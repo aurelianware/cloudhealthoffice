@@ -258,7 +258,9 @@ public class PayerToPayerConsentTests
             new PatientAccessPayerToPayerMemberSource(provider, adapterOptions),
             new PatientAccessPayerToPayerMemberMatchSource(provider, adapterOptions),
             new ConsentRegistryPayerToPayerConsentGate(
-                consentSource, AcceptanceContext.Logger<ConsentRegistryPayerToPayerConsentGate>()),
+                new FhirService.Services.Consent.RegistryConsentEvaluator(
+                    consentSource,
+                    AcceptanceContext.Logger<FhirService.Services.Consent.RegistryConsentEvaluator>())),
             new ConfiguredPayerToPayerEndpointResolver(
                 directory, AcceptanceContext.Logger<ConfiguredPayerToPayerEndpointResolver>()),
             peer,
@@ -458,8 +460,9 @@ public class PayerToPayerConsentTests
 
         // And an unreadable registry denies rather than defaults open.
         var gate = new ConsentRegistryPayerToPayerConsentGate(
-            new ThrowingConsentSource(),
-            AcceptanceContext.Logger<ConsentRegistryPayerToPayerConsentGate>());
+            new FhirService.Services.Consent.RegistryConsentEvaluator(
+                new ThrowingConsentSource(),
+                AcceptanceContext.Logger<FhirService.Services.Consent.RegistryConsentEvaluator>()));
 
         var decision = await gate.EvaluateAsync(AcceptanceContext.TenantId, Member);
         decision.Allowed.Should().BeFalse();
