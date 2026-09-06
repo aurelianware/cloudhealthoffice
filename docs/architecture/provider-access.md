@@ -67,12 +67,23 @@ requests it governs, so non-Provider-Access traffic passes straight through.
 
 ### What it governs
 
-Every member-scoped resource the FHIR surface serves — `Patient`, `Coverage`,
-`ExplanationOfBenefit`, `Encounter`, `Claim`, `Task`, `Communication`,
-`DocumentReference`, `ClaimResponse`. An acceptance test pins this inventory to
-the SMART layer's own resource list, so a resource added to one cannot quietly
-escape the other. Protecting `Patient` alone would leave the claims history
-readable.
+Every member-scoped resource the FHIR surface serves:
+
+* the administrative and claims surface — `Patient`, `Coverage`,
+  `ExplanationOfBenefit`, `Encounter`, `Claim`, `Task`, `Communication`,
+  `DocumentReference`, `ClaimResponse`;
+* the **USCDI clinical** types (PAT-02) — `AllergyIntolerance`, `CarePlan`,
+  `CareTeam`, `Condition`, `Device`, `DiagnosticReport`, `Goal`,
+  `Immunization`, `MedicationDispense`, `MedicationRequest`, `Observation`,
+  `Procedure`. These are not listed here a second time in code: the filter
+  concatenates them from `ClinicalResourceInventory`, the same table the SMART
+  layer, the routes and the CapabilityStatement read. See
+  [Clinical FHIR resources](clinical-fhir.md).
+
+An acceptance test pins this inventory to the SMART layer's own resource list,
+so a resource added to one cannot quietly escape the other. Protecting `Patient`
+alone would leave the claims history readable; protecting the claims history
+alone would leave the clinical record readable.
 
 Not governed, deliberately: FHIR **operations** (`POST …/$member-match`,
 `$member-data-export`). Those are a different surface with their own
@@ -82,11 +93,17 @@ purpose — and the operation name is not a member id.
 ### Resolving the member
 
 `Patient/{id}` names the member directly; otherwise the member comes from an
-explicit `?patient=` or the SMART `patient` binding. A resource id alone is
-**not** resolved to a member, because resolving it means reading the resource —
-which is the access being authorized. No member context therefore **denies**
-rather than guessing, which is why a provider-shaped search across the whole
-membership is refused.
+explicit member-naming search parameter — `patient`, `beneficiary`, or
+`subject` (which most clinical types define alongside `patient` in R4) — or the
+SMART `patient` binding. Reading only some of them would refuse a request for
+want of a member context it was actually given, so the list and the parameters
+the controllers accept are pinned together by test.
+
+A resource id alone is **not** resolved to a member, because resolving it means
+reading the resource — which is the access being authorized. No member context
+therefore **denies** rather than guessing, which is why a provider-shaped search
+across the whole membership is refused, and why a provider reading a clinical
+resource by id must also name the member (`?patient=`).
 
 ## Attribution
 

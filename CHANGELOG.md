@@ -7,6 +7,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### USCDI clinical resources served through Patient and Provider Access (PAT-02)
+
+Cloud Health Office could receive a prior payer's Condition, Observation,
+Procedure and the rest — the Payer-to-Payer pipeline validated, counted, named
+and archived them — but it had nowhere to put them and no way to serve them.
+They were classified `Unsupported`, because claiming to ingest a resource type
+with no read path behind it would have been a false claim. That gap is now
+closed at its root.
+
+**Twelve types, one table.** `AllergyIntolerance`, `CarePlan`, `CareTeam`,
+`Condition`, `Device`, `DiagnosticReport`, `Goal`, `Immunization`,
+`MedicationDispense`, `MedicationRequest`, `Observation`, `Procedure` — the
+USCDI clinical data classes this repository already documents as CMS-0057-F
+obligations, minus the ones CHO discharges elsewhere (Patient demographics,
+Coverage, CARIN EOB, DocumentReference clinical notes, Provenance as metadata).
+`ClinicalResourceInventory` is the single source of truth, and the FHIR routes,
+the SMART scope layer, the Provider Access authorization filter, the
+Payer-to-Payer import classification and the CapabilityStatement all read it.
+That is not tidiness: a clinical type reachable through SMART but missing from
+the governed set would be readable by any provider with a scope, attributed or
+not, consented or not. Structural tests pin each consumer to the table, and a
+test checks every entry against the Firely search-parameter registry so the
+table cannot claim a parameter FHIR R4 does not have.
+
+**The import store was promoted, not copied.** The rows Patient and Provider
+Access read are the rows a Payer-to-Payer exchange committed — one object in DI
+behind two interfaces. There is no projection to fall behind, no dual write to
+reconcile, and no second place a resource could be stale in. Clinical data
+therefore stays out of CHO's authoritative member, enrollment, coverage and
+claim stores *by construction*: a prior payer's Condition cannot be read as a
+CHO-owned record because it does not live where CHO-owned records live. Reads
+return the version from the most recently **committed** exchange, so a staged or
+failed ingestion is invisible and never displaces a committed one.
+
+**Identity is derived, not allocated.** A resource is served under the
+deterministic import identity — SHA-256 of tenant + member + source payer +
+resource type + source id. A replay updates in place instead of appearing at a
+new URL; two payers' identically-numbered records are two resources; another
+tenant's id resolves to nothing; and the URL leaks no member, payer or clinical
+detail. Serving the payer's own `Observation/123` would have collided on all
+three counts.
+
+**Imported `subject` is data, never authorization authority.** Tenant and member
+come from the exchange context CHO drove, so a package whose Observation names
+another member is filed under the member CHO resolved — and *served* that way
+too, with the subject element rewritten to the trusted binding on the way out.
+
+**Both authorization boundaries, unchanged in shape.** Patient Access requires a
+patient-context token whose binding is now enforced against **both**
+member-naming search parameters: `patient` *and* `subject`. Checking only the
+first would have left the second as an unguarded way to ask for someone else's
+record, and `subject` is exactly what the clinical types added. Provider Access
+keeps all four CONSENT-01 controls — authentication, SMART scope, attribution,
+active ProviderAccess-purpose consent — because the clinical types are in the
+same globally registered filter's governed set and there is exactly one clinical
+controller. A Payer-to-Payer consent still opens nothing here.
+
+**Knowing an id is not authority to read it.** Every store call is keyed on the
+tenant *and* the authorized member, so another member's resource is never
+selected rather than filtered out afterwards. A provider reading by id must name
+the member, because Provider Access authorizes a member and not an id. "Not
+yours", "not there" and "another tenant's" return one identical 404 — telling
+them apart is what enumeration needs — with the category kept in a PHI-free
+audit line carrying ids, an outcome and a count, and no field a value, diagnosis,
+medication name or narrative could live in.
+
+**Ingestion gains a payload gate and keeps its honesty.** Clinical resources
+pass a type / source-id / size / nesting check before they become readable PHI,
+using the parser this service already owns rather than a second one. A refusal is
+per resource, counted and named by reason — one oversized Observation does not
+cost the member the rest of their history — and the package stays archived
+verbatim. Types still outside the inventory are still named, counted and
+archived, never dropped.
+
+**Existing history becomes visible without re-running an exchange.** Clinical
+data CHO already holds from exchanges committed before this change lives only in
+the archived package. `ClinicalBackfillService` re-projects it under exactly the
+identities a real import would have produced: deterministic, replay-safe,
+tenant-safe (binding from the ledger entry, never the Bundle), committed-only,
+non-destructive, gated by the same validator, disabled by default with a dry-run
+mode. Asking a prior payer again for data CHO already has would be impossible
+once that relationship has ended.
+
+**Stated, not glossed.** No US Core profile is claimed: no `meta.profile`, no
+`supportedProfile`. CHO serves these as valid FHIR R4 and does not re-shape a
+prior payer's content to satisfy US Core invariants, so a profile URL would be a
+label rather than conformance. Search is read plus `_id`, `patient` and
+`subject` where R4 defines it — no `category`, `code`, `status` or date search.
+No CHO component authors native clinical data yet, so every served resource is
+imported; the source axis exists so native data will coexist rather than
+overwrite, but it is an unexercised seam.
+
+`meta.source` names the originating payer and the source resource id,
+`meta.versionId` is a content hash, so imported data is never indistinguishable
+from CHO-authored data.
+
+PAT-02 moves **PARTIAL → PASSABLE**, and the CMS-0057-F evidence generator
+computes CHO Replace at **20 PASSABLE / 1 PARTIAL / 0 GAP** from the manifest —
+nothing is hard-coded. The one remaining PARTIAL is **SEC-01**, where the
+identity provider is configured per engagement.
+
+Design: [docs/architecture/clinical-fhir.md](docs/architecture/clinical-fhir.md).
+
 ### CDex additional-information round trip on a pended prior authorization (PAS-07)
 
 A prior authorization pended for additional information stopped at an A4 status.

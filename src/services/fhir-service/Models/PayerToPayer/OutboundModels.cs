@@ -228,11 +228,28 @@ public sealed class PayerToPayerOutboundExchange
     /// <summary>Resources already held from this payer with identical content (a replay).</summary>
     public int DuplicateResourceCount { get; set; }
 
+    /// <summary>
+    /// USCDI clinical resources stored and served through Patient/Provider
+    /// Access (PAT-02). Counted separately from member history so "what clinical
+    /// data did this exchange actually make readable?" is answerable from the
+    /// exchange record.
+    /// </summary>
+    public int ClinicalResourceCount { get; set; }
+
     /// <summary>Resources whose type CHO's FHIR surface does not serve.</summary>
     public int UnsupportedResourceCount { get; set; }
 
     /// <summary>The distinct unsupported resource types, named rather than merely counted.</summary>
     public IReadOnlyList<string> UnsupportedResourceTypes { get; set; } = Array.Empty<string>();
+
+    /// <summary>Clinical resources the payload validator refused.</summary>
+    public int RejectedResourceCount { get; set; }
+
+    /// <summary>
+    /// Why each was refused, as <c>"{ResourceType}:{reason}"</c> — named rather
+    /// than merely counted, and categories only, never the refused payload.
+    /// </summary>
+    public IReadOnlyList<string> RejectedResourceReasons { get; set; } = Array.Empty<string>();
 
     public DateTime? IngestionStartedAtUtc { get; set; }
     public DateTime? IngestionCompletedAtUtc { get; set; }
@@ -323,8 +340,10 @@ public sealed class PayerToPayerOutboundAuditEntry
     /// <summary>What the durable ingestion did with them — status and counts only, never content.</summary>
     public string IngestionStatus { get; init; } = PayerToPayerIngestionStatus.NotStarted.ToString();
     public int PersistedResourceCount { get; init; }
+    public int ClinicalResourceCount { get; init; }
     public int DuplicateResourceCount { get; init; }
     public int UnsupportedResourceCount { get; init; }
+    public int RejectedResourceCount { get; init; }
 
     public DateTime OccurredAtUtc { get; init; } = DateTime.UtcNow;
 }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using FhirService.Models.PayerToPayer;
+using FhirService.Services.Clinical;
 
 namespace FhirService.Services.PayerToPayer.Ingestion;
 
@@ -79,8 +80,14 @@ public readonly record struct StageOutcome(int Written, int UnchangedDuplicates)
 /// testable end to end; a deployment that needs durability configures MongoDB and
 /// gets <see cref="MongoPayerToPayerImportRepository"/> instead, with no change
 /// to the workflow above it.
+///
+/// It also serves <see cref="IClinicalResourceStore"/> — the SAME rows, read
+/// through the clinical contract. There is no second copy of a clinical resource
+/// and nothing to keep in step: the store an exchange commits into is the store
+/// Patient and Provider Access read from.
 /// </summary>
-public sealed class InMemoryPayerToPayerImportRepository : IPayerToPayerImportRepository
+public sealed class InMemoryPayerToPayerImportRepository
+    : IPayerToPayerImportRepository, IClinicalResourceStore, IClinicalBackfillStore
 {
     private readonly ConcurrentDictionary<string, PayerToPayerImportLedgerEntry> _ledger = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ImportedFhirResource> _resources = new(StringComparer.Ordinal);
@@ -158,12 +165,16 @@ public sealed class InMemoryPayerToPayerImportRepository : IPayerToPayerImportRe
     /// committed exchange. Uncommitted versions are invisible and never displace
     /// a committed one.
     /// </summary>
-    private IEnumerable<ImportedFhirResource> CommittedVersions(string tenantId, string memberId)
-    {
-        var committedAt = _ledger.Values
+    /// <summary>When each of this tenant's COMMITTED exchanges published.</summary>
+    private Dictionary<string, DateTime> CommittedExchangeInstants(string tenantId)
+        => _ledger.Values
             .Where(e => string.Equals(e.TenantId, tenantId, StringComparison.Ordinal)
                      && e.Status == PayerToPayerIngestionStatus.Completed)
             .ToDictionary(e => e.ExchangeId, e => e.CompletedAtUtc ?? e.StartedAtUtc, StringComparer.Ordinal);
+
+    private IEnumerable<ImportedFhirResource> CommittedVersions(string tenantId, string memberId)
+    {
+        var committedAt = CommittedExchangeInstants(tenantId);
 
         return _resources.Values
             .Where(r => string.Equals(r.TenantId, tenantId, StringComparison.Ordinal)
@@ -181,6 +192,128 @@ public sealed class InMemoryPayerToPayerImportRepository : IPayerToPayerImportRe
     private ImportedFhirResource? LatestCommitted(string tenantId, string memberId, string importKey)
         => CommittedVersions(tenantId, memberId)
             .FirstOrDefault(r => string.Equals(r.ImportKey, importKey, StringComparison.Ordinal));
+
+    // ── IClinicalBackfillStore ────────────────────────────────────────────────
+
+    public async IAsyncEnumerable<PayerToPayerImportLedgerEntry> CommittedLedgerEntriesAsync(
+        int batchSize,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var committed = _ledger.Values
+            .Where(e => e.Status == PayerToPayerIngestionStatus.Completed)
+            .OrderBy(e => e.CompletedAtUtc ?? e.StartedAtUtc)
+            .ThenBy(e => e.ExchangeId, StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var entry in committed)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return entry;
+        }
+
+        await Task.CompletedTask;
+    }
+
+    public Task UpdateBackfilledLedgerAsync(
+        PayerToPayerImportLedgerEntry entry, CancellationToken ct = default)
+    {
+        // The entries handed out above ARE the stored objects here, so the counts
+        // and the marker are already applied; re-indexing keeps the write explicit
+        // rather than relying on that.
+        _ledger[LedgerKey(entry.TenantId, entry.ExchangeId)] = entry;
+        return Task.CompletedTask;
+    }
+
+    // ── IClinicalResourceStore ────────────────────────────────────────────────
+    // The same committed rows, filtered by the clinical contract. Tenant, member
+    // and resource type are applied while selecting, never afterwards.
+
+    public Task<StoredClinicalResource?> GetAsync(
+        string tenantId, string memberId, string resourceType, string clinicalId,
+        CancellationToken ct = default)
+    {
+        var match = ClinicalVersions(tenantId, memberId, resourceType)
+            .FirstOrDefault(r => string.Equals(
+                ClinicalResourceIdentity.ForImported(r.ImportKey), clinicalId, StringComparison.Ordinal));
+
+        return Task.FromResult(match is null ? null : ToClinical(match));
+    }
+
+    public Task<ClinicalResourcePage> SearchAsync(
+        ClinicalResourceQuery query, CancellationToken ct = default)
+    {
+        var matches = ClinicalVersions(query.TenantId, query.MemberId, query.ResourceType);
+
+        if (!string.IsNullOrWhiteSpace(query.ClinicalId))
+        {
+            matches = matches.Where(r => string.Equals(
+                ClinicalResourceIdentity.ForImported(r.ImportKey), query.ClinicalId, StringComparison.Ordinal));
+        }
+
+        // ClinicalVersions already yields page order (commit instant, then
+        // ingest, then identity), so nothing is re-sorted under a different
+        // notion of "newest" here.
+        var ordered = matches.ToList();
+
+        var page = Math.Max(1, query.Page);
+        var count = Math.Max(1, query.Count);
+
+        var items = ordered
+            .Skip((page - 1) * count)
+            .Take(count)
+            .Select(ToClinical)
+            .ToList();
+
+        return Task.FromResult(new ClinicalResourcePage(items, ordered.Count));
+    }
+
+    public Task<IReadOnlyDictionary<string, string>> GetResourceTypesAsync(
+        string tenantId, string memberId, IReadOnlyCollection<string> localIds,
+        CancellationToken ct = default)
+    {
+        var wanted = new HashSet<string>(localIds, StringComparer.Ordinal);
+
+        var map = CommittedVersions(tenantId, memberId)
+            .Where(r => wanted.Contains(r.ImportKey))
+            .GroupBy(r => r.ImportKey, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().ResourceType, StringComparer.Ordinal);
+
+        return Task.FromResult<IReadOnlyDictionary<string, string>>(map);
+    }
+
+    /// <summary>
+    /// Committed clinical rows of one type for one member in one tenant, newest
+    /// first by the SAME commit instant that decided which version wins — so
+    /// recency means one thing here, and the page order agrees with the version
+    /// selection. Mirrors <c>MongoPayerToPayerImportRepository</c>.
+    /// </summary>
+    private IEnumerable<ImportedFhirResource> ClinicalVersions(
+        string tenantId, string memberId, string resourceType)
+    {
+        var committedAt = CommittedExchangeInstants(tenantId);
+
+        return CommittedVersions(tenantId, memberId)
+            .Where(r => r.Classification == ImportedResourceClass.ClinicalRecord
+                     && string.Equals(r.ResourceType, resourceType, StringComparison.Ordinal))
+            .OrderByDescending(r => committedAt.TryGetValue(r.ExchangeId, out var at) ? at : DateTime.MinValue)
+            .ThenByDescending(r => r.IngestedAtUtc)
+            .ThenBy(r => r.ImportKey, StringComparer.Ordinal);
+    }
+
+    internal static StoredClinicalResource ToClinical(ImportedFhirResource row) => new()
+    {
+        TenantId = row.TenantId,
+        MemberId = row.MemberId,
+        ResourceType = row.ResourceType,
+        ClinicalId = ClinicalResourceIdentity.ForImported(row.ImportKey),
+        ResourceJson = row.ResourceJson,
+        Origin = ClinicalResourceOrigin.Imported,
+        SourcePayerId = row.SourcePayerId,
+        SourceResourceId = row.SourceResourceId,
+        ExchangeId = row.ExchangeId,
+        ContentHash = row.ContentHash,
+        LastUpdatedUtc = row.IngestedAtUtc,
+    };
 
     // Every key is tenant-prefixed, so one tenant's import can never be read or
     // overwritten through another tenant's context.

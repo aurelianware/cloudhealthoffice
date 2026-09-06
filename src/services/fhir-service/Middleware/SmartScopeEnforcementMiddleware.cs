@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Task = System.Threading.Tasks.Task;
@@ -36,6 +37,12 @@ public class SmartScopeEnforcementMiddleware
     // "pass through unenforced" branch below — skipping the scope check entirely.
     // ParseResourceType returns the canonical spelling so the scope strings built
     // from it still match the token's.
+    //
+    // The USCDI clinical types (PAT-02) are appended from
+    // ClinicalResourceInventory rather than retyped: a clinical resource that
+    // this set did not know about would fall through to the "unknown path"
+    // branch below and be served with NO scope check at all, so the two must be
+    // the same list by construction, not by discipline.
     private static readonly HashSet<string> KnownResources = new(
         new[]
         {
@@ -48,8 +55,14 @@ public class SmartScopeEnforcementMiddleware
             "Communication",
             "DocumentReference",
             "ClaimResponse"
-        },
+        }.Concat(ClinicalResourceInventory.ResourceTypes),
         StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Search parameters that name the member a request is about. A patient-scoped
+    /// token's binding is enforced against every one of them.
+    /// </summary>
+    private static readonly string[] MemberBindingParameters = ["patient", "subject"];
 
     private readonly RequestDelegate _next;
     private readonly ILogger<SmartScopeEnforcementMiddleware> _logger;
@@ -136,30 +149,35 @@ public class SmartScopeEnforcementMiddleware
                 return;
             }
 
-            // (b) Search — validate or auto-inject the patient parameter
+            // (b) Search — validate or auto-inject the member parameter.
+            //     EVERY parameter that names a member is checked, not just
+            //     `patient`: the clinical resources added for PAT-02 are also
+            //     searchable by `subject`, and checking one while ignoring the
+            //     other would leave the second as an unguarded way to ask for
+            //     somebody else's record.
             if (resourceId == null)
             {
-                var queryPatient = context.Request.Query["patient"].FirstOrDefault();
-
-                if (!string.IsNullOrEmpty(queryPatient))
+                foreach (var parameter in MemberBindingParameters)
                 {
-                    // Explicit patient param must match the token binding
-                    var normalizedQuery = StripPrefix("Patient/", queryPatient);
-                    if (normalizedQuery != normalizedPatient)
-                    {
-                        _logger.LogWarning(
-                            "Patient binding violation — token bound to {Bound}, query param {Query}",
-                            SanitizeForLog(normalizedPatient), SanitizeForLog(queryPatient));
+                    var queryMember = context.Request.Query[parameter].FirstOrDefault();
+                    if (string.IsNullOrEmpty(queryMember)) continue;
 
-                        await WriteFhirError(context, 403,
-                            OperationOutcome.IssueSeverity.Error,
-                            OperationOutcome.IssueType.Forbidden,
-                            $"Patient token bound to Patient/{normalizedPatient} cannot search " +
-                            $"resources for patient={queryPatient}.");
-                        return;
-                    }
+                    var normalizedQuery = StripPrefix("Patient/", queryMember);
+                    if (normalizedQuery == normalizedPatient) continue;
+
+                    _logger.LogWarning(
+                        "Patient binding violation — token bound to {Bound}, {Parameter}={Query}",
+                        SanitizeForLog(normalizedPatient), SanitizeForLog(parameter),
+                        SanitizeForLog(queryMember));
+
+                    await WriteFhirError(context, 403,
+                        OperationOutcome.IssueSeverity.Error,
+                        OperationOutcome.IssueType.Forbidden,
+                        $"Patient token bound to Patient/{normalizedPatient} cannot search " +
+                        $"resources for {parameter}={queryMember}.");
+                    return;
                 }
-                // else: no patient param → controllers pick it up from SmartPatientId
+                // else: no member param → controllers pick it up from SmartPatientId
             }
 
             context.Items["SmartPatientId"] = normalizedPatient;

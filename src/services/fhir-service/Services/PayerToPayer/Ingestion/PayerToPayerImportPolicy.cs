@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using FhirService.Models.PayerToPayer;
+using FhirService.Services.Clinical;
 
 namespace FhirService.Services.PayerToPayer.Ingestion;
 
@@ -10,9 +11,17 @@ namespace FhirService.Services.PayerToPayer.Ingestion;
 ///
 /// The supported inventory is taken from what CHO's FHIR surface ACTUALLY serves
 /// (its CapabilityStatement and resource controllers) - not from the CMS wish
-/// list. Claiming to ingest a Condition or an Observation while CHO has nowhere
-/// to serve it from would be a false claim; those types are recorded as
-/// unsupported by name, and the whole validated package is archived, instead.
+/// list. A type CHO has nowhere to serve from is recorded as unsupported BY
+/// NAME, and the whole validated package is archived, instead of being claimed
+/// as ingested.
+///
+/// PAT-02 moved the USCDI clinical set across that line. Condition, Observation
+/// and the rest are no longer unsupported because CHO now has a real read path
+/// for them - the clinical store this policy files them into is the same store
+/// Patient and Provider Access serve from. The list itself is not repeated here:
+/// it is read from <see cref="ClinicalResourceInventory"/>, the one table the
+/// FHIR routes, the SMART layer, the consent filter and the CapabilityStatement
+/// also read, so ingesting a type and serving it cannot drift apart.
 /// </summary>
 public static class PayerToPayerImportPolicy
 {
@@ -51,6 +60,10 @@ public static class PayerToPayerImportPolicy
         null or "" => ImportedResourceClass.Unsupported,
         var t when MemberHistoryTypes.Contains(t) => ImportedResourceClass.MemberHistory,
         var t when AdministrativeTypes.Contains(t) => ImportedResourceClass.AdministrativeReference,
+        // Asked of the serving inventory, not of a second list kept in step with
+        // it by hand. A type is ingested as clinical exactly when CHO serves it
+        // as clinical.
+        var t when ClinicalResourceInventory.IsClinical(t) => ImportedResourceClass.ClinicalRecord,
         _ => ImportedResourceClass.Unsupported,
     };
 
@@ -61,6 +74,13 @@ public static class PayerToPayerImportPolicy
     /// <summary>The administrative types CHO stores as reference-only context.</summary>
     public static IReadOnlyList<string> AdministrativeReferenceTypes =>
         AdministrativeTypes.OrderBy(t => t, StringComparer.Ordinal).ToList();
+
+    /// <summary>
+    /// The USCDI clinical types CHO ingests and serves (PAT-02), for
+    /// documentation and status reporting. Delegates to the serving inventory
+    /// rather than restating it.
+    /// </summary>
+    public static IReadOnlyList<string> ClinicalTypes => ClinicalResourceInventory.ResourceTypes;
 
     /// <summary>
     /// Deterministic identity of an imported resource. The tuple is

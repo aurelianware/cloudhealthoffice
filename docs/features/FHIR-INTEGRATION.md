@@ -645,8 +645,15 @@ The Provider Access API supports search and read operations for the following FH
 | **Claim** | Claims data (837 Professional, Institutional, Dental) | FHIR R4 |
 | **Encounter** | Clinical encounters and visits | FHIR R4 |
 | **ExplanationOfBenefit** | Adjudicated claim information | FHIR R4 |
-| **Condition** | Clinical conditions (diagnoses) | US Core, USCDI |
-| **Observation** | Laboratory results and vital signs | US Core, USCDI |
+| **Condition** | Clinical conditions (diagnoses) | FHIR R4 (USCDI data class; no US Core profile claimed) |
+| **Observation** | Laboratory results and vital signs | FHIR R4 (USCDI data class; no US Core profile claimed) |
+
+The full USCDI clinical set — `AllergyIntolerance`, `CarePlan`, `CareTeam`,
+`Condition`, `Device`, `DiagnosticReport`, `Goal`, `Immunization`,
+`MedicationDispense`, `MedicationRequest`, `Observation`, `Procedure` — is served
+read + member-scoped search behind the same SMART, attribution and consent
+controls. See
+[docs/architecture/clinical-fhir.md](../architecture/clinical-fhir.md).
 
 ### Authentication Flow
 

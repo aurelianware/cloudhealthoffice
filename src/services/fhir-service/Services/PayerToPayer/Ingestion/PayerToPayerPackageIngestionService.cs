@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FhirService.Models.PayerToPayer;
+using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Microsoft.Extensions.Logging;
@@ -20,7 +21,8 @@ namespace FhirService.Services.PayerToPayer.Ingestion;
 ///   2. archive the validated package verbatim, so nothing CHO cannot project is
 ///      lost;
 ///   3. classify each resource (member history / administrative reference /
-///      unsupported);
+///      USCDI clinical / unsupported), validating clinical payloads before they
+///      become member-visible;
 ///   4. normalize intra-package references to CHO's imported identities;
 ///   5. stage every resource under a deterministic import key;
 ///   6. commit the exchange's ledger entry — the single write that publishes the
@@ -40,13 +42,17 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
     private static readonly FhirJsonSerializer Serializer = new(new SerializerSettings { Pretty = false });
 
     private readonly IPayerToPayerImportRepository _repository;
+    private readonly ClinicalPayloadValidator _clinicalValidator;
     private readonly ILogger<PayerToPayerPackageIngestionService> _logger;
 
     public PayerToPayerPackageIngestionService(
-        IPayerToPayerImportRepository repository, ILogger<PayerToPayerPackageIngestionService> logger)
+        IPayerToPayerImportRepository repository,
+        ILogger<PayerToPayerPackageIngestionService> logger,
+        ClinicalPayloadValidator clinicalValidator)
     {
         _repository = repository;
         _logger = logger;
+        _clinicalValidator = clinicalValidator;
     }
 
     public async Task<PayerToPayerIngestionResult> IngestAsync(
@@ -125,8 +131,10 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
         //        ingestion would report data it did not keep.
         var staged = new List<ImportedFhirResource>(resources.Count);
         var unsupportedTypes = new SortedSet<string>(StringComparer.Ordinal);
+        var rejectedReasons = new SortedSet<string>(StringComparer.Ordinal);
         var memberHistoryStaged = 0;
         var administrativeStaged = 0;
+        var clinicalStaged = 0;
 
         foreach (var resource in resources)
         {
@@ -150,6 +158,22 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
                 await _repository.FailAsync(ledger, PayerToPayerIngestionFailure.UnreadableResource, ct);
                 return PayerToPayerIngestionResult.Failed(
                     PayerToPayerIngestionFailure.UnreadableResource, startedAt, counts);
+            }
+
+            // Clinical data becomes readable PHI on CHO's own FHIR surface, so it
+            // passes a payload gate the reference-only administrative context does
+            // not need. A refusal is per-resource: one oversized Observation does
+            // not cost the member the rest of their history, and the package stays
+            // archived verbatim either way.
+            if (classification == ImportedResourceClass.ClinicalRecord)
+            {
+                var rejection = _clinicalValidator.Validate(resource, json);
+                if (rejection != ClinicalPayloadRejection.None)
+                {
+                    counts.Rejected++;
+                    rejectedReasons.Add($"{resource.TypeName}:{rejection}");
+                    continue;
+                }
             }
 
             staged.Add(new ImportedFhirResource
@@ -178,11 +202,16 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
                 ReceivedAtUtc = context.ReceivedAtUtc,
             });
 
-            if (classification == ImportedResourceClass.MemberHistory) memberHistoryStaged++;
-            else administrativeStaged++;
+            switch (classification)
+            {
+                case ImportedResourceClass.MemberHistory: memberHistoryStaged++; break;
+                case ImportedResourceClass.ClinicalRecord: clinicalStaged++; break;
+                default: administrativeStaged++; break;
+            }
         }
 
         counts.UnsupportedTypes = unsupportedTypes.ToList();
+        counts.RejectedReasons = rejectedReasons.ToList();
 
         StageOutcome outcome;
         try
@@ -210,6 +239,7 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
         //    so only now are the staged resources counted as persisted.
         counts.Persisted = memberHistoryStaged;
         counts.AdministrativeReference = administrativeStaged;
+        counts.Clinical = clinicalStaged;
         ledger.Counts = counts;
 
         try
@@ -226,6 +256,7 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
             // reported counts must say so.
             counts.Persisted = 0;
             counts.AdministrativeReference = 0;
+            counts.Clinical = 0;
             await _repository.FailAsync(ledger, PayerToPayerIngestionFailure.CommitFailed, ct);
             return PayerToPayerIngestionResult.Failed(
                 PayerToPayerIngestionFailure.CommitFailed, startedAt, counts);
@@ -235,9 +266,11 @@ public sealed class PayerToPayerPackageIngestionService : IPayerToPayerPackageIn
         // no source URL.
         _logger.LogInformation(
             "P2P import committed: exchange={Exchange} sourcePayer={Payer} received={Received} "
-            + "persisted={Persisted} administrative={Administrative} duplicate={Duplicate} unsupported={Unsupported}",
+            + "persisted={Persisted} clinical={Clinical} administrative={Administrative} "
+            + "duplicate={Duplicate} unsupported={Unsupported} rejected={Rejected}",
             Clean(context.ExchangeId), Clean(context.SourcePayerId),
-            counts.Received, counts.Persisted, counts.AdministrativeReference, counts.Duplicate, counts.Unsupported);
+            counts.Received, counts.Persisted, counts.Clinical, counts.AdministrativeReference,
+            counts.Duplicate, counts.Unsupported, counts.Rejected);
 
         return new PayerToPayerIngestionResult
         {

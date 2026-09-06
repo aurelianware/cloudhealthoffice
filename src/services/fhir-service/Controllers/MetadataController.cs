@@ -1,5 +1,6 @@
 using FhirService.Services;
 using FhirService.Services.Cdex;
+using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
 
@@ -223,6 +224,25 @@ public class MetadataController : FhirControllerBase
                             ("request",      SearchParamType.Reference)
                         ],
                         supportedProfiles: [FhirAppealMapper.ClaimResponseProfileUrl]),
+                        // ── USCDI clinical resources (PAT-02) ─────────────
+                        // Generated from ClinicalResourceInventory, the same
+                        // table ClinicalResourceController routes from and the
+                        // Payer-to-Payer import policy classifies against, so
+                        // the statement cannot advertise a type with no read
+                        // path or omit one that has one. Each entry declares
+                        // read + search-type and EXACTLY the search parameters
+                        // the controller honours — `subject` appears only for
+                        // the types FHIR R4 defines it on.
+                        //
+                        // No supportedProfile is declared. CHO serves these as
+                        // valid FHIR R4 and does not re-shape a prior payer's
+                        // clinical content to satisfy US Core invariants, so a
+                        // US Core profile URL here would be a label rather than
+                        // a conformance claim. See docs/architecture/clinical-fhir.md.
+                        .. ClinicalResourceInventory.All.Select(entry =>
+                            BuildResource(
+                                entry.ResourceType,
+                                [.. entry.SearchParameters.Select(p => (p, SearchParamTypeFor(p)))])),
                     ],
                     Operation =
                     [
@@ -254,6 +274,16 @@ public class MetadataController : FhirControllerBase
 
         return Ok(cs);
     }
+
+    /// <summary>
+    /// The FHIR search-parameter type for a clinical parameter name. <c>_id</c>
+    /// is a token; <c>patient</c> and <c>subject</c> are references.
+    /// </summary>
+    private static SearchParamType SearchParamTypeFor(string name) => name switch
+    {
+        ClinicalResourceInventory.IdParam => SearchParamType.Token,
+        _ => SearchParamType.Reference,
+    };
 
     private static CapabilityStatement.ResourceComponent BuildResource(
         string type,

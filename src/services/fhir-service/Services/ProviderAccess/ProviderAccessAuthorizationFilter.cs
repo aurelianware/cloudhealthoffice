@@ -1,4 +1,5 @@
 using FhirService.Middleware;
+using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Microsoft.AspNetCore.Mvc;
@@ -42,19 +43,28 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
     /// so /fhir/r4/patient/123 reaches the same controller as /fhir/r4/Patient/123.
     /// An ordinal comparison here would let a caller skip the whole authorization
     /// layer by lower-casing the URL.
+    ///
+    /// The USCDI clinical types (PAT-02) come from
+    /// <see cref="ClinicalResourceInventory"/> rather than being retyped here.
+    /// A clinical resource served through SMART but missing from this set would
+    /// be readable by any attributed-or-not provider with a scope, which is
+    /// exactly the failure the structural test guards; taking both from one table
+    /// removes the chance of it.
     public static readonly IReadOnlySet<string> GovernedResources =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "Patient",
-            "Coverage",
-            "ExplanationOfBenefit",
-            "Encounter",
-            "Claim",
-            "Task",
-            "Communication",
-            "DocumentReference",
-            "ClaimResponse",
-        };
+        new HashSet<string>(
+            new[]
+            {
+                "Patient",
+                "Coverage",
+                "ExplanationOfBenefit",
+                "Encounter",
+                "Claim",
+                "Task",
+                "Communication",
+                "DocumentReference",
+                "ClaimResponse",
+            }.Concat(ClinicalResourceInventory.ResourceTypes),
+            StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Query parameters that name the member a request is about, across the
@@ -62,7 +72,13 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
     /// controller means adding it here, or the request is refused as
     /// member-less.
     /// </summary>
-    private static readonly string[] MemberSearchParameters = ["patient", "beneficiary"];
+    ///
+    /// <c>subject</c> arrives with the clinical resources: most of them define it
+    /// alongside <c>patient</c> in R4, and a provider searching
+    /// <c>?subject=Patient/x</c> would otherwise be refused for want of a member
+    /// context it did in fact supply.
+    private static readonly string[] MemberSearchParameters =
+        ["patient", "beneficiary", "subject"];
 
     private static readonly JsonSerializerOptions FhirJson =
         new JsonSerializerOptions().ForFhir(typeof(OperationOutcome).Assembly);

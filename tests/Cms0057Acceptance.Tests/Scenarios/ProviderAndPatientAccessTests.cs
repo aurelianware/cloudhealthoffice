@@ -18,8 +18,9 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 ///   consent     src/services/consent-service/Services/ConsentStateMachine.cs
 ///   qnxt seams  claims-service QnxtClaimAdapter / provider-service QnxtProviderAdapter (GAP — GapAdapterTests)
 ///
-/// USCDI clinical data (PAT-02) lives in an external clinical store, not in
-/// QNXT; this suite does not pretend QNXT holds USCDI.
+/// USCDI clinical data (PAT-02) is served by CHO's own clinical FHIR surface —
+/// see PatientAccessClinicalTests for that scenario. It is not sourced from
+/// QNXT, and this suite does not pretend QNXT holds USCDI.
 /// </summary>
 public class ProviderAndPatientAccessTests
 {
@@ -102,10 +103,13 @@ public class ProviderAndPatientAccessTests
 
     [Fact]
     [Trait("Scenario", "PAT-02")]
+    [Trait("Backend", "Replace")]
     public void PAT02_UsCorePatient_ValidatesAsPatientDemographics()
     {
-        // Demographics are held by CHO; broader USCDI clinical classes live in an
-        // external clinical store (PARTIAL — not sourced from QNXT here).
+        // The demographics half of PAT-02: CHO's Patient validates against US
+        // Core. The USCDI CLINICAL half — Condition, Observation, Procedure and
+        // the rest — is proven in PatientAccessClinicalTests, which drives the
+        // real storage, authorization and read path rather than a validator.
         var checker = new Cms0057ComplianceChecker();
         var patient = new HlModel.Patient
         {

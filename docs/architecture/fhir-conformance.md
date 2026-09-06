@@ -42,10 +42,31 @@ conformance to, what we test against, and where the gaps are.
   internal `documentreference/{id}` references are skipped per
   Decision 4)
 
+## USCDI clinical resources (PAT-02)
+
+`AllergyIntolerance`, `CarePlan`, `CareTeam`, `Condition`, `Device`,
+`DiagnosticReport`, `Goal`, `Immunization`, `MedicationDispense`,
+`MedicationRequest`, `Observation`, `Procedure` are served read + search-type by
+fhir-service (`ClinicalResourceController`).
+
+**Posture: valid FHIR R4, no profile claimed.** No `meta.profile` is emitted and
+no `supportedProfile` is advertised for these types. CHO serves a prior payer's
+clinical content as received; it does not re-shape it to satisfy US Core
+invariants, and it does not validate against a US Core profile. Two things would
+have to change before a profile URL here meant anything: the shape would have to
+be validated, and search-parameter support would have to meet US Core's SHALL
+set (today it is `_id`, `patient`, and `subject` where R4 defines it — no
+`category`, `code`, `status` or date search).
+
+Stating that is deliberate. A label without validation is a claim, not
+conformance. Full detail, including the storage and authorization model, is in
+[clinical-fhir.md](clinical-fhir.md).
+
 ## Phase 2 / deferred
 
 | IG / capability                                  | Status                                                 |
 |--------------------------------------------------|--------------------------------------------------------|
+| US Core 6.1.0 clinical profiles (Condition, Observation, …) | Deferred — served as valid R4 today; profile validation and the US Core SHALL search set are not implemented, and neither is claimed |
 | Plan-Net 1.1.0 extended Organization extensions  | Capability 5.17 (accessibility, languages, populations)|
 | Plan-Net 1.1.0 Organization.endpoint             | Phase 2 (Plan-Net publishing URLs; provider-side)      |
 | Plan-Net 1.1.0 InsurancePlan.coverageArea / contact / alias | Phase 2 (BenefitPlan needs the fields)        |

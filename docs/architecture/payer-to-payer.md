@@ -133,10 +133,20 @@ list:
 | --- | --- | --- |
 | `MemberHistory` | `ExplanationOfBenefit`, `Claim`, `ClaimResponse`, `Encounter`, `DocumentReference` | Ingested as the member's imported history |
 | `AdministrativeReference` | `Patient`, `Coverage`, `Organization`, `Practitioner`, `PractitionerRole`, `Provenance` | Stored for reference resolution and traceability **only** |
-| `Unsupported` | everything else (`Condition`, `Observation`, `Procedure`, `MedicationRequest`, …) | Counted, **named on the exchange**, and preserved in the archived package |
+| `ClinicalRecord` | the USCDI clinical set — `AllergyIntolerance`, `CarePlan`, `CareTeam`, `Condition`, `Device`, `DiagnosticReport`, `Goal`, `Immunization`, `MedicationDispense`, `MedicationRequest`, `Observation`, `Procedure` | Ingested **and served** through Patient / Provider Access (PAT-02) |
+| `Rejected` | a clinical resource the payload validator refused (no source id, oversized, too deeply nested) | Counted and **named by reason** on the exchange; still in the archived package |
+| `Unsupported` | everything else (`RiskAssessment`, `NutritionOrder`, …) | Counted, **named on the exchange**, and preserved in the archived package |
 
 Unsupported types are never silently dropped, and CHO never claims to have
-ingested a type it cannot serve.
+ingested a type it cannot serve. The clinical list is not restated here in code:
+`PayerToPayerImportPolicy` asks `ClinicalResourceInventory`, the same table the
+FHIR routes and the CapabilityStatement read, so a type is ingested exactly when
+it is served. See [Clinical FHIR resources](clinical-fhir.md).
+
+Clinical resources pass a payload gate the reference-only administrative context
+does not need — type, source id, size and nesting limits — because they become
+readable PHI on CHO's own FHIR surface. A refusal is per resource: one oversized
+Observation does not cost the member the rest of their history.
 
 ### Ownership and reconciliation
 
@@ -224,11 +234,14 @@ invent links the source payer never asserted.
   not reinterpreted, so a deployment upgrading to this code authorizes nothing
   until purposes are recorded — see
   [Migration](consent.md#migration-and-backward-compatibility).
-* Imported data is **not yet surfaced through CHO's FHIR read APIs**; it is
-  durable and queryable through the import repository, and projecting it into
-  Patient Access / Provider Access responses is follow-up work.
-* Clinical types outside the supported inventory (`Condition`, `Observation`, …)
-  are archived, not ingested — the same gap that keeps **PAT-02** PARTIAL.
+* Imported **clinical** data is surfaced through CHO's FHIR read APIs as of
+  PAT-02 — the import store is also the clinical serving store, so there is no
+  projection between them (see [Clinical FHIR resources](clinical-fhir.md)).
+  Imported member **history** (EOB, Claim, ClaimResponse, Encounter,
+  DocumentReference) is still durable and queryable only through the import
+  repository; surfacing it alongside CHO's own claims history is follow-up work.
+* Types outside the clinical and member-history inventories are archived, not
+  ingested. They are named and counted rather than dropped.
 * Transport credentials for a specific payer (SMART Backend Services / UDAP
   client registration, mTLS) remain deployment integration behind
   `IPayerToPayerCredentialProvider`, which supplies none by default.

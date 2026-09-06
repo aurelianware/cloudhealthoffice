@@ -82,11 +82,25 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
             "consent-service registry (ConsentPurposeOfUse + ConsentAuthorizationPolicy; "
             + "PHI-free authorization-snapshots projection) enforced for Payer-to-Payer "
             + "and Provider Access through one shared evaluator"),
+        // USCDI clinical resources served through Patient and Provider Access
+        // (PAT-02). NOT a complete capability: every served resource today is
+        // IMPORTED from another payer (no CHO component authors native clinical
+        // data), no US Core profile is claimed or validated, and search is
+        // _id/patient/subject only — no category, code, status or date search.
+        ("Clinical", FhirAdapterModes.Demo,
+            "ClinicalResourceController over IClinicalResourceStore (the Payer-to-Payer import "
+            + "store promoted into the clinical serving store; MongoDB when configured) for the "
+            + "USCDI clinical inventory: AllergyIntolerance, CarePlan, CareTeam, Condition, Device, "
+            + "DiagnosticReport, Goal, Immunization, MedicationDispense, MedicationRequest, "
+            + "Observation, Procedure. Read + member-scoped search only, member-keyed in the "
+            + "storage query, behind the same SMART scope and Provider Access consent/attribution "
+            + "controls as every other member-scoped resource. Valid FHIR R4; no US Core profile claimed"),
         // Provider Access over CHO-owned data. NOT a complete capability:
         // attribution panels come from configuration, so no live roster feed from
         // a payer source system is wired up (engagement integration behind
-        // IProviderAttributionSource); Payer-to-Payer imported data is not yet
-        // projected into these reads; and no external-core (QNXT/Facets/
+        // IProviderAttributionSource); Payer-to-Payer imported member HISTORY is
+        // not yet projected into these reads (imported CLINICAL data is — see
+        // the Clinical entry above); and no external-core (QNXT/Facets/
         // HealthEdge) Provider Access integration exists.
         ("ProviderAccess", FhirAdapterModes.Demo,
             "ProviderAccessAuthorizationService (authentication + SMART scope + provider/member "
@@ -100,14 +114,16 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         // before any exchange is authorized (generic consent is NOT
         // reinterpreted, so a deployment authorizes nothing until purposes are
         // recorded), ingestion covers only the resource types this FHIR surface serves
-        // (others are archived, not ingested), imported data is not yet projected
-        // into the read APIs, outbound transport to a specific payer depends on
-        // that payer's onboarding (credentials/endpoint configuration), and no
+        // (others are archived, not ingested), imported member HISTORY is not yet
+        // projected into the claims read APIs (imported CLINICAL data is served —
+        // see the Clinical entry), outbound transport to a specific payer depends
+        // on that payer's onboarding (credentials/endpoint configuration), and no
         // external-core (QNXT/Facets/HealthEdge) P2P integration exists.
         ("PayerToPayer", FhirAdapterModes.Demo,
             "PayerToPayerExchangeService (inbound respond) + PayerToPayerMemberMatchService ($member-match) "
             + "+ PayerToPayerOutboundService (outbound initiation; remote payer endpoints per configuration) "
-            + "+ PayerToPayerPackageIngestionService (durable import of supported resource types) "
+            + "+ PayerToPayerPackageIngestionService (durable import of supported resource types, "
+            + "including the USCDI clinical set served through Patient/Provider Access) "
             + "+ ConsentRegistryPayerToPayerConsentGate (purpose-scoped consent enforced server-side, both directions)"),
     ];
 

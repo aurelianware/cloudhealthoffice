@@ -15,6 +15,8 @@ deployment guarantee.
 | System architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Claims processing pipeline | [claim-adjudication-pipeline.md](claim-adjudication-pipeline.md), [ADJUDICATION-PIPELINE.md](ADJUDICATION-PIPELINE.md) |
 | FHIR integration | [fhir-conformance.md](fhir-conformance.md), [fhir-endpoint-projection.md](fhir-endpoint-projection.md), [claim-fhir-projection.md](claim-fhir-projection.md) |
+| USCDI clinical resources (CMS-0057-F PAT-02) | [clinical-fhir.md](clinical-fhir.md) |
+| Patient / Provider Access, consent | [provider-access.md](provider-access.md), [consent.md](consent.md), [payer-to-payer.md](payer-to-payer.md) |
 | X12 processing | [837 claims pipeline](../features/837-CLAIMS-PIPELINE.md), [834 enrollment](../features/834-IMPLEMENTATION-SUMMARY.md), [276/277 inbound/ECS](../features/276-277-IMPLEMENTATION-COMPLETE.md), outbound 276/277 via [healthcare-transaction-gateway.md](healthcare-transaction-gateway.md), [277 value-adds](../features/VALUEADDS277-README.md) |
 | Event flow | [shared-messagebus.md](shared-messagebus.md) |
 | Payer / clearinghouse connectivity | [healthcare-transaction-gateway.md](healthcare-transaction-gateway.md), field note: [Stedi interoperability](../engineering-field-notes/stedi-interoperability.md) |
