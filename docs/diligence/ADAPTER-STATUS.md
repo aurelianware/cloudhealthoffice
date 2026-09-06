@@ -20,7 +20,7 @@ This table is the September 2026 **synthetic demo tenant** default. A live pilot
 | Organization | Hybrid | provider-service FHIR proxy | Pilot wiring in progress; source labels shown per resource. |
 | InsurancePlan | Hybrid | benefit-plan-service FHIR proxy | Pilot wiring in progress; source labels shown per resource. |
 | Appeal | Demo (Hybrid when `Appeals:UseMockAdapter=false`) | mock or `HttpFhirAppealAdapter` | See endpoint. |
-| Prior Authorization (PAS) | Demo | `PasAutoAdjudicator` + rule engine (TX seed rules if DB present) | Demonstrates technical behavior with synthetic data. |
+| Prior Authorization (PAS) | Demo | `PasAutoAdjudicator` + rule engine (TX seed rules if DB present); `Claim/$submit` and `Claim/$inquire` | Demonstrates technical behavior with synthetic data. Status inquiry projects the stored authorization record read-only; it never re-queries a payer or mutates state. |
 | CRD / DTR | Demo | `CrdService` / `DtrService` | Demonstrates technical behavior with synthetic data. |
 | Bulk FHIR export | Demo | technical scaffold | Demonstrates technical behavior with synthetic data. |
 | Consent | Demo | consent-service registry (`ConsentPurposeOfUse` + shared `ConsentAuthorizationPolicy`; PHI-free `authorization-snapshots` projection) | Demonstrates technical behavior with synthetic data. Purpose-scoped authorization is enforced server-side for both Payer-to-Payer (both directions) and Provider Access, through one shared evaluator and one policy. |

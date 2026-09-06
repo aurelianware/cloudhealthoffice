@@ -53,7 +53,14 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         ("Organization", FhirAdapterModes.Hybrid, "provider-service FHIR proxy"),
         ("InsurancePlan", FhirAdapterModes.Hybrid, "benefit-plan-service FHIR proxy"),
         ("Appeal", FhirAdapterModes.Demo, "MockFhirAppealAdapter"),
-        ("PriorAuthorization", FhirAdapterModes.Demo, "PasAutoAdjudicator"),
+        // Da Vinci PAS: Claim/$submit (PAS-03) and Claim/$inquire (PAS-04).
+        // NOT complete: $inquire reports a pended-for-information decision but
+        // neither requests nor accepts documentation, so the CDex round-trip
+        // (PAS-07) remains unimplemented; there is no X12 278 parser; and
+        // authorization records carry no concurrency token.
+        ("PriorAuthorization", FhirAdapterModes.Demo,
+            "PasAutoAdjudicator (Claim/$submit) + PriorAuthorizationInquiryService "
+            + "(Claim/$inquire; read-only projection of the stored authorization record)"),
         ("CRD", FhirAdapterModes.Demo, "CrdService"),
         ("DTR", FhirAdapterModes.Demo, "DtrService"),
         ("BulkExport", FhirAdapterModes.Demo, "BulkExportService scaffold"),

@@ -134,7 +134,8 @@ Mode column: current operating mode of that surface in the default build.
 | `Services/CrdClassificationStore.cs` | `ICrdClassificationStore` (IMemoryCache) | Demo | PAS-01 |
 | `Controllers/DtrController.cs` | Questionnaire/QuestionnaireResponse CRUD, `$questionnaire-package` | Demo | PAS-02 |
 | `Services/DtrService.cs` | `DtrService : IDtrService`, 5 seeded Questionnaires (incl. Draft medication PA) | Demo (in-memory) | PAS-02, PAS-08 |
-| `Controllers/PasController.cs` | `Claim/$submit` only (no `$inquire`) | Demo | PAS-03/05/06 |
+| `Controllers/PasController.cs` | `Claim/$submit` and `Claim/$inquire` | Demo | PAS-03/04/05/06 |
+| `Services/PriorAuthorizationInquiry.cs`, `Services/PriorAuthorizationInquiryService.cs` | read-only projection of the authoritative authorization record; corroborating-key lookup; uniform refusal | Demo | PAS-04 inquiry / status | **PASSABLE** | **GAP** | Da Vinci PAS `Claim/$inquire` at `POST fhir/r4/Claim/$inquire`, projecting the SAME authorization record `$submit` writes — no inquiry-specific store, no second status field. Request is a PAS Bundle carrying a `Claim` (`use=preauthorization`); response is a Bundle carrying a `ClaimResponse` on the PAS profile, built by the same `PasResponseBuilder`. Status maps deterministically and totally (Submitted/InReview → queued `pending`; Pended/A4 → queued `pended-additional-information` + X12 306 reviewAction; Approved/A1 → complete `approved`; Modified/A2 → partial `modified`; Denied/A3 → complete `denied` + coded reason; Expired → complete `expired`; Cancelled → cancelled), so pending, pended-for-information, approved and denied are all distinguishable without claiming a CDex round-trip. Reads live committed state on every call, so a status changed since submission is the status returned. **Read-only by contract** — the store seam exposes no write method at all (asserted structurally), so repetition cannot create a record, move a status, restart a clock or trigger a payer submission. Tenant from the authenticated context and re-checked on the record; an authorization number alone never suffices — a corroborating member or provider key must match. Unknown / wrong-tenant / not-yours return one identical 404 `OperationOutcome`, category kept in a PHI-free audit line. CapabilityStatement advertises `submit` and `inquire` on `Claim`, pinned by test. Limitation: authorization records carry no concurrency token, so reads are last-write-wins committed state. QNXT status inquiry absent |
 | `Services/PasAutoAdjudicator.cs` | `IPasAutoAdjudicator.TryDecideAsync` (rule engine + enrollment gate) | Demo | PAS-03 |
 | `Services/PasResponseBuilder.cs` | approved/denied/pended ClaimResponse (PAS profile, X12 A4) | Demo | PAS-03/05/06/07 |
 | `Services/Cms0057ComplianceChecker.cs` | `ICms0057ComplianceChecker`, `CheckPriorAuthTimeline` (72h/7d) | Demo | PAS-03/05/06, PAT-02/03 |
@@ -307,6 +308,34 @@ scored on the CHO-native authorization backend (Replace) rather than a flat GAP.
 PAS-03 product capability moved GAP → **PASSABLE**; METRICS-01 product moved
 PARTIAL → **PASSABLE** (derives from the persisted record, not a test-only
 object). The QNXT column stays GAP: that integration is engagement work.
+
+**What changed in the PAS-04 PR:** the Da Vinci PAS `Claim/$inquire` operation
+is now served, projecting the existing authorization record onto a standards-
+shaped `ClaimResponse`. PAS-04 moved PARTIAL → **PASSABLE**, so CHO Replace
+declares **17 PASSABLE / 4 PARTIAL / 0 GAP** (generator-computed from the
+manifest — nothing here is hard-coded). Remaining PARTIAL: PAS-07, PAT-02,
+PAT-03, SEC-01.
+
+**PAS-07 deliberately stays PARTIAL.** `$inquire` *reports* that a decision is
+pended awaiting information — CHO already knows that from the A4 review decision
+— but it neither requests documentation nor accepts it. That round-trip is what
+CDex is, and it is not implemented. The PAS-07 GAP test was rewritten to stop
+keying on the string `$inquire` (now a legitimate operation) and to assert what
+actually remains missing: no additional-information intake action.
+
+**Write-side fixes this required.** Status was not inquirable as shipped:
+`preAuthRef` was set only on approvals, and a pended submission persisted an
+authorization number that was never returned to the caller, so the outcome that
+most needs following up had no tracking handle. Approved, denied and pended
+responses now all carry the persisted number; the denial code and reason, the
+approved period, and the service lines from the submitted Claim are persisted
+too; and the authorization HTTP client now propagates the tenant header, without
+which authorization-service falls back to its default partition and reads and
+writes cross tenants.
+
+**Zero GAPs still does not mean complete CMS-0057-F compliance.** This inventory
+is implementation evidence, not certification or attestation, and the
+QNXT/external-core column is unchanged — PAS-04 augment stays **GAP**.
 
 **What changed in the CONSENT-01 PR:** Provider Access stopped being governed by
 SMART scopes alone and now composes four independent, mandatory controls, the
