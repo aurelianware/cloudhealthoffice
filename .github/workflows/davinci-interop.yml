@@ -107,6 +107,8 @@ jobs:
   # and performs real exchanges against it:
   #   BR-PAS-SUBMIT-001  PAS $submit — a synthetic prior authorization
   #   BR-CRD-001         CRD CDS Hooks — discovery plus order-sign invocations
+  #   BR-DTR-001         DTR $questionnaire-package — entered from the payer's own
+  #                      CRD determination, following the questionnaire it named
   #
   # Security posture:
   #   * `permissions: contents: read` only — the third-party container never sits
@@ -118,13 +120,13 @@ jobs:
   #   * All data sent is synthetic; no VSAC or other licensed terminology
   #     credential is used or required.
   scenarios:
-    name: br-payer external scenarios (PAS $submit, CRD)
+    name: br-payer external scenarios (PAS $submit, CRD, DTR)
     runs-on: ubuntu-latest
     needs: harness
     # A dead external implementation must fail with a diagnostic, not hold a
     # runner. The harness has its own bounded timeouts; this is the outer bound,
-    # sized for two scenarios each starting their own container.
-    timeout-minutes: 45
+    # sized for three scenarios each starting their own container.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -171,7 +173,8 @@ jobs:
           print('| --- | --- | --- | --- | --- |')
           for target in run['targets']:
               for result in target['results']:
-                  print(f"| {result['scenarioId']} | {result['protocol']} | {result['status']} "
+                  chain = f" ← {result['linkedFromScenario']}" if result.get('linkedFromScenario') else ''
+                  print(f"| {result['scenarioId']}{chain} | {result['protocol']} | {result['status']} "
                         f"| {target['name']} | `{target['version']}` |")
           for result in run['notRunScenarios']:
               print(f"| {result['scenarioId']} | {result['protocol']} | NotRun | {result['target']} | — |")

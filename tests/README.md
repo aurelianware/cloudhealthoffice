@@ -20,7 +20,9 @@ merged into one score:
   implementation? Reports `Passed` / `Failed` / `Skipped` / `NotRun`. External
   scenarios are opt-in and start pinned third-party containers; see
   [docs/interop/davinci.md](../docs/interop/davinci.md). Executing today:
-  `BR-PAS-SUBMIT-001` (PAS `$submit`) and `BR-CRD-001` (CRD CDS Hooks).
+  `BR-PAS-SUBMIT-001` (PAS `$submit`), `BR-CRD-001` (CRD CDS Hooks) and
+  `BR-DTR-001` (DTR `$questionnaire-package`, chained from the payer's own CRD
+  determination).
 
 ## Supporting Artifacts
 - [E2E-TEST-RESULTS.md](E2E-TEST-RESULTS.md)
