@@ -202,14 +202,11 @@ public class PasController : FhirControllerBase
         if (validationError != null)
             return validationError;
 
-        var request = new PriorAuthorizationInquiryRequest
-        {
-            // Tenant is the authenticated context's, never the body's.
-            TenantId = TenantId,
-            AuthorizationNumber = ExtractAuthorizationNumber(claim!),
-            MemberReference = claim!.Patient?.Reference,
-            RequestingProviderNpi = claim.Provider?.Identifier?.Value,
-        };
+        // Tenant from the authenticated context, caller from the validated token —
+        // neither is read from the request body. Lifting the lookup keys out of
+        // the Claim is the service's job, so this action stays routing plus
+        // HTTP mapping.
+        var request = _inquiry.FromInquiryClaim(claim!, TenantId, CallerId());
 
         var result = await _inquiry.InquireAsync(request, HttpContext.RequestAborted);
 
@@ -217,9 +214,21 @@ public class PasController : FhirControllerBase
 
         if (!result.Found)
         {
-            // ONE refusal for every category. "Wrong tenant", "not yours" and
-            // "no such authorization" must be indistinguishable, or the
-            // identifier space can be probed for which authorizations exist.
+            // A defect in the REQUEST is the caller's to fix and says nothing
+            // about what exists, so it is reported plainly as a 400.
+            if (result.FailureKind == PriorAuthorizationInquiryFailureKind.BadRequest)
+            {
+                return FhirBadRequest(
+                    result.Outcome == PriorAuthorizationInquiryOutcome.MissingIdentifier
+                        ? "Inquiry Claim must carry the authorization identifier "
+                          + "(Claim.identifier or Claim.insurance.preAuthRef)."
+                        : "Inquiry must also carry a corroborating key: the patient "
+                          + "reference or the requesting provider identifier.");
+            }
+
+            // Everything about a RECORD gets ONE answer. "Wrong tenant", "not
+            // yours" and "no such authorization" must be indistinguishable, or
+            // the identifier space can be probed for what exists.
             return StatusCode(404, new OperationOutcome
             {
                 Issue =
@@ -245,8 +254,7 @@ public class PasController : FhirControllerBase
     /// </summary>
     private void AuditInquiry(PriorAuthorizationInquiryResult result)
     {
-        var caller = User?.FindFirst("sub")?.Value
-                     ?? User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var caller = CallerId();
 
         if (result.Found)
         {
@@ -309,20 +317,26 @@ public class PasController : FhirControllerBase
     }
 
     /// <summary>
-    /// The authorization number from the inquiry Claim: its identifier, or the
-    /// pre-auth reference some submitters echo on <c>Claim.insurance.preAuthRef</c>.
+    /// The authenticated caller, from the validated token. The JWT handler maps
+    /// <c>sub</c> onto NameIdentifier, and backend clients may carry only
+    /// <c>client_id</c>/<c>azp</c>. Never read from a header or the body.
     /// </summary>
-    private static string? ExtractAuthorizationNumber(Claim claim)
+    private string? CallerId()
     {
-        var fromIdentifier = claim.Identifier
-            ?.Select(i => i.Value)
-            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-        if (!string.IsNullOrWhiteSpace(fromIdentifier))
-            return fromIdentifier;
+        foreach (var claimType in new[]
+                 {
+                     "sub",
+                     System.Security.Claims.ClaimTypes.NameIdentifier,
+                     "client_id",
+                     "azp",
+                 })
+        {
+            var value = User?.FindFirst(claimType)?.Value;
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
 
-        return claim.Insurance
-            ?.SelectMany(i => i.PreAuthRef ?? new List<string>())
-            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+        return null;
     }
 
     private async System.Threading.Tasks.Task PersistAuthorizationAsync(Claim claim, PasDecisionResult decision)

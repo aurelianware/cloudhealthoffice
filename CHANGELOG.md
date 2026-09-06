@@ -54,10 +54,19 @@ the record, and a supplied key that does *not* match refuses even when another
 does. Tenant comes from the authenticated context and is re-checked on the record
 itself, so it holds even if header propagation is lost.
 
-**Anti-enumeration.** Unknown authorization, wrong tenant, and not-yours all
-return one identical `404` `OperationOutcome`; the distinguishing category is
-kept in a PHI-free audit line carrying tenant, caller, authorization number,
-outcome and status only.
+**Anti-enumeration, without swallowing honest errors.** Request-shape defects —
+no authorization identifier, no corroborating key — return `400` naming what is
+missing, because they say nothing about what exists; telling a caller who forgot
+an identifier that their authorization "does not exist" would be both wrong and
+unhelpful. Every refusal about a *record* — unknown, wrong tenant, not the
+caller's — returns one identical `404` `OperationOutcome`, and a structural test
+pins that classification so a newly added outcome cannot quietly become
+distinguishable. The category is kept in a PHI-free audit line carrying tenant,
+caller, authorization number, outcome and status only.
+
+**Thin controller.** The action routes and maps to HTTP; lifting the lookup keys
+out of the inquiry Claim belongs to the service, since which element carries
+which key is a property of the PAS request shape rather than of HTTP.
 
 **Authorization controls.** Authentication (`[Authorize]`), the SMART
 `*/Claim.read` scope, and tenant from context — the same controls `$submit` has.

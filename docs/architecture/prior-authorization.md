@@ -118,6 +118,22 @@ a duplicate transaction, or cause a payer submission — however many times it i
 repeated. CHO's status derives from a stored adjudication record, not a live
 re-query, so an inquiry never turns into an outbound X12 transaction.
 
+### Error responses
+
+| Condition | Response |
+| --- | --- |
+| Malformed bundle, wrong `Claim.use`, disallowed resource type | `400` + `OperationOutcome` |
+| Missing authorization identifier | `400` + `OperationOutcome` naming what is missing |
+| Missing corroborating key | `400` + `OperationOutcome` naming what is missing |
+| Unknown / wrong tenant / not the caller's | one uniform `404` + `OperationOutcome` |
+
+The split matters: a defect in the **request** is the caller's to fix and says
+nothing about what exists, so it is described plainly. A refusal about a
+**record** is uniform. Collapsing the first into the second would tell a caller
+who forgot an identifier that their authorization does not exist.
+
+No response carries store, query, or implementation detail.
+
 ### Authorization controls
 
 As a POST operation, `$inquire` is governed by the same controls as `$submit`:
@@ -175,6 +191,15 @@ Making status inquirable required fixing the write side:
   pended awaiting information, which CHO already knows from the A4 review
   decision. It neither requests documentation nor accepts it; that round-trip is
   what CDex is, and it is not implemented.
+* **An inquiry is bound to its authorization by the corroborating key, not by
+  the caller's own identity.** PAS is system-to-system here: `$submit` does not
+  check that the caller *is* the provider named in the Claim, and there is no
+  mapping in this repository from a token subject to a provider NPI. So a caller
+  who knows both the authorization number and a matching member or provider key
+  can read it, within their own tenant. Inventing a subject-to-NPI mapping to
+  close that would be security theatre — NPIs are public — so the caller is
+  recorded in the audit trail instead, and tightening this waits on a real
+  provider identity claim in the token.
 * **No optimistic concurrency on authorization records.** There is no ETag or
   row version, so updates are last-write-wins and an inquiry reads committed
   state rather than a versioned snapshot. Partially persisted status changes are

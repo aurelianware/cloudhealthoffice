@@ -335,6 +335,99 @@ public class PasInquiryTests
 
     [Fact]
     [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_RequestDefectsAre400AndRecordRefusalsAre404()
+    {
+        // A defect in the REQUEST is the caller's to fix and reveals nothing
+        // about what exists, so it is reported plainly. A refusal about a RECORD
+        // is uniform. Collapsing the first into the second would tell a caller
+        // who forgot an identifier that their authorization does not exist.
+        var controller = InquiryController(Record(Approved, "A1"));
+
+        var noIdentifier = await controller.ClaimInquire(BundleWith(new Claim
+        {
+            Use = ClaimUseCode.Preauthorization,
+            Patient = new ResourceReference($"Patient/{Member}"),
+        }));
+
+        var noCorroboratingKey = await controller.ClaimInquire(BundleWith(new Claim
+        {
+            Use = ClaimUseCode.Preauthorization,
+            Identifier = [new Identifier { Value = AuthNumber }],
+        }));
+
+        var notYours = await controller.ClaimInquire(BundleWith(new Claim
+        {
+            Use = ClaimUseCode.Preauthorization,
+            Identifier = [new Identifier { Value = AuthNumber }],
+            Patient = new ResourceReference("Patient/pat-999"),
+        }));
+
+        noIdentifier.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        noCorroboratingKey.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(400);
+        // ...but a well-formed request for a record the caller may not have is
+        // still the uniform 404.
+        notYours.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_Replace_OnlyRequestShapeDefectsAreSafeToDescribe()
+    {
+        // Structural guard on the classification itself: every outcome that
+        // concerns a RECORD must map to the uniform answer, so a new outcome
+        // cannot accidentally become a distinguishable one.
+        PriorAuthorizationInquiryResult.Refused(PriorAuthorizationInquiryOutcome.MissingIdentifier)
+            .FailureKind.Should().Be(PriorAuthorizationInquiryFailureKind.BadRequest);
+        PriorAuthorizationInquiryResult.Refused(PriorAuthorizationInquiryOutcome.MissingCorroboratingKey)
+            .FailureKind.Should().Be(PriorAuthorizationInquiryFailureKind.BadRequest);
+
+        foreach (var recordOutcome in new[]
+                 {
+                     PriorAuthorizationInquiryOutcome.NotFound,
+                     PriorAuthorizationInquiryOutcome.TenantMismatch,
+                     PriorAuthorizationInquiryOutcome.NotAuthorizedForCaller,
+                 })
+        {
+            PriorAuthorizationInquiryResult.Refused(recordOutcome)
+                .FailureKind.Should().Be(PriorAuthorizationInquiryFailureKind.Unavailable,
+                    "a refusal about a record must never be distinguishable");
+        }
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_Replace_LookupKeysComeFromTheServiceNotTheController()
+    {
+        // The controller routes and maps to HTTP; which Claim element carries
+        // which lookup key is a property of the PAS request shape and lives with
+        // the lookup rules.
+        typeof(IPriorAuthorizationInquiryService)
+            .GetMethod(nameof(IPriorAuthorizationInquiryService.FromInquiryClaim))
+            .Should().NotBeNull();
+
+        typeof(PasController)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
+            .Select(m => m.Name)
+            .Should().NotContain("ExtractAuthorizationNumber",
+                "identifier extraction belongs to the inquiry service");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_Replace_TenantIsNeverTakenFromTheRequestBody()
+    {
+        // FromInquiryClaim takes the tenant as an argument from the authenticated
+        // context; there is no path by which a Claim could supply one.
+        var service = new PriorAuthorizationInquiryService(new RecordingStore([]));
+
+        var mapped = service.FromInquiryClaim(InquiryClaim(), "tenant-from-context", "caller-1");
+
+        mapped.TenantId.Should().Be("tenant-from-context");
+        mapped.CallerId.Should().Be("caller-1");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
     public async Task PAS04_Replace_MalformedBundleReturnsAnOperationOutcome()
     {
         var controller = InquiryController(Record(Approved, "A1"));

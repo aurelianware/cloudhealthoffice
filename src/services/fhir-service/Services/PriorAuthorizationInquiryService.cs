@@ -33,6 +33,20 @@ public sealed record PriorAuthorizationInquiryResult
     public bool Found => Outcome == PriorAuthorizationInquiryOutcome.Found
                          && Authorization is not null;
 
+    /// <summary>
+    /// How this refusal should be reported. Only the two request-shape defects
+    /// are safe to describe; everything else collapses to one answer.
+    /// </summary>
+    public PriorAuthorizationInquiryFailureKind FailureKind => Outcome switch
+    {
+        PriorAuthorizationInquiryOutcome.Found => PriorAuthorizationInquiryFailureKind.None,
+        PriorAuthorizationInquiryOutcome.MissingIdentifier
+            => PriorAuthorizationInquiryFailureKind.BadRequest,
+        PriorAuthorizationInquiryOutcome.MissingCorroboratingKey
+            => PriorAuthorizationInquiryFailureKind.BadRequest,
+        _ => PriorAuthorizationInquiryFailureKind.Unavailable,
+    };
+
     public static PriorAuthorizationInquiryResult Refused(
         PriorAuthorizationInquiryOutcome outcome, string? requested = null)
         => new() { Outcome = outcome, RequestedAuthorizationNumber = requested };
@@ -54,6 +68,27 @@ public sealed record PriorAuthorizationInquiryRequest
 
     /// <summary>Requesting provider NPI the caller asserts.</summary>
     public string? RequestingProviderNpi { get; init; }
+
+    /// <summary>
+    /// The authenticated caller, for the audit trail. Not an authorization key:
+    /// see the limitation note on <see cref="IPriorAuthorizationInquiryService"/>.
+    /// </summary>
+    public string? CallerId { get; init; }
+}
+
+/// <summary>
+/// How a refusal should surface over HTTP. A defect in the REQUEST is the
+/// caller's to fix and reveals nothing about what exists, so it is reported
+/// plainly. A refusal about a RECORD is uniform, because distinguishing "no such
+/// authorization" from "not yours" is what turns an inquiry into a probe.
+/// </summary>
+public enum PriorAuthorizationInquiryFailureKind
+{
+    None = 0,
+    /// <summary>The request itself is incomplete — safe to say so (400).</summary>
+    BadRequest = 1,
+    /// <summary>Anything about a record. One uniform answer (404).</summary>
+    Unavailable = 2,
 }
 
 /// <summary>
@@ -70,11 +105,32 @@ public sealed record PriorAuthorizationInquiryRequest
 /// READ ONLY. The service depends on <see cref="IPriorAuthorizationStore"/>,
 /// which has no write method: an inquiry cannot create a record, move a status,
 /// restart a decision clock, or cause a payer submission.
+///
+/// CALLER BINDING — a documented limitation. PAS is a system-to-system surface
+/// here: <c>$submit</c> does not check that the caller IS the provider named in
+/// the Claim, and there is no mapping in this repository from a token subject to
+/// a provider NPI. So an inquiry is bound to its authorization by the
+/// corroborating key, not by the caller's own identity: a caller who knows both
+/// the authorization number AND a matching member or provider key can read it,
+/// within their own tenant. Inventing a subject-to-NPI mapping to close that
+/// would be security theatre — NPIs are public — so the caller is recorded in
+/// the audit trail instead, and tightening this waits on a real provider
+/// identity claim. Provider Access consent is deliberately NOT applied: it
+/// governs a provider reading a member's clinical record, not a submitter asking
+/// after its own prior-authorization request.
 /// </summary>
 public interface IPriorAuthorizationInquiryService
 {
     Task<PriorAuthorizationInquiryResult> InquireAsync(
         PriorAuthorizationInquiryRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lifts the lookup keys out of an inquiry Claim. Which elements carry which
+    /// key is a property of the PAS request shape, so it belongs with the lookup
+    /// rules rather than in the HTTP layer.
+    /// </summary>
+    PriorAuthorizationInquiryRequest FromInquiryClaim(
+        Hl7.Fhir.Model.Claim claim, string tenantId, string? callerId);
 }
 
 /// <inheritdoc />
@@ -84,6 +140,36 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
 
     public PriorAuthorizationInquiryService(IPriorAuthorizationStore store)
         => _store = store;
+
+    /// <inheritdoc />
+    public PriorAuthorizationInquiryRequest FromInquiryClaim(
+        Hl7.Fhir.Model.Claim claim, string tenantId, string? callerId) => new()
+    {
+        // Tenant is the authenticated context's. A tenant named anywhere in the
+        // body is data, never authority.
+        TenantId = tenantId,
+        CallerId = callerId,
+        AuthorizationNumber = ExtractAuthorizationNumber(claim),
+        MemberReference = claim.Patient?.Reference,
+        RequestingProviderNpi = claim.Provider?.Identifier?.Value,
+    };
+
+    /// <summary>
+    /// The authorization number: the Claim's own identifier, or the pre-auth
+    /// reference some submitters echo on <c>Claim.insurance.preAuthRef</c>.
+    /// </summary>
+    private static string? ExtractAuthorizationNumber(Hl7.Fhir.Model.Claim claim)
+    {
+        var fromIdentifier = claim.Identifier
+            ?.Select(i => i.Value)
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+        if (!string.IsNullOrWhiteSpace(fromIdentifier))
+            return fromIdentifier;
+
+        return claim.Insurance
+            ?.SelectMany(i => i.PreAuthRef ?? new List<string>())
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+    }
 
     public async Task<PriorAuthorizationInquiryResult> InquireAsync(
         PriorAuthorizationInquiryRequest request, CancellationToken ct = default)
