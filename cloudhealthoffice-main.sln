@@ -235,6 +235,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "rfai-service", "src\service
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RfaiService.Tests", "src\services\rfai-service\RfaiService.Tests\RfaiService.Tests.csproj", "{3C0D4960-1343-4573-A6C9-9E16F5B09E25}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DaVinciInterop.Tests", "tests\DaVinciInterop.Tests\DaVinciInterop.Tests.csproj", "{E3E5068A-D110-4908-9B8B-566E6DDE52CE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1337,6 +1339,18 @@ Global
 		{3C0D4960-1343-4573-A6C9-9E16F5B09E25}.Release|x64.Build.0 = Release|Any CPU
 		{3C0D4960-1343-4573-A6C9-9E16F5B09E25}.Release|x86.ActiveCfg = Release|Any CPU
 		{3C0D4960-1343-4573-A6C9-9E16F5B09E25}.Release|x86.Build.0 = Release|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Debug|x64.Build.0 = Debug|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Debug|x86.Build.0 = Debug|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Release|x64.ActiveCfg = Release|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Release|x64.Build.0 = Release|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Release|x86.ActiveCfg = Release|Any CPU
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1441,6 +1455,7 @@ Global
 		{C950ACB0-F1CA-478A-89FE-B1B644E7B49D} = {1CF083BF-0A1D-5B5F-37B1-E2F5EFE0303B}
 		{A3644FF9-6AC3-40BA-BB0A-42821FABB4B6} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
 		{3C0D4960-1343-4573-A6C9-9E16F5B09E25} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{E3E5068A-D110-4908-9B8B-566E6DDE52CE} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C10C3349-5BEE-4B34-9987-23F0142F9D98}

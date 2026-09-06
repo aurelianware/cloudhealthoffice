@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Da Vinci External Interoperability Suite
+    ========================================
+    Answers a different question from tests/Cms0057Acceptance.Tests.
+
+      Cms0057Acceptance.Tests  Does CHO implement the behavior its own
+                               CMS-0057-F acceptance specification requires?
+      DaVinciInterop.Tests     Can CHO exchange standards-conformant requests
+                               and responses with an INDEPENDENT Da Vinci
+                               implementation it does not own?
+
+    The two evidence streams are deliberately separate and are never merged
+    into one score. An interop pass is not CMS certification, and an interop
+    failure does not change a CMS-0057-F scenario status.
+
+    Two test categories live here, split by [Trait("Category", …)]:
+
+      DaVinciInteropUnit    Harness unit tests. No Docker, no network. These
+                            run anywhere, including on ordinary PRs.
+      DaVinciInterop        Scenarios that cross a real process/container
+                            boundary into third-party code. Opt-in: they skip
+                            unless CHO_INTEROP_ENABLED=1 is set.
+
+    Run the smoke path with `scripts/interop/run.sh br-payer smoke`, which
+    starts the pinned external implementation, runs the scenario, collects
+    sanitized evidence under artifacts/interop/ and tears the stack down.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>DaVinciInterop.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The pinned external targets and the scenario inventory are the
+         machine-readable sources of truth. Copy them next to the test
+         assembly so the harness can load them at runtime. -->
+    <Content Include="..\..\interop\versions.json" Link="interop\versions.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\interop\scenarios.json" Link="interop\scenarios.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="FluentAssertions" Version="6.12.2" />
+    <!-- Same FHIR parser/serializer version the CHO FHIR service uses, so an
+         external response is validated by the parser CHO would actually run. -->
+    <PackageReference Include="Hl7.Fhir.R4" Version="5.10.2" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- CHO's real FHIR surface. Referenced so conformance cross-checks read
+         CHO's production CapabilityStatement rather than a restated copy. -->
+    <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
+  </ItemGroup>
+
+</Project>
