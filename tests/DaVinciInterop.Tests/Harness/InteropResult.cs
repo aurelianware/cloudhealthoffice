@@ -46,6 +46,20 @@ public enum FindingSeverity
 public sealed record InteropInteraction
 {
     [JsonPropertyName("sequence")] public int Sequence { get; init; }
+
+    /// <summary>
+    /// What kind of exchange this was, e.g. "cds-hooks-discovery",
+    /// "cds-hooks-invoke". Lets evidence be read by protocol step rather than by
+    /// reverse-engineering the URL.
+    /// </summary>
+    [JsonPropertyName("kind")] public string? Kind { get; init; }
+
+    /// <summary>The CDS Hooks hook invoked, when the interaction was a hook call.</summary>
+    [JsonPropertyName("hook")] public string? Hook { get; init; }
+
+    /// <summary>The external service id invoked, as resolved from discovery.</summary>
+    [JsonPropertyName("serviceId")] public string? ServiceId { get; init; }
+
     [JsonPropertyName("target")] public string Target { get; init; } = "";
     [JsonPropertyName("method")] public string Method { get; init; } = "";
     [JsonPropertyName("url")] public string Url { get; init; } = "";
@@ -87,8 +101,15 @@ public sealed record InteropFinding
     [JsonPropertyName("externalObserved")] public string? ExternalObserved { get; init; }
     [JsonPropertyName("specificationReference")] public string? SpecificationReference { get; init; }
 
-    public static InteropFinding Info(string code, string summary) =>
-        new() { Severity = nameof(FindingSeverity.Info), Code = code, Summary = summary };
+    public static InteropFinding Info(string code, string summary, string? cho = null, string? external = null) =>
+        new()
+        {
+            Severity = nameof(FindingSeverity.Info),
+            Code = code,
+            Summary = summary,
+            ChoObserved = cho,
+            ExternalObserved = external,
+        };
 
     public static InteropFinding Warning(string code, string summary, string? cho = null, string? external = null, string? spec = null) =>
         new()
@@ -149,6 +170,13 @@ public sealed record InteropResult
     [JsonPropertyName("title")] public string Title { get; init; } = "";
     [JsonPropertyName("protocol")] public string Protocol { get; init; } = "";
     [JsonPropertyName("choRole")] public string ChoRole { get; init; } = "";
+
+    /// <summary>
+    /// The role the external implementation played, e.g. "payer-server". Recorded
+    /// alongside CHO's role so evidence states the direction of the exchange
+    /// rather than leaving it to be inferred from the protocol.
+    /// </summary>
+    [JsonPropertyName("externalRole")] public string? ExternalRole { get; init; }
     [JsonPropertyName("target")] public string Target { get; init; } = "";
     [JsonPropertyName("targetVersion")] public string TargetVersion { get; init; } = "";
     [JsonPropertyName("targetImageReference")] public string? TargetImageReference { get; init; }

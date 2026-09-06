@@ -44,7 +44,7 @@ the machine-readable source of truth.
 
 | Target | Role | Protocols | License | Status in this repository |
 | --- | --- | --- | --- | --- |
-| [HL7-DaVinci/br-payer](https://github.com/HL7-DaVinci/br-payer) | External server | CRD, DTR, PAS | Apache-2.0 | **Executed** — the smoke scenario runs against it |
+| [HL7-DaVinci/br-payer](https://github.com/HL7-DaVinci/br-payer) | External server | CRD, DTR, PAS | Apache-2.0 | **Executed** — PAS `$submit` and CRD CDS Hooks scenarios run against it |
 | [HL7-DaVinci/br-provider](https://github.com/HL7-DaVinci/br-provider) | External client | CRD, DTR, PAS | MIT | Pinned and defined; no scenario yet |
 | [inferno-framework/davinci-pdex-test-kit](https://github.com/inferno-framework/davinci-pdex-test-kit) | Conformance runner | PDex | Apache-2.0 | Runner seam only — see §11 |
 | [inferno-framework/davinci-dtr-test-kit](https://github.com/inferno-framework/davinci-dtr-test-kit) | Conformance runner | DTR | Apache-2.0 | Runner seam only — see §11 |
@@ -102,14 +102,22 @@ export CHO_INTEROP_COMPOSE_OVERRIDE=$PWD/interop/docker-compose.proxy.yml
 An overlay may add host plumbing only. It must never override an `image:` — the
 pins are enforced by tests.
 
-## 6. Running the smoke test
+## 6. Running the scenarios
 
 One command starts the dependency, runs the scenario, collects evidence and cleans
 up:
 
 ```bash
-./scripts/interop/run.sh br-payer smoke
+./scripts/interop/run.sh br-payer smoke   # PAS $submit    (BR-PAS-SUBMIT-001)
+./scripts/interop/run.sh br-payer crd     # CRD CDS Hooks  (BR-CRD-001)
+./scripts/interop/run.sh br-payer all     # both, merged into one evidence document
 ```
+
+Scenarios run one at a time even under `all`. They share a Compose project name
+and host ports, so the suite serializes them deliberately
+(`InteropCollection`) — running them concurrently would have them contend for the
+same container and the same evidence file, and the failure would look like a
+flaky external implementation rather than the harness fighting itself.
 
 Harness unit tests only (no Docker, no third-party code, a couple of seconds):
 
@@ -119,10 +127,11 @@ Harness unit tests only (no Docker, no third-party code, a couple of seconds):
 dotnet test tests/DaVinciInterop.Tests --filter Category=DaVinciInteropUnit
 ```
 
-Running the external scenario directly, if you would rather drive it yourself:
+Running the external scenarios directly, if you would rather drive them yourself:
 
 ```bash
 CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Category=DaVinciInterop
+CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Scenario=BR-CRD-001
 ```
 
 Without `CHO_INTEROP_ENABLED=1` the external scenarios **skip**. An ordinary
@@ -254,8 +263,14 @@ Future scenarios are added without touching orchestration:
    (with license, pin, endpoints and IG versions) and a service to
    `interop/docker-compose.interop.yml` under its own profile.
 3. Write the test in `tests/DaVinciInterop.Tests/Scenarios/`, marked
-   `[Trait("Category", "DaVinciInterop")]` and `[InteropFact]`, using
+   `[Collection(InteropCollection.Name)]`, `[Trait("Category", "DaVinciInterop")]`,
+   `[Trait("Scenario", "<id>")]` and `[InteropFact]`, using
    `InteropEnvironment.For(...)`, `InteropHttpClient` and `InteropScenarioRun`.
+   The collection attribute is not optional: scenarios share a Compose project and
+   host ports, so they must not run concurrently.
+   Write evidence with `writer.MergeWithPrevious([result])` so running alongside
+   another scenario produces one run document rather than erasing the other's
+   result.
 4. Flip `implemented` to true and update the expectation in
    `ScenarioInventoryTests.Only_the_scenario_this_harness_actually_executes_is_marked_implemented`.
 
@@ -323,22 +338,40 @@ Known at the current pins:
   `$inquire`; only `$submit`, which both sides name identically, is asserted.
 * **`Claim/$submit` canonical agrees** between CHO and the RI, and the smoke
   scenario asserts that agreement.
+* **CRD version.** CHO targets the Da Vinci CRD **STU 2.2.x** family; the pinned
+  payer advertises **2.2** through its `davinci-crd.version` discovery extension.
+  Same family, but as with PAS one side names a family and the other a release, so
+  `run.json` reports `mismatch: true` rather than claiming an agreement it cannot
+  demonstrate.
+* **CHO advertises no `davinci-crd.version` extension** in its own CDS Hooks
+  discovery, while the payer does. Recorded by `BR-CRD-001` as the Warning finding
+  `crd.surface.noVersionExtension`. A CRD client cannot tell from CHO's discovery
+  which CRD version CHO implements. Not adjudicated here; a reasonable follow-up.
 
 ## 13. Limitations
 
-* One scenario executes today: `BR-PAS-SUBMIT-001`. Everything else in the
-  inventory is `NotRun` — deliberately, because a placeholder must never look like
-  a result.
-* CHO participates in the smoke scenario as the **client** and through its real
-  `MetadataController`. CHO's FHIR service does not run as a container in this
-  scenario; the `interop-cho` profile exists for the scenarios where CHO is the
+* Two scenarios execute today: `BR-PAS-SUBMIT-001` (PAS) and `BR-CRD-001` (CRD).
+  Everything else in the inventory is `NotRun` — deliberately, because a
+  placeholder must never look like a result.
+* CHO participates in both scenarios as the **client**, and through its real
+  production code on the CHO side (`MetadataController` for PAS,
+  `CrdController` for CRD). CHO's FHIR service does not run as a container in
+  either; the `interop-cho` profile exists for the scenarios where CHO is the
   server, and is exercised by no scenario yet.
+* `BR-CRD-001` proves protocol interoperability and that the external payer's
+  rules ran. It does **not** compare coverage decisions between CHO and the
+  payer — see "Protocol compatibility vs payer rule parity" below.
 * `br-provider` is pinned and defined, but nothing drives it. Upstream pairs it
   with the FAST UDAP security server in its own Compose stack; that topology is
   not reproduced here.
 * No Inferno suite executes. Only the runner seam exists.
 * CDS-Library is pinned but unused: the pinned br-payer image already bundles the
-  clinical content its own rules need.
+  clinical content its own rules need, including the CRD rule fixtures
+  `BR-CRD-001` exercises.
+* Same-content rule parity is **deferred**. CHO and br-payer are two different
+  payers with two different rule sets, so comparing their coverage decisions
+  today would compare rule content, not implementations. A later PR can load the
+  same pinned CDS-Library content into both and make that comparison meaningful.
 * The smoke scenario submits a service code that matches no PlanDefinition on the
   RI, so the payer answers with review action `A3` (Not Required). That is a
   deterministic, content-independent path on purpose — it is a proof of protocol
@@ -348,11 +381,158 @@ Known at the current pins:
   run a full IG profile validator against the response; adding one is a reasonable
   next step and would turn structural findings into richer ones.
 
-## 14. Recommended next step
+## 14. CRD interoperability (`BR-CRD-001`)
 
-`BR-CRD-001` — CRD CDS Hooks against br-payer. The pinned image already advertises
-its CRD services at `/cds-services` with `davinci-crd.version` extensions, it needs
-no additional content or prior state, and it exercises a second protocol through
-the same harness with no orchestration changes. `BR-PAS-INQUIRE-001` is the natural
-follow-on, since `BR-PAS-SUBMIT-001` already establishes the prior authorization
-an inquiry needs.
+### The exchange
+
+```
+CHO interop runner  ──  GET  /cds-services                    ──▶  br-payer
+                    ◀──  discovery: 6 CRD services, davinci-crd.version 2.2
+
+CHO interop runner  ──  POST /cds-services/order-sign-crd     ──▶  br-payer
+                    ◀──  CDS Hooks response + coverage-information determination
+```
+
+CHO is the **provider-side CRD client**; br-payer is the **payer CDS service**.
+The payer is never mocked, and its rules are never reimplemented in CHO.
+
+### Why order-sign
+
+Selected from what the pinned image actually advertises, not from assumption. It
+exposes six CRD services (`appointment-book`, `encounter-discharge`,
+`encounter-start`, `order-dispatch`, `order-select`, `order-sign`), all advertising
+CRD 2.2. `order-sign` is the one its own rule fixtures — `PriorAuthRequired`,
+`ExcludedServices`, `DocumentationRequired` — declare as their named trigger
+event, so it is the hook that exercises real coverage logic rather than returning
+a default. It also needs no licensed terminology, no credentials, and no prior
+server state.
+
+The service id is **resolved from discovery by hook**, never hard-coded and never
+taken by list position: a server may reorder or rename services between releases,
+and a scenario that indexed into the array would quietly start testing something
+else instead of failing honestly.
+
+### Behavioural cases
+
+Three synthetic draft orders, three genuinely different determinations from the
+payer's own rule fixtures:
+
+| Billing code (HCPCS) | Upstream fixture | Payer's determination |
+| --- | --- | --- |
+| `L8000` | `PriorAuthRequired` | `covered=covered`, `pa-needed=auth-needed`, `doc-needed=no-doc`, plus a DTR questionnaire canonical |
+| `J3490` | `ExcludedServices` | `covered=not-covered` |
+| `E0100` | *(matches no fixture)* | `covered=conditional`, `info-needed=detail-code` |
+
+The third code is what makes the first two meaningful. Two differing answers could
+be two hard-coded branches; three distinct answers, one of which is the no-rule
+default, show the payer actually resolving rules per billing code. The scenario
+asserts all three are distinct.
+
+CHO does not compute these answers. It supplies inputs the payer's rules key off
+and validates the shape and distinctness of what comes back — the external
+implementation remains the system producing the decision.
+
+### Upstream fixture dependency
+
+The payer scopes its CRD rules to a payer identifier on the member's Coverage. A
+request carrying CHO's own payer id would match no rule, and the exchange would
+prove only that the endpoint answers. The synthetic Coverage therefore names the
+payer identifier the reference implementation's own scenario library uses:
+
+```
+system  urn:oid:2.16.840.1.113883.6.300
+value   00001
+```
+
+This is **upstream test fixture data, not CHO production configuration**. It is
+synthetic on both sides and names no real payer. It lives in
+`SyntheticInteropData.UpstreamRulePayerIdentifier*` with that caveat attached.
+Everything else in the request — member, coverage, practitioner, order — comes
+from CHO's own synthetic interoperability identity set.
+
+### Prefetch and the FHIR server callback
+
+`order-sign-crd` advertises nine prefetch templates. The scenario supplies the two
+the service needs (`patient`, `coverage`) and asserts the rest were not required.
+
+A CDS Hooks request must name a `fhirServer` the service may dereference for
+anything prefetch did not supply. Rather than pointing that at a placeholder and
+hoping it is never called, the harness points it at `FhirCallbackWatch` — a
+listener it actually runs — and **fails if any callback arrives**. The scenario is
+correct by construction rather than accidentally successful, and if a future
+scenario does need the payer to fetch data, that listener is the seam to replace
+with the `interop-cho` profile.
+
+### Response validation
+
+* HTTP status, and a body that parses as a CDS Hooks response.
+* `cards` present — CDS Hooks requires the member even when empty, so its absence
+  is a protocol violation rather than "no recommendations".
+* Any card that *is* present validated for `summary` (≤140 chars), `indicator`
+  (`info`/`warning`/`critical`) and `source.label`.
+* The Da Vinci `ext-coverage-information` extension on the system action parsed
+  for `covered`, `pa-needed`, `doc-needed`, `info-needed`, `questionnaire`,
+  `billingCode` and `coverage-assertion-id`.
+* The determination tied back to the coverage and billing code CHO submitted.
+
+An absent field is parsed as absent, never defaulted. A missing `pa-needed` means
+the payer said nothing about prior authorization — materially different from
+saying none is required.
+
+Note that a CRD server's decision arrives in the **system action**, not in cards:
+the pinned payer answers `order-sign` with zero cards and one system action
+carrying the whole determination. A scenario that inspected only `cards` would
+conclude nothing happened.
+
+### Protocol compatibility vs payer rule parity
+
+These are kept apart deliberately:
+
+* **Protocol interoperability** — can CHO conduct a standards-conformant CRD
+  exchange with an independent implementation? This is what `BR-CRD-001` asserts,
+  and what a `Passed` means.
+* **Payer rule parity** — would CHO and br-payer reach the *same* coverage
+  decision? This is **not** asserted, and a difference is not a defect. They are
+  two different payers with two different rule sets; comparing their decisions on
+  non-identical content would compare rule content, not implementations.
+
+The scenario therefore compares advertised *surfaces* rather than decisions, and
+records what it finds as findings. Parity on identical rule content is deferred
+until both sides can be loaded from the same pinned CDS-Library content.
+
+### Interpreting the findings
+
+| Finding | Severity | Meaning |
+| --- | --- | --- |
+| `crd.discovery.services` | Info | What the payer advertised and which service was selected, with the reason |
+| `crd.discovery.prefetch` | Info | Prefetch keys the selected service advertises |
+| `crd.determination.priorAuthRequired` | Info | The PA determination, as a PHI-free coded summary |
+| `crd.determination.questionnaireOffered` | Info | The payer named a DTR questionnaire — the CRD→DTR hand-off |
+| `crd.determination.contrast` | Info | All three determinations, for reviewing decision behaviour at a glance |
+| `crd.surface.hooks` | Info | Hooks each side advertises |
+| `crd.surface.serviceIdDiffers` | Info | Service ids differ. Expected — ids are server-chosen and clients resolve them from discovery. Recorded because a client that hard-coded one would break |
+| `crd.surface.noVersionExtension` | **Warning** | CHO's discovery advertises no `davinci-crd.version` extension while the payer's does, so a CRD client cannot tell which CRD version CHO implements. Recorded, not adjudicated |
+
+A Warning does not fail the scenario. Only assertions do, and they are limited to
+things that are unambiguously protocol requirements.
+
+### Running just CRD
+
+```bash
+./scripts/interop/run.sh br-payer crd
+```
+
+## 15. Recommended next step
+
+`BR-DTR-001` — DTR `$questionnaire-package` against br-payer. `BR-CRD-001`
+discovered the hand-off that makes it the highest-value next step: when the payer
+reports `pa-needed=auth-needed` it also names a DTR questionnaire canonical
+(`.../Questionnaire/PriorAuthRequired`) in the same coverage-information
+extension. Following that canonical into `$questionnaire-package` walks the real
+CRD → DTR path an implementer takes, using content the payer itself just pointed
+at rather than a fixture chosen by the harness.
+
+`BR-PAS-INQUIRE-001` remains a straightforward follow-on, since
+`BR-PAS-SUBMIT-001` already establishes the prior authorization an inquiry needs.
+The Inferno suites should come after both, as they additionally require the
+`interop-cho` profile and per-suite input discovery.

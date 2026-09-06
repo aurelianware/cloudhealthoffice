@@ -138,6 +138,70 @@ public sealed class InteropEvidenceWriter
         };
     }
 
+    /// <summary>
+    /// Results already recorded in a previous write to this artifacts directory.
+    ///
+    /// The harness runs one scenario per test, and several scenarios can run in a
+    /// single invocation. Each writes the run document, so without this a second
+    /// scenario would erase the first one's result and the evidence would claim
+    /// the earlier scenario never ran. Reading back and merging keeps the document
+    /// a record of the whole run rather than of whichever scenario finished last.
+    ///
+    /// Merging is by scenario id, newest wins — a re-run of the same scenario in
+    /// one invocation replaces its earlier result rather than duplicating it.
+    /// </summary>
+    public IReadOnlyList<InteropResult> PreviouslyRecordedResults()
+    {
+        var path = Path.Combine(_root, "run.json");
+        if (!File.Exists(path))
+        {
+            return Array.Empty<InteropResult>();
+        }
+
+        try
+        {
+            var existing = JsonSerializer.Deserialize<InteropEvidenceRun>(
+                File.ReadAllText(path),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            // NotRun rows are regenerated from the inventory on every write, so
+            // only genuinely executed results carry forward.
+            return existing?.Targets
+                       .SelectMany(target => target.Results)
+                       .Where(result => result.ParsedStatus != InteropStatus.NotRun)
+                       .ToList()
+                   ?? (IReadOnlyList<InteropResult>)Array.Empty<InteropResult>();
+        }
+        catch (Exception ex) when (ex is JsonException or IOException)
+        {
+            // A corrupt or partially written document must not lose the result the
+            // caller is about to record.
+            return Array.Empty<InteropResult>();
+        }
+    }
+
+    /// <summary>
+    /// Merges <paramref name="results"/> with anything already recorded in this
+    /// artifacts directory, newest wins per scenario id.
+    /// </summary>
+    public IReadOnlyList<InteropResult> MergeWithPrevious(IReadOnlyList<InteropResult> results)
+    {
+        var merged = new Dictionary<string, InteropResult>(StringComparer.Ordinal);
+        foreach (var previous in PreviouslyRecordedResults())
+        {
+            merged[previous.ScenarioId] = previous;
+        }
+
+        foreach (var result in results)
+        {
+            merged[result.ScenarioId] = result;
+        }
+
+        return merged.Values
+            .OrderBy(result => result.ScenarioId, StringComparer.Ordinal)
+            .ToList();
+    }
+
     /// <summary>Writes the full evidence package and returns the run document path.</summary>
     public string Write(
         InteropEvidenceRun run,
