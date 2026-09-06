@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-06T02:21:50Z",
-  "commitSha": "1628e4e5d30170a60216ad9f70e5b8c82e0a0b89",
-  "commitShaShort": "1628e4e5d301",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/1628e4e5d30170a60216ad9f70e5b8c82e0a0b89",
+  "generatedAtUtc": "2026-09-06T04:58:32Z",
+  "commitSha": "802fbef5c8489399c8e9d07f2028940ca241aebc",
+  "commitShaShort": "802fbef5c848",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/802fbef5c8489399c8e9d07f2028940ca241aebc",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 188,
+    "passed": 226,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 16,
-    "partial": 5,
+    "passable": 17,
+    "partial": 4,
     "gap": 0,
     "na": 0
   },
@@ -114,7 +114,7 @@
       "id": "PAS-04",
       "name": "PAS inquiry / status",
       "capability": "PriorAuthorization",
-      "replace": "PARTIAL",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "GAP"
       }
