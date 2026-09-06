@@ -31,18 +31,18 @@ public class PasInquiryTests
     private const string Member = "pat-001";
     private const string ProviderNpi = "1234567890";
 
-    // Authorization.Status values, as authorization-service defines them.
-    private const int Submitted = 1;
-    private const int InReview = 2;
-    private const int Pended = 3;
-    private const int Approved = 4;
-    private const int Modified = 5;
-    private const int Denied = 6;
-    private const int Expired = 7;
-    private const int Cancelled = 8;
+    // Named rather than numeric: the wire carries the declared names.
+    private const PriorAuthorizationStatus Submitted = PriorAuthorizationStatus.Submitted;
+    private const PriorAuthorizationStatus InReview = PriorAuthorizationStatus.InReview;
+    private const PriorAuthorizationStatus Pended = PriorAuthorizationStatus.Pended;
+    private const PriorAuthorizationStatus Approved = PriorAuthorizationStatus.Approved;
+    private const PriorAuthorizationStatus Modified = PriorAuthorizationStatus.Modified;
+    private const PriorAuthorizationStatus Denied = PriorAuthorizationStatus.Denied;
+    private const PriorAuthorizationStatus Expired = PriorAuthorizationStatus.Expired;
+    private const PriorAuthorizationStatus Cancelled = PriorAuthorizationStatus.Cancelled;
 
     private static PriorAuthorizationRecord Record(
-        int status = Submitted,
+        PriorAuthorizationStatus status = Submitted,
         string? reviewDecision = null,
         string tenant = AcceptanceContext.TenantId,
         string member = Member,
@@ -101,7 +101,7 @@ public class PasInquiryTests
     [InlineData(Expired, null, "expired")]
     [InlineData(Cancelled, null, "cancelled")]
     public async Task PAS04_Replace_EveryAuthorizationStatus_ProjectsToItsPasDisposition(
-        int status, string? reviewDecision, string expectedDisposition)
+        PriorAuthorizationStatus status, string? reviewDecision, string expectedDisposition)
     {
         var (service, _) = ServiceOver(Record(status, reviewDecision));
 
@@ -538,6 +538,104 @@ public class PasInquiryTests
             || n.Contains("Attachment", StringComparison.OrdinalIgnoreCase)
             || n.Contains("Notes", StringComparison.OrdinalIgnoreCase)
             || n.Contains("Reviewer", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ── Wire format ────────────────────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_Replace_TheAuthorizationServiceWireFormatDeserializes()
+    {
+        // authorization-service serializes enums as their DECLARED NAMES with
+        // integer values disallowed (AddCloudHealthOfficeJsonOptions), so status
+        // arrives as "Approved", not 4. Reading it into a numeric field throws,
+        // the store swallows that as "not found", and EVERY inquiry 404s against
+        // the real service — while a test that builds records in memory passes.
+        // This pins the actual wire shape.
+        const string payload = """
+        {
+          "tenantId": "demo-tenant",
+          "id": "auth-1",
+          "authorizationNumber": "PAS-20260906-ABCD1234",
+          "memberId": "Patient/pat-001",
+          "requestingProviderNPI": "1234567890",
+          "status": "Approved",
+          "reviewDecision": "A1",
+          "submittedDate": "2026-09-01T00:00:00Z",
+          "lastUpdatedDate": "2026-09-05T00:00:00Z",
+          "requestedServices": [
+            { "procedureCode": "70551", "requestedUnits": 1 }
+          ]
+        }
+        """;
+
+        var record = System.Text.Json.JsonSerializer.Deserialize<PriorAuthorizationRecord>(
+            payload, HttpPriorAuthorizationStore.WireFormat);
+
+        record.Should().NotBeNull();
+        record!.Status.Should().Be(PriorAuthorizationStatus.Approved);
+        record.AuthorizationNumber.Should().Be(AuthNumber);
+        record.RequestingProviderNpi.Should().Be(ProviderNpi);
+        record.RequestedServices.Should().ContainSingle()
+            .Which.ProcedureCode.Should().Be("70551");
+    }
+
+    [Theory]
+    [Trait("Scenario", "PAS-04")]
+    [InlineData("Submitted", PriorAuthorizationStatus.Submitted)]
+    [InlineData("Pended", PriorAuthorizationStatus.Pended)]
+    [InlineData("Modified", PriorAuthorizationStatus.Modified)]
+    [InlineData("Denied", PriorAuthorizationStatus.Denied)]
+    [InlineData("Cancelled", PriorAuthorizationStatus.Cancelled)]
+    public void PAS04_Replace_EveryStatusNameOnTheWireIsUnderstood(
+        string wireValue, PriorAuthorizationStatus expected)
+    {
+        var payload = $$"""
+        { "tenantId": "t", "authorizationNumber": "a", "memberId": "m",
+          "status": "{{wireValue}}", "submittedDate": "2026-09-01T00:00:00Z",
+          "lastUpdatedDate": "2026-09-01T00:00:00Z" }
+        """;
+
+        System.Text.Json.JsonSerializer
+            .Deserialize<PriorAuthorizationRecord>(payload, HttpPriorAuthorizationStore.WireFormat)!
+            .Status.Should().Be(expected);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public async Task PAS04_Replace_IdentifiersAreNormalisedBeforeLookup()
+    {
+        // A Claim identifier may arrive padded. Without trimming, a valid
+        // identifier misses the lookup and the refusal echoes the untrimmed value
+        // into the audit line.
+        var (service, _) = ServiceOver(Record(PriorAuthorizationStatus.Approved, "A1"));
+
+        var padded = await service.InquireAsync(new PriorAuthorizationInquiryRequest
+        {
+            TenantId = AcceptanceContext.TenantId,
+            AuthorizationNumber = $"  {AuthNumber}  ",
+            MemberReference = $" Patient/{Member} ",
+        });
+
+        padded.Found.Should().BeTrue();
+        padded.RequestedAuthorizationNumber.Should().Be(AuthNumber,
+            "the audit line records the normalised identifier, not the padded input");
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_Replace_ClaimIdentifiersAreTrimmedWhenLifted()
+    {
+        var service = new PriorAuthorizationInquiryService(new RecordingStore([]));
+
+        var mapped = service.FromInquiryClaim(new Claim
+        {
+            Use = ClaimUseCode.Preauthorization,
+            Identifier = [new Identifier { Value = $"  {AuthNumber} " }],
+            Patient = new ResourceReference($" Patient/{Member} "),
+        }, AcceptanceContext.TenantId, "caller-1");
+
+        mapped.AuthorizationNumber.Should().Be(AuthNumber);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

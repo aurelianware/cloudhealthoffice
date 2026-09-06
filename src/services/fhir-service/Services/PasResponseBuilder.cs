@@ -263,20 +263,29 @@ public class PasResponseBuilder
                     string Disposition,
                     string? ReviewActionCode,
                     string? ReviewActionDisplay)
-        MapStatus(int status, string? reviewDecision) => status switch
+        MapStatus(PriorAuthorizationStatus status, string? reviewDecision) => status switch
         {
-            1 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
-            2 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
-            3 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued,
-                  "pended-additional-information", "A4", "Pending"),
-            4 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "approved", "A1", "Certified in total"),
-            5 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Partial, "modified", "A2", "Certified partial"),
-            6 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "denied", "A3", "Not certified"),
-            7 => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "expired", null, null),
-            8 => (FinancialResourceStatusCodes.Cancelled, ClaimProcessingCodes.Complete, "cancelled", null, null),
+            PriorAuthorizationStatus.Submitted
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+            PriorAuthorizationStatus.InReview
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
+            PriorAuthorizationStatus.Pended
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued,
+                    "pended-additional-information", "A4", "Pending"),
+            PriorAuthorizationStatus.Approved
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "approved", "A1", "Certified in total"),
+            PriorAuthorizationStatus.Modified
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Partial, "modified", "A2", "Certified partial"),
+            PriorAuthorizationStatus.Denied
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "denied", "A3", "Not certified"),
+            PriorAuthorizationStatus.Expired
+                => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Complete, "expired", null, null),
+            PriorAuthorizationStatus.Cancelled
+                => (FinancialResourceStatusCodes.Cancelled, ClaimProcessingCodes.Complete, "cancelled", null, null),
 
-            // An unrecognised status is never reported as a decision: it reads as
-            // still in progress rather than as an approval CHO cannot vouch for.
+            // An unrecognised or absent status is never reported as a decision:
+            // it reads as still in progress rather than as an approval CHO
+            // cannot vouch for.
             _ => (FinancialResourceStatusCodes.Active, ClaimProcessingCodes.Queued, "pending", null, null),
         };
 

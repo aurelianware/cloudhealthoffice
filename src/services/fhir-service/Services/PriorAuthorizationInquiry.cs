@@ -37,9 +37,8 @@ public sealed record PriorAuthorizationRecord
     [JsonPropertyName("requestingProviderNPI")]
     public string? RequestingProviderNpi { get; init; }
 
-    /// <summary>1 Submitted, 2 InReview, 3 Pended, 4 Approved, 5 Modified, 6 Denied, 7 Expired, 8 Cancelled.</summary>
     [JsonPropertyName("status")]
-    public int Status { get; init; }
+    public PriorAuthorizationStatus Status { get; init; }
 
     /// <summary>X12 278 review decision: A1 approved, A2 modified, A3 denied, A4 pended.</summary>
     [JsonPropertyName("reviewDecision")]
@@ -78,6 +77,33 @@ public sealed record PriorAuthorizationRecord
 
     [JsonPropertyName("requestedServices")]
     public List<PriorAuthorizationService> RequestedServices { get; init; } = new();
+}
+
+/// <summary>
+/// The authorization lifecycle, mirroring authorization-service's
+/// <c>AuthorizationStatus</c> by NAME and by VALUE.
+///
+/// The names matter as much as the numbers: authorization-service serializes
+/// enums as their declared names with integer values disallowed, so the wire
+/// carries <c>"Approved"</c>, not <c>4</c>. The numeric values are kept aligned
+/// anyway so the two enums cannot drift apart silently.
+/// </summary>
+public enum PriorAuthorizationStatus
+{
+    /// <summary>Not a value authorization-service emits; the default for an absent field.</summary>
+    Unknown = 0,
+    Submitted = 1,
+    InReview = 2,
+    /// <summary>Waiting for additional information. X12 278 A4.</summary>
+    Pended = 3,
+    /// <summary>X12 278 A1.</summary>
+    Approved = 4,
+    /// <summary>Some services approved, some reduced or denied. X12 278 A2.</summary>
+    Modified = 5,
+    /// <summary>X12 278 A3.</summary>
+    Denied = 6,
+    Expired = 7,
+    Cancelled = 8,
 }
 
 /// <summary>One requested service line on the authorization.</summary>
@@ -123,7 +149,23 @@ public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore
 {
     public const string HttpClientName = "AuthorizationService";
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    /// <summary>
+    /// The wire format authorization-service actually speaks. Web defaults do
+    /// NOT read string enum names, so without this converter every status
+    /// deserialization throws, the catch below turns it into "not found", and
+    /// every inquiry 404s against the real service.
+    /// </summary>
+    public static readonly JsonSerializerOptions WireFormat = BuildWireFormat();
+
+    private static JsonSerializerOptions BuildWireFormat()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        // Accepts the declared names authorization-service emits, and integers
+        // too, so a numeric status from any other producer still reads.
+        options.Converters.Add(new JsonStringEnumConverter(
+            namingPolicy: null, allowIntegerValues: true));
+        return options;
+    }
 
     private readonly IHttpClientFactory _factory;
     private readonly ILogger<HttpPriorAuthorizationStore> _logger;
@@ -175,7 +217,7 @@ public sealed class HttpPriorAuthorizationStore : IPriorAuthorizationStore
 
         try
         {
-            return await response.Content.ReadFromJsonAsync<PriorAuthorizationRecord>(Json, ct);
+            return await response.Content.ReadFromJsonAsync<PriorAuthorizationRecord>(WireFormat, ct);
         }
         catch (Exception ex)
         {

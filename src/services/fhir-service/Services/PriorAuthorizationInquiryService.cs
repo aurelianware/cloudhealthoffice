@@ -149,10 +149,15 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
         // body is data, never authority.
         TenantId = tenantId,
         CallerId = callerId,
-        AuthorizationNumber = ExtractAuthorizationNumber(claim),
-        MemberReference = claim.Patient?.Reference,
-        RequestingProviderNpi = claim.Provider?.Identifier?.Value,
+        // Trimmed on the way in: a padded identifier would otherwise miss the
+        // lookup and be echoed untrimmed into the audit line.
+        AuthorizationNumber = Normalize(ExtractAuthorizationNumber(claim)),
+        MemberReference = Normalize(claim.Patient?.Reference),
+        RequestingProviderNpi = Normalize(claim.Provider?.Identifier?.Value),
     };
+
+    private static string? Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// The authorization number: the Claim's own identifier, or the pre-auth
@@ -174,7 +179,8 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
     public async Task<PriorAuthorizationInquiryResult> InquireAsync(
         PriorAuthorizationInquiryRequest request, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.AuthorizationNumber))
+        var authorizationNumber = request.AuthorizationNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(authorizationNumber))
             return PriorAuthorizationInquiryResult.Refused(
                 PriorAuthorizationInquiryOutcome.MissingIdentifier);
 
@@ -183,30 +189,30 @@ public sealed class PriorAuthorizationInquiryService : IPriorAuthorizationInquir
         if (!hasMember && !hasProvider)
             return PriorAuthorizationInquiryResult.Refused(
                 PriorAuthorizationInquiryOutcome.MissingCorroboratingKey,
-                request.AuthorizationNumber);
+                authorizationNumber);
 
-        var record = await _store.GetByAuthorizationNumberAsync(request.AuthorizationNumber, ct);
+        var record = await _store.GetByAuthorizationNumberAsync(authorizationNumber, ct);
         if (record is null)
             return PriorAuthorizationInquiryResult.Refused(
-                PriorAuthorizationInquiryOutcome.NotFound, request.AuthorizationNumber);
+                PriorAuthorizationInquiryOutcome.NotFound, authorizationNumber);
 
         // Tenant isolation, applied here rather than trusted from the lookup:
         // the read endpoint partitions on the propagated tenant header, and this
         // is the check that holds even if that propagation is ever lost.
         if (!string.Equals(record.TenantId, request.TenantId, StringComparison.Ordinal))
             return PriorAuthorizationInquiryResult.Refused(
-                PriorAuthorizationInquiryOutcome.TenantMismatch, request.AuthorizationNumber);
+                PriorAuthorizationInquiryOutcome.TenantMismatch, authorizationNumber);
 
         if (!CorroboratingKeyMatches(request, record))
             return PriorAuthorizationInquiryResult.Refused(
                 PriorAuthorizationInquiryOutcome.NotAuthorizedForCaller,
-                request.AuthorizationNumber);
+                authorizationNumber);
 
         return new PriorAuthorizationInquiryResult
         {
             Outcome = PriorAuthorizationInquiryOutcome.Found,
             Authorization = record,
-            RequestedAuthorizationNumber = request.AuthorizationNumber,
+            RequestedAuthorizationNumber = authorizationNumber,
         };
     }
 
