@@ -2,8 +2,7 @@ using FhirService.Formatters;
 using FhirService.Middleware;
 using FhirService.Models;
 using FhirService.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
+using FhirService.Services.Identity;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Caching;
@@ -18,26 +17,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-// ── SMART JWT Bearer ──────────────────────────────────────────────────────────
-var smartIssuer   = builder.Configuration["SmartAuth:Issuer"]
-    ?? throw new InvalidOperationException("SmartAuth:Issuer is required.");
-var smartAudience = builder.Configuration["SmartAuth:Audience"] ?? "fhir-api";
-var requireHttps  = builder.Configuration.GetValue<bool>("SmartAuth:RequireHttpsMetadata", true);
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Authority                 = smartIssuer;
-        options.Audience                  = smartAudience;
-        options.RequireHttpsMetadata      = requireHttps;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer   = true,  ValidIssuer   = smartIssuer,
-            ValidateAudience = true,  ValidAudience = smartAudience,
-            ValidateLifetime = true,  ClockSkew     = TimeSpan.FromSeconds(30)
-        };
-    });
-builder.Services.AddAuthorization();
+// ── SMART on FHIR / OAuth trust ───────────────────────────────────────────────
+// Multi-issuer, fail-closed trust: the issuer is resolved first and supplies
+// its own keys, audiences, algorithms and claim mapping. Demo mode trusts the
+// bundled smart-auth-service and is refused outside a development host, so a
+// production deployment cannot silently fall back to it.
+// See docs/architecture/smart-oauth-trust.md.
+builder.Services.AddSmartTrust(builder.Configuration, builder.Environment);
 
 // ── Shared infrastructure ─────────────────────────────────────────────────────
 // ICacheProvider (via AddChoCaching) backs the tenant-config and rule-set
@@ -554,6 +540,17 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbEndpoint        = builder.Configuration["CosmosDb:Endpoint"];
     options.CosmosDbKey             = builder.Configuration["CosmosDb:Key"];
 });
+
+// Identity trust readiness: configuration valid AND every trusted issuer's
+// signing keys retrievable. Reports operational trust state only — never keys,
+// never discovery payloads, and never per-token outcomes, so a burst of expired
+// tokens does not read as an outage.
+builder.Services.AddHealthChecks()
+    .AddCheck<SmartIdentityTrustHealthCheck>(
+        "smart-identity-trust",
+        tags: ["ready", "identity"]);
+builder.Services.AddHostedService<SmartTrustWarmupHostedService>();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCors(options => options.AddPolicy("AllowAll",
     p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));

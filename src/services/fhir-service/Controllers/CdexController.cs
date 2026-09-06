@@ -72,7 +72,7 @@ public sealed class CdexController : FhirControllerBase
             return FhirBadRequest("A Parameters resource is required.");
 
         var result = await _submissions.SubmitAsync(
-            parameters, TenantId, CallerId(), HttpContext.RequestAborted);
+            parameters, TenantId, CallerId(), VerifiedProviderNpi(), HttpContext.RequestAborted);
 
         Audit(result);
 
@@ -184,6 +184,19 @@ public sealed class CdexController : FhirControllerBase
             SanitizeForLog(result.TrackingId), SanitizeForLog(result.RequestId),
             result.Outcome, DateTime.UtcNow);
     }
+
+    /// <summary>
+    /// The caller's provider NPI, but only when a trusted issuer asserted it.
+    ///
+    /// Null is the normal answer and is not a failure: it means this deployment's
+    /// identity provider is not configured to assert provider identity, so the
+    /// submission falls back to the corroborating-key rule it has always used.
+    /// Reading an NPI out of an arbitrary claim here would turn a public number
+    /// into an authorization decision, which is the trap this avoids.
+    /// </summary>
+    private string? VerifiedProviderNpi()
+        => (HttpContext.Items[FhirService.Services.Identity.AuthenticatedCaller.HttpContextItemKey]
+                as FhirService.Services.Identity.AuthenticatedCaller)?.ProviderNpi;
 
     /// <summary>
     /// The authenticated caller, from the validated token — the same resolution

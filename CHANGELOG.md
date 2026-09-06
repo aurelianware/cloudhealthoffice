@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — SEC-01: production SMART on FHIR / OAuth trust
+
+Cloud Health Office can now be deployed behind an externally managed OAuth/OIDC/
+SMART authorization server without source changes or insecure issuer shortcuts.
+
+- **Explicit identity mode.** `SmartAuth:Mode` is `Demo` or `ExternalIssuer`,
+  stated rather than inferred. A Demo deployment on a non-development host
+  **fails startup**, so production cannot silently fall back to the bundled
+  issuer.
+- **Multi-issuer trust registry.** The issuer is resolved from the token's exact
+  `iss` first and then supplies its own keys, audiences, algorithms, claim
+  mapping and permitted tenants — so one trusted IdP's material never authorizes
+  another's token.
+- **Validated OIDC discovery and JWKS.** The document's `issuer` must match
+  exactly; fetch targets are confined to configured origins (SSRF boundary),
+  with loopback, link-local and RFC1918 addresses barred outside development.
+- **Key rotation.** Unknown `kid` triggers a rate-limited, single-flighted
+  refresh; cached keys survive an IdP outage within a bounded staleness window
+  and fail closed outside it.
+- **Algorithm policy.** Asymmetric only — no `alg=none`, and no HMAC (a
+  symmetric verifier accepts a token signed with the issuer's public key).
+- **Caller identity model.** One resolution per request into
+  `AuthenticatedCaller`; provider NPI is established only from a claim a trusted
+  issuer was configured to assert.
+- **Readiness.** A `smart-identity-trust` health check reports operational trust
+  state without exposing keys, discovery payloads or IdP error text.
+
+#### Fixed
+
+- **Tenant could be named by an unauthenticated header.** `X-Tenant-ID` was
+  consulted whenever a token carried no tenant claim, so any authenticated
+  caller whose issuer did not map a tenant could select any tenant. The header
+  may now fill a vacuum but never contradict a token — a mismatch is a 403.
+  `X-Dev-Tenant-ID` is honoured on development hosts only.
+- **CDex submitter binding strengthened.** Where a trusted issuer asserts the
+  caller's NPI, `$submit-attachment` compares the *token's* identity against the
+  provider the request was addressed to, closing the substitution a public-NPI
+  corroborating key cannot detect. Deployments without a provider claim are
+  unchanged.
+
+Docs: `docs/architecture/smart-oauth-trust.md`,
+`docs/architecture/idp-integration-contract.md`.
+
+
 ### USCDI clinical resources served through Patient and Provider Access (PAT-02)
 
 Cloud Health Office could receive a prior payer's Condition, Observation,

@@ -266,8 +266,8 @@
       "name": "SMART on FHIR / OAuth",
       "capability": "Security",
       "replace": {
-        "status": "PARTIAL",
-        "rationale": "SMART discovery, scopes, and PKCE are served; the identity provider is configured per engagement."
+        "status": "PASSABLE",
+        "rationale": "CHO is a production-configurable SMART/OAuth resource server: trust is an explicit, administrator-controlled registry of external OIDC issuers, and Demo mode fails startup on a non-development host so no deployment can silently fall back to the bundled issuer. Per issuer, resolved from the token's exact iss before anything else: signing keys via validated OIDC discovery, audiences, an asymmetric-only algorithm policy (no alg=none, no HMAC), claim mapping, and permitted tenants. Signature, audience, exp/nbf and bounded clock skew are enforced; signing keys rotate on an unknown kid with rate-limited single-flight refresh, survive an IdP outage within a bounded staleness window, and fail closed outside it. Discovery and JWKS retrieval are confined to configured origins, so no request-supplied value can steer a fetch. Caller identity resolves once into subject, client, caller type, patient, tenant and -- only where a trusted issuer is configured to assert it -- provider NPI, which tightens CDex submitter binding from a corroborating key to verified identity. Patient binding covers both patient and subject; a tenant asserted by the token cannot be overridden by a header. LIMITATION: no customer's production IdP is connected in this repository -- every test issuer is synthetic. Connecting one is deployment configuration against docs/architecture/idp-integration-contract.md, not missing product capability."
       },
       "augment": {
         "qnxt": {

@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FhirService.Controllers;
@@ -14,10 +15,24 @@ namespace FhirService.Controllers;
 public class SmartConfigurationController : FhirControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly TrustedIssuerRegistry? _registry;
+    private readonly SmartSigningKeyRing? _keyRing;
 
-    public SmartConfigurationController(IConfiguration config)
+    /// <summary>
+    /// The registry and key ring are optional so a Demo-mode host — and the
+    /// acceptance suite — can construct this controller from configuration
+    /// alone. When they are present and the deployment trusts an external
+    /// issuer, the advertised endpoints come from that issuer's own discovery
+    /// document instead of being synthesized.
+    /// </summary>
+    public SmartConfigurationController(
+        IConfiguration config,
+        TrustedIssuerRegistry? registry = null,
+        SmartSigningKeyRing? keyRing = null)
     {
         _config = config;
+        _registry = registry;
+        _keyRing = keyRing;
     }
 
     /// <summary>GET /fhir/r4/.well-known/smart-configuration</summary>
@@ -26,8 +41,28 @@ public class SmartConfigurationController : FhirControllerBase
     [ProducesResponseType(200)]
     public IActionResult GetSmartConfiguration()
     {
-        var authBase = _config["SmartAuth:Issuer"]
-            ?? throw new InvalidOperationException("SmartAuth:Issuer is not configured.");
+        var endpoints = ResolveAuthorizationServer();
+
+        // A SMART configuration document is only useful if a client can act on
+        // it, and authorization_endpoint / token_endpoint / jwks_uri are what it
+        // acts on. Serving the document with those null — which is what happens
+        // between startup and the first successful discovery — hands the client
+        // a parseable document that cannot be used, and this service does not
+        // omit nulls on serialization, so they appear explicitly rather than
+        // being absent. 503 says the right thing instead: not yet, retry.
+        if (endpoints.Incomplete)
+        {
+            Response.Headers.RetryAfter = "10";
+            return StatusCode(503, new
+            {
+                error = "smart_configuration_unavailable",
+                error_description =
+                    "Authorization server metadata has not been retrieved yet. Retry shortly; "
+                    + "readiness reports identity trust state under the smart-identity-trust check.",
+            });
+        }
+
+        var authBase = endpoints.Issuer;
 
         var fhirBase = _config["Fhir:ServerBaseUrl"]
             ?? $"{Request.Scheme}://{Request.Host}/fhir/r4";
@@ -36,9 +71,9 @@ public class SmartConfigurationController : FhirControllerBase
         {
             // ── Core endpoints ────────────────────────────────────────────────
             issuer = authBase,
-            jwks_uri = $"{authBase}/.well-known/jwks",
-            authorization_endpoint = $"{authBase}/connect/authorize",
-            token_endpoint = $"{authBase}/connect/token",
+            jwks_uri = endpoints.JwksUri,
+            authorization_endpoint = endpoints.AuthorizationEndpoint,
+            token_endpoint = endpoints.TokenEndpoint,
             token_endpoint_auth_methods_supported = new[]
             {
                 "client_secret_basic",
@@ -117,5 +152,61 @@ public class SmartConfigurationController : FhirControllerBase
         };
 
         return Ok(config);
+    }
+
+    /// <summary>
+    /// The authorization server a SMART client should actually be sent to.
+    ///
+    /// CHO is a resource server; it does not host an authorization flow in
+    /// ExternalIssuer mode, so advertising one built from its own URL patterns
+    /// would point every client at endpoints that do not exist. Real issuers
+    /// disagree about paths — Okta serves /v1/authorize, Entra
+    /// /oauth2/v2.0/authorize, OpenIddict /connect/authorize — which is exactly
+    /// why the values come from the issuer's discovery document rather than
+    /// from string concatenation here.
+    ///
+    /// The Demo path keeps the bundled smart-auth-service's OpenIddict layout,
+    /// which CHO does host and therefore does know.
+    /// </summary>
+    private AuthorizationServerEndpoints ResolveAuthorizationServer()
+    {
+        var trusted = _registry?.Issuers.FirstOrDefault();
+
+        if (_registry?.Mode == SmartTrustMode.ExternalIssuer && trusted != null)
+        {
+            var metadata = _keyRing?.MetadataFor(trusted.Issuer);
+            return new AuthorizationServerEndpoints(
+                Issuer: trusted.Issuer,
+                // Null rather than a guess when discovery has not completed: a
+                // client that reads a fabricated endpoint fails confusingly,
+                // one that reads a missing field retries.
+                JwksUri: metadata?.JwksUri,
+                AuthorizationEndpoint: metadata?.AuthorizationEndpoint,
+                TokenEndpoint: metadata?.TokenEndpoint);
+        }
+
+        var authBase = trusted?.Issuer
+            ?? _config["SmartAuth:Issuer"]
+            ?? throw new InvalidOperationException("SmartAuth:Issuer is not configured.");
+
+        return new AuthorizationServerEndpoints(
+            Issuer: authBase,
+            JwksUri: $"{authBase}/.well-known/jwks",
+            AuthorizationEndpoint: $"{authBase}/connect/authorize",
+            TokenEndpoint: $"{authBase}/connect/token");
+    }
+
+    private sealed record AuthorizationServerEndpoints(
+        string Issuer, string? JwksUri, string? AuthorizationEndpoint, string? TokenEndpoint)
+    {
+        /// <summary>
+        /// True when a core endpoint a SMART client needs is still unknown.
+        /// Only reachable in ExternalIssuer mode before discovery has completed
+        /// or while the issuer is unreachable; the Demo path always fills all three.
+        /// </summary>
+        public bool Incomplete =>
+            string.IsNullOrEmpty(JwksUri)
+            || string.IsNullOrEmpty(AuthorizationEndpoint)
+            || string.IsNullOrEmpty(TokenEndpoint);
     }
 }

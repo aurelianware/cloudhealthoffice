@@ -1134,6 +1134,62 @@ public class CdexAdditionalInformationTests
         return controller;
     }
 
+    // ── SEC-01 verified caller identity tightens CDex submission ────────────────
+    //
+    // Before SEC-01 there was no way to bind a submitter to a provider: the
+    // service compared the NPI in the PAYLOAD against the one on the request,
+    // which is a corroborating key rather than an identity, and NPIs are public.
+    // With a trusted issuer asserting the caller's NPI, the value compared comes
+    // from a signed token instead.
+
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public async Task SEC01_VerifiedProviderIdentityMatchingTheRequest_IsAccepted()
+    {
+        var (harness, _, rfai) = await PendedWithRequestAsync();
+
+        var result = await SubmitAsync(
+            harness, rfai.TrackingId, verifiedProviderNpi: ProviderNpi);
+
+        result.Outcome.Should().Be(CdexSubmissionOutcome.Accepted);
+    }
+
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public async Task SEC01_AVerifiedCallerWhoIsNotTheRequestedProvider_IsRefused_EvenWithACorrectPayload()
+    {
+        // The substitution the corroborating key could never detect: the payload
+        // names the right provider, and the caller is somebody else. Knowing a
+        // public NPI stops being enough the moment identity is verified.
+        var (harness, _, rfai) = await PendedWithRequestAsync();
+
+        var result = await SubmitAsync(
+            harness, rfai.TrackingId,
+            providerNpi: ProviderNpi,                    // payload says the right one
+            verifiedProviderNpi: OtherProviderNpi);      // the token says otherwise
+
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public async Task SEC01_WithNoVerifiedIdentity_TheCorroboratingKeyRuleIsUnchanged()
+    {
+        // Deployments whose IdP asserts no provider identity must not get
+        // weaker OR stronger behaviour than before: this change only ever
+        // tightens, and only where real identity exists.
+        var (harness, _, rfai) = await PendedWithRequestAsync();
+        (await SubmitAsync(harness, rfai.TrackingId, providerNpi: ProviderNpi))
+            .Outcome.Should().Be(CdexSubmissionOutcome.Accepted);
+
+        var (harness2, _, rfai2) = await PendedWithRequestAsync();
+        (await SubmitAsync(harness2, rfai2.TrackingId, providerNpi: OtherProviderNpi))
+            .Succeeded.Should().BeFalse();
+    }
+
     private static Task<CdexSubmissionResult> SubmitAsync(
         AdditionalInformationHarness harness,
         string trackingId,
@@ -1141,10 +1197,11 @@ public class CdexAdditionalInformationTests
         string tenant = AcceptanceContext.TenantId,
         string providerNpi = ProviderNpi,
         byte[]? content = null,
-        string? title = "Discharge summary")
+        string? title = "Discharge summary",
+        string? verifiedProviderNpi = null)
         => harness.Submissions().SubmitAsync(
             BuildParameters(trackingId, attachTo, providerNpi, [content ?? Pdf], title: title),
-            tenant, Caller);
+            tenant, Caller, verifiedProviderNpi);
 
     private static async Task<IActionResult> SubmitViaControllerAsync(
         AdditionalInformationHarness harness,

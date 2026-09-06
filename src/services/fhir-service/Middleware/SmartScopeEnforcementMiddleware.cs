@@ -388,30 +388,14 @@ public class SmartScopeEnforcementMiddleware
 
     // ── OperationOutcome error writer ─────────────────────────────────────────
 
-    private static async Task WriteFhirError(
+    // Delegates to the shared writer so every refusal under /fhir/r4 — whichever
+    // middleware issues it — has the same OperationOutcome shape.
+    private static Task WriteFhirError(
         HttpContext context, int statusCode,
         OperationOutcome.IssueSeverity severity,
         OperationOutcome.IssueType code,
         string diagnostics)
-    {
-        var outcome = new OperationOutcome
-        {
-            Issue =
-            [
-                new OperationOutcome.IssueComponent
-                {
-                    Severity = severity,
-                    Code = code,
-                    Diagnostics = diagnostics
-                }
-            ]
-        };
-
-        context.Response.StatusCode = statusCode;
-        context.Response.ContentType = "application/fhir+json; charset=utf-8";
-        var json = JsonSerializer.Serialize(outcome, FhirOptions);
-        await context.Response.WriteAsync(json);
-    }
+        => FhirErrorResponse.WriteAsync(context, statusCode, severity, code, diagnostics);
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
