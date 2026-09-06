@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-06T07:08:59Z",
-  "commitSha": "82e8d9cf9f002a42574eb2c576f3d0a8a596c429",
-  "commitShaShort": "82e8d9cf9f00",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/82e8d9cf9f002a42574eb2c576f3d0a8a596c429",
+  "generatedAtUtc": "2026-09-06T09:29:53Z",
+  "commitSha": "e66f210845e17bd5d588ea1ca7cea37edff10d91",
+  "commitShaShort": "e66f210845e1",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e66f210845e17bd5d588ea1ca7cea37edff10d91",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 317,
+    "passed": 344,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 19,
-    "partial": 2,
+    "passable": 20,
+    "partial": 1,
     "gap": 0,
     "na": 0
   },
@@ -168,7 +168,7 @@
       "id": "PAT-02",
       "name": "Patient Access — US Core clinical",
       "capability": "PatientAccess",
-      "replace": "PARTIAL",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "N/A"
       }
