@@ -152,9 +152,24 @@ public sealed class SmartSigningKeyRing
 
         if (!entry.Gate.Wait(TimeSpan.FromSeconds(10)))
         {
-            _logger.LogWarning(
-                "Timed out waiting for a signing-key refresh of issuer {Issuer}; using cached keys.",
-                Sanitize(entry.Options.Issuer));
+            // Which of these it is decides whether anything still works, so the
+            // line has to say. "Using cached keys" when there are none reads as
+            // benign during precisely the outage it is reporting.
+            if (entry.Metadata != null)
+            {
+                _logger.LogWarning(
+                    "Timed out waiting for a signing-key refresh of issuer {Issuer}; "
+                    + "continuing on cached keys.",
+                    Sanitize(entry.Options.Issuer));
+            }
+            else
+            {
+                _logger.LogError(
+                    "Timed out waiting for a signing-key refresh of issuer {Issuer} and no keys "
+                    + "are cached; tokens from this issuer cannot be validated.",
+                    Sanitize(entry.Options.Issuer));
+            }
+
             return;
         }
 

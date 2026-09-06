@@ -42,6 +42,26 @@ public class SmartConfigurationController : FhirControllerBase
     public IActionResult GetSmartConfiguration()
     {
         var endpoints = ResolveAuthorizationServer();
+
+        // A SMART configuration document is only useful if a client can act on
+        // it, and authorization_endpoint / token_endpoint / jwks_uri are what it
+        // acts on. Serving the document with those null — which is what happens
+        // between startup and the first successful discovery — hands the client
+        // a parseable document that cannot be used, and this service does not
+        // omit nulls on serialization, so they appear explicitly rather than
+        // being absent. 503 says the right thing instead: not yet, retry.
+        if (endpoints.Incomplete)
+        {
+            Response.Headers.RetryAfter = "10";
+            return StatusCode(503, new
+            {
+                error = "smart_configuration_unavailable",
+                error_description =
+                    "Authorization server metadata has not been retrieved yet. Retry shortly; "
+                    + "readiness reports identity trust state under the smart-identity-trust check.",
+            });
+        }
+
         var authBase = endpoints.Issuer;
 
         var fhirBase = _config["Fhir:ServerBaseUrl"]
@@ -177,5 +197,16 @@ public class SmartConfigurationController : FhirControllerBase
     }
 
     private sealed record AuthorizationServerEndpoints(
-        string Issuer, string? JwksUri, string? AuthorizationEndpoint, string? TokenEndpoint);
+        string Issuer, string? JwksUri, string? AuthorizationEndpoint, string? TokenEndpoint)
+    {
+        /// <summary>
+        /// True when a core endpoint a SMART client needs is still unknown.
+        /// Only reachable in ExternalIssuer mode before discovery has completed
+        /// or while the issuer is unreachable; the Demo path always fills all three.
+        /// </summary>
+        public bool Incomplete =>
+            string.IsNullOrEmpty(JwksUri)
+            || string.IsNullOrEmpty(AuthorizationEndpoint)
+            || string.IsNullOrEmpty(TokenEndpoint);
+    }
 }

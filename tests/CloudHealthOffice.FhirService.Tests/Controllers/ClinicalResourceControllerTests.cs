@@ -394,6 +394,26 @@ public class ClinicalResourceControllerTests : IClassFixture<FhirTestWebAppFacto
             PayerToPayerImportPolicy.ImportKey(Tenant, memberId, Payer, resourceType, sourceId));
 
     [Fact]
+    public async Task ATenantRefusal_IsAFhirOperationOutcome_LikeEveryOtherRefusal()
+    {
+        // A FHIR client is entitled to parse an error body as an OperationOutcome.
+        // A middleware answering with an ad-hoc JSON shape is not merely
+        // inconsistent — it is unparseable to a strict client, and which shape
+        // it gets would depend on which layer happened to refuse it.
+        var response = await GetAsync(
+            $"/fhir/r4/Observation/{IdFor("Observation", "OBS-1", Member)}",
+            _factory.IssueToken("patient/Observation.read", Member, tenantId: "other-tenant"),
+            tenantHeader: Tenant);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/fhir+json");
+
+        var outcome = await ParseAsync<OperationOutcome>(response);
+        outcome.Issue.Should().ContainSingle()
+            .Which.Code.Should().Be(OperationOutcome.IssueType.Forbidden);
+    }
+
+    [Fact]
     public async Task ATokenAndHeaderNamingDifferentTenants_IsRefusedOverHttp()
     {
         // The whole request, through the real pipeline: two statements of tenant

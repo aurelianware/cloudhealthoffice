@@ -1,4 +1,6 @@
 using FhirService.Services.Identity;
+using Hl7.Fhir.Model;
+using Task = System.Threading.Tasks.Task;
 
 namespace FhirService.Middleware;
 
@@ -57,8 +59,10 @@ public class TenantMiddleware
             _logger.LogWarning(
                 "FHIR request tenant conflict: token asserts {TokenTenant}, header asserts {HeaderTenant}",
                 SanitizeForLog(resolution.TokenTenant), SanitizeForLog(resolution.HeaderTenant));
-            context.Response.StatusCode = 403;
-            await context.Response.WriteAsJsonAsync(new { error = "Tenant context conflict" });
+            await FhirErrorResponse.WriteAsync(context, 403,
+                OperationOutcome.IssueSeverity.Error,
+                OperationOutcome.IssueType.Forbidden,
+                "Tenant context conflict: the token and the request header name different tenants.");
             return;
         }
 
@@ -67,8 +71,10 @@ public class TenantMiddleware
         if (string.IsNullOrEmpty(tenantId))
         {
             _logger.LogWarning("FHIR request missing tenant context: {Path}", SanitizeForLog(context.Request.Path));
-            context.Response.StatusCode = 401;
-            await context.Response.WriteAsJsonAsync(new { error = "Missing tenant context" });
+            await FhirErrorResponse.WriteAsync(context, 401,
+                OperationOutcome.IssueSeverity.Error,
+                OperationOutcome.IssueType.Login,
+                "Missing tenant context.");
             return;
         }
 
@@ -83,8 +89,10 @@ public class TenantMiddleware
                 _logger.LogWarning(
                     "Issuer {Issuer} is not permitted to authenticate tenant {TenantId}",
                     SanitizeForLog(caller.Issuer), SanitizeForLog(tenantId));
-                context.Response.StatusCode = 403;
-                await context.Response.WriteAsJsonAsync(new { error = "Issuer is not permitted for this tenant" });
+                await FhirErrorResponse.WriteAsync(context, 403,
+                    OperationOutcome.IssueSeverity.Error,
+                    OperationOutcome.IssueType.Forbidden,
+                    "The authenticated issuer is not permitted to serve this tenant.");
                 return;
             }
         }
