@@ -743,26 +743,44 @@ az monitor metrics alert create \
 
 ### Supported USCDI Versions
 
-- **USCDI v1**: Complete coverage
-- **USCDI v2**: Complete coverage
+- **USCDI v1 / v2**: a FHIR R4 read path exists for each clinical data class
+  below. That is resource coverage, **not** certified conformance: US Core
+  profile validation and the US Core SHALL search set are not implemented, and
+  are not claimed.
 - **USCDI v3**: Roadmap (future support)
 
 ### USCDI Data Classes
 
+Read this column as *"is there a real read path?"*, not as a conformance claim.
+The clinical rows are served as **valid FHIR R4 with no US Core profile
+declared** — see [clinical-fhir.md](../architecture/clinical-fhir.md) §15 for why
+that distinction is drawn explicitly rather than papered over.
+
 | Data Class | FHIR Resources | CHO Support |
 |------------|----------------|-------------|
-| **Patient Demographics** | Patient | ✅ Full |
-| **Problems** | Condition | ✅ Mapped from ICD-10 |
-| **Procedures** | Procedure | ✅ Mapped from CPT/HCPCS |
-| **Medications** | MedicationRequest, MedicationDispense | 🔄 Roadmap |
-| **Laboratory** | Observation (lab) | 🔄 Roadmap |
-| **Vital Signs** | Observation (vitals) | 🔄 Roadmap |
-| **Clinical Notes** | DocumentReference | ✅ Full (via X12 275) |
-| **Immunizations** | Immunization | 🔄 Roadmap |
-| **Care Team** | CareTeam | 🔄 Roadmap |
-| **Provenance** | Provenance | ✅ Tracked in metadata |
-| **Health Insurance Info** | Coverage | ✅ Full |
-| **Coverage** | Coverage, ExplanationOfBenefit | ✅ Full |
+| **Patient Demographics** | Patient | ✅ Served; US Core Patient profile declared and asserted |
+| **Problems / Health Concerns** | Condition | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Procedures** | Procedure | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Medications** | MedicationRequest, MedicationDispense | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Laboratory** | Observation, DiagnosticReport | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Vital Signs / Smoking Status** | Observation | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Allergies and Intolerances** | AllergyIntolerance | ✅ Served (read + `patient` search); R4, no US Core profile claimed |
+| **Immunizations** | Immunization | ✅ Served (read + `patient` search); R4, no US Core profile claimed |
+| **Care Team** | CareTeam | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Assessment and Plan of Treatment** | CarePlan | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Goals** | Goal | ✅ Served (read + `patient`/`subject` search); R4, no US Core profile claimed |
+| **Unique Device Identifiers** | Device | ✅ Served (read + `patient` search); R4, no US Core profile claimed |
+| **Clinical Notes** | DocumentReference | ✅ Served (via X12 275) |
+| **Provenance** | Provenance | ✅ Tracked in resource metadata (`meta.source`, `meta.versionId`); no `Provenance` resource is served |
+| **Health Insurance Info** | Coverage | ✅ Served |
+| **Coverage** | Coverage, ExplanationOfBenefit | ✅ Served |
+
+**What "served" does and does not mean for the clinical rows.** Every clinical
+resource CHO serves today arrived through a **Payer-to-Payer exchange** — no CHO
+component authors native clinical data yet, so a deployment with no prior-payer
+history has no clinical data to serve. Search support is `_id`, `patient` and
+`subject` where R4 defines it; `category`, `code`, `status` and date searches are
+not implemented and are not advertised in the CapabilityStatement.
 
 ### Coding Systems
 

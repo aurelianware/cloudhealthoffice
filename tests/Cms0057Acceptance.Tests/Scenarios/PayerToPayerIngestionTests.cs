@@ -83,7 +83,9 @@ public class PayerToPayerIngestionTests
             peer,
             exchanges,
             new PayerToPayerPackageIngestionService(
-                repository, AcceptanceContext.Logger<PayerToPayerPackageIngestionService>()),
+                repository,
+                AcceptanceContext.Logger<PayerToPayerPackageIngestionService>(),
+                new FhirService.Services.Clinical.ClinicalPayloadValidator()),
             directory,
             AcceptanceContext.Logger<PayerToPayerOutboundService>());
 
@@ -225,25 +227,65 @@ public class PayerToPayerIngestionTests
     [Trait("Backend", "Replace")]
     public async Task P2P02_Replace_UnsupportedResourceTypes_AreNamedAndArchivedNotSilentlyDropped()
     {
-        // The peer sends a Condition and an Observation — types CHO's FHIR surface
-        // does not serve today. They must be reported explicitly, and the package
-        // must still be archived so nothing is lost.
+        // The peer sends a RiskAssessment and a NutritionOrder — types CHO's FHIR
+        // surface does not serve, and which PAT-02 did not add. They must be
+        // reported explicitly, and the package must still be archived so nothing
+        // is lost. Unsupported handling did not go away when the USCDI clinical
+        // set became serveable; it still means what it says.
         var harness = Build(new StaticPriorPayer(PriorPayerPackages.WithUnsupportedTypes()));
 
         var result = await harness.Service.InitiateAsync(Request());
 
         result.Succeeded.Should().BeTrue();
         result.Exchange.UnsupportedResourceCount.Should().Be(2);
-        result.Exchange.UnsupportedResourceTypes.Should().BeEquivalentTo(new[] { "Condition", "Observation" });
+        result.Exchange.UnsupportedResourceTypes.Should()
+            .BeEquivalentTo(new[] { "NutritionOrder", "RiskAssessment" });
 
-        // Not ingested as member history...
+        // Not ingested...
         var imported = await ImportedAsync(harness);
-        imported.Should().NotContain(r => r.ResourceType == "Condition" || r.ResourceType == "Observation");
+        imported.Should().NotContain(r =>
+            r.ResourceType == "RiskAssessment" || r.ResourceType == "NutritionOrder");
 
         // ...but preserved verbatim in the archived package.
         var ledger = await harness.Imports.GetLedgerAsync(AcceptanceContext.TenantId, result.Exchange.ExchangeId);
         ledger!.ArchivedPackageJson.Should().NotBeNull();
-        ledger.ArchivedPackageJson.Should().Contain("Condition").And.Contain("Observation");
+        ledger.ArchivedPackageJson.Should().Contain("RiskAssessment").And.Contain("NutritionOrder");
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-02")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P02_Replace_UscdiClinicalTypes_AreNowIngestedRatherThanArchivedOnly()
+    {
+        // The PAT-02 change to this pipeline: Condition and Observation used to be
+        // counted as unsupported and left in the archive. They are now classified
+        // as clinical records and staged like the rest of the member's history,
+        // under the same exchange-derived binding.
+        var harness = Build(new StaticPriorPayer(PriorPayerPackages.WithClinicalTypes()));
+
+        var result = await harness.Service.InitiateAsync(Request());
+
+        result.Succeeded.Should().BeTrue();
+        result.Exchange.UnsupportedResourceCount.Should().Be(0);
+        result.Exchange.ClinicalResourceCount.Should().Be(2);
+        result.Exchange.RejectedResourceCount.Should().Be(0);
+        result.Audit.ClinicalResourceCount.Should().Be(2);
+
+        var imported = await ImportedAsync(harness);
+        imported.Where(r => r.Classification == ImportedResourceClass.ClinicalRecord)
+            .Select(r => r.ResourceType)
+            .Should().BeEquivalentTo(new[] { "Condition", "Observation" });
+
+        // Bound to the exchange's tenant/member/payer, exactly like member history.
+        imported.Where(r => r.Classification == ImportedResourceClass.ClinicalRecord)
+            .Should().OnlyContain(r =>
+                r.TenantId == AcceptanceContext.TenantId
+                && r.MemberId == "pat-001"
+                && r.SourcePayerId == TargetPayer);
+
+        // And clinical is counted apart from member history, so neither total
+        // silently absorbs the other.
+        result.Exchange.PersistedResourceCount.Should().Be(0);
     }
 
     // ── Idempotency / replay ────────────────────────────────────────────────────
@@ -772,7 +814,12 @@ public class PayerToPayerIngestionTests
             ],
         });
 
-        /// <summary>Adds resource types CHO's FHIR surface does not serve.</summary>
+        /// <summary>
+        /// Adds resource types CHO's FHIR surface does not serve. Neither is in
+        /// the PAT-02 USCDI inventory, so both stay unsupported: the point of the
+        /// scenario is that "unsupported" is still a real, honestly-reported
+        /// bucket after PAT-02, not that it became empty.
+        /// </summary>
         public static string WithUnsupportedTypes() => Serialize(new Bundle
         {
             Type = Bundle.BundleType.Collection,
@@ -780,9 +827,37 @@ public class PayerToPayerIngestionTests
             [
                 Entry(new Patient { Id = RemoteMemberId, BirthDate = "1955-07-14" }),
                 Entry(Eob("PRIOR-EOB-1", null)),
+                Entry(new RiskAssessment
+                {
+                    Id = "PRIOR-RSK-1",
+                    Status = ObservationStatus.Final,
+                    Subject = new ResourceReference($"Patient/{RemoteMemberId}"),
+                }),
+                Entry(new NutritionOrder
+                {
+                    Id = "PRIOR-NUT-1",
+                    Status = RequestStatus.Active,
+                    Intent = RequestIntent.Order,
+                    Patient = new ResourceReference($"Patient/{RemoteMemberId}"),
+                }),
+            ],
+        });
+
+        /// <summary>
+        /// USCDI clinical resources — the set PAT-02 made serveable. Includes an
+        /// Observation whose subject reference points at the imported Patient, so
+        /// the member binding and reference handling are exercised together.
+        /// </summary>
+        public static string WithClinicalTypes() => Serialize(new Bundle
+        {
+            Type = Bundle.BundleType.Collection,
+            Entry =
+            [
+                Entry(new Patient { Id = RemoteMemberId, BirthDate = "1955-07-14" }),
                 Entry(new Condition
                 {
                     Id = "PRIOR-CND-1",
+                    Code = new CodeableConcept("http://hl7.org/fhir/sid/icd-10-cm", "E11.9"),
                     Subject = new ResourceReference($"Patient/{RemoteMemberId}"),
                 }),
                 Entry(new Observation

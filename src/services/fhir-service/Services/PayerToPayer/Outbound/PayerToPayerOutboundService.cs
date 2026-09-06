@@ -498,9 +498,12 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         exchange.IngestionFailure = PayerToPayerIngestionFailure.None;
         exchange.PersistedResourceCount = 0;
         exchange.AdministrativeResourceCount = 0;
+        exchange.ClinicalResourceCount = 0;
         exchange.DuplicateResourceCount = 0;
         exchange.UnsupportedResourceCount = 0;
         exchange.UnsupportedResourceTypes = Array.Empty<string>();
+        exchange.RejectedResourceCount = 0;
+        exchange.RejectedResourceReasons = Array.Empty<string>();
         exchange.IngestionStartedAtUtc = null;
         exchange.IngestionCompletedAtUtc = null;
     }
@@ -526,9 +529,12 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         exchange.IngestionFailure = ingestion.Failure;
         exchange.PersistedResourceCount = ingestion.Counts.Persisted;
         exchange.AdministrativeResourceCount = ingestion.Counts.AdministrativeReference;
+        exchange.ClinicalResourceCount = ingestion.Counts.Clinical;
         exchange.DuplicateResourceCount = ingestion.Counts.Duplicate;
         exchange.UnsupportedResourceCount = ingestion.Counts.Unsupported;
         exchange.UnsupportedResourceTypes = ingestion.Counts.UnsupportedTypes;
+        exchange.RejectedResourceCount = ingestion.Counts.Rejected;
+        exchange.RejectedResourceReasons = ingestion.Counts.RejectedReasons;
         exchange.IngestionCompletedAtUtc = ingestion.CompletedAtUtc;
     }
 
@@ -553,8 +559,10 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         ConsentDecisionReason = exchange.ConsentDecisionReason,
         IngestionStatus = exchange.IngestionStatus.ToString(),
         PersistedResourceCount = exchange.PersistedResourceCount,
+        ClinicalResourceCount = exchange.ClinicalResourceCount,
         DuplicateResourceCount = exchange.DuplicateResourceCount,
         UnsupportedResourceCount = exchange.UnsupportedResourceCount,
+        RejectedResourceCount = exchange.RejectedResourceCount,
     };
 
     /// <summary>
