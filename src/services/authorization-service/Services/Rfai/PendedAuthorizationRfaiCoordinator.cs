@@ -149,6 +149,14 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
     /// Whether this decision asks the provider for documentation. Both halves
     /// are required: the A4 decision code, and at least one thing being asked
     /// for.
+    ///
+    /// EVERY named item must be usable, not merely one of them. rfai-service
+    /// refuses a request in which ANY item lacks a description, so a predicate
+    /// that accepted a mixed list here would call a decision eligible and then
+    /// have the request rejected downstream — a documentation request the
+    /// reviewer believes they raised and the provider never receives. The two
+    /// rules are the same rule, and a mixed list is a malformed decision, not a
+    /// decision that asked for nothing.
     /// </summary>
     public static bool IndicatesAdditionalInformationRequest(
         Authorization authorization, IReadOnlyList<RequestedInformationItem> requestedItems)
@@ -157,7 +165,8 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
                authorization.ReviewDecision?.Trim(),
                AdditionalInformationRequiredDecision,
                StringComparison.OrdinalIgnoreCase)
-           && requestedItems.Any(i => !string.IsNullOrWhiteSpace(i.Description));
+           && requestedItems.Count > 0
+           && requestedItems.All(i => !string.IsNullOrWhiteSpace(i.Description));
 
     /// <inheritdoc />
     public async Task<bool> EnsureRequestForDecisionAsync(
@@ -169,14 +178,29 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
     {
         if (!IndicatesAdditionalInformationRequest(authorization, requestedItems))
         {
-            if (authorization.Status == AuthorizationStatus.Pended
-                && requestedItems.Count == 0)
+            if (authorization.Status == AuthorizationStatus.Pended)
             {
-                _logger.LogInformation(
-                    "Authorization {AuthNumber} pended with decision {Decision} but named no "
-                    + "requested documentation — no additional-information request raised.",
-                    Sanitize(authorization.AuthorizationNumber),
-                    Sanitize(authorization.ReviewDecision));
+                if (requestedItems.Count == 0)
+                {
+                    _logger.LogInformation(
+                        "Authorization {AuthNumber} pended with decision {Decision} but named no "
+                        + "requested documentation — no additional-information request raised.",
+                        Sanitize(authorization.AuthorizationNumber),
+                        Sanitize(authorization.ReviewDecision));
+                }
+                else if (requestedItems.Any(i => string.IsNullOrWhiteSpace(i.Description)))
+                {
+                    // Distinct from "asked for nothing": the reviewer DID ask,
+                    // and the decision is malformed. Reported as a warning so it
+                    // is not mistaken for the ordinary no-documentation pend.
+                    _logger.LogWarning(
+                        "Authorization {AuthNumber} pended with decision {Decision} naming "
+                        + "{Count} item(s), at least one without a description — no "
+                        + "additional-information request raised.",
+                        Sanitize(authorization.AuthorizationNumber),
+                        Sanitize(authorization.ReviewDecision),
+                        requestedItems.Count);
+                }
             }
 
             return false;

@@ -38,7 +38,9 @@ either — all asserted.
 
 **Structured, not prose.** Each requested item carries the X12 PWK code *and* the
 LOINC code (the same request has to be expressible on both wires), the service
-line it is about, diagnosis context, and whether it is required; the case carries
+line it is about, diagnosis context (on a CHO-owned `Task.input` type, since CDex
+has no code for it and typing a diagnosis as `attachment-code` would make it read
+as a document being requested), and whether it is required; the case carries
 a due date and a coded reason. Free text supplements the codes and never replaces
 them, and a request with no items is refused at creation.
 
@@ -80,15 +82,31 @@ asserts explicitly that documentation submission does not imply approval.
 X12 A4 reviewAction before, plain `pending` after — so it is never left
 permanently reporting A4 once the data is in.
 
-**A security hole this surfaced and closed.** `SmartScopeEnforcementMiddleware`
-derived the required scope from the resource-type path segment. A system-level
-operation path — `/fhir/r4/$submit-attachment` — names no resource type and fell
-through the middleware's "unknown path" branch **unenforced**. System operations
-now declare the resource, the access **and the scope contexts** they accept, and
-`$submit-attachment` requires a `Task` **write** scope in a `user/` or `system/`
-context: a read scope is not enough to put documents into a payer's record, and a
-patient-context token is not an acceptable caller for a provider/payer
-transaction. rfai-service's legacy `by-auth/{tenantId}/…` route now honours a path
+**A security hole this surfaced and closed — read scopes no longer authorize
+writes.** `SmartScopeEnforcementMiddleware` derived the required scope from the
+resource-type path segment and always demanded `.read`. Two consequences: a
+system-level operation path — `/fhir/r4/$submit-attachment` — names no resource
+type and fell through the "unknown path" branch **entirely unenforced**; and
+every write reachable under `/fhir/r4`, `POST Claim/$submit` included, was
+authorized by a **read** scope.
+
+A request is now resolved into the interaction it actually is — which resource's
+scope governs it, whether it reads or writes, and which scope contexts may invoke
+it — from the path *and* the method. FHIR operations are classified explicitly,
+because an operation's HTTP method says nothing about its effect (`$inquire` and
+`$member-match` are POSTs that read); plain REST follows the method. Nothing
+falls through: an operation nobody classified is still governed by a scope named
+for the operation, with the access its method implies. `$submit-attachment`
+additionally requires a `user/` or `system/` context — a patient-context token is
+not an acceptable caller for a provider/payer transaction.
+
+**Behaviour change:** `Claim/$submit`, `$cho-appeal-submit`,
+`PayerToPayer/$initiate` and DTR questionnaire authoring now require a **write**
+scope where a read scope previously sufficed. smart-auth-service therefore issues
+write scopes (`user`/`system` × `*`, `Claim`, `Task`, `Questionnaire`,
+`QuestionnaireResponse`) and `.well-known/smart-configuration` advertises them —
+without that the CDex response half would have been ungrantable, since CHO issued
+no write scope at all. There is deliberately **no patient-context write scope**. rfai-service's legacy `by-auth/{tenantId}/…` route now honours a path
 tenant only when it matches the authenticated one, instead of selecting on it.
 
 **Anti-enumeration.** Unknown tracking id, other tenant, other authorization and
@@ -127,7 +145,7 @@ solution, which did not previously build them.
 
 Design: [docs/architecture/cdex-additional-information.md](docs/architecture/cdex-additional-information.md).
 
-Acceptance 301 passed (+47), rfai-service 37 (new), fhir-service 450, SmartAuth 59,
+Acceptance 317 passed (+63), rfai-service 37 (new), fhir-service 458, SmartAuth 59,
 authorization-service 26 + 38, evidence 32; all 0 failed. PAS-07 PARTIAL →
 **PASSABLE** on 41 supporting tests, so CHO Replace is **19 PASSABLE / 2 PARTIAL /
 0 GAP** (generator-computed). Remaining PARTIAL: PAT-02, SEC-01.

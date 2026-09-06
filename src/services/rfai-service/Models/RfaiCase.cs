@@ -45,7 +45,7 @@ public class RfaiCase
     /// Cosmos DB / MongoDB document ID.
     ///
     /// DETERMINISTIC for cases created through
-    /// <see cref="Services.RfaiCaseFactory"/>: it is derived from the caller's
+    /// <see cref="Services.RfaiCaseLifecycle.Create"/>: it is derived from the caller's
     /// correlation key, so the primary key itself — not an application-level
     /// read-then-write — is what makes creation idempotent. Two workers
     /// processing the same A4 review decision insert the same id and exactly one

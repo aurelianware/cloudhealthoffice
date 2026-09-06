@@ -258,13 +258,19 @@ public sealed class CdexTaskMapper
                 });
             }
 
+            // The diagnosis the question is about is NOT an attachment code, and
+            // must not be typed as one: a consumer reading Task.input by type
+            // would otherwise take a diagnosis for a document being requested.
+            // CDex defines no input type for per-item diagnosis context, so it is
+            // named in CHO's own code system rather than by overloading one of
+            // theirs.
             if (!string.IsNullOrWhiteSpace(item.DiagnosisCode))
             {
                 task.Input.Add(new FhirTask.ParameterComponent
                 {
                     Type = new CodeableConcept(
-                        CdexCanonicalUrls.TempCodeSystem,
-                        CdexCanonicalUrls.AttachmentCode,
+                        CdexCanonicalUrls.ChoTaskInputCodeSystem,
+                        CdexCanonicalUrls.DiagnosisContext,
                         "Diagnosis context"),
                     Value = new CodeableConcept(
                         CdexCanonicalUrls.Icd10Cm, item.DiagnosisCode, item.Description),

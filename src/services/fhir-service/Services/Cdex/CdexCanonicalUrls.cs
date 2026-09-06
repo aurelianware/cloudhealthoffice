@@ -104,4 +104,22 @@ public static class CdexCanonicalUrls
     /// <c>Task.status</c> vocabulary.
     /// </summary>
     public const string RfaiStatusCodeSystem = ChoFhirCanonicalUrls.CodeSystemBase + "cho-rfai-status";
+
+    /// <summary>
+    /// CHO-owned <c>Task.input.type</c> codes, for request context CDex has no
+    /// code of its own for.
+    ///
+    /// Named in CHO's system rather than by overloading a CDex code: typing a
+    /// diagnosis as <c>attachment-code</c> would make a consumer reading
+    /// <c>Task.input</c> by type take the diagnosis for a document being asked
+    /// for. A code CHO owns is honest about being CHO's.
+    /// </summary>
+    public const string ChoTaskInputCodeSystem =
+        ChoFhirCanonicalUrls.CodeSystemBase + "cho-rfai-task-input";
+
+    /// <summary>
+    /// <c>Task.input.type</c> — the diagnosis a requested item is about. Its
+    /// value is an ICD-10-CM CodeableConcept.
+    /// </summary>
+    public const string DiagnosisContext = "diagnosis-context";
 }

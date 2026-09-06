@@ -83,59 +83,35 @@ public class SmartScopeEnforcementMiddleware
 
         var scopes = ParseScopes(context.User);
 
-        // ── 0. System-level operations ────────────────────────────────────────
-        // A path like /fhir/r4/$submit-attachment names no resource type, so the
-        // resource-type parse below cannot govern it. Left unhandled it would
-        // fall through the "unknown path" branch and be enforced by NOTHING —
-        // an unauthenticated-scope write into a payer's record. Each system
-        // operation therefore declares the resource and the access it needs.
-        var systemOperation = ParseSystemOperation(context.Request.Path);
-        if (systemOperation is not null)
-        {
-            var (operationResource, requiredAccess, contexts) = systemOperation.Value;
-
-            if (!HasRequiredScope(scopes, operationResource, requiredAccess, contexts))
-            {
-                _logger.LogWarning(
-                    "SMART scope denied — operation: {Operation}, required: {Resource}.{Access}",
-                    SanitizeForLog(context.Request.Path.Value), operationResource, requiredAccess);
-
-                await WriteFhirError(context, 403,
-                    OperationOutcome.IssueSeverity.Error,
-                    OperationOutcome.IssueType.Forbidden,
-                    "Insufficient scope. Required: "
-                    + string.Join(" or ", contexts.Select(c =>
-                        $"{c}/{operationResource}.{requiredAccess}")));
-                return;
-            }
-
-            context.Items["SmartScopes"] = scopes;
-            await _next(context);
-            return;
-        }
-
-        var resourceType = ParseResourceType(context.Request.Path);
-        if (resourceType == null)
+        // What this request actually IS: which resource's scope governs it,
+        // whether it READS or WRITES, and which scope contexts may invoke it.
+        // Resolved once, from the path AND the method — enforcing `.read` on
+        // everything, as this middleware previously did, let any write reachable
+        // under /fhir/r4 through on a read scope.
+        var interaction = ResolveInteraction(context.Request);
+        if (interaction == null)
         {
             // Unknown path within /fhir/r4/ — pass through
             await _next(context);
             return;
         }
 
+        var resourceType = interaction.Resource;
         var patientClaim = context.User.FindFirst("patient")?.Value;
 
         // ── 1. Scope check ────────────────────────────────────────────────────
-        if (!HasRequiredScope(scopes, resourceType, ReadAccess))
+        if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts))
         {
             _logger.LogWarning(
-                "SMART scope denied — resource: {Resource}, scopes: {Scopes}",
-                resourceType, string.Join(" ", scopes));
+                "SMART scope denied — resource: {Resource}, access: {Access}, scopes: {Scopes}",
+                resourceType, interaction.Access, string.Join(" ", scopes));
 
             await WriteFhirError(context, 403,
                 OperationOutcome.IssueSeverity.Error,
                 OperationOutcome.IssueType.Forbidden,
-                $"Insufficient scope for {resourceType}. Required: patient/{resourceType}.read, " +
-                $"user/{resourceType}.read, or system/{resourceType}.read");
+                $"Insufficient scope for {resourceType}. Required: "
+                + string.Join(", ", interaction.Contexts.Select(
+                    c => $"{c}/{resourceType}.{interaction.Access}")));
             return;
         }
 
@@ -145,7 +121,7 @@ public class SmartScopeEnforcementMiddleware
             var normalizedPatient = StripPrefix("Patient/", patientClaim);
 
             // (a) Direct resource read — enforce ID match for Patient
-            var resourceId = ParseResourceId(context.Request.Path, resourceType);
+            var resourceId = interaction.ResourceId;
             if (resourceId != null && resourceType == "Patient" &&
                 resourceId != normalizedPatient)
             {
@@ -214,68 +190,137 @@ public class SmartScopeEnforcementMiddleware
     internal const string ReadAccess = "read";
     internal const string WriteAccess = "write";
 
+    /// <summary>All three SMART scope contexts. The default for most interactions.</summary>
+    private static readonly string[] AllContexts = ["patient", "user", "system"];
+
     /// <summary>
-    /// System-level FHIR operations served by this server, and the scope each
-    /// one needs.
-    ///
-    /// <c>$submit-attachment</c> is the Da Vinci CDex operation a provider uses
-    /// to send documentation on a pended prior authorization. It WRITES into the
-    /// payer's record, so a read scope is not enough: it is governed by the
-    /// Task write scope, Task being the resource the additional-information
-    /// request is projected as.
-    /// </summary>
-    /// <summary>
-    /// Scope contexts a system operation may be invoked under. <c>$submit-attachment</c>
-    /// is a provider/system transaction with a payer, so a PATIENT-context token
-    /// is not an acceptable caller however it is scoped — only <c>user/</c> and
-    /// <c>system/</c> grants apply.
+    /// Backend-only contexts. A provider/payer transaction is not something a
+    /// PATIENT-context token may invoke, however it is scoped.
     /// </summary>
     private static readonly string[] BackendContexts = ["user", "system"];
 
+    /// <summary>
+    /// What one request is, for authorization purposes: the resource whose scope
+    /// governs it, the instance it names (for patient binding), whether it reads
+    /// or writes, and which scope contexts may invoke it.
+    /// </summary>
+    private sealed record FhirInteraction(
+        string Resource, string? ResourceId, string Access, string[] Contexts);
+
+    /// <summary>
+    /// SYSTEM-level FHIR operations — <c>/fhir/r4/$operation</c> — and the scope
+    /// each needs. A path like this names no resource type, so without an entry
+    /// here there is nothing for a scope string to be built from.
+    ///
+    /// <c>$submit-attachment</c> is the Da Vinci CDex operation a provider uses
+    /// to send documentation on a pended prior authorization. It WRITES into the
+    /// payer's record, so it is governed by the Task write scope — Task being the
+    /// resource the additional-information request is projected as — and only in
+    /// a backend context.
+    /// </summary>
     private static readonly IReadOnlyDictionary<string, (string Resource, string Access, string[] Contexts)>
         SystemOperations = new Dictionary<string, (string, string, string[])>(StringComparer.OrdinalIgnoreCase)
         {
             ["$submit-attachment"] = ("Task", WriteAccess, BackendContexts),
+
+            // Appeal submission creates an appeal, which this surface projects as
+            // a Task. A write, therefore — it was previously reachable with a
+            // read scope.
+            ["$cho-appeal-submit"] = ("Task", WriteAccess, AllContexts),
+
+            // Bulk export ASKS for data. POST is the Bulk Data IG's kick-off
+            // shape, not evidence of a write.
+            ["$export"] = ("$export", ReadAccess, AllContexts),
         };
 
     /// <summary>
-    /// Recognises /fhir/r4/$operation, returning the resource and access its
-    /// scope must name. Null when the path is not a system-level operation.
+    /// Named operations on a resource, and the access each needs.
+    ///
+    /// A FHIR operation's HTTP method says nothing about whether it reads or
+    /// writes — <c>$inquire</c> and <c>$member-match</c> are POSTs that read —
+    /// so every operation this server serves is classified HERE rather than
+    /// inferred. An operation that is NOT listed falls back to the method, so a
+    /// new POST operation defaults to requiring a write scope rather than
+    /// silently inheriting read-only enforcement.
     /// </summary>
-    private static (string Resource, string Access, string[] Contexts)? ParseSystemOperation(PathString path)
-    {
-        var segments = path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments is not { Length: 3 }) return null;
-        if (!segments[2].StartsWith('$')) return null;
+    private static readonly IReadOnlyDictionary<string, string> ResourceOperations =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Da Vinci PAS. $submit CREATES a prior authorization; $inquire only
+            // projects the one it already wrote.
+            ["Claim/$submit"] = WriteAccess,
+            ["Claim/$inquire"] = ReadAccess,
 
-        return SystemOperations.TryGetValue(segments[2], out var required) ? required : null;
-    }
+            // Payer-to-Payer. A match and an export are reads; initiating an
+            // outbound exchange is an action.
+            ["Patient/$member-match"] = ReadAccess,
+            ["PayerToPayer/$member-data-export"] = ReadAccess,
+            ["PayerToPayer/$initiate"] = WriteAccess,
+
+            // DTR: a questionnaire package is assembled and returned, not stored.
+            ["Questionnaire/$questionnaire-package"] = ReadAccess,
+
+            // Bulk export for a group — the kick-off shape again.
+            ["Group/$export"] = ReadAccess,
+        };
 
     /// <summary>
-    /// Extracts the FHIR resource type from paths like /fhir/r4/Patient/123 → "Patient".
-    /// Returns null for unrecognised paths.
+    /// Resolves a request under <c>/fhir/r4</c> into the interaction that governs
+    /// it. Null only when the path is too short to name anything.
+    ///
+    /// Nothing here falls through to "unenforced": an operation nobody
+    /// classified is still governed by a scope named for the operation itself,
+    /// with the access its HTTP method implies.
     /// </summary>
-    private static string? ParseResourceType(PathString path)
+    private static FhirInteraction? ResolveInteraction(HttpRequest request)
     {
-        var segments = path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var segments = request.Path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments is not { Length: >= 3 })
             return null;
 
-        // Return the CANONICAL spelling when the segment names a known resource,
-        // so downstream scope strings ("user/Patient.read") are built from it
-        // rather than from whatever casing the caller sent.
-        return KnownResources.TryGetValue(segments[2], out var canonical)
+        var methodAccess = AccessForMethod(request.Method);
+
+        // /fhir/r4/$operation[/...]
+        if (segments[2].StartsWith('$'))
+        {
+            return SystemOperations.TryGetValue(segments[2], out var declared)
+                ? new FhirInteraction(declared.Resource, null, declared.Access, declared.Contexts)
+                : new FhirInteraction(segments[2], null, methodAccess, AllContexts);
+        }
+
+        // The CANONICAL spelling when the segment names a known resource, so the
+        // scope strings are built from it rather than from the caller's casing.
+        var resource = KnownResources.TryGetValue(segments[2], out var canonical)
             ? canonical
             : segments[2];
+
+        // /fhir/r4/{Resource}/$operation
+        if (segments.Length >= 4 && segments[3].StartsWith('$'))
+            return new FhirInteraction(resource, null, OperationAccess(resource, segments[3], methodAccess), AllContexts);
+
+        // /fhir/r4/{Resource}/{id}/$operation
+        if (segments.Length >= 5 && segments[4].StartsWith('$'))
+            return new FhirInteraction(resource, segments[3], OperationAccess(resource, segments[4], methodAccess), AllContexts);
+
+        // Plain REST: /fhir/r4/{Resource}[/{id}]
+        var id = segments.Length >= 4 ? segments[3] : null;
+        return new FhirInteraction(resource, id, methodAccess, AllContexts);
     }
 
-    /// <summary>Returns the resource ID from /fhir/r4/{Type}/{id}, or null for searches.</summary>
-    private static string? ParseResourceId(PathString path, string resourceType)
-    {
-        var segments = path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments == null || segments.Length < 4) return null;
-        return segments.Length >= 4 ? segments[3] : null;
-    }
+    private static string OperationAccess(string resource, string operation, string fallback)
+        => ResourceOperations.TryGetValue($"{resource}/{operation}", out var declared)
+            ? declared
+            : fallback;
+
+    /// <summary>
+    /// The access a plain REST interaction implies. Safe methods read; everything
+    /// else writes. Operations do NOT use this as their first answer — see
+    /// <see cref="ResourceOperations"/>.
+    /// </summary>
+    private static string AccessForMethod(string method)
+        => HttpMethods.IsGet(method) || HttpMethods.IsHead(method) || HttpMethods.IsOptions(method)
+            ? ReadAccess
+            : WriteAccess;
 
     // ── Scope analysis helpers ────────────────────────────────────────────────
 
@@ -289,9 +334,6 @@ public class SmartScopeEnforcementMiddleware
                 result.Add(s);
         return result;
     }
-
-    /// <summary>All three scope contexts. The default for resource reads.</summary>
-    private static readonly string[] AllContexts = ["patient", "user", "system"];
 
     /// <summary>
     /// Whether the token grants <c>{resourceType}.{access}</c> in one of the

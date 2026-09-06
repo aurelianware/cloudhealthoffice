@@ -349,13 +349,20 @@ retry records nothing twice while a materially different document is appended as
 an additional response.
 
 **A security hole this surfaced and closed.** `SmartScopeEnforcementMiddleware`
-derived the required scope from the resource-type path segment. A system-level
-operation path — `/fhir/r4/$submit-attachment` — names no resource type and fell
-through the "unknown path" branch **unenforced**. System operations now declare
-the resource, the access and the scope contexts they accept, and
-`$submit-attachment` requires a `Task` **write** scope in a `user/` or `system/`
-context: a read scope is not enough to put documents into a payer's record, and a
-patient-context token is not an acceptable caller.
+derived the required scope from the resource-type path segment and always demanded
+`.read`. A system-level operation path — `/fhir/r4/$submit-attachment` — names no
+resource type and fell through the "unknown path" branch **unenforced**; and every
+write under `/fhir/r4`, `POST Claim/$submit` included, was authorized by a read
+scope. A request is now resolved into the interaction it is — resource, access,
+permitted contexts — from the path *and* the method, with FHIR operations
+classified explicitly (their method says nothing about their effect: `$inquire`
+and `$member-match` are POSTs that read) and nothing falling through unenforced.
+`$submit-attachment` additionally requires a `user/`/`system/` context.
+**Behaviour change:** `Claim/$submit`, `$cho-appeal-submit`,
+`PayerToPayer/$initiate` and DTR authoring now need a write scope, so
+smart-auth-service issues write scopes and `.well-known/smart-configuration`
+advertises them — CHO previously issued none at all, which would have left the
+CDex response half ungrantable.
 
 **Deliberately not Provider Access consent.** That gate governs a provider
 *reading a member's clinical record*. This is a payer/provider transaction about

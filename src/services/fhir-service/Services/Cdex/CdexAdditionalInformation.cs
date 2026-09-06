@@ -396,17 +396,57 @@ public sealed class HttpCdexAdditionalInformationStore : ICdexAdditionalInformat
 
         if (!response.IsSuccessStatusCode)
         {
-            // Status category only — never the response body, which echoes the case.
+            // Status category only — never the response body's detail, which
+            // echoes the case.
             _logger.LogWarning(
                 "Recording an RFAI response returned {Status}.", (int)response.StatusCode);
 
-            return response.StatusCode == HttpStatusCode.Conflict
-                ? new CdexResponseRecordResult { Outcome = "CaseNotOpenForResponse" }
-                : throw new HttpRequestException(
+            if (response.StatusCode != HttpStatusCode.Conflict)
+            {
+                throw new HttpRequestException(
                     $"rfai-service rejected the response with {(int)response.StatusCode}.");
+            }
+
+            // WHICH conflict matters: "the request is closed" and "the request is
+            // at its artifact limit" are different answers to the caller. The
+            // outcome name travels in the body precisely so this does not have to
+            // be guessed from the status code.
+            return await ReadConflictOutcomeAsync(response, ct);
         }
 
         return await response.Content.ReadFromJsonAsync<CdexResponseRecordResult>(WireFormat, ct);
+    }
+
+    /// <summary>
+    /// Reads the outcome rfai-service named on a 409. Falls back to
+    /// <c>CaseNotOpenForResponse</c> only when the body cannot be read at all —
+    /// the conservative answer, because it tells the caller to stop rather than
+    /// to retry.
+    /// </summary>
+    private async Task<CdexResponseRecordResult> ReadConflictOutcomeAsync(
+        HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var conflict = await response.Content
+                .ReadFromJsonAsync<CdexResponseRecordResult>(WireFormat, ct);
+
+            if (conflict is not null && !string.IsNullOrWhiteSpace(conflict.Outcome))
+                return conflict with { Recorded = 0, ResumedReview = false };
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                "An RFAI conflict response could not be read ({Fault}); "
+                + "treating it as a closed request.",
+                ex.GetType().Name);
+        }
+
+        return new CdexResponseRecordResult { Outcome = "CaseNotOpenForResponse" };
     }
 
     private HttpClient Client() => _factory.CreateClient(HttpClientName);

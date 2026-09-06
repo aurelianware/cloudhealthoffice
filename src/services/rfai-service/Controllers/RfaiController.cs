@@ -208,13 +208,23 @@ public class RfaiController : ControllerBase
         if (result is null)
             return NotFound($"RFAI case {id} not found.");
 
-        if (result.Outcome == RfaiIntakeOutcome.CaseNotOpenForResponse)
-            return Conflict($"RFAI case {id} is {result.Case.Status} and cannot take a response.");
-
-        if (result.Outcome == RfaiIntakeOutcome.TooManyArtifacts)
-            return Conflict(
-                $"RFAI case {id} would exceed the maximum of "
-                + $"{RfaiCaseLifecycle.MaxArtifactsPerCase} artifacts.");
+        // A refusal answers in the SAME shape as an acceptance, carrying the
+        // outcome name. A plain-string 409 forced every caller to collapse
+        // "closed" and "at capacity" into one guess — and the CDex surface then
+        // reported a capacity refusal as "no longer open".
+        if (result.IsRefusal)
+        {
+            return Conflict(new RfaiResponseResult
+            {
+                Outcome = result.Outcome.ToString(),
+                Recorded = 0,
+                ResumedReview = false,
+                Detail = result.Outcome == RfaiIntakeOutcome.TooManyArtifacts
+                    ? $"RFAI case {id} would exceed the maximum of "
+                      + $"{RfaiCaseLifecycle.MaxArtifactsPerCase} artifacts."
+                    : $"RFAI case {id} is {result.Case.Status} and cannot take a response.",
+            });
+        }
 
         return Ok(new RfaiResponseResult
         {
@@ -270,7 +280,12 @@ public class RfaiController : ControllerBase
             return NotFound($"RFAI case {id} not found.");
 
         if (result.IsRefusal)
-            return Conflict($"RFAI case {id} is {result.Case.Status} and cannot take a response.");
+        {
+            return Conflict(result.Outcome == RfaiIntakeOutcome.TooManyArtifacts
+                ? $"RFAI case {id} would exceed the maximum of "
+                  + $"{RfaiCaseLifecycle.MaxArtifactsPerCase} artifacts."
+                : $"RFAI case {id} is {result.Case.Status} and cannot take a response.");
+        }
 
         return Ok(result.Case);
     }
@@ -361,11 +376,21 @@ public class RecordRfaiResponseRequest
 
 public class RfaiResponseResult
 {
+    /// <summary>
+    /// The intake outcome by name — <c>Accepted</c>, <c>DuplicateIgnored</c>,
+    /// <c>CaseNotOpenForResponse</c> or <c>TooManyArtifacts</c>. Present on a
+    /// refusal as well as on success, so a caller never has to infer which
+    /// conflict it hit from the status code alone.
+    /// </summary>
     public string Outcome { get; set; } = string.Empty;
+
     public int Recorded { get; set; }
 
     /// <summary>True when this call is the one that lets the authorization resume review.</summary>
     public bool ResumedReview { get; set; }
+
+    /// <summary>Operator-facing explanation of a refusal. Never present on success.</summary>
+    public string? Detail { get; set; }
 
     public RfaiCase? Case { get; set; }
 }

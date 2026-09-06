@@ -209,7 +209,7 @@ The projected Task carries:
 | `requester` | the payer |
 | `reasonCode` | X12 306 `A4`, plus the reviewer's coded reason |
 | `restriction.period.end` | the due date |
-| `input` | one `attachment-code` per requested item (LOINC + PWK), `line-item`, ICD-10 context, `purpose-of-use` = `COVAUTH`, `signature-flag` = false |
+| `input` | one `attachment-code` per requested item (LOINC + PWK), `line-item`, `diagnosis-context` (ICD-10, on CHO's own input code system — CDex has none, and typing a diagnosis as `attachment-code` would read as a document being requested), `purpose-of-use` = `COVAUTH`, `signature-flag` = false |
 | `output` | one entry per accepted artifact — see below |
 | `businessStatus` | CHO's own RFAI state |
 | `note` | free-text supplement |
@@ -350,14 +350,30 @@ provider can retrieve and answer.
 ## 10. Security, tenancy and provider isolation
 
 **Authentication and scopes.** Every route under `/fhir/r4` requires a validated
-token. `Task` reads need a `Task` **read** scope.
-`$submit-attachment` needs a `Task` **write** scope in a `user/` or `system/`
-context — a read scope is not enough to put documents into a payer's record, and
-a patient-context token is not an acceptable caller for a provider/payer
-transaction however it is scoped. `SmartScopeEnforcementMiddleware` gained
-an explicit system-level-operation table for this: a path like
-`/fhir/r4/$submit-attachment` names no resource type, and previously fell through
-the middleware's "unknown path" branch **unenforced**.
+token. `Task` reads need a `Task` **read** scope. `$submit-attachment` needs a
+`Task` **write** scope in a `user/` or `system/` context — a read scope is not
+enough to put documents into a payer's record, and a patient-context token is not
+an acceptable caller for a provider/payer transaction however it is scoped.
+
+`SmartScopeEnforcementMiddleware` was reworked for this, and the rework fixed a
+wider hole. It previously derived the scope from the resource-type path segment
+and always demanded `.read`, so a path naming no resource type
+(`/fhir/r4/$submit-attachment`) fell through its "unknown path" branch
+**unenforced**, and every write under `/fhir/r4` — `POST Claim/$submit` included —
+was authorized by a read scope. A request is now resolved into the interaction it
+actually is:
+
+| Interaction | Access |
+| --- | --- |
+| A classified operation (`Claim/$submit`, `$submit-attachment`, …) | as declared |
+| An unclassified operation | from the HTTP method |
+| Plain REST | GET/HEAD read; POST/PUT/PATCH/DELETE write |
+
+Operations are classified explicitly because their HTTP method says nothing about
+their effect — `$inquire` and `$member-match` are POSTs that read. Nothing falls
+through to unenforced. smart-auth-service issues the corresponding write scopes
+and `.well-known/smart-configuration` advertises them; there is deliberately no
+patient-context write scope.
 
 **Tenant** comes from the authenticated context on every path. It is never read
 from a `Task`, a `Parameters` payload, an identifier system, an `Organization`

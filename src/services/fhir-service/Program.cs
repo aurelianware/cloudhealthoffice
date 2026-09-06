@@ -355,10 +355,14 @@ Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorE
         builder.Services,
         sp =>
         {
-            Console.WriteLine(
-                "CDex attachments use the in-process attachment content store — submitted "
-                + "documentation does NOT survive a restart. Register a durable "
-                + "IClaimAttachmentContentStore for deployment.");
+            // Through the configured logging pipeline, so the warning reaches the
+            // same sinks and levels as everything else a container emits.
+            sp.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("FhirService.Cdex.Attachments")
+                .LogWarning(
+                    "CDex attachments use the in-process attachment content store — submitted "
+                    + "documentation does NOT survive a restart. Register a durable "
+                    + "IClaimAttachmentContentStore for deployment.");
 
             var options = sp.GetService<Microsoft.Extensions.Options.IOptions<
                 CloudHealthOffice.Infrastructure.Gateways.ClaimAttachmentOptions>>()?.Value

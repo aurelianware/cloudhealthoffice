@@ -185,6 +185,43 @@ public class CdexAdditionalInformationTests
         auth.RFAIReference.Should().BeNull();
     }
 
+    [Fact]
+    [Trait("Scenario", "PAS-07")]
+    public async Task PAS07_Replace_ADecisionWithAnUnusableItemRaisesNothingRatherThanFailingLater()
+    {
+        // The eligibility rule here and the validation rule in rfai-service are
+        // the SAME rule: every named item must be usable. A predicate that
+        // accepted a mixed list would call the decision eligible and then have
+        // the request rejected downstream — a request the reviewer believes they
+        // raised and the provider never receives.
+        var harness = new AdditionalInformationHarness();
+        var auth = PendedAuthorization();
+
+        List<RequestedInformationItem> mixed =
+        [
+            new() { Code = "AS", Description = "Discharge summary" },
+            new() { Code = "03", Description = "   " },
+        ];
+
+        var stamped = await harness.Coordinator().EnsureRequestForDecisionAsync(
+            auth, mixed, dueDate: null, decisionControlNumber: "CTRL-0001");
+
+        stamped.Should().BeFalse();
+        harness.Gateway.Calls.Should().Be(0, "nothing is sent that would be refused on arrival");
+        harness.Repository.All.Should().BeEmpty();
+        auth.RFAIIssued.Should().BeFalse();
+
+        // And the rules genuinely agree — the aggregate would have refused it.
+        RfaiCaseLifecycle.Validate(new RfaiCreationRequest
+        {
+            TenantId = AcceptanceContext.TenantId,
+            AuthNumber = AuthNumber,
+            RequestedItems = mixed
+                .Select(i => new RequestedItem { Code = i.Code, Description = i.Description })
+                .ToList(),
+        }).IsValid.Should().BeFalse();
+    }
+
     [Theory]
     [Trait("Scenario", "PAS-07")]
     [InlineData("A1", AuthorizationStatus.Approved)]
@@ -360,8 +397,21 @@ public class CdexAdditionalInformationTests
 
         attachmentInputs.SelectMany(c => c.Coding)
             .Should().Contain(c => c.System == CdexCanonicalUrls.Loinc && c.Code == "18842-5")
-            .And.Contain(c => c.System == CdexCanonicalUrls.X12AttachmentReportType && c.Code == "AS")
-            .And.Contain(c => c.System == CdexCanonicalUrls.Icd10Cm && c.Code == "M54.5");
+            .And.Contain(c => c.System == CdexCanonicalUrls.X12AttachmentReportType && c.Code == "AS");
+
+        // The diagnosis the question is about has its OWN input type. Typing it
+        // as an attachment code would make a consumer reading Task.input by type
+        // take the diagnosis for a document being requested.
+        var diagnosis = task.Input.Should().ContainSingle(i =>
+            i.Type!.Coding.Any(c => c.System == CdexCanonicalUrls.ChoTaskInputCodeSystem
+                                    && c.Code == CdexCanonicalUrls.DiagnosisContext)).Subject;
+
+        (diagnosis.Value as CodeableConcept)!.Coding.Should().ContainSingle(c =>
+            c.System == CdexCanonicalUrls.Icd10Cm && c.Code == "M54.5");
+
+        attachmentInputs.SelectMany(c => c.Coding)
+            .Should().NotContain(c => c.System == CdexCanonicalUrls.Icd10Cm,
+                "a diagnosis is not one of the documents being asked for");
 
         // The service line the question is about.
         task.Input.Should().Contain(i =>
