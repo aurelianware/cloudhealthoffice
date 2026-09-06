@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
 using ConsentService.Middleware;
+using CloudHealthOffice.Consent.Contracts;
 using ConsentService.Models;
 using ConsentService.Repositories;
 using ConsentService.Services;
@@ -61,6 +62,10 @@ public class ConsentsController : ControllerBase
             TenantId = TenantId,
             MemberId = memberId,
             ConsentType = request.ConsentType,
+            // The purpose comes from the request body; the tenant does NOT — it
+            // is taken from the authenticated context above, so a caller can
+            // name what they are authorizing but not whose data it covers.
+            PurposeOfUse = request.PurposeOfUse,
             SensitiveCategory = request.SensitiveCategory,
             Status = ConsentStatus.Draft,
             EffectiveAt = request.EffectiveAt,
@@ -118,6 +123,35 @@ public class ConsentsController : ControllerBase
         var decrypted = await Task.WhenAll(items.Select(c => DecryptForResponseAsync(c, ct)));
 
         return Ok(new ConsentListResponse { Items = decrypted.ToList() });
+    }
+
+    /// <summary>
+    /// GET the member's consents as PHI-free AUTHORIZATION SNAPSHOTS: tenant,
+    /// member, id, purpose, status, and period — nothing else. This is what
+    /// another service reads to decide "may we disclose?", so the encrypted
+    /// narrative fields (reason, grantee, purpose text) never leave the
+    /// registry to answer an authorization question.
+    ///
+    /// The decision itself is NOT made here: callers evaluate
+    /// <c>ConsentAuthorizationPolicy</c> over these snapshots, so inbound and
+    /// outbound Payer-to-Payer reach the same answer from the same rules.
+    /// </summary>
+    [HttpGet("authorization-snapshots")]
+    [ProducesResponseType(typeof(ConsentAuthorizationSnapshotResponse), 200)]
+    public async Task<IActionResult> GetAuthorizationSnapshots(
+        [FromRoute] string memberId,
+        [FromQuery] ConsentPurposeOfUse? purposeOfUse,
+        CancellationToken ct)
+    {
+        // Tenant comes from the authenticated context, never the query string.
+        var consents = await _consents.ListByMemberAsync(TenantId, memberId, activeOnly: false);
+
+        var snapshots = consents
+            .Select(c => c.ToAuthorizationSnapshot())
+            .Where(s => purposeOfUse is null || s.PurposeOfUse == purposeOfUse)
+            .ToList();
+
+        return Ok(new ConsentAuthorizationSnapshotResponse { Items = snapshots });
     }
 
     [HttpGet("{consentId}/history")]
@@ -314,6 +348,9 @@ public class ConsentsController : ControllerBase
         {
             ["consentId"] = consent.Id,
             ["consentType"] = consent.ConsentType.ToString(),
+            // Enum-valued, no PHI: the audit trail answers "which purpose did
+            // this grant or revocation cover?" without carrying any narrative.
+            ["purposeOfUse"] = consent.PurposeOfUse.ToString(),
             ["sensitiveCategory"] = consent.SensitiveCategory,
             ["fromStatus"] = fromStatus?.ToString(),
             ["toStatus"] = toStatus.ToString(),
@@ -386,6 +423,13 @@ public class CreateConsentRequest
     [Required]
     public ConsentType ConsentType { get; set; }
 
+    /// <summary>
+    /// What the consent authorizes (Payer-to-Payer exchange, Provider Access).
+    /// Omitted means <c>Unspecified</c>, which authorizes no purpose-specific
+    /// disclosure — a caller must ask for a purpose to get one.
+    /// </summary>
+    public ConsentPurposeOfUse PurposeOfUse { get; set; } = ConsentPurposeOfUse.Unspecified;
+
     [StringLength(100)]
     public string? SensitiveCategory { get; set; }
 
@@ -429,6 +473,12 @@ public class RevokeConsentRequest
 public class ConsentListResponse
 {
     public List<Consent> Items { get; set; } = new();
+}
+
+/// <summary>PHI-free authorization projection of a member's consents.</summary>
+public class ConsentAuthorizationSnapshotResponse
+{
+    public List<ConsentAuthorizationSnapshot> Items { get; set; } = new();
 }
 
 public class ConsentHistoryResponse

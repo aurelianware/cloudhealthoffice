@@ -3,12 +3,15 @@ using FluentAssertions;
 namespace Cms0057Acceptance.Tests.Scenarios;
 
 /// <summary>
-/// P2P-03 — Payer-to-Payer opt-in enforcement. The rest of the Payer-to-Payer
-/// set is implemented as real Replace-mode capability: inbound respond (P2P-01,
-/// see PayerToPayerExportTests), member-match / concurrent coverage (P2P-04, see
-/// MemberMatchTests), and outbound initiation (P2P-02, see
-/// PayerToPayerOutboundTests). Dedicated Payer-to-Payer consent semantics remain
-/// PARTIAL and are asserted honestly against the real consent registry.
+/// P2P-03 — Payer-to-Payer opt-in enforcement. Payer-to-Payer authorization is
+/// now a first-class consent purpose on the one registry, enforced server-side in
+/// both directions; the behavioural evidence is in PayerToPayerConsentTests and
+/// the policy's own rules are pinned in
+/// ConsentService.Tests/Services/ConsentAuthorizationPolicyTests. The rest of
+/// the Payer-to-Payer set: inbound respond (P2P-01, PayerToPayerExportTests),
+/// member-match / concurrent coverage (P2P-04, MemberMatchTests), and outbound
+/// initiation with durable ingestion (P2P-02, PayerToPayerOutboundTests and
+/// PayerToPayerIngestionTests).
 ///
 /// Locked rule facts (documented, enforced by engagement work, not code yet):
 ///   5-year date-of-service lookback; exclude remittances and enrollee
@@ -19,26 +22,33 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// </summary>
 public class PayerToPayerTests
 {
-    // P2P-01 (inbound respond), P2P-04 ($member-match / concurrent coverage), and
-    // P2P-02 (outbound initiation) are implemented as real CHO Replace-mode
-    // capability and proven behaviorally in PayerToPayerExportTests,
-    // MemberMatchTests, and PayerToPayerOutboundTests. The GAP markers that used
-    // to live here — pinning the adapter layer as OutOfScope, asserting no
-    // member-match surface, and asserting no outbound initiator type — have been
-    // removed as each path landed. P2P-03 remains PARTIAL below: opt-in is still
-    // a generic Active consent, with no dedicated Payer-to-Payer ConsentType.
+    // Every Payer-to-Payer scenario is now implemented as real CHO Replace-mode
+    // capability, proven behaviourally in its own suite. The GAP markers that
+    // used to live here — pinning the adapter layer as OutOfScope, asserting no
+    // member-match surface, asserting no outbound initiator type, and asserting
+    // no dedicated Payer-to-Payer consent — have been removed as each path
+    // landed. What remains PARTIAL for Payer-to-Payer is external-core (QNXT)
+    // integration, which is a different axis entirely.
 
     [Fact]
     [Trait("Scenario", "P2P-03")]
-    public void P2P03_OptInModeledInConsentRegistry_ButNoDedicatedP2pConsentType()
+    [Trait("Backend", "Replace")]
+    public void P2P03_PayerToPayerHasItsOwnConsentPurpose_DistinctFromProviderAccess()
     {
-        // PARTIAL: the consent registry can express opt-in (an Active consent),
-        // but there is no dedicated Payer-to-Payer opt-in ConsentType value yet.
-        var active = global::ConsentService.Models.ConsentStatus.Active;
-        active.ToString().Should().Be("Active");
+        // The registry now distinguishes WHAT a consent authorizes. The
+        // behavioural enforcement lives in PayerToPayerConsentTests; this pins
+        // the vocabulary the two directions share.
+        var purposes = Enum.GetNames(typeof(CloudHealthOffice.Consent.Contracts.ConsentPurposeOfUse));
+        purposes.Should().Contain("PayerToPayerExchange");
+        purposes.Should().Contain("ProviderAccess");
 
-        var consentTypeNames = Enum.GetNames(typeof(global::ConsentService.Models.ConsentType));
-        consentTypeNames.Should().NotContain(n =>
-            n.Contains("PayerToPayer", StringComparison.OrdinalIgnoreCase));
+        // They are different values — one cannot stand in for the other.
+        CloudHealthOffice.Consent.Contracts.ConsentPurposeOfUse.PayerToPayerExchange
+            .Should().NotBe(CloudHealthOffice.Consent.Contracts.ConsentPurposeOfUse.ProviderAccess);
+
+        // And the default authorizes nothing, so a record written before this
+        // axis existed is not Payer-to-Payer authorization.
+        new global::ConsentService.Models.Consent().PurposeOfUse
+            .Should().Be(CloudHealthOffice.Consent.Contracts.ConsentPurposeOfUse.Unspecified);
     }
 }

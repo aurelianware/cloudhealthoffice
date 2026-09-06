@@ -188,6 +188,17 @@ public sealed class PayerToPayerOutboundExchange
     public PayerToPayerOutboundStatus Status { get; set; } = PayerToPayerOutboundStatus.Pending;
     public PayerToPayerOutboundFailure Failure { get; set; } = PayerToPayerOutboundFailure.None;
 
+    // ── Authorization evidence ──────────────────────────────────────────────────
+    // Which consent the exchange is running under, so "what specifically allowed
+    // this payer-to-payer disclosure?" is answerable from durable state. Opaque
+    // id and reason code only — never consent content.
+
+    public string? AuthorizingConsentId { get; set; }
+    public string? ConsentDecisionReason { get; set; }
+
+    /// <summary>When authorization was last evaluated for this exchange.</summary>
+    public DateTime? ConsentEvaluatedAtUtc { get; set; }
+
     /// <summary>Outcome of the remote member-match step, once it has run.</summary>
     public string? MemberMatchOutcome { get; set; }
 
@@ -302,6 +313,12 @@ public sealed class PayerToPayerOutboundAuditEntry
 
     /// <summary>Resources received from the peer.</summary>
     public int ResourceCount { get; init; }
+
+    /// <summary>The consent that authorized the exchange, by opaque id.</summary>
+    public string? AuthorizingConsentId { get; init; }
+
+    /// <summary>Structured reason the authorization was allowed or refused.</summary>
+    public string? ConsentDecisionReason { get; init; }
 
     /// <summary>What the durable ingestion did with them — status and counts only, never content.</summary>
     public string IngestionStatus { get; init; } = PayerToPayerIngestionStatus.NotStarted.ToString();

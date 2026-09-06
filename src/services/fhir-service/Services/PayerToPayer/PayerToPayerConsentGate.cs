@@ -1,52 +1,185 @@
+using CloudHealthOffice.Consent.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace FhirService.Services.PayerToPayer;
 
 /// <summary>
-/// Server-side authorization gate for a Payer-to-Payer exchange: does the member
-/// have an active opt-in on record for data sharing? This is decided by Cloud
-/// Health Office from its own consent state — never from a value supplied on the
-/// inbound request — so a receiving payer cannot self-attest consent.
+/// Server-side authorization gate for a Payer-to-Payer exchange: has the member
+/// authorized THIS purpose? Decided by Cloud Health Office from its own consent
+/// registry — never from a value on the request — so neither a receiving payer
+/// nor an internal caller can self-attest consent.
+///
+/// The gate returns a <see cref="ConsentDecision"/> rather than a bool so the
+/// exchange can record WHICH authorization allowed a disclosure, and so a
+/// refusal carries a reason an operator can act on ("revoked" and "expired" and
+/// "they never granted this purpose" are different facts).
+///
+/// Both directions of the exchange use this one gate: the inbound respond and
+/// the outbound initiation ask the same question of the same registry, so one
+/// direction cannot drift more permissive than the other.
 /// </summary>
 public interface IPayerToPayerConsentGate
 {
-    Task<bool> HasActiveOptInAsync(string tenantId, string memberId, CancellationToken ct = default);
+    /// <summary>
+    /// Evaluates Payer-to-Payer authorization for the member as of
+    /// <paramref name="asOfUtc"/> (defaulting to now). Point-in-time by design:
+    /// a multi-step exchange re-asks rather than carrying an earlier answer
+    /// forward across a disclosure boundary.
+    /// </summary>
+    Task<ConsentDecision> EvaluateAsync(
+        string tenantId, string memberId, DateTime? asOfUtc = null, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Opt-in records the plan holds for Payer-to-Payer data sharing, keyed by tenant.
-/// Bound from configuration (synthetic in tests, per-engagement in a real
-/// deployment). This is the generic active opt-in signal — it is NOT a dedicated
-/// Payer-to-Payer ConsentType, so P2P-03 stays PARTIAL and independent.
+/// Reads the member's consent records for an authorization decision. The
+/// registry in consent-service is the authoritative source; this is the seam
+/// fhir-service reads it through.
+/// </summary>
+public interface IPayerToPayerConsentSource
+{
+    /// <summary>
+    /// The member's consent snapshots within the tenant. Returns everything on
+    /// record for the member — the purpose filtering and lifecycle evaluation
+    /// are the policy's job, so a source cannot accidentally widen authorization
+    /// by returning the wrong subset.
+    /// </summary>
+    Task<IReadOnlyList<ConsentAuthorizationSnapshot>> GetConsentsAsync(
+        string tenantId, string memberId, CancellationToken ct = default);
+}
+
+/// <summary>
+/// The member's consent records as configuration, for Demo mode and tests —
+/// the same shape the registry serves, not a shortcut around it. Each entry
+/// carries a purpose, a lifecycle status, and an effective period, so a Demo
+/// deployment exercises the real policy rather than a boolean allow-list.
 /// </summary>
 public sealed class PayerToPayerConsentOptions
 {
     public const string SectionName = "Cms0057:PayerToPayerConsent";
 
-    /// <summary>Members (by id) with an active opt-in, keyed by tenant id.</summary>
-    public Dictionary<string, List<string>> OptedInMembersByTenant { get; set; } = new();
+    /// <summary>Consent records held for members, keyed by tenant id.</summary>
+    public Dictionary<string, List<ConfiguredConsentRecord>> ConsentsByTenant { get; set; } = new();
+}
+
+/// <summary>One configured consent record. Mirrors the registry's authorization projection.</summary>
+public sealed class ConfiguredConsentRecord
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string? ConsentId { get; set; }
+
+    /// <summary>
+    /// Purpose this record authorizes. Defaults to <c>Unspecified</c>, which
+    /// authorizes nothing — a misconfigured entry fails closed rather than
+    /// granting the exchange.
+    /// </summary>
+    public ConsentPurposeOfUse PurposeOfUse { get; set; } = ConsentPurposeOfUse.Unspecified;
+
+    public ConsentLifecycleStatus Status { get; set; } = ConsentLifecycleStatus.Draft;
+
+    public DateTime? EffectiveAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
 }
 
 /// <summary>
-/// Configuration-driven, tenant-scoped, fail-closed consent gate. A member is
-/// authorized only if the plan's own opt-in records list them under the request's
-/// tenant. An empty catalog authorizes no one.
-///
-/// This is the server-side authority in the current slice; binding it to the live
-/// consent-service registry (an Active consent lookup) is the production wiring
-/// and remains engagement work.
+/// Configuration-backed consent source (Demo default, and the fallback when no
+/// consent registry is configured). An empty catalog authorizes no one.
 /// </summary>
-public sealed class ConfiguredPayerToPayerConsentGate : IPayerToPayerConsentGate
+public sealed class ConfiguredPayerToPayerConsentSource : IPayerToPayerConsentSource
 {
     private readonly IOptions<PayerToPayerConsentOptions> _options;
 
-    public ConfiguredPayerToPayerConsentGate(IOptions<PayerToPayerConsentOptions> options) => _options = options;
+    public ConfiguredPayerToPayerConsentSource(IOptions<PayerToPayerConsentOptions> options)
+        => _options = options;
 
-    public Task<bool> HasActiveOptInAsync(string tenantId, string memberId, CancellationToken ct = default)
+    public Task<IReadOnlyList<ConsentAuthorizationSnapshot>> GetConsentsAsync(
+        string tenantId, string memberId, CancellationToken ct = default)
     {
-        var authorized =
-            _options.Value.OptedInMembersByTenant.TryGetValue(tenantId, out var members)
-            && members.Contains(memberId, StringComparer.Ordinal);
-        return Task.FromResult(authorized);
+        if (!_options.Value.ConsentsByTenant.TryGetValue(tenantId, out var records) || records is null)
+            return Task.FromResult<IReadOnlyList<ConsentAuthorizationSnapshot>>(
+                Array.Empty<ConsentAuthorizationSnapshot>());
+
+        var snapshots = records
+            .Where(r => string.Equals(r.MemberId, memberId, StringComparison.Ordinal))
+            .Select((r, index) => new ConsentAuthorizationSnapshot
+            {
+                // Tenant and member come from the LOOKUP, not from the record, so
+                // a config entry cannot claim to be another member's consent.
+                TenantId = tenantId,
+                MemberId = memberId,
+                ConsentId = string.IsNullOrWhiteSpace(r.ConsentId)
+                    ? $"configured-consent-{index}"
+                    : r.ConsentId,
+                PurposeOfUse = r.PurposeOfUse,
+                Status = r.Status,
+                EffectiveAt = r.EffectiveAt,
+                ExpiresAt = r.ExpiresAt,
+            })
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<ConsentAuthorizationSnapshot>>(snapshots);
     }
+}
+
+/// <summary>
+/// The production gate: reads the member's consents from the registry and
+/// applies <see cref="ConsentAuthorizationPolicy"/> for the Payer-to-Payer
+/// purpose. It holds no policy of its own — the shared policy decides, so the
+/// answer is identical whichever service asks.
+///
+/// Fail-closed at every edge: a source that throws, a tenant or member that is
+/// blank, or a registry that returns nothing all deny.
+/// </summary>
+public sealed class ConsentRegistryPayerToPayerConsentGate : IPayerToPayerConsentGate
+{
+    /// <summary>The purpose a Payer-to-Payer exchange requires. Not configurable.</summary>
+    public const ConsentPurposeOfUse RequiredPurpose = ConsentPurposeOfUse.PayerToPayerExchange;
+
+    private readonly IPayerToPayerConsentSource _source;
+    private readonly ILogger<ConsentRegistryPayerToPayerConsentGate> _logger;
+
+    public ConsentRegistryPayerToPayerConsentGate(
+        IPayerToPayerConsentSource source, ILogger<ConsentRegistryPayerToPayerConsentGate> logger)
+    {
+        _source = source;
+        _logger = logger;
+    }
+
+    public async Task<ConsentDecision> EvaluateAsync(
+        string tenantId, string memberId, DateTime? asOfUtc = null, CancellationToken ct = default)
+    {
+        var asOf = asOfUtc ?? DateTime.UtcNow;
+
+        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(memberId))
+            return ConsentDecision.Deny(
+                RequiredPurpose, ConsentAuthorizationReason.NoConsentOnRecord, asOf);
+
+        IReadOnlyList<ConsentAuthorizationSnapshot> consents;
+        try
+        {
+            consents = await _source.GetConsentsAsync(tenantId, memberId, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // An unreadable registry is not permission. Category only — the
+            // exception can carry registry detail.
+            _logger.LogWarning(
+                "Payer-to-Payer consent lookup failed for tenant={Tenant}; denying ({Fault}).",
+                Clean(tenantId), ex.GetType().Name);
+            return ConsentDecision.Deny(
+                RequiredPurpose, ConsentAuthorizationReason.NoConsentOnRecord, asOf);
+        }
+
+        return ConsentAuthorizationPolicy.Evaluate(tenantId, memberId, RequiredPurpose, consents, asOf);
+    }
+
+    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
+    private static string Clean(string? value)
+        => string.IsNullOrEmpty(value)
+            ? string.Empty
+            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
+                   .Replace("\n", string.Empty, StringComparison.Ordinal);
 }

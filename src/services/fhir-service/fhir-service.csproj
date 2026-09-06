@@ -35,6 +35,7 @@
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.Appeals.Contracts\CloudHealthOffice.Appeals.Contracts.csproj" />
+    <ProjectReference Include="..\shared\CloudHealthOffice.Consent.Contracts\CloudHealthOffice.Consent.Contracts.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderEnrollmentService\CloudHealthOffice.ProviderEnrollmentService.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.PriorAuthRuleEngine\CloudHealthOffice.PriorAuthRuleEngine.csproj" />
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.62.1" />

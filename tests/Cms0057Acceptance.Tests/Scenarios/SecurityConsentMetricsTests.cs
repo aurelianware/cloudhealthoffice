@@ -81,15 +81,48 @@ public class SecurityConsentMetricsTests
 
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
-    [Trait("Kind", "GAP")]
-    public void CONSENT01_Gap_NoDedicatedProviderAccessOrP2pConsentTypes()
+    public void CONSENT01_OneRegistryCarriesPurposeSpecificConsents()
     {
-        // PARTIAL/GAP: the registry has no dedicated ConsentType for Provider
-        // Access opt-out or Payer-to-Payer opt-in; those semantics ride on the
-        // generic authorization types today. Documented in the inventory.
-        var names = Enum.GetNames(typeof(global::ConsentService.Models.ConsentType));
-        names.Should().NotContain(n => n.Contains("ProviderAccess", StringComparison.OrdinalIgnoreCase));
-        names.Should().NotContain(n => n.Contains("PayerToPayer", StringComparison.OrdinalIgnoreCase));
+        // The registry distinguishes what each consent authorizes, on one
+        // aggregate and one lifecycle — not two stores. Payer-to-Payer
+        // enforcement reads it (see PayerToPayerConsentTests).
+        var p2p = new global::ConsentService.Models.Consent
+        {
+            TenantId = AcceptanceContext.TenantId,
+            MemberId = "pat-001",
+            ConsentType = global::ConsentService.Models.ConsentType.GeneralAuthorization,
+            PurposeOfUse = CloudHealthOffice.Consent.Contracts.ConsentPurposeOfUse.PayerToPayerExchange,
+            Status = global::ConsentService.Models.ConsentStatus.Active,
+            GrantedBy = "pat-001",
+        };
+        var providerAccess = new global::ConsentService.Models.Consent
+        {
+            TenantId = AcceptanceContext.TenantId,
+            MemberId = "pat-001",
+            ConsentType = global::ConsentService.Models.ConsentType.GeneralAuthorization,
+            PurposeOfUse = CloudHealthOffice.Consent.Contracts.ConsentPurposeOfUse.ProviderAccess,
+            Status = global::ConsentService.Models.ConsentStatus.Active,
+            GrantedBy = "pat-001",
+        };
+
+        p2p.ToAuthorizationSnapshot().PurposeOfUse.Should()
+            .NotBe(providerAccess.ToAuthorizationSnapshot().PurposeOfUse);
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Kind", "GAP")]
+    public void CONSENT01_Gap_ProviderAccessDoesNotYetEnforceThroughTheRegistry()
+    {
+        // PARTIAL, and this is why: the registry can now express a Provider
+        // Access purpose, but the Provider Access READ PATH does not consult it —
+        // it is governed by attribution plus SMART scopes. Payer-to-Payer is
+        // enforced through the registry (P2P-03); Provider Access is not, so
+        // CONSENT-01 stays PARTIAL rather than riding on the P2P work.
+        var enforcementTypes = AcceptanceContext.ProductTypes()
+            .Where(t => t.Name.Contains("ProviderAccess", StringComparison.OrdinalIgnoreCase)
+                     && t.Name.Contains("Consent", StringComparison.OrdinalIgnoreCase));
+        enforcementTypes.Should().BeEmpty();
     }
 
     // ── METRICS-01 CMS public metric set ────────────────────────────────────────
