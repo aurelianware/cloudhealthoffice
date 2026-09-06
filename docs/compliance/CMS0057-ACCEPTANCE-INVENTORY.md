@@ -186,6 +186,8 @@ dimensions, not one.
 | `src/services/authorization-service` | `AuthorizationsController` (`POST`, `GET number/{n}`, `GET search`, `PUT {id}/status`, `POST {id}/response`, `GET summary`), `Authorization` (`Status`, `DenialReasonCode`, `SubmittedDate`, `ReviewedDate`), `AuthorizationsSummaryCalculator.CalculateTurnaroundDays` | live (CHO) | PAS-04 status, METRICS-01 |
 | `src/services/consent-service` | `ConsentsController` (+ `GET consents/authorization-snapshots`), `Consent` (`MemberId`, `ConsentType`, **`PurposeOfUse`**, `Status`, `EffectiveAt`/`ExpiresAt`), `ConsentStateMachine` (Draft→Active→Revoked/Expired) | live (CHO) | PROV-03, P2P-03, CONSENT-01 |
 | `src/services/shared/CloudHealthOffice.Consent.Contracts` | `ConsentPurposeOfUse`, `ConsentAuthorizationSnapshot`, `ConsentDecision`/`ConsentAuthorizationReason`, `ConsentAuthorizationPolicy.Evaluate` (pure) | live (CHO) | P2P-03, CONSENT-01 |
+| `src/services/fhir-service/Services/Consent` | `IConsentSource`, `IConsentEvaluator`, `RegistryConsentEvaluator` (one fail-closed registry read + one policy, every purpose) | live (CHO) | P2P-03, CONSENT-01 |
+| `src/services/fhir-service/Services/ProviderAccess` | `IProviderAttributionSource`/`ConfiguredProviderAttributionSource`, `IProviderAccessAuthorizationService`/`ProviderAccessAuthorizationService`, `ProviderAccessAuthorizationFilter` (global MVC filter) | live (CHO) | PROV-01/02/03, CONSENT-01 |
 | `src/services/tenant-service` | adapter platform config (`cho`/`qnxt`) | n/a | mode routing |
 | `api/openapi/prior-auth-api.yaml` | PA intake/status contract | n/a | reference |
 | `src/fhir/*` (TypeScript CRD/DTR/PAS) | legacy prototype | **legacy** | `fhir-service` `Program.cs` is the system of record; TS is not in the C# runtime path — harness targets the C# services |
@@ -297,7 +299,7 @@ external-core dependency (no vendor adapter involved).
 | PAT-02 US Core clinical | **PARTIAL** | n/a | demographics validate; USCDI clinical is an external store |
 | PAT-03 PA data except drugs | **PARTIAL** | n/a | `ClaimResponse` is a supported PA-data type; retention job absent |
 | SEC-01 SMART/OAuth | **PARTIAL** | n/a | `SmartConfigurationController` (endpoints, scopes, S256); IdP per engagement |
-| CONSENT-01 single registry | **PARTIAL** | n/a | one registry, one aggregate, one lifecycle, now carrying purpose-specific authorization (`PayerToPayerExchange` / `ProviderAccess`) with a PHI-free `authorization-snapshots` projection other services evaluate — no second consent store. **Still PARTIAL because the Provider Access read path does not consult the registry**: it is governed by attribution plus SMART scopes. Payer-to-Payer is enforced through the registry (P2P-03); Provider Access is not, and an explicit GAP test records that rather than letting CONSENT-01 ride on the P2P work |
+| CONSENT-01 single registry | **PASSABLE** | n/a | One registry, one aggregate, one lifecycle, one purpose axis — and **both** purposes now enforced server-side through it. Payer-to-Payer (P2P-03) and Provider Access reach their answers via the same `IConsentEvaluator` over the same pure `ConsentAuthorizationPolicy`, differing only in the purpose asked for, so neither can drift more permissive and a consent for one satisfies nothing for the other. Provider Access authorization is composed by `ProviderAccessAuthorizationService` and enforced by a **global** MVC filter covering every member-scoped resource the SMART layer serves (a structural test pins the two inventories together, so a new controller cannot bypass it), placed after tenant resolution and before any action body so PHI is never assembled for an unauthorized request; FHIR operations are excluded because Payer-to-Payer authorizes those itself. Four independent, mandatory controls — authentication and SMART scope (upstream middleware, not re-implemented), provider/member attribution, active `ProviderAccess`-purpose consent — each able to refuse alone, composed fail-closed. Tenant and member must both match the consent; tenant comes from the authenticated context. Registry faults, an empty catalog, a missing member context and an unidentified caller all deny rather than degrading to SMART-plus-attribution. Denials are externally uniform (one 403 `OperationOutcome`, byte-identical bodies) so "not attributed" / "no consent" / "no such member" cannot be told apart and used to enumerate; the structured category stays in the PHI-free audit record. **Attribution is served from a configured panel catalog** — real, fail-closed enforcement, but no live roster feed from a payer source system is wired up (engagement integration behind `IProviderAttributionSource`) |
 | METRICS-01 public metric set | **PASSABLE** | **GAP** | metrics derive from the persisted CHO authorization (`ChoAuthorizationBackend` + `AuthorizationsSummaryCalculator`); QNXT auth data stub. Full public-metrics *extract job* is still engagement work. |
 
 **What changed in this PR:** PAS-03/PAS-04/PAS-05/PAS-06 and METRICS-01 are now
@@ -305,6 +307,40 @@ scored on the CHO-native authorization backend (Replace) rather than a flat GAP.
 PAS-03 product capability moved GAP → **PASSABLE**; METRICS-01 product moved
 PARTIAL → **PASSABLE** (derives from the persisted record, not a test-only
 object). The QNXT column stays GAP: that integration is engagement work.
+
+**What changed in the CONSENT-01 PR:** Provider Access stopped being governed by
+SMART scopes alone and now composes four independent, mandatory controls, the
+consent one running on the same registry and policy as Payer-to-Payer.
+CONSENT-01 moved PARTIAL → **PASSABLE**, so CHO Replace declares **16 PASSABLE /
+5 PARTIAL / 0 GAP** (generator-computed from the manifest — nothing here is
+hard-coded). Remaining PARTIAL: PAS-04, PAS-07, PAT-02, PAT-03, SEC-01.
+
+Provider Access requires, independently and mandatorily:
+
+1. **authentication** — middleware, unchanged;
+2. **appropriate SMART authorization** — `SmartScopeEnforcementMiddleware`,
+   unchanged and not re-implemented;
+3. **provider/member attribution** — the member must be on this provider's panel;
+4. **an active purpose-scoped `ProviderAccess` consent** — evaluated at the
+   authorization instant through the one registry.
+
+None implies another, and the composed decision fails closed on any refusal.
+
+**A discrepancy worth recording:** the brief for this work assumed attribution
+already existed and was to be preserved. It did not. There was **no attribution
+code in the repository** — PROV-02's "attribution enforcement" test asserted a
+dictionary miss on an unknown member id, and the capability text describing
+Provider Access as "governed by attribution plus SMART scopes" was aspirational.
+Attribution was therefore built as a real control here, backed by a configured
+panel catalog that fails closed. It is genuine enforcement, but **no live roster
+feed from a payer source system is wired up** and nothing claims one is; that
+remains engagement integration behind `IProviderAttributionSource`. PROV-01/02/03
+keep their existing statuses — this change does not re-score them on the back of
+the consent work.
+
+**Zero GAPs still does not mean complete CMS-0057-F compliance.** This inventory
+is implementation evidence, not certification or attestation, and the
+QNXT/external-core column is unchanged.
 
 **What changed in the P2P-03 consent PR:** Payer-to-Payer authorization stopped
 being "any Active consent" and became a first-class purpose on the existing

@@ -4,9 +4,8 @@ How Cloud Health Office decides whether a member has authorized a particular
 disclosure. One registry, one policy, evaluated server-side at the moment the
 disclosure is attempted.
 
-Acceptance scenarios: **CONSENT-01** (single registry — PARTIAL, see
-[Limitations](#limitations)), **P2P-03** (Payer-to-Payer authorization),
-**PROV-03** (opt-out honored).
+Acceptance scenarios: **CONSENT-01** (single registry, both purposes enforced),
+**P2P-03** (Payer-to-Payer authorization), **PROV-03** (opt-out honored).
 
 ## The two axes
 
@@ -34,15 +33,21 @@ Payer-to-Payer exchange. `ConsentRegistryPayerToPayerConsentGate.RequiredPurpose
 names it as a constant and it is deliberately not configurable — a deployment
 cannot widen which purpose satisfies P2P.
 
-### Provider Access authorization does not imply Payer-to-Payer authorization
+### Provider Access has its own purpose, and the two do not imply each other
 
-The separation is structural, not a routing convention. A member with an Active
-`ProviderAccess` consent and nothing else is **denied** for Payer-to-Payer with
-reason `NoConsentForPurpose`. Nothing about the calling controller, route, or
-client changes that: the purpose is compared as data inside the policy, so the
-two permissions cannot drift together by accident.
+`ConsentPurposeOfUse.ProviderAccess` is the only value that authorizes a provider
+to read an attributed member's record, named as a constant on
+`ProviderAccessAuthorizationService`.
 
-### Generic consent no longer satisfies Payer-to-Payer
+The separation runs both ways and is structural, not a routing convention. A
+member with an Active `ProviderAccess` consent and nothing else is **denied** for
+Payer-to-Payer with `NoConsentForPurpose`; a member with only a
+`PayerToPayerExchange` consent is **denied** for Provider Access with the same
+reason. Nothing about the calling controller, route, or client changes that: the
+purpose is compared as data inside one policy, so the two permissions cannot
+drift together by accident.
+
+### Generic consent satisfies neither purpose
 
 `ConsentPurposeOfUse.Unspecified` authorizes **nothing** that requires an
 explicit purpose. It is the default on new records and the value historical
@@ -128,6 +133,27 @@ service boundary, and the snapshot type has no field to put them in.
 
 ## Enforcement
 
+Two capabilities enforce through this registry, and both reach their answer
+through the same `IConsentEvaluator` and the same pure
+`ConsentAuthorizationPolicy`. The evaluator owns the fail-closed registry read;
+the policy owns every lifecycle and purpose rule. Adding a purpose adds no
+logic to either.
+
+### Provider Access
+
+A provider reading an attributed member's record requires
+`ConsentPurposeOfUse.ProviderAccess` — **and** an adequate SMART scope, **and**
+provider/member attribution, **and** an authenticated caller. Each control is
+independent and mandatory; none implies another, and the composed decision fails
+closed. Enforcement is a global MVC filter covering every member-scoped FHIR
+resource, placed after tenant resolution and before any action body, so an
+unauthorized request never assembles member PHI. Refusals are externally uniform
+so they cannot be used to enumerate the membership.
+
+See [Provider Access](provider-access.md) for the full flow.
+
+### Payer-to-Payer
+
 Enforcement is server-side and identical in both directions. Neither a receiving
 payer, an initiating payer, nor an internal caller can assert consent: no request
 type in the Payer-to-Payer surface has a consent field, and a test asserts that
@@ -207,12 +233,10 @@ reason, grantee, or purpose text.
 
 ## Limitations
 
-* **CONSENT-01 remains PARTIAL.** The registry can express a `ProviderAccess`
-  purpose, but the Provider Access **read path does not consult it** — that path
-  is governed by attribution plus SMART scopes. Payer-to-Payer is enforced
-  through the registry; Provider Access is not, and the acceptance suite carries
-  an explicit GAP test saying so rather than letting CONSENT-01 ride on the P2P
-  work.
+* Provider attribution — one of the four Provider Access controls — is served
+  from a **configured panel catalog**. It enforces for real and fails closed, but
+  no live roster feed from a payer source system is wired up; that remains
+  engagement integration behind `IProviderAttributionSource`.
 * No FHIR `Consent` resource projection yet — `PurposeOfUse` is aligned to
   `Consent.provision.purpose` in anticipation of it.
 * Consent versioning is modelled on the snapshot (`Version`) and used for

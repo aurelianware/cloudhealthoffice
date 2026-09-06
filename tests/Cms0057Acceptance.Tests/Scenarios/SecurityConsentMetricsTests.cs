@@ -111,18 +111,48 @@ public class SecurityConsentMetricsTests
 
     [Fact]
     [Trait("Scenario", "CONSENT-01")]
-    [Trait("Kind", "GAP")]
-    public void CONSENT01_Gap_ProviderAccessDoesNotYetEnforceThroughTheRegistry()
+    [Trait("Backend", "Replace")]
+    public void CONSENT01_BothPurposesEnforceThroughTheOneRegistry()
     {
-        // PARTIAL, and this is why: the registry can now express a Provider
-        // Access purpose, but the Provider Access READ PATH does not consult it —
-        // it is governed by attribution plus SMART scopes. Payer-to-Payer is
-        // enforced through the registry (P2P-03); Provider Access is not, so
-        // CONSENT-01 stays PARTIAL rather than riding on the P2P work.
-        var enforcementTypes = AcceptanceContext.ProductTypes()
-            .Where(t => t.Name.Contains("ProviderAccess", StringComparison.OrdinalIgnoreCase)
-                     && t.Name.Contains("Consent", StringComparison.OrdinalIgnoreCase));
-        enforcementTypes.Should().BeEmpty();
+        // This replaces the GAP test that asserted no Provider Access consent
+        // enforcement existed. Both purposes are now enforced server-side, and
+        // both reach their answer through the SAME evaluator and the SAME
+        // ConsentAuthorizationPolicy — not two implementations that happen to
+        // agree today.
+        var evaluatorType = typeof(FhirService.Services.Consent.IConsentEvaluator);
+
+        // Payer-to-Payer's gate holds no policy of its own: it delegates.
+        typeof(FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate)
+            .GetConstructors().Single()
+            .GetParameters().Select(p => p.ParameterType)
+            .Should().Contain(evaluatorType);
+
+        // Provider Access composes attribution with the same evaluator.
+        typeof(FhirService.Services.ProviderAccess.ProviderAccessAuthorizationService)
+            .GetConstructors().Single()
+            .GetParameters().Select(p => p.ParameterType)
+            .Should().Contain(evaluatorType)
+            .And.Contain(typeof(FhirService.Services.ProviderAccess.IProviderAttributionSource));
+
+        // And they ask for different purposes, so neither satisfies the other.
+        FhirService.Services.ProviderAccess.ProviderAccessAuthorizationService.RequiredPurpose
+            .Should().NotBe(
+                FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate.RequiredPurpose);
+    }
+
+    [Fact]
+    [Trait("Scenario", "CONSENT-01")]
+    [Trait("Backend", "Replace")]
+    public void CONSENT01_OneRegistryNotTwo()
+    {
+        // A second consent store would be the real failure mode here. Every
+        // consent read in fhir-service goes through the one IConsentSource seam,
+        // whose production implementation is the consent-service registry.
+        typeof(FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource)
+            .Should().Implement<FhirService.Services.Consent.IConsentSource>();
+
+        FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource.HttpClientName
+            .Should().Be("ChoConsentService");
     }
 
     // ── METRICS-01 CMS public metric set ────────────────────────────────────────

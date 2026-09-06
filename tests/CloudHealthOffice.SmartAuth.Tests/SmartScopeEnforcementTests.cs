@@ -9,6 +9,7 @@ using Hl7.Fhir.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -169,9 +170,12 @@ public class SmartScopeEnforcementTests : IClassFixture<FhirServiceFactory>
     // ── user-scoped token (provider access) ──────────────────────────────────
 
     [Fact]
-    public async Task EobSearch_UserToken_CanSearchAnyPatient()
+    public async Task EobSearch_UserToken_AttributedAndConsented_Succeeds()
     {
-        // user/*.read — provider can see any patient's EOBs (filtered by their access)
+        // user/*.read is the Provider Access shape. The scope alone is no longer
+        // enough: provider-001 also has pat-001 on its configured panel AND
+        // pat-001 has an active ProviderAccess-purpose consent (see
+        // FhirServiceFactory). All four controls satisfied -> 200.
         var client = CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer",
@@ -181,23 +185,90 @@ public class SmartScopeEnforcementTests : IClassFixture<FhirServiceFactory>
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    [Fact]
+    public async Task EobSearch_UserToken_NotAttributed_IsForbidden()
+    {
+        // Same valid scope, a member NOT on this provider's panel. Before
+        // CONSENT-01 this returned 200 for any patient the caller named — a
+        // correct SMART scope was the only thing standing between a provider and
+        // the entire membership.
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("provider-001", "user/*.read"));
+
+        var resp = await client.GetAsync("/fhir/r4/ExplanationOfBenefit?patient=pat-002");
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task EobSearch_UserToken_AttributedButNoConsent_IsForbidden()
+    {
+        // provider-002 has pat-003 on its panel, but pat-003 has no
+        // ProviderAccess consent. Attribution does not imply consent.
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("provider-002", "user/*.read"));
+
+        var resp = await client.GetAsync("/fhir/r4/ExplanationOfBenefit?patient=pat-003");
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ProviderAccessDenials_AreIndistinguishable()
+    {
+        // Anti-enumeration: "not attributed", "no consent", and "no such member"
+        // must look identical from outside, or the response tells a caller which
+        // members exist.
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("provider-001", "user/*.read"));
+
+        var notAttributed = await client.GetAsync("/fhir/r4/ExplanationOfBenefit?patient=pat-002");
+        var noSuchMember = await client.GetAsync("/fhir/r4/ExplanationOfBenefit?patient=pat-does-not-exist");
+
+        notAttributed.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        noSuchMember.StatusCode.Should().Be(notAttributed.StatusCode);
+
+        var a = await notAttributed.Content.ReadAsStringAsync();
+        var b = await noSuchMember.Content.ReadAsStringAsync();
+        b.Should().Be(a, "the refusal must not reveal whether the member exists");
+    }
+
     // ── system-scoped token (payer-to-payer) ─────────────────────────────────
 
     [Fact]
-    public async Task PatientSearch_SystemToken_NoPatientBinding()
+    public async Task PatientSearch_SystemToken_WithoutMemberContext_IsForbidden()
     {
-        // system/*.read — no patient binding, returns all patients
+        // system/*.read carries no patient binding, which used to mean "return
+        // every member". A whole-membership listing cannot be authorized: there
+        // is no member whose consent could be evaluated, so it fails closed.
+        // Enumerating the membership is precisely what an unauthenticated-to-the-
+        // member backend token must not be able to do.
         var client = CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer",
                 _factory.IssueToken("cho-payer-system", "system/*.read"));
 
         var resp = await client.GetAsync("/fhir/r4/Patient");
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 
-        var body = await resp.Content.ReadAsStringAsync();
-        var bundle = JsonSerializer.Deserialize<Bundle>(body, FhirOptions);
-        bundle!.Total.Should().Be(3); // all patients
+    [Fact]
+    public async Task PatientRead_SystemToken_AttributedAndConsented_Succeeds()
+    {
+        // A system token naming a specific member it is attributed to, whose
+        // ProviderAccess consent is active, is authorized — the member context
+        // is what was missing above, not the token class.
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("cho-payer-system", "system/*.read"));
+
+        var resp = await client.GetAsync("/fhir/r4/Patient/pat-001");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ── specific resource scopes ──────────────────────────────────────────────
@@ -274,6 +345,40 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
             // canned Bundle the old MockFhirDataAdapter used to produce.
             services.AddHttpClient(global::FhirService.Controllers.ExplanationOfBenefitController.ClaimsServiceClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new FakeClaimsServiceHandler());
+        });
+
+        // CONSENT-01 — Provider Access now needs attribution AND a
+        // ProviderAccess-purpose consent on top of the SMART scope. Configure
+        // both for the test tenant so these tests exercise the real composed
+        // decision rather than an empty catalog that would deny everything.
+        //
+        //   provider-001      panel: pat-001, pat-004      (pat-001 consented)
+        //   provider-002      panel: pat-003               (pat-003 NOT consented)
+        //   cho-payer-system  panel: pat-001               (consented)
+        //
+        // pat-002 is on nobody's panel; pat-004 is attributed but its consent is
+        // for the Payer-to-Payer purpose only.
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:0:ProviderId"] = "provider-001",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:0:MemberIds:0"] = "pat-001",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:0:MemberIds:1"] = "pat-004",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:1:ProviderId"] = "provider-002",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:1:MemberIds:0"] = "pat-003",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:2:ProviderId"] = "cho-payer-system",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:2:MemberIds:0"] = "pat-001",
+
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:MemberId"] = "pat-001",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:ConsentId"] = "consent-pa-pat-001",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:PurposeOfUse"] = "ProviderAccess",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:Status"] = "Active",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:MemberId"] = "pat-004",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:ConsentId"] = "consent-p2p-pat-004",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:PurposeOfUse"] = "PayerToPayerExchange",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:Status"] = "Active",
+            });
         });
 
         builder.UseEnvironment("Development");
