@@ -1,0 +1,53 @@
+# Optional overlay for hosts whose outbound HTTPS goes through a proxy.
+#
+# The pinned burden-reduction images download their Da Vinci IG packages from
+# packages2.fhir.org at startup and do not boot without that egress. On a host
+# where egress is proxied and the proxy terminates TLS, the JVM inside the
+# container needs both the proxy address and a truststore that trusts it.
+#
+# This file is an EXAMPLE, not part of the default stack. Copy it, fill in your
+# proxy and truststore, and point the harness at your copy:
+#
+#   export CHO_INTEROP_COMPOSE_OVERRIDE=$PWD/interop/docker-compose.proxy.yml
+#   ./scripts/interop/run.sh br-payer smoke
+#
+# GitHub Actions runners have direct egress, so CI does not use this overlay.
+#
+# An overlay may only add host-specific plumbing — proxy settings, a CA mount,
+# host aliases. It must never override an `image:`. The digest pins live in
+# interop/versions.json and DaVinciInterop.Tests asserts that the stack starts
+# exactly those digests.
+
+services:
+  br-payer:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # A PKCS#12 truststore that trusts your proxy's CA.
+      - ${INTEROP_PROXY_TRUSTSTORE:?set INTEROP_PROXY_TRUSTSTORE to a PKCS#12 truststore path}:/certs/truststore.p12:ro
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/certs/truststore.p12
+        -Djavax.net.ssl.trustStorePassword=${INTEROP_PROXY_TRUSTSTORE_PASSWORD:-changeit}
+        -Djavax.net.ssl.trustStoreType=PKCS12
+        -Dhttps.proxyHost=${INTEROP_PROXY_HOST:-host.docker.internal}
+        -Dhttps.proxyPort=${INTEROP_PROXY_PORT:?set INTEROP_PROXY_PORT}
+        -Dhttp.proxyHost=${INTEROP_PROXY_HOST:-host.docker.internal}
+        -Dhttp.proxyPort=${INTEROP_PROXY_PORT}
+        -Dhttp.nonProxyHosts=localhost|127.0.0.1
+
+  br-provider:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${INTEROP_PROXY_TRUSTSTORE:?set INTEROP_PROXY_TRUSTSTORE to a PKCS#12 truststore path}:/certs/truststore.p12:ro
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/certs/truststore.p12
+        -Djavax.net.ssl.trustStorePassword=${INTEROP_PROXY_TRUSTSTORE_PASSWORD:-changeit}
+        -Djavax.net.ssl.trustStoreType=PKCS12
+        -Dhttps.proxyHost=${INTEROP_PROXY_HOST:-host.docker.internal}
+        -Dhttps.proxyPort=${INTEROP_PROXY_PORT:?set INTEROP_PROXY_PORT}
+        -Dhttp.proxyHost=${INTEROP_PROXY_HOST:-host.docker.internal}
+        -Dhttp.proxyPort=${INTEROP_PROXY_PORT}
+        -Dhttp.nonProxyHosts=localhost|127.0.0.1
