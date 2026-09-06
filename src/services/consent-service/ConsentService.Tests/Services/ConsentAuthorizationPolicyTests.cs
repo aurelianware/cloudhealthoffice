@@ -221,4 +221,61 @@ public class ConsentAuthorizationPolicyTests
         ((int)registry).Should().Be((int)contract);
         new Consent { Status = registry }.ToAuthorizationSnapshot().Status.Should().Be(contract);
     }
+    // ── Deterministic selection under ties (Copilot review, PR #1152) ──────────
+
+    [Fact]
+    public void Grant_WhenExpiryAndVersionTie_NamesTheSameConsentWhateverTheSourceOrder()
+    {
+        // Two equally valid consents: same purpose, same status, same unbounded
+        // expiry, same version. Before the consent-id tie-break the winner was
+        // whichever the source happened to return first, so the SAME registry
+        // state could authorize under a different consent on a second read.
+        var a = Snapshot(consentId: "consent-aaa");
+        var b = Snapshot(consentId: "consent-bbb");
+
+        var forward = ConsentAuthorizationPolicy.Evaluate(
+            Tenant, Member, ConsentPurposeOfUse.PayerToPayerExchange, new[] { a, b }, Now);
+        var reversed = ConsentAuthorizationPolicy.Evaluate(
+            Tenant, Member, ConsentPurposeOfUse.PayerToPayerExchange, new[] { b, a }, Now);
+
+        forward.Allowed.Should().BeTrue();
+        reversed.Allowed.Should().BeTrue();
+        forward.ConsentId.Should().Be(reversed.ConsentId);
+        forward.ConsentId.Should().Be("consent-aaa");
+    }
+
+    [Fact]
+    public void Deny_WhenSeveralRecordsShareANearMiss_NamesTheSameOneWhateverTheSourceOrder()
+    {
+        // The refusal path had the same ordering dependence: which revoked
+        // consent an audit entry blamed varied with the source's order.
+        var a = Snapshot(consentId: "consent-aaa", status: ConsentLifecycleStatus.Revoked);
+        var b = Snapshot(consentId: "consent-bbb", status: ConsentLifecycleStatus.Revoked);
+
+        var forward = ConsentAuthorizationPolicy.Evaluate(
+            Tenant, Member, ConsentPurposeOfUse.PayerToPayerExchange, new[] { a, b }, Now);
+        var reversed = ConsentAuthorizationPolicy.Evaluate(
+            Tenant, Member, ConsentPurposeOfUse.PayerToPayerExchange, new[] { b, a }, Now);
+
+        forward.Allowed.Should().BeFalse();
+        forward.Reason.Should().Be(ConsentAuthorizationReason.Revoked);
+        forward.ConsentId.Should().Be(reversed.ConsentId);
+        forward.ConsentId.Should().Be("consent-aaa");
+    }
+
+    [Fact]
+    public void Grant_ExpiryStillOutranksTheConsentIdTieBreak()
+    {
+        // The id is the LAST tie-break, not a new precedence: a later-expiring
+        // consent still wins over an alphabetically earlier one.
+        var earlyIdShortLived = Snapshot(consentId: "consent-aaa", expiresAt: Now.AddDays(1));
+        var lateIdLongLived = Snapshot(consentId: "consent-zzz", expiresAt: Now.AddDays(30));
+
+        var decision = ConsentAuthorizationPolicy.Evaluate(
+            Tenant, Member, ConsentPurposeOfUse.PayerToPayerExchange,
+            new[] { earlyIdShortLived, lateIdLongLived }, Now);
+
+        decision.ConsentId.Should().Be("consent-zzz");
+    }
+
 }

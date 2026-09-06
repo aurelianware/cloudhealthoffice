@@ -57,7 +57,13 @@ by value for cross-service use, with a drift guard in the policy tests.
 
 Two lifecycle facts are evaluated rather than trusted:
 
-* **effective period** — a record is in force only when `EffectiveAt <= asOf`
+* **effective period** — evaluated at the **disclosure attempt**, never at an
+  instant supplied by the caller. `PayerToPayerExchangeRequest.ExchangeDateUtc`
+  anchors the export's lookback window and arrives on the request, so it is
+  deliberately not the authorization instant: a back-dated value would otherwise
+  be judged against consent that has since lapsed, and a forward-dated one
+  against consent that has not started. A record is in force only when
+  `EffectiveAt <= asOf`
   and (`ExpiresAt` is null or `> asOf`). The policy applies the period itself, so
   a record persisted as `Active` past its `ExpiresAt` still denies, and a future
   `EffectiveAt` denies with `NotYetEffective`;
@@ -66,8 +72,13 @@ Two lifecycle facts are evaluated rather than trusted:
 
 When a member holds several qualifying records for a purpose, the policy picks
 deterministically: the latest-expiring record wins (unbounded before bounded),
-then the highest `Version`. Two evaluations of the same registry state at the
-same instant always return the same consent id.
+then the highest `Version`, then the lowest `ConsentId` ordinal. The id is the
+last tie-break and the one that makes the choice reproducible — without it two
+otherwise-equal consents would resolve by whatever order the source happened to
+return, so the same registry state could name a different authorization on a
+second evaluation. The same ordering decides which near miss a refusal names.
+Two evaluations of the same registry state at the same instant always return the
+same consent id.
 
 ## The decision
 

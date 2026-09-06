@@ -25,7 +25,11 @@ namespace CloudHealthOffice.Consent.Contracts;
 ///     cannot authorize anything.
 /// When several consents qualify, the one expiring latest (unbounded first)
 /// wins, so the decision names the authorization that actually covers the
-/// operation.
+/// operation; ties break by highest version, then by consent id. The id
+/// tie-break is what makes the choice reproducible: without it two equally
+/// valid consents would resolve by whatever order the source happened to
+/// return, so the same registry state could name different authorizations on
+/// two evaluations. The same ordering picks which near miss a refusal names.
 /// </summary>
 public static class ConsentAuthorizationPolicy
 {
@@ -54,9 +58,12 @@ public static class ConsentAuthorizationPolicy
 
         var inForce = forPurpose
             .Where(c => c.Status == ConsentLifecycleStatus.Active && IsInForce(c, asOfUtc))
-            // Latest-expiring first, unbounded ahead of bounded.
+            // Latest-expiring first, unbounded ahead of bounded, then highest
+            // version, then consent id — the id is the stable tie-break that
+            // keeps the selection independent of the source's ordering.
             .OrderByDescending(c => c.ExpiresAt ?? DateTime.MaxValue)
             .ThenByDescending(c => c.Version ?? 0)
+            .ThenBy(c => c.ConsentId, StringComparer.Ordinal)
             .FirstOrDefault();
 
         if (inForce is not null)
@@ -64,27 +71,31 @@ public static class ConsentAuthorizationPolicy
 
         // Nothing in force: say which of the near misses it was, most specific
         // first, so the audit trail distinguishes "they said no" from "it lapsed"
-        // from "it has not started yet".
-        var revoked = forPurpose.FirstOrDefault(c => c.Status == ConsentLifecycleStatus.Revoked);
+        // from "it has not started yet". Ordered by consent id so that when
+        // several records fall in the same category the refusal names the same
+        // one every time, whatever order the source returned them in.
+        var candidates = forPurpose.OrderBy(c => c.ConsentId, StringComparer.Ordinal).ToList();
+
+        var revoked = candidates.FirstOrDefault(c => c.Status == ConsentLifecycleStatus.Revoked);
         if (revoked is not null)
             return ConsentDecision.Deny(
                 purpose, ConsentAuthorizationReason.Revoked, asOfUtc, revoked.ConsentId);
 
-        var expired = forPurpose.FirstOrDefault(c =>
+        var expired = candidates.FirstOrDefault(c =>
             c.Status == ConsentLifecycleStatus.Expired
             || (c.Status == ConsentLifecycleStatus.Active && HasLapsed(c, asOfUtc)));
         if (expired is not null)
             return ConsentDecision.Deny(
                 purpose, ConsentAuthorizationReason.Expired, asOfUtc, expired.ConsentId);
 
-        var pending = forPurpose.FirstOrDefault(c =>
+        var pending = candidates.FirstOrDefault(c =>
             c.Status == ConsentLifecycleStatus.Active && NotYetEffective(c, asOfUtc));
         if (pending is not null)
             return ConsentDecision.Deny(
                 purpose, ConsentAuthorizationReason.NotYetEffective, asOfUtc, pending.ConsentId);
 
         return ConsentDecision.Deny(
-            purpose, ConsentAuthorizationReason.NotActivated, asOfUtc, forPurpose[0].ConsentId);
+            purpose, ConsentAuthorizationReason.NotActivated, asOfUtc, candidates[0].ConsentId);
     }
 
     private static bool IsInForce(ConsentAuthorizationSnapshot consent, DateTime asOfUtc)

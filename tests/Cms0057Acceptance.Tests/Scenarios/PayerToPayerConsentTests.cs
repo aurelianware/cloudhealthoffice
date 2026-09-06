@@ -72,12 +72,12 @@ public class PayerToPayerConsentTests
             AcceptanceContext.Logger<PayerToPayerExchangeService>());
     }
 
-    private static PayerToPayerExchangeRequest InboundRequest() => new()
+    private static PayerToPayerExchangeRequest InboundRequest(DateTime? exchangeDateUtc = null) => new()
     {
         TenantId = AcceptanceContext.TenantId,
         ReceivingPayerId = "receiving-payer-001",
         MemberId = Member,
-        ExchangeDateUtc = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc),
+        ExchangeDateUtc = exchangeDateUtc ?? new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc),
     };
 
     [Fact]
@@ -124,6 +124,53 @@ public class PayerToPayerConsentTests
 
         result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
         result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NoConsentForPurpose));
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-03")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P03_Replace_BackDatedExchangeDate_DoesNotAuthorizeLapsedConsent()
+    {
+        // ExchangeDateUtc arrives ON THE REQUEST and anchors the five-year
+        // lookback window. It must not also decide WHEN authorization is judged.
+        // A consent still persisted Active but whose period has run out is the
+        // case that bites: expiry is compared against the evaluation instant, so
+        // a receiving payer that back-dates ExchangeDateUtc (or a delayed or
+        // replayed request) would be judged against consent as it stood while it
+        // was still in force. The authorization instant is the disclosure
+        // attempt — now — and CHO picks it, not the caller.
+        var request = InboundRequest(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var lapsedSinceThen = Consent(
+            ConsentPurposeOfUse.PayerToPayerExchange,
+            effectiveAt: new DateTime(2019, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            expiresAt: new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var result = await InboundWith(lapsedSinceThen).RespondAsync(request);
+
+        result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
+        result.Bundle.Should().BeNull();
+        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.Expired));
+    }
+
+    [Fact]
+    [Trait("Scenario", "P2P-03")]
+    [Trait("Backend", "Replace")]
+    public async Task P2P03_Replace_FutureDatedExchangeDate_DoesNotAuthorizeNotYetEffectiveConsent()
+    {
+        // The mirror image: a forward-dated ExchangeDateUtc must not reach a
+        // consent that has not started yet. Same principle — the caller does not
+        // choose the authorization instant in either direction.
+        var request = InboundRequest(new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var startsLater = Consent(
+            ConsentPurposeOfUse.PayerToPayerExchange,
+            effectiveAt: DateTime.UtcNow.AddYears(2));
+
+        var result = await InboundWith(startsLater).RespondAsync(request);
+
+        result.Outcome.Should().Be(PayerToPayerOutcome.NotAuthorized);
+        result.Audit.ConsentDecisionReason.Should().Be(nameof(ConsentAuthorizationReason.NotYetEffective));
     }
 
     [Theory]

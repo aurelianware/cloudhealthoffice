@@ -61,8 +61,16 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
         // from the plan's own registry (never a value supplied on the request),
         // so a receiving payer cannot self-attest consent, and a consent granted
         // for some other purpose (Provider Access, say) does not open this door.
+        //
+        // Evaluated as of NOW, deliberately NOT request.ExchangeDateUtc: that
+        // field anchors the five-year lookback window and arrives on the
+        // request, so using it here would let a caller choose the instant its
+        // own authorization is judged at — a stale or replayed ExchangeDateUtc
+        // would authorize against consent that has since been revoked. The
+        // authorization instant is the disclosure attempt, which is now, and it
+        // is ours to pick. Outbound does the same.
         var decision = await _consentGate.EvaluateAsync(
-            request.TenantId, member.MemberId, request.ExchangeDateUtc, ct);
+            request.TenantId, member.MemberId, asOfUtc: null, ct);
         if (!decision.Allowed)
             return Failed(request, PayerToPayerOutcome.NotAuthorized, member.MemberId, decision);
 
