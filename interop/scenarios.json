@@ -40,8 +40,9 @@
       "choRole": "Client",
       "externalTarget": "br-payer",
       "requiredServices": ["br-payer"],
-      "implemented": false,
-      "description": "Inquire on a prior authorization previously established by BR-PAS-SUBMIT-001 and validate the returned Parameters/responseBundle set."
+      "implemented": true,
+      "linkedFromScenario": "BR-PAS-SUBMIT-001",
+      "description": "CHO acts as the provider-side PAS client across the authorization lifecycle: it submits a synthetic prior authorization, reads the authorization identity the payer itself issued out of the ClaimResponse, invokes the payer's $inquire with exactly that identity and the same synthetic member/provider context, and validates that the payer reports the same authorization in the same state. It performs its own submit in the same run against a fresh container, so it never depends on a prior run's artifacts."
     },
     {
       "id": "INFERNO-DTR-PAYER-001",

@@ -1,10 +1,6 @@
 using System.Net;
-using FhirService.Controllers;
 using FluentAssertions;
 using Hl7.Fhir.Model;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 
 namespace DaVinciInterop.Tests.Scenarios;
 
@@ -43,24 +39,6 @@ public sealed class BrPayerPasSubmitSmokeTests
 {
     private const string ScenarioId = "BR-PAS-SUBMIT-001";
     private const string TargetKey = "br-payer";
-
-    /// <summary>PAS defines the submit operation under this canonical URL.</summary>
-    private const string PasSubmitOperation =
-        "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-submit";
-
-    private const string PasResponseBundleProfile =
-        "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-pas-response-bundle";
-
-    private const string PasClaimResponseProfile =
-        "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-claimresponse";
-
-    private const string ReviewActionExtension =
-        "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewAction";
-
-    private const string ReviewActionCodeExtension =
-        "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/extension-reviewActionCode";
-
-    private const string X12ReviewActionSystem = "https://codesystem.x12.org/005010/306";
 
     [InteropFact]
     public async Task Cho_submits_a_synthetic_prior_authorization_to_the_independent_payer_implementation()
@@ -129,7 +107,7 @@ public sealed class BrPayerPasSubmitSmokeTests
                 .ToList();
 
             externalClaimOperations.Should().Contain(
-                operation => operation.Definition == PasSubmitOperation,
+                operation => operation.Definition == PasProtocol.SubmitOperationCanonical,
                 "the payer RI must advertise the PAS $submit operation this scenario invokes");
 
             // ── 2. Compare what CHO advertises for PAS with what the independent
@@ -148,41 +126,22 @@ public sealed class BrPayerPasSubmitSmokeTests
                 "the payer RI accepted the request bundle or reported why it did not: {0}",
                 DescribeOutcome(submit));
 
-            // ── 4. Validate the response with the same FHIR library CHO runs.
-            //    The response is asserted exactly as received; nothing about it is
-            //    adjusted to make an assertion pass.
-            var responseBundle = submit.As<Bundle>();
-            responseBundle.Should().NotBeNull(
+            // ── 4. Validate the response with the same FHIR library CHO runs, and
+            //    through the same PAS reader BR-PAS-INQUIRE-001 uses, so both PAS
+            //    scenarios agree on what a ClaimResponse means. The response is
+            //    asserted exactly as received; nothing about it is adjusted to
+            //    make an assertion pass.
+            var response = PasResponseBundle.From(submit.Resource);
+            response.Should().NotBeNull(
                 "PAS $submit returns a response Bundle; got {0}", submit.Resource?.TypeName ?? "(unparseable body)");
 
-            responseBundle!.Meta?.Profile.Should().Contain(PasResponseBundleProfile,
-                "the payer RI claims conformance to the PAS response bundle profile");
-
-            var claimResponse = responseBundle.Entry
-                .Select(entry => entry.Resource)
-                .OfType<ClaimResponse>()
-                .FirstOrDefault();
-
-            claimResponse.Should().NotBeNull("a PAS response bundle carries a ClaimResponse");
-            claimResponse!.Meta?.Profile.Should().Contain(PasClaimResponseProfile);
-            claimResponse.Use.Should().Be(ClaimUseCode.Preauthorization,
-                "the response must answer the prior authorization that was submitted");
-            claimResponse.Status.Should().Be(FinancialResourceStatusCodes.Active);
-            claimResponse.Outcome.Should().NotBeNull("ClaimResponse.outcome is required by PAS");
-
-            // ── 5. The PAS-specific payload: an X12 review action per submitted item.
-            var reviewActionCodes = ExtractReviewActionCodes(claimResponse);
-            reviewActionCodes.Should().NotBeEmpty(
-                "PAS requires a review action on each adjudicated item; the harness submitted one item");
-            reviewActionCodes.Should().OnlyContain(
-                coding => coding.System == X12ReviewActionSystem,
-                "review action codes come from the X12 005010/306 code system");
-            reviewActionCodes.Should().OnlyContain(
-                coding => !string.IsNullOrWhiteSpace(coding.Code),
-                "every review action must carry a code");
+            // ── 5. Structural conformance, including the PAS-specific payload: an
+            //    X12 review action per adjudicated item.
+            response!.SubmitProtocolViolations().Should().BeEmpty(
+                "the payer RI's response must be a well-formed PAS submit answer");
 
             // ── 6. The member the harness sent must be the member that came back.
-            var echoedPatient = responseBundle.Entry
+            var echoedPatient = response.Bundle.Entry
                 .Select(entry => entry.Resource)
                 .OfType<Patient>()
                 .FirstOrDefault();
@@ -203,8 +162,8 @@ public sealed class BrPayerPasSubmitSmokeTests
 
             run.Record(InteropFinding.Info(
                 "pas.reviewAction.observed",
-                $"The payer RI returned review action code(s) [{string.Join(", ", reviewActionCodes.Select(c => c.Code))}] " +
-                "for the submitted synthetic item."));
+                "The payer RI answered the submitted synthetic item with " +
+                PasReviewStatus.SafeSummary(response.ReviewActions) + "."));
 
             result = run.Complete(
                 run.HasBlockingFindings ? InteropStatus.Failed : InteropStatus.Passed,
@@ -243,21 +202,23 @@ public sealed class BrPayerPasSubmitSmokeTests
     /// to decide which. Only the operation this scenario actually invokes is
     /// asserted; the rest are warnings so a naming difference elsewhere does not
     /// mask a real functional result.
+    ///
+    /// This is what first surfaced the <c>$inquire</c> canonical discrepancy, as a
+    /// Warning. It has since been settled against the published PAS IG — CHO was
+    /// wrong, and its CapabilityStatement is corrected — so this comparison is now
+    /// silent for both PAS operations. <c>BR-PAS-INQUIRE-001</c> hard-asserts the
+    /// published canonical on both sides; this stays a warning-only sweep because
+    /// its job is to notice a difference nobody has adjudicated yet.
     /// </summary>
     private static void CompareAdvertisedPasOperations(
         InteropScenarioRun run,
         IReadOnlyList<CapabilityStatement.OperationComponent> externalClaimOperations)
     {
-        var choCapability = ReadChoCapabilityStatement();
-        var choClaimOperations = choCapability.Rest
-            .SelectMany(rest => rest.Resource)
-            .Where(resource => resource.Type == "Claim")
-            .SelectMany(resource => resource.Operation)
-            .ToList();
+        var choClaimOperations = ChoPasSurface.ClaimOperations();
 
         var choSubmit = choClaimOperations.SingleOrDefault(operation => operation.Name == "submit");
         choSubmit.Should().NotBeNull("CHO's CapabilityStatement advertises the PAS $submit operation");
-        choSubmit!.Definition.Should().Be(PasSubmitOperation,
+        choSubmit!.Definition.Should().Be(PasProtocol.SubmitOperationCanonical,
             "CHO and the independent payer implementation must name the same PAS $submit OperationDefinition");
 
         foreach (var choOperation in choClaimOperations)
@@ -279,47 +240,15 @@ public sealed class BrPayerPasSubmitSmokeTests
                 run.Record(InteropFinding.Warning(
                     $"pas.operation.{choOperation.Name}.canonicalMismatch",
                     $"CHO and the payer RI advertise different OperationDefinition canonicals for Claim/${choOperation.Name}. " +
-                    "Recorded as an interoperability finding; which side matches the PAS IG is for the follow-up PR to " +
-                    "establish against the published IG, not for the harness to assume.",
+                    "Recorded as an interoperability finding; which side matches the PAS IG is settled against the " +
+                    "published IG, not by assuming either implementation is right. See docs/interop/davinci.md for how " +
+                    "the $inquire canonical was resolved.",
                     cho: choOperation.Definition,
                     external: external.Definition,
                     spec: "http://hl7.org/fhir/us/davinci-pas/"));
             }
         }
     }
-
-    /// <summary>
-    /// Reads CHO's production CapabilityStatement from the real
-    /// <see cref="MetadataController"/>, following the same
-    /// instantiate-the-controller idiom the CMS acceptance suite uses.
-    /// </summary>
-    private static CapabilityStatement ReadChoCapabilityStatement()
-    {
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Scheme = "https";
-        httpContext.Request.Host = new HostString("cho.interop.test");
-
-        var controller = new MetadataController(new ConfigurationBuilder().Build())
-        {
-            ControllerContext = new ControllerContext { HttpContext = httpContext },
-        };
-
-        var response = controller.GetCapabilityStatement();
-        var payload = response.Should().BeAssignableTo<ObjectResult>().Subject.Value;
-        return payload.Should().BeAssignableTo<CapabilityStatement>().Subject;
-    }
-
-    private static List<Coding> ExtractReviewActionCodes(ClaimResponse claimResponse) =>
-        claimResponse.Item
-            .SelectMany(item => item.Adjudication)
-            .SelectMany(adjudication => adjudication.Extension)
-            .Where(extension => extension.Url == ReviewActionExtension)
-            .SelectMany(extension => extension.Extension)
-            .Where(extension => extension.Url == ReviewActionCodeExtension)
-            .Select(extension => extension.Value)
-            .OfType<CodeableConcept>()
-            .SelectMany(concept => concept.Coding)
-            .ToList();
 
     private static string DescribeOutcome(InteropResponse response) =>
         response.OperationOutcome is { } outcome

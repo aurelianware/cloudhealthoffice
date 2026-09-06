@@ -44,7 +44,7 @@ the machine-readable source of truth.
 
 | Target | Role | Protocols | License | Status in this repository |
 | --- | --- | --- | --- | --- |
-| [HL7-DaVinci/br-payer](https://github.com/HL7-DaVinci/br-payer) | External server | CRD, DTR, PAS | Apache-2.0 | **Executed** — PAS `$submit`, CRD CDS Hooks and DTR `$questionnaire-package` scenarios run against it |
+| [HL7-DaVinci/br-payer](https://github.com/HL7-DaVinci/br-payer) | External server | CRD, DTR, PAS | Apache-2.0 | **Executed** — PAS `$submit`, CRD CDS Hooks, DTR `$questionnaire-package` and the PAS `$submit`→`$inquire` lifecycle run against it |
 | [HL7-DaVinci/br-provider](https://github.com/HL7-DaVinci/br-provider) | External client | CRD, DTR, PAS | MIT | Pinned and defined; no scenario yet |
 | [inferno-framework/davinci-pdex-test-kit](https://github.com/inferno-framework/davinci-pdex-test-kit) | Conformance runner | PDex | Apache-2.0 | Runner seam only — see §11 |
 | [inferno-framework/davinci-dtr-test-kit](https://github.com/inferno-framework/davinci-dtr-test-kit) | Conformance runner | DTR | Apache-2.0 | Runner seam only — see §11 |
@@ -108,10 +108,11 @@ One command starts the dependency, runs the scenario, collects evidence and clea
 up:
 
 ```bash
-./scripts/interop/run.sh br-payer smoke   # PAS $submit               (BR-PAS-SUBMIT-001)
-./scripts/interop/run.sh br-payer crd     # CRD CDS Hooks             (BR-CRD-001)
-./scripts/interop/run.sh br-payer dtr     # DTR $questionnaire-package (BR-DTR-001)
-./scripts/interop/run.sh br-payer all     # all three, merged into one evidence document
+./scripts/interop/run.sh br-payer smoke        # PAS $submit                (BR-PAS-SUBMIT-001)
+./scripts/interop/run.sh br-payer crd          # CRD CDS Hooks              (BR-CRD-001)
+./scripts/interop/run.sh br-payer dtr          # DTR $questionnaire-package (BR-DTR-001)
+./scripts/interop/run.sh br-payer pas-inquire  # PAS $submit -> $inquire    (BR-PAS-INQUIRE-001)
+./scripts/interop/run.sh br-payer all          # all four, merged into one evidence document
 ```
 
 Scenarios run one at a time even under `all`. They share a Compose project name
@@ -134,6 +135,7 @@ Running the external scenarios directly, if you would rather drive them yourself
 CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Category=DaVinciInterop
 CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Scenario=BR-CRD-001
 CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Scenario=BR-DTR-001
+CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Scenario=BR-PAS-INQUIRE-001
 ```
 
 Without `CHO_INTEROP_ENABLED=1` the external scenarios **skip**. An ordinary
@@ -329,15 +331,16 @@ Known at the current pins:
   release, so `run.json` reports `mismatch: true` for PAS rather than claiming
   agreement it cannot demonstrate. Pinning CHO's own declaration to a point
   release is a reasonable follow-up.
-* **`Claim/$inquire` OperationDefinition canonical.** CHO's CapabilityStatement
-  advertises
-  `http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquire`; the
-  pinned br-payer advertises `.../OperationDefinition/Claim-inquiry`. The harness
-  records this as a **Warning** finding
-  (`pas.operation.inquire.canonicalMismatch`) and does not adjudicate it: the
-  follow-up work is to check the published PAS IG and correct whichever side is
-  wrong. It is not asserted here because the smoke scenario does not invoke
-  `$inquire`; only `$submit`, which both sides name identically, is asserted.
+* **`Claim/$inquire` OperationDefinition canonical — resolved; CHO was wrong.**
+  Recorded as an open Warning when `BR-PAS-SUBMIT-001` first observed it, and
+  settled in `BR-PAS-INQUIRE-001` against the published IG. CHO advertised
+  `.../OperationDefinition/Claim-inquire`, which **no published PAS version
+  defines**; the canonical is `.../OperationDefinition/Claim-inquiry` and CHO's
+  CapabilityStatement is corrected. See
+  "[The `$inquire` canonical, resolved](#the-inquire-canonical-resolved)" below
+  for the evidence and the reasoning. The harness now records
+  `pas.operation.inquire.canonicalResolved` (Info) and hard-asserts the published
+  canonical on both sides.
 * **`Claim/$submit` canonical agrees** between CHO and the RI, and the smoke
   scenario asserts that agreement.
 * **CRD version.** CHO targets the Da Vinci CRD **STU 2.2.x** family; the pinned
@@ -357,14 +360,27 @@ Known at the current pins:
 
 ## 13. Limitations
 
-* Three scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD)
-  and `BR-DTR-001` (DTR). Everything else in the inventory is `NotRun` —
-  deliberately, because a placeholder must never look like a result.
-* CHO participates in all three scenarios as the **client**, and through its real
+* Four scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD),
+  `BR-DTR-001` (DTR) and `BR-PAS-INQUIRE-001` (PAS lifecycle). Everything else in
+  the inventory is `NotRun` — deliberately, because a placeholder must never look
+  like a result.
+* CHO participates in all four scenarios as the **client**, and through its real
   production code on the CHO side (`MetadataController` for PAS,
   `CrdController` for CRD). CHO's FHIR service does not run as a container in
   any of them; the `interop-cho` profile exists for the scenarios where CHO is
   the server, and is exercised by no scenario yet.
+* `BR-PAS-INQUIRE-001` proves that the external payer retained and re-reported the
+  authorization it created. It does **not** compare that authorization with any
+  decision CHO's own prior-authorization engine would reach — the two are
+  different payers with different rule sets, the same separation `BR-CRD-001`
+  keeps.
+* The negative corroboration subcase substitutes a member the payer has never
+  been told about, so its refusal may come from the payer being unable to resolve
+  that member rather than from an entitlement check between two members it knows.
+  It supports the narrow claim it makes — the authorization is not obtainable by
+  quoting its identifier alone — and not a broader one. Proving cross-member
+  non-disclosure would need a second established authorization, which is an
+  authorization-security suite rather than a lifecycle scenario.
 * `BR-CRD-001` proves protocol interoperability and that the external payer's
   rules ran. It does **not** compare coverage decisions between CHO and the
   payer — see "Protocol compatibility vs payer rule parity" below.
@@ -697,19 +713,276 @@ The scenario performs its own CRD call rather than reading a saved artifact from
 an earlier run, so it is reproducible on its own and cannot go stale against a
 CRD result recorded under a different pin.
 
-## 16. Recommended next step
+## 16. PAS lifecycle interoperability (`BR-PAS-INQUIRE-001`)
 
-`BR-PAS-INQUIRE-001` — PAS `$inquire` against br-payer, chained from
-`BR-PAS-SUBMIT-001`. The chaining machinery `BR-DTR-001` introduced
-(`linkedFromScenario` / `linkedArtifact`) is protocol-neutral and applies
-directly: `$submit` establishes a prior authorization and returns an
-authorization number, and `$inquire` should find it. That closes the third Da
-Vinci protocol as a workflow rather than as isolated calls, and needs no new
-infrastructure.
+### The workflow
 
-After that, the Inferno suites (`INFERNO-DTR-PAYER-001`,
-`INFERNO-PDEX-SERVER-001`) are the natural next frontier — but they are a larger
-step, because they reverse the direction. CHO becomes the system under test
-rather than the client, which means the `interop-cho` profile has to run for the
-first time. That profile has existed since #1159 and has never been exercised;
-expect it to need work.
+```
+CHO interop runner  ──  POST /fhir/Claim/$submit    ──▶  br-payer
+                    ◀──  ClaimResponse: A1 (Certified in total), authorization AUTH-0001
+
+CHO interop runner  ──  POST /fhir/Claim/$inquire   ──▶  br-payer
+                        (AUTH-0001 + the same member, provider and coverage)
+                    ◀──  Parameters: responseBundle carrying that same authorization,
+                         still A1
+```
+
+`BR-PAS-SUBMIT-001` proved CHO can hand a prior authorization to an independent
+payer and read the answer. This proves the payer **kept** it: that an
+authorization CHO caused to exist has a durable identity, and that quoting that
+identity back retrieves the same authorization in the same state.
+
+### The authorization identity, and where it comes from
+
+The correlation key is **issued by the payer, never chosen by CHO**. The payer
+mints it while adjudicating and returns it inside the submit response; the
+scenario reads it from there and quotes it back unchanged.
+
+| | |
+| --- | --- |
+| **Identity used** | `AUTH-0001` — the PAS authorization number |
+| **Issued at** | `ClaimResponse.item[1].adjudication.extension[reviewAction].extension[number].valueString` |
+| **Quoted back at** | `Claim.item.extension[authorizationNumber].valueString` |
+| **Fallback identity** | `ClaimResponse.item.extension[administrationReferenceNumber]`, used when the payer pended rather than decided |
+
+Those two placements are not the same, and that asymmetry is the **IG's**, not an
+implementation's. PAS defines `extension-reviewAction` with a sliced
+sub-extension whose url is the bare token `number` ("Item Level Review Number"),
+while `extension-authorizationNumber` is contextualized to `Claim.item` and
+`ClaimResponse.item`. A reader that expects one shape in both places finds
+nothing, so `PasAuthorizationIdentityExtractor` knows both and the scenario
+records the asymmetry as an Info finding
+(`pas.identity.placementAsymmetry`).
+
+CHO does **not** mint a tracking id of its own. If it did, the inquiry would
+prove only that CHO can echo a string it invented.
+
+### Why this scenario submits a different service than `BR-PAS-SUBMIT-001`
+
+Same code path — the same request builder, the same FHIR serializer, the same
+POST helper and the same `PasSubmitResponse` reader — but a different service
+code, for a reason that matters:
+
+| | `BR-PAS-SUBMIT-001` | `BR-PAS-INQUIRE-001` |
+| --- | --- | --- |
+| Service | CPT `99213` office visit | HCPCS `L8000` |
+| Matches a payer rule? | No, deliberately | Yes |
+| Payer's answer | `A3` (Not Required) | `A1` (Certified in total) |
+| Authorization identity issued | None | `AUTH-0001` |
+
+The pinned payer issues an authorization number only when its rules actually
+decide something — for review actions `A1` (certified) or `A6` (modified) — and a
+pended item (`A4`) gets an administration reference number instead. A request
+matching no rule is answered `A3` and carries **no identity at all**, so there
+would be nothing to inquire on.
+
+`BR-PAS-SUBMIT-001` keeps its content-independent request on purpose: that is what
+makes it a proof of protocol interoperability that cannot break because upstream
+rule content changed. This scenario instead asks about `L8000`, the same billing
+code `BR-CRD-001` and `BR-DTR-001` already prove the payer's rules evaluate, and
+carries the upstream fixture payer identifier so those rules engage (see
+"[Upstream fixture dependency](#upstream-fixture-dependency)" — the same
+dependency, for the same reason).
+
+**Which way the payer decides is never asserted.** The scenario requires that the
+payer issued *an* identity and that the state held; it does not require approval.
+A denial or a pend would be equally valid evidence of a lifecycle.
+
+### The inquiry request
+
+Built to `profile-claim-inquiry` and `profile-pas-inquiry-request-bundle`, and
+carrying what the operation needs and no more:
+
+* a collection `Bundle` with an identifier and timestamp, every entry with a
+  `fullUrl`, the inquiry `Claim` first;
+* `Claim.identifier` (1..1 in the profile), `status = active`,
+  `use = preauthorization`, `created`;
+* `patient`, `insurer`, `provider` and `insurance.coverage` — **the same synthetic
+  identities the submit used**, because a PAS payer scopes an inquiry by them;
+* a `Patient` carrying the `MB`-typed member identifier the inquiry profile
+  requires — the payer matches a member by identifier, not by a sender-supplied
+  logical id;
+* one item quoting the authorization number, with the same `productOrService`
+  code, which is PAS query-by-example.
+
+Invoked as `POST /fhir/Claim/$inquire` — the route the pinned implementation
+serves — with the Bundle wrapped in the single `resource` parameter PAS defines
+for both operations.
+
+### The `$inquire` canonical, resolved
+
+`BR-PAS-SUBMIT-001` recorded a Warning that CHO and the payer named the inquiry
+`OperationDefinition` differently. This change settles it, **against the published
+IG rather than by comparing the two implementations to each other** — comparing
+them could only ever say "they differ", never which one was wrong.
+
+Every published PAS release was checked, by downloading the IG packages from
+`packages2.fhir.org` and reading `OperationDefinition-Claim-inquiry.json`:
+
+| PAS IG version | Canonical (`url`) | Operation `code` |
+| --- | --- | --- |
+| 1.0.0 | `.../OperationDefinition/Claim-inquiry` | `submit` (an upstream slip, fixed in 1.1.0) |
+| 1.1.0 | `.../OperationDefinition/Claim-inquiry` | `inquiry` |
+| 2.0.1 | `.../OperationDefinition/Claim-inquiry` | `inquire` |
+| 2.1.0 | `.../OperationDefinition/Claim-inquiry` | `inquire` |
+| 2.2.0 | `.../OperationDefinition/Claim-inquiry` | `inquire` |
+| **2.2.1** (the version the pinned image installs) | `.../OperationDefinition/Claim-inquiry` | `inquire` |
+
+**Conclusion: CHO was wrong.** The canonical is `Claim-inquiry` in *every*
+release; there is no version for which `Claim-inquire` is correct, so this is a
+**defect, not a version mismatch and not an upstream deviation**.
+
+The trap is that PAS names the definition `Claim-inquiry` but gives it the
+operation `code` `inquire`, so the canonical ends in `-inquiry` while the route
+ends in `$inquire`. Spelling the canonical from the code yields `Claim-inquire`.
+`$submit` is the case where the two coincide, which is why the difference went
+unnoticed until an independent implementation was asked.
+
+What changed, and what deliberately did not:
+
+* **Fixed:** `MetadataController` now advertises
+  `http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquiry`.
+* **Unchanged:** the route. `POST fhir/r4/Claim/$inquire` was already correct —
+  it matches the IG's operation `code` — so no behaviour moved.
+* **Unchanged:** the pin. The pinned br-payer advertises the published canonical
+  and serves the published route; there was nothing to work around and no reason
+  to upgrade.
+* **Regression tests:** the published canonical is pinned as a literal in both the
+  CMS acceptance suite (`PAS04_Replace_PasOperationCanonicalsMatchThePublishedIg`)
+  and the interop harness, including an explicit assertion that the wrong
+  canonical is *absent*, and a test asserting that the code and the canonical
+  deliberately differ so a future edit cannot "tidy" them into agreement.
+
+### Same-authorization assertion
+
+The core claim. Asserted on stable structural identity, never on display text and
+never on position in the result set:
+
+| Compared | Why |
+| --- | --- |
+| Payer-issued authorization number | The correlation key itself; the result is selected by it |
+| `ClaimResponse.id` | The payer's own logical id for the authorization |
+| `ClaimResponse.request` | The payer's own reference to the stored `Claim` it adjudicated |
+| `ClaimResponse.patient` | The authorization must belong to the same member |
+| `ClaimResponse.requestor` | …and name the same requesting provider |
+| `ClaimResponse.insurer` | …and the same insurer |
+| `use`, `status` | Still a `preauthorization`, still `active` |
+
+Exactly one returned authorization must carry the identity — more than one would
+mean the payer could not say which authorization the inquiry was about.
+
+### Status continuity
+
+The state `$submit` established must be the state `$inquire` reports, asserted on
+the **X12 review action code per item**. Display wording is the payer's prose: a
+payer that rephrases it has not changed the authorization, so continuity is not
+asserted on it. The raw code, system and display all reach the evidence.
+
+`ClaimResponse.outcome` is deliberately *not* what continuity is read from — it is
+`complete` for an approval, a denial and a pend alike, because it describes
+whether processing finished, not what was decided. A scenario reading `outcome`
+would see no difference between the three.
+
+`PasReviewStatus` normalizes codes to a coarse disposition
+(`Approved` / `Denied` / `NotRequired` / `Pended` / `Modified` / `Cancelled`)
+for reporting and for one decision the raw code cannot express: whether a state is
+one the payer may advance on its own. The X12 005010/306 code list PAS binds to is
+licensed and is not redistributed inside the IG package, so the table maps only
+the codes the pinned implementations actually emit; anything else is reported
+`Unknown` rather than bucketed into a neighbouring state.
+
+**The pended exception.** The pinned payer schedules its own resolution of a pend
+(`pas.pended-resolution-delay-seconds: 15`), moving an item from `A4` to `A1` with
+no further request. Where submit pended, requiring "pended then, pended now" would
+assert a race against that timer, so the scenario records what the inquiry found
+and requires only that the authorization is the same one. Where submit reached a
+settled state — as `L8000` does, with `A1` — continuity is asserted strictly.
+
+### Read-only behaviour
+
+The inquiry is invoked twice. The second call must return the same authorization
+id, pointing at the same stored request, with the match count unchanged — a
+second authorization for the same identity would mean the inquiry had a submit
+side effect. Whether the *decision* is identical is recorded rather than required,
+for the self-advancing reason above: a payer progressing a pend between two reads
+is the payer working, not the read mutating anything.
+
+### Negative case: the identity is not a bearer token
+
+One extra call answers a question the positive case cannot — whether quoting the
+authorization number is by itself enough to obtain the authorization. It is a
+short opaque string, and if it were sufficient, the payer would be handing
+authorization state to anyone who guessed one.
+
+The same real, payer-issued identity is presented with a **different synthetic
+member**, everything else unchanged. Against the current pin the payer refuses
+with `HTTP 400` (`Claim.patient reference is required for inquiry`).
+
+The refusal **shape** is not asserted, only the refusal: a payer may reject the
+request or accept it and match nothing, and both are conformant refusals to
+disclose. Which one the pinned implementation chose is recorded as a finding,
+because that is an observation about an implementation rather than a requirement
+of the specification.
+
+See [Limitations](#13-limitations) for what this subcase deliberately does not
+establish.
+
+### Interpreting the findings
+
+| Finding | Severity | Means |
+| --- | --- | --- |
+| `pas.operation.inquire.canonicalResolved` | Info | The canonical discrepancy, settled against the published IG. Replaces the Warning `BR-PAS-SUBMIT-001` used to carry |
+| `pas.submit.authorizationIdentityIssued` | Info | Which identity the payer issued, and the decision it issued it with |
+| `pas.identity.placementAsymmetry` | Info | The IG puts the identity in different places on the response and the request. Expected, recorded so a reader is not surprised |
+| `pas.inquire.sameAuthorization` | Info | The authorization matched, and on which fields |
+| `pas.inquire.statusContinuity` | Info | The state held across the lifecycle |
+| `pas.inquire.statusContinuity.selfAdvancing` | Info | Submit pended, so strict equality was not asserted — the payer's own timer, not a failure |
+| `pas.inquire.repeatStable` | Info | The repeated inquiry was a clean read |
+| `pas.inquire.repeatAdvancedByPayer` | Info | The payer progressed a pend between two reads. Not a mutation by the inquiry |
+| `pas.inquire.corroboration.refused` / `.emptyResult` | Info | How the payer refused a mismatched corroborating key |
+| `pas.inquire.responseBundleProfile` | Warning | The payer used a different (still valid) PAS response bundle profile. Representational; the authorization still matched on stable identifiers |
+
+An Info finding is an observation. A Warning is a real difference between two
+implementations that did not stop the exchange working. Only an Error fails the
+scenario, and a representational difference is never an Error on its own.
+
+### What this does not claim
+
+* It is **not** PAS certification.
+* It does **not** compare the external payer's decision with CHO's own
+  prior-authorization engine. They are two payers with two rule sets; requiring
+  them to agree would compare rule content, not implementations.
+* It does **not** change the CMS-0057-F acceptance status of any scenario. The
+  internal acceptance generator remains independent; this is additional proof
+  only.
+
+### Running just the lifecycle
+
+```bash
+./scripts/interop/run.sh br-payer pas-inquire
+```
+
+The scenario performs its **own** `$submit` inside the same run, against a
+container the harness starts and tears down (volumes included) for it alone. It
+never reads an authorization number from a CHO fixture and never consumes an
+earlier run's `run.json`: fresh container, fresh submit, fresh payer-generated
+identity, fresh inquire. Nothing in it can pass because of state some previous run
+left behind.
+
+## 17. Recommended next step
+
+The br-payer client-side set is complete: CRD, DTR and the PAS lifecycle all run
+against an independent implementation, and each of the three protocols is now
+exercised as a workflow rather than as isolated calls.
+
+The next step is the Inferno suites (`INFERNO-DTR-PAYER-001`,
+`INFERNO-PDEX-SERVER-001`), and it is a larger one because it **reverses the
+direction**. In every scenario so far CHO is the client driving an external
+server. Inferno makes CHO the system under test, which means the `interop-cho`
+Compose profile has to run for the first time — it has existed since #1159 and
+has never been exercised, so expect it to need work.
+
+Prefer `INFERNO-DTR-PAYER-001`. DTR is the protocol this repository has the most
+external evidence for, so a failure there is more likely to be about CHO's server
+surface than about a misunderstanding of the protocol — which is the point of
+reversing the direction.

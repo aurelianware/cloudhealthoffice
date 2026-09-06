@@ -322,12 +322,19 @@ public sealed class InteropEvidenceWriterTests : IDisposable
             .Should().Contain("linkedFromScenario").And.Contain(canonical);
     }
 
+    /// <summary>
+    /// `run.sh br-payer all` runs every external scenario in one invocation, each
+    /// writing the run document in turn. Merging is what makes the last write a
+    /// record of the whole run rather than of whichever scenario finished last —
+    /// so adding a fourth scenario must not cost the first three their rows.
+    /// </summary>
     [Fact]
-    public void Three_scenarios_merge_into_one_run_document()
+    public void All_four_br_payer_scenarios_merge_into_one_run_document()
     {
         var writer = new InteropEvidenceWriter(_tempRoot);
+        string[] executed = ["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001", "BR-PAS-INQUIRE-001"];
 
-        foreach (var id in new[] { "BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001" })
+        foreach (var id in executed)
         {
             var merged = writer.MergeWithPrevious([PassedResult(id)]);
             writer.Write(InteropEvidenceWriter.BuildRun(Versions, Inventory, merged));
@@ -337,10 +344,86 @@ public sealed class InteropEvidenceWriterTests : IDisposable
             File.ReadAllText(Path.Combine(_tempRoot, "run.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
 
-        run.Summary.Passed.Should().Be(3);
-        run.Summary.NotRun.Should().Be(Inventory.Scenarios.Count - 3);
-        run.NotRunScenarios.Select(r => r.ScenarioId)
-            .Should().NotContain(["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001"]);
+        run.Summary.Passed.Should().Be(4);
+        run.Summary.NotRun.Should().Be(Inventory.Scenarios.Count - 4);
+        run.Targets.SelectMany(target => target.Results).Select(result => result.ScenarioId)
+            .Should().BeEquivalentTo(executed);
+        run.NotRunScenarios.Select(r => r.ScenarioId).Should().NotContain(executed);
+
+        // The Inferno rows are placeholders and must stay NotRun no matter how
+        // many br-payer scenarios pass.
+        run.NotRunScenarios.Select(r => r.ScenarioId).Should().BeEquivalentTo(
+            ["INFERNO-DTR-PAYER-001", "INFERNO-PDEX-SERVER-001", "INFERNO-PDEX-CLIENT-001"]);
+    }
+
+    /// <summary>
+    /// Running the inquiry scenario after the others must leave their evidence
+    /// intact — the failure this guards is a fourth scenario silently truncating
+    /// the run document to its own row.
+    /// </summary>
+    [Fact]
+    public void The_inquiry_scenario_does_not_overwrite_earlier_scenarios_evidence()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+
+        writer.Write(InteropEvidenceWriter.BuildRun(Versions, Inventory,
+        [
+            PassedResult("BR-PAS-SUBMIT-001"),
+            PassedResult("BR-CRD-001"),
+            PassedResult("BR-DTR-001"),
+        ]));
+
+        var merged = writer.MergeWithPrevious([PassedResult("BR-PAS-INQUIRE-001")]);
+
+        merged.Select(result => result.ScenarioId).Should().BeEquivalentTo(
+            ["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001", "BR-PAS-INQUIRE-001"]);
+    }
+
+    /// <summary>
+    /// The PAS chain must read as a workflow in the evidence: submit produced an
+    /// authorization, inquire consumed that same authorization. The linked
+    /// artifact is the payer-issued identity, which is synthetic and carries no
+    /// member or clinical content.
+    /// </summary>
+    [Fact]
+    public void A_pas_inquiry_result_records_the_authorization_it_chained_from()
+    {
+        const string authorizationNumber = "AUTH-0001";
+
+        var scenario = Inventory.Scenario("BR-PAS-INQUIRE-001");
+        var result = new InteropScenarioRun(scenario, Versions.Target(scenario.ExternalTarget))
+            .Complete(
+                InteropStatus.Passed,
+                Array.Empty<InteropInteraction>(),
+                externalRole: "payer-server",
+                linkedFromScenario: "BR-PAS-SUBMIT-001",
+                linkedArtifact: authorizationNumber);
+
+        result.LinkedFromScenario.Should().Be("BR-PAS-SUBMIT-001");
+        result.LinkedArtifact.Should().Be(authorizationNumber);
+        result.Protocol.Should().Be("PAS");
+        result.ChoRole.Should().Be("Client");
+        result.ExternalRole.Should().Be("payer-server");
+
+        var json = JsonSerializer.Serialize(
+            InteropEvidenceWriter.BuildRun(Versions, Inventory, [result]));
+
+        json.Should().Contain("linkedFromScenario").And.Contain(authorizationNumber);
+        json.Should().NotContain(SyntheticInteropData.MemberId,
+            "the chain is expressed through the payer-issued identity, not through member data");
+    }
+
+    /// <summary>
+    /// The inventory declares the chain too, so a reader can see the workflow
+    /// without running anything.
+    /// </summary>
+    [Fact]
+    public void The_inventory_declares_the_pas_submit_to_inquire_chain()
+    {
+        Inventory.Scenario("BR-PAS-INQUIRE-001").LinkedFromScenario.Should().Be("BR-PAS-SUBMIT-001");
+        Inventory.Scenario("BR-DTR-001").LinkedFromScenario.Should().Be("BR-CRD-001");
+        Inventory.Scenario("BR-PAS-SUBMIT-001").LinkedFromScenario.Should().BeNull(
+            "the submit scenario enters from nothing");
     }
 
     private static InteropResult PassedResult(string scenarioId)

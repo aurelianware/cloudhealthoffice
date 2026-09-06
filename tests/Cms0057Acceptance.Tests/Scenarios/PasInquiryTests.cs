@@ -519,7 +519,49 @@ public class PasInquiryTests
 
         claim.Operation.Select(o => o.Name).Should().Contain(["submit", "inquire"]);
         claim.Operation.Single(o => o.Name == "inquire").Definition.Should()
-            .Be("http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquire");
+            .Be("http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquiry");
+    }
+
+    /// <summary>
+    /// Pins the PAS OperationDefinition canonicals to what the IG actually
+    /// publishes.
+    ///
+    /// The two halves of the inquiry operation do not match each other, and that
+    /// is the point of this test. PAS names the definition <c>Claim-inquiry</c>
+    /// and gives it the operation <c>code</c> <c>inquire</c>, so the canonical
+    /// ends in "-inquiry" while the route ends in "$inquire". Deriving either
+    /// from the other produces <c>Claim-inquire</c>, which is what CHO
+    /// advertised until the discrepancy was caught against an independent
+    /// implementation — and which no published PAS version (1.0.0, 1.1.0, 2.0.1,
+    /// 2.1.0, 2.2.0, 2.2.1) has ever defined.
+    ///
+    /// Asserted as a literal rather than against a constant so that a future edit
+    /// to the CapabilityStatement cannot quietly move both sides together.
+    /// </summary>
+    [Fact]
+    [Trait("Scenario", "PAS-04")]
+    public void PAS04_Replace_PasOperationCanonicalsMatchThePublishedIg()
+    {
+        var controller = new MetadataController(AcceptanceContext.DemoConfig()).WithTenant();
+        var capability = controller.GetCapabilityStatement()
+            .Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<CapabilityStatement>().Subject;
+
+        var operations = capability.Rest.Single().Resource
+            .Single(resource => resource.Type == "Claim").Operation
+            .ToDictionary(operation => operation.Name, operation => operation.Definition);
+
+        operations["submit"].Should().Be(
+            "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-submit");
+
+        operations["inquire"].Should().Be(
+            "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquiry",
+            "PAS publishes the inquiry OperationDefinition as 'Claim-inquiry' in every version; "
+            + "'Claim-inquire' spells the canonical from the operation code and matches no IG release");
+
+        operations.Values.Should().NotContain(
+            "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquire",
+            "no published PAS version defines that canonical");
     }
 
     [Fact]

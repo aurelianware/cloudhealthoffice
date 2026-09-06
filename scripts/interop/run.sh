@@ -3,10 +3,11 @@
 # Da Vinci external interoperability harness — one command.
 #
 #   ./scripts/interop/run.sh                    # br-payer smoke (the default)
-#   ./scripts/interop/run.sh br-payer smoke     # PAS $submit  (BR-PAS-SUBMIT-001)
-#   ./scripts/interop/run.sh br-payer crd       # CRD CDS Hooks (BR-CRD-001)
-#   ./scripts/interop/run.sh br-payer dtr       # DTR $questionnaire-package (BR-DTR-001)
-#   ./scripts/interop/run.sh br-payer all       # all three, into one evidence document
+#   ./scripts/interop/run.sh br-payer smoke       # PAS $submit  (BR-PAS-SUBMIT-001)
+#   ./scripts/interop/run.sh br-payer crd         # CRD CDS Hooks (BR-CRD-001)
+#   ./scripts/interop/run.sh br-payer dtr         # DTR $questionnaire-package (BR-DTR-001)
+#   ./scripts/interop/run.sh br-payer pas-inquire # PAS $submit -> $inquire (BR-PAS-INQUIRE-001)
+#   ./scripts/interop/run.sh br-payer all         # all four, into one evidence document
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
 # Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
@@ -18,8 +19,10 @@
 # path discovers the payer's CDS Hooks services and invokes its order-sign CRD
 # service with synthetic draft orders. The DTR path enters from the payer's own
 # CRD determination and follows the questionnaire canonical it named into
-# $questionnaire-package. Scenarios run one at a time: they share a Compose
-# project and host ports, so the suite serializes them deliberately.
+# $questionnaire-package. The pas-inquire path performs its own $submit, takes the
+# authorization identity the payer issued for it, and inquires on exactly that.
+# Scenarios run one at a time: they share a Compose project and host ports, so the
+# suite serializes them deliberately.
 #
 # Everything the external implementation sees is synthetic. No repository secret,
 # cloud credential or Docker socket is exposed to it.
@@ -50,13 +53,14 @@ fi
 # scenario tests carry. `all` runs every external scenario in one invocation; the
 # evidence writer merges their results into a single run document.
 case "$MODE" in
-  smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
-  crd)   FILTER='Scenario=BR-CRD-001';        LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
-  dtr)   FILTER='Scenario=BR-DTR-001';        LABEL='DTR $questionnaire-package, chained from CRD (BR-DTR-001)' ;;
-  all)   FILTER='Category=DaVinciInterop';    LABEL='all external scenarios' ;;
+  smoke)       FILTER='Scenario=BR-PAS-SUBMIT-001';  LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
+  crd)         FILTER='Scenario=BR-CRD-001';         LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
+  dtr)         FILTER='Scenario=BR-DTR-001';         LABEL='DTR $questionnaire-package, chained from CRD (BR-DTR-001)' ;;
+  pas-inquire) FILTER='Scenario=BR-PAS-INQUIRE-001'; LABEL='PAS $submit then $inquire (BR-PAS-INQUIRE-001)' ;;
+  all)         FILTER='Category=DaVinciInterop';     LABEL='all external scenarios' ;;
   unit)  : ;;
   *)
-    echo "Unknown mode '$MODE'. Modes: smoke | crd | dtr | all | unit." >&2
+    echo "Unknown mode '$MODE'. Modes: smoke | crd | dtr | pas-inquire | all | unit." >&2
     exit 2
     ;;
 esac
@@ -86,7 +90,8 @@ fi
 
 if [[ "$TARGET" != "br-payer" ]]; then
   echo "Unknown interop target '$TARGET'." >&2
-  echo "Executable targets in this repository: br-payer (BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001)." >&2
+  echo "Executable targets in this repository: br-payer (BR-PAS-SUBMIT-001, BR-CRD-001," >&2
+  echo "BR-DTR-001, BR-PAS-INQUIRE-001)." >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
   exit 2

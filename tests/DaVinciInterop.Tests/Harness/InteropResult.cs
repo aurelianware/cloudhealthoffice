@@ -101,7 +101,15 @@ public sealed record InteropFinding
     [JsonPropertyName("externalObserved")] public string? ExternalObserved { get; init; }
     [JsonPropertyName("specificationReference")] public string? SpecificationReference { get; init; }
 
-    public static InteropFinding Info(string code, string summary, string? cho = null, string? external = null) =>
+    /// <summary>
+    /// An observation worth recording. <paramref name="spec"/> is available here
+    /// as it is on <see cref="Warning"/> and <see cref="Error"/>, because the
+    /// most useful informational finding is often the one that says which
+    /// published artifact settled a question — a difference that turned out not
+    /// to be a defect is still worth citing a source for.
+    /// </summary>
+    public static InteropFinding Info(
+        string code, string summary, string? cho = null, string? external = null, string? spec = null) =>
         new()
         {
             Severity = nameof(FindingSeverity.Info),
@@ -109,6 +117,7 @@ public sealed record InteropFinding
             Summary = summary,
             ChoObserved = cho,
             ExternalObserved = external,
+            SpecificationReference = spec,
         };
 
     public static InteropFinding Warning(string code, string summary, string? cho = null, string? external = null, string? spec = null) =>

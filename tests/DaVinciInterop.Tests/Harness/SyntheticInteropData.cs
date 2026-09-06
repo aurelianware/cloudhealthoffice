@@ -61,14 +61,66 @@ public static class SyntheticInteropData
         BirthDate = "1970-01-01",
     };
 
-    /// <summary>The synthetic payer organization (the external implementation's insurer).</summary>
-    public static Organization Payer() => new()
+    /// <summary>A second synthetic member the payer has never been told about.</summary>
+    public const string OtherMemberId = "interop-member-002";
+
+    /// <summary>
+    /// A second synthetic member, structurally identical to <see cref="Member"/>
+    /// but with a different member identifier.
+    ///
+    /// Exists for one purpose: to send a well-formed inquiry that quotes a real
+    /// payer-issued authorization number alongside the WRONG member, and observe
+    /// that the payer does not hand the authorization over. Without it, an
+    /// inquiry scenario proves only that a correct request works — not that an
+    /// authorization is unreachable by guessing its identifier.
+    /// </summary>
+    public static Patient OtherMember() => new()
     {
-        Id = PayerId,
-        Identifier = { new Identifier(PayerIdentifierSystem, PayerId) },
-        Active = true,
-        Name = "Interop Payer A (synthetic)",
+        Id = OtherMemberId,
+        Identifier =
+        {
+            new Identifier(MemberIdentifierSystem, OtherMemberId)
+            {
+                Type = new CodeableConcept(V2IdentifierTypeSystem, "MB"),
+            },
+        },
+        Name = { new HumanName { Family = "Interop", Given = ["Othercase"] } },
+        Gender = AdministrativeGender.Male,
+        BirthDate = "1970-01-02",
     };
+
+    /// <summary>The synthetic payer organization (the external implementation's insurer).</summary>
+    public static Organization Payer() => Payer(engageUpstreamPayerRules: false);
+
+    /// <summary>
+    /// The synthetic payer organization, optionally also carrying the payer
+    /// identifier the pinned implementation's own rule fixtures are scoped to.
+    ///
+    /// A PAS payer decides coverage against the identifiers on the member's
+    /// Coverage.payor. CHO's own synthetic payer id matches no rule on the
+    /// reference implementation, so a request carrying only that id gets a
+    /// content-independent answer. Adding the upstream fixture identifier is what
+    /// makes the payer's rules run — the same thing <c>BR-CRD-001</c> does, and
+    /// for the same reason. Both identifiers are synthetic and name no real payer.
+    /// </summary>
+    public static Organization Payer(bool engageUpstreamPayerRules)
+    {
+        var payer = new Organization
+        {
+            Id = PayerId,
+            Identifier = { new Identifier(PayerIdentifierSystem, PayerId) },
+            Active = true,
+            Name = "Interop Payer A (synthetic)",
+        };
+
+        if (engageUpstreamPayerRules)
+        {
+            payer.Identifier.Add(new Identifier(
+                UpstreamRulePayerIdentifierSystem, UpstreamRulePayerIdentifierValue));
+        }
+
+        return payer;
+    }
 
     /// <summary>The synthetic requesting provider organization.</summary>
     public static Organization Provider() => new()
@@ -90,6 +142,56 @@ public static class SyntheticInteropData
     };
 
     /// <summary>
+    /// The service a PAS request asks about, and whether the payer's own coverage
+    /// rules should be engaged by it.
+    ///
+    /// Two scenarios need two different things from the same request builder, and
+    /// separating them here keeps one builder rather than two.
+    /// <see cref="OfficeVisit"/> deliberately matches no rule on the pinned payer,
+    /// which is what makes <c>BR-PAS-SUBMIT-001</c> a content-independent proof of
+    /// protocol interoperability. <see cref="PriorAuthorizationRequired"/>
+    /// deliberately does match one, because an inquiry needs the payer to have
+    /// issued an authorization identity — and a payer only issues one when its
+    /// rules actually decided something.
+    /// </summary>
+    /// <param name="BillingCodeSystem">Code system of the requested service.</param>
+    /// <param name="BillingCode">The requested service code.</param>
+    /// <param name="BillingCodeDisplay">Display for the requested service.</param>
+    /// <param name="EngageUpstreamPayerRules">
+    /// When true, the payer Organization additionally carries the payer identifier
+    /// the pinned implementation's own rule fixtures are scoped to, so its
+    /// coverage rules engage. Upstream test-fixture data, exactly as CRD already
+    /// uses it — see docs/interop/davinci.md, "Upstream fixture dependency".
+    /// </param>
+    public sealed record PasRequestedService(
+        string BillingCodeSystem,
+        string BillingCode,
+        string BillingCodeDisplay,
+        bool EngageUpstreamPayerRules)
+    {
+        /// <summary>
+        /// An office visit that matches no PlanDefinition on the pinned payer, so
+        /// the answer is content-independent. The default, and what
+        /// <c>BR-PAS-SUBMIT-001</c> has always submitted.
+        /// </summary>
+        public static PasRequestedService OfficeVisit { get; } = new(
+            CptSystem, "99213", "Office or other outpatient visit", EngageUpstreamPayerRules: false);
+
+        /// <summary>
+        /// A service the pinned payer's own <c>PriorAuthRequired</c> rule covers.
+        ///
+        /// Chosen because it is the same billing code <c>BR-CRD-001</c> and
+        /// <c>BR-DTR-001</c> already prove the payer's rules evaluate, so the
+        /// inquiry scenario rests on behaviour this repository has demonstrated
+        /// rather than on a code picked hopefully. Which decision the rule
+        /// produces is the payer's business and is never asserted — only that
+        /// whatever it decided came with an identity to inquire on.
+        /// </summary>
+        public static PasRequestedService PriorAuthorizationRequired { get; } = new(
+            HcpcsSystem, "L8000", "Breast prosthesis", EngageUpstreamPayerRules: true);
+    }
+
+    /// <summary>
     /// A Da Vinci PAS prior-authorization request bundle for a single office-visit
     /// item, built from the synthetic identities above.
     ///
@@ -99,12 +201,31 @@ public static class SyntheticInteropData
     /// insurance references and an item carrying category and location.
     /// </summary>
     /// <param name="created">Timestamp for Bundle.timestamp and Claim.created.</param>
-    public static Bundle PasRequestBundle(DateTimeOffset created)
+    public static Bundle PasRequestBundle(DateTimeOffset created) =>
+        PasRequestBundle(created, PasRequestedService.OfficeVisit, PriorAuthId);
+
+    /// <summary>
+    /// The same PAS request bundle, for a caller that needs to choose the service
+    /// and the request's own identifier.
+    ///
+    /// The identifier is a parameter because a submit→inquire scenario must be
+    /// able to tell its own authorization apart from anything else the payer
+    /// holds, and because a run must not depend on a previous run's state. It is
+    /// the SUBMITTER's identifier for its request — not an authorization number,
+    /// which only the payer may issue.
+    /// </summary>
+    /// <param name="created">Timestamp for Bundle.timestamp and Claim.created.</param>
+    /// <param name="service">Which service to request, and whether to engage the payer's rules.</param>
+    /// <param name="requestIdentifier">The submitter's identifier for this request.</param>
+    public static Bundle PasRequestBundle(
+        DateTimeOffset created,
+        PasRequestedService service,
+        string requestIdentifier)
     {
         var claim = new Claim
         {
             Id = PriorAuthId,
-            Identifier = { new Identifier(ClaimIdentifierSystem, PriorAuthId) },
+            Identifier = { new Identifier(ClaimIdentifierSystem, requestIdentifier) },
             Status = FinancialResourceStatusCodes.Active,
             Type = new CodeableConcept(ClaimTypeSystem, "professional"),
             Use = ClaimUseCode.Preauthorization,
@@ -129,7 +250,7 @@ public static class SyntheticInteropData
                     Sequence = 1,
                     Category = new CodeableConcept(X12ServiceTypeSystem, "3", "Consultation"),
                     ProductOrService = new CodeableConcept(
-                        CptSystem, "99213", "Office or other outpatient visit"),
+                        service.BillingCodeSystem, service.BillingCode, service.BillingCodeDisplay),
                     Quantity = new Quantity { Value = 1 },
                     Location = new CodeableConcept(PlaceOfServiceSystem, "11", "Office"),
                 },
@@ -140,13 +261,17 @@ public static class SyntheticInteropData
         {
             Id = "interop-pas-request-001",
             Type = Bundle.BundleType.Collection,
-            Identifier = new Identifier(RequestBundleIdentifierSystem, PriorAuthId),
+            Identifier = new Identifier(RequestBundleIdentifierSystem, requestIdentifier),
             Timestamp = created,
             Entry =
             {
                 new Bundle.EntryComponent { FullUrl = ClaimFullUrl, Resource = claim },
                 new Bundle.EntryComponent { FullUrl = PatientFullUrl, Resource = Member() },
-                new Bundle.EntryComponent { FullUrl = InsurerFullUrl, Resource = Payer() },
+                new Bundle.EntryComponent
+                {
+                    FullUrl = InsurerFullUrl,
+                    Resource = Payer(service.EngageUpstreamPayerRules),
+                },
                 new Bundle.EntryComponent { FullUrl = ProviderFullUrl, Resource = Provider() },
                 new Bundle.EntryComponent { FullUrl = CoverageFullUrl, Resource = Coverage() },
             },
@@ -362,6 +487,127 @@ public static class SyntheticInteropData
     /// </summary>
     public static Parameters AsSubmitParameters(Bundle requestBundle) => new()
     {
-        Parameter = { new Parameters.ParameterComponent { Name = "resource", Resource = requestBundle } },
+        Parameter =
+        {
+            new Parameters.ParameterComponent
+            {
+                Name = PasProtocol.ResourceParameter,
+                Resource = requestBundle,
+            },
+        },
     };
+
+    // ── PAS ($inquire) ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a Da Vinci PAS inquiry request bundle asking about one
+    /// authorization the payer itself established.
+    ///
+    /// Everything that identifies the authorization comes from the payer's own
+    /// submit response — <paramref name="authorizationIdentity"/> is quoted back
+    /// exactly as issued and is never rewritten, padded or reformatted. CHO does
+    /// not mint a tracking id of its own: if it did, the inquiry would prove only
+    /// that CHO can echo a string it invented.
+    ///
+    /// The corroborating context is the SAME synthetic member, payer and provider
+    /// the submit used, because a PAS payer scopes an inquiry by them. Supplying
+    /// a different <paramref name="member"/> is how the negative subcase asks for
+    /// a real authorization with the wrong corroborating key.
+    ///
+    /// Carries what the operation needs and no more: the inquiry Claim per
+    /// <c>profile-claim-inquiry</c> (identifier required, status active,
+    /// use=preauthorization, patient/insurer/provider/insurance), plus the
+    /// resources those references resolve to. A PAS payer matches the member by
+    /// identifier rather than by a sender-supplied logical id, so the Patient
+    /// travels with the MB-typed identifier the inquiry profile requires.
+    /// </summary>
+    /// <param name="created">Timestamp for Bundle.timestamp and Claim.created.</param>
+    /// <param name="authorizationIdentity">The payer-issued identity, exactly as received.</param>
+    /// <param name="service">The service the original request named, for query-by-example matching.</param>
+    /// <param name="inquiryIdentifier">The submitter's identifier for this inquiry.</param>
+    /// <param name="member">
+    /// The member to corroborate with. Defaults to the member the submit used;
+    /// pass <see cref="OtherMember"/> to prove the payer refuses a mismatched key.
+    /// </param>
+    public static Bundle PasInquiryBundle(
+        DateTimeOffset created,
+        string authorizationIdentity,
+        PasRequestedService service,
+        string inquiryIdentifier,
+        Patient? member = null)
+    {
+        var claim = new Claim
+        {
+            Meta = new Meta { Profile = [PasProtocol.ClaimInquiryProfile] },
+            Identifier = { new Identifier(ClaimIdentifierSystem, inquiryIdentifier) },
+            Status = FinancialResourceStatusCodes.Active,
+            Type = new CodeableConcept(ClaimTypeSystem, "professional"),
+            Use = ClaimUseCode.Preauthorization,
+            Patient = new ResourceReference(PatientFullUrl),
+            Created = created.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+            Insurer = new ResourceReference(InsurerFullUrl),
+            Provider = new ResourceReference(ProviderFullUrl),
+            Priority = new CodeableConcept(ProcessPrioritySystem, "normal"),
+            Insurance =
+            {
+                new Claim.InsuranceComponent
+                {
+                    Sequence = 1,
+                    Focal = true,
+                    Coverage = new ResourceReference(CoverageFullUrl),
+                },
+            },
+            Item =
+            {
+                new Claim.ItemComponent
+                {
+                    Sequence = 1,
+                    // The authorization number rides on Claim.item, which is where
+                    // PAS contextualizes extension-authorizationNumber. It is NOT
+                    // where the payer issued it — a payer issues it nested inside
+                    // reviewAction on the response — and that asymmetry is the
+                    // IG's, not an implementation's.
+                    Extension =
+                    {
+                        new Extension(
+                            PasProtocol.AuthorizationNumberExtension,
+                            new FhirString(authorizationIdentity)),
+                    },
+                    ProductOrService = new CodeableConcept(
+                        service.BillingCodeSystem, service.BillingCode, service.BillingCodeDisplay),
+                },
+            },
+        };
+
+        return new Bundle
+        {
+            Type = Bundle.BundleType.Collection,
+            Meta = new Meta { Profile = [PasProtocol.InquiryRequestBundleProfile] },
+            Identifier = new Identifier(RequestBundleIdentifierSystem, inquiryIdentifier),
+            Timestamp = created,
+            Entry =
+            {
+                new Bundle.EntryComponent { FullUrl = ClaimFullUrl, Resource = claim },
+                new Bundle.EntryComponent { FullUrl = PatientFullUrl, Resource = member ?? Member() },
+                new Bundle.EntryComponent
+                {
+                    FullUrl = InsurerFullUrl,
+                    Resource = Payer(service.EngageUpstreamPayerRules),
+                },
+                new Bundle.EntryComponent { FullUrl = ProviderFullUrl, Resource = Provider() },
+                new Bundle.EntryComponent { FullUrl = CoverageFullUrl, Resource = Coverage() },
+            },
+        };
+    }
+
+    /// <summary>
+    /// Wraps an inquiry request bundle in the Parameters resource
+    /// <c>Claim/$inquire</c> takes.
+    ///
+    /// The same single <c>resource</c> parameter <c>$submit</c> takes — PAS
+    /// defines both operations with one input parameter of type Bundle — so this
+    /// is <see cref="AsSubmitParameters"/> under the name the calling code means.
+    /// </summary>
+    public static Parameters AsInquiryParameters(Bundle inquiryBundle) =>
+        AsSubmitParameters(inquiryBundle);
 }

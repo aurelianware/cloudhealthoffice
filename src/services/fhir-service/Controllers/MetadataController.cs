@@ -104,6 +104,16 @@ public class MetadataController : FhirControllerBase
                         ]),
                         // Da Vinci PAS operations, both served by PasController:
                         // POST fhir/r4/Claim/$submit and POST fhir/r4/Claim/$inquire.
+                        //
+                        // OperationDefinition.name and the invoked operation code are
+                        // deliberately different for inquiry, and both values below are
+                        // taken from the published IG rather than inferred from each
+                        // other: PAS names the definition `Claim-inquiry` while its
+                        // `code` — the token in the URL — is `inquire`. Every published
+                        // PAS version (1.0.0 through 2.2.1) publishes the canonical as
+                        // `Claim-inquiry`, so there is no version for which
+                        // `Claim-inquire` is correct. See docs/interop/davinci.md,
+                        // "The `$inquire` canonical, resolved".
                         BuildResource("Claim",
                         [
                             ("_id",          SearchParamType.Token),
@@ -116,7 +126,7 @@ public class MetadataController : FhirControllerBase
                         operations:
                         [
                             ("submit",  "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-submit"),
-                            ("inquire", "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquire"),
+                            ("inquire", "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquiry"),
                         ]),
                         BuildResource("Questionnaire",
                         [

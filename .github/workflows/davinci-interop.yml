@@ -21,8 +21,8 @@ name: Da Vinci Interoperability
 # workflow_dispatch, and nightly. Heavier suites (Inferno conformance kits) are
 # expected to be nightly-only when they land.
 #
-# Both br-payer scenarios run in ONE job rather than a matrix leg each. They pin
-# the same image, so a single job pulls it once instead of twice; the harness
+# All br-payer scenarios run in ONE job rather than a matrix leg each. They pin
+# the same image, so a single job pulls it once instead of four times; the harness
 # still starts and tears down a separate container per scenario, so they remain
 # isolated from one another. The evidence writer merges their results into one
 # run document.
@@ -109,6 +109,8 @@ jobs:
   #   BR-CRD-001         CRD CDS Hooks — discovery plus order-sign invocations
   #   BR-DTR-001         DTR $questionnaire-package — entered from the payer's own
   #                      CRD determination, following the questionnaire it named
+  #   BR-PAS-INQUIRE-001 PAS $submit then $inquire — the authorization lifecycle,
+  #                      correlating on the identity the payer itself issued
   #
   # Security posture:
   #   * `permissions: contents: read` only — the third-party container never sits
@@ -120,13 +122,16 @@ jobs:
   #   * All data sent is synthetic; no VSAC or other licensed terminology
   #     credential is used or required.
   scenarios:
-    name: br-payer external scenarios (PAS $submit, CRD, DTR)
+    name: br-payer external scenarios (PAS $submit, CRD, DTR, PAS $inquire)
     runs-on: ubuntu-latest
     needs: harness
     # A dead external implementation must fail with a diagnostic, not hold a
     # runner. The harness has its own bounded timeouts; this is the outer bound,
-    # sized for three scenarios each starting their own container.
-    timeout-minutes: 60
+    # sized for four scenarios each starting their own container. Raised from 60
+    # with the fourth scenario: each one pays a fresh HAPI startup (IG package
+    # install, then CQL compilation), which dominates the wall clock, and the
+    # exchanges themselves take seconds.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
 

@@ -34,7 +34,8 @@ public sealed class ScenarioInventoryTests
         Inventory.Scenarios
             .Where(s => s.Implemented)
             .Select(s => s.Id)
-            .Should().BeEquivalentTo(["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001"]);
+            .Should().BeEquivalentTo(
+                ["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001", "BR-PAS-INQUIRE-001"]);
     }
 
     [Fact]
