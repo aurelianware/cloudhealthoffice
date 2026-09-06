@@ -243,7 +243,8 @@ public class ClinicalResourceControllerTests : IClassFixture<FhirTestWebAppFacto
         // every clinical store query, so there is nothing to find.
         var response = await GetAsync(
             $"/fhir/r4/Observation/{IdFor("Observation", "OBS-1", Member)}",
-            _factory.IssueToken("patient/Observation.read", Member, tenantId: "other-tenant"));
+            _factory.IssueToken("patient/Observation.read", Member, tenantId: "other-tenant"),
+            tenantHeader: "other-tenant");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -253,7 +254,8 @@ public class ClinicalResourceControllerTests : IClassFixture<FhirTestWebAppFacto
     {
         var response = await GetAsync(
             $"/fhir/r4/Condition?patient=Patient/{Member}",
-            _factory.IssueToken("patient/Condition.read", Member, tenantId: "other-tenant"));
+            _factory.IssueToken("patient/Condition.read", Member, tenantId: "other-tenant"),
+            tenantHeader: "other-tenant");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -391,11 +393,35 @@ public class ClinicalResourceControllerTests : IClassFixture<FhirTestWebAppFacto
         => ClinicalResourceIdentity.ForImported(
             PayerToPayerImportPolicy.ImportKey(Tenant, memberId, Payer, resourceType, sourceId));
 
-    private async Task<HttpResponseMessage> GetAsync(string path, string token)
+    [Fact]
+    public async Task ATokenAndHeaderNamingDifferentTenants_IsRefusedOverHttp()
+    {
+        // The whole request, through the real pipeline: two statements of tenant
+        // authority that disagree. Before SEC-01 the header was simply ignored
+        // whenever the token carried a claim, so a mismatch went unnoticed
+        // instead of being refused.
+        var response = await GetAsync(
+            $"/fhir/r4/Observation/{IdFor("Observation", "OBS-1", Member)}",
+            _factory.IssueToken("patient/Observation.read", Member, tenantId: "other-tenant"),
+            tenantHeader: Tenant);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    /// <param name="tenantHeader">
+    /// The X-Tenant-ID the request carries. Defaults to this fixture's tenant.
+    /// A cross-tenant test has to move BOTH this and the token's tenant claim:
+    /// since SEC-01, a header contradicting the token is refused outright as a
+    /// tenant conflict (see TenantBindingTests), so leaving them disagreeing
+    /// would prove the conflict check rather than the data-layer isolation the
+    /// test is aiming at.
+    /// </param>
+    private async Task<HttpResponseMessage> GetAsync(
+        string path, string token, string? tenantHeader = null)
     {
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantHeader ?? Tenant);
         return await client.GetAsync(path);
     }
 

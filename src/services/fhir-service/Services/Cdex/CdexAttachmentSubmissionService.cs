@@ -170,8 +170,15 @@ public sealed record CdexSubmissionResult
 /// </summary>
 public interface ICdexAttachmentSubmissionService
 {
+    /// <param name="verifiedProviderNpi">
+    /// The caller's provider NPI when — and only when — a trusted issuer
+    /// asserted it (see <c>SmartAuth:TrustedIssuers[].Claims.ProviderNpiClaim</c>).
+    /// Null means no issuer CHO trusts has vouched for the caller's identity,
+    /// and the corroborating-key rule applies unchanged.
+    /// </param>
     Task<CdexSubmissionResult> SubmitAsync(
-        Parameters parameters, string tenantId, string? callerId, CancellationToken ct = default);
+        Parameters parameters, string tenantId, string? callerId,
+        string? verifiedProviderNpi = null, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -202,7 +209,8 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
     }
 
     public async Task<CdexSubmissionResult> SubmitAsync(
-        Parameters parameters, string tenantId, string? callerId, CancellationToken ct = default)
+        Parameters parameters, string tenantId, string? callerId,
+        string? verifiedProviderNpi = null, CancellationToken ct = default)
     {
         // ── 1. Read the operation parameters ────────────────────────────────
         var trackingId = CdexSubmitAttachmentParameters.TrackingId(parameters);
@@ -270,7 +278,7 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
             return Refused(CdexSubmissionOutcome.AuthorizationMismatch, trackingId);
         }
 
-        if (!SubmitterMatchesRequestedProvider(parameters, request))
+        if (!SubmitterMatchesRequestedProvider(parameters, request, verifiedProviderNpi))
             return Refused(CdexSubmissionOutcome.ProviderMismatch, trackingId);
 
         // ── 3. Fully correlated. From here, refusals may say why. ───────────
@@ -505,20 +513,58 @@ public sealed class CdexAttachmentSubmissionService : ICdexAttachmentSubmissionS
     }
 
     /// <summary>
-    /// The submitter must be the provider the request was addressed to, where
-    /// the request records one. A request with no provider on it cannot make
-    /// this check, and says so in the audit trail rather than pretending to.
+    /// The submitter must be the provider the request was addressed to.
+    ///
+    /// There are two strengths of this check, and which one applies depends on
+    /// what the deployment's identity provider actually asserts:
+    ///
+    ///   VERIFIED IDENTITY. When a trusted issuer asserted the caller's NPI,
+    ///   that NPI — not the payload's — must match the request. This is real
+    ///   caller binding: knowing another provider's NPI no longer helps, because
+    ///   the value being compared came from the token, and the token is signed
+    ///   by an issuer CHO trusts. A verified caller who is not the requested
+    ///   provider is refused even if the payload names the right one, which is
+    ///   precisely the substitution the corroborating key could not detect.
+    ///
+    ///   CORROBORATING KEY. With no verified identity — no issuer configured to
+    ///   assert NPI — the original rule stands: the payload's NPI must match the
+    ///   request's. That is a weaker check and has always been documented as
+    ///   one, since NPIs are public. It is kept rather than removed because
+    ///   removing it would loosen deployments that have no provider identity
+    ///   claim available, and this change must only ever tighten.
     /// </summary>
     private bool SubmitterMatchesRequestedProvider(
-        Parameters parameters, CdexAdditionalInformationRequest request)
+        Parameters parameters,
+        CdexAdditionalInformationRequest request,
+        string? verifiedProviderNpi)
     {
         if (string.IsNullOrWhiteSpace(request.RequestingProviderNpi))
         {
+            // A request naming no provider cannot corroborate anyone — but a
+            // caller whose identity IS verified is still pinned to it, so a
+            // verified NPI is not silently discarded here.
             _logger.LogInformation(
                 "CDex $submit-attachment: request {Request} records no provider, so the "
                 + "submitter could not be corroborated against one.",
                 Sanitize(request.Id));
             return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(verifiedProviderNpi))
+        {
+            var bound = string.Equals(
+                verifiedProviderNpi.Trim(), request.RequestingProviderNpi.Trim(),
+                StringComparison.Ordinal);
+
+            if (!bound)
+            {
+                _logger.LogWarning(
+                    "CDex $submit-attachment: caller identity verified by the trusted issuer "
+                    + "does not match the provider request {Request} was addressed to.",
+                    Sanitize(request.Id));
+            }
+
+            return bound;
         }
 
         var submitted = CdexSubmitAttachmentParameters.ProviderNpi(parameters);
