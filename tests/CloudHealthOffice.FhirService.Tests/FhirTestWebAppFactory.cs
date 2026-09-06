@@ -123,14 +123,19 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     /// Issues a test JWT signed with the factory's test RSA key.
     /// The token includes tenant_id and the requested SMART scopes.
     /// </summary>
-    public string IssueToken(string scopes, string? patientId = null)
+    /// <param name="tenantId">
+    /// The <c>tenant_id</c> claim. TenantMiddleware prefers this claim over the
+    /// X-Tenant-ID header, so a cross-tenant test has to change it HERE — setting
+    /// the header alone proves nothing, because the token still says test-tenant.
+    /// </param>
+    public string IssueToken(string scopes, string? patientId = null, string tenantId = "test-tenant")
     {
         var claims = new List<SecurityClaim>
         {
             new(JwtRegisteredClaimNames.Sub, "test-user"),
             new("scope", scopes),
             new(JwtRegisteredClaimNames.Aud, "fhir-api"),
-            new("tenant_id", "test-tenant")
+            new("tenant_id", tenantId)
         };
 
         if (patientId != null)

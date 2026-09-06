@@ -23,12 +23,29 @@ public enum ImportedResourceClass
     AdministrativeReference,
 
     /// <summary>
-    /// A resource type CHO's FHIR surface does not serve today (for example
-    /// Condition, Observation, Procedure, MedicationRequest). It is counted and
+    /// USCDI clinical data (Condition, Observation, Procedure, MedicationRequest
+    /// and the rest of <c>ClinicalResourceInventory</c>). Stored member-scoped
+    /// and SERVED through CHO's Patient and Provider Access FHIR APIs — this is
+    /// the class PAT-02 exists for. It stays source-attributed: an imported
+    /// Condition is the prior payer's clinical assertion that CHO now serves, not
+    /// a CHO-authored clinical record.
+    /// </summary>
+    ClinicalRecord,
+
+    /// <summary>
+    /// A resource type CHO's FHIR surface does not serve today. It is counted and
     /// named on the exchange, and the whole validated package is archived, so the
     /// data is neither lost nor misrepresented as ingested.
     /// </summary>
     Unsupported,
+
+    /// <summary>
+    /// A clinical resource CHO would serve, refused by
+    /// <c>ClinicalPayloadValidator</c> (no source id, oversized, too deeply
+    /// nested). Counted and named by rejection reason rather than dropped, and
+    /// still present in the archived package.
+    /// </summary>
+    Rejected,
 }
 
 /// <summary>Lifecycle of the durable ingestion that follows a successful exchange.</summary>
@@ -186,6 +203,15 @@ public sealed class PayerToPayerImportLedgerEntry
 
     public DateTime StartedAtUtc { get; init; } = DateTime.UtcNow;
     public DateTime? CompletedAtUtc { get; set; }
+
+    /// <summary>
+    /// Set when the PAT-02 clinical backfill re-projected this exchange's
+    /// archived package. It keeps "these clinical rows arrived later, from the
+    /// archive, not from the original ingestion" answerable after the counts
+    /// have been brought up to date. Null on an exchange ingested after clinical
+    /// serving existed.
+    /// </summary>
+    public DateTime? ClinicalBackfilledAtUtc { get; set; }
 }
 
 /// <summary>What an ingestion did, in numbers — the auditable, PHI-free summary.</summary>
@@ -199,6 +225,18 @@ public sealed class PayerToPayerIngestionCounts
 
     /// <summary>Administrative resources stored for reference/traceability only.</summary>
     public int AdministrativeReference { get; set; }
+
+    /// <summary>USCDI clinical resources stored and served through Patient/Provider Access (PAT-02).</summary>
+    public int Clinical { get; set; }
+
+    /// <summary>Clinical resources refused by the payload validator — counted, never silently dropped.</summary>
+    public int Rejected { get; set; }
+
+    /// <summary>
+    /// Why each rejected resource was refused: <c>"{ResourceType}:{reason}"</c>,
+    /// sorted. Categories only — never the payload that was refused.
+    /// </summary>
+    public IReadOnlyList<string> RejectedReasons { get; set; } = Array.Empty<string>();
 
     /// <summary>Resources already held from this payer with identical content (replay).</summary>
     public int Duplicate { get; set; }

@@ -264,6 +264,41 @@ else
 builder.Services.AddScoped<
     FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerPackageIngestionService,
     FhirService.Services.PayerToPayer.Ingestion.PayerToPayerPackageIngestionService>();
+
+// ── USCDI clinical resources (CMS-0057-F PAT-02) ──────────────────────────────
+// The clinical serving store is the SAME object as the Payer-to-Payer import
+// store, resolved through a second interface — the rows Patient and Provider
+// Access read are the rows an exchange committed. Registering it as a forwarding
+// singleton rather than a second registration is what makes that literal: there
+// is exactly one instance, so there is no second copy of a clinical resource and
+// no projection to fall behind.
+builder.Services.AddSingleton<FhirService.Services.Clinical.IClinicalResourceStore>(sp =>
+    (FhirService.Services.Clinical.IClinicalResourceStore)
+        sp.GetRequiredService<FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository>());
+builder.Services.AddSingleton<FhirService.Services.Clinical.IClinicalBackfillStore>(sp =>
+    (FhirService.Services.Clinical.IClinicalBackfillStore)
+        sp.GetRequiredService<FhirService.Services.PayerToPayer.Ingestion.IPayerToPayerImportRepository>());
+
+builder.Services.Configure<FhirService.Services.Clinical.ClinicalBackfillOptions>(
+    builder.Configuration.GetSection(FhirService.Services.Clinical.ClinicalBackfillOptions.SectionName));
+builder.Services.AddSingleton(sp =>
+{
+    var limits = new FhirService.Services.Clinical.ClinicalPayloadLimits();
+    builder.Configuration
+        .GetSection(FhirService.Services.Clinical.ClinicalPayloadLimits.SectionName)
+        .Bind(limits);
+    return limits;
+});
+builder.Services.AddSingleton<FhirService.Services.Clinical.ClinicalPayloadValidator>();
+builder.Services.AddSingleton<FhirService.Services.Clinical.ClinicalResourceProjector>();
+builder.Services.AddScoped<FhirService.Services.Clinical.IClinicalResourceService,
+    FhirService.Services.Clinical.ClinicalResourceService>();
+
+// Migration: makes clinical data already held from earlier Payer-to-Payer
+// exchanges readable, without asking an operator to re-run those exchanges.
+// Disabled by default, idempotent, and never on a request path.
+builder.Services.AddScoped<FhirService.Services.Clinical.ClinicalBackfillService>();
+builder.Services.AddHostedService<FhirService.Services.Clinical.ClinicalBackfillWorker>();
 // Redirects are NOT followed: a peer must not be able to bounce an outbound
 // Payer-to-Payer call onto another host. TLS validation is left at the platform
 // default — it is never relaxed.

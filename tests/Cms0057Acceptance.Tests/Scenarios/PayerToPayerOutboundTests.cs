@@ -110,7 +110,9 @@ public class PayerToPayerOutboundTests
             peer,
             store,
             new PayerToPayerPackageIngestionService(
-                imports, AcceptanceContext.Logger<PayerToPayerPackageIngestionService>()),
+                imports,
+                AcceptanceContext.Logger<PayerToPayerPackageIngestionService>(),
+                new FhirService.Services.Clinical.ClinicalPayloadValidator()),
             directory,
             AcceptanceContext.Logger<PayerToPayerOutboundService>());
 

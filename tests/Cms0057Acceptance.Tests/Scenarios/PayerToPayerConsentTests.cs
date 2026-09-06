@@ -267,7 +267,8 @@ public class PayerToPayerConsentTests
             new InMemoryPayerToPayerOutboundExchangeStore(),
             new PayerToPayerPackageIngestionService(
                 new InMemoryPayerToPayerImportRepository(),
-                AcceptanceContext.Logger<PayerToPayerPackageIngestionService>()),
+                AcceptanceContext.Logger<PayerToPayerPackageIngestionService>(),
+                new FhirService.Services.Clinical.ClinicalPayloadValidator()),
             directory,
             AcceptanceContext.Logger<PayerToPayerOutboundService>());
 

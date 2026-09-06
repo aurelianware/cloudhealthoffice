@@ -1,4 +1,5 @@
 using FhirService.Models.PayerToPayer;
+using FhirService.Services.Clinical;
 using FhirService.Services.PayerToPayer.Ingestion;
 using FluentAssertions;
 using Hl7.Fhir.Model;
@@ -27,13 +28,20 @@ public class PayerToPayerImportPolicyTests
     [InlineData("Organization", ImportedResourceClass.AdministrativeReference)]
     [InlineData("Practitioner", ImportedResourceClass.AdministrativeReference)]
     [InlineData("Provenance", ImportedResourceClass.AdministrativeReference)]
-    // Types CHO's FHIR surface does not serve. Claiming to ingest these would be
-    // a false claim, so they are named and counted instead.
-    [InlineData("Condition", ImportedResourceClass.Unsupported)]
-    [InlineData("Observation", ImportedResourceClass.Unsupported)]
-    [InlineData("Procedure", ImportedResourceClass.Unsupported)]
-    [InlineData("MedicationRequest", ImportedResourceClass.Unsupported)]
-    [InlineData("AllergyIntolerance", ImportedResourceClass.Unsupported)]
+    // USCDI clinical data. These were unsupported until PAT-02 gave CHO a real
+    // read path for them; they are ingested now because they are served now.
+    [InlineData("Condition", ImportedResourceClass.ClinicalRecord)]
+    [InlineData("Observation", ImportedResourceClass.ClinicalRecord)]
+    [InlineData("Procedure", ImportedResourceClass.ClinicalRecord)]
+    [InlineData("MedicationRequest", ImportedResourceClass.ClinicalRecord)]
+    [InlineData("AllergyIntolerance", ImportedResourceClass.ClinicalRecord)]
+    [InlineData("Immunization", ImportedResourceClass.ClinicalRecord)]
+    [InlineData("CareTeam", ImportedResourceClass.ClinicalRecord)]
+    // Types CHO's FHIR surface still does not serve. Claiming to ingest these
+    // would be a false claim, so they are named and counted instead.
+    [InlineData("RiskAssessment", ImportedResourceClass.Unsupported)]
+    [InlineData("NutritionOrder", ImportedResourceClass.Unsupported)]
+    [InlineData("FamilyMemberHistory", ImportedResourceClass.Unsupported)]
     [InlineData("", ImportedResourceClass.Unsupported)]
     public void Classify_PutsEachResourceTypeInItsDocumentedBucket(string type, ImportedResourceClass expected)
         => PayerToPayerImportPolicy.Classify(type).Should().Be(expected);
@@ -45,6 +53,31 @@ public class PayerToPayerImportPolicyTests
         // claims to ingest must be a type its FHIR surface serves.
         PayerToPayerImportPolicy.SupportedMemberHistoryTypes.Should().BeEquivalentTo(
             new[] { "Claim", "ClaimResponse", "DocumentReference", "Encounter", "ExplanationOfBenefit" });
+    }
+
+    [Fact]
+    public void ClinicalTypes_AreTheServingInventoryItself_NotACopyOfIt()
+    {
+        // The ingestion inventory and the serving inventory are the same object,
+        // so a type cannot be ingested-but-unservable or servable-but-ignored on
+        // import. This is the property, asserted rather than assumed.
+        PayerToPayerImportPolicy.ClinicalTypes.Should().BeSameAs(
+            ClinicalResourceInventory.ResourceTypes);
+    }
+
+    [Fact]
+    public void NoResourceTypeFallsIntoTwoBuckets()
+    {
+        // Member history, administrative reference and clinical are disjoint: a
+        // type in two of them would be classified by whichever check ran first,
+        // which is a coin toss between "CHO's claims history" and "clinical data".
+        var history = PayerToPayerImportPolicy.SupportedMemberHistoryTypes;
+        var administrative = PayerToPayerImportPolicy.AdministrativeReferenceTypes;
+        var clinical = PayerToPayerImportPolicy.ClinicalTypes;
+
+        history.Should().NotIntersectWith(administrative);
+        history.Should().NotIntersectWith(clinical);
+        administrative.Should().NotIntersectWith(clinical);
     }
 
     [Fact]
