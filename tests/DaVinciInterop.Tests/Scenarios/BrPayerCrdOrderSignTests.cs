@@ -126,7 +126,7 @@ public sealed class BrPayerCrdOrderSignTests
             var serviceUrl = $"{cdsHooksBase.TrimEnd('/')}/{service.Id}";
 
             var priorAuth = await InvokeAsync(
-                client, serviceUrl, service.Hook, PriorAuthRequiredCode,
+                client, serviceUrl, service, PriorAuthRequiredCode,
                 fhirCallbackWatch.BaseUrl, "11111111-1111-4111-8111-111111111111", cancellation.Token);
 
             priorAuth.Raw.StatusCode.Should().Be(HttpStatusCode.OK,
@@ -165,7 +165,7 @@ public sealed class BrPayerCrdOrderSignTests
 
             // ── 001C — contrasting behaviour ────────────────────────────────────
             var notCovered = await InvokeAsync(
-                client, serviceUrl, service.Hook, NotCoveredCode,
+                client, serviceUrl, service, NotCoveredCode,
                 fhirCallbackWatch.BaseUrl, "22222222-2222-4222-8222-222222222222", cancellation.Token);
 
             notCovered.Raw.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -183,7 +183,7 @@ public sealed class BrPayerCrdOrderSignTests
                 "an excluded service must not also be reported as merely needing prior authorization");
 
             var noRule = await InvokeAsync(
-                client, serviceUrl, service.Hook, NoMatchingRuleCode,
+                client, serviceUrl, service, NoMatchingRuleCode,
                 fhirCallbackWatch.BaseUrl, "33333333-3333-4333-8333-333333333333", cancellation.Token);
 
             noRule.Raw.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -255,14 +255,18 @@ public sealed class BrPayerCrdOrderSignTests
     private static async Task<(CdsHooksResponse? Parsed, InteropResponse Raw)> InvokeAsync(
         InteropHttpClient client,
         string serviceUrl,
-        string hook,
+        CdsHooksService service,
         string billingCode,
         string fhirServer,
         string hookInstance,
         CancellationToken cancellationToken)
     {
-        var request = SyntheticInteropData.CrdOrderRequest(hook, billingCode, fhirServer, hookInstance);
-        return await client.PostCdsHooksAsync(serviceUrl, request, cancellationToken: cancellationToken);
+        // The hook and the service id both come from what discovery advertised,
+        // so the recorded interaction names the service that was actually called.
+        var request = SyntheticInteropData.CrdOrderRequest(
+            service.Hook, billingCode, fhirServer, hookInstance);
+        return await client.PostCdsHooksAsync(
+            serviceUrl, request, serviceId: service.Id, cancellationToken: cancellationToken);
     }
 
     /// <summary>

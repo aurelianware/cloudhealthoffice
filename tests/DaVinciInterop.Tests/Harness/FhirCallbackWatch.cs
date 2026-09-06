@@ -49,32 +49,81 @@ public sealed class FhirCallbackWatch : IDisposable
     }
 
     /// <summary>
-    /// Starts a listener on a free loopback port, reachable from the external
-    /// container through the Docker bridge gateway.
+    /// Starts a listener on a free port, reachable from the external container
+    /// through the Docker bridge gateway.
     /// </summary>
+    /// <param name="port">
+    /// A specific port to bind, or 0 to choose one. With 0 the choice is retried:
+    /// a port observed to be free can be taken by another process before the
+    /// listener claims it, and in CI that race would surface as an intermittent
+    /// scenario failure looking like external flakiness rather than a local
+    /// collision.
+    /// </param>
     public static FhirCallbackWatch Start(int port = 0)
     {
-        var chosen = port == 0 ? FreePort() : port;
-        var listener = new HttpListener();
+        const int attempts = 5;
+        HttpListenerException? lastFailure = null;
 
-        // Bind on all interfaces: the caller is a container reaching the host
-        // across the bridge network, not a loopback client.
-        listener.Prefixes.Add($"http://+:{chosen}/");
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            var chosen = port == 0 ? FreePort() : port;
+            try
+            {
+                return new FhirCallbackWatch(Listen(chosen), $"{DockerHostAddress()}:{chosen}/fhir");
+            }
+            catch (HttpListenerException ex)
+            {
+                lastFailure = ex;
+                if (port != 0)
+                {
+                    // An explicitly requested port cannot be substituted: the
+                    // caller asked for that one.
+                    throw;
+                }
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Could not bind a callback listener after {attempts} attempts at auto-selected ports. " +
+            "The scenario needs one to assert that the external implementation did not call back.",
+            lastFailure);
+    }
+
+    /// <summary>
+    /// Binds one port, preferring a wildcard prefix so a container reaching the
+    /// host across the bridge network is served.
+    /// </summary>
+    private static HttpListener Listen(int port)
+    {
+        var listener = new HttpListener();
+        listener.Prefixes.Add($"http://+:{port}/");
         try
         {
             listener.Start();
+            return listener;
         }
-        catch (HttpListenerException)
+        catch (HttpListenerException) when (WildcardPrefixesAreRestricted())
         {
-            // Restricted environments disallow wildcard prefixes; loopback still
-            // proves the assertion for a host-network scenario.
-            listener = new HttpListener();
-            listener.Prefixes.Add($"http://127.0.0.1:{chosen}/");
-            listener.Start();
+            // Some environments reserve wildcard prefixes for elevated processes.
+            // Loopback still proves the assertion for a host-network scenario, and
+            // is retried on the same port because that failure was about the
+            // prefix, not about the port being taken. Where wildcards are not
+            // restricted, a bind failure means the port is gone and the caller
+            // picks a new one instead.
+            listener.Close();
+            var loopback = new HttpListener();
+            loopback.Prefixes.Add($"http://127.0.0.1:{port}/");
+            loopback.Start();
+            return loopback;
         }
-
-        return new FhirCallbackWatch(listener, $"{DockerHostAddress()}:{chosen}/fhir");
     }
+
+    /// <summary>
+    /// Whether wildcard prefixes need elevation here. Only Windows restricts them.
+    /// </summary>
+    private static bool WildcardPrefixesAreRestricted() =>
+        System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+            System.Runtime.InteropServices.OSPlatform.Windows);
 
     /// <summary>
     /// The address a container uses to reach the test host. The interop stack adds

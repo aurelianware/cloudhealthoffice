@@ -115,10 +115,17 @@ public sealed class InteropHttpClient : IDisposable
     /// </summary>
     /// <param name="url">The service endpoint, built from the id discovery advertised.</param>
     /// <param name="request">The request to send; its JSON is captured for evidence.</param>
+    /// <param name="serviceId">
+    /// The service id resolved from discovery, recorded on the interaction. Passed
+    /// in rather than parsed back out of the URL: the caller holds the value the
+    /// server actually advertised, and re-deriving it would be guesswork that
+    /// silently degrades once a server uses an id the URL shape does not survive.
+    /// </param>
     /// <param name="kind">Interaction kind recorded in evidence, e.g. "cds-hooks-invoke".</param>
     public async Task<(CdsHooksResponse? Response, InteropResponse Raw)> PostCdsHooksAsync(
         string url,
         CdsHooksRequest request,
+        string? serviceId = null,
         string kind = "cds-hooks-invoke",
         CancellationToken cancellationToken = default)
     {
@@ -128,7 +135,7 @@ public sealed class InteropHttpClient : IDisposable
 
         var raw = await SendAsync(
             HttpMethod.Post, url, content, json, cancellationToken,
-            kind: kind, hook: request.Hook);
+            kind: kind, hook: request.Hook, serviceId: serviceId);
 
         return (raw.IsSuccess ? CdsHooksResponse.Parse(raw.Body) : null, raw);
     }
@@ -216,7 +223,8 @@ public sealed class InteropHttpClient : IDisposable
         string? requestBodyForCapture,
         CancellationToken cancellationToken,
         string? kind = null,
-        string? hook = null)
+        string? hook = null,
+        string? serviceId = null)
     {
         var sequence = ++_sequence;
         var stopwatch = Stopwatch.StartNew();
@@ -252,6 +260,7 @@ public sealed class InteropHttpClient : IDisposable
                 RequestHeaders = headers,
                 Kind = kind,
                 Hook = hook,
+                ServiceId = serviceId,
             };
 
             interaction = interaction with
@@ -297,6 +306,7 @@ public sealed class InteropHttpClient : IDisposable
                 RequestHeaders = headers,
                 Kind = kind,
                 Hook = hook,
+                ServiceId = serviceId,
                 TransportError = $"{ex.GetType().Name}: {ex.Message}",
             };
 
