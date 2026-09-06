@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using CloudHealthOffice.Consent.Contracts;
+using FhirService.Services.Consent;
 using FhirService.Middleware;
 
 namespace FhirService.Services.PayerToPayer;
@@ -23,7 +24,7 @@ namespace FhirService.Services.PayerToPayer;
 /// snapshots, and no snapshots means no authorization. A registry that is down
 /// stops the exchange rather than waving it through.
 /// </summary>
-public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSource
+public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSource, IConsentSource
 {
     public const string HttpClientName = "ChoConsentService";
 

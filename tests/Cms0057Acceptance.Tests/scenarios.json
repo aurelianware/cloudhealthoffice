@@ -1,5 +1,5 @@
 {
-  "$comment": "CMS-0057-F acceptance scenario manifest — the machine-readable SOURCE OF TRUTH for scenario status. The acceptance suite validates its [Trait(\"Scenario\",...)] against this file (see ScenarioManifestTests), and tools/Cms0057Evidence generates versioned evidence from it. Statuses are one of: PASSABLE, PARTIAL, GAP, N/A. 'replace' is Cloud Health Office product capability (Replace mode). 'augment' is external-core integration capability (per backend). Do not invent Facets/HealthEdge results until an integration exists.",
+  "$comment": "CMS-0057-F acceptance scenario manifest \u2014 the machine-readable SOURCE OF TRUTH for scenario status. The acceptance suite validates its [Trait(\"Scenario\",...)] against this file (see ScenarioManifestTests), and tools/Cms0057Evidence generates versioned evidence from it. Statuses are one of: PASSABLE, PARTIAL, GAP, N/A. 'replace' is Cloud Health Office product capability (Replace mode). 'augment' is external-core integration capability (per backend). Do not invent Facets/HealthEdge results until an integration exists.",
   "schemaVersion": 1,
   "capabilityDefinitions": {
     "PASSABLE": "The repository's defined acceptance scenario is supported by the tested implementation. Not a CMS certification and not by itself production readiness for a specific payer deployment.",
@@ -10,150 +10,298 @@
   "scenarios": [
     {
       "id": "PAS-01",
-      "name": "CRD — is prior authorization required?",
+      "name": "CRD \u2014 is prior authorization required?",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT benefit/auth-required lookup is per-engagement integration work; product path runs on the CHO rule store." } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "QNXT benefit/auth-required lookup is per-engagement integration work; product path runs on the CHO rule store."
+        }
+      }
     },
     {
       "id": "PAS-02",
-      "name": "DTR — correct documentation questionnaire",
+      "name": "DTR \u2014 correct documentation questionnaire",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "PAS-03",
-      "name": "PAS submit — create prior authorization",
+      "name": "PAS submit \u2014 create prior authorization",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT AUTH_CREATE is per-engagement integration work; product path persists via ChoAuthorizationBackend." } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "QNXT AUTH_CREATE is per-engagement integration work; product path persists via ChoAuthorizationBackend."
+        }
+      }
     },
     {
       "id": "PAS-04",
       "name": "PAS inquiry / status",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PARTIAL", "rationale": "Status is persisted and retrievable via the CHO backend; a FHIR PAS $inquire operation is not implemented." },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT status inquiry is per-engagement integration work." } }
+      "replace": {
+        "status": "PARTIAL",
+        "rationale": "Status is persisted and retrievable via the CHO backend; a FHIR PAS $inquire operation is not implemented."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "QNXT status inquiry is per-engagement integration work."
+        }
+      }
     },
     {
       "id": "PAS-05",
       "name": "PAS specific denial reason",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT-sourced denial reasons are per-engagement integration work." } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "QNXT-sourced denial reasons are per-engagement integration work."
+        }
+      }
     },
     {
       "id": "PAS-06",
       "name": "PAS decision timeframe (72h / 7 calendar days)",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "PAS-07",
       "name": "CDex additional-information exchange",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PARTIAL", "rationale": "A pended decision signals outstanding review (X12 A4); a full CDex request/response round-trip is not implemented." },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PARTIAL",
+        "rationale": "A pended decision signals outstanding review (X12 A4); a full CDex request/response round-trip is not implemented."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "PAS-08",
       "name": "Drug exclusion from medical PA scope",
       "capability": "PriorAuthorization",
-      "replace": { "status": "PASSABLE", "rationale": "The CHO Replace-mode authorization workflow enforces benefit drug/service exclusions: a request for a plan-excluded drug (or the pharmacy service type, out of the CMS-0057-F medical scope) is recorded as a coded denial and persisted with audit history, rather than following the ordinary approvable path." },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PASSABLE",
+        "rationale": "The CHO Replace-mode authorization workflow enforces benefit drug/service exclusions: a request for a plan-excluded drug (or the pharmacy service type, out of the CMS-0057-F medical scope) is recorded as a coded denial and persisted with audit history, rather than following the ordinary approvable path."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "PROV-01",
-      "name": "Provider Access — attributed member data pull",
+      "name": "Provider Access \u2014 attributed member data pull",
       "capability": "ProviderAccess",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT provider directory pull is per-engagement integration work; product path uses the CHO projection." } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "QNXT provider directory pull is per-engagement integration work; product path uses the CHO projection."
+        }
+      }
     },
     {
       "id": "PROV-02",
-      "name": "Provider Access — attribution enforcement",
+      "name": "Provider Access \u2014 attribution enforcement",
       "capability": "ProviderAccess",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "PROV-03",
-      "name": "Provider Access — patient opt-out honored",
+      "name": "Provider Access \u2014 patient opt-out honored",
       "capability": "ProviderAccess",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "P2P-01",
       "name": "Payer-to-Payer inbound respond",
       "capability": "PayerToPayer",
-      "replace": { "status": "PASSABLE", "rationale": "CHO Replace mode implements inbound Payer-to-Payer respond: a dedicated application service (PayerToPayerExchangeService) deterministically matches the transitioning member within the tenant, enforces the member's authorization via a server-side consent gate (never a caller-supplied value; an Active consent whose purpose is explicitly PayerToPayerExchange \u2014 see P2P-03), and assembles a member-scoped FHIR export (Patient + Coverage + CARIN EOBs) from CHO-owned data with a 5-year lookback and an audit trail. Outbound initiation (P2P-02) and $member-match/concurrent coverage (P2P-04) are separate paths, implemented in their own scenarios." },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
+      "replace": {
+        "status": "PASSABLE",
+        "rationale": "CHO Replace mode implements inbound Payer-to-Payer respond: a dedicated application service (PayerToPayerExchangeService) deterministically matches the transitioning member within the tenant, enforces the member's authorization via a server-side consent gate (never a caller-supplied value; an Active consent whose purpose is explicitly PayerToPayerExchange \u2014 see P2P-03), and assembles a member-scoped FHIR export (Patient + Coverage + CARIN EOBs) from CHO-owned data with a 5-year lookback and an audit trail. Outbound initiation (P2P-02) and $member-match/concurrent coverage (P2P-04) are separate paths, implemented in their own scenarios."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "No external-core P2P integration."
+        }
+      }
     },
     {
       "id": "P2P-02",
       "name": "Payer-to-Payer outbound initiate",
       "capability": "PayerToPayer",
-      "replace": { "status": "PASSABLE", "rationale": "Cloud Health Office Replace mode initiates the outbound exchange as the member\u2019s new payer: a dedicated application service (PayerToPayerOutboundService) resolves the member and the prior-payer coverage context from CHO-owned data (tenant-scoped; overlapping coverages with the target payer refuse rather than guess), resolves the target payer through a trusted, tenant-scoped, fail-closed directory (IPayerToPayerEndpointResolver \u2014 a caller names a payer id, never a URL, and a non-HTTPS entry is rejected, so no caller-controlled request forgery), enforces the member\u2019s Payer-to-Payer consent purpose server-side before anything leaves CHO, and again before the export (see P2P-03), calls the remote Patient/$member-match through a transport seam (IPayerToPayerRemoteClient), requests the member-data export ONLY after a single member resolves, and validates the returned FHIR Bundle for member consistency (single matched Patient; no foreign Patient reference) before stamping it with source-payer Provenance. Outcomes are structured (target payer not configured / not authorized / no match / ambiguous / remote unauthorized / remote unavailable / invalid response), recorded on a durable-shaped exchange record with an idempotency key so a retried transition resumes one exchange, and audited without demographics, payloads, endpoint URLs, or credentials. A validated package is then durably ingested (PayerToPayerPackageIngestionService): resources are classified against the types CHO's FHIR surface actually serves, intra-package references are normalized to CHO's imported identities, and every row is staged under a deterministic import key (tenant + member + source payer + type + source id) before a single-document ledger commit publishes it \u2014 so a replay does not duplicate history, two payers' records are never merged, and a failed ingestion leaves the member's record untouched rather than half-written. Imported data is stored apart from CHO's authoritative member/enrollment/claim stores, so a prior payer's Patient or Coverage can never become CHO-owned, and the exchange reaches Completed only after the commit lands. Resource types CHO does not serve (Condition, Observation, and the rest of the USCDI clinical set \u2014 the same gap that keeps PAT-02 PARTIAL) are named and counted on the exchange and preserved in an archived package rather than ingested or dropped. Imported data is not yet projected into CHO's FHIR read APIs; live payer onboarding (SMART Backend Services / UDAP client registration, mTLS) remains deployment integration behind the credential-provider seam. " },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration: outbound initiation against a QNXT-backed deployment is not implemented." } }
+      "replace": {
+        "status": "PASSABLE",
+        "rationale": "Cloud Health Office Replace mode initiates the outbound exchange as the member\u2019s new payer: a dedicated application service (PayerToPayerOutboundService) resolves the member and the prior-payer coverage context from CHO-owned data (tenant-scoped; overlapping coverages with the target payer refuse rather than guess), resolves the target payer through a trusted, tenant-scoped, fail-closed directory (IPayerToPayerEndpointResolver \u2014 a caller names a payer id, never a URL, and a non-HTTPS entry is rejected, so no caller-controlled request forgery), enforces the member\u2019s Payer-to-Payer consent purpose server-side before anything leaves CHO, and again before the export (see P2P-03), calls the remote Patient/$member-match through a transport seam (IPayerToPayerRemoteClient), requests the member-data export ONLY after a single member resolves, and validates the returned FHIR Bundle for member consistency (single matched Patient; no foreign Patient reference) before stamping it with source-payer Provenance. Outcomes are structured (target payer not configured / not authorized / no match / ambiguous / remote unauthorized / remote unavailable / invalid response), recorded on a durable-shaped exchange record with an idempotency key so a retried transition resumes one exchange, and audited without demographics, payloads, endpoint URLs, or credentials. A validated package is then durably ingested (PayerToPayerPackageIngestionService): resources are classified against the types CHO's FHIR surface actually serves, intra-package references are normalized to CHO's imported identities, and every row is staged under a deterministic import key (tenant + member + source payer + type + source id) before a single-document ledger commit publishes it \u2014 so a replay does not duplicate history, two payers' records are never merged, and a failed ingestion leaves the member's record untouched rather than half-written. Imported data is stored apart from CHO's authoritative member/enrollment/claim stores, so a prior payer's Patient or Coverage can never become CHO-owned, and the exchange reaches Completed only after the commit lands. Resource types CHO does not serve (Condition, Observation, and the rest of the USCDI clinical set \u2014 the same gap that keeps PAT-02 PARTIAL) are named and counted on the exchange and preserved in an archived package rather than ingested or dropped. Imported data is not yet projected into CHO's FHIR read APIs; live payer onboarding (SMART Backend Services / UDAP client registration, mTLS) remains deployment integration behind the credential-provider seam. "
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "No external-core P2P integration: outbound initiation against a QNXT-backed deployment is not implemented."
+        }
+      }
     },
     {
       "id": "P2P-03",
       "name": "Payer-to-Payer opt-in enforcement",
       "capability": "PayerToPayer",
-      "replace": { "status": "PASSABLE", "rationale": "Payer-to-Payer authorization is a first-class consent purpose, enforced server-side in both directions. The consent registry carries an explicit purpose-of-use axis (ConsentPurposeOfUse: PayerToPayerExchange, ProviderAccess) orthogonal to the \u00a7164.508 instrument type, aligned with FHIR Consent.provision.purpose; a shared ConsentAuthorizationPolicy is the single answer both the inbound respond (PayerToPayerExchangeService) and the outbound initiation (PayerToPayerOutboundService) evaluate, so neither direction can drift more permissive. An exchange requires an Active consent FOR the Payer-to-Payer purpose that is in force at evaluation time: a Provider Access consent does not authorize it, a consent with no purpose recorded does not authorize it (records predating the axis default to Unspecified, so no history is silently reinterpreted), and Draft, Revoked, expired, and not-yet-effective records each deny with their own reason code. The period is applied by the policy rather than trusted from the stored status, so a lapsed authorization cannot be used in the window before the registry writes the transition. Consent is never accepted from a caller \u2014 no request type on either direction carries one \u2014 and an unreadable registry denies rather than defaulting open. Authorization is re-evaluated at each disclosure boundary: outbound checks before the $member-match (so an unauthorized member\u2019s identity never leaves CHO) and again before the export, and a revocation landing between the two stops the data request. A retry re-asks the registry rather than inheriting the earlier decision. Each exchange and audit record carries the authorizing consent id and a structured reason code, so \u201cwhat specifically allowed this disclosure?\u201d is answerable from durable state without any consent content. The registry in consent-service is authoritative when configured; Demo mode serves the same purpose/status/period records through the same policy. Provider Access enforcement does not yet read the registry \u2014 CONSENT-01 stays PARTIAL for that reason." },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
+      "replace": {
+        "status": "PASSABLE",
+        "rationale": "Payer-to-Payer authorization is a first-class consent purpose, enforced server-side in both directions. The consent registry carries an explicit purpose-of-use axis (ConsentPurposeOfUse: PayerToPayerExchange, ProviderAccess) orthogonal to the \u00a7164.508 instrument type, aligned with FHIR Consent.provision.purpose; a shared ConsentAuthorizationPolicy is the single answer both the inbound respond (PayerToPayerExchangeService) and the outbound initiation (PayerToPayerOutboundService) evaluate, so neither direction can drift more permissive. An exchange requires an Active consent FOR the Payer-to-Payer purpose that is in force at evaluation time: a Provider Access consent does not authorize it, a consent with no purpose recorded does not authorize it (records predating the axis default to Unspecified, so no history is silently reinterpreted), and Draft, Revoked, expired, and not-yet-effective records each deny with their own reason code. The period is applied by the policy rather than trusted from the stored status, so a lapsed authorization cannot be used in the window before the registry writes the transition. Consent is never accepted from a caller \u2014 no request type on either direction carries one \u2014 and an unreadable registry denies rather than defaulting open. Authorization is re-evaluated at each disclosure boundary: outbound checks before the $member-match (so an unauthorized member\u2019s identity never leaves CHO) and again before the export, and a revocation landing between the two stops the data request. A retry re-asks the registry rather than inheriting the earlier decision. Each exchange and audit record carries the authorizing consent id and a structured reason code, so \u201cwhat specifically allowed this disclosure?\u201d is answerable from durable state without any consent content. The registry in consent-service is authoritative when configured; Demo mode serves the same purpose/status/period records through the same policy. Provider Access enforcement does not yet read the registry \u2014 CONSENT-01 stays PARTIAL for that reason."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "No external-core P2P integration."
+        }
+      }
     },
     {
       "id": "P2P-04",
       "name": "Payer-to-Payer member-match / concurrent coverage",
       "capability": "PayerToPayer",
-      "replace": { "status": "PASSABLE", "rationale": "Cloud Health Office Replace mode implements the FHIR Patient/$member-match operation as a dedicated application service (PayerToPayerMemberMatchService): it resolves a transitioning member across payer contexts within the tenant from normalized identity attributes, using a deterministic strong-vs-supporting policy (a strong identifier — member/subscriber id or SSN — or the family-name + birth-date pair, with any contradiction failing closed) so zero candidates yield no match, more than one yields ambiguous, and cross-tenant identities are never visible. Concurrent/overlapping coverage is selected deterministically by requested payer/subscriber context and effective date (overlaps without a discriminator refuse rather than guess). The resolved member/coverage context is consumable by the P2P-01 export path. The same resolved context is what the outbound initiation path (P2P-02) uses when interpreting a remote payer's match; Provider Access enforcement through the consent registry (CONSENT-01) remains PARTIAL." },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "No external-core P2P integration." } }
+      "replace": {
+        "status": "PASSABLE",
+        "rationale": "Cloud Health Office Replace mode implements the FHIR Patient/$member-match operation as a dedicated application service (PayerToPayerMemberMatchService): it resolves a transitioning member across payer contexts within the tenant from normalized identity attributes, using a deterministic strong-vs-supporting policy (a strong identifier \u2014 member/subscriber id or SSN \u2014 or the family-name + birth-date pair, with any contradiction failing closed) so zero candidates yield no match, more than one yields ambiguous, and cross-tenant identities are never visible. Concurrent/overlapping coverage is selected deterministically by requested payer/subscriber context and effective date (overlaps without a discriminator refuse rather than guess). The resolved member/coverage context is consumable by the P2P-01 export path. The same resolved context is what the outbound initiation path (P2P-02) uses when interpreting a remote payer's match; Provider Access enforcement through the consent registry (CONSENT-01) remains PARTIAL."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "No external-core P2P integration."
+        }
+      }
     },
     {
       "id": "PAT-01",
-      "name": "Patient Access — member claims / CARIN EOB",
+      "name": "Patient Access \u2014 member claims / CARIN EOB",
       "capability": "PatientAccess",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "QNXT claims read is per-engagement integration work; product path projects CHO claims to CARIN EOB." } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "QNXT claims read is per-engagement integration work; product path projects CHO claims to CARIN EOB."
+        }
+      }
     },
     {
       "id": "PAT-02",
-      "name": "Patient Access — US Core clinical",
+      "name": "Patient Access \u2014 US Core clinical",
       "capability": "PatientAccess",
-      "replace": { "status": "PARTIAL", "rationale": "Demographics validate against US Core; broader USCDI clinical data lives in an external clinical store." },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PARTIAL",
+        "rationale": "Demographics validate against US Core; broader USCDI clinical data lives in an external clinical store."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "PAT-03",
-      "name": "Patient Access — PA data (drugs excluded)",
+      "name": "Patient Access \u2014 PA data (drugs excluded)",
       "capability": "PatientAccess",
-      "replace": { "status": "PARTIAL", "rationale": "PA data is a recognized resource type; the >=1-year retention / 1-business-day freshness job is not implemented." },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PARTIAL",
+        "rationale": "PA data is a recognized resource type; the >=1-year retention / 1-business-day freshness job is not implemented."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "SEC-01",
       "name": "SMART on FHIR / OAuth",
       "capability": "Security",
-      "replace": { "status": "PARTIAL", "rationale": "SMART discovery, scopes, and PKCE are served; the identity provider is configured per engagement." },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PARTIAL",
+        "rationale": "SMART discovery, scopes, and PKCE are served; the identity provider is configured per engagement."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "CONSENT-01",
       "name": "Single consent registry",
       "capability": "Consent",
-      "replace": { "status": "PARTIAL", "rationale": "One registry (consent-service) carries the opt-in/opt-out lifecycle and now distinguishes what each consent authorizes via an explicit purpose-of-use axis, on one aggregate and one state machine rather than separate stores per purpose. Payer-to-Payer authorization is enforced through it (P2P-03). It stays PARTIAL because the Provider Access READ PATH does not consult the registry: Provider Access is governed by attribution plus SMART scopes today, so the registry can express a Provider Access consent that nothing enforces. Closing this means wiring the Provider Access path to the same policy \u2014 it is deliberately NOT claimed on the back of the Payer-to-Payer work." },
-      "augment": { "qnxt": { "status": "N/A" } }
+      "replace": {
+        "status": "PASSABLE",
+        "rationale": "One registry (consent-service) carries the opt-in/opt-out lifecycle and a purpose-of-use axis, on one aggregate and one state machine rather than separate stores per purpose. BOTH purposes are now enforced server-side through it. Payer-to-Payer (P2P-03) and Provider Access reach their answers through the same IConsentEvaluator and the same pure ConsentAuthorizationPolicy, so neither can drift more permissive than the other and a consent granted for one purpose satisfies nothing for the other. Provider Access authorization is composed by ProviderAccessAuthorizationService and enforced by a GLOBAL MVC filter covering every member-scoped FHIR resource the SMART layer serves (a structural test pins the two inventories together, so a new controller cannot bypass the layer), placed after tenant resolution and before any action body so PHI is never assembled for an unauthorized request. Four independent, mandatory controls: authentication and SMART scope (upstream middleware, not re-implemented), provider/member attribution, and an active ProviderAccess-purpose consent \u2014 each can refuse alone, and the composed decision fails closed. Tenant and member must both match the consent; the tenant comes from the authenticated context. Registry faults, an empty catalog, a missing member context, and an unidentified caller all deny rather than degrading to SMART-plus-attribution. Denials are externally uniform (one 403 OperationOutcome) so a caller cannot distinguish 'not attributed' from 'no consent' from 'no such member' and enumerate the membership; the structured category is kept in the PHI-free audit record instead. Attribution is served from a configured panel catalog: it enforces for real and fails closed, but no live roster/attribution feed from a payer source system is wired up \u2014 that remains engagement integration behind IProviderAttributionSource."
+      },
+      "augment": {
+        "qnxt": {
+          "status": "N/A"
+        }
+      }
     },
     {
       "id": "METRICS-01",
       "name": "Prior-authorization public metric set",
       "capability": "Metrics",
-      "replace": { "status": "PASSABLE" },
-      "augment": { "qnxt": { "status": "GAP", "rationale": "Metrics over QNXT-owned authorization data are per-engagement integration work; product path derives from the persisted CHO authorization record. The full public-metrics extract job remains engagement work." } }
+      "replace": {
+        "status": "PASSABLE"
+      },
+      "augment": {
+        "qnxt": {
+          "status": "GAP",
+          "rationale": "Metrics over QNXT-owned authorization data are per-engagement integration work; product path derives from the persisted CHO authorization record. The full public-metrics extract job remains engagement work."
+        }
+      }
     }
   ]
 }

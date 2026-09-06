@@ -63,13 +63,23 @@ internal static class AcceptanceContext
     public static FhirService.Services.PayerToPayer.IPayerToPayerConsentGate ConsentGateFor(
         params FhirService.Services.PayerToPayer.ConfiguredConsentRecord[] records)
         => new FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate(
+            ConsentEvaluatorFor(records));
+
+    /// <summary>
+    /// The shared purpose-agnostic evaluator over exactly the records given.
+    /// Payer-to-Payer and Provider Access both read it, so a test that grants one
+    /// purpose is visibly not granting the other.
+    /// </summary>
+    public static FhirService.Services.Consent.IConsentEvaluator ConsentEvaluatorFor(
+        params FhirService.Services.PayerToPayer.ConfiguredConsentRecord[] records)
+        => new FhirService.Services.Consent.RegistryConsentEvaluator(
             new FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource(
                 Microsoft.Extensions.Options.Options.Create(
                     new FhirService.Services.PayerToPayer.PayerToPayerConsentOptions
                     {
                         ConsentsByTenant = new() { [TenantId] = records.ToList() },
                     })),
-            Logger<FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate>());
+            Logger<FhirService.Services.Consent.RegistryConsentEvaluator>());
 
     /// <summary>Attaches a Demo-tenant HttpContext to a controller (mirrors TenantMiddleware).</summary>
     public static T WithTenant<T>(this T controller) where T : ControllerBase

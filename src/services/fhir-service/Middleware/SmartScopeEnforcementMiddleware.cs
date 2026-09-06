@@ -30,18 +30,26 @@ public class SmartScopeEnforcementMiddleware
     // patient|user|system/{Type}.read scope as the existing resources.
     // See AppealsController.cs in appeals-service for the domain model;
     // see FhirAppealMapper.cs in this service for the projection.
-    private static readonly HashSet<string> KnownResources =
-    [
-        "Patient",
-        "Coverage",
-        "ExplanationOfBenefit",
-        "Encounter",
-        "Claim",
-        "Task",
-        "Communication",
-        "DocumentReference",
-        "ClaimResponse"
-    ];
+    // Case-INSENSITIVE: ASP.NET route matching is, so /fhir/r4/patient/123 hits
+    // the same controller as /fhir/r4/Patient/123. Matching ordinally here meant
+    // a lower-cased path parsed to an unknown resource type and fell through the
+    // "pass through unenforced" branch below — skipping the scope check entirely.
+    // ParseResourceType returns the canonical spelling so the scope strings built
+    // from it still match the token's.
+    private static readonly HashSet<string> KnownResources = new(
+        new[]
+        {
+            "Patient",
+            "Coverage",
+            "ExplanationOfBenefit",
+            "Encounter",
+            "Claim",
+            "Task",
+            "Communication",
+            "DocumentReference",
+            "ClaimResponse"
+        },
+        StringComparer.OrdinalIgnoreCase);
 
     private readonly RequestDelegate _next;
     private readonly ILogger<SmartScopeEnforcementMiddleware> _logger;
@@ -177,12 +185,16 @@ public class SmartScopeEnforcementMiddleware
     /// </summary>
     private static string? ParseResourceType(PathString path)
     {
-        // path = /fhir/r4/{ResourceType}[/{id}]
         var segments = path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments == null || segments.Length < 3) return null;  // ["fhir","r4",...]
+        if (segments is not { Length: >= 3 })
+            return null;
 
-        var candidate = segments[2]; // index 0="fhir", 1="r4", 2=resourceType
-        return KnownResources.Contains(candidate) ? candidate : null;
+        // Return the CANONICAL spelling when the segment names a known resource,
+        // so downstream scope strings ("user/Patient.read") are built from it
+        // rather than from whatever casing the caller sent.
+        return KnownResources.TryGetValue(segments[2], out var canonical)
+            ? canonical
+            : segments[2];
     }
 
     /// <summary>Returns the resource ID from /fhir/r4/{Type}/{id}, or null for searches.</summary>

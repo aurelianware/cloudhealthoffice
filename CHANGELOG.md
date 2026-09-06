@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Enforce Provider Access through the shared consent registry
+
+Payer-to-Payer already ran on a purpose-scoped consent decision; Provider Access
+did not. A provider-shaped token (`user/…` or `system/…`) that passed the SMART
+scope check could read **any** member's record — the acceptance suite even
+asserted that as expected behaviour. Provider Access now composes four
+independent, mandatory controls, and the consent one runs on the same registry
+and the same policy as Payer-to-Payer.
+
+**Four controls, none implying another.** Authentication and SMART scope stay
+where they are (middleware — token validation is not moved or re-implemented).
+On top of them `ProviderAccessAuthorizationService` adds provider/member
+attribution and an active `ConsentPurposeOfUse.ProviderAccess` consent. A correct
+scope implies neither attribution nor consent; attribution does not imply
+consent; consent does not imply attribution; and a Payer-to-Payer consent
+authorizes nothing here. The composed decision fails closed — any one refusal
+denies, and so do a missing tenant, a missing member context, an unidentified
+caller, and an unreadable registry.
+
+**One registry, one policy, now shared by construction.** A new
+`IConsentEvaluator` owns the fail-closed registry read and delegates every
+lifecycle and purpose rule to the existing pure `ConsentAuthorizationPolicy`.
+Payer-to-Payer's gate was refactored onto it rather than keeping its own copy, so
+the two capabilities cannot drift: they differ only in the purpose they ask for.
+`IConsentSource` generalises the registry seam that #1152 introduced — the same
+`HttpConsentRegistryConsentSource` against `consent-service` serves both, and no
+second consent store exists.
+
+**Enforced at one shared boundary, before any PHI is read.**
+`ProviderAccessAuthorizationFilter` is a **global** MVC action filter, not a
+per-controller attribute, so a new member-scoped controller is governed the
+moment it exists. A filter rather than middleware because Provider Access needs
+the tenant and `TenantMiddleware` runs *after* `SmartScopeEnforcementMiddleware`;
+a filter runs after the whole pipeline yet still before any action body. It
+governs every member-scoped resource the SMART layer serves — `Patient`,
+`Coverage`, `ExplanationOfBenefit`, `Encounter`, `Claim`, `Task`,
+`Communication`, `DocumentReference`, `ClaimResponse` — and a structural test
+pins that inventory to the SMART layer's own list so a resource cannot escape one
+by being forgotten in the other. FHIR operations are deliberately excluded:
+`$member-match` and `$member-data-export` have their own Payer-to-Payer
+authorization, and an operation name is not a member id.
+
+**Provider Access is a caller shape, not a route name.** A `user/`- or
+`system/`-scoped token is a provider reading someone else's record. A
+patient-scoped token is Patient Access — the member reading their own data —
+which a Provider Access consent does not govern and is not required for. The
+distinction comes from the token, so it cannot be lost by adding an endpoint.
+
+**Member context is required, not guessed.** `Patient/{id}` names the member;
+otherwise it comes from `?patient=` or the SMART binding. A resource id is never
+resolved to a member, because resolving it means reading the resource being
+authorized. No member context denies — which is why a provider-shaped search
+across the whole membership is now refused rather than returning every member.
+
+**Refusals cannot be used to enumerate.** "Not attributed", "no consent" and "no
+such member" return one identical `403` FHIR `OperationOutcome`; a test asserts
+the bodies are byte-identical. The structured category lives in the audit record
+instead. Decisions are audited with PHI-free identifiers only — tenant, member
+id, caller id, resource type, consent id, category, instant — never
+demographics, clinical payloads, consent narrative, or credentials, with CR/LF
+stripped from ids (CWE-117).
+
+**Attribution, stated honestly.** The repository had **no** attribution code at
+all: PROV-02's "attribution enforcement" test asserted a dictionary miss on an
+unknown id, and the capability text describing Provider Access as "governed by
+attribution plus SMART scopes" was aspirational. Attribution is now a real,
+enforced control backed by a configured panel catalog
+(`Cms0057:ProviderAttribution`) that fails closed on an empty catalog — but no
+live roster feed from a payer source system is wired up, and nothing claims one
+is. That remains engagement integration behind `IProviderAttributionSource`.
+
+Two existing tests asserted the hole and were rewritten rather than deleted:
+`EobSearch_UserToken_CanSearchAnyPatient` (a provider token reading any patient)
+and `PatientSearch_SystemToken_NoPatientBinding` (a backend token listing the
+whole membership) now assert the refusals, alongside new tests for the authorized
+paths.
+
+Acceptance: **CONSENT-01 moves PARTIAL → PASSABLE**, so CHO Replace declares
+16 PASSABLE / 5 PARTIAL / 0 GAP — computed by the evidence generator from the
+manifest, not hard-coded. Payer-to-Payer behaviour is unchanged and its suite
+re-runs green: a Provider Access consent still authorizes no exchange. Remaining
+PARTIAL: PAS-04, PAS-07, PAT-02, PAT-03, SEC-01. Zero GAPs is still not complete
+CMS-0057-F compliance; this is implementation evidence, not certification, and
+the QNXT/external-core column is unchanged.
+
+New documentation: `docs/architecture/provider-access.md`. Updated:
+`docs/architecture/consent.md`, `docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md`,
+`docs/diligence/ADAPTER-STATUS.md`.
+
 ### Dedicated Payer-to-Payer consent lifecycle and enforcement
 
 Payer-to-Payer authorization was a generic Active consent: any active record for

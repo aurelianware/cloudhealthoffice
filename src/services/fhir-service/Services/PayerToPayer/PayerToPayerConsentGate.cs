@@ -1,4 +1,5 @@
 using CloudHealthOffice.Consent.Contracts;
+using FhirService.Services.Consent;
 using Microsoft.Extensions.Options;
 
 namespace FhirService.Services.PayerToPayer;
@@ -31,20 +32,18 @@ public interface IPayerToPayerConsentGate
 }
 
 /// <summary>
-/// Reads the member's consent records for an authorization decision. The
-/// registry in consent-service is the authoritative source; this is the seam
-/// fhir-service reads it through.
+/// The Payer-to-Payer name for the shared consent seam. It adds nothing to
+/// <see cref="IConsentSource"/> — one contract, so the two cannot drift apart in
+/// signature, documentation, or annotation — and exists only so the
+/// Payer-to-Payer wiring keeps a name that says what it is for.
+///
+/// Like every consent source, an implementation returns EVERYTHING on record for
+/// the member: purpose filtering and lifecycle evaluation belong to
+/// <c>ConsentAuthorizationPolicy</c>, so a source cannot widen authorization by
+/// returning the wrong subset.
 /// </summary>
-public interface IPayerToPayerConsentSource
+public interface IPayerToPayerConsentSource : IConsentSource
 {
-    /// <summary>
-    /// The member's consent snapshots within the tenant. Returns everything on
-    /// record for the member — the purpose filtering and lifecycle evaluation
-    /// are the policy's job, so a source cannot accidentally widen authorization
-    /// by returning the wrong subset.
-    /// </summary>
-    Task<IReadOnlyList<ConsentAuthorizationSnapshot>> GetConsentsAsync(
-        string tenantId, string memberId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -84,7 +83,7 @@ public sealed class ConfiguredConsentRecord
 /// Configuration-backed consent source (Demo default, and the fallback when no
 /// consent registry is configured). An empty catalog authorizes no one.
 /// </summary>
-public sealed class ConfiguredPayerToPayerConsentSource : IPayerToPayerConsentSource
+public sealed class ConfiguredPayerToPayerConsentSource : IPayerToPayerConsentSource, IConsentSource
 {
     private readonly IOptions<PayerToPayerConsentOptions> _options;
 
@@ -134,52 +133,12 @@ public sealed class ConsentRegistryPayerToPayerConsentGate : IPayerToPayerConsen
     /// <summary>The purpose a Payer-to-Payer exchange requires. Not configurable.</summary>
     public const ConsentPurposeOfUse RequiredPurpose = ConsentPurposeOfUse.PayerToPayerExchange;
 
-    private readonly IPayerToPayerConsentSource _source;
-    private readonly ILogger<ConsentRegistryPayerToPayerConsentGate> _logger;
+    private readonly IConsentEvaluator _evaluator;
 
-    public ConsentRegistryPayerToPayerConsentGate(
-        IPayerToPayerConsentSource source, ILogger<ConsentRegistryPayerToPayerConsentGate> logger)
-    {
-        _source = source;
-        _logger = logger;
-    }
+    public ConsentRegistryPayerToPayerConsentGate(IConsentEvaluator evaluator)
+        => _evaluator = evaluator;
 
-    public async Task<ConsentDecision> EvaluateAsync(
+    public Task<ConsentDecision> EvaluateAsync(
         string tenantId, string memberId, DateTime? asOfUtc = null, CancellationToken ct = default)
-    {
-        var asOf = asOfUtc ?? DateTime.UtcNow;
-
-        if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(memberId))
-            return ConsentDecision.Deny(
-                RequiredPurpose, ConsentAuthorizationReason.NoConsentOnRecord, asOf);
-
-        IReadOnlyList<ConsentAuthorizationSnapshot> consents;
-        try
-        {
-            consents = await _source.GetConsentsAsync(tenantId, memberId, ct);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // An unreadable registry is not permission. Category only — the
-            // exception can carry registry detail.
-            _logger.LogWarning(
-                "Payer-to-Payer consent lookup failed for tenant={Tenant}; denying ({Fault}).",
-                Clean(tenantId), ex.GetType().Name);
-            return ConsentDecision.Deny(
-                RequiredPurpose, ConsentAuthorizationReason.NoConsentOnRecord, asOf);
-        }
-
-        return ConsentAuthorizationPolicy.Evaluate(tenantId, memberId, RequiredPurpose, consents, asOf);
-    }
-
-    /// <summary>Strips CR/LF so an id cannot forge a log entry (CWE-117).</summary>
-    private static string Clean(string? value)
-        => string.IsNullOrEmpty(value)
-            ? string.Empty
-            : value.Replace("\r", string.Empty, StringComparison.Ordinal)
-                   .Replace("\n", string.Empty, StringComparison.Ordinal);
+        => _evaluator.EvaluateAsync(tenantId, memberId, RequiredPurpose, asOfUtc, ct);
 }

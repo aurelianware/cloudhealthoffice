@@ -59,12 +59,25 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         ("BulkExport", FhirAdapterModes.Demo, "BulkExportService scaffold"),
         // Purpose-scoped consent on one registry: ConsentPurposeOfUse
         // (PayerToPayerExchange / ProviderAccess) evaluated by the shared
-        // ConsentAuthorizationPolicy. Payer-to-Payer is enforced through it in
-        // both directions; the Provider Access READ PATH is not — that path is
-        // governed by attribution plus SMART scopes (CONSENT-01 PARTIAL).
+        // ConsentAuthorizationPolicy. BOTH purposes are enforced server-side
+        // through it — Payer-to-Payer in both directions, and the Provider Access
+        // read path via ProviderAccessAuthorizationFilter — reaching their answers
+        // through the same IConsentEvaluator and the same policy.
         ("Consent", FhirAdapterModes.Demo,
             "consent-service registry (ConsentPurposeOfUse + ConsentAuthorizationPolicy; "
-            + "PHI-free authorization-snapshots projection)"),
+            + "PHI-free authorization-snapshots projection) enforced for Payer-to-Payer "
+            + "and Provider Access through one shared evaluator"),
+        // Provider Access over CHO-owned data. NOT a complete capability:
+        // attribution panels come from configuration, so no live roster feed from
+        // a payer source system is wired up (engagement integration behind
+        // IProviderAttributionSource); Payer-to-Payer imported data is not yet
+        // projected into these reads; and no external-core (QNXT/Facets/
+        // HealthEdge) Provider Access integration exists.
+        ("ProviderAccess", FhirAdapterModes.Demo,
+            "ProviderAccessAuthorizationService (authentication + SMART scope + provider/member "
+            + "attribution + active ProviderAccess-purpose consent, each independent and mandatory, "
+            + "composed fail-closed) enforced by a global ProviderAccessAuthorizationFilter over every "
+            + "member-scoped FHIR resource"),
         // Payer-to-Payer over CHO-owned data: inbound respond (P2P-01),
         // member-match (P2P-04), outbound initiation (P2P-02), and durable
         // ingestion of what comes back. This is NOT a complete Payer-to-Payer

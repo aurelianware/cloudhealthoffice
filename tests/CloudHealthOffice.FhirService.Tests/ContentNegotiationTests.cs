@@ -35,6 +35,19 @@ public class ContentNegotiationTests : IClassFixture<FhirTestWebAppFactory>
         return client;
     }
 
+    /// <summary>
+    /// A patient-scoped (Patient Access) client — the member reading their own
+    /// record. Not governed by Provider Access consent, which is a control on
+    /// disclosure to a THIRD party.
+    /// </summary>
+    private HttpClient CreatePatientScopedClient(string patientId = "pat-001")
+    {
+        var client = _factory.CreateClient();
+        var token = _factory.IssueToken("patient/*.read", patientId);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
     // ── /fhir/r4/metadata ────────────────────────────────────────────────────
 
     [Fact]
@@ -95,12 +108,17 @@ public class ContentNegotiationTests : IClassFixture<FhirTestWebAppFactory>
     }
 
     [Fact]
-    public async Task PatientRead_UnknownId_Returns404WithOperationOutcome()
+    public async Task PatientRead_UnknownMember_ReturnsUniformForbiddenOperationOutcome()
     {
         var client = CreateAuthenticatedClient();
 
+        // CONSENT-01: a provider-shaped caller asking for a member outside its
+        // panel gets the same refusal whether or not the member exists — a 404
+        // here would confirm non-membership and let a caller enumerate. The
+        // response is still a FHIR OperationOutcome in fhir+json, which is what
+        // this suite is about.
         var response = await client.GetAsync("/fhir/r4/Patient/does-not-exist");
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         var body = await response.Content.ReadAsStringAsync();
         var outcome = JsonSerializer.Deserialize<OperationOutcome>(body, FhirOptions);
@@ -114,8 +132,14 @@ public class ContentNegotiationTests : IClassFixture<FhirTestWebAppFactory>
     [Fact]
     public async Task PatientSearch_ReturnsSearchsetBundle()
     {
-        var client = CreateAuthenticatedClient();
+        var client = CreatePatientScopedClient();
 
+        // Driven with a patient-scoped token: a provider-shaped token searching
+        // the membership by name has no member context to authorize against and
+        // is refused (see SmartScopeEnforcementTests). Patient Access — the
+        // member reading their own record — is not governed by Provider Access
+        // consent, and still exercises the searchset content negotiation this
+        // test is for.
         var response = await client.GetAsync("/fhir/r4/Patient?name=Smith");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -142,12 +166,15 @@ public class ContentNegotiationTests : IClassFixture<FhirTestWebAppFactory>
     }
 
     [Fact]
-    public async Task EobSearch_WithoutPatientOrId_Returns400()
+    public async Task EobSearch_WithoutMemberContext_IsRefused()
     {
         var client = CreateAuthenticatedClient();
 
+        // CONSENT-01: with no member named, there is no consent to evaluate, so
+        // the authorization layer refuses before the controller's own 400 guard
+        // is reached. Failing closed outranks the more descriptive error.
         var response = await client.GetAsync("/fhir/r4/ExplanationOfBenefit");
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         var body = await response.Content.ReadAsStringAsync();
         var outcome = JsonSerializer.Deserialize<OperationOutcome>(body, FhirOptions);

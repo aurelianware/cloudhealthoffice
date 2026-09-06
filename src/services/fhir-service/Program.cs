@@ -164,17 +164,40 @@ if (!string.IsNullOrWhiteSpace(consentServiceUrl))
             client => client.BaseAddress = new Uri(consentServiceUrl))
         .AddHttpMessageHandler<TenantHeaderPropagationHandler>()
         .AddHttpMessageHandler<CorrelationIdPropagationHandler>();
-    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource,
-        FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource>(sp =>
+        sp.GetRequiredService<FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource>());
+    builder.Services.AddScoped<FhirService.Services.Consent.IConsentSource>(sp =>
+        sp.GetRequiredService<FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource>());
 }
 else
 {
-    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource,
-        FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource>(sp =>
+        sp.GetRequiredService<FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>());
+    builder.Services.AddScoped<FhirService.Services.Consent.IConsentSource>(sp =>
+        sp.GetRequiredService<FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>());
 }
+
+// ONE evaluator for every purpose: the same fail-closed registry read and the
+// same ConsentAuthorizationPolicy answer Payer-to-Payer and Provider Access, so
+// neither can drift more permissive than the other.
+builder.Services.AddScoped<FhirService.Services.Consent.IConsentEvaluator,
+    FhirService.Services.Consent.RegistryConsentEvaluator>();
 
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentGate,
     FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate>();
+
+// Provider Access authorization (CONSENT-01). Attribution and the
+// ProviderAccess-purpose consent decision, composed on top of the
+// authentication and SMART-scope controls the middleware already enforces.
+builder.Services.Configure<FhirService.Services.ProviderAccess.ProviderAttributionOptions>(
+    builder.Configuration.GetSection(
+        FhirService.Services.ProviderAccess.ProviderAttributionOptions.SectionName));
+builder.Services.AddScoped<FhirService.Services.ProviderAccess.IProviderAttributionSource,
+    FhirService.Services.ProviderAccess.ConfiguredProviderAttributionSource>();
+builder.Services.AddScoped<FhirService.Services.ProviderAccess.IProviderAccessAuthorizationService,
+    FhirService.Services.ProviderAccess.ProviderAccessAuthorizationService>();
 builder.Services.AddSingleton<FhirService.Services.PayerToPayer.IPayerToPayerExportBuilder,
     FhirService.Services.PayerToPayer.PayerToPayerExportBuilder>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExchangeService,
@@ -401,6 +424,13 @@ builder.Services.AddControllers(options =>
 {
     options.InputFormatters.Insert(0, new FhirInputFormatter());
     options.OutputFormatters.Insert(0, new FhirOutputFormatter());
+
+    // Provider Access authorization, registered GLOBALLY rather than per
+    // controller: a new member-scoped FHIR controller is governed the moment it
+    // exists, with nothing to remember to opt into. The filter itself decides
+    // which requests it governs (member-scoped resource + provider-shaped
+    // token), so non-Provider-Access traffic passes straight through.
+    options.Filters.Add<FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter>();
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

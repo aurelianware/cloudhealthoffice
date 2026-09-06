@@ -9,6 +9,7 @@ using CloudHealthOffice.ProviderEnrollmentService.Gates;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using SecurityClaim = System.Security.Claims.Claim;
@@ -77,6 +78,35 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             // canned Bundle the old MockFhirDataAdapter used to produce.
             services.AddHttpClient(global::FhirService.Controllers.ExplanationOfBenefitController.ClaimsServiceClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => new FakeClaimsServiceHandler());
+        });
+
+        // CONSENT-01 — these tests drive the real pipeline with user/*.read
+        // (provider-shaped) tokens, which now require attribution AND an active
+        // ProviderAccess-purpose consent alongside the SMART scope. Attribute the
+        // test subject to the members these tests read so the suite keeps
+        // exercising content negotiation rather than authorization refusals.
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:0:ProviderId"] = "test-user",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:0:MemberIds:0"] = "pat-001",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:0:MemberIds:1"] = "pat-002",
+                ["Cms0057:ProviderAttribution:PanelsByTenant:test-tenant:0:MemberIds:2"] = "pat-003",
+
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:MemberId"] = "pat-001",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:ConsentId"] = "consent-pa-pat-001",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:PurposeOfUse"] = "ProviderAccess",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:0:Status"] = "Active",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:MemberId"] = "pat-002",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:ConsentId"] = "consent-pa-pat-002",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:PurposeOfUse"] = "ProviderAccess",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:1:Status"] = "Active",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:MemberId"] = "pat-003",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:ConsentId"] = "consent-pa-pat-003",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:PurposeOfUse"] = "ProviderAccess",
+                ["Cms0057:PayerToPayerConsent:ConsentsByTenant:test-tenant:2:Status"] = "Active",
+            });
         });
 
         builder.UseEnvironment("Development");
