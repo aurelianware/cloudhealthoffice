@@ -187,6 +187,25 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
 // SLA deadline watchdog (runs every 15 minutes)
 builder.Services.AddHostedService<SlaWatchdogService>();
 
+// ── CDex additional-information requests (PAS-07) ─────────────────────────────
+// An A4 (pended — additional information required) decision that names what it
+// needs raises a durable request in rfai-service, which owns that record. This
+// service keeps only the handle. Registered unconditionally: the gateway degrades
+// to "not recorded" when rfai-service is unreachable, and the retry is idempotent.
+builder.Services.AddScoped<AuthorizationService.Services.Rfai.IRfaiRequestGateway,
+    AuthorizationService.Services.Rfai.HttpRfaiRequestGateway>();
+builder.Services.AddScoped<AuthorizationService.Services.Rfai.IPendedAuthorizationRfaiCoordinator,
+    AuthorizationService.Services.Rfai.PendedAuthorizationRfaiCoordinator>();
+builder.Services.AddHttpClient(
+    AuthorizationService.Services.Rfai.HttpRfaiRequestGateway.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:RfaiServiceUrl"]
+            ?? "http://rfai-service.cloudhealthoffice/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 // ── Prior-authorization data retention (PAT-03) ───────────────────────────────
 // The policy is a pure, testable rule; the worker only discovers records it
 // applies to. Disabled by default — a destructive sweep opts in per deployment.

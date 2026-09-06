@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using AuthorizationService.Services.Rfai;
 
 namespace AuthorizationService.Models;
 
@@ -30,6 +31,18 @@ public class AuthorizationStatusUpdate
 
     [StringLength(1000)]
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// What documentation the reviewer needs, when the status is being moved to
+    /// Pended with review decision A4. Naming it here is what turns a pended
+    /// status into an actual additional-information request the provider can
+    /// answer; a pend with nothing named asks the provider for nothing and
+    /// raises no request.
+    /// </summary>
+    public List<RequestedInformationItem> RequestedInformation { get; set; } = new();
+
+    /// <summary>When the requested documentation is expected.</summary>
+    public DateTime? InformationDueDate { get; set; }
 }
 
 /// <summary>
@@ -67,6 +80,20 @@ public class AuthorizationResponse
 
     [StringLength(20)]
     public string? ReviewerPhone { get; set; }
+
+    /// <summary>
+    /// The documentation an A4 (pended) decision is asking the provider for.
+    /// Coded, per item, because a receiving system has to act on it — see
+    /// <see cref="RequestedInformationItem"/>. <see cref="PendReason"/> and
+    /// <see cref="FollowUpAction"/> supplement these; they do not replace them.
+    ///
+    /// An A4 decision that names nothing here raises no additional-information
+    /// request: nothing was actually asked for.
+    /// </summary>
+    public List<RequestedInformationItem> RequestedInformation { get; set; } = new();
+
+    /// <summary>When the requested documentation is expected back.</summary>
+    public DateTime? InformationDueDate { get; set; }
 }
 
 /// <summary>

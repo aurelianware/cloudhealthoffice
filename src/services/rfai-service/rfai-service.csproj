@@ -7,6 +7,13 @@
     <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 
+  <!-- Exclude test project files when built inside Docker (Dockerfile copies entire directory) -->
+  <ItemGroup>
+    <Compile Remove="RfaiService.Tests/**" />
+    <Content Remove="RfaiService.Tests/**" />
+    <None Remove="RfaiService.Tests/**" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Azure.Core" Version="1.44.1" />

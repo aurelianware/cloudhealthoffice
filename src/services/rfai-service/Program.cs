@@ -72,6 +72,13 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
     builder.Services.AddHostedService(sp => sp.GetRequiredService<KafkaProducerService>());
 }
 
+// ── Domain services ──────────────────────────────────────────────────────────
+// The case aggregate's rules live behind one service so every intake path — the
+// internal API, the CDex surface in fhir-service, and 275 correlation in
+// attachment-service — reaches the same invariants.
+
+builder.Services.AddScoped<IRfaiCaseService, RfaiCaseService>();
+
 // ── Middleware / infra ────────────────────────────────────────────────────────
 
 builder.Services.AddHttpContextAccessor();

@@ -57,6 +57,11 @@
     <ProjectReference Include="..\..\src\services\benefit-plan-service\benefit-plan-service.csproj" />
     <ProjectReference Include="..\..\src\services\authorization-service\authorization-service.csproj" />
 
+    <!-- The additional-information (RFAI/CDex) aggregate. Referenced so PAS-07
+         drives the REAL case lifecycle rather than an acceptance-only copy of
+         its rules. -->
+    <ProjectReference Include="..\..\src\services\rfai-service\rfai-service.csproj" />
+
     <!-- Consent registry (Provider Access opt-out / P2P opt-in modeling). -->
     <ProjectReference Include="..\..\src\services\consent-service\consent-service.csproj" />
   </ItemGroup>

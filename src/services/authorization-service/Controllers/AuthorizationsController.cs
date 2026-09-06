@@ -5,6 +5,7 @@ using AuthorizationService.Middleware;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
+using AuthorizationService.Services.Rfai;
 
 namespace AuthorizationService.Controllers;
 
@@ -17,17 +18,26 @@ public class AuthorizationsController : ControllerBase
     private readonly IAuthorizationRepository _authorizationRepository;
     private readonly IAuthorizationBackendSelector _backends;
     private readonly IWebHostEnvironment _environment;
+    private readonly IPendedAuthorizationRfaiCoordinator? _rfai;
     private readonly ILogger<AuthorizationsController> _logger;
 
+    /// <param name="rfai">
+    /// Raises the CDex additional-information request an A4 decision implies.
+    /// Optional so a deployment without rfai-service still records decisions —
+    /// the pended status and its reason are unaffected; only the provider-facing
+    /// documentation request is absent.
+    /// </param>
     public AuthorizationsController(
         IAuthorizationRepository authorizationRepository,
         IAuthorizationBackendSelector backends,
         IWebHostEnvironment environment,
-        ILogger<AuthorizationsController> logger)
+        ILogger<AuthorizationsController> logger,
+        IPendedAuthorizationRfaiCoordinator? rfai = null)
     {
         _authorizationRepository = authorizationRepository;
         _backends = backends;
         _environment = environment;
+        _rfai = rfai;
         _logger = logger;
     }
 
@@ -390,6 +400,15 @@ public class AuthorizationsController : ControllerBase
         var updated = await _backends.Resolve().UpdateStatusAsync(
             authorization, authorization.Status, authorization.ReviewDecision,
             authorization.DenialReason, HttpContext.RequestAborted);
+
+        // A status update that lands on pended-for-information raises the request
+        // too. This is also the repair path: an authorization left Pended/A4 with
+        // no request (because rfai-service was unreachable at decision time) gets
+        // one here, under the same correlation key, so the retry cannot duplicate.
+        await EnsureAdditionalInformationRequestAsync(
+            updated, statusUpdate.RequestedInformation, statusUpdate.InformationDueDate,
+            decisionControlNumber: null);
+
         return Ok(updated);
     }
 
@@ -464,7 +483,57 @@ public class AuthorizationsController : ControllerBase
         var updated = await _backends.Resolve().UpdateStatusAsync(
             authorization, authorization.Status, authorization.ReviewDecision,
             authorization.DenialReason, HttpContext.RequestAborted);
+
+        // An A4 decision that names what it needs raises the provider-facing
+        // documentation request. The decision is already durable at this point:
+        // if raising the request fails, the pend stands and the retry is
+        // idempotent — see PendedAuthorizationRfaiCoordinator.
+        await EnsureAdditionalInformationRequestAsync(
+            updated, response.RequestedInformation, response.InformationDueDate,
+            response.ControlNumber);
+
         return Ok(updated);
+    }
+
+    /// <summary>
+    /// Raises the CDex additional-information request an A4 decision implies, and
+    /// persists the handle on the authorization.
+    ///
+    /// The handle write is a SECOND write, deliberately: the decision must land
+    /// whether or not rfai-service is reachable, and stamping the handle
+    /// afterwards keeps a failure here from rolling back a recorded review
+    /// decision. Failing to stamp leaves the authorization pended with
+    /// RFAIIssued false, which the coordinator documents as the recoverable
+    /// state.
+    /// </summary>
+    private async System.Threading.Tasks.Task EnsureAdditionalInformationRequestAsync(
+        Authorization authorization,
+        List<RequestedInformationItem> requestedInformation,
+        DateTime? dueDate,
+        string? decisionControlNumber)
+    {
+        if (_rfai is null) return;
+
+        var stamped = await _rfai.EnsureRequestForDecisionAsync(
+            authorization, requestedInformation, dueDate, decisionControlNumber,
+            HttpContext.RequestAborted);
+
+        if (!stamped) return;
+
+        try
+        {
+            await _authorizationRepository.UpdateAsync(authorization);
+        }
+        catch (Exception ex)
+        {
+            // The request itself exists and is durable in rfai-service; only the
+            // handle on the authorization is missing. A later delivery of the
+            // same decision replays onto the same request and stamps it again.
+            _logger.LogError(ex,
+                "Authorization {AuthNumber}: the additional-information request was raised "
+                + "but its handle could not be persisted.",
+                SanitizeForLog(authorization.AuthorizationNumber));
+        }
     }
 
     /// <summary>

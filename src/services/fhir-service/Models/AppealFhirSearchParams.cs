@@ -29,6 +29,22 @@ public class AppealTaskSearchParams : FhirSearchParamsBase
     /// <summary>`owner` — Task.owner (assigned reviewer).</summary>
     [FromQuery(Name = "owner")]
     public string? Owner { get; set; }
+
+    /// <summary>
+    /// `code` — Task.code. One Task endpoint serves two kinds of Task: appeal
+    /// projections and Da Vinci CDex additional-information requests. The CDex
+    /// code (<c>attachment-request-code</c>) selects the latter, which is what
+    /// FHIR's <c>code</c> search parameter is for.
+    /// </summary>
+    [FromQuery(Name = "code")]
+    public string? Code { get; set; }
+
+    /// <summary>
+    /// `identifier` — Task.identifier. For a CDex additional-information request
+    /// this is the tracking id (attachment control number) the payer issued.
+    /// </summary>
+    [FromQuery(Name = "identifier")]
+    public string? Identifier { get; set; }
 }
 
 public class AppealCommunicationSearchParams : FhirSearchParamsBase

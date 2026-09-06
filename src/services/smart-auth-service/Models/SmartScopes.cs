@@ -43,6 +43,43 @@ public static class SmartScopes
     public const string SystemEncounterRead = "system/Encounter.read";
     public const string SystemClaimRead = "system/Claim.read";
 
+    // ── Write scopes ──────────────────────────────────────────────────────────
+    // The FHIR surface serves genuine writes — Da Vinci PAS Claim/$submit, the
+    // CDex $submit-attachment response, DTR questionnaire authoring — and a read
+    // scope must not authorize any of them. There is deliberately NO
+    // patient-context write scope: every write this server serves is a
+    // provider/payer transaction, so a patient-context token is never the right
+    // caller for one.
+    public const string UserWildcardWrite = "user/*.write";
+    public const string SystemWildcardWrite = "system/*.write";
+
+    /// <summary>Da Vinci PAS <c>Claim/$submit</c> — creating a prior authorization.</summary>
+    public const string UserClaimWrite = "user/Claim.write";
+    public const string SystemClaimWrite = "system/Claim.write";
+
+    /// <summary>
+    /// Da Vinci CDex <c>$submit-attachment</c> — answering a payer's request for
+    /// documentation, and appeal submission. Both are projected as Task.
+    /// </summary>
+    public const string UserTaskWrite = "user/Task.write";
+    public const string SystemTaskWrite = "system/Task.write";
+
+    /// <summary>DTR questionnaire authoring and response capture.</summary>
+    public const string UserQuestionnaireWrite = "user/Questionnaire.write";
+    public const string SystemQuestionnaireWrite = "system/Questionnaire.write";
+    public const string UserQuestionnaireResponseWrite = "user/QuestionnaireResponse.write";
+    public const string SystemQuestionnaireResponseWrite = "system/QuestionnaireResponse.write";
+
+    /// <summary>All write scopes this authorization server issues.</summary>
+    public static readonly string[] AllWriteScopes =
+    [
+        UserWildcardWrite, SystemWildcardWrite,
+        UserClaimWrite, SystemClaimWrite,
+        UserTaskWrite, SystemTaskWrite,
+        UserQuestionnaireWrite, SystemQuestionnaireWrite,
+        UserQuestionnaireResponseWrite, SystemQuestionnaireResponseWrite,
+    ];
+
     /// <summary>
     /// Returns all scopes that grant read access to a given FHIR resource type
     /// for a given level (patient / user / system).
