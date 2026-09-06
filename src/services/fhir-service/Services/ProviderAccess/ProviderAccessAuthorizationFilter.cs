@@ -38,8 +38,12 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
     /// test pins the two sets together so a resource added to one cannot quietly
     /// escape the other.
     /// </summary>
+    /// Matched case-INSENSITIVELY: ASP.NET route matching is case-insensitive,
+    /// so /fhir/r4/patient/123 reaches the same controller as /fhir/r4/Patient/123.
+    /// An ordinal comparison here would let a caller skip the whole authorization
+    /// layer by lower-casing the URL.
     public static readonly IReadOnlySet<string> GovernedResources =
-        new HashSet<string>(StringComparer.Ordinal)
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Patient",
             "Coverage",
@@ -51,6 +55,14 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
             "DocumentReference",
             "ClaimResponse",
         };
+
+    /// <summary>
+    /// Query parameters that name the member a request is about, across the
+    /// governed resources. Adding a member-scoped search parameter to a
+    /// controller means adding it here, or the request is refused as
+    /// member-less.
+    /// </summary>
+    private static readonly string[] MemberSearchParameters = ["patient", "beneficiary"];
 
     private static readonly JsonSerializerOptions FhirJson =
         new JsonSerializerOptions().ForFhir(typeof(OperationOutcome).Assembly);
@@ -181,16 +193,22 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
     /// </summary>
     private static string? ResolveMemberId(HttpContext http, string resourceType)
     {
-        if (string.Equals(resourceType, "Patient", StringComparison.Ordinal))
+        if (string.Equals(resourceType, "Patient", StringComparison.OrdinalIgnoreCase))
         {
             var id = ParseResourceId(http.Request.Path);
             if (!string.IsNullOrWhiteSpace(id))
                 return id;
         }
 
-        var queryPatient = http.Request.Query["patient"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(queryPatient))
-            return StripPrefix("Patient/", queryPatient);
+        // Every search parameter that names the member. Coverage accepts
+        // `beneficiary` as well as `patient`; reading only one of them refuses a
+        // request for want of a member context it was actually given.
+        foreach (var parameter in MemberSearchParameters)
+        {
+            var value = http.Request.Query[parameter].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(value))
+                return StripPrefix("Patient/", value);
+        }
 
         return http.Items["SmartPatientId"] as string;
     }

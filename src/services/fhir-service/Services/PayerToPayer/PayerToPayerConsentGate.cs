@@ -32,20 +32,18 @@ public interface IPayerToPayerConsentGate
 }
 
 /// <summary>
-/// Reads the member's consent records for an authorization decision. The
-/// registry in consent-service is the authoritative source; this is the seam
-/// fhir-service reads it through.
+/// The Payer-to-Payer name for the shared consent seam. It adds nothing to
+/// <see cref="IConsentSource"/> — one contract, so the two cannot drift apart in
+/// signature, documentation, or annotation — and exists only so the
+/// Payer-to-Payer wiring keeps a name that says what it is for.
+///
+/// Like every consent source, an implementation returns EVERYTHING on record for
+/// the member: purpose filtering and lifecycle evaluation belong to
+/// <c>ConsentAuthorizationPolicy</c>, so a source cannot widen authorization by
+/// returning the wrong subset.
 /// </summary>
 public interface IPayerToPayerConsentSource : IConsentSource
 {
-    /// <summary>
-    /// The member's consent snapshots within the tenant. Returns everything on
-    /// record for the member — the purpose filtering and lifecycle evaluation
-    /// are the policy's job, so a source cannot accidentally widen authorization
-    /// by returning the wrong subset.
-    /// </summary>
-    Task<IReadOnlyList<ConsentAuthorizationSnapshot>> GetConsentsAsync(
-        string tenantId, string memberId, CancellationToken ct = default);
 }
 
 /// <summary>

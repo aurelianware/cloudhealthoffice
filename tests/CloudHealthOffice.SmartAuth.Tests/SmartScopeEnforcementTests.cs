@@ -240,6 +240,56 @@ public class SmartScopeEnforcementTests : IClassFixture<FhirServiceFactory>
     // ── system-scoped token (payer-to-payer) ─────────────────────────────────
 
     [Fact]
+    public async Task ProviderAccess_LowercaseResourcePath_IsStillEnforced()
+    {
+        // ASP.NET route matching is case-insensitive, so /fhir/r4/patient/...
+        // reaches PatientController. Any authorization layer that matches the
+        // resource type case-sensitively is therefore bypassable by changing the
+        // casing of the URL — for BOTH the SMART scope check and Provider Access.
+        // pat-002 is on nobody's panel: it must be refused whatever the casing.
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("provider-001", "user/*.read"));
+
+        var lower = await client.GetAsync("/fhir/r4/patient/pat-002");
+        var canonical = await client.GetAsync("/fhir/r4/Patient/pat-002");
+
+        canonical.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        lower.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "casing the path differently must not skip the authorization layer");
+    }
+
+    [Fact]
+    public async Task ProviderAccess_CoverageByBeneficiary_ResolvesMemberContext()
+    {
+        // Coverage search accepts `beneficiary` as well as `patient`. An
+        // authorization layer that only reads `patient` refuses a legitimate
+        // request for want of a member context it was actually given.
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("provider-001", "user/*.read"));
+
+        var resp = await client.GetAsync("/fhir/r4/Coverage?beneficiary=pat-001");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task ProviderAccess_CoverageByBeneficiary_StillEnforcesAttribution()
+    {
+        // And reading `beneficiary` must not become a way around the panel:
+        // pat-002 is not attributed to provider-001.
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer",
+                _factory.IssueToken("provider-001", "user/*.read"));
+
+        var resp = await client.GetAsync("/fhir/r4/Coverage?beneficiary=pat-002");
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task PatientSearch_SystemToken_WithoutMemberContext_IsForbidden()
     {
         // system/*.read carries no patient binding, which used to mean "return
