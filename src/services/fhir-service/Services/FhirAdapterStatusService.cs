@@ -95,6 +95,21 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
             + "Observation, Procedure. Read + member-scoped search only, member-keyed in the "
             + "storage query, behind the same SMART scope and Provider Access consent/attribution "
             + "controls as every other member-scoped resource. Valid FHIR R4; no US Core profile claimed"),
+        // Identity trust. Demo here is the DEFAULT posture of a clone, not a
+        // ceiling: the same code runs in ExternalIssuer mode against a real
+        // OIDC provider, and Demo is refused outright on a non-development
+        // host. The named limitation is that no customer's production IdP is
+        // connected in this repository — connecting one is deployment
+        // configuration against the integration contract, not product work.
+        ("SmartIdentityTrust", FhirAdapterModes.Demo,
+            "SMART/OAuth resource-server trust: an administrator-controlled registry of external "
+            + "OIDC issuers resolved by exact iss, each supplying its own JWKS (validated discovery, "
+            + "rotation on unknown kid, bounded refresh and staleness), audiences, asymmetric-only "
+            + "algorithm policy, claim mapping and permitted tenants. Signature, audience, exp/nbf "
+            + "and bounded clock skew enforced; discovery and JWKS fetches confined to configured "
+            + "origins. Demo mode trusts the bundled smart-auth-service and fails startup outside a "
+            + "development host. No customer production identity provider is connected in this "
+            + "repository; see docs/architecture/idp-integration-contract.md"),
         // Provider Access over CHO-owned data. NOT a complete capability:
         // attribution panels come from configuration, so no live roster feed from
         // a payer source system is wired up (engagement integration behind
