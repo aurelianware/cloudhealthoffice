@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using System.Text.Json;
 using FhirService.Controllers;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cms0057Acceptance.Tests.Scenarios;
@@ -195,5 +197,100 @@ public class SecurityConsentMetricsTests
         auth.Status.Should().Be(global::AuthorizationService.Models.AuthorizationStatus.Denied);
         auth.DenialReasonCode.Should().NotBeNullOrWhiteSpace();
         auth.DenialReason.Should().NotBeNullOrWhiteSpace();
+    }
+
+    // ── SEC-01 read/write scope separation ──────────────────────────────────────
+
+    [Theory]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    // A WRITE cannot be authorized by a read scope. Claim/$submit creates a
+    // prior authorization; before this was enforced, `Claim.read` was enough.
+    [InlineData("POST", "/fhir/r4/Claim/$submit", "system/Claim.read", 403)]
+    [InlineData("POST", "/fhir/r4/Claim/$submit", "system/*.read", 403)]
+    [InlineData("POST", "/fhir/r4/Claim/$submit", "system/Claim.write", 200)]
+    [InlineData("POST", "/fhir/r4/Claim/$submit", "system/*.write", 200)]
+    // …and an operation that only READS is not gratuitously escalated: an
+    // inquiry and a member match are POSTs by shape, not by effect.
+    [InlineData("POST", "/fhir/r4/Claim/$inquire", "system/Claim.read", 200)]
+    [InlineData("POST", "/fhir/r4/Patient/$member-match", "system/Patient.read", 200)]
+    [InlineData("POST", "/fhir/r4/Questionnaire/$questionnaire-package", "user/*.read", 200)]
+    // Plain REST follows the method: a GET reads, a POST/PUT writes.
+    [InlineData("GET", "/fhir/r4/Patient/pat-001", "user/Patient.read", 200)]
+    [InlineData("POST", "/fhir/r4/Questionnaire", "user/Questionnaire.read", 403)]
+    [InlineData("POST", "/fhir/r4/Questionnaire", "user/Questionnaire.write", 200)]
+    [InlineData("PUT", "/fhir/r4/Questionnaire/q1", "user/*.read", 403)]
+    // An operation nobody classified still needs a scope, and a POST to it needs
+    // a write one — it does not fall through unenforced.
+    [InlineData("POST", "/fhir/r4/$some-future-operation", "system/*.read", 403)]
+    [InlineData("POST", "/fhir/r4/$some-future-operation", "system/*.write", 200)]
+    public async Task SEC01_Replace_ScopeEnforcementFollowsTheInteractionNotJustThePath(
+        string method, string path, string scope, int expected)
+    {
+        (await ScopeCheckStatusAsync(method, path, scope)).Should().Be(expected);
+    }
+
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public async Task SEC01_Replace_AReadWildcardNeverSatisfiesAWrite()
+    {
+        // The one property the whole separation rests on. A `.read` wildcard is
+        // the scope almost every client actually holds.
+        (await ScopeCheckStatusAsync("POST", "/fhir/r4/Claim/$submit", "patient/*.read"))
+            .Should().Be(403);
+        (await ScopeCheckStatusAsync("POST", "/fhir/r4/Claim/$submit", "user/*.read"))
+            .Should().Be(403);
+    }
+
+    [Fact]
+    [Trait("Scenario", "SEC-01")]
+    [Trait("Backend", "Replace")]
+    public void SEC01_Replace_EveryWriteScopeTheSurfaceNeedsIsDiscoverable()
+    {
+        // A scope the server requires but never advertises is a surface nobody
+        // can call. The write scopes are new, so they have to appear in
+        // .well-known/smart-configuration alongside the reads.
+        var controller = new SmartConfigurationController(AcceptanceContext.DemoConfig())
+            .WithTenant();
+
+        var ok = controller.GetSmartConfiguration().Should().BeOfType<OkObjectResult>().Subject;
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+
+        var scopes = doc.RootElement.GetProperty("scopes_supported").EnumerateArray()
+            .Select(e => e.GetString()).ToList();
+
+        scopes.Should().Contain(["system/*.write", "user/*.write",
+                                 "system/Claim.write", "system/Task.write"]);
+
+        // …and no PATIENT-context write scope: every write this server serves is
+        // a provider/payer transaction.
+        scopes.Should().NotContain(s => s!.StartsWith("patient/", StringComparison.Ordinal)
+                                        && s.EndsWith(".write", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Drives the REAL SMART scope middleware and reports the status it produced.
+    /// 200 means the request reached the terminal delegate — the middleware
+    /// allowed it.
+    /// </summary>
+    private static async Task<int> ScopeCheckStatusAsync(string method, string path, string scope)
+    {
+        var reached = false;
+
+        var middleware = new FhirService.Middleware.SmartScopeEnforcementMiddleware(
+            _ => { reached = true; return Task.CompletedTask; },
+            AcceptanceContext.Logger<FhirService.Middleware.SmartScopeEnforcementMiddleware>());
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+        context.Request.Method = method;
+        context.Response.Body = new MemoryStream();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim("sub", "acceptance-client"), new Claim("scope", scope)], "test"));
+
+        await middleware.InvokeAsync(context);
+
+        return reached ? 200 : context.Response.StatusCode;
     }
 }

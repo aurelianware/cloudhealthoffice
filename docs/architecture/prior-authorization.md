@@ -6,8 +6,8 @@ both project onto the one authorization record.
 
 Acceptance scenarios: **PAS-01** (CRD), **PAS-02** (DTR), **PAS-03** (submit),
 **PAS-04** ([inquiry](#claiminquire)), **PAS-05** (coded denial), **PAS-06**
-(decision timeframe), **PAS-07** (CDex — still PARTIAL), **PAS-08** (drug
-exclusion).
+(decision timeframe), **PAS-07** (CDex additional information — see
+[its own document](cdex-additional-information.md)), **PAS-08** (drug exclusion).
 
 ## Topology
 
@@ -29,6 +29,16 @@ Both operations run through one controller, one response builder, and one
 authorization record. `$inquire` adds **no** store and **no** status field of
 its own — it is a read projection of the state `$submit` wrote and the rest of
 the platform updates.
+
+A pended decision continues into the Da Vinci CDex additional-information round
+trip: the payer's request is served as a `Task` on the CDex Task Attachment
+Request profile, the provider answers with `POST fhir/r4/$submit-attachment`, and
+the authorization returns to **review** — never to approved. That exchange has
+its own document: [Additional information on a pended prior
+authorization](cdex-additional-information.md). What matters here is the seam:
+the additional-information record lives in rfai-service, this service keeps only
+the handle (`Authorization.RFAIReference`), and `$inquire` reports the resulting
+status without knowing anything about the exchange.
 
 ## `Claim/$inquire`
 
@@ -339,10 +349,12 @@ which is the correct anti-enumeration behaviour.
 
 ## Limitations
 
-* **PAS-07 (CDex) remains PARTIAL.** `$inquire` *reports* that a decision is
-  pended awaiting information, which CHO already knows from the A4 review
-  decision. It neither requests documentation nor accepts it; that round-trip is
-  what CDex is, and it is not implemented.
+* **`$inquire` reports the pend; it is not the exchange.** `$inquire` says a
+  decision is pended awaiting information (X12 A4). Requesting that information
+  and accepting it is the CDex round trip, which lives in
+  [its own document](cdex-additional-information.md) and carries its own
+  limitations — pull rather than push, an in-process attachment store by default,
+  a scanner seam with no scanner, and no outbox between the two services.
 * **An inquiry is bound to its authorization by the corroborating key, not by
   the caller's own identity.** PAS is system-to-system here: `$submit` does not
   check that the caller *is* the provider named in the Claim, and there is no

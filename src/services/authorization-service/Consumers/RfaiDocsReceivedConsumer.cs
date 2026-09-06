@@ -158,20 +158,49 @@ public class RfaiDocsReceivedConsumer : BackgroundService
             return;
         }
 
+        // Documentation ARRIVING is recorded either way — that is a fact about
+        // the authorization regardless of whether the request is now complete.
+        // The first arrival is the one the response date records.
+        auth.RFAIResponseDate ??= message.ReceivedAt;
+
         if (message.AllRequestedItemsReceived)
         {
+            // Back to REVIEW — never to Approved. Receiving documents says the
+            // reviewer can now look at the question again; it says nothing about
+            // the answer, and nothing on this path may decide one. Re-entering
+            // InReview when the authorization is already InReview is a no-op, so
+            // a redelivered message cannot restart anything twice.
+            var resumed = auth.Status == AuthorizationStatus.Pended;
+
             auth.Status = AuthorizationStatus.InReview;
             auth.SlaResumedAt = message.ReceivedAt;
             auth.LastUpdatedDate = DateTime.UtcNow;
 
+            if (resumed)
+            {
+                // Provenance for "when the authorization resumed review, and why".
+                auth.StatusHistory ??= new List<AuthorizationStatusChange>();
+                auth.StatusHistory.Add(new AuthorizationStatusChange
+                {
+                    Status = AuthorizationStatus.InReview,
+                    ReviewDecision = auth.ReviewDecision,
+                    Reason = "Additional information received; returned to review.",
+                    ChangedAt = DateTime.UtcNow,
+                    ChangedBy = "rfai-docs-received",
+                });
+            }
+
             await repository.UpdateAsync(auth);
 
             _logger.LogInformation(
-                "SLA clock restarted for authorization {AuthNumber}, RFAI {RfaiCaseId}",
+                "Authorization {AuthNumber} returned to review after RFAI {RfaiCaseId}; "
+                + "SLA clock restarted. The decision remains with a reviewer.",
                 message.AuthNumber, message.RfaiCaseId);
         }
         else
         {
+            await repository.UpdateAsync(auth);
+
             _logger.LogInformation(
                 "Partial docs received for authorization {AuthNumber}, still awaiting items",
                 message.AuthNumber);

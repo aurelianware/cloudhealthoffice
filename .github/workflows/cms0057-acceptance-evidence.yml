@@ -33,6 +33,7 @@ on:
       # authorization metrics, SMART security, and the Replace/Augment engine).
       - 'src/services/fhir-service/**'            # PAS + Patient/Provider Access FHIR surface
       - 'src/services/authorization-service/**'   # prior-auth backend + metrics
+      - 'src/services/rfai-service/**'            # PAS-07 CDex additional-information record
       - 'src/services/member-service/**'          # Patient Access member data
       - 'src/services/provider-service/**'        # Provider Access attribution
       - 'src/services/claims-service/**'          # Patient Access CARIN EOB
@@ -51,6 +52,7 @@ on:
       - '.github/workflows/cms0057-acceptance-evidence.yml'
       - 'src/services/fhir-service/**'
       - 'src/services/authorization-service/**'
+      - 'src/services/rfai-service/**'
       - 'src/services/member-service/**'
       - 'src/services/provider-service/**'
       - 'src/services/claims-service/**'

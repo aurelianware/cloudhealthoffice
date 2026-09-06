@@ -76,7 +76,23 @@ public class SmartConfigurationController : FhirControllerBase
                 "user/Coverage.read",
                 "user/ExplanationOfBenefit.read",
                 "user/Encounter.read",
-                "user/Claim.read"
+                "user/Claim.read",
+
+                // Writes. The FHIR surface serves genuine writes (PAS
+                // Claim/$submit, CDex $submit-attachment, DTR authoring) and a
+                // read scope does not authorize any of them, so the write scopes
+                // have to be discoverable. There is no patient-context write
+                // scope: every write here is a provider/payer transaction.
+                "user/*.write",
+                "system/*.write",
+                "user/Claim.write",
+                "system/Claim.write",
+                "user/Task.write",
+                "system/Task.write",
+                "user/Questionnaire.write",
+                "system/Questionnaire.write",
+                "user/QuestionnaireResponse.write",
+                "system/QuestionnaireResponse.write"
             },
 
             // ── SMART capabilities advertised ─────────────────────────────────

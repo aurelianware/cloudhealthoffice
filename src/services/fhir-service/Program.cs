@@ -328,6 +328,60 @@ builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationStore,
 builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationInquiryService,
     FhirService.Services.PriorAuthorizationInquiryService>();
 
+// ── Da Vinci CDex additional information (PAS-07) ─────────────────────────────
+// The request half is a Task projection served by TaskController; the response
+// half is $submit-attachment in CdexController. Both read and write the ONE
+// additional-information record held by rfai-service — there is no second store.
+builder.Services.AddSingleton<FhirService.Services.Cdex.CdexTaskMapper>();
+builder.Services.AddScoped<FhirService.Services.Cdex.ICdexAdditionalInformationStore,
+    FhirService.Services.Cdex.HttpCdexAdditionalInformationStore>();
+builder.Services.AddScoped<FhirService.Services.Cdex.ICdexAttachmentSubmissionService,
+    FhirService.Services.Cdex.CdexAttachmentSubmissionService>();
+
+// Submitted documentation goes into the platform's EXISTING secure attachment
+// abstraction (IClaimAttachmentContentStore), which already owns checksumming,
+// content-type normalisation, storage-key derivation and file-name
+// sanitisation — no second storage story for prior-auth documents.
+//
+// LIMITATION, stated plainly: the implementation registered here is the
+// process-local one. A deployment MUST bind the blob-backed implementation of
+// IClaimAttachmentContentStore (the shared abstraction is shaped for
+// IDocumentStore / Azure Blob) before submitted documentation is durable across
+// a restart. TryAdd, so a host that registers one wins.
+builder.Services.Configure<CloudHealthOffice.Infrastructure.Gateways.ClaimAttachmentOptions>(
+    builder.Configuration.GetSection("Cms0057:CdexAttachments"));
+Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions
+    .TryAddSingleton<CloudHealthOffice.Infrastructure.Gateways.IClaimAttachmentContentStore>(
+        builder.Services,
+        sp =>
+        {
+            // Through the configured logging pipeline, so the warning reaches the
+            // same sinks and levels as everything else a container emits.
+            sp.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("FhirService.Cdex.Attachments")
+                .LogWarning(
+                    "CDex attachments use the in-process attachment content store — submitted "
+                    + "documentation does NOT survive a restart. Register a durable "
+                    + "IClaimAttachmentContentStore for deployment.");
+
+            var options = sp.GetService<Microsoft.Extensions.Options.IOptions<
+                CloudHealthOffice.Infrastructure.Gateways.ClaimAttachmentOptions>>()?.Value
+                ?? new CloudHealthOffice.Infrastructure.Gateways.ClaimAttachmentOptions();
+
+            if (string.Equals(options.ContentContainer, "claim-attachments", StringComparison.Ordinal))
+                options.ContentContainer = FhirService.Services.Cdex.CdexAttachmentPolicy.StorageContainer;
+
+            return new CloudHealthOffice.Infrastructure.Gateways.InMemoryClaimAttachmentContentStore(options);
+        });
+
+// Malware scanning is a SEAM, not an implementation: CHO has no scanning
+// infrastructure, and the default scanner scans nothing and says so. A
+// submission it has not scanned is recorded with scan status Unknown rather
+// than Safe, so nothing downstream can mistake "not scanned" for "clean".
+// Register a real IAttachmentContentScanner for deployment.
+builder.Services.AddSingleton<FhirService.Services.Cdex.IAttachmentContentScanner,
+    FhirService.Services.Cdex.UnscannedAttachmentContentScanner>();
+
 // ── HTTP clients ──────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient("AuthorizationService", client =>
 {
@@ -340,6 +394,17 @@ builder.Services.AddHttpClient("AuthorizationService", client =>
 // partition, so a PAS $inquire would read (and a $submit would write) the wrong
 // tenant's authorizations. Correlation follows the same call for tracing.
 .AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+.AddHttpMessageHandler<CorrelationIdPropagationHandler>();
+builder.Services.AddHttpClient(
+    FhirService.Services.Cdex.HttpCdexAdditionalInformationStore.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:RfaiServiceUrl"]
+            ?? "http://rfai-service.cloudhealthoffice/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+})
+// The store sends the authenticated tenant on every call explicitly; the
+// correlation id follows the same call for tracing.
 .AddHttpMessageHandler<CorrelationIdPropagationHandler>();
 builder.Services.AddHttpClient("TerminologyService", client =>
 {

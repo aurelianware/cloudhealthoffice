@@ -76,6 +76,20 @@ public class OpenIddictSeedWorker : IHostedService
             (SmartScopes.SystemEobRead,          "System: read ExplanationOfBenefit"),
             (SmartScopes.SystemEncounterRead,    "System: read Encounter"),
             (SmartScopes.SystemClaimRead,        "System: read Claim"),
+
+            // Writes. Without these the FHIR surface's write operations —
+            // PAS Claim/$submit, CDex $submit-attachment, DTR authoring — are
+            // ungrantable, because a read scope no longer authorizes them.
+            (SmartScopes.UserWildcardWrite,      "Write all user-level resources"),
+            (SmartScopes.SystemWildcardWrite,    "Write all system-level resources"),
+            (SmartScopes.UserClaimWrite,         "User: submit prior authorizations"),
+            (SmartScopes.SystemClaimWrite,       "System: submit prior authorizations"),
+            (SmartScopes.UserTaskWrite,          "User: submit attachments and appeals"),
+            (SmartScopes.SystemTaskWrite,        "System: submit attachments and appeals"),
+            (SmartScopes.UserQuestionnaireWrite, "User: author Questionnaires"),
+            (SmartScopes.SystemQuestionnaireWrite, "System: author Questionnaires"),
+            (SmartScopes.UserQuestionnaireResponseWrite, "User: submit QuestionnaireResponses"),
+            (SmartScopes.SystemQuestionnaireResponseWrite, "System: submit QuestionnaireResponses"),
         };
 
         foreach (var (name, display) in smartScopes)

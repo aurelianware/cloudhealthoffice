@@ -1,4 +1,5 @@
 using FhirService.Services;
+using FhirService.Services.Cdex;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
 
@@ -168,6 +169,12 @@ public class MetadataController : FhirControllerBase
                         // appeals-service over HTTP via HttpFhirAppealAdapter
                         // (the first IFhirDataAdapter implementation against
                         // a real backing service).
+                        // Task serves TWO profiles: the appeal projection, and
+                        // the Da Vinci CDex additional-information request on a
+                        // pended prior authorization (PAS-07). `code` selects
+                        // between them and `identifier` names a CDex request by
+                        // its tracking id — both are advertised because both are
+                        // actually honoured by TaskController.Search.
                         BuildResource("Task",
                         [
                             ("_id",          SearchParamType.Token),
@@ -176,10 +183,16 @@ public class MetadataController : FhirControllerBase
                             // TODO: implement authored-on filter in TaskController.Search
                             // ("authored-on", SearchParamType.Date),
                             ("status",       SearchParamType.Token),
+                            ("code",         SearchParamType.Token),
+                            ("identifier",   SearchParamType.Token),
                             ("focus",        SearchParamType.Reference),
                             ("owner",        SearchParamType.Reference)
                         ],
-                        supportedProfiles: [FhirAppealMapper.TaskProfileUrl]),
+                        supportedProfiles:
+                        [
+                            FhirAppealMapper.TaskProfileUrl,
+                            CdexCanonicalUrls.TaskAttachmentRequestProfile,
+                        ]),
                         BuildResource("Communication",
                         [
                             ("_id",          SearchParamType.Token),
@@ -222,6 +235,17 @@ public class MetadataController : FhirControllerBase
                         {
                             Name = AppealSubmitController.OperationName,
                             Definition = "http://fhir.cloudhealthoffice.com/OperationDefinition/cho-appeal-submit",
+                        },
+                        // Da Vinci CDex $submit-attachment — the response half of
+                        // the additional-information round trip on a pended prior
+                        // authorization. Advertised because CdexController
+                        // genuinely serves POST fhir/r4/$submit-attachment;
+                        // nothing broader about CDex is claimed here, because
+                        // nothing broader is implemented.
+                        new CapabilityStatement.OperationComponent
+                        {
+                            Name = CdexCanonicalUrls.SubmitAttachmentOperationName,
+                            Definition = CdexCanonicalUrls.SubmitAttachmentOperation,
                         },
                     ]
                 }

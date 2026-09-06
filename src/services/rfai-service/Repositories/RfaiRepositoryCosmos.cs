@@ -49,10 +49,57 @@ public class RfaiRepositoryCosmos : IRfaiRepository
         return results;
     }
 
+    public async Task<RfaiCase?> GetByTrackingIdAsync(string tenantId, string trackingId)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.trackingId = @trackingId")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@trackingId", trackingId);
+
+        using var iterator = _container.GetItemQueryIterator<RfaiCase>(query,
+            requestOptions: new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(tenantId),
+                MaxItemCount = 1,
+            });
+
+        while (iterator.HasMoreResults)
+        {
+            var page = await iterator.ReadNextAsync();
+            var match = page.FirstOrDefault();
+            if (match is not null) return match;
+        }
+
+        return null;
+    }
+
     public async Task<RfaiCase> CreateAsync(RfaiCase rfaiCase)
     {
         var response = await _container.CreateItemAsync(rfaiCase, new PartitionKey(rfaiCase.TenantId));
         return response.Resource;
+    }
+
+    /// <inheritdoc />
+    public async Task<(RfaiCase Case, bool Created)> CreateIfAbsentAsync(RfaiCase rfaiCase)
+    {
+        try
+        {
+            var response = await _container.CreateItemAsync(
+                rfaiCase, new PartitionKey(rfaiCase.TenantId));
+            return (response.Resource, true);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            // Someone already created the case this event addresses. Read theirs
+            // rather than creating a second active request for one decision.
+            var existing = await GetByIdAsync(rfaiCase.TenantId, rfaiCase.Id);
+            if (existing is not null)
+                return (existing, false);
+
+            _logger.LogWarning(
+                "RFAI create conflicted but the case could not be read back: {Id}", rfaiCase.Id);
+            throw;
+        }
     }
 
     public async Task<RfaiCase> UpdateAsync(RfaiCase rfaiCase)
