@@ -320,6 +320,14 @@ builder.Services.Configure<PasAutoAdjudicationConfig>(
 builder.Services.AddSingleton<IPasAutoAdjudicator, PasAutoAdjudicator>();
 builder.Services.AddSingleton<PasResponseBuilder>();
 
+// PAS $inquire (PAS-04). Read-only projection of the authoritative
+// authorization record held by authorization-service — no second PA store and
+// no inquiry-specific status.
+builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationStore,
+    FhirService.Services.HttpPriorAuthorizationStore>();
+builder.Services.AddScoped<FhirService.Services.IPriorAuthorizationInquiryService,
+    FhirService.Services.PriorAuthorizationInquiryService>();
+
 // ── HTTP clients ──────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient("AuthorizationService", client =>
 {
@@ -327,7 +335,12 @@ builder.Services.AddHttpClient("AuthorizationService", client =>
         builder.Configuration["Services:AuthorizationServiceUrl"]
             ?? "http://authorization-service.cloudhealthoffice/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
-});
+})
+// Without the tenant header authorization-service falls back to its default
+// partition, so a PAS $inquire would read (and a $submit would write) the wrong
+// tenant's authorizations. Correlation follows the same call for tracing.
+.AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+.AddHttpMessageHandler<CorrelationIdPropagationHandler>();
 builder.Services.AddHttpClient("TerminologyService", client =>
 {
     client.BaseAddress = new Uri(

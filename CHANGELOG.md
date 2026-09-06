@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Da Vinci PAS `Claim/$inquire` — prior-authorization status through the FHIR surface
+
+Prior-authorization state was persisted and retrievable, but only through
+authorization-service's own REST surface. The standards-facing FHIR operation did
+not exist, which is what kept PAS-04 PARTIAL. `POST fhir/r4/Claim/$inquire` now
+serves it.
+
+**One record, projected — not a second model.** The inquiry reads the same
+authorization record `$submit` writes and the rest of the platform updates, over
+the read endpoint authorization-service already exposes. There is no
+inquiry-specific store and no second status field. `PriorAuthorizationRecord` is
+a deliberately narrow read projection: the fields an inquiry does not need —
+patient name, date of birth, clinical attachments, reviewer, notes — have no
+property to land in, so they cannot leak into a response or a log.
+
+**Standards shape, not a CHO wire format.** The request is a PAS Bundle carrying
+a `Claim` with `use = preauthorization`, whose identifier (or
+`insurance.preAuthRef`) names the authorization. The response is a Bundle
+carrying a `ClaimResponse` on the Da Vinci PAS profile, built by the same
+`PasResponseBuilder` that serves `$submit`.
+
+**The status mapping is deterministic and total** over CHO's authorization
+states: Submitted/InReview → queued `pending`; Pended/A4 → queued
+`pended-additional-information` with the X12 306 reviewAction; Approved/A1 →
+complete `approved`; Modified/A2 → partial `modified`; Denied/A3 → complete
+`denied` with the coded reason; Expired → complete `expired`; Cancelled →
+cancelled. `outcome` carries the coarse answer and `disposition` the specific
+one, so a caller can distinguish pending from pended-for-information from
+approved from denied. An unrecognised status reads as still in progress rather
+than as an approval CHO cannot vouch for.
+
+**Read-only by contract.** `IPriorAuthorizationStore` exposes one lookup method
+and no write method at all — asserted structurally, so an inquiry cannot create a
+record, move a status, restart a decision clock, or trigger a payer submission
+however often it is repeated. Status comes from the stored adjudication record,
+so an inquiry never becomes an outbound X12 transaction.
+
+**Freshness.** Every inquiry reads live committed state, so a status changed
+after submission is the status returned; tests drive pended → approved and assert
+the second inquiry reflects it.
+
+**Lookup cannot be guessed into.** An authorization number alone is never
+sufficient — a corroborating member or provider key must accompany it and match
+the record, and a supplied key that does *not* match refuses even when another
+does. Tenant comes from the authenticated context and is re-checked on the record
+itself, so it holds even if header propagation is lost.
+
+**Anti-enumeration, without swallowing honest errors.** Request-shape defects —
+no authorization identifier, no corroborating key — return `400` naming what is
+missing, because they say nothing about what exists; telling a caller who forgot
+an identifier that their authorization "does not exist" would be both wrong and
+unhelpful. Every refusal about a *record* — unknown, wrong tenant, not the
+caller's — returns one identical `404` `OperationOutcome`, and a structural test
+pins that classification so a newly added outcome cannot quietly become
+distinguishable. The category is kept in a PHI-free audit line carrying tenant,
+caller, authorization number, outcome and status only.
+
+**Thin controller.** The action routes and maps to HTTP; lifting the lookup keys
+out of the inquiry Claim belongs to the service, since which element carries
+which key is a property of the PAS request shape rather than of HTTP.
+
+**Authorization controls.** Authentication (`[Authorize]`), the SMART
+`*/Claim.read` scope, and tenant from context — the same controls `$submit` has.
+Deliberately **not** routed through the Provider Access consent gate: that gate
+governs a provider reading a member's clinical record, whereas PAS is a
+system-to-system transaction between the submitter and the payer about the
+submitter's own request. The corroborating key, not a member consent, is what
+binds an inquiry to its authorization.
+
+**Making status inquirable required fixing the write side.** `preAuthRef` was set
+only on approvals, and a pended submission persisted an authorization number that
+was never returned to the caller — so the outcome that most needs following up
+was un-inquirable. Approved, denied and pended responses now all carry the
+number that was persisted. The denial code and reason, the approved period, and
+the service lines from the submitted Claim are now persisted too, so an inquiry
+can answer *why* and *for what* rather than just "denied". The authorization HTTP
+client now propagates the tenant header — without it authorization-service falls
+back to its default partition, and reads and writes would have crossed tenants.
+
+**CapabilityStatement.** `Claim` now advertises both `submit` and `inquire` with
+their Da Vinci PAS `OperationDefinition` canonicals, pinned by test to the routes
+actually served. `$submit` had never been advertised.
+
+Acceptance: **PAS-04 moves PARTIAL → PASSABLE**, so CHO Replace declares
+17 PASSABLE / 4 PARTIAL / 0 GAP — computed by the evidence generator, not
+hard-coded. **PAS-07 stays PARTIAL**: `$inquire` *reports* a pended-for-
+information decision, which CHO already knows from the A4 review decision, but it
+neither requests documentation nor accepts it — that round-trip is what CDex is,
+and it is not implemented. Remaining PARTIAL: PAS-07, PAT-02, PAT-03, SEC-01.
+PAS-01/02/03/05/06/08 are unchanged and green. Zero GAPs is still not complete
+CMS-0057-F compliance.
+
+New documentation: `docs/architecture/prior-authorization.md`. Updated:
+`docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md`, `docs/diligence/ADAPTER-STATUS.md`.
+
 ### Enforce Provider Access through the shared consent registry
 
 Payer-to-Payer already ran on a purpose-scoped consent decision; Provider Access

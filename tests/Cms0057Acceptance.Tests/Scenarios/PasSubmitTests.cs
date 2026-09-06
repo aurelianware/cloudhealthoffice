@@ -56,6 +56,8 @@ public class PasSubmitTests
             adjudicator.Object,
             new PasResponseBuilder(),
             compliance.Object,
+            // These suites exercise $submit; $inquire has its own coverage.
+            new Mock<IPriorAuthorizationInquiryService>().Object,
             config,
             new StubHttpClientFactory(),
             AcceptanceContext.Logger<PasController>())

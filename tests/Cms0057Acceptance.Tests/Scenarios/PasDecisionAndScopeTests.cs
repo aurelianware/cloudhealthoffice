@@ -120,7 +120,11 @@ public class PasDecisionAndScopeTests
         var xmlRefsAppeal = commType.GetCustomAttributesData(); // presence check only
         xmlRefsAppeal.Should().NotBeNull();
 
-        // Assert the PAS controller exposes no additional-info intake action.
+        // Assert the PAS controller exposes no additional-info INTAKE action.
+        // Note $inquire is deliberately not disqualifying here: it REPORTS that a
+        // decision is pended awaiting information (X12 A4), which CHO already
+        // knows, but it neither requests documentation nor accepts it. That
+        // round-trip is what CDex is, and it is still missing.
         var pasActions = typeof(PasController)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .SelectMany(m => m.GetCustomAttributes<RouteAttribute>()
@@ -128,7 +132,8 @@ public class PasDecisionAndScopeTests
                 .Concat(m.GetCustomAttributes<HttpPostAttribute>().Select(a => a.Template ?? "")))
             .Where(t => !string.IsNullOrEmpty(t))
             .ToList();
-        pasActions.Should().NotContain(t => t!.Contains("$inquire") || t!.Contains("additional"));
+        pasActions.Should().NotContain(t => t!.Contains("additional", StringComparison.OrdinalIgnoreCase)
+                                         || t!.Contains("$cdex", StringComparison.OrdinalIgnoreCase));
     }
 
     // ── PAS-08 drug exclusion ───────────────────────────────────────────────────
@@ -174,18 +179,18 @@ public class PasDecisionAndScopeTests
 
     [Fact]
     [Trait("Scenario", "PAS-04")]
-    [Trait("Kind", "GAP")]
-    public void PAS04_Gap_NoFhirPasInquireOperation()
+    [Trait("Backend", "Replace")]
+    public void PAS04_BothPasOperationsAreServedOnTheFhirSurface()
     {
-        // GAP: the FHIR PAS Claim/$inquire operation is not implemented in
-        // fhir-service (only Claim/$submit). Status inquiry is currently the
-        // authorization-service REST surface above, not a FHIR PAS operation.
+        // Replaces the GAP test that asserted $inquire did not exist. Status is
+        // now reachable through the Da Vinci PAS operation, not only through the
+        // authorization-service REST surface asserted above.
         var postTemplates = typeof(PasController)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .SelectMany(m => m.GetCustomAttributes<HttpPostAttribute>().Select(a => a.Template ?? ""))
             .ToList();
 
         postTemplates.Should().Contain("Claim/$submit");
-        postTemplates.Should().NotContain(t => t.Contains("$inquire"));
+        postTemplates.Should().Contain("Claim/$inquire");
     }
 }

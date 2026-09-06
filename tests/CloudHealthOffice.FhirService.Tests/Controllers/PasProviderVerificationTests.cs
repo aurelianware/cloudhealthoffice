@@ -86,6 +86,8 @@ public class PasProviderVerificationTests
             _adjudicatorMock.Object,
             _responseBuilder,
             _complianceCheckerMock.Object,
+            // These suites exercise $submit; $inquire has its own coverage.
+            new Mock<IPriorAuthorizationInquiryService>().Object,
             config,
             _httpClientFactoryMock.Object,
             _loggerMock.Object);
