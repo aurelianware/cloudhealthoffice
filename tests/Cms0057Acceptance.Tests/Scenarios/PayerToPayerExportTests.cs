@@ -37,11 +37,8 @@ public class PayerToPayerExportTests
 {
     // Members with a server-side opt-in on record for the demo tenant. Consent is
     // decided here, never from the request — a caller cannot self-attest it.
-    private static IPayerToPayerConsentGate Gate(params string[] optedInMembers) =>
-        new ConfiguredPayerToPayerConsentGate(Options.Create(new PayerToPayerConsentOptions
-        {
-            OptedInMembersByTenant = new() { [AcceptanceContext.TenantId] = optedInMembers.ToList() },
-        }));
+    private static IPayerToPayerConsentGate Gate(params string[] membersWithP2pConsent) =>
+        AcceptanceContext.PayerToPayerConsentGate(membersWithP2pConsent);
 
     private static PayerToPayerExchangeService ServiceOverCho(params string[] optedInMembers)
     {

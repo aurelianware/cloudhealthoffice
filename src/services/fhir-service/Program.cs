@@ -144,11 +144,37 @@ builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMember
     FhirService.Services.PayerToPayer.PatientAccessPayerToPayerMemberSource>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerMemberResolver,
     FhirService.Services.PayerToPayer.PayerToPayerMemberResolver>();
+// Payer-to-Payer authorization. The gate applies the shared
+// ConsentAuthorizationPolicy for the PayerToPayerExchange purpose, so inbound
+// respond and outbound initiation reach the same answer from the same rules; a
+// consent granted for another purpose (or none) never opens the exchange.
 builder.Services.Configure<FhirService.Services.PayerToPayer.PayerToPayerConsentOptions>(
     builder.Configuration.GetSection(
         FhirService.Services.PayerToPayer.PayerToPayerConsentOptions.SectionName));
+
+// The registry in consent-service is authoritative when its base URL is
+// configured; otherwise the configured records serve Demo mode with the same
+// purpose/status/period semantics. Neither is a boolean allow-list, and an
+// empty catalog authorizes no one.
+var consentServiceUrl = builder.Configuration["Services:ConsentServiceUrl"];
+if (!string.IsNullOrWhiteSpace(consentServiceUrl))
+{
+    builder.Services.AddHttpClient(
+            FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource.HttpClientName,
+            client => client.BaseAddress = new Uri(consentServiceUrl))
+        .AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+        .AddHttpMessageHandler<CorrelationIdPropagationHandler>();
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource,
+        FhirService.Services.PayerToPayer.HttpConsentRegistryConsentSource>();
+}
+else
+{
+    builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentSource,
+        FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource>();
+}
+
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerConsentGate,
-    FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentGate>();
+    FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate>();
 builder.Services.AddSingleton<FhirService.Services.PayerToPayer.IPayerToPayerExportBuilder,
     FhirService.Services.PayerToPayer.PayerToPayerExportBuilder>();
 builder.Services.AddScoped<FhirService.Services.PayerToPayer.IPayerToPayerExchangeService,

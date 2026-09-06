@@ -77,10 +77,7 @@ public class PayerToPayerIngestionTests
         var service = new PayerToPayerOutboundService(
             new PatientAccessPayerToPayerMemberSource(provider, adapterOptions),
             new PatientAccessPayerToPayerMemberMatchSource(provider, adapterOptions),
-            new ConfiguredPayerToPayerConsentGate(Options.Create(new PayerToPayerConsentOptions
-            {
-                OptedInMembersByTenant = new() { [AcceptanceContext.TenantId] = ["pat-001"] },
-            })),
+            AcceptanceContext.PayerToPayerConsentGate("pat-001"),
             new ConfiguredPayerToPayerEndpointResolver(
                 directory, AcceptanceContext.Logger<ConfiguredPayerToPayerEndpointResolver>()),
             peer,

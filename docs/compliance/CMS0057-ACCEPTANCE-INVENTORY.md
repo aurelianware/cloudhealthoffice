@@ -184,7 +184,8 @@ dimensions, not one.
 | Path | Key types | Mode | Note |
 | --- | --- | --- | --- |
 | `src/services/authorization-service` | `AuthorizationsController` (`POST`, `GET number/{n}`, `GET search`, `PUT {id}/status`, `POST {id}/response`, `GET summary`), `Authorization` (`Status`, `DenialReasonCode`, `SubmittedDate`, `ReviewedDate`), `AuthorizationsSummaryCalculator.CalculateTurnaroundDays` | live (CHO) | PAS-04 status, METRICS-01 |
-| `src/services/consent-service` | `ConsentsController`, `Consent` (`MemberId`, `ConsentType`, `Status`), `ConsentStateMachine` (Draft→Active→Revoked/Expired) | live (CHO) | PROV-03, P2P-03, CONSENT-01 |
+| `src/services/consent-service` | `ConsentsController` (+ `GET consents/authorization-snapshots`), `Consent` (`MemberId`, `ConsentType`, **`PurposeOfUse`**, `Status`, `EffectiveAt`/`ExpiresAt`), `ConsentStateMachine` (Draft→Active→Revoked/Expired) | live (CHO) | PROV-03, P2P-03, CONSENT-01 |
+| `src/services/shared/CloudHealthOffice.Consent.Contracts` | `ConsentPurposeOfUse`, `ConsentAuthorizationSnapshot`, `ConsentDecision`/`ConsentAuthorizationReason`, `ConsentAuthorizationPolicy.Evaluate` (pure) | live (CHO) | P2P-03, CONSENT-01 |
 | `src/services/tenant-service` | adapter platform config (`cho`/`qnxt`) | n/a | mode routing |
 | `api/openapi/prior-auth-api.yaml` | PA intake/status contract | n/a | reference |
 | `src/fhir/*` (TypeScript CRD/DTR/PAS) | legacy prototype | **legacy** | `fhir-service` `Program.cs` is the system of record; TS is not in the C# runtime path — harness targets the C# services |
@@ -290,13 +291,13 @@ external-core dependency (no vendor adapter involved).
 | PROV-03 opt-out honored | **PASSABLE** | n/a | `ConsentStateMachine` Active→Revoked |
 | P2P-01 inbound respond | **PASSABLE** | **GAP** | `PayerToPayerExchangeService` — tenant-scoped member resolution + opt-in gate + CHO-data FHIR export (Patient + Coverage + CARIN EOBs, 5-year lookback, audit); QNXT P2P integration absent |
 | P2P-02 outbound initiate | **PASSABLE** | **GAP** | `PayerToPayerOutboundService` — CHO, as the member's new payer, resolves the member + prior-payer coverage context from CHO-owned data, resolves the target payer through a trusted tenant-scoped HTTPS-only directory (payer id in, never a caller URL), enforces the opt-in server-side **before anything leaves CHO**, calls the remote `$member-match` through a transport seam, requests the export only after a single member resolves, validates the returned Bundle for member consistency, and stamps source `Provenance`; structured outcomes + idempotent exchange record + audit without demographics/payloads/URLs. A validated package is **durably ingested** (`PayerToPayerPackageIngestionService`) into an import store kept separate from CHO-authoritative data: deterministic import keys (tenant + member + source payer + type + source id) make replay non-duplicating and never merge two payers' records, references are normalized, and a staged-then-committed ledger means a failed ingestion leaves the member record untouched. Ingestion covers the types CHO's FHIR surface serves (EOB, Claim, ClaimResponse, Encounter, DocumentReference; Patient/Coverage/Organization/Practitioner/PractitionerRole/Provenance as reference-only); **USCDI clinical types are archived, not ingested** (the PAT-02 gap), imported data is **not yet projected into the read APIs**, live payer onboarding (SMART Backend Services / UDAP / mTLS) is deployment integration, and exchange state is in-process. QNXT-backed outbound initiation absent |
-| P2P-03 opt-in enforcement | **PARTIAL** | **GAP** | opt-in modeled as Active consent; no dedicated P2P `ConsentType` |
+| P2P-03 consent enforcement | **PASSABLE** | **GAP** | Payer-to-Payer authorization is a first-class purpose (`ConsentPurposeOfUse.PayerToPayerExchange`) on the one consent registry, orthogonal to `ConsentType` and aligned to FHIR `Consent.provision.purpose`. One pure `ConsentAuthorizationPolicy` decides for both directions: the snapshot must match tenant **and** member, carry the requested purpose, be `Active`, and be in force at the evaluation instant (the effective period is applied, not trusted from the stored status); ties resolve deterministically (latest-expiring, then highest version) and refusals carry a specific reason (`NoConsentForPurpose`, `Revoked`, `Expired`, `NotYetEffective`, `NotActivated`, `NoConsentOnRecord`). An Active consent is **not** sufficient by itself and a Provider Access consent does not authorize P2P — the separation is data, not a controller route. Enforced server-side in both directions against the same registry (`HttpConsentRegistryConsentSource` → `consent-service`, config-backed source only as the Demo fallback in the same shape): inbound before any member data is assembled; outbound before the remote `$member-match` (so an unauthorized member's identity never leaves CHO) **and again immediately before the export** (so a revocation in flight stops the data request). No request type carries a consent field — asserted by reflection — so no caller can self-attest. The exchange and both audit entries record `AuthorizingConsentId` + `ConsentDecisionReason`, and a retry clears the decision and re-asks. Fail-closed everywhere: blank ids, an unreadable registry, and `Unspecified` purpose all deny. Historical consent deserializes to `Unspecified` and is **not** reinterpreted. QNXT-backed P2P consent integration absent |
 | P2P-04 member-match/concurrent | **PASSABLE** | **GAP** | `PayerToPayerMemberMatchService` — FHIR `Patient/$member-match`; deterministic strong-vs-supporting identity policy (member/subscriber id or SSN, or family + DOB; any contradiction fails closed), tenant-scoped, anti-enumeration sufficiency gate; concurrent/overlapping coverage selected by requested payer/subscriber + effective date (overlaps without a discriminator refuse); resolved context feeds the P2P-01 export; QNXT P2P integration absent |
 | PAT-01 member claims / CARIN EOB | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` payments → `PatientAccessMapper` EOB; QNXT claim adapter stub |
 | PAT-02 US Core clinical | **PARTIAL** | n/a | demographics validate; USCDI clinical is an external store |
 | PAT-03 PA data except drugs | **PARTIAL** | n/a | `ClaimResponse` is a supported PA-data type; retention job absent |
 | SEC-01 SMART/OAuth | **PARTIAL** | n/a | `SmartConfigurationController` (endpoints, scopes, S256); IdP per engagement |
-| CONSENT-01 single registry | **PARTIAL** | n/a | one registry, opt-in/opt-out lifecycle; no dedicated Provider-Access/P2P `ConsentType` |
+| CONSENT-01 single registry | **PARTIAL** | n/a | one registry, one aggregate, one lifecycle, now carrying purpose-specific authorization (`PayerToPayerExchange` / `ProviderAccess`) with a PHI-free `authorization-snapshots` projection other services evaluate — no second consent store. **Still PARTIAL because the Provider Access read path does not consult the registry**: it is governed by attribution plus SMART scopes. Payer-to-Payer is enforced through the registry (P2P-03); Provider Access is not, and an explicit GAP test records that rather than letting CONSENT-01 ride on the P2P work |
 | METRICS-01 public metric set | **PASSABLE** | **GAP** | metrics derive from the persisted CHO authorization (`ChoAuthorizationBackend` + `AuthorizationsSummaryCalculator`); QNXT auth data stub. Full public-metrics *extract job* is still engagement work. |
 
 **What changed in this PR:** PAS-03/PAS-04/PAS-05/PAS-06 and METRICS-01 are now
@@ -304,6 +305,44 @@ scored on the CHO-native authorization backend (Replace) rather than a flat GAP.
 PAS-03 product capability moved GAP → **PASSABLE**; METRICS-01 product moved
 PARTIAL → **PASSABLE** (derives from the persisted record, not a test-only
 object). The QNXT column stays GAP: that integration is engagement work.
+
+**What changed in the P2P-03 consent PR:** Payer-to-Payer authorization stopped
+being "any Active consent" and became a first-class purpose on the existing
+registry. P2P-03 product capability moved PARTIAL → **PASSABLE**, so CHO Replace
+now declares **15 PASSABLE / 6 PARTIAL / 0 GAP** (the manifest is the source of
+truth; the evidence generator computes the totals — nothing here is hard-coded).
+Six scenarios remain PARTIAL: CONSENT-01, PAS-04, PAS-07, PAT-02, PAT-03, SEC-01.
+
+Specifically:
+
+* **Payer-to-Payer has its own consent purpose.**
+  `ConsentPurposeOfUse.PayerToPayerExchange` is the only value that authorizes an
+  exchange, and it is a constant on the gate rather than configuration.
+* **Provider Access authorization does not imply Payer-to-Payer authorization.**
+  The two purposes are compared as data inside one pure policy, so the separation
+  cannot be lost by adding a route or a client.
+* **Generic consent no longer satisfies Payer-to-Payer.** `Unspecified`
+  authorizes nothing purpose-specific.
+* **Consent is enforced server-side.** No Payer-to-Payer request type has a
+  consent field, in either direction; an acceptance test asserts that by
+  reflection over all four request types.
+* **Both directions use the same authoritative registry.** Inbound and outbound
+  call one gate over one policy against `consent-service`. There is no
+  P2P-local consent store.
+* **Revocation semantics are documented and tested** — including the in-flight
+  case, where the outbound re-check between `$member-match` and export stops the
+  data request. See
+  [Consent → Revocation semantics](../architecture/consent.md#revocation-semantics).
+* **Migration fails closed.** Historical consent deserializes to `Unspecified`
+  and is not backfilled or inferred, so a deployment upgrading to this code
+  authorizes no exchange until purposes are recorded. That is intentional on a
+  live disclosure path.
+* **CONSENT-01 deliberately stays PARTIAL**, with a new GAP test naming the
+  reason: the Provider Access read path does not consult the registry.
+
+**Zero GAPs still does not mean complete CMS-0057-F compliance.** This inventory
+is implementation evidence, not certification or attestation, and the
+QNXT/external-core column is unchanged — P2P-03 augment stays **GAP**.
 
 **What changed in the P2P ingestion PR:** a validated Payer-to-Payer package is
 now durably ingested into a CHO import store rather than validated and dropped,

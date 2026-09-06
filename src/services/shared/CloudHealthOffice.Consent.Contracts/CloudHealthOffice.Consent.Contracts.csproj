@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CloudHealthOffice.Consent.Contracts</RootNamespace>
+    <AssemblyName>CloudHealthOffice.Consent.Contracts</AssemblyName>
+    <!--
+      Cross-service consent AUTHORIZATION contract. Mirrors the
+      CloudHealthOffice.Appeals.Contracts pattern: no Mongo attributes, no
+      validation attributes, no encryption concerns — just the vocabulary and
+      the decision logic two services must agree on.
+
+      What lives here and why:
+      - ConsentPurposeOfUse: the purpose axis. consent-service owns the
+        registry; fhir-service asks it questions. Both must name purposes
+        identically or authorization silently diverges.
+      - ConsentAuthorizationSnapshot: the minimal, PHI-free projection of a
+        consent needed to make an authorization decision.
+      - ConsentAuthorizationPolicy: the decision itself, as pure logic, so
+        inbound and outbound Payer-to-Payer cannot drift apart by each
+        re-implementing "is this member authorized?".
+
+      Dependency direction:
+      - consent-service references this project and projects its Consent
+        aggregate onto ConsentAuthorizationSnapshot.
+      - fhir-service references this project and evaluates the policy over
+        snapshots it reads from the registry.
+    -->
+  </PropertyGroup>
+
+</Project>

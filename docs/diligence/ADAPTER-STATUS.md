@@ -23,7 +23,7 @@ This table is the September 2026 **synthetic demo tenant** default. A live pilot
 | Prior Authorization (PAS) | Demo | `PasAutoAdjudicator` + rule engine (TX seed rules if DB present) | Demonstrates technical behavior with synthetic data. |
 | CRD / DTR | Demo | `CrdService` / `DtrService` | Demonstrates technical behavior with synthetic data. |
 | Bulk FHIR export | Demo | technical scaffold | Demonstrates technical behavior with synthetic data. |
-| Consent | Demo | consent-service building block | Demonstrates technical behavior with synthetic data. |
+| Consent | Demo | consent-service registry (`ConsentPurposeOfUse` + shared `ConsentAuthorizationPolicy`; PHI-free `authorization-snapshots` projection) | Demonstrates technical behavior with synthetic data. Purpose-scoped authorization is enforced server-side for Payer-to-Payer in both directions; the Provider Access read path is governed by attribution plus SMART scopes, not the registry. |
 | Payer-to-Payer | Out of scope | Bulk FHIR + consent only | Not in current pilot scope. |
 
 Effective mode for the default tenant is **Hybrid**, because some resources proxy to other services while Patient / Coverage remain mock. Configured mode is **Demo**. The endpoint reports both so a reviewer can see the difference.

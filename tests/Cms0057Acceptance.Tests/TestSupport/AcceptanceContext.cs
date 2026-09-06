@@ -37,6 +37,40 @@ internal static class AcceptanceContext
             ["FhirAdapters:TenantId"] = TenantId,
         }).Build();
 
+    /// <summary>
+    /// A Payer-to-Payer consent gate over configured consent records — the same
+    /// production gate and the same shared policy the service binds, with the
+    /// registry's records supplied as configuration.
+    ///
+    /// Members named here are granted an ACTIVE consent whose purpose is
+    /// explicitly <c>PayerToPayerExchange</c>. That is the migration rule made
+    /// visible in the fixtures: authorization for this exchange is granted for
+    /// this purpose, never inherited from a generic consent.
+    /// </summary>
+    public static FhirService.Services.PayerToPayer.IPayerToPayerConsentGate PayerToPayerConsentGate(
+        params string[] membersWithP2pConsent)
+        => ConsentGateFor(membersWithP2pConsent
+            .Select(m => new FhirService.Services.PayerToPayer.ConfiguredConsentRecord
+            {
+                MemberId = m,
+                ConsentId = $"consent-p2p-{m}",
+                PurposeOfUse = CloudHealthOffice.Consent.Contracts.ConsentPurposeOfUse.PayerToPayerExchange,
+                Status = CloudHealthOffice.Consent.Contracts.ConsentLifecycleStatus.Active,
+            })
+            .ToArray());
+
+    /// <summary>A consent gate over exactly the records given — for purpose, lifecycle, and period cases.</summary>
+    public static FhirService.Services.PayerToPayer.IPayerToPayerConsentGate ConsentGateFor(
+        params FhirService.Services.PayerToPayer.ConfiguredConsentRecord[] records)
+        => new FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate(
+            new FhirService.Services.PayerToPayer.ConfiguredPayerToPayerConsentSource(
+                Microsoft.Extensions.Options.Options.Create(
+                    new FhirService.Services.PayerToPayer.PayerToPayerConsentOptions
+                    {
+                        ConsentsByTenant = new() { [TenantId] = records.ToList() },
+                    })),
+            Logger<FhirService.Services.PayerToPayer.ConsentRegistryPayerToPayerConsentGate>());
+
     /// <summary>Attaches a Demo-tenant HttpContext to a controller (mirrors TenantMiddleware).</summary>
     public static T WithTenant<T>(this T controller) where T : ControllerBase
     {

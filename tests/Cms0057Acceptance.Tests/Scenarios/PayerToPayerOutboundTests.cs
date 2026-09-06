@@ -27,7 +27,7 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// These scenarios drive the SAME production classes the running service binds —
 /// <see cref="PayerToPayerOutboundService"/>,
 /// <see cref="ConfiguredPayerToPayerEndpointResolver"/>,
-/// <see cref="ConfiguredPayerToPayerConsentGate"/>,
+/// <see cref="ConsentRegistryPayerToPayerConsentGate"/>,
 /// <see cref="PayerToPayerResponseReader"/>, the tenant-scoped CHO member /
 /// coverage sources, and <see cref="InMemoryPayerToPayerOutboundExchangeStore"/>.
 /// Only the far side of the wire is a test double: <see cref="ScriptedPriorPayer"/>
@@ -74,13 +74,8 @@ public class PayerToPayerOutboundTests
         var memberSource = new PatientAccessPayerToPayerMemberSource(provider, adapterOptions);
         coverageSource ??= new PatientAccessPayerToPayerMemberMatchSource(provider, adapterOptions);
 
-        var consentGate = new ConfiguredPayerToPayerConsentGate(Options.Create(new PayerToPayerConsentOptions
-        {
-            OptedInMembersByTenant = new()
-            {
-                [AcceptanceContext.TenantId] = (optedInMembers ?? Array.Empty<string>()).ToList(),
-            },
-        }));
+        var consentGate = AcceptanceContext.PayerToPayerConsentGate(
+            optedInMembers ?? Array.Empty<string>());
 
         var directory = Options.Create(new PayerToPayerDirectoryOptions
         {

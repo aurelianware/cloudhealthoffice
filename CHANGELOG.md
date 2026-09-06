@@ -7,6 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dedicated Payer-to-Payer consent lifecycle and enforcement
+
+Payer-to-Payer authorization was a generic Active consent: any active record for
+the member let an exchange proceed. It is now a first-class, purpose-scoped
+decision on the same registry.
+
+**A purpose axis, not a new consent type.** `ConsentPurposeOfUse`
+(`Unspecified` / `PayerToPayerExchange` / `ProviderAccess`) says what a consent
+authorizes the plan to *do*, orthogonal to `ConsentType`, which says what
+regulatory instrument the record *is*. A §164.508 authorization for
+Payer-to-Payer and one for Provider Access are the same instrument and different
+permissions, and a sensitive-category authorization can be purpose-scoped too.
+The axis follows FHIR `Consent.provision.purpose` (HL7 v3 PurposeOfUse), so the
+record projects onto FHIR Consent when that projection lands.
+
+**One registry, one policy.** `consent-service` remains the authoritative store —
+no second consent collection was added. The new
+`CloudHealthOffice.Consent.Contracts` project carries a PHI-free
+`ConsentAuthorizationSnapshot` (tenant, member, id, purpose, status, period,
+version — no narrative fields, and no field to put them in) and
+`ConsentAuthorizationPolicy.Evaluate`, a pure function that is the single place
+any purpose-scoped authorization is decided. A snapshot must match the tenant
+**and** the member, carry the requested purpose, be `Active`, and be in force at
+the evaluation instant — the effective period is applied by the policy rather
+than trusted from the stored status, so a record persisted as `Active` past its
+`ExpiresAt` still denies. Ties resolve deterministically (latest-expiring,
+unbounded first, then highest version), so two evaluations of the same registry
+state name the same consent.
+
+**Refusals say which refusal.** `NoConsentOnRecord`, `NoConsentForPurpose`,
+`NotActivated`, `Revoked`, `Expired`, `NotYetEffective` — reported
+most-specific-first, because "they revoked it", "it lapsed", and "they never
+granted this purpose" are different operational facts.
+
+**Enforced server-side, identically in both directions.** Inbound
+(`PayerToPayerExchangeService`) evaluates before any member data is assembled.
+Outbound (`PayerToPayerOutboundService`) evaluates twice: before the remote
+`$member-match`, so an unauthorized member's identity never leaves CHO at all,
+and **again immediately before the export**, so a revocation landing while the
+match is in flight stops the data request. Both call one
+`IPayerToPayerConsentGate` over one policy against one registry, so responding
+cannot drift more permissive than initiating. No Payer-to-Payer request type has
+a consent field in either direction — an acceptance test asserts that by
+reflection over all four request types, so neither a peer payer nor an internal
+caller can self-attest.
+
+**Provider Access separation is structural.** A member with an Active
+`ProviderAccess` consent and nothing else is denied for Payer-to-Payer with
+`NoConsentForPurpose`. The purposes are compared as data inside the policy;
+nothing about the calling controller or route participates.
+
+**Exchanges record what authorized them.** `AuthorizingConsentId`,
+`ConsentDecisionReason`, and `ConsentEvaluatedAtUtc` are written on the outbound
+exchange, and the consent id and reason on both audit entries. A retry clears
+them so it re-asks rather than reusing an earlier answer.
+
+**Fail-closed at every edge.** Blank tenant or member, an unreadable or
+unreachable registry, a source that throws, an empty catalog, and `Unspecified`
+purpose all deny. Consent-lookup failures log a category only, never registry
+detail.
+
+New consent-service surface: `PurposeOfUse` on `Consent` (optional on create) and
+`GET api/v1/members/{memberId}/consents/authorization-snapshots?purposeOfUse=`,
+a PHI-free projection so another service can authorize without reading consent
+narrative. `fhir-service` reads it through `HttpConsentRegistryConsentSource`
+when `Services:ConsentServiceUrl` is configured; the configuration-backed source
+remains the Demo/test fallback in the *same* shape (purpose, status, period), so
+Demo exercises the real policy instead of a boolean allow-list.
+
+**Migration is explicit and fails closed.** Records written before `PurposeOfUse`
+existed deserialize to `Unspecified` and authorize nothing purpose-specific.
+There is no backfill, no inference from `ConsentType`, and no "treat Active as
+P2P" fallback. The practical consequence is deliberate: **a deployment upgrading
+to this code authorizes zero Payer-to-Payer exchanges until members' consents are
+recorded with `PurposeOfUse = PayerToPayerExchange`.** Unchanged: `ConsentType`,
+the state machine and its transitions, the encrypted narrative fields, and every
+existing endpoint's contract (the consent event payload gains a `purposeOfUse`
+field).
+
+Acceptance: **P2P-03 moves PARTIAL → PASSABLE**, so CHO Replace declares
+15 PASSABLE / 6 PARTIAL / 0 GAP — computed by the evidence generator from the
+manifest, not hard-coded. **CONSENT-01 stays PARTIAL** with a new GAP test naming
+the reason: the registry can now express a Provider Access purpose, but the
+Provider Access *read path* does not consult it (attribution plus SMART scopes
+govern that path), so CONSENT-01 does not ride on the Payer-to-Payer work. The
+QNXT/external-core column is unchanged — P2P-03 augment stays **GAP**. Zero GAPs
+is still not complete CMS-0057-F compliance; this is implementation evidence, not
+certification or attestation.
+
+New documentation: `docs/architecture/consent.md`. Updated:
+`docs/architecture/payer-to-payer.md` (Consent section, order of operations),
+`docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md`.
+
 ### Durably ingest inbound Payer-to-Payer data into the member record
 
 The outbound Payer-to-Payer exchange previously stopped at a validated Bundle:

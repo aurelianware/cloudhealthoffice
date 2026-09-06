@@ -1,3 +1,4 @@
+using CloudHealthOffice.Consent.Contracts;
 using FhirService.Models;
 using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer.Ingestion;
@@ -143,12 +144,15 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
                 PayerToPayerOutboundFailure.TargetPayerNotConfigured, ct);
         exchange.TargetEndpointKey = endpoint.EndpointKey;
 
-        // 4. Authorization. Server-side opt-in state decides; a caller cannot
-        //    attest it. Enforced BEFORE any call, so an unauthorized member's
-        //    identity is never disclosed to another payer. (Generic active
-        //    opt-in; no dedicated Payer-to-Payer ConsentType — P2P-03 stays
-        //    PARTIAL.)
-        if (!await _consentGate.HasActiveOptInAsync(tenantId, member.MemberId, ct))
+        // 4. Authorization. The member must hold an active consent whose PURPOSE
+        //    authorizes Payer-to-Payer exchange — a Provider Access consent, or a
+        //    consent with no purpose recorded, does not. Decided server-side from
+        //    the registry; a caller cannot attest it. Enforced BEFORE any call,
+        //    so an unauthorized member's identity is never disclosed to another
+        //    payer, not even in a $member-match.
+        var authorization = await _consentGate.EvaluateAsync(tenantId, member.MemberId, null, ct);
+        ApplyConsentDecision(exchange, authorization);
+        if (!authorization.Allowed)
             return await FailAsync(request, exchange, PayerToPayerOutboundStatus.NotAuthorized,
                 PayerToPayerOutboundFailure.NotAuthorized, ct);
 
@@ -166,6 +170,21 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         await _store.SaveAsync(exchange, ct);
 
         // 6. Member-data export — only now that exactly one member resolved.
+        //    Re-check authorization first: the match round trip takes real time,
+        //    and a member who revokes in that window must not have their record
+        //    pulled. Consent is required before EACH disclosure boundary, not
+        //    once per exchange.
+        var exportAuthorization = await _consentGate.EvaluateAsync(tenantId, member.MemberId, null, ct);
+        ApplyConsentDecision(exchange, exportAuthorization);
+        if (!exportAuthorization.Allowed)
+        {
+            _logger.LogInformation(
+                "P2P outbound halted before export: exchange={Exchange} consent={Reason}",
+                Clean(exchange.ExchangeId), exportAuthorization.Reason);
+            return await FailAsync(request, exchange, PayerToPayerOutboundStatus.NotAuthorized,
+                PayerToPayerOutboundFailure.NotAuthorized, ct);
+        }
+
         exchange.Status = PayerToPayerOutboundStatus.RequestingData;
         await _store.SaveAsync(exchange, ct);
 
@@ -469,6 +488,12 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         // Ingestion counters describe one attempt; a retry re-derives them. The
         // import keys the previous attempt staged are deterministic, so the retry
         // lands on the same rows rather than duplicating the member's history.
+        // Authorization is never inherited across a retry: the exchange re-asks
+        // the registry, so a consent revoked since the last attempt stops it.
+        exchange.AuthorizingConsentId = null;
+        exchange.ConsentDecisionReason = null;
+        exchange.ConsentEvaluatedAtUtc = null;
+
         exchange.IngestionStatus = PayerToPayerIngestionStatus.NotStarted;
         exchange.IngestionFailure = PayerToPayerIngestionFailure.None;
         exchange.PersistedResourceCount = 0;
@@ -478,6 +503,19 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         exchange.UnsupportedResourceTypes = Array.Empty<string>();
         exchange.IngestionStartedAtUtc = null;
         exchange.IngestionCompletedAtUtc = null;
+    }
+
+    /// <summary>
+    /// Records which authorization the exchange is running under. Opaque consent
+    /// id and reason code only — enough to answer "what allowed this disclosure?"
+    /// from durable state, with no consent content on the exchange record.
+    /// </summary>
+    private static void ApplyConsentDecision(
+        PayerToPayerOutboundExchange exchange, ConsentDecision decision)
+    {
+        exchange.AuthorizingConsentId = decision.ConsentId;
+        exchange.ConsentDecisionReason = decision.Reason.ToString();
+        exchange.ConsentEvaluatedAtUtc = decision.EvaluatedAtUtc;
     }
 
     /// <summary>Copies the ingestion outcome onto the exchange as structured state, not prose.</summary>
@@ -511,6 +549,8 @@ public sealed class PayerToPayerOutboundService : IPayerToPayerOutboundService
         Outcome = exchange.Status.ToString(),
         FailureCategory = exchange.Failure.ToString(),
         ResourceCount = exchange.ReceivedResourceCount,
+        AuthorizingConsentId = exchange.AuthorizingConsentId,
+        ConsentDecisionReason = exchange.ConsentDecisionReason,
         IngestionStatus = exchange.IngestionStatus.ToString(),
         PersistedResourceCount = exchange.PersistedResourceCount,
         DuplicateResourceCount = exchange.DuplicateResourceCount,

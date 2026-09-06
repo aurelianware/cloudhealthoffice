@@ -5,8 +5,8 @@ respond path, `$member-match`, outbound initiation, and durable ingestion of wha
 comes back. Everything below lives in `fhir-service`.
 
 Acceptance scenarios: **P2P-01** (inbound respond), **P2P-02** (outbound initiate
-+ ingest), **P2P-03** (opt-in enforcement — still PARTIAL, see
-[Limitations](#limitations)), **P2P-04** (`$member-match` / concurrent coverage).
++ ingest), **P2P-03** ([consent enforcement](#consent)), **P2P-04**
+(`$member-match` / concurrent coverage).
 
 ## Topology
 
@@ -18,6 +18,8 @@ POST Patient/$member-match                  coverage transition
 POST PayerToPayer/$member-data-export              ├─ member + prior coverage (CHO data)
   └─ PayerToPayerExchangeService                   ├─ IPayerToPayerEndpointResolver
                                                    ├─ IPayerToPayerConsentGate
+                                                   │    └─ ConsentAuthorizationPolicy
+                                                   │         over consent-service registry
                                                    ├─ IPayerToPayerRemoteClient
                                                    │    ├─ remote $member-match
                                                    │    └─ remote member-data export
@@ -42,13 +44,15 @@ Fail-closed, and nothing leaves CHO until every local gate has passed:
    endpoints from trusted configuration. A caller never supplies a URL, non-HTTPS
    entries are rejected, and the HTTP client does not follow redirects. This is
    the SSRF boundary;
-4. **authorization** — `IPayerToPayerConsentGate` decides the member's opt-in
-   server-side. Enforced *before* any remote call, so an unauthorized member's
-   identity is never disclosed;
+4. **authorization** — `IPayerToPayerConsentGate` asks CHO's consent registry
+   whether the member authorized the **Payer-to-Payer purpose**, server-side.
+   Enforced *before* any remote call, so an unauthorized member's identity is
+   never disclosed. Re-asked again before the export — see [Consent](#consent);
 5. **remote `$member-match`** — CHO builds the request and interprets the answer;
    it does not re-run the peer's matching rules. No match or an ambiguous match
    is terminal;
-6. **member-data export** — issued only after exactly one member resolves;
+6. **member-data export** — issued only after exactly one member resolves *and*
+   consent is re-confirmed as of that moment;
 7. **validation** — the Bundle must parse, carry exactly one Patient, and that
    Patient (and every `Patient/…` reference, relative or absolute) must be the
    matched member;
@@ -64,6 +68,45 @@ Completed`, with terminal `NoMatch`, `Ambiguous`, `NotAuthorized`, and `Failed`.
 
 `DataReceived` exists so "retrieved but not stored" is a state the system can be
 in and report. Retrieval alone never reads as success.
+
+## Consent
+
+The consent model itself — purposes, lifecycle, the policy, the registry, and
+migration — is documented in [Consent](consent.md). What matters here is how the
+exchange uses it.
+
+**Payer-to-Payer has its own purpose.** Only
+`ConsentPurposeOfUse.PayerToPayerExchange` authorizes an exchange. An Active
+consent is not sufficient by itself: a member with a Provider Access consent, or
+with a consent carrying no purpose, is denied with `NoConsentForPurpose`. The
+required purpose is a constant on `ConsentRegistryPayerToPayerConsentGate`, not
+configuration.
+
+**Both directions ask the same registry.** Inbound
+(`PayerToPayerExchangeService`) and outbound (`PayerToPayerOutboundService`) call
+one `IPayerToPayerConsentGate` over one `ConsentAuthorizationPolicy` against
+`consent-service`. There is no P2P-local consent store and no direction-specific
+rule, so responding cannot become more permissive than initiating.
+
+**Consent is never supplied by a caller.** No request type in this surface has a
+consent field — not the inbound `$member-data-export` request, not the outbound
+initiation request. A receiving payer cannot self-attest, and neither can an
+internal caller.
+
+**Evaluated at the attempt, not carried forward.** Outbound evaluates before the
+remote `$member-match` and again immediately before the export, so a revocation
+landing while the match is in flight stops the data request. A retry clears the
+recorded decision and re-asks. Full semantics, including what a revocation does
+*not* undo, are in
+[Revocation semantics](consent.md#revocation-semantics).
+
+**The exchange records what authorized it.** `AuthorizingConsentId`,
+`ConsentDecisionReason`, and `ConsentEvaluatedAtUtc` are written on the exchange,
+and the consent id and reason on both audit entries — so a completed exchange
+names the consent record that permitted it and a refused one names why.
+
+Denials are terminal `NotAuthorized`, distinct from `Failed`: a member who has
+not authorized the exchange is not an error to retry.
 
 ## Ingestion
 
@@ -176,8 +219,11 @@ invent links the source payer never asserted.
 
 ## Limitations
 
-* **P2P-03 remains PARTIAL** — opt-in is a generic Active consent; there is no
-  dedicated Payer-to-Payer `ConsentType`.
+* Consent must be **recorded with the Payer-to-Payer purpose** before any
+  exchange is authorized. Pre-existing generic consent does not carry it and is
+  not reinterpreted, so a deployment upgrading to this code authorizes nothing
+  until purposes are recorded — see
+  [Migration](consent.md#migration-and-backward-compatibility).
 * Imported data is **not yet surfaced through CHO's FHIR read APIs**; it is
   durable and queryable through the import repository, and projecting it into
   Patient Access / Provider Access responses is follow-up work.

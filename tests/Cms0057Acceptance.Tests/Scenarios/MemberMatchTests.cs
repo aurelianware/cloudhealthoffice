@@ -365,10 +365,7 @@ public class MemberMatchTests
         var provider = new MockPatientAccessDataProvider();
         var exportSource = new PatientAccessPayerToPayerMemberSource(
             provider, Options.Create(new FhirAdapterOptions { TenantId = AcceptanceContext.TenantId }));
-        var consent = new ConfiguredPayerToPayerConsentGate(Options.Create(new PayerToPayerConsentOptions
-        {
-            OptedInMembersByTenant = new() { [AcceptanceContext.TenantId] = new() { match.MatchedMemberId! } },
-        }));
+        var consent = AcceptanceContext.PayerToPayerConsentGate(match.MatchedMemberId!);
         var export = new PayerToPayerExchangeService(
             new PayerToPayerMemberResolver(exportSource), exportSource, consent,
             new PayerToPayerExportBuilder(),

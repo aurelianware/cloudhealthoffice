@@ -73,7 +73,8 @@ trading-partner-service:       ['src/services/trading-partner-service/**']
 
 # ── Meta filters (any match → validate ALL services) ────────────────────────
 # shared-libs: src/services/shared/ contains CloudHealthOffice.Infrastructure,
-# CloudHealthOffice.Events, CloudHealthOffice.Appeals.Contracts — every
+# CloudHealthOffice.Events, CloudHealthOffice.Appeals.Contracts,
+# CloudHealthOffice.Consent.Contracts — every
 # service's Dockerfile COPYs from here, so any change can break every build.
 shared-libs:
   - 'src/services/shared/**'
