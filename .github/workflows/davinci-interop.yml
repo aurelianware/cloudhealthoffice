@@ -16,10 +16,16 @@ name: Da Vinci Interoperability
 # CMS-0057-F scenario status.
 #
 # Cost control: harness unit tests run on every triggering PR (seconds, no Docker).
-# The smoke scenario — which pulls and starts a real third-party container — runs
+# The external scenarios — which pull and start a real third-party container — run
 # on PRs that touch the harness or the interop-relevant service surface, on
 # workflow_dispatch, and nightly. Heavier suites (Inferno conformance kits) are
 # expected to be nightly-only when they land.
+#
+# Both br-payer scenarios run in ONE job rather than a matrix leg each. They pin
+# the same image, so a single job pulls it once instead of twice; the harness
+# still starts and tears down a separate container per scenario, so they remain
+# isolated from one another. The evidence writer merges their results into one
+# run document.
 
 permissions:
   contents: read
@@ -96,9 +102,11 @@ jobs:
           path: artifacts/trx
           if-no-files-found: warn
 
-  # ── External smoke scenario ────────────────────────────────────────────────
+  # ── External scenarios ─────────────────────────────────────────────────────
   # Starts the pinned HL7 Da Vinci burden-reduction payer reference implementation
-  # and performs a real PAS $submit against it.
+  # and performs real exchanges against it:
+  #   BR-PAS-SUBMIT-001  PAS $submit — a synthetic prior authorization
+  #   BR-CRD-001         CRD CDS Hooks — discovery plus order-sign invocations
   #
   # Security posture:
   #   * `permissions: contents: read` only — the third-party container never sits
@@ -109,13 +117,14 @@ jobs:
   #     127.0.0.1, so nothing is reachable off the runner.
   #   * All data sent is synthetic; no VSAC or other licensed terminology
   #     credential is used or required.
-  smoke:
-    name: br-payer PAS $submit smoke (BR-PAS-SUBMIT-001)
+  scenarios:
+    name: br-payer external scenarios (PAS $submit, CRD)
     runs-on: ubuntu-latest
     needs: harness
     # A dead external implementation must fail with a diagnostic, not hold a
-    # runner. The harness has its own bounded timeouts; this is the outer bound.
-    timeout-minutes: 30
+    # runner. The harness has its own bounded timeouts; this is the outer bound,
+    # sized for two scenarios each starting their own container.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -137,11 +146,13 @@ jobs:
                   print(f"  {'':<45} upstream commit {pin['sourceCommit']}")
           PY
 
-      - name: Run the interoperability smoke scenario
-        id: smoke
+      - name: Run the external interoperability scenarios
+        id: scenarios
         env:
           CHO_INTEROP_ENVIRONMENT: CI
-        run: ./scripts/interop/run.sh br-payer smoke
+        # `all` runs every external scenario in one invocation. They serialize
+        # (shared Compose project and host ports) and merge into one run document.
+        run: ./scripts/interop/run.sh br-payer all
 
       - name: Job summary
         if: always()
@@ -156,13 +167,14 @@ jobs:
           run = json.load(open(path))
           s = run['summary']
           print(f"\n{s['passed']} passed / {s['failed']} failed / {s['skipped']} skipped / {s['notRun']} not run\n")
-          print('| Scenario | Status | Independent implementation | Pinned version |')
-          print('| --- | --- | --- | --- |')
+          print('| Scenario | Protocol | Status | Independent implementation | Pinned version |')
+          print('| --- | --- | --- | --- | --- |')
           for target in run['targets']:
               for result in target['results']:
-                  print(f"| {result['scenarioId']} | {result['status']} | {target['name']} | `{target['version']}` |")
+                  print(f"| {result['scenarioId']} | {result['protocol']} | {result['status']} "
+                        f"| {target['name']} | `{target['version']}` |")
           for result in run['notRunScenarios']:
-              print(f"| {result['scenarioId']} | NotRun | {result['target']} | — |")
+              print(f"| {result['scenarioId']} | {result['protocol']} | NotRun | {result['target']} | — |")
           if run['findings']:
               print('\n### Interoperability findings\n')
               for finding in run['findings']:

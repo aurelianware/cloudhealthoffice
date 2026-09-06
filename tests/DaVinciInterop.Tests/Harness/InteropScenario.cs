@@ -106,10 +106,15 @@ public sealed class InteropScenarioRun
         _findings.Any(f => f.Severity == nameof(FindingSeverity.Error));
 
     /// <summary>Seals the run into an evidence result.</summary>
+    /// <param name="externalRole">
+    /// The role the external implementation played (e.g. "payer-server"), so the
+    /// evidence states the direction of the exchange explicitly.
+    /// </param>
     public InteropResult Complete(
         InteropStatus status,
         IReadOnlyList<InteropInteraction> interactions,
-        string? statusReason = null)
+        string? statusReason = null,
+        string? externalRole = null)
     {
         var endedAt = DateTimeOffset.UtcNow;
         return new InteropResult
@@ -118,6 +123,7 @@ public sealed class InteropScenarioRun
             Title = _definition.Title,
             Protocol = _definition.Protocol,
             ChoRole = _definition.ChoRole,
+            ExternalRole = externalRole,
             Target = _target.Name,
             TargetVersion = _target.EvidenceVersion,
             TargetImageReference = _target.Pin.Reference,

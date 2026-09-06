@@ -19,7 +19,8 @@ merged into one score:
   standards-conformant requests and responses with an *independent* HL7 Da Vinci
   implementation? Reports `Passed` / `Failed` / `Skipped` / `NotRun`. External
   scenarios are opt-in and start pinned third-party containers; see
-  [docs/interop/davinci.md](../docs/interop/davinci.md).
+  [docs/interop/davinci.md](../docs/interop/davinci.md). Executing today:
+  `BR-PAS-SUBMIT-001` (PAS `$submit`) and `BR-CRD-001` (CRD CDS Hooks).
 
 ## Supporting Artifacts
 - [E2E-TEST-RESULTS.md](E2E-TEST-RESULTS.md)

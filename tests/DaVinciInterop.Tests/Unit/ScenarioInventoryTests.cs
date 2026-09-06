@@ -26,14 +26,39 @@ public sealed class ScenarioInventoryTests
     }
 
     [Fact]
-    public void Only_the_scenario_this_harness_actually_executes_is_marked_implemented()
+    public void Only_the_scenarios_this_harness_actually_executes_are_marked_implemented()
     {
+        // An inventory row is a plan, not a result. This list grows only when a
+        // scenario that genuinely crosses into the external implementation lands,
+        // so a placeholder can never present itself as proven.
         Inventory.Scenarios
             .Where(s => s.Implemented)
             .Select(s => s.Id)
-            .Should().BeEquivalentTo(["BR-PAS-SUBMIT-001"],
-                "an inventory row is a plan, not a result; marking an unexecuted scenario implemented would " +
-                "produce a green row nothing proved");
+            .Should().BeEquivalentTo(["BR-PAS-SUBMIT-001", "BR-CRD-001"]);
+    }
+
+    [Fact]
+    public void Every_implemented_scenario_has_a_scenario_test_carrying_its_id()
+    {
+        // Guards the other direction: a row marked implemented with no test behind
+        // it would be reported NotRun forever while claiming to be implemented.
+        // TraitAttribute exposes nothing at runtime, so the ids are read from the
+        // attribute's constructor arguments in metadata.
+        var tested = typeof(InteropVersions).Assembly.GetTypes()
+            .SelectMany(type => type.GetCustomAttributesData())
+            .Where(data => data.AttributeType == typeof(TraitAttribute)
+                           && data.ConstructorArguments.Count == 2
+                           && (string?)data.ConstructorArguments[0].Value == "Scenario")
+            .Select(data => (string?)data.ConstructorArguments[1].Value)
+            .Where(id => id is not null)
+            .ToHashSet(StringComparer.Ordinal)!;
+
+        foreach (var scenario in Inventory.Scenarios.Where(s => s.Implemented))
+        {
+            tested.Should().Contain(scenario.Id,
+                "'{0}' is marked implemented, so a scenario test must carry [Trait(\"Scenario\", \"{0}\")]",
+                scenario.Id);
+        }
     }
 
     [Fact]
@@ -66,10 +91,22 @@ public sealed class ScenarioInventoryTests
     }
 
     [Fact]
-    public void The_default_developer_path_starts_only_what_the_smoke_scenario_needs()
+    public void The_default_developer_path_starts_only_what_the_scenarios_need()
     {
-        Inventory.Scenario("BR-PAS-SUBMIT-001").RequiredServices
-            .Should().BeEquivalentTo(["br-payer"],
-                "the documented smoke command must not start every external tool");
+        // The documented commands must not start every external tool. Both
+        // br-payer scenarios need exactly one external service.
+        Inventory.Scenario("BR-PAS-SUBMIT-001").RequiredServices.Should().BeEquivalentTo(["br-payer"]);
+        Inventory.Scenario("BR-CRD-001").RequiredServices.Should().BeEquivalentTo(["br-payer"]);
+    }
+
+    [Fact]
+    public void The_crd_scenario_is_declared_as_cho_driving_an_external_payer()
+    {
+        var crd = Inventory.Scenario("BR-CRD-001");
+
+        crd.Protocol.Should().Be("CRD");
+        crd.ParsedChoRole.Should().Be(ChoRole.Client,
+            "CHO is the provider-side CRD client; the external implementation is the payer CDS service");
+        crd.ExternalTarget.Should().Be("br-payer");
     }
 }

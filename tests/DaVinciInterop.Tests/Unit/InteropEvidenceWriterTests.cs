@@ -193,6 +193,112 @@ public sealed class InteropEvidenceWriterTests : IDisposable
             .Should().Be(body, "an ordinary response must reach the artifact verbatim");
     }
 
+    [Fact]
+    public void A_second_scenario_does_not_erase_the_first_ones_result()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+
+        // First scenario writes.
+        writer.Write(InteropEvidenceWriter.BuildRun(
+            Versions, Inventory, [PassedResult("BR-PAS-SUBMIT-001")]));
+
+        // Second scenario merges rather than clobbering — without this the run
+        // document would claim the first scenario never ran.
+        var merged = writer.MergeWithPrevious([PassedResult("BR-CRD-001")]);
+        writer.Write(InteropEvidenceWriter.BuildRun(Versions, Inventory, merged));
+
+        var run = JsonSerializer.Deserialize<InteropEvidenceRun>(
+            File.ReadAllText(Path.Combine(_tempRoot, "run.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+
+        run.Targets.SelectMany(t => t.Results).Select(r => r.ScenarioId)
+            .Should().BeEquivalentTo(["BR-PAS-SUBMIT-001", "BR-CRD-001"]);
+        run.Summary.Passed.Should().Be(2);
+        run.Summary.NotRun.Should().Be(Inventory.Scenarios.Count - 2);
+    }
+
+    [Fact]
+    public void Re_running_a_scenario_replaces_its_result_rather_than_duplicating_it()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+        writer.Write(InteropEvidenceWriter.BuildRun(Versions, Inventory, [PassedResult("BR-CRD-001")]));
+
+        var rerun = PassedResult("BR-CRD-001") with
+        {
+            Status = nameof(InteropStatus.Failed),
+            StatusReason = "second attempt failed",
+        };
+        var merged = writer.MergeWithPrevious([rerun]);
+
+        merged.Should().ContainSingle(r => r.ScenarioId == "BR-CRD-001")
+            .Which.ParsedStatus.Should().Be(InteropStatus.Failed, "newest wins");
+    }
+
+    [Fact]
+    public void NotRun_rows_are_regenerated_rather_than_carried_forward_as_results()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+        writer.Write(InteropEvidenceWriter.BuildRun(Versions, Inventory, [PassedResult("BR-CRD-001")]));
+
+        // The first write recorded five NotRun rows. They must not come back as
+        // "previously recorded results" and be mistaken for executed scenarios.
+        writer.PreviouslyRecordedResults().Should().ContainSingle()
+            .Which.ScenarioId.Should().Be("BR-CRD-001");
+    }
+
+    [Fact]
+    public void Merging_against_no_previous_run_returns_just_the_new_results()
+    {
+        new InteropEvidenceWriter(_tempRoot).MergeWithPrevious([PassedResult("BR-CRD-001")])
+            .Should().ContainSingle().Which.ScenarioId.Should().Be("BR-CRD-001");
+    }
+
+    [Fact]
+    public void A_corrupt_previous_run_document_never_loses_the_result_being_recorded()
+    {
+        Directory.CreateDirectory(_tempRoot);
+        File.WriteAllText(Path.Combine(_tempRoot, "run.json"), "{ not valid json");
+
+        var writer = new InteropEvidenceWriter(_tempRoot);
+
+        writer.MergeWithPrevious([PassedResult("BR-CRD-001")])
+            .Should().ContainSingle().Which.ScenarioId.Should().Be("BR-CRD-001");
+    }
+
+    [Fact]
+    public void A_crd_result_carries_the_direction_of_the_exchange()
+    {
+        var scenario = Inventory.Scenario("BR-CRD-001");
+        var result = new InteropScenarioRun(scenario, Versions.Target(scenario.ExternalTarget))
+            .Complete(InteropStatus.Passed, Array.Empty<InteropInteraction>(), externalRole: "payer-server");
+
+        result.ChoRole.Should().Be("Client");
+        result.ExternalRole.Should().Be("payer-server");
+        result.Protocol.Should().Be("CRD");
+    }
+
+    [Fact]
+    public void Cds_hooks_interactions_are_labelled_by_kind_and_hook()
+    {
+        var result = PassedResult("BR-CRD-001") with
+        {
+            Interactions =
+            [
+                new InteropInteraction { Sequence = 1, Kind = "cds-hooks-discovery", Method = "GET", StatusCode = 200 },
+                new InteropInteraction
+                {
+                    Sequence = 2, Kind = "cds-hooks-invoke", Hook = "order-sign",
+                    ServiceId = "order-sign-crd", Method = "POST", StatusCode = 200,
+                },
+            ],
+        };
+
+        var json = JsonSerializer.Serialize(
+            InteropEvidenceWriter.BuildRun(Versions, Inventory, [result]));
+
+        json.Should().Contain("cds-hooks-discovery").And.Contain("cds-hooks-invoke").And.Contain("order-sign");
+    }
+
     private static InteropResult PassedResult(string scenarioId)
     {
         var scenario = Inventory.Scenario(scenarioId);

@@ -35,6 +35,7 @@ namespace DaVinciInterop.Tests.Scenarios;
 ///
 /// Every identifier sent is synthetic (<see cref="SyntheticInteropData"/>).
 /// </summary>
+[Collection(InteropCollection.Name)]
 [Trait("Category", "DaVinciInterop")]
 [Trait("Scenario", "BR-PAS-SUBMIT-001")]
 [Trait("Target", "HL7-DaVinci/br-payer")]
@@ -207,7 +208,8 @@ public sealed class BrPayerPasSubmitSmokeTests
 
             result = run.Complete(
                 run.HasBlockingFindings ? InteropStatus.Failed : InteropStatus.Passed,
-                client.Interactions);
+                client.Interactions,
+                externalRole: "payer-server");
         }
         catch (Exception ex)
         {
@@ -216,7 +218,9 @@ public sealed class BrPayerPasSubmitSmokeTests
             // add megabytes of upstream startup noise to the artifact bundle
             // without telling a reviewer anything run.json does not already say.
             await environment.CaptureLogsAsync();
-            result = run.Complete(InteropStatus.Failed, client.Interactions, $"{ex.GetType().Name}: {ex.Message}");
+            result = run.Complete(
+                InteropStatus.Failed, client.Interactions,
+                $"{ex.GetType().Name}: {ex.Message}", externalRole: "payer-server");
             WriteEvidence(writer, versions, inventory, result, client, environment);
             throw;
         }
@@ -331,7 +335,10 @@ public sealed class BrPayerPasSubmitSmokeTests
         InteropHttpClient client,
         InteropEnvironment environment)
     {
-        var run = InteropEvidenceWriter.BuildRun(versions, inventory, [result]);
+        // Merge with anything already recorded this invocation, so running the PAS
+        // and CRD scenarios together yields one run document describing both.
+        var merged = writer.MergeWithPrevious([result]);
+        var run = InteropEvidenceWriter.BuildRun(versions, inventory, merged);
         writer.Write(run, client.CapturedBodies, environment.ServiceLogs);
     }
 }

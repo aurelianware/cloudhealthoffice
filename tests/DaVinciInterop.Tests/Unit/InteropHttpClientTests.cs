@@ -108,6 +108,53 @@ public sealed class InteropHttpClientTests
         discovery.Services[0].AdvertisedCrdVersions.Should().BeEquivalentTo(["2.2"]);
     }
 
+    [Fact]
+    public async Task A_cds_hooks_invocation_records_the_service_id_it_called()
+    {
+        using var client = ClientReturning(HttpStatusCode.OK, """{"cards":[]}""", "application/json");
+        var request = SyntheticInteropData.CrdOrderRequest(
+            "order-sign", "L8000", "http://host.docker.internal:1234/fhir", "hook-1");
+
+        var (_, raw) = await client.PostCdsHooksAsync(
+            "http://127.0.0.1:18081/cds-services/order-sign-crd", request, serviceId: "order-sign-crd");
+
+        // Without this the evidence carries a serviceId field nothing ever fills,
+        // and a reader cannot tell which service was invoked.
+        raw.Interaction.ServiceId.Should().Be("order-sign-crd");
+        raw.Interaction.Kind.Should().Be("cds-hooks-invoke");
+        raw.Interaction.Hook.Should().Be("order-sign");
+    }
+
+    [Fact]
+    public async Task An_invocation_that_never_reached_the_service_still_names_it()
+    {
+        using var client = new InteropHttpClient(
+            "HL7-DaVinci/br-payer",
+            TimeSpan.FromSeconds(5),
+            new HttpClient(new StubHandler(_ => throw new HttpRequestException("connection refused"))));
+        var request = SyntheticInteropData.CrdOrderRequest(
+            "order-sign", "L8000", "http://host.docker.internal:1234/fhir", "hook-1");
+
+        var act = () => client.PostCdsHooksAsync(
+            "http://127.0.0.1:18081/cds-services/order-sign-crd", request, serviceId: "order-sign-crd");
+
+        await act.Should().ThrowAsync<InteropTransportException>();
+        // A transport failure is exactly when knowing the target matters most.
+        client.Interactions.Should().ContainSingle()
+            .Which.ServiceId.Should().Be("order-sign-crd");
+    }
+
+    [Fact]
+    public async Task Discovery_is_labelled_as_discovery_and_names_no_service()
+    {
+        using var client = ClientReturning(HttpStatusCode.OK, """{"services":[]}""", "application/json");
+
+        var (_, raw) = await client.GetCdsHooksDiscoveryAsync("http://127.0.0.1:18081/cds-services");
+
+        raw.Interaction.Kind.Should().Be("cds-hooks-discovery");
+        raw.Interaction.ServiceId.Should().BeNull("discovery is not an invocation of any one service");
+    }
+
     private static InteropHttpClient ClientReturning(
         HttpStatusCode status,
         string body,

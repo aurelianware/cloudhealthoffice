@@ -14,13 +14,13 @@
     },
     {
       "id": "BR-CRD-001",
-      "title": "CRD CDS Hooks exchange with the burden-reduction payer RI",
+      "title": "CRD CDS Hooks exchange with the HL7 Da Vinci burden-reduction payer RI",
       "protocol": "CRD",
       "choRole": "Client",
       "externalTarget": "br-payer",
       "requiredServices": ["br-payer"],
-      "implemented": false,
-      "description": "Invoke an advertised CRD hook (order-sign / appointment-book) on the external payer and validate the returned cards and coverage-information system actions."
+      "implemented": true,
+      "description": "CHO acts as the provider-side CRD client: it discovers the payer RI's CDS Hooks services, selects the order-sign CRD service from discovery, invokes it with synthetic draft orders, and validates the CDS Hooks response and the Da Vinci coverage-information determinations it carries."
     },
     {
       "id": "BR-DTR-001",
