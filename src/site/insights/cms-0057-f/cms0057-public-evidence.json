@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-06T09:29:53Z",
-  "commitSha": "e66f210845e17bd5d588ea1ca7cea37edff10d91",
-  "commitShaShort": "e66f210845e1",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/e66f210845e17bd5d588ea1ca7cea37edff10d91",
+  "generatedAtUtc": "2026-09-06T11:10:23Z",
+  "commitSha": "73d448ba0b1b445268576dc7d5ecec8ae768f1a7",
+  "commitShaShort": "73d448ba0b1b",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/73d448ba0b1b445268576dc7d5ecec8ae768f1a7",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 344,
+    "passed": 362,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 20,
-    "partial": 1,
+    "passable": 21,
+    "partial": 0,
     "gap": 0,
     "na": 0
   },
@@ -213,7 +213,7 @@
       "id": "SEC-01",
       "name": "SMART on FHIR / OAuth",
       "capability": "Security",
-      "replace": "PARTIAL",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "N/A"
       }
