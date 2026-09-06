@@ -3,13 +3,20 @@
 # Da Vinci external interoperability harness — one command.
 #
 #   ./scripts/interop/run.sh                    # br-payer smoke (the default)
-#   ./scripts/interop/run.sh br-payer smoke     # the same, spelled out
+#   ./scripts/interop/run.sh br-payer smoke     # PAS $submit  (BR-PAS-SUBMIT-001)
+#   ./scripts/interop/run.sh br-payer crd       # CRD CDS Hooks (BR-CRD-001)
+#   ./scripts/interop/run.sh br-payer all       # both, into one evidence document
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
-# The smoke path starts the pinned HL7 Da Vinci burden-reduction payer reference
-# implementation, waits for it to actually serve FHIR, submits a synthetic prior
-# authorization to it, validates the response, writes sanitized evidence to
+# Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
+# implementation, waits for it to actually be ready, performs a real exchange
+# against it, validates the response, writes sanitized evidence to
 # artifacts/interop/, and tears the stack down — including after a failure.
+#
+# The smoke path submits a synthetic prior authorization (PAS $submit). The CRD
+# path discovers the payer's CDS Hooks services and invokes its order-sign CRD
+# service with synthetic draft orders. Scenarios run one at a time: they share a
+# Compose project and host ports, so the suite serializes them deliberately.
 #
 # Everything the external implementation sees is synthetic. No repository secret,
 # cloud credential or Docker socket is exposed to it.
@@ -36,6 +43,20 @@ if [[ "$TARGET" == "unit" || "$TARGET" == "--unit" ]]; then
   MODE="unit"
 fi
 
+# Each mode maps to the scenario ids it runs, via the [Trait("Scenario", …)] the
+# scenario tests carry. `all` runs every external scenario in one invocation; the
+# evidence writer merges their results into a single run document.
+case "$MODE" in
+  smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
+  crd)   FILTER='Scenario=BR-CRD-001';        LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
+  all)   FILTER='Category=DaVinciInterop';    LABEL='all external scenarios' ;;
+  unit)  : ;;
+  *)
+    echo "Unknown mode '$MODE'. Modes: smoke | crd | all | unit." >&2
+    exit 2
+    ;;
+esac
+
 # ── Unconditional cleanup ────────────────────────────────────────────────────
 # The harness tears its own stack down, but a killed test run (Ctrl-C, a CI
 # timeout) can leave containers behind. This trap is the backstop: nothing the
@@ -61,7 +82,7 @@ fi
 
 if [[ "$TARGET" != "br-payer" ]]; then
   echo "Unknown interop target '$TARGET'." >&2
-  echo "Executable targets in this repository: br-payer (scenario BR-PAS-SUBMIT-001)." >&2
+  echo "Executable targets in this repository: br-payer (BR-PAS-SUBMIT-001, BR-CRD-001)." >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
   exit 2
@@ -75,14 +96,14 @@ fi
 echo "==> Cleaning previous evidence from $ARTIFACTS"
 rm -rf "$ARTIFACTS"
 
-echo "==> Running the Da Vinci interoperability smoke scenario (BR-PAS-SUBMIT-001)"
+echo "==> Running Da Vinci interoperability: $LABEL"
 echo "    target: HL7-DaVinci/br-payer, pinned by digest in interop/versions.json"
 
 # The harness owns startup, readiness and teardown of the external stack; this
 # script only enables it and collects what it produced.
 CHO_INTEROP_ENABLED=1 \
 CHO_INTEROP_ARTIFACTS="$ARTIFACTS" \
-  dotnet test "$TEST_PROJECT" -c Debug --filter "Category=DaVinciInterop"
+  dotnet test "$TEST_PROJECT" -c Debug --filter "$FILTER"
 
 echo
 echo "==> Evidence written to $ARTIFACTS"

@@ -153,6 +153,156 @@ public static class SyntheticInteropData
         };
     }
 
+    // ── CRD (CDS Hooks) ──────────────────────────────────────────────────────
+    //
+    // Coverage Requirements Discovery is evaluated by the payer against the payer
+    // identifier on the member's Coverage. The pinned HL7 burden-reduction payer
+    // scopes its rule fixtures to a specific synthetic payer identifier, so a
+    // request carrying CHO's own payer id would match no rule and the exchange
+    // would prove only that the endpoint answers.
+    //
+    // The identifier below is therefore UPSTREAM TEST FIXTURE DATA, not CHO
+    // production configuration: it is the payer id the reference implementation's
+    // own scenario library uses, and it exists solely so its rule lookup engages.
+    // It is synthetic on both sides and names no real payer.
+
+    /// <summary>Identifier system of the payer the upstream CRD rule fixtures are scoped to.</summary>
+    public const string UpstreamRulePayerIdentifierSystem = "urn:oid:2.16.840.1.113883.6.300";
+
+    /// <summary>
+    /// Payer identifier the pinned br-payer rule fixtures are scoped to. Upstream
+    /// test data — see docs/interop/davinci.md, "Upstream fixture dependency".
+    /// </summary>
+    public const string UpstreamRulePayerIdentifierValue = "00001";
+
+    public const string PractitionerId = "interop-practitioner-001";
+    public const string OrderId = "interop-order-001";
+    public const string HcpcsSystem = "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets";
+
+    /// <summary>
+    /// Builds a CDS Hooks request for a CRD order-sign style hook: a draft device
+    /// order for <paramref name="billingCode"/>, with the patient and coverage
+    /// supplied as prefetch.
+    ///
+    /// Every prefetch key the service needs is supplied, so the payer has no
+    /// reason to dereference <paramref name="fhirServer"/>. That is asserted by
+    /// the scenario rather than assumed: the harness points fhirServer at a
+    /// listener it controls and fails if a callback arrives unexpectedly.
+    /// </summary>
+    /// <param name="hook">The hook name, taken from discovery — never hard-coded by the caller's guess.</param>
+    /// <param name="billingCode">HCPCS code on the draft order; what the payer's rules key off.</param>
+    /// <param name="fhirServer">A FHIR base the harness actually runs or observes.</param>
+    /// <param name="hookInstance">Stable id so a captured request artifact diffs cleanly.</param>
+    public static CdsHooksRequest CrdOrderRequest(
+        string hook,
+        string billingCode,
+        string fhirServer,
+        string hookInstance)
+    {
+        var draftOrder = new Dictionary<string, object>
+        {
+            ["resourceType"] = "Bundle",
+            ["type"] = "collection",
+            ["entry"] = new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["resource"] = new Dictionary<string, object>
+                    {
+                        ["resourceType"] = "DeviceRequest",
+                        ["id"] = OrderId,
+                        ["status"] = "draft",
+                        ["intent"] = "original-order",
+                        ["codeCodeableConcept"] = Concept(HcpcsSystem, billingCode),
+                        ["subject"] = Reference($"Patient/{MemberId}"),
+                        ["requester"] = Reference($"Practitioner/{PractitionerId}"),
+                        ["insurance"] = new object[] { Reference($"Coverage/{CoverageId}") },
+                    },
+                },
+            },
+        };
+
+        return new CdsHooksRequest
+        {
+            HookInstance = hookInstance,
+            Hook = hook,
+            FhirServer = fhirServer,
+            Context = new Dictionary<string, object>
+            {
+                ["userId"] = $"Practitioner/{PractitionerId}",
+                ["patientId"] = MemberId,
+                ["draftOrders"] = draftOrder,
+            },
+            Prefetch = new Dictionary<string, object>
+            {
+                ["patient"] = new Dictionary<string, object>
+                {
+                    ["resourceType"] = "Patient",
+                    ["id"] = MemberId,
+                    ["identifier"] = new object[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["type"] = Concept("http://terminology.hl7.org/CodeSystem/v2-0203", "MB"),
+                            ["system"] = MemberIdentifierSystem,
+                            ["value"] = MemberId,
+                        },
+                    },
+                    ["gender"] = "female",
+                    ["birthDate"] = "1970-01-01",
+                },
+                ["coverage"] = new Dictionary<string, object>
+                {
+                    ["resourceType"] = "Bundle",
+                    ["type"] = "collection",
+                    ["entry"] = new object[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["resource"] = new Dictionary<string, object>
+                            {
+                                ["resourceType"] = "Coverage",
+                                ["id"] = CoverageId,
+                                ["status"] = "active",
+                                ["beneficiary"] = Reference($"Patient/{MemberId}"),
+                                ["payor"] = new object[] { Reference($"Organization/{PayerId}") },
+                            },
+                        },
+                        new Dictionary<string, object>
+                        {
+                            ["resource"] = new Dictionary<string, object>
+                            {
+                                ["resourceType"] = "Organization",
+                                ["id"] = PayerId,
+                                ["active"] = true,
+                                ["name"] = "Interop Payer A (synthetic)",
+                                ["identifier"] = new object[]
+                                {
+                                    new Dictionary<string, object>
+                                    {
+                                        ["system"] = UpstreamRulePayerIdentifierSystem,
+                                        ["value"] = UpstreamRulePayerIdentifierValue,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+    }
+
+    private static Dictionary<string, object> Concept(string system, string code) => new()
+    {
+        ["coding"] = new object[]
+        {
+            new Dictionary<string, object> { ["system"] = system, ["code"] = code },
+        },
+    };
+
+    private static Dictionary<string, object> Reference(string reference) =>
+        new() { ["reference"] = reference };
+
     /// <summary>
     /// Wraps a PAS request bundle in the Parameters resource the PAS
     /// <c>Claim/$submit</c> and <c>Claim/$inquire</c> operations take.
