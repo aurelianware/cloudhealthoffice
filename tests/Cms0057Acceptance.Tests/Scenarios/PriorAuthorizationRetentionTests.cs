@@ -31,7 +31,13 @@ public class PriorAuthorizationRetentionTests
     private const string TenantA = AcceptanceContext.TenantId;
     private const string TenantB = "other-tenant";
 
-    private static readonly DateTime Now = new(2026, 9, 6, 0, 0, 0, DateTimeKind.Utc);
+    /// <summary>
+    /// Evaluated per use, NOT a fixed date. The worker decides eligibility from
+    /// DateTime.UtcNow, so records seeded relative to a hard-coded "now" would
+    /// drift across the retention boundary as real time passed and these tests
+    /// would start failing on a date nobody chose.
+    /// </summary>
+    private static DateTime Now => DateTime.UtcNow;
 
     private static PriorAuthorizationRetentionOptions Options(
         TimeSpan? period = null, bool dryRun = false, int max = 500) => new()
@@ -386,6 +392,59 @@ public class PriorAuthorizationRetentionTests
 
         summary.Scanned.Should().Be(3, "a sweep never loads an unbounded result set");
         summary.Purged.Should().Be(3);
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAT-03")]
+    public async Task PAT03_Replace_SuccessiveSweepsAdvanceThroughABacklogOldestFirst()
+    {
+        // A bounded query without an ordering can return whichever subset the
+        // store happens to hand back, so a large backlog could be re-scanned
+        // forever while the oldest records are never reached. Oldest-first means
+        // each sweep makes progress and the longest-expired records go first.
+        var options = Options(period: TimeSpan.FromDays(365), max: 2);
+
+        // Six eligible records, distinguishable by age.
+        var seed = Enumerable.Range(1, 6)
+            .Select(i => Auth(AuthorizationStatus.Approved, Now.AddDays(-400 - (i * 100)),
+                authNumber: $"PAS-AGE-{i:D2}"))
+            .ToArray();
+        var (worker, store) = WorkerOver(options, seed);
+
+        // The oldest is i=6 (-1000d); the youngest eligible is i=1 (-500d).
+        var oldestTwo = new[] { "PAS-AGE-06", "PAS-AGE-05" };
+
+        await worker.SweepAsync(options, CancellationToken.None);
+
+        foreach (var number in oldestTwo)
+            (await store.GetByAuthorizationNumberAsync(number)).Should().BeNull(
+                "the oldest records are purged first");
+        (await store.GetByAuthorizationNumberAsync("PAS-AGE-01")).Should().NotBeNull(
+            "a bounded sweep leaves the youngest for a later pass");
+
+        // Three bounded sweeps clear all six — progress, not repetition.
+        await worker.SweepAsync(options, CancellationToken.None);
+        await worker.SweepAsync(options, CancellationToken.None);
+
+        foreach (var a in seed)
+            (await store.GetByAuthorizationNumberAsync(a.AuthorizationNumber)).Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Scenario", "PAT-03")]
+    public async Task PAT03_Replace_AnOpenStatusIsRefusedEvenIfNamedAsExpected()
+    {
+        // Defence in depth at the store: a caller that names an open status as
+        // the expected one is refused rather than trusted, in every repository.
+        var options = Options();
+        var auth = Auth(AuthorizationStatus.Pended, Now.AddDays(-5000));
+        var (_, store) = WorkerOver(options, auth);
+
+        var purged = await store.PurgeIfStillEligibleAsync(
+            TenantA, auth.Id, AuthorizationStatus.Pended);
+
+        purged.Should().BeFalse();
+        (await store.GetByIdAsync(auth.Id)).Should().NotBeNull();
     }
 
     [Fact]

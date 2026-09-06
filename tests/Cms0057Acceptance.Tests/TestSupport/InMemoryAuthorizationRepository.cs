@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using AuthorizationService.Services.Retention;
 
 namespace Cms0057Acceptance.Tests.TestSupport;
 
@@ -59,6 +60,9 @@ internal sealed class InMemoryAuthorizationRepository : IAuthorizationRepository
                                  or AuthorizationStatus.Expired
                                  or AuthorizationStatus.Cancelled)
             .Where(a => a.SubmittedDate <= anchorCutoffUtc)
+            // Oldest-first, mirroring both production repositories: a bounded
+            // sweep must advance through a backlog rather than re-scan a subset.
+            .OrderBy(a => a.SubmittedDate)
             .Take(limit)
             .Select(Clone)
             .ToList();
@@ -71,6 +75,14 @@ internal sealed class InMemoryAuthorizationRepository : IAuthorizationRepository
     {
         if (string.IsNullOrWhiteSpace(tenantId))
             throw new ArgumentException("Tenant is required for a retention purge.", nameof(tenantId));
+
+        // Mirrors the production Mongo implementation: an open status is never
+        // purgeable, even if a caller names one as the expected status.
+        if (expectedStatus.IsOpen())
+        {
+            RefusedPurgeCount++;
+            return Task.FromResult(false);
+        }
 
         OnBeforePurge?.Invoke(id);
 

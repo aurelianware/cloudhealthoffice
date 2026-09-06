@@ -187,7 +187,14 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
                        })
                      & builder.Lte(x => x.SubmittedDate, anchorCutoffUtc);
 
-        return await _collection.Find(filter).Limit(limit).ToListAsync(ct);
+        // Ordered oldest-first for the same reason as the Cosmos query: a bounded
+        // query without a sort can re-scan one subset forever and never reach the
+        // oldest records. Matches SearchAsync's existing SubmittedDate ordering.
+        return await _collection
+            .Find(filter)
+            .SortBy(x => x.SubmittedDate)
+            .Limit(limit)
+            .ToListAsync(ct);
     }
 
     public async Task<bool> PurgeIfStillEligibleAsync(

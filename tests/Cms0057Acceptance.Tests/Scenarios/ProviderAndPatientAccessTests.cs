@@ -141,8 +141,11 @@ public class ProviderAndPatientAccessTests
         // lifecycle is now a pure policy plus a hosted sweeper; the behaviour is
         // proven in PriorAuthorizationRetentionTests rather than by this
         // presence check.
-        typeof(AuthorizationService.Services.Retention.IPriorAuthorizationRetentionPolicy)
-            .Should().NotBeNull();
+        // A concrete policy implements the rule...
+        typeof(AuthorizationService.Services.Retention.PriorAuthorizationRetentionPolicy)
+            .Should().Implement<AuthorizationService.Services.Retention.IPriorAuthorizationRetentionPolicy>();
+
+        // ...and a hosted worker applies it.
         typeof(AuthorizationService.Services.Retention.PriorAuthorizationRetentionWorker)
             .Should().BeAssignableTo<Microsoft.Extensions.Hosting.BackgroundService>();
     }

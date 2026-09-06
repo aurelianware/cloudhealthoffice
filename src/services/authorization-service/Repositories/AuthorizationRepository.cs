@@ -351,11 +351,17 @@ public class AuthorizationRepository : IAuthorizationRepository
         // submittedDate as a COARSE floor: a record submitted after the cutoff
         // cannot possibly have a last status change before it, so this is a safe
         // over-select. The policy then decides per record from the real anchor.
+        //
+        // ORDERED oldest-first: a bounded query without a sort returns whatever
+        // subset the store happens to hand back, so a large backlog could be
+        // re-scanned indefinitely while the oldest records are never reached.
+        // Oldest-first makes each sweep advance.
         var queryText = @"
             SELECT * FROM c
             WHERE c.tenantId = @tenantId
             AND c.status IN ('Approved', 'Modified', 'Denied', 'Expired', 'Cancelled')
             AND c.submittedDate <= @cutoff
+            ORDER BY c.submittedDate ASC
             OFFSET 0 LIMIT @limit";
 
         var queryDef = new QueryDefinition(queryText)
