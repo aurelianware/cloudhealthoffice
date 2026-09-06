@@ -44,7 +44,7 @@ the machine-readable source of truth.
 
 | Target | Role | Protocols | License | Status in this repository |
 | --- | --- | --- | --- | --- |
-| [HL7-DaVinci/br-payer](https://github.com/HL7-DaVinci/br-payer) | External server | CRD, DTR, PAS | Apache-2.0 | **Executed** — PAS `$submit` and CRD CDS Hooks scenarios run against it |
+| [HL7-DaVinci/br-payer](https://github.com/HL7-DaVinci/br-payer) | External server | CRD, DTR, PAS | Apache-2.0 | **Executed** — PAS `$submit`, CRD CDS Hooks and DTR `$questionnaire-package` scenarios run against it |
 | [HL7-DaVinci/br-provider](https://github.com/HL7-DaVinci/br-provider) | External client | CRD, DTR, PAS | MIT | Pinned and defined; no scenario yet |
 | [inferno-framework/davinci-pdex-test-kit](https://github.com/inferno-framework/davinci-pdex-test-kit) | Conformance runner | PDex | Apache-2.0 | Runner seam only — see §11 |
 | [inferno-framework/davinci-dtr-test-kit](https://github.com/inferno-framework/davinci-dtr-test-kit) | Conformance runner | DTR | Apache-2.0 | Runner seam only — see §11 |
@@ -108,9 +108,10 @@ One command starts the dependency, runs the scenario, collects evidence and clea
 up:
 
 ```bash
-./scripts/interop/run.sh br-payer smoke   # PAS $submit    (BR-PAS-SUBMIT-001)
-./scripts/interop/run.sh br-payer crd     # CRD CDS Hooks  (BR-CRD-001)
-./scripts/interop/run.sh br-payer all     # both, merged into one evidence document
+./scripts/interop/run.sh br-payer smoke   # PAS $submit               (BR-PAS-SUBMIT-001)
+./scripts/interop/run.sh br-payer crd     # CRD CDS Hooks             (BR-CRD-001)
+./scripts/interop/run.sh br-payer dtr     # DTR $questionnaire-package (BR-DTR-001)
+./scripts/interop/run.sh br-payer all     # all three, merged into one evidence document
 ```
 
 Scenarios run one at a time even under `all`. They share a Compose project name
@@ -132,6 +133,7 @@ Running the external scenarios directly, if you would rather drive them yourself
 ```bash
 CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Category=DaVinciInterop
 CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Scenario=BR-CRD-001
+CHO_INTEROP_ENABLED=1 dotnet test tests/DaVinciInterop.Tests --filter Scenario=BR-DTR-001
 ```
 
 Without `CHO_INTEROP_ENABLED=1` the external scenarios **skip**. An ordinary
@@ -347,17 +349,22 @@ Known at the current pins:
   discovery, while the payer does. Recorded by `BR-CRD-001` as the Warning finding
   `crd.surface.noVersionExtension`. A CRD client cannot tell from CHO's discovery
   which CRD version CHO implements. Not adjudicated here; a reasonable follow-up.
+* **DTR version.** CHO targets the Da Vinci DTR **STU 2.2.x** family; the pinned
+  payer reports **2.2.0**, read at runtime from the version on the
+  `dtr-std-questionnaire` StructureDefinition it has installed rather than assumed
+  from the pin. Same family; `run.json` reports `mismatch: true` for the same
+  reason as CRD and PAS — one side names a family, the other a release.
 
 ## 13. Limitations
 
-* Two scenarios execute today: `BR-PAS-SUBMIT-001` (PAS) and `BR-CRD-001` (CRD).
-  Everything else in the inventory is `NotRun` — deliberately, because a
-  placeholder must never look like a result.
-* CHO participates in both scenarios as the **client**, and through its real
+* Three scenarios execute today: `BR-PAS-SUBMIT-001` (PAS), `BR-CRD-001` (CRD)
+  and `BR-DTR-001` (DTR). Everything else in the inventory is `NotRun` —
+  deliberately, because a placeholder must never look like a result.
+* CHO participates in all three scenarios as the **client**, and through its real
   production code on the CHO side (`MetadataController` for PAS,
   `CrdController` for CRD). CHO's FHIR service does not run as a container in
-  either; the `interop-cho` profile exists for the scenarios where CHO is the
-  server, and is exercised by no scenario yet.
+  any of them; the `interop-cho` profile exists for the scenarios where CHO is
+  the server, and is exercised by no scenario yet.
 * `BR-CRD-001` proves protocol interoperability and that the external payer's
   rules ran. It does **not** compare coverage decisions between CHO and the
   payer — see "Protocol compatibility vs payer rule parity" below.
@@ -522,17 +529,187 @@ things that are unambiguously protocol requirements.
 ./scripts/interop/run.sh br-payer crd
 ```
 
-## 15. Recommended next step
+## 15. DTR interoperability (`BR-DTR-001`)
 
-`BR-DTR-001` — DTR `$questionnaire-package` against br-payer. `BR-CRD-001`
-discovered the hand-off that makes it the highest-value next step: when the payer
-reports `pa-needed=auth-needed` it also names a DTR questionnaire canonical
-(`.../Questionnaire/PriorAuthRequired`) in the same coverage-information
-extension. Following that canonical into `$questionnaire-package` walks the real
-CRD → DTR path an implementer takes, using content the payer itself just pointed
-at rather than a fixture chosen by the harness.
+### The chain
 
-`BR-PAS-INQUIRE-001` remains a straightforward follow-on, since
-`BR-PAS-SUBMIT-001` already establishes the prior authorization an inquiry needs.
-The Inferno suites should come after both, as they additionally require the
-`interop-cho` profile and per-suite input discovery.
+```
+CHO ──CRD order-sign──────────────────────────▶ br-payer
+    ◀── coverage-information:
+          pa-needed = auth-needed
+          questionnaire = <canonical>
+
+CHO ──$questionnaire-package(<canonical>)─────▶ br-payer
+    ◀── Parameters: packagebundle containing that Questionnaire
+```
+
+CHO is the **provider-side DTR client**; br-payer is the **payer DTR server**.
+
+### Why it chains rather than picks
+
+The questionnaire is never chosen by CHO. The payer decides which one applies
+when it evaluates coverage, and this scenario follows that decision into the
+payer's DTR surface — which is exactly what a provider system must do in
+production.
+
+Selecting a questionnaire from a CHO fixture would have tested a different, much
+weaker thing: that the payer answers for a canonical CHO already knew. Chaining
+means CHO does not reimplement, mirror or second-guess the payer's
+questionnaire-selection rule. It consumes it. That is what makes this independent
+evidence.
+
+The evidence records the linkage, so a run reads as a workflow rather than as
+isolated green rows:
+
+```json
+{
+  "scenarioId": "BR-DTR-001",
+  "protocol": "DTR",
+  "choRole": "Client",
+  "externalRole": "payer-server",
+  "linkedFromScenario": "BR-CRD-001",
+  "linkedArtifact": "http://example.org/fhir/Questionnaire/PriorAuthRequired",
+  "status": "Passed"
+}
+```
+
+`linkedFromScenario` / `linkedArtifact` are deliberately protocol-neutral: a
+future PAS submit → inquire chain would use the same two fields for an
+authorization number.
+
+### The operation
+
+`POST {fhirBase}/Questionnaire/$questionnaire-package`, advertised by the payer's
+CapabilityStatement under the DTR canonical
+`http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/questionnaire-package`.
+The scenario asserts it is advertised before invoking it.
+
+Request `Parameters`, carrying only what the operation requires:
+
+| Part | Cardinality | What the scenario sends |
+| --- | --- | --- |
+| `coverage` | 1..1 (required) | Synthetic Coverage with `subscriberId` and a beneficiary identifier |
+| `questionnaire` | 0..* | The canonical CRD returned, verbatim |
+
+The pinned implementation also accepts `order`, `context` and `changedsince`, and
+requires at least one of `questionnaire` / `order` / `context`. The scenario sends
+the questionnaire canonical and nothing more — padding the request with resources
+the operation does not use would make it look richer while proving less.
+
+The Coverage carries `subscriberId` and a beneficiary **identifier** because the
+payer looks a member up by identifier and explicitly refuses to trust a
+sender-supplied reference as a lookup key. It still will not match — the member is
+synthetic — and the payer says so in an OperationOutcome, which the scenario
+records as an Info finding rather than suppressing. That refusal is a sensible
+privacy property, not a defect.
+
+### What comes back
+
+`Parameters` conforming to `dtr-qpackage-output-parameters`, containing:
+
+| Part | Contents |
+| --- | --- |
+| `packagebundle` | `Bundle` (collection, profile `DTR-QPackageBundle`) |
+| `outcome` | `OperationOutcome` with any warnings |
+
+For the fixtures this scenario exercises, the bundle carries a `Questionnaire`
+(profile `dtr-std-questionnaire`) and a draft `QuestionnaireResponse` (profile
+`dtr-questionnaireresponse`).
+
+### Package completeness — as declared, not as assumed
+
+A DTR package carries exactly the dependencies its questionnaire names.
+`PackageResourceIndex` walks the Questionnaire — the `cqf-library` extension,
+`item.answerValueSet` bindings, and SDC sub-questionnaire extensions, through
+nested items — and asserts every canonical it finds resolves **inside the
+package**.
+
+The questionnaires these two CRD paths lead to declare no Library, ValueSet or
+sub-questionnaire dependencies, so a package containing just the Questionnaire is
+complete. The scenario does **not** require a Library or ValueSet to be present:
+demanding resource types the implementation had no reason to send would fail a
+conformant server. It records `dtr.package.noDeclaredDependencies.*` so that an
+upstream change which *adds* a dependency shows up as a change rather than
+passing silently.
+
+Canonical versions are never normalised away. A dependency present at a different
+version than requested is reported as a **version mismatch**, not as missing —
+different consequence, different fix, and calling it "missing" would send a
+reader looking for something that is sitting in the package.
+
+### CQL, terminology and profile validation — what is *not* claimed
+
+* **No CQL is executed.** If a future package includes a Library, its structure is
+  validated; its CQL is not run. This scenario proves package exchange, not rule
+  evaluation.
+* **No licensed terminology is required.** Nothing here needs VSAC or any other
+  credentialed terminology service.
+* **FHIR structure is validated; DTR profile conformance is not independently
+  validated.** Every returned resource is parsed with the Firely parser CHO's own
+  FHIR service uses, and the scenario asserts DTR-specific structure it checks by
+  hand (package parameter present, questionnaire present at the requested
+  canonical, dependencies resolvable, bundle type). It does **not** run a profile
+  validator against the DTR 2.2.0 StructureDefinitions. The resources declare
+  `meta.profile`, but a declared profile is a claim by the sender, not validation —
+  and this document does not treat it as one.
+
+### Behavioural cases
+
+Two CRD determinations, two different questionnaires:
+
+| Billing code | CRD determination | Questionnaire the payer named |
+| --- | --- | --- |
+| `L8000` | `covered`, `pa-needed=auth-needed` | `.../Questionnaire/PriorAuthRequired` |
+| `E0466` | `covered`, `pa-needed=auth-needed`, `doc-needed=clinical` | `.../Questionnaire/DocumentationRequired` |
+
+The scenario asserts the two canonicals differ, which is what shows the chain
+follows the payer's decision rather than returning a constant.
+
+### `$next-question` — deliberately out of scope
+
+The payer also advertises
+`.../OperationDefinition/DTR-Questionnaire-next-question`. The questionnaires
+these paths return declare the DTR **standard** profile, not
+`dtr-questionnaire-adapt`, so they are usable as delivered and adaptive
+progression is not needed to prove the package exchange. If a package ever
+returns an adaptive questionnaire, the scenario records
+`dtr.package.adaptiveQuestionnaire` — the seam for a later adaptive scenario.
+
+### Interpreting the findings
+
+| Finding | Severity | Meaning |
+| --- | --- | --- |
+| `dtr.discovery.operationAdvertised` | Info | The payer advertises the operation under the DTR canonical |
+| `dtr.chain.<code>` | Info | Which canonical CRD named and what the package contained |
+| `dtr.chain.contrast` | Info | Two codes led to two different questionnaires |
+| `dtr.package.noDeclaredDependencies.<code>` | Info | The questionnaire names no dependencies, so the package is complete without them |
+| `dtr.package.outcomeIssue` | Info | Something the payer reported alongside the package — expected for a synthetic member |
+| `dtr.package.dependencyVersionMismatch` | **Warning** | A dependency resolved only by disregarding the version it asked for |
+| `dtr.package.adaptiveQuestionnaire` | Info | Completing this questionnaire would need `$next-question` |
+
+### Running just DTR
+
+```bash
+./scripts/interop/run.sh br-payer dtr
+```
+
+The scenario performs its own CRD call rather than reading a saved artifact from
+an earlier run, so it is reproducible on its own and cannot go stale against a
+CRD result recorded under a different pin.
+
+## 16. Recommended next step
+
+`BR-PAS-INQUIRE-001` — PAS `$inquire` against br-payer, chained from
+`BR-PAS-SUBMIT-001`. The chaining machinery `BR-DTR-001` introduced
+(`linkedFromScenario` / `linkedArtifact`) is protocol-neutral and applies
+directly: `$submit` establishes a prior authorization and returns an
+authorization number, and `$inquire` should find it. That closes the third Da
+Vinci protocol as a workflow rather than as isolated calls, and needs no new
+infrastructure.
+
+After that, the Inferno suites (`INFERNO-DTR-PAYER-001`,
+`INFERNO-PDEX-SERVER-001`) are the natural next frontier — but they are a larger
+step, because they reverse the direction. CHO becomes the system under test
+rather than the client, which means the `interop-cho` profile has to run for the
+first time. That profile has existed since #1159 and has never been exercised;
+expect it to need work.
