@@ -39,13 +39,12 @@ public enum ImportedResourceClass
     /// </summary>
     Unsupported,
 
-    /// <summary>
-    /// A clinical resource CHO would serve, refused by
-    /// <c>ClinicalPayloadValidator</c> (no source id, oversized, too deeply
-    /// nested). Counted and named by rejection reason rather than dropped, and
-    /// still present in the archived package.
-    /// </summary>
-    Rejected,
+    // There is deliberately no `Rejected` member. A clinical resource the
+    // payload validator refuses is never STAGED, so no row could ever carry that
+    // classification — and an enum value no row can hold is one a future query
+    // would filter on and silently get nothing back from. Refusals live where
+    // they actually are: `PayerToPayerIngestionCounts.Rejected` and
+    // `.RejectedReasons` on the exchange, plus the archived package.
 }
 
 /// <summary>Lifecycle of the durable ingestion that follows a successful exchange.</summary>

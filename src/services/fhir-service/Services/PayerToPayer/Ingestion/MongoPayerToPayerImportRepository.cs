@@ -231,11 +231,16 @@ public sealed class MongoPayerToPayerImportRepository
         int batchSize,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        // A cursor in bounded batches: the archived package on each entry can be
-        // large, so the whole ledger is never in memory at once.
+        // A cursor in bounded batches, with the caller's batch size pushed into
+        // the FIND rather than left to the server's default. Each ledger entry
+        // carries an archived package, so an unbounded batch would pull many
+        // large documents into memory at once — which is the whole reason the
+        // backfill asks for a batch size.
         using var cursor = await _ledger
-            .Find(Builders<BsonDocument>.Filter.Eq(
-                "status", PayerToPayerIngestionStatus.Completed.ToString()))
+            .Find(
+                Builders<BsonDocument>.Filter.Eq(
+                    "status", PayerToPayerIngestionStatus.Completed.ToString()),
+                new FindOptions { BatchSize = Math.Max(1, batchSize) })
             .Sort(Builders<BsonDocument>.Sort.Ascending("startedAtUtc").Ascending("exchangeId"))
             .ToCursorAsync(ct);
 
@@ -324,7 +329,12 @@ public sealed class MongoPayerToPayerImportRepository
 
     /// <summary>
     /// Committed clinical rows for one member and one type, newest first — one
-    /// row per import key, taken from the most recently committed exchange.
+    /// row per import key, taken from the most recently committed exchange, and
+    /// ordered by that SAME commit instant. Recency means one thing here: if a
+    /// version wins because its exchange committed most recently, that is also
+    /// what puts it at the top of the page. Ordering by the staging time instead
+    /// would be a second, subtly different notion of "newest" — they diverge
+    /// whenever an exchange stages well before it commits, or is retried.
     ///
     /// Every constraint that bounds the result (tenant, member, resource type,
     /// classification, and the optional id) is in the Mongo filter, so what comes
@@ -365,7 +375,11 @@ public sealed class MongoPayerToPayerImportRepository
                 .ThenByDescending(r => r.IngestedAtUtc)
                 .ThenBy(r => r.ExchangeId, StringComparer.Ordinal)
                 .First())
-            .OrderByDescending(r => r.IngestedAtUtc)
+            // The same instant that decided the winner decides the order, with
+            // ingest time and then the identity as deterministic tiebreaks so a
+            // page boundary never shifts between requests.
+            .OrderByDescending(r => committedAt[r.ExchangeId])
+            .ThenByDescending(r => r.IngestedAtUtc)
             .ThenBy(r => r.ImportKey, StringComparer.Ordinal)
             .ToList();
     }

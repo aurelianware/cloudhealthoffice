@@ -165,12 +165,16 @@ public sealed class InMemoryPayerToPayerImportRepository
     /// committed exchange. Uncommitted versions are invisible and never displace
     /// a committed one.
     /// </summary>
-    private IEnumerable<ImportedFhirResource> CommittedVersions(string tenantId, string memberId)
-    {
-        var committedAt = _ledger.Values
+    /// <summary>When each of this tenant's COMMITTED exchanges published.</summary>
+    private Dictionary<string, DateTime> CommittedExchangeInstants(string tenantId)
+        => _ledger.Values
             .Where(e => string.Equals(e.TenantId, tenantId, StringComparison.Ordinal)
                      && e.Status == PayerToPayerIngestionStatus.Completed)
             .ToDictionary(e => e.ExchangeId, e => e.CompletedAtUtc ?? e.StartedAtUtc, StringComparer.Ordinal);
+
+    private IEnumerable<ImportedFhirResource> CommittedVersions(string tenantId, string memberId)
+    {
+        var committedAt = CommittedExchangeInstants(tenantId);
 
         return _resources.Values
             .Where(r => string.Equals(r.TenantId, tenantId, StringComparison.Ordinal)
@@ -246,11 +250,10 @@ public sealed class InMemoryPayerToPayerImportRepository
                 ClinicalResourceIdentity.ForImported(r.ImportKey), query.ClinicalId, StringComparison.Ordinal));
         }
 
-        // Newest first, then by identity so equal timestamps still page stably.
-        var ordered = matches
-            .OrderByDescending(r => r.IngestedAtUtc)
-            .ThenBy(r => r.ImportKey, StringComparer.Ordinal)
-            .ToList();
+        // ClinicalVersions already yields page order (commit instant, then
+        // ingest, then identity), so nothing is re-sorted under a different
+        // notion of "newest" here.
+        var ordered = matches.ToList();
 
         var page = Math.Max(1, query.Page);
         var count = Math.Max(1, query.Count);
@@ -278,12 +281,24 @@ public sealed class InMemoryPayerToPayerImportRepository
         return Task.FromResult<IReadOnlyDictionary<string, string>>(map);
     }
 
-    /// <summary>Committed clinical rows of one type for one member in one tenant.</summary>
+    /// <summary>
+    /// Committed clinical rows of one type for one member in one tenant, newest
+    /// first by the SAME commit instant that decided which version wins — so
+    /// recency means one thing here, and the page order agrees with the version
+    /// selection. Mirrors <c>MongoPayerToPayerImportRepository</c>.
+    /// </summary>
     private IEnumerable<ImportedFhirResource> ClinicalVersions(
         string tenantId, string memberId, string resourceType)
-        => CommittedVersions(tenantId, memberId)
+    {
+        var committedAt = CommittedExchangeInstants(tenantId);
+
+        return CommittedVersions(tenantId, memberId)
             .Where(r => r.Classification == ImportedResourceClass.ClinicalRecord
-                     && string.Equals(r.ResourceType, resourceType, StringComparison.Ordinal));
+                     && string.Equals(r.ResourceType, resourceType, StringComparison.Ordinal))
+            .OrderByDescending(r => committedAt.TryGetValue(r.ExchangeId, out var at) ? at : DateTime.MinValue)
+            .ThenByDescending(r => r.IngestedAtUtc)
+            .ThenBy(r => r.ImportKey, StringComparer.Ordinal);
+    }
 
     internal static StoredClinicalResource ToClinical(ImportedFhirResource row) => new()
     {

@@ -200,6 +200,39 @@ public class ClinicalResourceStoreTests
             .Select(i => i.ClinicalId).Should().OnlyHaveUniqueItems().And.HaveCount(7);
     }
 
+    [Fact]
+    public async Task SearchOrdersByCommitInstant_TheSameRecencyThatDecidesTheWinningVersion()
+    {
+        // Staging time and commit time are not the same clock: an exchange can
+        // stage early and commit late, or be retried. Selecting the winning
+        // version by commit instant while ORDERING the page by ingest time would
+        // be two different notions of "newest" in one method — so this pins them
+        // to one.
+        var store = new InMemoryPayerToPayerImportRepository();
+
+        var early = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var late = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // STAGED first, COMMITTED last.
+        var stagedFirst = await store.OpenLedgerAsync(Ledger("exchange-staged-first"));
+        await store.StageAsync([Row("exchange-staged-first", Observation("OBS-EARLY-STAGE"), early)]);
+
+        // STAGED last, COMMITTED first.
+        var stagedLast = await store.OpenLedgerAsync(Ledger("exchange-staged-last"));
+        await store.StageAsync([Row("exchange-staged-last", Observation("OBS-LATE-STAGE"), late)]);
+
+        await store.CommitAsync(stagedLast);   // commits first
+        await store.CommitAsync(stagedFirst);  // commits second — so it is newest
+
+        var page = await Search(store, "Observation");
+
+        page.Items.Select(i => i.SourceResourceId).Should().ContainInOrder(
+            "OBS-EARLY-STAGE", "OBS-LATE-STAGE");
+        page.Items[0].SourceResourceId.Should().Be("OBS-EARLY-STAGE",
+            "it was committed most recently, which is the recency the version winner also uses — "
+            + "ordering by ingest time would have put the other one first");
+    }
+
     // ── Reference resolution ──────────────────────────────────────────────────
 
     [Fact]
@@ -299,7 +332,8 @@ public class ClinicalResourceStoreTests
         SourcePayerId = Payer,
     };
 
-    private static ImportedFhirResource Row(string exchangeId, Resource resource)
+    private static ImportedFhirResource Row(
+        string exchangeId, Resource resource, DateTime? ingestedAt = null)
     {
         var json = Serializer.SerializeToString(resource);
         return new ImportedFhirResource
@@ -316,6 +350,7 @@ public class ClinicalResourceStoreTests
             Classification = ImportedResourceClass.ClinicalRecord,
             ResourceJson = json,
             ContentHash = PayerToPayerImportPolicy.ContentHash(json),
+            IngestedAtUtc = ingestedAt ?? DateTime.UtcNow,
         };
     }
 }

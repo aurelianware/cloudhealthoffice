@@ -765,7 +765,11 @@ public class PatientAccessClinicalTests
             "Goal" => new Goal
             {
                 LifecycleStatus = Goal.GoalLifecycleStatus.Active,
-                Description = new CodeableConcept(null, null, "Lower A1c"),
+                // Text only: a Goal needs a description, and the acceptance
+                // scenarios turn on member binding and authorization, not on a
+                // coded goal. `Text` says that without passing nulls for a
+                // system and a code the fixture does not have.
+                Description = new CodeableConcept { Text = "Lower A1c" },
             },
             "Device" => new Device(),
             _ => throw new ArgumentException(
