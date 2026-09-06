@@ -60,7 +60,9 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         // authorization records carry no concurrency token.
         ("PriorAuthorization", FhirAdapterModes.Demo,
             "PasAutoAdjudicator (Claim/$submit) + PriorAuthorizationInquiryService "
-            + "(Claim/$inquire; read-only projection of the stored authorization record)"),
+            + "(Claim/$inquire; read-only projection of the stored authorization record) "
+            + "+ authorization-service retention lifecycle (policy-driven, tenant-safe, "
+            + "conditional-delete sweeper; disabled by default)"),
         ("CRD", FhirAdapterModes.Demo, "CrdService"),
         ("DTR", FhirAdapterModes.Demo, "DtrService"),
         ("BulkExport", FhirAdapterModes.Demo, "BulkExportService scaffold"),

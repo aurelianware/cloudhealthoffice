@@ -106,6 +106,18 @@ public static class ChoMetrics
     /// admin-triggered backfill). Dimensions: cho.outcome (patched |
     /// skipped | failed | etag_conflict), cho.tenant_id.
     /// </summary>
+    /// <summary>
+    /// Outcomes of the prior-authorization retention sweep (PAT-03).
+    /// Dimensions: <c>cho.outcome</c> (purged|would_purge|skipped|failed),
+    /// <c>cho.dry_run</c>, <c>cho.tenant_id</c>. Never labelled with member,
+    /// provider, or authorization identity.
+    /// </summary>
+    public static readonly Counter<long> PriorAuthorizationRetentionOutcomes =
+        Meter.CreateCounter<long>(
+            "cho.authorization.retention.outcomes.total",
+            unit: "{record}",
+            description: "Prior-authorization retention sweep outcomes by result and tenant.");
+
     public static readonly Counter<long> NetworkParticipationBackfillOutcomes =
         Meter.CreateCounter<long>(
             "cho.provider.network_participation.backfill.outcomes.total",

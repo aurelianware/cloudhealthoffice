@@ -187,6 +187,16 @@ if (!string.IsNullOrEmpty(kafkaBootstrap))
 // SLA deadline watchdog (runs every 15 minutes)
 builder.Services.AddHostedService<SlaWatchdogService>();
 
+// ── Prior-authorization data retention (PAT-03) ───────────────────────────────
+// The policy is a pure, testable rule; the worker only discovers records it
+// applies to. Disabled by default — a destructive sweep opts in per deployment.
+builder.Services.Configure<AuthorizationService.Services.Retention.PriorAuthorizationRetentionOptions>(
+    builder.Configuration.GetSection(
+        AuthorizationService.Services.Retention.PriorAuthorizationRetentionOptions.SectionName));
+builder.Services.AddScoped<AuthorizationService.Services.Retention.IPriorAuthorizationRetentionPolicy,
+    AuthorizationService.Services.Retention.PriorAuthorizationRetentionPolicy>();
+builder.Services.AddHostedService<AuthorizationService.Services.Retention.PriorAuthorizationRetentionWorker>();
+
 // CORS (for development)
 builder.Services.AddCors(options =>
 {
