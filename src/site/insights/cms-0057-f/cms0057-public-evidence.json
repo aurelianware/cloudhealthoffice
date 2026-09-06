@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-06T05:36:51Z",
-  "commitSha": "1a748d1683931f264f3baf50cff7e40caded0100",
-  "commitShaShort": "1a748d168393",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/1a748d1683931f264f3baf50cff7e40caded0100",
+  "generatedAtUtc": "2026-09-06T07:08:59Z",
+  "commitSha": "82e8d9cf9f002a42574eb2c576f3d0a8a596c429",
+  "commitShaShort": "82e8d9cf9f00",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/82e8d9cf9f002a42574eb2c576f3d0a8a596c429",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 254,
+    "passed": 317,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 18,
-    "partial": 3,
+    "passable": 19,
+    "partial": 2,
     "gap": 0,
     "na": 0
   },
@@ -141,7 +141,7 @@
       "id": "PAS-07",
       "name": "CDex additional-information exchange",
       "capability": "PriorAuthorization",
-      "replace": "PARTIAL",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "N/A"
       }
