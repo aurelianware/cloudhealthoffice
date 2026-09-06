@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-05T23:45:36Z",
-  "commitSha": "f0dfe5e3b18f6a3477198a8276180c8be6a37c7c",
-  "commitShaShort": "f0dfe5e3b18f",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/f0dfe5e3b18f6a3477198a8276180c8be6a37c7c",
+  "generatedAtUtc": "2026-09-06T01:41:10Z",
+  "commitSha": "749e928cb23bc276dcb14738dd8cd20d228c7d79",
+  "commitShaShort": "749e928cb23b",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/749e928cb23bc276dcb14738dd8cd20d228c7d79",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 146,
+    "passed": 166,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 14,
-    "partial": 7,
+    "passable": 15,
+    "partial": 6,
     "gap": 0,
     "na": 0
   },
@@ -69,7 +69,7 @@
       "id": "P2P-03",
       "name": "Payer-to-Payer opt-in enforcement",
       "capability": "PayerToPayer",
-      "replace": "PARTIAL",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "GAP"
       }
