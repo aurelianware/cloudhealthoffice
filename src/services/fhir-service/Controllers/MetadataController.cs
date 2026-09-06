@@ -100,6 +100,8 @@ public class MetadataController : FhirControllerBase
                             ("status",       SearchParamType.Token),
                             ("type",         SearchParamType.Token)
                         ]),
+                        // Da Vinci PAS operations, both served by PasController:
+                        // POST fhir/r4/Claim/$submit and POST fhir/r4/Claim/$inquire.
                         BuildResource("Claim",
                         [
                             ("_id",          SearchParamType.Token),
@@ -108,6 +110,11 @@ public class MetadataController : FhirControllerBase
                             ("created",      SearchParamType.Date),
                             ("status",       SearchParamType.Token),
                             ("use",          SearchParamType.Token)
+                        ],
+                        operations:
+                        [
+                            ("submit",  "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-submit"),
+                            ("inquire", "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquire"),
                         ]),
                         BuildResource("Questionnaire",
                         [
@@ -228,7 +235,8 @@ public class MetadataController : FhirControllerBase
         string type,
         (string Name, SearchParamType Type)[] searchParams,
         CapabilityStatement.TypeRestfulInteraction[]? interactions = null,
-        string[]? supportedProfiles = null)
+        string[]? supportedProfiles = null,
+        (string Name, string Definition)[]? operations = null)
     {
         interactions ??= [
             CapabilityStatement.TypeRestfulInteraction.Read,
@@ -253,6 +261,20 @@ public class MetadataController : FhirControllerBase
         if (supportedProfiles is { Length: > 0 })
         {
             resource.SupportedProfile = [.. supportedProfiles];
+        }
+
+        // Type-level operations. Advertised ONLY where the route genuinely
+        // exists — a CapabilityStatement that claims an operation the server
+        // does not serve is worse than one that claims nothing.
+        if (operations is { Length: > 0 })
+        {
+            resource.Operation = operations
+                .Select(o => new CapabilityStatement.OperationComponent
+                {
+                    Name = o.Name,
+                    Definition = o.Definition,
+                })
+                .ToList();
         }
 
         return resource;

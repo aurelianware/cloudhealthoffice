@@ -23,6 +23,7 @@ public class PasController : FhirControllerBase
     private readonly IPasAutoAdjudicator _adjudicator;
     private readonly PasResponseBuilder _responseBuilder;
     private readonly ICms0057ComplianceChecker _complianceChecker;
+    private readonly IPriorAuthorizationInquiryService _inquiry;
     private readonly PasAutoAdjudicationConfig _config;
     private readonly HttpClient _authServiceClient;
     private readonly HttpClient _providerVerificationClient;
@@ -32,6 +33,7 @@ public class PasController : FhirControllerBase
         IPasAutoAdjudicator adjudicator,
         PasResponseBuilder responseBuilder,
         ICms0057ComplianceChecker complianceChecker,
+        IPriorAuthorizationInquiryService inquiry,
         IOptions<PasAutoAdjudicationConfig> config,
         IHttpClientFactory httpClientFactory,
         ILogger<PasController> logger)
@@ -39,6 +41,7 @@ public class PasController : FhirControllerBase
         _adjudicator = adjudicator;
         _responseBuilder = responseBuilder;
         _complianceChecker = complianceChecker;
+        _inquiry = inquiry;
         _config = config.Value;
         _authServiceClient = httpClientFactory.CreateClient("AuthorizationService");
         _providerVerificationClient = httpClientFactory.CreateClient("ProviderVerificationService");
@@ -123,7 +126,14 @@ public class PasController : FhirControllerBase
             var decision = await _adjudicator.TryDecideAsync(
                 claim, requestBundle, timeBudgetMs, HttpContext.RequestAborted);
 
-            // 4. Build response based on decision
+            // 4. Build response based on decision.
+            // Every outcome — approved, denied and pended alike — gets a tracking
+            // number BEFORE the response is built, so the preAuthRef the caller
+            // receives is the number persisted and later inquirable. Previously
+            // only approvals carried one and pends persisted a number nobody was
+            // ever told.
+            decision.AuthorizationNumber ??= NewAuthorizationNumber();
+
             Bundle responseBundle;
             if (decision.HasDecision && decision.Decision == "approved")
             {
@@ -139,8 +149,8 @@ public class PasController : FhirControllerBase
             }
             else
             {
-                responseBundle = _responseBuilder.BuildPendedResponse(claim);
-                await PersistPendedAuthorizationAsync(claim);
+                responseBundle = _responseBuilder.BuildPendedResponse(claim, decision.AuthorizationNumber);
+                await PersistPendedAuthorizationAsync(claim, decision.AuthorizationNumber);
                 RecordMetrics(sw, "pended", decision.RuleName);
             }
 
@@ -158,6 +168,163 @@ public class PasController : FhirControllerBase
         }
     }
 
+
+    /// <summary>
+    /// Da Vinci PAS <c>Claim/$inquire</c> — prior-authorization status inquiry.
+    ///
+    /// Read-only. Projects the CURRENT committed authorization state held by
+    /// authorization-service onto a PAS ClaimResponse bundle. It creates
+    /// nothing, changes nothing, and never re-submits to a payer, so repeating
+    /// it is free of consequence.
+    ///
+    /// Request: a Bundle carrying a Claim whose identifier names the
+    /// authorization (the <c>preAuthRef</c> issued at submit) together with a
+    /// corroborating key — the patient reference or the requesting provider's
+    /// NPI. The identifier alone is not enough; see
+    /// <see cref="IPriorAuthorizationInquiryService"/> for why.
+    ///
+    /// AUTHORIZATION. As a POST operation this route is governed by the same
+    /// controls as <c>$submit</c>: authentication (<c>[Authorize]</c>), the SMART
+    /// <c>*/Claim.read</c> scope check, and tenant from the authenticated
+    /// context. It is deliberately NOT routed through the Provider Access
+    /// consent gate: that gate governs a provider reading a member's clinical
+    /// record, whereas PAS is a system-to-system transaction between the
+    /// submitter and the payer about the submitter's own request — which is why
+    /// the corroborating key, not a member consent, is what binds an inquiry to
+    /// its authorization.
+    /// </summary>
+    [HttpPost("Claim/$inquire")]
+    [Consumes("application/fhir+json", "application/json")]
+    [Produces("application/fhir+json")]
+    public async Task<IActionResult> ClaimInquire([FromBody] Bundle requestBundle)
+    {
+        var (claim, validationError) = ValidateAndExtractInquiryClaim(requestBundle);
+        if (validationError != null)
+            return validationError;
+
+        var request = new PriorAuthorizationInquiryRequest
+        {
+            // Tenant is the authenticated context's, never the body's.
+            TenantId = TenantId,
+            AuthorizationNumber = ExtractAuthorizationNumber(claim!),
+            MemberReference = claim!.Patient?.Reference,
+            RequestingProviderNpi = claim.Provider?.Identifier?.Value,
+        };
+
+        var result = await _inquiry.InquireAsync(request, HttpContext.RequestAborted);
+
+        AuditInquiry(result);
+
+        if (!result.Found)
+        {
+            // ONE refusal for every category. "Wrong tenant", "not yours" and
+            // "no such authorization" must be indistinguishable, or the
+            // identifier space can be probed for which authorizations exist.
+            return StatusCode(404, new OperationOutcome
+            {
+                Issue =
+                [
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.NotFound,
+                        Diagnostics =
+                            "No prior authorization matching the supplied identifiers is available.",
+                    }
+                ]
+            });
+        }
+
+        return Ok(_responseBuilder.BuildInquiryResponse(result.Authorization!));
+    }
+
+    /// <summary>
+    /// Records the inquiry with safe identifiers only: tenant, caller, the
+    /// authorization asked about, the outcome category and the status returned.
+    /// Never the Claim, the ClaimResponse, demographics, or clinical content.
+    /// </summary>
+    private void AuditInquiry(PriorAuthorizationInquiryResult result)
+    {
+        var caller = User?.FindFirst("sub")?.Value
+                     ?? User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (result.Found)
+        {
+            _logger.LogInformation(
+                "PAS $inquire: tenant={Tenant} caller={Caller} authorization={Auth} "
+                + "outcome={Outcome} status={Status} at={At}",
+                SanitizeForLog(TenantId), SanitizeForLog(caller),
+                SanitizeForLog(result.Authorization!.AuthorizationNumber),
+                result.Outcome, result.Authorization.Status, DateTime.UtcNow);
+            return;
+        }
+
+        _logger.LogWarning(
+            "PAS $inquire refused: tenant={Tenant} caller={Caller} authorization={Auth} "
+            + "outcome={Outcome} at={At}",
+            SanitizeForLog(TenantId), SanitizeForLog(caller),
+            SanitizeForLog(result.RequestedAuthorizationNumber),
+            result.Outcome, DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// The inquiry Claim, validated with the same bundle guards as $submit
+    /// (size cap, resource-type allowlist) but without $submit's requirement for
+    /// full provider/insurance detail — an inquiry names an authorization, it
+    /// does not restate the request.
+    /// </summary>
+    private (Claim? claim, IActionResult? error) ValidateAndExtractInquiryClaim(Bundle? requestBundle)
+    {
+        if (requestBundle?.Entry == null || requestBundle.Entry.Count == 0)
+            return (null, FhirBadRequest("Inquiry bundle must contain at least one entry"));
+
+        if (requestBundle.Entry.Count > MaxBundleEntries)
+            return (null, FhirBadRequest(
+                $"Inquiry bundle exceeds maximum of {MaxBundleEntries} entries"));
+
+        foreach (var entry in requestBundle.Entry)
+        {
+            if (entry.Resource != null && !AllowedResourceTypes.Contains(entry.Resource.TypeName))
+            {
+                _logger.LogWarning("PAS $inquire rejected unexpected resource type: {Type}",
+                    SanitizeForLog(entry.Resource.TypeName));
+                return (null, FhirBadRequest(
+                    $"Bundle contains disallowed resource type: {entry.Resource.TypeName}"));
+            }
+        }
+
+        var claim = requestBundle.Entry
+            .Select(e => e.Resource)
+            .OfType<Claim>()
+            .FirstOrDefault();
+
+        if (claim == null)
+            return (null, FhirBadRequest("Inquiry bundle must contain a Claim resource"));
+
+        if (claim.Use != ClaimUseCode.Preauthorization)
+            return (null, FhirBadRequest(
+                "Inquiry Claim.use must be 'preauthorization'"));
+
+        return (claim, null);
+    }
+
+    /// <summary>
+    /// The authorization number from the inquiry Claim: its identifier, or the
+    /// pre-auth reference some submitters echo on <c>Claim.insurance.preAuthRef</c>.
+    /// </summary>
+    private static string? ExtractAuthorizationNumber(Claim claim)
+    {
+        var fromIdentifier = claim.Identifier
+            ?.Select(i => i.Value)
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+        if (!string.IsNullOrWhiteSpace(fromIdentifier))
+            return fromIdentifier;
+
+        return claim.Insurance
+            ?.SelectMany(i => i.PreAuthRef ?? new List<string>())
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+    }
+
     private async System.Threading.Tasks.Task PersistAuthorizationAsync(Claim claim, PasDecisionResult decision)
     {
         try
@@ -165,7 +332,7 @@ public class PasController : FhirControllerBase
             var authPayload = new
             {
                 tenantId = TenantId,
-                authorizationNumber = decision.AuthorizationNumber ?? $"PAS-{Guid.NewGuid():N}",
+                authorizationNumber = decision.AuthorizationNumber ?? NewAuthorizationNumber(),
                 memberId = claim.Patient?.Reference ?? "",
                 patientFirstName = "PAS",
                 patientLastName = "Patient",
@@ -179,7 +346,14 @@ public class PasController : FhirControllerBase
                          decision.Decision == "denied" ? "Denied" : "Pended",
                 reviewDecision = decision.Decision == "approved" ? "A1" :
                                  decision.Decision == "denied" ? "A3" : "A4",
-                requestedServices = new[] { new { procedureCode = "99213", requestedUnits = 1 } },
+                // Recorded so an inquiry can answer WHY, not just "denied".
+                denialReasonCode = decision.DenialReasonCode,
+                denialReason = decision.DenialReason,
+                // The approved period an inquiry reports as preAuthPeriod.
+                approvedServiceDateFrom = decision.EffectiveFrom,
+                approvedServiceDateTo = decision.EffectiveTo,
+                expirationDate = decision.EffectiveTo,
+                requestedServices = ExtractRequestedServices(claim),
             };
 
             await _authServiceClient.PostAsJsonAsync("api/authorizations", authPayload);
@@ -190,13 +364,40 @@ public class PasController : FhirControllerBase
         }
     }
 
-    private async System.Threading.Tasks.Task PersistPendedAuthorizationAsync(Claim claim)
+    private async System.Threading.Tasks.Task PersistPendedAuthorizationAsync(
+        Claim claim, string? authorizationNumber)
     {
         await PersistAuthorizationAsync(claim, new PasDecisionResult
         {
             HasDecision = false,
             Decision = "pended",
+            AuthorizationNumber = authorizationNumber,
         });
+    }
+
+    /// <summary>Tracking handle issued at submit and used to inquire later.</summary>
+    private static string NewAuthorizationNumber()
+        => $"PAS-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+
+    /// <summary>
+    /// The service lines actually requested, so an inquiry reports the caller's
+    /// own request rather than a placeholder procedure code.
+    /// </summary>
+    private static object[] ExtractRequestedServices(Claim claim)
+    {
+        if (claim.Item is null || claim.Item.Count == 0)
+            return [];
+
+        return claim.Item
+            .Select(i => new
+            {
+                procedureCode = i.ProductOrService?.Coding?.FirstOrDefault()?.Code,
+                procedureDescription = i.ProductOrService?.Coding?.FirstOrDefault()?.Display,
+                requestedUnits = i.Quantity?.Value ?? 1,
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.procedureCode))
+            .Cast<object>()
+            .ToArray();
     }
 
     private static void RecordMetrics(Stopwatch sw, string decision, string? rule)
