@@ -4,10 +4,12 @@ WORKDIR /repo
 
 COPY src/services/consent-service/consent-service.csproj src/services/consent-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Consent.Contracts/CloudHealthOffice.Consent.Contracts.csproj src/services/shared/CloudHealthOffice.Consent.Contracts/
 RUN dotnet restore src/services/consent-service/consent-service.csproj
 
 COPY src/services/consent-service/ src/services/consent-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Consent.Contracts/ src/services/shared/CloudHealthOffice.Consent.Contracts/
 RUN dotnet build src/services/consent-service/consent-service.csproj -c Release --no-restore
 
 FROM build AS publish
