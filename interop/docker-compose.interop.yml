@@ -1,0 +1,136 @@
+# Cloud Health Office — Da Vinci external interoperability stack
+#
+# Separate from the repository's development stack (docker-compose.yml) on
+# purpose: these are third-party reference implementations, they are pinned by
+# digest, and no ordinary development or unit-test workflow should start them.
+#
+# Nothing starts without an explicit profile:
+#
+#   docker compose -f interop/docker-compose.interop.yml --profile interop-br up -d
+#   docker compose -f interop/docker-compose.interop.yml --profile interop-cho up -d
+#
+# Profiles:
+#   interop-br           HL7 br-payer                  (CRD/DTR/PAS payer RI)
+#   interop-br-provider  HL7 br-provider               (provider-side RI)
+#   interop-cho          CHO fhir-service + mongo      (CHO as the server under test)
+#   interop-pdex         Inferno PDex test kit         (seam only — see docs/interop/davinci.md)
+#   interop-dtr-inferno  Inferno DTR test kit          (seam only — see docs/interop/davinci.md)
+#
+# Normally you do not run this file by hand — `scripts/interop/run.sh` and the
+# harness (InteropEnvironment) bring up exactly the services a scenario needs.
+#
+# Security posture:
+#   * No secrets, no repository credentials and no Docker socket are mounted.
+#   * External containers sit on their own bridge network, isolated from the
+#     development stack's network.
+#   * Host ports are bound to 127.0.0.1 so nothing is published off-box.
+#   * Every byte of data these services see is synthetic (SyntheticInteropData).
+#
+# Egress: br-payer and br-provider download Da Vinci IG packages from
+# packages2.fhir.org at startup and do not boot without it. No VSAC or other
+# licensed terminology credential is required for the scenarios in this file.
+
+name: cho-interop
+
+networks:
+  interop:
+    name: cho-interop
+    driver: bridge
+
+volumes:
+  interop_mongo_data:
+
+services:
+
+  # ── HL7 Da Vinci Burden Reduction payer reference implementation ──────────
+  # Pinned by digest (interop/versions.json → targets[br-payer]).
+  # Upstream: https://github.com/HL7-DaVinci/br-payer (Apache-2.0)
+  br-payer:
+    image: hlseven/davinci-br-payer@sha256:6074aebc39929a00cf93c1efa28c227eb46aab2418afa208eb293133cb150d8c
+    profiles: [interop-br]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_BR_PAYER_PORT:-18081}:8081"
+    environment:
+      # Advertise the address the harness reaches the server on, so the RI's
+      # self-referential URLs (fullUrl, next-question-url) match reality.
+      - HAPI_FHIR_SERVER_ADDRESS=http://localhost:${INTEROP_BR_PAYER_PORT:-18081}/fhir
+    security_opt:
+      - no-new-privileges:true
+
+  # ── HL7 Da Vinci Burden Reduction provider reference implementation ───────
+  # Upstream: https://github.com/HL7-DaVinci/br-provider (MIT)
+  # Defined for the provider-side role; no scenario drives it yet.
+  br-provider:
+    image: hlseven/davinci-br-provider@sha256:6ddcea188bfc38cb8a2bf3e5bbda7f290970a659d2be3b85182d305565e9b74a
+    profiles: [interop-br-provider]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_BR_PROVIDER_PORT:-18080}:8080"
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Cloud Health Office under test ────────────────────────────────────────
+  # Only needed by scenarios where CHO is the *server* (the Inferno suites).
+  # Kept behind its own profile so the br-payer smoke path stays light.
+  interop-mongo:
+    image: mongo:7
+    profiles: [interop-cho]
+    networks: [interop]
+    volumes:
+      - interop_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  cho-fhir-service:
+    build:
+      context: ..
+      dockerfile: src/services/fhir-service/Dockerfile
+      args:
+        REGISTRY: ${CHO_IMAGE_REGISTRY:-mcr.microsoft.com}
+    profiles: [interop-cho]
+    networks: [interop]
+    ports:
+      - "127.0.0.1:${INTEROP_CHO_FHIR_PORT:-18023}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - MongoDb__ConnectionString=mongodb://interop-mongo:27017
+      - MongoDb__DatabaseName=FhirInteropDB
+      # Synthetic interoperability identity mode. This is a test-environment
+      # configuration value, not a switch that disables authentication: CHO's
+      # SMART middleware stays in place and still validates tokens.
+      - FhirAdapters__Mode=Demo
+      - FhirAdapters__DataClassification=synthetic
+      - FhirAdapters__TenantId=interop-tenant
+      - SmartAuth__Issuer=${INTEROP_SMART_ISSUER:-http://localhost:18024}
+      - SmartAuth__RequireHttpsMetadata=false
+      - Appeals__UseMockAdapter=true
+    depends_on:
+      interop-mongo:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Inferno conformance runners ───────────────────────────────────────────
+  # Upstream publishes no image for these kits: they are built from a checkout
+  # at the pinned tag during explicit setup (scripts/interop/fetch-inferno.sh).
+  # The service definitions below describe the shape the runner expects; they
+  # are inert until that checkout exists, and no scenario starts them yet.
+  inferno-pdex:
+    profiles: [interop-pdex]
+    networks: [interop]
+    build:
+      context: ${INTEROP_INFERNO_PDEX_DIR:-./.external/davinci-pdex-test-kit}
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_PDEX_PORT:-14567}:4567"
+
+  inferno-dtr:
+    profiles: [interop-dtr-inferno]
+    networks: [interop]
+    build:
+      context: ${INTEROP_INFERNO_DTR_DIR:-./.external/davinci-dtr-test-kit}
+    ports:
+      - "127.0.0.1:${INTEROP_INFERNO_DTR_PORT:-14568}:4567"

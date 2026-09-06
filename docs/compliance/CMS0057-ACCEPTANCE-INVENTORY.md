@@ -610,3 +610,31 @@ the real `ChoAuthorizationBackend`; Augment GAP tests pass by confirming the
 QNXT backend is still a stub — when a QNXT integration ships for real, the
 matching Augment test fails and must be replaced with a live-mode acceptance
 test. Demo (synthetic FHIR projection) scenarios remain distinct from Replace.
+
+---
+
+## Relationship to Da Vinci external interoperability evidence
+
+This inventory and the suite it governs answer one question: **does Cloud Health
+Office implement the behavior its own CMS-0057-F acceptance specification
+requires?** That is a statement about CHO's implementation, evaluated against CHO
+fixtures.
+
+A separate harness — `tests/DaVinciInterop.Tests`, documented in
+[docs/interop/davinci.md](../interop/davinci.md) — answers a different question:
+**can CHO exchange standards-conformant requests and responses with an
+independent HL7 Da Vinci implementation?** It runs real reference
+implementations in containers, pinned by digest, and records its own evidence at
+`artifacts/interop/run.json`.
+
+The two are deliberately kept apart:
+
+* Their vocabularies differ (`PASSABLE` / `PARTIAL` / `GAP` here; `Passed` /
+  `Failed` / `Skipped` / `NotRun` there) so the two scales cannot be added
+  together by accident.
+* **An external interoperability result never changes a CMS-0057-F scenario
+  status in this inventory**, and no scenario here may be re-scored on the basis
+  of an interop run. Conversely, a `PASSABLE` here is not a claim that any
+  independent implementation has interoperated with CHO.
+* Interoperability success is not CMS certification. It is additional, separate
+  evidence that CHO speaks the standard to somebody else's code.

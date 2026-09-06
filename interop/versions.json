@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "description": "Pinned external Da Vinci implementations used by the Cloud Health Office interoperability harness. Every entry MUST be reproducible: an image digest, a release tag plus commit SHA, or a commit SHA. Never a floating tag or unpinned branch. See docs/interop/davinci.md for the upgrade procedure.",
+  "lastReviewedUtc": "2026-09-06T00:00:00Z",
+  "targets": [
+    {
+      "name": "HL7-DaVinci/br-payer",
+      "key": "br-payer",
+      "role": "ExternalServer",
+      "protocols": ["CRD", "DTR", "PAS"],
+      "upstreamRepository": "https://github.com/HL7-DaVinci/br-payer",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "imageDigest",
+        "image": "hlseven/davinci-br-payer",
+        "digest": "sha256:6074aebc39929a00cf93c1efa28c227eb46aab2418afa208eb293133cb150d8c",
+        "reference": "hlseven/davinci-br-payer@sha256:6074aebc39929a00cf93c1efa28c227eb46aab2418afa208eb293133cb150d8c",
+        "manifestType": "multiArch",
+        "platforms": ["linux/amd64", "linux/arm64"],
+        "originTag": "latest",
+        "imageCreatedUtc": "2026-07-15T13:10:03Z",
+        "sourceCommit": "09d794e202717b4f6c86823626d05eb8667f4010",
+        "sourceCommitProvenance": "org.opencontainers.image.revision label on the pinned image config"
+      },
+      "compose": { "service": "br-payer", "profiles": ["interop-br"] },
+      "endpoints": {
+        "fhirBaseUrl": "http://127.0.0.1:18081/fhir",
+        "cdsHooksBaseUrl": "http://127.0.0.1:18081/cds-services",
+        "readinessUrl": "http://127.0.0.1:18081/fhir/metadata"
+      },
+      "auth": { "mode": "None", "note": "The pinned image serves the FHIR endpoint unsecured. It is bound to the loopback interface on a dedicated bridge network and only ever receives synthetic data." },
+      "implementationGuides": {
+        "CRD": "2.2.1",
+        "DTR": "2.2.0",
+        "PAS": "2.2.1",
+        "CDex": "2.1.0"
+      },
+      "igVersionProvenance": "Observed from the pinned image's startup package installation (packages2.fhir.org downloads), not from upstream source at HEAD.",
+      "requiredEgress": [
+        "https://packages2.fhir.org — Da Vinci IG packages are downloaded at container startup; the server fails to boot without it."
+      ],
+      "startupNotes": "HAPI FHIR JPA starter (8.8.0). Boot takes roughly 60-120s: JPA schema, IG package install, then the FHIR endpoint. Poll GET /fhir/metadata; do not sleep."
+    },
+    {
+      "name": "HL7-DaVinci/br-provider",
+      "key": "br-provider",
+      "role": "ExternalClient",
+      "protocols": ["CRD", "DTR", "PAS"],
+      "upstreamRepository": "https://github.com/HL7-DaVinci/br-provider",
+      "license": "MIT",
+      "pin": {
+        "kind": "imageDigest",
+        "image": "hlseven/davinci-br-provider",
+        "digest": "sha256:6ddcea188bfc38cb8a2bf3e5bbda7f290970a659d2be3b85182d305565e9b74a",
+        "reference": "hlseven/davinci-br-provider@sha256:6ddcea188bfc38cb8a2bf3e5bbda7f290970a659d2be3b85182d305565e9b74a",
+        "manifestType": "multiArch",
+        "platforms": ["linux/amd64", "linux/arm64"],
+        "originTag": "latest",
+        "imageCreatedUtc": "2026-07-14T18:29:34Z",
+        "sourceCommit": "6a28d5c78ce9d566167d1d65e39d6f5f0e215a67",
+        "sourceCommitProvenance": "org.opencontainers.image.revision label on the pinned image config"
+      },
+      "compose": { "service": "br-provider", "profiles": ["interop-br-provider"] },
+      "endpoints": {
+        "fhirBaseUrl": "http://127.0.0.1:18080/fhir",
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:18080/fhir/metadata"
+      },
+      "auth": { "mode": "None", "note": "Upstream pairs this server with the FAST UDAP security server in its own compose stack. The harness does not start that stack; no CHO interop scenario currently drives br-provider." },
+      "implementationGuides": { "CRD": "2.2.x", "DTR": "2.2.x", "PAS": "2.2.x" },
+      "igVersionProvenance": "Declared by upstream README at the pinned image's source commit; not yet confirmed against a running instance by a CHO scenario.",
+      "requiredEgress": [
+        "https://packages2.fhir.org — Da Vinci IG packages are downloaded at container startup."
+      ],
+      "startupNotes": "Not exercised by any scenario in this PR. Defined so the provider-side role can be added without redesigning orchestration."
+    },
+    {
+      "name": "inferno-framework/davinci-pdex-test-kit",
+      "key": "inferno-pdex",
+      "role": "ConformanceRunner",
+      "protocols": ["PDex"],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-pdex-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v0.13.2",
+        "commit": "bc3a769f5ae9e4b1d6bdcd67d3b1b0eeab348da8",
+        "reference": "https://github.com/inferno-framework/davinci-pdex-test-kit@v0.13.2"
+      },
+      "compose": { "service": "inferno-pdex", "profiles": ["interop-pdex"] },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14567/"
+      },
+      "auth": { "mode": "None", "note": "Inferno drives CHO as the system under test; CHO's SMART configuration is supplied as suite input, never by weakening CHO." },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14567/api",
+        "suites": ["pdex_payer_server", "pdex_payer_client", "pdex_provider_client"],
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": { "PDex": "see kit release notes for v0.13.2" },
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "No upstream-published image exists for this kit; it is built from a checkout at the pinned tag during explicit setup. Not started in this PR — see docs/interop/davinci.md for the exact integration point."
+    },
+    {
+      "name": "inferno-framework/davinci-dtr-test-kit",
+      "key": "inferno-dtr",
+      "role": "ConformanceRunner",
+      "protocols": ["DTR"],
+      "upstreamRepository": "https://github.com/inferno-framework/davinci-dtr-test-kit",
+      "license": "Apache-2.0",
+      "pin": {
+        "kind": "releaseTag",
+        "tag": "v0.17.1",
+        "commit": "ed28c3a6a9742f4f81365f8747656e5c6add543c",
+        "reference": "https://github.com/inferno-framework/davinci-dtr-test-kit@v0.17.1"
+      },
+      "compose": { "service": "inferno-dtr", "profiles": ["interop-dtr-inferno"] },
+      "endpoints": {
+        "fhirBaseUrl": null,
+        "cdsHooksBaseUrl": null,
+        "readinessUrl": "http://127.0.0.1:14568/"
+      },
+      "auth": { "mode": "None", "note": "Same as the PDex kit: CHO is the system under test and supplies endpoint configuration as suite input." },
+      "inferno": {
+        "apiBaseUrl": "http://127.0.0.1:14568/api",
+        "suites": ["dtr_payer_server", "dtr_full_ehr", "dtr_light_ehr", "dtr_smart_app"],
+        "runner": "docker compose build && docker compose up (upstream run.sh) from a checkout at the pinned tag"
+      },
+      "implementationGuides": { "DTR": "see kit release notes for v0.17.1" },
+      "requiredEgress": [
+        "https://github.com — the kit is fetched at the pinned tag during explicit setup",
+        "https://rubygems.org and Docker Hub — the kit image is built locally from upstream's Dockerfile",
+        "https://packages.fhir.org — the bundled hl7_validator_service loads IG packages"
+      ],
+      "startupNotes": "Not started in this PR. Same integration seam as the PDex kit."
+    }
+  ],
+  "contentSources": [
+    {
+      "name": "HL7-DaVinci/CDS-Library",
+      "key": "cds-library",
+      "purpose": "CRD/DTR/PAS test content: PlanDefinition, Questionnaire, Library, CQL, ValueSet and prior-auth rule fixtures for future scenarios.",
+      "upstreamRepository": "https://github.com/HL7-DaVinci/CDS-Library",
+      "license": "No LICENSE file is present in the repository at the pinned commit. Treat as reference-only: fetch at the pin during explicit setup, never vendor into this repository, and resolve licensing with HL7 before copying any file.",
+      "pin": {
+        "kind": "commit",
+        "branch": "master",
+        "commit": "560403a97a4c50248713fad90314faaeeff7977d",
+        "reference": "https://github.com/HL7-DaVinci/CDS-Library@560403a97a4c50248713fad90314faaeeff7977d"
+      },
+      "vendored": false,
+      "usedBy": [],
+      "note": "The pinned br-payer image already bundles the clinical content its own CRD/DTR/PAS rules need, so no scenario in this PR consumes CDS-Library. The pin exists so a later scenario can point at specific upstream PlanDefinitions/Questionnaires/CQL without copying them into CHO."
+    }
+  ]
+}

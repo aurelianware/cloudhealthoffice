@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "description": "Da Vinci external interoperability scenario inventory. This is the source of truth for which scenarios exist; execution status comes from a harness run, never from this file. A scenario listed here with no result in a run is reported NotRun.",
+  "scenarios": [
+    {
+      "id": "BR-PAS-SUBMIT-001",
+      "title": "PAS $submit against the HL7 Da Vinci burden-reduction payer RI",
+      "protocol": "PAS",
+      "choRole": "Client",
+      "externalTarget": "br-payer",
+      "requiredServices": ["br-payer"],
+      "implemented": true,
+      "description": "CHO's harness submits a synthetic PAS request bundle to the independent payer RI's Claim/$submit and parses/validates the PAS response bundle with the same FHIR parser CHO uses."
+    },
+    {
+      "id": "BR-CRD-001",
+      "title": "CRD CDS Hooks exchange with the burden-reduction payer RI",
+      "protocol": "CRD",
+      "choRole": "Client",
+      "externalTarget": "br-payer",
+      "requiredServices": ["br-payer"],
+      "implemented": false,
+      "description": "Invoke an advertised CRD hook (order-sign / appointment-book) on the external payer and validate the returned cards and coverage-information system actions."
+    },
+    {
+      "id": "BR-DTR-001",
+      "title": "DTR $questionnaire-package against the burden-reduction payer RI",
+      "protocol": "DTR",
+      "choRole": "Client",
+      "externalTarget": "br-payer",
+      "requiredServices": ["br-payer"],
+      "implemented": false,
+      "description": "Request a questionnaire package for a synthetic coverage/order context and validate the returned Questionnaire/Library bundle."
+    },
+    {
+      "id": "BR-PAS-INQUIRE-001",
+      "title": "PAS $inquire against the burden-reduction payer RI",
+      "protocol": "PAS",
+      "choRole": "Client",
+      "externalTarget": "br-payer",
+      "requiredServices": ["br-payer"],
+      "implemented": false,
+      "description": "Inquire on a prior authorization previously established by BR-PAS-SUBMIT-001 and validate the returned Parameters/responseBundle set."
+    },
+    {
+      "id": "INFERNO-DTR-PAYER-001",
+      "title": "Inferno DTR payer-server suite against CHO",
+      "protocol": "DTR",
+      "choRole": "Server",
+      "externalTarget": "inferno-dtr",
+      "requiredServices": ["cho-fhir-service", "inferno-dtr"],
+      "implemented": false,
+      "description": "Run the davinci-dtr-test-kit dtr_payer_server suite with CHO's FHIR base as the suite input and map Inferno result statuses into InteropResult."
+    },
+    {
+      "id": "INFERNO-PDEX-SERVER-001",
+      "title": "Inferno PDex payer-server suite against CHO",
+      "protocol": "PDex",
+      "choRole": "Server",
+      "externalTarget": "inferno-pdex",
+      "requiredServices": ["cho-fhir-service", "inferno-pdex"],
+      "implemented": false,
+      "description": "Run the davinci-pdex-test-kit pdex_payer_server suite with CHO's FHIR base as the suite input."
+    },
+    {
+      "id": "INFERNO-PDEX-CLIENT-001",
+      "title": "Inferno PDex payer-client suite driven by CHO",
+      "protocol": "PDex",
+      "choRole": "Client",
+      "externalTarget": "inferno-pdex",
+      "requiredServices": ["cho-fhir-service", "inferno-pdex"],
+      "implemented": false,
+      "description": "Run the davinci-pdex-test-kit pdex_payer_client suite with CHO acting as the payer client performing $member-match and clinical data retrieval."
+    }
+  ]
+}

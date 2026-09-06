@@ -148,6 +148,34 @@ as the source of truth for current status and gaps.
 - [FHIR integration](docs/features/FHIR-INTEGRATION.md)
 - [Prior authorization API](docs/features/PRIOR-AUTHORIZATION-API.md)
 
+## Da Vinci Interoperability
+
+Separate from the internal CMS-0057-F acceptance suite, which proves CHO
+implements the behavior its own acceptance specification requires, the
+interoperability harness proves CHO can exchange standards-conformant FHIR with
+independent HL7 Da Vinci reference implementations running in their own
+containers, pinned by image digest.
+
+One command starts the pinned dependency, runs the scenario, writes sanitized
+evidence to `artifacts/interop/`, and tears the stack down:
+
+```bash
+./scripts/interop/run.sh br-payer smoke
+```
+
+Harness unit tests only — no Docker, no third-party code:
+
+```bash
+dotnet test tests/DaVinciInterop.Tests --filter Category=DaVinciInteropUnit
+```
+
+External scenarios are opt-in (`CHO_INTEROP_ENABLED=1`), so an ordinary
+`dotnet test` never downloads or starts third-party code. The two evidence
+streams are kept separate: an interoperability result never changes a CMS-0057-F
+scenario status.
+
+- [Da Vinci interoperability harness](docs/interop/davinci.md)
+
 ## Quick Start
 
 For the shortest path, use the current quickstart:
