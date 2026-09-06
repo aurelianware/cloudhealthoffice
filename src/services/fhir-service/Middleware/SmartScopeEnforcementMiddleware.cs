@@ -81,6 +81,39 @@ public class SmartScopeEnforcementMiddleware
             return;
         }
 
+        var scopes = ParseScopes(context.User);
+
+        // ── 0. System-level operations ────────────────────────────────────────
+        // A path like /fhir/r4/$submit-attachment names no resource type, so the
+        // resource-type parse below cannot govern it. Left unhandled it would
+        // fall through the "unknown path" branch and be enforced by NOTHING —
+        // an unauthenticated-scope write into a payer's record. Each system
+        // operation therefore declares the resource and the access it needs.
+        var systemOperation = ParseSystemOperation(context.Request.Path);
+        if (systemOperation is not null)
+        {
+            var (operationResource, requiredAccess, contexts) = systemOperation.Value;
+
+            if (!HasRequiredScope(scopes, operationResource, requiredAccess, contexts))
+            {
+                _logger.LogWarning(
+                    "SMART scope denied — operation: {Operation}, required: {Resource}.{Access}",
+                    SanitizeForLog(context.Request.Path.Value), operationResource, requiredAccess);
+
+                await WriteFhirError(context, 403,
+                    OperationOutcome.IssueSeverity.Error,
+                    OperationOutcome.IssueType.Forbidden,
+                    "Insufficient scope. Required: "
+                    + string.Join(" or ", contexts.Select(c =>
+                        $"{c}/{operationResource}.{requiredAccess}")));
+                return;
+            }
+
+            context.Items["SmartScopes"] = scopes;
+            await _next(context);
+            return;
+        }
+
         var resourceType = ParseResourceType(context.Request.Path);
         if (resourceType == null)
         {
@@ -89,11 +122,10 @@ public class SmartScopeEnforcementMiddleware
             return;
         }
 
-        var scopes = ParseScopes(context.User);
         var patientClaim = context.User.FindFirst("patient")?.Value;
 
         // ── 1. Scope check ────────────────────────────────────────────────────
-        if (!HasRequiredScope(scopes, resourceType))
+        if (!HasRequiredScope(scopes, resourceType, ReadAccess))
         {
             _logger.LogWarning(
                 "SMART scope denied — resource: {Resource}, scopes: {Scopes}",
@@ -179,6 +211,46 @@ public class SmartScopeEnforcementMiddleware
         || path.StartsWithSegments("/health")
         || path.StartsWithSegments("/swagger");
 
+    internal const string ReadAccess = "read";
+    internal const string WriteAccess = "write";
+
+    /// <summary>
+    /// System-level FHIR operations served by this server, and the scope each
+    /// one needs.
+    ///
+    /// <c>$submit-attachment</c> is the Da Vinci CDex operation a provider uses
+    /// to send documentation on a pended prior authorization. It WRITES into the
+    /// payer's record, so a read scope is not enough: it is governed by the
+    /// Task write scope, Task being the resource the additional-information
+    /// request is projected as.
+    /// </summary>
+    /// <summary>
+    /// Scope contexts a system operation may be invoked under. <c>$submit-attachment</c>
+    /// is a provider/system transaction with a payer, so a PATIENT-context token
+    /// is not an acceptable caller however it is scoped — only <c>user/</c> and
+    /// <c>system/</c> grants apply.
+    /// </summary>
+    private static readonly string[] BackendContexts = ["user", "system"];
+
+    private static readonly IReadOnlyDictionary<string, (string Resource, string Access, string[] Contexts)>
+        SystemOperations = new Dictionary<string, (string, string, string[])>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["$submit-attachment"] = ("Task", WriteAccess, BackendContexts),
+        };
+
+    /// <summary>
+    /// Recognises /fhir/r4/$operation, returning the resource and access its
+    /// scope must name. Null when the path is not a system-level operation.
+    /// </summary>
+    private static (string Resource, string Access, string[] Contexts)? ParseSystemOperation(PathString path)
+    {
+        var segments = path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments is not { Length: 3 }) return null;
+        if (!segments[2].StartsWith('$')) return null;
+
+        return SystemOperations.TryGetValue(segments[2], out var required) ? required : null;
+    }
+
     /// <summary>
     /// Extracts the FHIR resource type from paths like /fhir/r4/Patient/123 → "Patient".
     /// Returns null for unrecognised paths.
@@ -218,15 +290,27 @@ public class SmartScopeEnforcementMiddleware
         return result;
     }
 
-    private static bool HasRequiredScope(HashSet<string> scopes, string resourceType)
-    {
-        if (scopes.Contains("patient/*.read") || scopes.Contains("user/*.read") ||
-            scopes.Contains("system/*.read"))
-            return true;
+    /// <summary>All three scope contexts. The default for resource reads.</summary>
+    private static readonly string[] AllContexts = ["patient", "user", "system"];
 
-        return scopes.Contains($"patient/{resourceType}.read")
-            || scopes.Contains($"user/{resourceType}.read")
-            || scopes.Contains($"system/{resourceType}.read");
+    /// <summary>
+    /// Whether the token grants <c>{resourceType}.{access}</c> in one of the
+    /// permitted contexts. A wildcard grant counts only for the access being
+    /// asked for: a <c>.read</c> wildcard never satisfies a write.
+    /// </summary>
+    private static bool HasRequiredScope(
+        HashSet<string> scopes, string resourceType, string access, string[]? contexts = null)
+    {
+        foreach (var context in contexts ?? AllContexts)
+        {
+            if (scopes.Contains($"{context}/*.{access}")
+                || scopes.Contains($"{context}/*.*")
+                || scopes.Contains($"{context}/{resourceType}.{access}")
+                || scopes.Contains($"{context}/{resourceType}.*"))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

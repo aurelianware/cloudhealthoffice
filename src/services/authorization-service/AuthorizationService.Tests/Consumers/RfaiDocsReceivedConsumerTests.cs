@@ -85,8 +85,16 @@ public class RfaiDocsReceivedConsumerTests
         await consumer.ProcessMessageAsync(message);
 
         // Assert
-        auth.Status.Should().Be(AuthorizationStatus.Pended);
-        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Never);
+        auth.Status.Should().Be(AuthorizationStatus.Pended,
+            "a partial delivery does not satisfy the request, so the authorization "
+            + "stays pended and the decision clock stays stopped");
+
+        // The ARRIVAL is still recorded: documents reaching the payer is a fact
+        // about the authorization whether or not the request is now complete,
+        // and PAS-07 needs it as provenance. Previously nothing was written on a
+        // partial delivery, so the first arrival left no trace at all.
+        auth.RFAIResponseDate.Should().NotBeNull();
+        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<Authorization>()), Times.Once);
     }
 
     [Fact]
@@ -107,7 +115,8 @@ public class RfaiDocsReceivedConsumerTests
         await consumer.ProcessMessageAsync(message);
 
         // Assert
-        auth.SlaResumedAt.Should().BeNull();
+        auth.SlaResumedAt.Should().BeNull(
+            "the decision clock restarts only when the request is satisfied");
     }
 
     [Fact]

@@ -10,14 +10,19 @@ namespace Cms0057Acceptance.Tests.Scenarios;
 /// <summary>
 /// PAS-04 (inquiry/status), PAS-06 (decision timeframe), PAS-07 (CDex
 /// additional-info), PAS-08 (drug exclusion). Executed against the REAL
-/// Cms0057ComplianceChecker + PasResponseBuilder in Demo/Cho mode, with honest
-/// GAP markers where the corresponding surface is not yet built.
+/// Cms0057ComplianceChecker + PasResponseBuilder in Demo/Cho mode.
+///
+/// PAS-07's behaviour lives in CdexAdditionalInformationTests, which drives the
+/// whole round trip against the real services. What stays here is the PAS half:
+/// the X12 A4 signal a pended decision carries, and the routes the CDex exchange
+/// is actually served at.
 ///
 /// Traceability:
 ///   compliance  src/services/fhir-service/Services/Cms0057ComplianceChecker.cs (CheckPriorAuthTimeline)
 ///   builder     src/services/fhir-service/Services/PasResponseBuilder.cs (BuildPendedResponse — X12 A4)
 ///   status      src/services/authorization-service/Controllers/AuthorizationsController.cs
-///   pas surface src/services/fhir-service/Controllers/PasController.cs (only Claim/$submit)
+///   pas surface src/services/fhir-service/Controllers/PasController.cs (Claim/$submit, Claim/$inquire)
+///   cdex        src/services/fhir-service/Controllers/CdexController.cs ($submit-attachment)
 /// </summary>
 public class PasDecisionAndScopeTests
 {
@@ -107,33 +112,36 @@ public class PasDecisionAndScopeTests
 
     [Fact]
     [Trait("Scenario", "PAS-07")]
-    [Trait("Kind", "GAP")]
-    public void PAS07_Gap_NoCdexAdditionalInfoRoundTripInPasPath()
+    public void PAS07_TheCdexRoundTripIsServedNotMerelySignalled()
     {
-        // GAP: there is no Da Vinci CDex additional-information request/response
-        // round-trip wired into the fhir-service PAS path. The existing
-        // CommunicationController projects APPEAL notes onto FHIR Communication
-        // (cho-appeal-communication), not a CDex documentation request on a
-        // pended prior-auth. Standing up that exchange is engagement/product
-        // follow-up.
-        var commType = typeof(CommunicationController);
-        var xmlRefsAppeal = commType.GetCustomAttributesData(); // presence check only
-        xmlRefsAppeal.Should().NotBeNull();
+        // The A4 signal above says a decision is outstanding pending information.
+        // What makes PAS-07 a ROUND TRIP is that the request is retrievable and
+        // answerable through the standards surface, and both halves exist:
+        //
+        //   request  — a Task on the CDex Task Attachment Request profile,
+        //              served by TaskController (see CdexAdditionalInformationTests)
+        //   response — POST fhir/r4/$submit-attachment, served by CdexController
+        //
+        // This test pins the ROUTES; the behaviour behind them is proven end to
+        // end in CdexAdditionalInformationTests against the real services.
+        var submitAttachment = typeof(CdexController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .SelectMany(m => m.GetCustomAttributes<HttpPostAttribute>())
+            .Select(a => a.Template)
+            .ToList();
 
-        // Assert the PAS controller exposes no additional-info INTAKE action.
-        // Note $inquire is deliberately not disqualifying here: it REPORTS that a
-        // decision is pended awaiting information (X12 A4), which CHO already
-        // knows, but it neither requests documentation nor accepts it. That
-        // round-trip is what CDex is, and it is still missing.
+        submitAttachment.Should().Contain(FhirService.Services.Cdex.CdexCanonicalUrls.SubmitAttachmentRoute);
+
+        // The PAS controller stays what it is — submit and inquire. The CDex
+        // exchange lives on its own standards-defined surface rather than being
+        // bolted onto the PAS operations.
         var pasActions = typeof(PasController)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .SelectMany(m => m.GetCustomAttributes<RouteAttribute>()
-                .Select(a => a.Template)
-                .Concat(m.GetCustomAttributes<HttpPostAttribute>().Select(a => a.Template ?? "")))
+            .SelectMany(m => m.GetCustomAttributes<HttpPostAttribute>().Select(a => a.Template ?? ""))
             .Where(t => !string.IsNullOrEmpty(t))
             .ToList();
-        pasActions.Should().NotContain(t => t!.Contains("additional", StringComparison.OrdinalIgnoreCase)
-                                         || t!.Contains("$cdex", StringComparison.OrdinalIgnoreCase));
+
+        pasActions.Should().BeEquivalentTo(["Claim/$submit", "Claim/$inquire"]);
     }
 
     // ── PAS-08 drug exclusion ───────────────────────────────────────────────────

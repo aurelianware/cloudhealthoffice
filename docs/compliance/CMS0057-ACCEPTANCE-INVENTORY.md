@@ -135,7 +135,7 @@ Mode column: current operating mode of that surface in the default build.
 | `Controllers/DtrController.cs` | Questionnaire/QuestionnaireResponse CRUD, `$questionnaire-package` | Demo | PAS-02 |
 | `Services/DtrService.cs` | `DtrService : IDtrService`, 5 seeded Questionnaires (incl. Draft medication PA) | Demo (in-memory) | PAS-02, PAS-08 |
 | `Controllers/PasController.cs` | `Claim/$submit` and `Claim/$inquire` | Demo | PAS-03/04/05/06 |
-| `Services/PriorAuthorizationInquiry.cs`, `Services/PriorAuthorizationInquiryService.cs` | read-only projection of the authoritative authorization record; corroborating-key lookup; uniform refusal | Demo | PAS-04 inquiry / status | **PASSABLE** | **GAP** | Da Vinci PAS `Claim/$inquire` at `POST fhir/r4/Claim/$inquire`, projecting the SAME authorization record `$submit` writes — no inquiry-specific store, no second status field. Request is a PAS Bundle carrying a `Claim` (`use=preauthorization`); response is a Bundle carrying a `ClaimResponse` on the PAS profile, built by the same `PasResponseBuilder`. Status maps deterministically and totally (Submitted/InReview → queued `pending`; Pended/A4 → queued `pended-additional-information` + X12 306 reviewAction; Approved/A1 → complete `approved`; Modified/A2 → partial `modified`; Denied/A3 → complete `denied` + coded reason; Expired → complete `expired`; Cancelled → cancelled), so pending, pended-for-information, approved and denied are all distinguishable without claiming a CDex round-trip. Reads live committed state on every call, so a status changed since submission is the status returned. **Read-only by contract** — the store seam exposes no write method at all (asserted structurally), so repetition cannot create a record, move a status, restart a clock or trigger a payer submission. Tenant from the authenticated context and re-checked on the record; an authorization number alone never suffices — a corroborating member or provider key must match. Unknown / wrong-tenant / not-yours return one identical 404 `OperationOutcome`, category kept in a PHI-free audit line. CapabilityStatement advertises `submit` and `inquire` on `Claim`, pinned by test. Limitation: authorization records carry no concurrency token, so reads are last-write-wins committed state. QNXT status inquiry absent |
+| `Services/PriorAuthorizationInquiry.cs`, `Services/PriorAuthorizationInquiryService.cs` | read-only projection of the authoritative authorization record; corroborating-key lookup; uniform refusal | Demo | PAS-04 inquiry / status | **PASSABLE** | **GAP** | Da Vinci PAS `Claim/$inquire` at `POST fhir/r4/Claim/$inquire`, projecting the SAME authorization record `$submit` writes — no inquiry-specific store, no second status field. Request is a PAS Bundle carrying a `Claim` (`use=preauthorization`); response is a Bundle carrying a `ClaimResponse` on the PAS profile, built by the same `PasResponseBuilder`. Status maps deterministically and totally (Submitted/InReview → queued `pending`; Pended/A4 → queued `pended-additional-information` + X12 306 reviewAction; Approved/A1 → complete `approved`; Modified/A2 → partial `modified`; Denied/A3 → complete `denied` + coded reason; Expired → complete `expired`; Cancelled → cancelled), so pending, pended-for-information, approved and denied are all distinguishable; since PAS-07 the pended-for-information state is backed by a real CDex request the provider can retrieve and answer. Reads live committed state on every call, so a status changed since submission is the status returned. **Read-only by contract** — the store seam exposes no write method at all (asserted structurally), so repetition cannot create a record, move a status, restart a clock or trigger a payer submission. Tenant from the authenticated context and re-checked on the record; an authorization number alone never suffices — a corroborating member or provider key must match. Unknown / wrong-tenant / not-yours return one identical 404 `OperationOutcome`, category kept in a PHI-free audit line. CapabilityStatement advertises `submit` and `inquire` on `Claim`, pinned by test. Limitation: authorization records carry no concurrency token, so reads are last-write-wins committed state. QNXT status inquiry absent |
 | `Services/PasAutoAdjudicator.cs` | `IPasAutoAdjudicator.TryDecideAsync` (rule engine + enrollment gate) | Demo | PAS-03 |
 | `Services/PasResponseBuilder.cs` | approved/denied/pended ClaimResponse (PAS profile, X12 A4) | Demo | PAS-03/05/06/07 |
 | `Services/Cms0057ComplianceChecker.cs` | `ICms0057ComplianceChecker`, `CheckPriorAuthTimeline` (72h/7d) | Demo | PAS-03/05/06, PAT-02/03 |
@@ -158,7 +158,13 @@ Mode column: current operating mode of that surface in the default build.
 | `Services/PayerToPayer/Ingestion/PayerToPayerImportRepository.cs` | import store **separate from CHO-authoritative data**; staged-then-committed, tenant + member scoped | Demo (in-memory) | P2P-02 |
 | `Services/PayerToPayer/Ingestion/MongoPayerToPayerImportRepository.cs` | durable MongoDB store; unique index on (tenantId, importKey), single-document ledger commit | live when `MongoDb:ConnectionString` set | P2P-02 |
 | `Controllers/PayerToPayerOutboundController.cs` | `POST fhir/r4/PayerToPayer/$initiate` (payer id only — never a URL); thin routing | Demo | P2P-02 |
-| `Controllers/CommunicationController.cs` | Appeal-note → FHIR Communication (**not** CDex additional-info) | Demo | PAS-07 (GAP note) |
+| `Controllers/CommunicationController.cs` | Appeal-note → FHIR Communication (**not** the CDex additional-info exchange — that is `Task` + `$submit-attachment`) | Demo | appeals surface |
+| `Controllers/CdexController.cs` | CDex `POST fhir/r4/$submit-attachment` — the response half of the additional-information round trip | Demo | PAS-07 |
+| `Controllers/TaskController.cs` | `Task` read/search; dispatches CDex additional-information requests (`rfai-` ids, `code`/`identifier`/`focus`) alongside the appeal projection | Demo | PAS-07 |
+| `Services/Cdex/CdexTaskMapper.cs` | RfaiCase → `Task` on the CDex Task Attachment Request profile; total status mapping with CHO's own state on `businessStatus` | Demo | PAS-07 |
+| `Services/Cdex/CdexAttachmentSubmissionService.cs` | correlation (tenant + tracking id + `AttachTo` + provider), content-derived submission identity, all-or-nothing payload policy, uniform refusal | Demo | PAS-07 |
+| `Services/Cdex/CdexAttachmentPolicy.cs` | content-type allow-list, size/count caps, title sanitisation, `IAttachmentContentScanner` seam (default records `Unknown`, never `Safe`) | Demo | PAS-07 |
+| `Services/Cdex/CdexAdditionalInformation.cs` | narrow read/write projection of the rfai-service record; every lookup tenant-scoped (asserted structurally) | Demo | PAS-07 |
 
 ### QNXT / operating-mode adapters (mostly stubs)
 
@@ -284,10 +290,10 @@ external-core dependency (no vendor adapter involved).
 | PAS-01 CRD | **PASSABLE** | **GAP** | `CrdController` + `CrdService` + CHO rule store; QNXT benefit adapter stub |
 | PAS-02 DTR | **PASSABLE** | n/a | `DtrController` + `DtrService` (seeded, in-memory) |
 | PAS-03 PA submit | **PASSABLE** | **GAP** | `ChoAuthorizationBackend` persists + retrieves via `IAuthorizationRepository`; `QnxtAuthorizationBackend` stub |
-| PAS-04 inquiry/status | **PARTIAL** | **GAP** | `ChoAuthorizationBackend.GetByNumberAsync` + `AuthorizationsController` status persisted; FHIR PAS `$inquire` **GAP** |
+| PAS-04 inquiry/status | **PASSABLE** | **GAP** | `ChoAuthorizationBackend.GetByNumberAsync` + `AuthorizationsController` status persisted; FHIR PAS `Claim/$inquire` served by `PriorAuthorizationInquiryService` (read-only projection of the same record). QNXT status inquiry absent |
 | PAS-05 specific denial | **PASSABLE** | **GAP** | `PasResponseBuilder` coded error; `ChoAuthorizationBackend` persists coded denial reason |
 | PAS-06 decision timeframe | **PASSABLE** | n/a | `Cms0057ComplianceChecker.CheckPriorAuthTimeline` (72h/7d); persisted status/decision history |
-| PAS-07 CDex additional-info | **PARTIAL** | n/a | pended X12 A4 via `PasResponseBuilder`; CDex round-trip **GAP** |
+| PAS-07 CDex additional-info | **PASSABLE** | n/a | A4 decision naming documentation raises a durable request on rfai-service's `RfaiCase` (`PendedAuthorizationRfaiCoordinator`); the request is served as a `Task` on the CDex Task Attachment Request profile and answered through `POST fhir/r4/$submit-attachment`; idempotent on both halves; accepted documentation returns the authorization to **review**, never to approved; `$inquire` follows the lifecycle |
 | PAS-08 drug exclusion | **PASSABLE** | n/a | `ChoAuthorizationBackend.CreateAsync` enforces benefit exclusions (`BenefitExclusion` catalog + `DrugExclusionEvaluator`): a plan-excluded drug / pharmacy service type is persisted as a coded denial (A3) with audit history, not approvable |
 | PROV-01 attributed pull | **PASSABLE** | **GAP** | `MockPatientAccessDataProvider` + `PatientAccessMapper`; QNXT provider adapter stub |
 | PROV-02 attribution enforce | **PASSABLE** | n/a | data layer returns no data for non-attributed member; 403-class via middleware (SEC-01) |
@@ -308,6 +314,75 @@ scored on the CHO-native authorization backend (Replace) rather than a flat GAP.
 PAS-03 product capability moved GAP → **PASSABLE**; METRICS-01 product moved
 PARTIAL → **PASSABLE** (derives from the persisted record, not a test-only
 object). The QNXT column stays GAP: that integration is engagement work.
+
+**What changed in the PAS-07 PR:** a pended prior authorization can now progress
+through a real Da Vinci CDex additional-information lifecycle instead of stopping
+at an A4 status. PAS-07 moved PARTIAL → **PASSABLE**, so CHO Replace declares
+**19 PASSABLE / 2 PARTIAL / 0 GAP** (generator-computed from the manifest —
+nothing here is hard-coded). Remaining PARTIAL: PAT-02, SEC-01. Full design:
+[docs/architecture/cdex-additional-information.md](../architecture/cdex-additional-information.md).
+
+The exchange, end to end: an X12 278 **A4** decision that *names what
+documentation it needs* raises a durable request on rfai-service's existing
+`RfaiCase` — extended, not duplicated, so there is no second additional-info
+aggregate. The provider retrieves it as a FHIR `Task` on the **CDex Task
+Attachment Request** profile (`GET fhir/r4/Task/{id}`, or by `identifier` /
+`focus=Claim/{authNumber}`), answers with **`POST fhir/r4/$submit-attachment`**,
+and the authorization returns to **review** — never to approved. `$inquire`
+follows: `pended-additional-information` + A4 before, plain `pending` after, so it
+is not left permanently reporting A4 once the data is in.
+
+**Why an A4 status alone is not enough.** A request is raised only when the
+decision is A4 **and** names requested documentation. A pend that asks the
+provider for nothing has not asked them anything, and manufacturing a request
+from it would put a question to the provider that no reviewer posed. Asserted, as
+are A1/A2/A3 and plain InReview raising nothing.
+
+**Idempotency lives in the primary key.** The case's document id is derived from
+tenant + authorization + a digest of the decision, so two workers racing on one
+A4 event address the same document and exactly one conditional insert wins; a
+redelivered event replays onto the request the first delivery created, whatever
+status it has since reached. At most one cycle is open per authorization, and a
+later cycle is a new record with the next sequence — earlier evidence is never
+overwritten. On the response side the submission id is content-derived, so a
+retry records nothing twice while a materially different document is appended as
+an additional response.
+
+**A security hole this surfaced and closed.** `SmartScopeEnforcementMiddleware`
+derived the required scope from the resource-type path segment. A system-level
+operation path — `/fhir/r4/$submit-attachment` — names no resource type and fell
+through the "unknown path" branch **unenforced**. System operations now declare
+the resource, the access and the scope contexts they accept, and
+`$submit-attachment` requires a `Task` **write** scope in a `user/` or `system/`
+context: a read scope is not enough to put documents into a payer's record, and a
+patient-context token is not an acceptable caller.
+
+**Deliberately not Provider Access consent.** That gate governs a provider
+*reading a member's clinical record*. This is a payer/provider transaction about
+the submitter's own prior-authorization request, governed by the PAS/CDex
+authorization model, so the separation introduced with CONSENT-01 is preserved
+rather than borrowed from.
+
+**Named limitations, not silently absent.** The submitter is bound by the
+tracking id and the corroborating provider NPI rather than by the caller's own
+identity (no token-subject-to-NPI mapping exists here — the same limitation as
+`$inquire`); the payer makes the request available for retrieval rather than
+pushing a Task to a provider endpoint (no provider endpoint registry); attachment
+bytes go through the shared `IClaimAttachmentContentStore`, of which fhir-service
+registers the **in-process** implementation by default, so a deployment must bind
+a durable one; malware scanning is a registered seam with **no scanner behind
+it**, and unscanned content is recorded as scan status `Unknown`, never `Safe`;
+expiry is derived from the due date rather than swept; and there is no outbox, so
+a failure between recording the decision and raising the request leaves the
+authorization pended with `RFAIIssued = false` — recoverable, because the retry
+carries the same correlation key and cannot duplicate.
+
+**One existing test was changed, with cause.** `RfaiDocsReceivedConsumerTests`
+asserted that a *partial* delivery wrote nothing at all. Documents reaching the
+payer is a fact about the authorization whether or not the request is complete,
+so the first arrival is now stamped on `RFAIResponseDate`; the assertion that
+matters — the status stays pended and the decision clock stays stopped — is
+unchanged and sharpened.
 
 **What changed in the PAT-03 PR:** prior-authorization data gained an explicit
 retention lifecycle — a pure policy plus a hosted, tenant-safe, conditional-delete

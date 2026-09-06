@@ -7,6 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CDex additional-information round trip on a pended prior authorization (PAS-07)
+
+A prior authorization pended for additional information stopped at an A4 status.
+Cloud Health Office could say *that* more information was needed and could not
+say *what*, could not hand the request to the provider, and had no way to take
+the answer back. That round trip now exists, end to end, on one durable record.
+
+**Which CDex interaction.** CHO is the payer, so the exchange it needs is the
+solicited one: the **CDex Task Attachment Request** profile for the request half
+(`GET fhir/r4/Task/{id}`, or by `identifier` / `focus=Claim/{authNumber}`) and
+the **`$submit-attachment`** operation for the response half
+(`POST fhir/r4/$submit-attachment`). CDex's *Task Data Request* profile — a payer
+querying a provider's clinical record — is a different transaction and is
+deliberately not what a pended prior authorization uses.
+
+**One record, extended rather than duplicated.** rfai-service already held
+`RfaiCase`, so that is the additional-information aggregate: no second store, and
+no second lifecycle. The FHIR `Task` is a projection computed on read, and
+authorization-service keeps only the handle (`Authorization.RFAIReference`). The
+correlation chain is tenant → authorization → request → response → stored
+artifact.
+
+**An A4 status alone does not raise a request.** `PendedAuthorizationRfaiCoordinator`
+raises one only when the review decision is **A4 *and* the decision names what
+documentation is wanted**. A pend that asks the provider for nothing has not asked
+them anything, and manufacturing a request from it would put a question to the
+provider that no reviewer posed. A1/A2/A3 and a plain InReview state raise nothing
+either — all asserted.
+
+**Structured, not prose.** Each requested item carries the X12 PWK code *and* the
+LOINC code (the same request has to be expressible on both wires), the service
+line it is about, diagnosis context, and whether it is required; the case carries
+a due date and a coded reason. Free text supplements the codes and never replaces
+them, and a request with no items is refused at creation.
+
+**Idempotency is in the primary key, not in a read-then-write.** The case's
+document id is derived from tenant + authorization + a digest of the decision, so
+two workers racing on one A4 event address the same document and exactly one
+conditional insert wins (Cosmos 409 / Mongo duplicate key); the loser reads back
+the winner's case. A redelivered event replays onto the request the first delivery
+created **whatever status it has since reached** — otherwise a redelivery after
+the cycle closed would open a second one. At most one cycle is open per
+authorization, and a later cycle is a new record with the next sequence, so
+earlier request/response evidence is never overwritten.
+
+**A submission is bound to its request, not to an authorization number.** Tenant
+(from the authenticated context, never the payload), the payer-issued tracking id,
+the authorization named in `AttachTo`, and — where the request records one — the
+submitting provider's NPI must all agree. Knowing an authorization number attaches
+nothing. Submission identity is content-derived (tenant + request + tracking id +
+SHA-256 of the bytes), so a retry records nothing twice while a materially
+different document is appended as an *additional* response rather than
+overwriting the first.
+
+**Payload policy is enforced before anything is stored, all-or-nothing per call:**
+a content-type allow-list (PDF, images, plain/RTF text, XML, C-CDA, FHIR JSON),
+20 MB per attachment, 50 MB and 10 attachments per call, 25 artifacts per request
+enforced by the aggregate itself, caller-supplied `Attachment.url` refused rather
+than fetched, and titles kept as sanitised metadata. Storage keys are derived
+entirely from server-side values through the platform's existing
+`IClaimAttachmentContentStore`; the case record keeps a pointer and a hash, never
+content, and no clinical payload reaches a log or an audit event.
+
+**Receiving documents returns the authorization to review — never approves it.**
+The resume-review announcement is raised only on the transition into
+`DocsReceived`, so a replay cannot restart the decision clock twice; a partial
+delivery records the arrival but leaves the status pended; and a decided
+authorization is not reopened by documents arriving late. An acceptance test
+asserts explicitly that documentation submission does not imply approval.
+`Claim/$inquire` follows the lifecycle — `pended-additional-information` with the
+X12 A4 reviewAction before, plain `pending` after — so it is never left
+permanently reporting A4 once the data is in.
+
+**A security hole this surfaced and closed.** `SmartScopeEnforcementMiddleware`
+derived the required scope from the resource-type path segment. A system-level
+operation path — `/fhir/r4/$submit-attachment` — names no resource type and fell
+through the middleware's "unknown path" branch **unenforced**. System operations
+now declare the resource, the access **and the scope contexts** they accept, and
+`$submit-attachment` requires a `Task` **write** scope in a `user/` or `system/`
+context: a read scope is not enough to put documents into a payer's record, and a
+patient-context token is not an acceptable caller for a provider/payer
+transaction. rfai-service's legacy `by-auth/{tenantId}/…` route now honours a path
+tenant only when it matches the authenticated one, instead of selecting on it.
+
+**Anti-enumeration.** Unknown tracking id, other tenant, other authorization and
+other provider all return one identical 404, with the distinguishing category kept
+in a PHI-free audit line. Request-shape defects are described plainly as 400
+because they say nothing about what exists, payload defects as 422, and a fully
+correlated but closed request as 409 — the caller has already proven it is theirs.
+
+**Deliberately not Provider Access consent.** That gate governs a provider reading
+a member's clinical record; this is a payer/provider transaction about the
+submitter's own prior-authorization request. The separation introduced with the
+shared consent registry is preserved rather than borrowed from.
+
+**Known limitations, named rather than left absent.** The submitter is bound by the
+tracking id and the corroborating provider NPI rather than by the caller's own
+identity, because this repository has no token-subject-to-NPI mapping (the same
+documented limitation as `$inquire`). The payer makes the request available for
+retrieval rather than pushing a Task to a provider endpoint — there is no provider
+FHIR endpoint registry here. fhir-service registers the **in-process** attachment
+content store by default and says so at startup, so a deployment must bind a
+durable implementation before submitted documentation survives a restart. Malware
+scanning is a registered seam with **no scanner behind it**; unscanned content is
+recorded with scan status `Unknown`, never `Safe`. Expiry is derived from the due
+date rather than swept. And there is no outbox: a failure between recording the
+decision and raising the request leaves the authorization pended with
+`RFAIIssued = false` — the recoverable state, because the retry carries the same
+correlation key and cannot duplicate.
+
+**One existing test changed, with cause.** `RfaiDocsReceivedConsumerTests`
+asserted that a *partial* delivery wrote nothing at all. Documents reaching the
+payer is a fact about the authorization whether or not the request is complete, so
+the first arrival is now stamped on `RFAIResponseDate`; the assertion that matters
+— the status stays pended and the decision clock stays stopped — is unchanged and
+sharpened. `rfai-service` and a new `RfaiService.Tests` were also added to the
+solution, which did not previously build them.
+
+Design: [docs/architecture/cdex-additional-information.md](docs/architecture/cdex-additional-information.md).
+
+Acceptance 301 passed (+47), rfai-service 37 (new), fhir-service 450, SmartAuth 59,
+authorization-service 26 + 38, evidence 32; all 0 failed. PAS-07 PARTIAL →
+**PASSABLE** on 41 supporting tests, so CHO Replace is **19 PASSABLE / 2 PARTIAL /
+0 GAP** (generator-computed). Remaining PARTIAL: PAT-02, SEC-01.
+
 ### Durable prior-authorization data retention (PAT-03)
 
 Prior-authorization state was persisted and queryable but had no retention
