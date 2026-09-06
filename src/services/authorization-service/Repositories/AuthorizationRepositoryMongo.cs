@@ -1,4 +1,5 @@
 using AuthorizationService.Models;
+using AuthorizationService.Services.Retention;
 using MongoDB.Driver;
 using MongoDB.Bson;
 
@@ -148,6 +149,68 @@ public class AuthorizationRepositoryMongo : IAuthorizationRepository
         }
 
         return summary;
+    }
+
+    // ── Retention (PAT-03) ───────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<string>> ListTenantIdsAsync(CancellationToken ct = default)
+    {
+        var tenants = await _collection
+            .Distinct(new StringFieldDefinition<Authorization, string>("TenantId"),
+                Builders<Authorization>.Filter.Empty,
+                cancellationToken: ct)
+            .ToListAsync(ct);
+
+        return tenants.Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+    }
+
+    public async Task<IReadOnlyList<Authorization>> FindRetentionCandidatesAsync(
+        string tenantId, DateTime anchorCutoffUtc, int limit, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for a retention sweep.", nameof(tenantId));
+
+        var builder = Builders<Authorization>.Filter;
+
+        // Terminal statuses only, bounded, and tenant-scoped. SubmittedDate is a
+        // COARSE floor — a record submitted after the cutoff cannot have a last
+        // status change before it — so this over-selects safely and the policy
+        // makes the real per-record decision.
+        var filter = builder.Eq(x => x.TenantId, tenantId)
+                     & builder.In(x => x.Status, new[]
+                       {
+                           AuthorizationStatus.Approved,
+                           AuthorizationStatus.Modified,
+                           AuthorizationStatus.Denied,
+                           AuthorizationStatus.Expired,
+                           AuthorizationStatus.Cancelled,
+                       })
+                     & builder.Lte(x => x.SubmittedDate, anchorCutoffUtc);
+
+        return await _collection.Find(filter).Limit(limit).ToListAsync(ct);
+    }
+
+    public async Task<bool> PurgeIfStillEligibleAsync(
+        string tenantId, string id, AuthorizationStatus expectedStatus, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for a retention purge.", nameof(tenantId));
+
+        if (expectedStatus.IsOpen())
+            return false;
+
+        var builder = Builders<Authorization>.Filter;
+
+        // The status predicate is part of the DELETE, so the check and the
+        // delete are one atomic operation: a record that moved back to an open
+        // state between being listed and being purged no longer matches, and
+        // survives. No read-then-blind-delete window.
+        var filter = builder.Eq(x => x.Id, id)
+                     & builder.Eq(x => x.TenantId, tenantId)
+                     & builder.Eq(x => x.Status, expectedStatus);
+
+        var result = await _collection.DeleteOneAsync(filter, ct);
+        return result.DeletedCount == 1;
     }
 
     public async Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null)

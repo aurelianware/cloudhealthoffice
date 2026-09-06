@@ -185,6 +185,158 @@ Making status inquirable required fixing the write side:
   authorization-service falls back to its default partition — reads and writes
   would have crossed tenants.
 
+## Data retention
+
+Prior-authorization records have an explicit, testable lifecycle. The rule lives
+in one place — `IPriorAuthorizationRetentionPolicy` — and the sweeper only
+discovers records it applies to, so a job that runs late, early, or twice reaches
+the same answer.
+
+### The rule
+
+```
+RetentionUntil = last status change + retention period
+purgeable      = status is terminal  AND  now >= RetentionUntil
+```
+
+**Period.** CMS-0057-F states a **minimum** — retain prior-authorization data for
+at least one year after the last status change — not a maximum. The one-year
+figure is enforced as a **floor that configuration cannot go under**, and the
+default is **six years**, matching the HIPAA posture already used for member
+documents. Defaulting a destructive job to the bare regulatory minimum would
+quietly make prior-auth the shortest-retained regulated data in the platform.
+
+**Anchor.** The last change to the authorization's lifecycle:
+`StatusHistory.ChangedAt` (max), falling back to `ReviewedDate`, then
+`SubmittedDate`. Deliberately **not** `LastUpdatedDate` — every write touches it,
+so an unrelated edit would silently move the boundary — and never a read. **An
+inquiry cannot extend a record's regulatory retention**, which is asserted by
+test.
+
+Records with no establishable anchor are **kept**, not purged.
+
+### Terminal versus open
+
+| Status | | Purgeable |
+| --- | --- | --- |
+| Submitted, InReview, Pended | open | **never**, however old |
+| Approved, Modified, Denied, Expired, Cancelled | terminal | once past the boundary |
+
+Both conditions always apply. An ancient timestamp is not permission to delete an
+authorization that is still operationally live — a pended decision may still be
+waiting on information no matter how long it has waited. The open/terminal split
+was previously spelled out separately in the SLA watchdog, the RFAI consumer and
+both repositories; it is now defined once as `AuthorizationStatus.IsOpen()` /
+`IsTerminal()` and is total over the enum.
+
+### What is covered
+
+The `Authorization` document is the authoritative prior-authorization record and
+**embeds** its diagnosis codes, requested service lines, clinical-attachment
+metadata and status history. Deleting the document deletes all of them — there
+are no separate collections to orphan, and the PAS `ClaimResponse` is projected
+on read rather than stored, so no FHIR artifact survives the purge.
+
+Deletion is **hard**. Nothing is retained behind a soft-delete flag while
+claiming to be purged.
+
+Outside this boundary, and documented rather than deleted blindly:
+
+* **blobs behind `ClinicalAttachment.FileUrl`** — the pointer is removed with the
+  document; the blob's own lifecycle is storage-tier policy;
+* **`rfai-service` `RfaiCase` records** keyed by authorization number —
+  `IRfaiRepository` has no delete path at all, so they are explicitly out of
+  scope rather than half-handled.
+
+### The sweeper
+
+`PriorAuthorizationRetentionWorker`, a `BackgroundService` modelled on
+provider-service's `IntegrityProjectionWorker`:
+
+* **disabled by default** — a destructive sweep opts in per deployment;
+* a **scope per tenant** from `IServiceScopeFactory`, never a repository captured
+  for the process lifetime;
+* **tenant explicit on every call** — `ListTenantIdsAsync`,
+  `FindRetentionCandidatesAsync` and `PurgeIfStillEligibleAsync` all take it as
+  an argument, so the sweep never depends on an ambient `HttpContext`;
+* **bounded** — `MaxRecordsPerTenantPerSweep` caps work; no unbounded load;
+* **cancellation observed** between every tenant and every record;
+* **dry-run mode**, following the convention the Cosmos claims migration uses.
+
+Cadence (default daily) affects only *when* eligible records are discovered,
+never *whether* a record is eligible.
+
+### Concurrency and idempotency
+
+Purge is a **conditional delete** predicated on the status the sweep decided
+against:
+
+* **Mongo** — one atomic `DeleteOne` whose filter includes id, tenant and
+  expected status;
+* **Cosmos** — a re-read inside the purge, carrying that read's ETag into
+  `DeleteItemAsync` as `IfMatchEtag`.
+
+So a record that reopens between being listed and being purged **survives**: the
+predicate no longer matches. `Authorization` has no version field of its own; the
+store's ETag is the concurrency token available.
+
+Repeated sweeps are safe — an already-purged record returns false, not an error —
+and a failed batch simply retries next interval, because each record is an
+independent conditional delete rather than part of a transaction.
+
+### Tenant isolation
+
+Every query and every delete predicate carries the tenant. A purge naming the
+wrong tenant refuses outright, asserted by test. Tenant iteration comes from
+`ListTenantIdsAsync` on the authorization store itself, so no second service is
+needed and no tenant's policy is resolved from another's configuration.
+
+### Audit and metrics
+
+Normal operation reports **aggregate counts** (`scanned`, `purged`, `skipped`,
+`failed`) per sweep. Per-record purge lines carry PHI-free identifiers only:
+tenant, opaque authorization id, policy version, retention boundary, status. Never
+a member, a payload, a denial narrative, or a credential; CR/LF is stripped
+(CWE-117).
+
+`ChoMetrics.PriorAuthorizationRetentionOutcomes`
+(`cho.authorization.retention.outcomes.total`) is dimensioned by `cho.outcome`
+(`purged` | `would_purge` | `skipped` | `failed`), `cho.dry_run` and
+`cho.tenant_id` — never by member, provider or authorization identity.
+
+### Freshness — why there is no sync job
+
+PAT-03's other half is *"update PA data within 1 business day"*. That obligation
+bounds how stale a **copy** may be. Cloud Health Office keeps no copy: PA state is
+projected from the authoritative record at **read** time, so the interval between
+a status change and its visibility is **zero** and there is nothing for a
+freshness job to synchronise.
+
+What makes that structural rather than incidental is that the read seam cannot
+hold state — `IPriorAuthorizationStore` exposes a single lookup and no write — so
+no cached or replicated projection can exist behind it to drift. The absence of a
+freshness job is the design, not a gap.
+
+### `$inquire` before and after purge
+
+A retained record is queryable through `Claim/$inquire` for its whole retention
+period. Once purged, the lookup returns nothing and the inquiry collapses to the
+same uniform `404` `OperationOutcome` as an unknown or inaccessible
+authorization — a purged record is indistinguishable from one that never existed,
+which is the correct anti-enumeration behaviour.
+
+### Retention limitations
+
+* Purging does not delete blobs referenced by `ClinicalAttachment.FileUrl`, nor
+  `rfai-service` `RfaiCase` records (which have no delete path). Both are named
+  above rather than silently left.
+* There is no legal-hold flag: a record past its boundary in an enabled tenant is
+  purged. Holds are a deployment concern today (leave the sweep disabled).
+* The candidate query pre-filters on `SubmittedDate` as a coarse floor and the
+  policy makes the real decision per record, so a sweep may examine more records
+  than it purges. That is deliberate — the alternative is trusting a denormalised
+  anchor column that nothing maintains.
+
 ## Limitations
 
 * **PAS-07 (CDex) remains PARTIAL.** `$inquire` *reports* that a decision is

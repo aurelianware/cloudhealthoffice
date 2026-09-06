@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using AuthorizationService.Models;
+using AuthorizationService.Services.Retention;
 
 namespace AuthorizationService.Repositories;
 
@@ -21,6 +22,37 @@ public interface IAuthorizationRepository
     Task<Authorization> CreateAsync(Authorization authorization);
     Task<Authorization> UpdateAsync(Authorization authorization);
     Task DeleteAsync(string id);
+
+    // ── Retention (PAT-03) ───────────────────────────────────────────────────
+    // Background-callable: every method takes the tenant EXPLICITLY, so a sweep
+    // never depends on an ambient HttpContext, and a CancellationToken so a
+    // shutdown stops mid-sweep rather than at the end of it.
+
+    /// <summary>
+    /// Tenants that have authorization data, so a sweep can iterate them
+    /// without a second service. Mirrors provider-service's
+    /// <c>ListProviderTenantIdsAsync</c>.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListTenantIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Terminal authorizations for one tenant whose retention anchor is at or
+    /// before <paramref name="anchorCutoffUtc"/>, capped at
+    /// <paramref name="limit"/>. Coarse filtering only — the caller applies the
+    /// retention policy per record before deleting anything.
+    /// </summary>
+    Task<IReadOnlyList<Authorization>> FindRetentionCandidatesAsync(
+        string tenantId, DateTime anchorCutoffUtc, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes one authorization ONLY IF it is still in
+    /// <paramref name="expectedStatus"/>. Returns false when the record moved on
+    /// or was already gone, so a sweep cannot delete a record that became active
+    /// again between being listed and being purged. Tenant is explicit and
+    /// always part of the delete predicate.
+    /// </summary>
+    Task<bool> PurgeIfStillEligibleAsync(
+        string tenantId, string id, AuthorizationStatus expectedStatus, CancellationToken ct = default);
 }
 
 public class AuthorizationRepository : IAuthorizationRepository
@@ -289,6 +321,109 @@ public class AuthorizationRepository : IAuthorizationRepository
         }
 
         return summary;
+    }
+
+    // ── Retention (PAT-03) ───────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<string>> ListTenantIdsAsync(CancellationToken ct = default)
+    {
+        var queryDef = new QueryDefinition("SELECT DISTINCT VALUE c.tenantId FROM c");
+        var iterator = _container.GetItemQueryIterator<string>(queryDef);
+        var tenants = new List<string>();
+
+        while (iterator.HasMoreResults)
+        {
+            ct.ThrowIfCancellationRequested();
+            var response = await iterator.ReadNextAsync(ct);
+            tenants.AddRange(response.Where(t => !string.IsNullOrWhiteSpace(t)));
+        }
+
+        return tenants;
+    }
+
+    public async Task<IReadOnlyList<Authorization>> FindRetentionCandidatesAsync(
+        string tenantId, DateTime anchorCutoffUtc, int limit, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for a retention sweep.", nameof(tenantId));
+
+        // Terminal statuses only, and bounded. The date predicate uses
+        // submittedDate as a COARSE floor: a record submitted after the cutoff
+        // cannot possibly have a last status change before it, so this is a safe
+        // over-select. The policy then decides per record from the real anchor.
+        var queryText = @"
+            SELECT * FROM c
+            WHERE c.tenantId = @tenantId
+            AND c.status IN ('Approved', 'Modified', 'Denied', 'Expired', 'Cancelled')
+            AND c.submittedDate <= @cutoff
+            OFFSET 0 LIMIT @limit";
+
+        var queryDef = new QueryDefinition(queryText)
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@cutoff", anchorCutoffUtc)
+            .WithParameter("@limit", limit);
+
+        var iterator = _container.GetItemQueryIterator<Authorization>(
+            queryDef,
+            requestOptions: new QueryRequestOptions
+            {
+                PartitionKey = new PartitionKey(tenantId),
+                MaxItemCount = limit,
+            });
+
+        var results = new List<Authorization>();
+        while (iterator.HasMoreResults && results.Count < limit)
+        {
+            ct.ThrowIfCancellationRequested();
+            var response = await iterator.ReadNextAsync(ct);
+            results.AddRange(response);
+        }
+
+        return results.Count > limit ? results.Take(limit).ToList() : results;
+    }
+
+    public async Task<bool> PurgeIfStillEligibleAsync(
+        string tenantId, string id, AuthorizationStatus expectedStatus, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for a retention purge.", nameof(tenantId));
+
+        var partition = new PartitionKey(tenantId);
+
+        try
+        {
+            // Re-read inside the purge and carry the ETag into the delete, so a
+            // record that changed between being listed and being deleted fails
+            // the precondition instead of being removed. Authorization has no
+            // version field of its own; the store's ETag is the concurrency
+            // token available here.
+            var current = await _container.ReadItemAsync<Authorization>(id, partition, cancellationToken: ct);
+
+            if (current.Resource is null
+                || current.Resource.Status != expectedStatus
+                || current.Resource.Status.IsOpen())
+            {
+                return false;
+            }
+
+            await _container.DeleteItemAsync<Authorization>(
+                id,
+                partition,
+                new ItemRequestOptions { IfMatchEtag = current.ETag },
+                ct);
+
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Already gone. A repeated sweep is a no-op, not a failure.
+            return false;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // Changed under us. Leave it; the next sweep re-evaluates.
+            return false;
+        }
     }
 
     public async Task<IEnumerable<Authorization>> GetOpenAuthorizationsAsync(string? tenantId = null)

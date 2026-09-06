@@ -27,6 +27,68 @@ internal sealed class InMemoryAuthorizationRepository : IAuthorizationRepository
     private static Authorization Clone(Authorization a) =>
         JsonSerializer.Deserialize<Authorization>(JsonSerializer.Serialize(a))!;
 
+    // ── Retention (PAT-03) ───────────────────────────────────────────────────
+    // Mirrors the production repositories' semantics closely enough to prove the
+    // sweep: tenant is explicit, candidates are terminal-only and bounded, and
+    // the purge is CONDITIONAL on the status still matching.
+
+    /// <summary>Purge attempts that found the record changed or already gone.</summary>
+    public int RefusedPurgeCount { get; private set; }
+
+    /// <summary>Runs immediately before each conditional purge — a concurrency hook.</summary>
+    public Action<string>? OnBeforePurge { get; set; }
+
+    public Task<IReadOnlyList<string>> ListTenantIdsAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(
+            _store.Select(a => a.TenantId)
+                  .Where(t => !string.IsNullOrWhiteSpace(t))
+                  .Distinct(StringComparer.Ordinal)
+                  .ToList());
+
+    public Task<IReadOnlyList<Authorization>> FindRetentionCandidatesAsync(
+        string tenantId, DateTime anchorCutoffUtc, int limit, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for a retention sweep.", nameof(tenantId));
+
+        var candidates = _store
+            .Where(a => string.Equals(a.TenantId, tenantId, StringComparison.Ordinal))
+            .Where(a => a.Status is AuthorizationStatus.Approved
+                                 or AuthorizationStatus.Modified
+                                 or AuthorizationStatus.Denied
+                                 or AuthorizationStatus.Expired
+                                 or AuthorizationStatus.Cancelled)
+            .Where(a => a.SubmittedDate <= anchorCutoffUtc)
+            .Take(limit)
+            .Select(Clone)
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<Authorization>>(candidates);
+    }
+
+    public Task<bool> PurgeIfStillEligibleAsync(
+        string tenantId, string id, AuthorizationStatus expectedStatus, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant is required for a retention purge.", nameof(tenantId));
+
+        OnBeforePurge?.Invoke(id);
+
+        var idx = _store.FindIndex(a =>
+            a.Id == id
+            && string.Equals(a.TenantId, tenantId, StringComparison.Ordinal)
+            && a.Status == expectedStatus);
+
+        if (idx < 0)
+        {
+            RefusedPurgeCount++;
+            return Task.FromResult(false);
+        }
+
+        _store.RemoveAt(idx);
+        return Task.FromResult(true);
+    }
+
     public Task<Authorization> CreateAsync(Authorization authorization)
     {
         CreateCount++;
