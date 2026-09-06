@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-06T01:41:10Z",
-  "commitSha": "749e928cb23bc276dcb14738dd8cd20d228c7d79",
-  "commitShaShort": "749e928cb23b",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/749e928cb23bc276dcb14738dd8cd20d228c7d79",
+  "generatedAtUtc": "2026-09-06T02:21:50Z",
+  "commitSha": "1628e4e5d30170a60216ad9f70e5b8c82e0a0b89",
+  "commitShaShort": "1628e4e5d301",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/1628e4e5d30170a60216ad9f70e5b8c82e0a0b89",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 166,
+    "passed": 188,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 15,
-    "partial": 6,
+    "passable": 16,
+    "partial": 5,
     "gap": 0,
     "na": 0
   },
@@ -33,7 +33,7 @@
       "id": "CONSENT-01",
       "name": "Single consent registry",
       "capability": "Consent",
-      "replace": "PARTIAL",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "N/A"
       }
