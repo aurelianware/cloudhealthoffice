@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "evidenceStatus": "validated",
-  "generatedAtUtc": "2026-09-06T04:58:32Z",
-  "commitSha": "802fbef5c8489399c8e9d07f2028940ca241aebc",
-  "commitShaShort": "802fbef5c848",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/802fbef5c8489399c8e9d07f2028940ca241aebc",
+  "generatedAtUtc": "2026-09-06T05:36:51Z",
+  "commitSha": "1a748d1683931f264f3baf50cff7e40caded0100",
+  "commitShaShort": "1a748d168393",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/1a748d1683931f264f3baf50cff7e40caded0100",
   "testDataClassification": "synthetic",
   "framework": ".NET 8 / xUnit",
   "fhirVersion": "R4",
   "scenarioCount": 21,
   "testSummary": {
-    "passed": 226,
+    "passed": 254,
     "failed": 0,
     "skipped": 0
   },
   "replaceSummary": {
-    "passable": 17,
-    "partial": 4,
+    "passable": 18,
+    "partial": 3,
     "gap": 0,
     "na": 0
   },
@@ -177,7 +177,7 @@
       "id": "PAT-03",
       "name": "Patient Access — PA data (drugs excluded)",
       "capability": "PatientAccess",
-      "replace": "PARTIAL",
+      "replace": "PASSABLE",
       "integrations": {
         "qnxt": "N/A"
       }
