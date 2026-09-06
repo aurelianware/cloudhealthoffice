@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using CloudHealthOffice.Consent.Contracts;
 using MongoDB.Bson.Serialization.Attributes;
 
 // TODO(feature-5.18-followup): FHIR Consent R4 projection. Not in this PR —
@@ -39,6 +40,21 @@ public class Consent
 
     [Required]
     public ConsentType ConsentType { get; set; }
+
+    /// <summary>
+    /// What this consent authorizes the plan to DO with the member's data —
+    /// orthogonal to <see cref="ConsentType"/>, which says what regulatory
+    /// instrument the record is. A §164.508 authorization FOR Payer-to-Payer
+    /// exchange and one FOR Provider Access are the same instrument and
+    /// different permissions, and a member granting the second has not granted
+    /// the first.
+    ///
+    /// Defaults to <see cref="ConsentPurposeOfUse.Unspecified"/>, which
+    /// authorizes nothing that requires an explicit purpose. Records written
+    /// before this field existed deserialize to it, so no historical consent is
+    /// silently reinterpreted as Payer-to-Payer authorization.
+    /// </summary>
+    public ConsentPurposeOfUse PurposeOfUse { get; set; } = ConsentPurposeOfUse.Unspecified;
 
     /// <summary>
     /// Optional sub-category when the record falls under a heightened regulatory
@@ -130,6 +146,23 @@ public class Consent
             return ConsentStatus.Expired;
         return Status;
     }
+
+    /// <summary>
+    /// Projects this record onto the PHI-free authorization snapshot other
+    /// services evaluate. Only the fields an authorization decision needs cross
+    /// the boundary: tenant, member, id, purpose, status, and period. The
+    /// encrypted narrative fields (reason, grantee, purpose text) stay here.
+    /// </summary>
+    public ConsentAuthorizationSnapshot ToAuthorizationSnapshot() => new()
+    {
+        TenantId = TenantId,
+        MemberId = MemberId,
+        ConsentId = Id,
+        PurposeOfUse = PurposeOfUse,
+        Status = (ConsentLifecycleStatus)(int)Status,
+        EffectiveAt = EffectiveAt,
+        ExpiresAt = ExpiresAt,
+    };
 }
 
 /// <summary>

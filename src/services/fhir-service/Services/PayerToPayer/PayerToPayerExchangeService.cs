@@ -1,3 +1,4 @@
+using CloudHealthOffice.Consent.Contracts;
 using FhirService.Models.PayerToPayer;
 using Microsoft.Extensions.Logging;
 
@@ -55,18 +56,20 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
 
         var member = resolution.Member;
 
-        // Consent / authorization gate — the member must have an active opt-in on
-        // record. Decided server-side from the plan's own consent state (never a
-        // value supplied on the request), so consent cannot be self-attested by the
-        // caller. Uses the generic active opt-in signal; no dedicated
-        // Payer-to-Payer ConsentType (P2P-03 stays PARTIAL).
-        if (!await _consentGate.HasActiveOptInAsync(request.TenantId, member.MemberId, ct))
-            return Failed(request, PayerToPayerOutcome.NotAuthorized, member.MemberId);
+        // Consent / authorization gate — the member must have an active consent
+        // whose PURPOSE authorizes Payer-to-Payer exchange. Decided server-side
+        // from the plan's own registry (never a value supplied on the request),
+        // so a receiving payer cannot self-attest consent, and a consent granted
+        // for some other purpose (Provider Access, say) does not open this door.
+        var decision = await _consentGate.EvaluateAsync(
+            request.TenantId, member.MemberId, request.ExchangeDateUtc, ct);
+        if (!decision.Allowed)
+            return Failed(request, PayerToPayerOutcome.NotAuthorized, member.MemberId, decision);
 
         var payments = await _source.GetPaymentsAsync(request.TenantId, member.MemberId, ct);
         var bundle = _builder.Build(member, payments, request);
 
-        var audit = Audit(request, PayerToPayerOutcome.Exported, member.MemberId, bundle.Total);
+        var audit = Audit(request, PayerToPayerOutcome.Exported, member.MemberId, bundle.Total, decision);
         _logger.LogInformation(
             "P2P respond: tenant={Tenant} receivingPayer={Payer} member={Member} resources={Count}",
             Clean(audit.TenantId), Clean(audit.ReceivingPayerId), Clean(audit.MatchedMemberId), audit.ResourceCount);
@@ -81,12 +84,14 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
     }
 
     private PayerToPayerExportResult Failed(
-        PayerToPayerExchangeRequest request, PayerToPayerOutcome outcome, string? matchedMemberId)
+        PayerToPayerExchangeRequest request, PayerToPayerOutcome outcome, string? matchedMemberId,
+        ConsentDecision? decision = null)
     {
-        var audit = Audit(request, outcome, matchedMemberId, resourceCount: 0);
+        var audit = Audit(request, outcome, matchedMemberId, resourceCount: 0, decision);
         _logger.LogInformation(
-            "P2P respond declined: tenant={Tenant} receivingPayer={Payer} outcome={Outcome}",
-            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), audit.Outcome);
+            "P2P respond declined: tenant={Tenant} receivingPayer={Payer} outcome={Outcome} consent={Consent}",
+            Clean(audit.TenantId), Clean(audit.ReceivingPayerId), audit.Outcome,
+            audit.ConsentDecisionReason ?? "n/a");
         return new PayerToPayerExportResult { Outcome = outcome, MatchedMemberId = matchedMemberId, Audit = audit };
     }
 
@@ -101,7 +106,8 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
                    .Replace("\n", string.Empty, StringComparison.Ordinal);
 
     private static PayerToPayerAuditEntry Audit(
-        PayerToPayerExchangeRequest request, PayerToPayerOutcome outcome, string? matchedMemberId, int resourceCount) =>
+        PayerToPayerExchangeRequest request, PayerToPayerOutcome outcome, string? matchedMemberId,
+        int resourceCount, ConsentDecision? decision) =>
         new()
         {
             TenantId = request.TenantId,
@@ -110,5 +116,10 @@ public sealed class PayerToPayerExchangeService : IPayerToPayerExchangeService
             MatchedMemberId = matchedMemberId,
             Outcome = outcome.ToString(),
             ResourceCount = resourceCount,
+            // Which authorization answered, and how. Opaque id + reason code: it
+            // makes "why was this disclosure allowed?" answerable without putting
+            // any consent content in the audit trail.
+            AuthorizingConsentId = decision?.ConsentId,
+            ConsentDecisionReason = decision?.Reason.ToString(),
         };
 }

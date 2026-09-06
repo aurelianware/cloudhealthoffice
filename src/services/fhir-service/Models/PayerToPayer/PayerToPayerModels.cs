@@ -89,6 +89,20 @@ public sealed class PayerToPayerAuditEntry
 
     /// <summary>Number of FHIR resources included in the export (0 when not exported).</summary>
     public int ResourceCount { get; init; }
+
+    /// <summary>
+    /// The consent that authorized this disclosure, by opaque id. Present when a
+    /// consent decision was reached — the evidence handle for "what specifically
+    /// allowed this?".
+    /// </summary>
+    public string? AuthorizingConsentId { get; init; }
+
+    /// <summary>
+    /// Why authorization was allowed or refused, as a structured reason code
+    /// (Granted / Revoked / Expired / NoConsentForPurpose / …). No consent
+    /// content, no PHI.
+    /// </summary>
+    public string? ConsentDecisionReason { get; init; }
 }
 
 /// <summary>

@@ -57,12 +57,21 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         ("CRD", FhirAdapterModes.Demo, "CrdService"),
         ("DTR", FhirAdapterModes.Demo, "DtrService"),
         ("BulkExport", FhirAdapterModes.Demo, "BulkExportService scaffold"),
-        ("Consent", FhirAdapterModes.Demo, "consent-service building block"),
+        // Purpose-scoped consent on one registry: ConsentPurposeOfUse
+        // (PayerToPayerExchange / ProviderAccess) evaluated by the shared
+        // ConsentAuthorizationPolicy. Payer-to-Payer is enforced through it in
+        // both directions; the Provider Access READ PATH is not — that path is
+        // governed by attribution plus SMART scopes (CONSENT-01 PARTIAL).
+        ("Consent", FhirAdapterModes.Demo,
+            "consent-service registry (ConsentPurposeOfUse + ConsentAuthorizationPolicy; "
+            + "PHI-free authorization-snapshots projection)"),
         // Payer-to-Payer over CHO-owned data: inbound respond (P2P-01),
         // member-match (P2P-04), outbound initiation (P2P-02), and durable
         // ingestion of what comes back. This is NOT a complete Payer-to-Payer
-        // capability: dedicated P2P consent semantics (P2P-03) remain partial,
-        // ingestion covers only the resource types this FHIR surface serves
+        // capability: consent must be recorded with the Payer-to-Payer purpose
+        // before any exchange is authorized (generic consent is NOT
+        // reinterpreted, so a deployment authorizes nothing until purposes are
+        // recorded), ingestion covers only the resource types this FHIR surface serves
         // (others are archived, not ingested), imported data is not yet projected
         // into the read APIs, outbound transport to a specific payer depends on
         // that payer's onboarding (credentials/endpoint configuration), and no
@@ -70,7 +79,8 @@ public sealed class FhirAdapterStatusService : IFhirAdapterStatusService
         ("PayerToPayer", FhirAdapterModes.Demo,
             "PayerToPayerExchangeService (inbound respond) + PayerToPayerMemberMatchService ($member-match) "
             + "+ PayerToPayerOutboundService (outbound initiation; remote payer endpoints per configuration) "
-            + "+ PayerToPayerPackageIngestionService (durable import of supported resource types)"),
+            + "+ PayerToPayerPackageIngestionService (durable import of supported resource types) "
+            + "+ ConsentRegistryPayerToPayerConsentGate (purpose-scoped consent enforced server-side, both directions)"),
     ];
 
     private readonly FhirAdapterOptions _options;
