@@ -121,6 +121,25 @@ public sealed class BrPayerDtrQuestionnairePackageTests
                 "Questionnaire operations advertised: [{0}]",
                 string.Join(", ", questionnaireOperations.Select(o => o.Name)));
 
+            // The CRD leg resolves its service from discovery by hook, exactly as
+            // BR-CRD-001 does. Hard-coding the id would risk silently testing a
+            // different service if the payer renames or reorders services, or if a
+            // future pin exposes a different one — the failure mode this harness
+            // exists to catch, so it must not be one the harness commits itself.
+            var (discovery, discoveryResponse) =
+                await client.GetCdsHooksDiscoveryAsync(cdsHooksBase, cancellation.Token);
+
+            discoveryResponse.StatusCode.Should().Be(HttpStatusCode.OK,
+                "the CRD leg of the chain starts from the payer's CDS Hooks discovery");
+            CdsHooksServiceSelector.DiscoveryViolations(discovery).Should().BeEmpty();
+
+            var crdService = CdsHooksServiceSelector.Select(discovery!, CrdHook);
+
+            run.Record(InteropFinding.Info(
+                "dtr.chain.crdServiceResolved",
+                $"Resolved CRD service '{crdService.Id}' for hook '{CrdHook}' from discovery, " +
+                "by hook match rather than a hard-coded id."));
+
             run.Record(InteropFinding.Info(
                 "dtr.discovery.operationAdvertised",
                 $"The payer advertises Questionnaire/${packageOperation!.Name} under " +
@@ -128,7 +147,7 @@ public sealed class BrPayerDtrQuestionnairePackageTests
 
             // ── 001B — CRD names the questionnaire; DTR is asked for that one ────
             var priorAuth = await FollowCrdIntoDtrAsync(
-                client, cdsHooksBase, fhirBase, PriorAuthCode,
+                client, cdsHooksBase, crdService, fhirBase, PriorAuthCode,
                 fhirCallbackWatch.BaseUrl, "cccccccc-1111-4111-8111-111111111111", cancellation.Token);
 
             chainedCanonical = priorAuth.Canonical;
@@ -137,7 +156,7 @@ public sealed class BrPayerDtrQuestionnairePackageTests
 
             // ── 001C — a different CRD path names a different questionnaire ─────
             var documentation = await FollowCrdIntoDtrAsync(
-                client, cdsHooksBase, fhirBase, DocumentationCode,
+                client, cdsHooksBase, crdService, fhirBase, DocumentationCode,
                 fhirCallbackWatch.BaseUrl, "dddddddd-2222-4222-8222-222222222222", cancellation.Token);
 
             AssertChain(run, documentation, DocumentationCode);
@@ -208,19 +227,21 @@ public sealed class BrPayerDtrQuestionnairePackageTests
     private static async Task<ChainStep> FollowCrdIntoDtrAsync(
         InteropHttpClient client,
         string cdsHooksBase,
+        CdsHooksService crdService,
         string fhirBase,
         string billingCode,
         string fhirServer,
         string hookInstance,
         CancellationToken cancellationToken)
     {
+        // Both the hook and the service id come from what discovery advertised.
         var crdRequest = SyntheticInteropData.CrdOrderRequest(
-            CrdHook, billingCode, fhirServer, hookInstance);
+            crdService.Hook, billingCode, fhirServer, hookInstance);
 
         var (crdResponse, crdRaw) = await client.PostCdsHooksAsync(
-            $"{cdsHooksBase.TrimEnd('/')}/order-sign-crd",
+            $"{cdsHooksBase.TrimEnd('/')}/{crdService.Id}",
             crdRequest,
-            serviceId: "order-sign-crd",
+            serviceId: crdService.Id,
             cancellationToken: cancellationToken);
 
         crdRaw.StatusCode.Should().Be(HttpStatusCode.OK,

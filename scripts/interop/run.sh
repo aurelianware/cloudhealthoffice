@@ -119,10 +119,15 @@ s = run["summary"]
 print(f"    {s['passed']} passed / {s['failed']} failed / {s['skipped']} skipped / {s['notRun']} not run")
 for target in run["targets"]:
     for result in target["results"]:
-        chain = f"  ← {result['linkedFromScenario']}" if result.get("linkedFromScenario") else ""
+        # Both chain fields are optional in the evidence schema, so neither is
+        # indexed directly — a reporting path must not be the thing that fails.
+        linked_from = result.get("linkedFromScenario")
+        linked_artifact = result.get("linkedArtifact")
+        chain = f"  ← {linked_from}" if linked_from else ""
         print(f"    {result['scenarioId']}: {result['status']}{chain}  ({target['name']} @ {target['version']})")
-        if result.get("linkedArtifact"):
-            print(f"        consumed from {result['linkedFromScenario']}: {result['linkedArtifact']}")
+        if linked_artifact:
+            source = f" from {linked_from}" if linked_from else ""
+            print(f"        consumed{source}: {linked_artifact}")
 for finding in run["findings"]:
     print(f"    [{finding['severity']}] {finding['code']}: {finding['summary']}")
 PY
