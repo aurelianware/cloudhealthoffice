@@ -24,13 +24,14 @@
     },
     {
       "id": "BR-DTR-001",
-      "title": "DTR $questionnaire-package against the burden-reduction payer RI",
+      "title": "DTR $questionnaire-package chained from the payer's own CRD determination",
       "protocol": "DTR",
       "choRole": "Client",
       "externalTarget": "br-payer",
       "requiredServices": ["br-payer"],
-      "implemented": false,
-      "description": "Request a questionnaire package for a synthetic coverage/order context and validate the returned Questionnaire/Library bundle."
+      "implemented": true,
+      "linkedFromScenario": "BR-CRD-001",
+      "description": "CHO acts as the provider-side DTR client: it enters from the payer's own CRD determination, takes the DTR questionnaire canonical the payer named, requests exactly that canonical from the payer's $questionnaire-package, and validates the returned package and its declared dependencies."
     },
     {
       "id": "BR-PAS-INQUIRE-001",

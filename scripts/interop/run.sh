@@ -5,7 +5,8 @@
 #   ./scripts/interop/run.sh                    # br-payer smoke (the default)
 #   ./scripts/interop/run.sh br-payer smoke     # PAS $submit  (BR-PAS-SUBMIT-001)
 #   ./scripts/interop/run.sh br-payer crd       # CRD CDS Hooks (BR-CRD-001)
-#   ./scripts/interop/run.sh br-payer all       # both, into one evidence document
+#   ./scripts/interop/run.sh br-payer dtr       # DTR $questionnaire-package (BR-DTR-001)
+#   ./scripts/interop/run.sh br-payer all       # all three, into one evidence document
 #   ./scripts/interop/run.sh unit               # harness unit tests only, no Docker
 #
 # Each scenario starts the pinned HL7 Da Vinci burden-reduction payer reference
@@ -15,8 +16,10 @@
 #
 # The smoke path submits a synthetic prior authorization (PAS $submit). The CRD
 # path discovers the payer's CDS Hooks services and invokes its order-sign CRD
-# service with synthetic draft orders. Scenarios run one at a time: they share a
-# Compose project and host ports, so the suite serializes them deliberately.
+# service with synthetic draft orders. The DTR path enters from the payer's own
+# CRD determination and follows the questionnaire canonical it named into
+# $questionnaire-package. Scenarios run one at a time: they share a Compose
+# project and host ports, so the suite serializes them deliberately.
 #
 # Everything the external implementation sees is synthetic. No repository secret,
 # cloud credential or Docker socket is exposed to it.
@@ -49,10 +52,11 @@ fi
 case "$MODE" in
   smoke) FILTER='Scenario=BR-PAS-SUBMIT-001'; LABEL='PAS $submit smoke (BR-PAS-SUBMIT-001)' ;;
   crd)   FILTER='Scenario=BR-CRD-001';        LABEL='CRD CDS Hooks (BR-CRD-001)' ;;
+  dtr)   FILTER='Scenario=BR-DTR-001';        LABEL='DTR $questionnaire-package, chained from CRD (BR-DTR-001)' ;;
   all)   FILTER='Category=DaVinciInterop';    LABEL='all external scenarios' ;;
   unit)  : ;;
   *)
-    echo "Unknown mode '$MODE'. Modes: smoke | crd | all | unit." >&2
+    echo "Unknown mode '$MODE'. Modes: smoke | crd | dtr | all | unit." >&2
     exit 2
     ;;
 esac
@@ -82,7 +86,7 @@ fi
 
 if [[ "$TARGET" != "br-payer" ]]; then
   echo "Unknown interop target '$TARGET'." >&2
-  echo "Executable targets in this repository: br-payer (BR-PAS-SUBMIT-001, BR-CRD-001)." >&2
+  echo "Executable targets in this repository: br-payer (BR-PAS-SUBMIT-001, BR-CRD-001, BR-DTR-001)." >&2
   echo "Other targets are pinned in interop/versions.json but have no scenario yet;" >&2
   echo "see docs/interop/davinci.md for how to add one." >&2
   exit 2
@@ -115,7 +119,15 @@ s = run["summary"]
 print(f"    {s['passed']} passed / {s['failed']} failed / {s['skipped']} skipped / {s['notRun']} not run")
 for target in run["targets"]:
     for result in target["results"]:
-        print(f"    {result['scenarioId']}: {result['status']}  ({target['name']} @ {target['version']})")
+        # Both chain fields are optional in the evidence schema, so neither is
+        # indexed directly — a reporting path must not be the thing that fails.
+        linked_from = result.get("linkedFromScenario")
+        linked_artifact = result.get("linkedArtifact")
+        chain = f"  ← {linked_from}" if linked_from else ""
+        print(f"    {result['scenarioId']}: {result['status']}{chain}  ({target['name']} @ {target['version']})")
+        if linked_artifact:
+            source = f" from {linked_from}" if linked_from else ""
+            print(f"        consumed{source}: {linked_artifact}")
 for finding in run["findings"]:
     print(f"    [{finding['severity']}] {finding['code']}: {finding['summary']}")
 PY

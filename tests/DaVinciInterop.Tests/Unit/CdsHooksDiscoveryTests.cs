@@ -144,6 +144,52 @@ public sealed class CdsHooksDiscoveryTests
     }
 
     [Fact]
+    public void No_scenario_hard_codes_a_cds_hooks_service_id()
+    {
+        // A scenario that embeds an id would keep passing while silently invoking
+        // the wrong service after an upstream rename or reorder — the exact
+        // failure mode CdsHooksServiceSelector exists to prevent, so the harness
+        // must not commit it itself. (BR-DTR-001 did, until review caught it.)
+        var scenarioSources = Directory.GetFiles(
+            Path.Combine(RepositoryRoot(), "tests", "DaVinciInterop.Tests", "Scenarios"), "*.cs");
+
+        scenarioSources.Should().NotBeEmpty("the guard is worthless if it scans nothing");
+
+        foreach (var source in scenarioSources)
+        {
+            var text = File.ReadAllText(source);
+            var offenders = KnownServiceIdSuffixes
+                .Where(suffix => text.Contains($"\"{suffix}\"", StringComparison.Ordinal)
+                                 || text.Contains($"/{suffix}\"", StringComparison.Ordinal))
+                .ToList();
+
+            offenders.Should().BeEmpty(
+                "{0} should resolve service ids from discovery rather than embedding {1}",
+                Path.GetFileName(source), string.Join(", ", offenders));
+        }
+    }
+
+    /// <summary>Service ids the pinned payer advertises today, as literals to forbid.</summary>
+    private static readonly string[] KnownServiceIdSuffixes =
+    [
+        "order-sign-crd", "order-select-crd", "order-dispatch-crd",
+        "appointment-book-crd", "encounter-start-crd", "encounter-discharge-crd",
+    ];
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null
+               && !File.Exists(Path.Combine(directory.FullName, "interop", "docker-compose.interop.yml")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName
+               ?? throw new DirectoryNotFoundException("Could not locate the repository root.");
+    }
+
+    [Fact]
     public void Only_crd_capable_services_are_listed_as_crd_services()
     {
         CdsHooksServiceSelector.CrdServices(Parse(PayerDiscovery))

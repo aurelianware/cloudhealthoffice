@@ -23,6 +23,9 @@ public sealed record InteropScenarioDefinition
     /// <summary>False for a placeholder awaiting a future PR. Never a claim about a result.</summary>
     [JsonPropertyName("implemented")] public bool Implemented { get; init; }
 
+    /// <summary>The scenario this one is entered from, when it chains off another's external output.</summary>
+    [JsonPropertyName("linkedFromScenario")] public string? LinkedFromScenario { get; init; }
+
     [JsonPropertyName("description")] public string Description { get; init; } = "";
 
     public ChoRole ParsedChoRole => Enum.Parse<ChoRole>(ChoRole);
@@ -114,7 +117,9 @@ public sealed class InteropScenarioRun
         InteropStatus status,
         IReadOnlyList<InteropInteraction> interactions,
         string? statusReason = null,
-        string? externalRole = null)
+        string? externalRole = null,
+        string? linkedFromScenario = null,
+        string? linkedArtifact = null)
     {
         var endedAt = DateTimeOffset.UtcNow;
         return new InteropResult
@@ -124,6 +129,8 @@ public sealed class InteropScenarioRun
             Protocol = _definition.Protocol,
             ChoRole = _definition.ChoRole,
             ExternalRole = externalRole,
+            LinkedFromScenario = linkedFromScenario,
+            LinkedArtifact = linkedArtifact,
             Target = _target.Name,
             TargetVersion = _target.EvidenceVersion,
             TargetImageReference = _target.Pin.Reference,

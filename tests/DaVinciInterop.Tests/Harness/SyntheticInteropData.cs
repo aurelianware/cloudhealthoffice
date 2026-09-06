@@ -292,6 +292,59 @@ public static class SyntheticInteropData
         };
     }
 
+    // ── DTR ($questionnaire-package) ─────────────────────────────────────────
+
+    /// <summary>
+    /// Builds the input Parameters for a DTR <c>$questionnaire-package</c>.
+    ///
+    /// The canonical is supplied by the caller because it comes from what the
+    /// payer said in CRD, not from anything CHO decided: following the payer's own
+    /// determination is what makes this independent evidence rather than CHO
+    /// asking for a questionnaire it picked itself.
+    ///
+    /// Carries only what the operation requires — the pinned implementation
+    /// declares <c>coverage</c> mandatory and needs at least one of
+    /// <c>questionnaire</c>, <c>order</c> or <c>context</c>. Padding the request
+    /// with resources the operation does not use would make it look richer while
+    /// proving less.
+    ///
+    /// The Coverage carries <c>subscriberId</c> and a beneficiary identifier
+    /// because the payer looks a member up by identifier rather than trusting a
+    /// sender-supplied reference. It will not match a real member — the member is
+    /// synthetic — and the payer says so in an OperationOutcome, which the
+    /// scenario records rather than suppresses.
+    /// </summary>
+    public static Parameters DtrQuestionnairePackageRequest(string questionnaireCanonical) => new()
+    {
+        Parameter =
+        {
+            new Parameters.ParameterComponent
+            {
+                Name = "coverage",
+                Resource = new Coverage
+                {
+                    Id = CoverageId,
+                    Identifier = { new Identifier(CoverageIdentifierSystem, CoverageId) },
+                    Status = FinancialResourceStatusCodes.Active,
+                    SubscriberId = MemberId,
+                    Beneficiary = new ResourceReference($"Patient/{MemberId}")
+                    {
+                        Identifier = new Identifier(MemberIdentifierSystem, MemberId)
+                        {
+                            Type = new CodeableConcept("http://terminology.hl7.org/CodeSystem/v2-0203", "MB"),
+                        },
+                    },
+                    Payor = { new ResourceReference($"Organization/{PayerId}") },
+                },
+            },
+            new Parameters.ParameterComponent
+            {
+                Name = "questionnaire",
+                Value = new Canonical(questionnaireCanonical),
+            },
+        },
+    };
+
     private static Dictionary<string, object> Concept(string system, string code) => new()
     {
         ["coding"] = new object[]

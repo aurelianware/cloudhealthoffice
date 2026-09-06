@@ -299,6 +299,50 @@ public sealed class InteropEvidenceWriterTests : IDisposable
         json.Should().Contain("cds-hooks-discovery").And.Contain("cds-hooks-invoke").And.Contain("order-sign");
     }
 
+    [Fact]
+    public void A_chained_scenario_records_what_it_consumed_and_where_it_came_from()
+    {
+        var scenario = Inventory.Scenario("BR-DTR-001");
+        const string canonical = "http://example.org/fhir/Questionnaire/PriorAuthRequired";
+
+        var result = new InteropScenarioRun(scenario, Versions.Target(scenario.ExternalTarget))
+            .Complete(
+                InteropStatus.Passed, Array.Empty<InteropInteraction>(),
+                externalRole: "payer-server",
+                linkedFromScenario: "BR-CRD-001",
+                linkedArtifact: canonical);
+
+        // Evidence should show a workflow — CRD determined, DTR followed — rather
+        // than two unrelated green rows.
+        result.LinkedFromScenario.Should().Be("BR-CRD-001");
+        result.LinkedArtifact.Should().Be(canonical);
+        result.Protocol.Should().Be("DTR");
+
+        JsonSerializer.Serialize(InteropEvidenceWriter.BuildRun(Versions, Inventory, [result]))
+            .Should().Contain("linkedFromScenario").And.Contain(canonical);
+    }
+
+    [Fact]
+    public void Three_scenarios_merge_into_one_run_document()
+    {
+        var writer = new InteropEvidenceWriter(_tempRoot);
+
+        foreach (var id in new[] { "BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001" })
+        {
+            var merged = writer.MergeWithPrevious([PassedResult(id)]);
+            writer.Write(InteropEvidenceWriter.BuildRun(Versions, Inventory, merged));
+        }
+
+        var run = JsonSerializer.Deserialize<InteropEvidenceRun>(
+            File.ReadAllText(Path.Combine(_tempRoot, "run.json")),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+
+        run.Summary.Passed.Should().Be(3);
+        run.Summary.NotRun.Should().Be(Inventory.Scenarios.Count - 3);
+        run.NotRunScenarios.Select(r => r.ScenarioId)
+            .Should().NotContain(["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001"]);
+    }
+
     private static InteropResult PassedResult(string scenarioId)
     {
         var scenario = Inventory.Scenario(scenarioId);

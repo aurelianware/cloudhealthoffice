@@ -177,6 +177,22 @@ public sealed record InteropResult
     /// rather than leaving it to be inferred from the protocol.
     /// </summary>
     [JsonPropertyName("externalRole")] public string? ExternalRole { get; init; }
+
+    /// <summary>
+    /// The scenario whose external output this one consumed, when it was entered
+    /// from another exchange rather than from data the harness chose. Recording it
+    /// lets evidence show a workflow — CRD determined, DTR followed — instead of
+    /// isolated green rows.
+    /// </summary>
+    [JsonPropertyName("linkedFromScenario")] public string? LinkedFromScenario { get; init; }
+
+    /// <summary>
+    /// The identifier the linked scenario produced and this one consumed — a
+    /// questionnaire canonical for CRD→DTR, an authorization number for a future
+    /// PAS submit→inquire chain. Deliberately generic: the chain matters more than
+    /// the protocol that produced it.
+    /// </summary>
+    [JsonPropertyName("linkedArtifact")] public string? LinkedArtifact { get; init; }
     [JsonPropertyName("target")] public string Target { get; init; } = "";
     [JsonPropertyName("targetVersion")] public string TargetVersion { get; init; } = "";
     [JsonPropertyName("targetImageReference")] public string? TargetImageReference { get; init; }

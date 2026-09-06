@@ -34,7 +34,7 @@ public sealed class ScenarioInventoryTests
         Inventory.Scenarios
             .Where(s => s.Implemented)
             .Select(s => s.Id)
-            .Should().BeEquivalentTo(["BR-PAS-SUBMIT-001", "BR-CRD-001"]);
+            .Should().BeEquivalentTo(["BR-PAS-SUBMIT-001", "BR-CRD-001", "BR-DTR-001"]);
     }
 
     [Fact]
@@ -97,6 +97,22 @@ public sealed class ScenarioInventoryTests
         // br-payer scenarios need exactly one external service.
         Inventory.Scenario("BR-PAS-SUBMIT-001").RequiredServices.Should().BeEquivalentTo(["br-payer"]);
         Inventory.Scenario("BR-CRD-001").RequiredServices.Should().BeEquivalentTo(["br-payer"]);
+        Inventory.Scenario("BR-DTR-001").RequiredServices.Should().BeEquivalentTo(["br-payer"]);
+    }
+
+    [Fact]
+    public void The_dtr_scenario_declares_the_crd_scenario_it_chains_from()
+    {
+        var dtr = Inventory.Scenario("BR-DTR-001");
+
+        dtr.Protocol.Should().Be("DTR");
+        dtr.ParsedChoRole.Should().Be(ChoRole.Client);
+        dtr.LinkedFromScenario.Should().Be("BR-CRD-001",
+            "the DTR exchange is entered from the payer's own CRD determination, and the inventory should " +
+            "say so rather than leaving the chain implicit");
+
+        Inventory.Scenario(dtr.LinkedFromScenario!).Implemented.Should().BeTrue(
+            "a scenario cannot chain from one that never runs");
     }
 
     [Fact]

@@ -154,16 +154,19 @@ Separate from the internal CMS-0057-F acceptance suite, which proves CHO
 implements the behavior its own acceptance specification requires, the
 interoperability harness proves CHO can exchange standards-conformant FHIR with
 independent HL7 Da Vinci reference implementations running in their own
-containers, pinned by image digest. Today it proves a PAS `$submit` exchange and
-a CRD CDS Hooks exchange against the HL7 burden-reduction payer.
+containers, pinned by image digest. Today it proves a PAS `$submit` exchange, a
+CRD CDS Hooks exchange, and a CRD → DTR chain in which CHO follows the
+questionnaire canonical the payer itself returned into that payer's
+`$questionnaire-package`.
 
 One command starts the pinned dependency, runs the scenario, writes sanitized
 evidence to `artifacts/interop/`, and tears the stack down:
 
 ```bash
-./scripts/interop/run.sh br-payer smoke   # PAS $submit    (BR-PAS-SUBMIT-001)
-./scripts/interop/run.sh br-payer crd     # CRD CDS Hooks  (BR-CRD-001)
-./scripts/interop/run.sh br-payer all     # both
+./scripts/interop/run.sh br-payer smoke   # PAS $submit               (BR-PAS-SUBMIT-001)
+./scripts/interop/run.sh br-payer crd     # CRD CDS Hooks             (BR-CRD-001)
+./scripts/interop/run.sh br-payer dtr     # DTR $questionnaire-package (BR-DTR-001)
+./scripts/interop/run.sh br-payer all     # all three
 ```
 
 Harness unit tests only — no Docker, no third-party code:
