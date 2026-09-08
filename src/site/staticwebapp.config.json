@@ -59,6 +59,60 @@
       "rewrite": "/evidence.html"
     },
     {
+      "route": "/evidence/replace-vs-augment.html",
+      "redirect": "/evidence/replace-vs-augment",
+      "statusCode": 301
+    },
+    {
+      "route": "/evidence/replace-vs-augment",
+      "rewrite": "/evidence/replace-vs-augment.html"
+    },
+    {
+      "route": "/evidence/payer-to-payer.html",
+      "redirect": "/evidence/payer-to-payer",
+      "statusCode": 301
+    },
+    {
+      "route": "/evidence/payer-to-payer",
+      "rewrite": "/evidence/payer-to-payer.html"
+    },
+    {
+      "route": "/evidence/prior-authorization.html",
+      "redirect": "/evidence/prior-authorization",
+      "statusCode": 301
+    },
+    {
+      "route": "/evidence/prior-authorization",
+      "rewrite": "/evidence/prior-authorization.html"
+    },
+    {
+      "route": "/evidence/davinci-interoperability.html",
+      "redirect": "/evidence/davinci-interoperability",
+      "statusCode": 301
+    },
+    {
+      "route": "/evidence/davinci-interoperability",
+      "rewrite": "/evidence/davinci-interoperability.html"
+    },
+    {
+      "route": "/evidence/provider-access-security.html",
+      "redirect": "/evidence/provider-access-security",
+      "statusCode": 301
+    },
+    {
+      "route": "/evidence/provider-access-security",
+      "rewrite": "/evidence/provider-access-security.html"
+    },
+    {
+      "route": "/insights/cms-0057-f/acceptance-scenarios.html",
+      "redirect": "/insights/cms-0057-f/acceptance-scenarios",
+      "statusCode": 301
+    },
+    {
+      "route": "/insights/cms-0057-f/acceptance-scenarios",
+      "rewrite": "/insights/cms-0057-f/acceptance-scenarios.html"
+    },
+    {
       "route": "/solutions-payers.html",
       "redirect": "/solutions-payers",
       "statusCode": 301
