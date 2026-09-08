@@ -209,3 +209,68 @@ jobs:
           else
             echo "No interop containers remain."
           fi
+
+  # ── Publish the latest interoperability snapshot (main only) ───────────────
+  # Mirrors cms0057-acceptance-evidence.yml: a public-safe projection of the run
+  # is committed into the site tree so the Evidence Hub renders live status
+  # instead of hard-coded prose. `needs: scenarios` means a failed or cancelled
+  # run never publishes, and the snapshot on the site keeps naming the run that
+  # actually produced it.
+  #
+  # The committed file touches only src/site/**, which is not in this workflow's
+  # paths — so the push deploys via Pages without re-triggering interop.
+  #
+  # A Failed scenario is still published, deliberately: the projection reports
+  # what happened, and hiding a failure would make the snapshot a marketing
+  # artifact rather than evidence. The job's own gate is that the scenarios job
+  # completed, not that every scenario passed.
+  publish:
+    name: Publish latest interoperability evidence
+    runs-on: ubuntu-latest
+    needs: scenarios
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Download the interoperability evidence
+        uses: actions/download-artifact@v8
+        with:
+          name: davinci-interop-evidence-${{ github.sha }}
+          path: artifacts/interop
+
+      - name: Project the public snapshot
+        run: node scripts/interop/publish-public-evidence.mjs --run artifacts/interop/run.json
+
+      - name: Commit the snapshot if it changed
+        run: |
+          set -euo pipefail
+          DEST=src/site/insights/cms-0057-f/davinci-interop-public-evidence.json
+          # generatedAtUtc moves every run. Publish only when something a reader
+          # would care about changed, so main does not collect a daily no-op
+          # commit from the nightly schedule.
+          if git diff --quiet -- "$DEST"; then
+            echo "Interoperability snapshot unchanged; nothing to publish."
+            exit 0
+          fi
+          SUBSTANTIVE=$(git diff --unified=0 -- "$DEST" \
+            | sed -n 's/^[+-]\([^+-]\)/\1/p' \
+            | grep -vc '"generatedAtUtc"' || true)
+          if [ "$SUBSTANTIVE" = "0" ]; then
+            echo "Only the generation timestamp changed; nothing to publish."
+            git checkout -- "$DEST"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$DEST"
+          git commit -m "chore: publish latest Da Vinci interoperability evidence"
+          git push origin HEAD:main

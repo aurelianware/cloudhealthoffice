@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRD, DTR and PAS: Da Vinci Prior Authorization Evidence — Cloud Health Office</title>
+  <meta name="description" content="How Da Vinci CRD, DTR and PAS chain into one prior-authorization workflow: the payer-selected questionnaire canonical, PAS $submit and $inquire semantics, and the CDex round trip that a pended A4 decision actually requires." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/evidence/prior-authorization" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/evidence/prior-authorization" />
+  <meta property="og:title" content="How CRD, DTR and PAS chain together — implementation evidence" />
+  <meta property="og:description" content="How Da Vinci CRD, DTR and PAS chain into one prior-authorization workflow: the payer-selected questionnaire canonical, PAS $submit and $inquire semantics, and the CDex round trip that a pended A4 decision actually requires." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/crd-dtr-pas-chain.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="How CRD, DTR and PAS chain together — implementation evidence" />
+  <meta name="twitter:description" content="How Da Vinci CRD, DTR and PAS chain into one prior-authorization workflow: the payer-selected questionnaire canonical, PAS $submit and $inquire semantics, and the CDex round trip that a pended A4 decision actually requires." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/crd-dtr-pas-chain.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "CRD, DTR and PAS: Da Vinci prior authorization implementation evidence",
+      "description": "How Da Vinci CRD, DTR and PAS chain into one prior-authorization workflow: the payer-selected questionnaire canonical, PAS $submit and $inquire semantics, and the CDex round trip that a pended A4 decision actually requires.",
+      "url": "https://cloudhealthoffice.com/evidence/prior-authorization",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "Da Vinci CRD",
+        "Da Vinci DTR",
+        "Da Vinci PAS",
+        "Da Vinci CDex",
+        "CMS-0057-F prior authorization"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Prior authorization",
+          "item": "https://cloudhealthoffice.com/evidence/prior-authorization"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <script defer src="/js/evidence-snapshot.js"></script>
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/prior-authorization">Prior authorization</a></nav>
+        <span class="ev-eyebrow">Prior-authorization evidence</span>
+        <h1>CRD, DTR and PAS are <em>one</em> workflow.</h1>
+        <p class="ev-lede">Each stage hands the next one its input: a questionnaire canonical the payer chose, a completed response, an authorization number. And when a decision comes back A4, a status code is not the answer — a structured, correlated, retrievable documentation request is.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">PAS-01 &hellip; PAS-08</span>
+          <span class="ev-badge">Da Vinci CRD / DTR / PAS STU 2.2.x</span>
+          <span class="ev-badge">CDex solicited attachment</span>
+          <span class="ev-badge ev-badge--amber">Synthetic data</span></div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
+        </p>
+      </div>
+    </header>
+
+    <div class="ev-section ev-section--tight">
+      <nav class="ev-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+            <li><a href="#chain">The chain: CRD, DTR, PAS</a></li>
+            <li><a href="#inquire">$inquire as a read projection</a></li>
+            <li><a href="#a4">What A4 actually requires</a></li>
+            <li><a href="#evidence">Traceability and limits</a></li>
+            <li><a href="#related">Related evidence</a></li>
+        </ol>
+      </nav>
+    </div>
+
+
+    <section class="ev-section" id="chain">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The chain</span>
+        <h2>CRD, DTR and PAS are one workflow, not three endpoints</h2>
+        <p class="ev-sub">
+          The three Da Vinci prior-authorization specifications are usually described separately, which makes them
+          sound like three independent APIs a payer has to stand up. They are not. Each one hands the next its
+          input, and an implementation that cannot pass that input along has built three demos rather than a
+          workflow.
+        </p>
+
+        <figure class="ev-figure">
+          <img src="/graphics/evidence/crd-dtr-pas-chain.svg" alt="A four-stage chain. CRD answers whether prior authorization is required and names a questionnaire canonical, delivering its determination in the CDS Hooks system action. DTR follows that canonical into the questionnaire-package operation. PAS submit creates one authorization record carrying a preAuthRef. PAS inquire reads that same record as a projection with no store of its own. Below, the pended branch: an A4 review action that names required documentation raises a CDex Task Attachment Request, the provider answers with submit-attachment, and the authorization returns to In Review." />
+          <figcaption>
+            The hand-offs are the workflow: a questionnaire canonical from CRD to DTR, a completed response from
+            DTR to PAS, and an authorization number from PAS <code>$submit</code> to PAS <code>$inquire</code>.
+          </figcaption>
+        </figure>
+
+        <h3>CRD &mdash; is prior authorization required, and on what basis</h3>
+        <p>
+          A provider signs an order. A CDS Hooks service answers with a coverage determination carrying
+          <code>covered</code>, <code>pa-needed</code>, <code>doc-needed</code> and, where documentation is wanted,
+          a questionnaire canonical.
+        </p>
+        <p>
+          One implementation detail matters more than it sounds: <strong>a CRD determination can arrive in the
+          system action rather than in a card.</strong> A client that inspects only <code>cards</code> will read a
+          fully answered request as though nothing happened. An absent field must also be parsed as absent, never
+          defaulted &mdash; a missing <code>pa-needed</code> means the payer said nothing about prior
+          authorization, which is materially different from saying none is required.
+        </p>
+
+        <h3>DTR &mdash; the payer chooses the questionnaire; the requester follows it</h3>
+        <p>
+          The questionnaire canonical named by the coverage determination is requested from
+          <code>Questionnaire/$questionnaire-package</code>, and what comes back is a package containing that
+          questionnaire and the dependencies <em>it declares</em>.
+        </p>
+        <p>
+          Package completeness is checked as declared, not as assumed: the questionnaire is walked &mdash; library
+          extension, answer value-set bindings, sub-questionnaire extensions, through nested items &mdash; and every
+          canonical found must resolve inside the package. Demanding a Library or ValueSet that the questionnaire
+          never asked for would fail a conformant server. Canonical versions are never normalised away either: a
+          dependency present at a different version is reported as a <strong>version mismatch</strong>, not as
+          missing, because calling it missing sends a reader looking for something that is sitting in the package.
+        </p>
+
+        <h3>PAS <code>$submit</code> &mdash; one authorization record</h3>
+        <p>
+          The completed documentation is submitted as a PAS Bundle carrying a <code>Claim</code> with
+          <code>use = preauthorization</code>. The response is a <code>ClaimResponse</code> on the PAS profile
+          carrying the authorization number as <code>preAuthRef</code>, an X12 278 review action, and &mdash; on a
+          denial &mdash; a <strong>coded</strong> reason rather than a bare "not medically necessary".
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="inquire">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Status</span>
+        <h2><code>$inquire</code> is a read projection, and it is enforced as one</h2>
+        <p class="ev-sub">
+          An inquiry adds no store and no status field of its own. It reads the state <code>$submit</code> wrote
+          and the rest of the platform updates, through one controller and one response builder.
+        </p>
+
+        <h3>Read-only by contract, not by convention</h3>
+        <p>
+          The store interface exposes a single lookup method and no write method at all, and a structural test
+          asserts it. An inquiry therefore cannot create a record, move a status, restart a decision clock, emit a
+          duplicate transaction or cause a payer submission &mdash; however many times it is repeated. Status
+          derives from the stored adjudication record rather than a live re-query, so an inquiry never turns into
+          an outbound X12 transaction.
+        </p>
+
+        <h3>The authorization number alone is never enough</h3>
+        <p>
+          Authorization numbers are structured, and therefore guessable at the margins. An inquiry must also carry a
+          corroborating key &mdash; the member, or the requesting provider NPI &mdash; and that key must match the
+          stored record. <strong>A supplied key that does not match refuses even when another one does</strong>:
+          naming the wrong member for a real authorization is guessing, and guessing must not get a different answer
+          than a miss.
+        </p>
+
+        <h3>Deterministic status mapping, total over the status enum</h3>
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th>Authorization status</th><th>X12 278</th><th>outcome</th><th>disposition</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Submitted</td><td>&mdash;</td><td>queued</td><td>pending</td></tr>
+              <tr><td>InReview</td><td>&mdash;</td><td>queued</td><td>pending</td></tr>
+              <tr><td>Pended</td><td>A4</td><td>queued</td><td>pended-additional-information</td></tr>
+              <tr><td>Approved</td><td>A1</td><td>complete</td><td>approved</td></tr>
+              <tr><td>Modified</td><td>A2</td><td>partial</td><td>modified</td></tr>
+              <tr><td>Denied</td><td>A3</td><td>complete</td><td>denied</td></tr>
+              <tr><td>Expired</td><td>&mdash;</td><td>complete</td><td>expired</td></tr>
+              <tr><td>Cancelled</td><td>&mdash;</td><td>complete</td><td>cancelled</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <code>outcome</code> carries the coarse machine answer &mdash; still working, decided, partially decided
+          &mdash; and <code>disposition</code> the specific one, so a caller can distinguish <em>pending</em> from
+          <em>pended for additional information</em> from <em>approved</em> from <em>denied</em>. An unrecognised
+          status reads as still in progress rather than as an approval that cannot be vouched for.
+        </p>
+
+        <h3>Refusals do not leak which authorizations exist</h3>
+        <p>
+          Unknown authorization, wrong tenant and not-your-authorization all return one identical <code>404</code>
+          <code>OperationOutcome</code>, so the identifier space cannot be probed. A malformed request is a
+          different matter and is described plainly &mdash; collapsing the two would tell a caller who forgot an
+          identifier that their authorization does not exist. The distinguishing category is kept in the audit
+          record instead, where an operator can act on it.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="a4">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The pended branch</span>
+        <h2>What actually has to happen after a payer answers A4</h2>
+        <p class="ev-sub">
+          "Pended &mdash; additional information required" is the point where most prior-authorization
+          integrations stop being a protocol exercise. A status code tells the provider that something is wanted.
+          It does not tell them <em>what</em>, it does not correlate to anything they can retrieve, and it gives
+          them nowhere to send an answer.
+        </p>
+
+        <p>A working implementation needs all of the following, and Cloud Health Office implements the solicited CDex exchange to provide them:</p>
+
+        <div class="ev-grid ev-grid--two">
+          <div class="ev-card">
+            <h3>A structured request, or none at all</h3>
+            <p>
+              A documentation request is raised only when the decision is <code>Pended</code> with review action
+              <strong>A4</strong> <em>and</em> the decision names what documentation is wanted. A pended state alone
+              is not enough: manufacturing a request from it would put a question to the provider that no reviewer
+              posed. Each requested item carries an X12 PWK attachment-type code, a LOINC document-type code, the
+              service line it is about and whether it is mandatory &mdash; description supplements the codes, never
+              replaces them. A request with no items is refused at creation.
+            </p>
+          </div>
+          <div class="ev-card">
+            <h3>Something the provider can retrieve</h3>
+            <p>
+              The request is served as a FHIR <code>Task</code> on the CDex Task Attachment Request profile, at
+              <code>GET Task/{id}</code> and by search &mdash; by tracking id, or by code and focus to list every
+              cycle on one authorization. It is a projection computed on read from the one additional-information
+              record; nothing keeps a second copy.
+            </p>
+          </div>
+          <div class="ev-card">
+            <h3>Correlation that a caller cannot derive</h3>
+            <p>
+              The authorization number links the Task to the prior authorization the submitter already holds. The
+              provider-facing tracking id is <strong>random rather than derived</strong> &mdash; it is one of the
+              keys an intake must match, so deriving it from facts a caller already knows would hand it to anyone
+              who knows them. A later cycle is a new record with its own sequence number.
+            </p>
+          </div>
+          <div class="ev-card">
+            <h3>A way back in, with controls</h3>
+            <p>
+              The provider answers with <code>POST fhir/r4/$submit-attachment</code>. Intake applies payload
+              controls, provider binding and idempotency, and an <strong>invalid submission is refused without
+              consuming the provider's one chance to answer</strong> &mdash; the request stays open. There is
+              deliberately no "invalid response" state.
+            </p>
+          </div>
+          <div class="ev-card">
+            <h3>A status transition that is honest</h3>
+            <p>
+              Documentation received returns the authorization to <strong>In Review</strong> &mdash; never directly
+              to approved. A cycle closed <em>without</em> the information reads as <code>failed</code>, not
+              <code>completed</code>: reporting both the same way would tell a provider their unanswered request had
+              been satisfied. Expiry is derived from the due date rather than stored, because nothing in this
+              repository sweeps due dates and a stored state nothing ever sets would be a lie in the data.
+            </p>
+          </div>
+          <div class="ev-card">
+            <h3>Repeatable inquiry behaviour</h3>
+            <p>
+              <code>$inquire</code> reports the resulting status without knowing anything about the exchange, and
+              every inquiry reads live committed state &mdash; no submission-time snapshot, no cache. A status
+              changed after submission is the status the next inquiry returns.
+            </p>
+          </div>
+        </div>
+
+        <h3>Retention, and why no sync job is needed</h3>
+        <p>
+          Retention is an explicit rule rather than an operational habit: retain until the last status change plus a
+          configured period, with the CMS-0057-F one-year minimum enforced as a <strong>floor configuration cannot
+          go under</strong>. The anchor is the last status change &mdash; never a read &mdash; so an inquiry cannot
+          extend retention. Only terminal, past-boundary records are purgeable: Submitted, InReview and Pended
+          records are never purged however old. Purge is a conditional delete, so a record that reopens mid-sweep
+          survives and repeat runs are no-ops, and the sweep is disabled by default with a dry run available.
+        </p>
+        <p>
+          The freshness obligation needs no synchronisation job, because there is nothing to synchronise: prior-auth
+          state is projected from the authoritative record at read time, the read seam exposes no write, and no
+          replicated projection exists to drift. Pharmacy prior authorization is enforced as <strong>outside</strong>
+          the CMS-0057-F medical scope rather than left as a documentation note, so drug items are excluded from the
+          workflow and from what Patient Access serves.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="evidence">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Traceability</span>
+        <h2>What proves the above</h2>
+
+        <div class="ev-ref">
+          <h4>Implementation evidence</h4>
+          <dl>
+            <dt>Scenarios</dt><dd>PAS-01 CRD &middot; PAS-02 DTR &middot; PAS-03 submit &middot; PAS-04 inquiry &middot; PAS-05 coded denial &middot; PAS-06 decision timeframe &middot; PAS-07 CDex additional information &middot; PAS-08 drug exclusion &middot; PAT-03 prior-auth data retention</dd>
+            <dt>IG family</dt><dd>Da Vinci CRD / DTR / PAS STU 2.2.x &middot; CDex solicited attachment</dd>
+            <dt>Test data</dt><dd>Synthetic. Decisions come from the Cloud Health Office rule store, not from a payer's production rules.</dd>
+            <dt>Architecture docs</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/prior-authorization.md">prior-authorization.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/cdex-additional-information.md">cdex-additional-information.md</a></dd>
+            <dt>Pull requests</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1147">#1147</a> drug exclusion &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1154">#1154</a> PAS <code>$inquire</code> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1155">#1155</a> prior-authorization retention &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1156">#1156</a> CDex additional-information round trip</dd>
+            <dt>Also exercised externally</dt><dd>CRD, DTR and PAS <code>$submit</code> are exercised against an independently developed HL7 Da Vinci implementation &mdash; <a href="/evidence/davinci-interoperability">see that evidence</a>, which is kept separate from the acceptance status above</dd>
+          </dl>
+        </div>
+
+        
+        <p class="ev-sub">Prior-authorization scenarios from the latest published acceptance evidence, generated from the suite rather than typed into this page.</p>
+        <div class="ev-snapshot" data-evidence="cms0057" data-src="/insights/cms-0057-f/cms0057-public-evidence.json" data-view="scenarios" data-capability="PriorAuthorization">
+          <p class="ev-fallback" data-evidence-fallback>
+            Loading the latest published CMS-0057-F acceptance evidence. It is generated in CI from the
+            acceptance suite at a named source revision and committed to this repository, so the status
+            shown here is the tested status rather than a claim typed into a page.
+          </p>
+          <div data-evidence-body hidden></div>
+        </div>
+
+        <div class="ev-limits">
+          <h3>What is not proven here</h3>
+          <ul>
+            <li><strong>Acceptance evidence is not CMS certification</strong>, and a Passable status does not establish production readiness for a particular payer deployment.</li>
+            <li><strong>Synthetic data throughout.</strong> The coverage decisions exercised are Cloud Health Office's own rule content, not a plan's production medical policy.</li>
+            <li><strong>CQL is not executed.</strong> Where a DTR package carries a Library its structure is validated; its CQL is not run. This is package exchange, not rule evaluation.</li>
+            <li><strong>The CDex request is made available for retrieval, not pushed.</strong> There is no provider FHIR endpoint registry in this repository to POST a Task into.</li>
+            <li><strong>The CDex Task Data Request profile is deliberately not implemented</strong> &mdash; a payer querying a provider's clinical record is a different transaction from a pended prior authorization.</li>
+            <li><strong>Prior-authorization decisions in Augment mode depend on an external core adapter</strong>, and those adapters are documented stubs in this repository. See <a href="/evidence/replace-vs-augment">Replace vs Augment</a>.</li>
+          </ul>
+        </div>
+
+        <p>
+          For the regulatory requirement rather than the implementation, the
+          <a href="https://cms-0057-f.com/guides/crd-dtr-pas-cms-0057-f" rel="noopener">CRD, DTR and PAS guide</a>
+          on our sister reference site covers what the rule asks for.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Related evidence</span>
+        <h2>Where to read next</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/evidence/davinci-interoperability"><h3>Independently tested interoperability</h3><p>The same three protocols, exchanged with software Cloud Health Office did not write.</p></a>
+          <a class="ev-card" href="/insights/cms-0057-f/acceptance-scenarios"><h3>CMS-0057-F implementation evidence</h3><p>The full scenario inventory and the live acceptance snapshot.</p></a>
+          <a class="ev-card" href="/docs/prior-auth-guide"><h3>Prior Authorization Guide</h3><p>Operating the prior-authorization workflow in the platform.</p></a>
+          <a class="ev-card" href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas"><h3>CRD, DTR and PAS with an existing core</h3><p>How the chain maps onto QNXT, Facets or HealthEdge.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>Bring your own pended-authorization scenario.</h2>
+          <p>The interesting question is rarely $submit. It is what your reviewers ask for, how it is coded, and who is allowed to answer.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact">Talk about a deployment &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice">Read the source on GitHub &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Evidence</h5>
+          <ul>
+            <li><a href="/evidence">Evidence Hub</a></li>
+            <li><a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F implementation evidence</a></li>
+            <li><a href="/evidence/davinci-interoperability">Da Vinci interoperability evidence</a></li>
+            <li><a href="/evidence/payer-to-payer">Payer-to-Payer implementation evidence</a></li>
+            <li><a href="/evidence/prior-authorization">CRD, DTR and PAS workflow evidence</a></li>
+            <li><a href="/evidence/provider-access-security">Provider Access security evidence</a></li>
+            <li><a href="/evidence/replace-vs-augment">Replace vs Augment architecture</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/prior-auth-guide">Prior Authorization Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payer-to-Payer Exchange: End-to-End Implementation Evidence — Cloud Health Office</title>
+  <meta name="description" content="The CMS-0057-F Payer-to-Payer workflow as implemented: consent evaluated before disclosure, Patient/$member-match, member data export, bundle validation, provenance, idempotent durable ingestion, and USCDI clinical resources served through Patient and Provider Access." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/evidence/payer-to-payer" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/evidence/payer-to-payer" />
+  <meta property="og:title" content="What Payer-to-Payer actually requires — implementation evidence" />
+  <meta property="og:description" content="The CMS-0057-F Payer-to-Payer workflow as implemented: consent evaluated before disclosure, Patient/$member-match, member data export, bundle validation, provenance, idempotent durable ingestion, and USCDI clinical resources served through Patient and Provider Access." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/payer-to-payer-flow.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="What Payer-to-Payer actually requires — implementation evidence" />
+  <meta name="twitter:description" content="The CMS-0057-F Payer-to-Payer workflow as implemented: consent evaluated before disclosure, Patient/$member-match, member data export, bundle validation, provenance, idempotent durable ingestion, and USCDI clinical resources served through Patient and Provider Access." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/payer-to-payer-flow.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Payer-to-Payer exchange: end-to-end implementation evidence",
+      "description": "The CMS-0057-F Payer-to-Payer workflow as implemented: consent evaluated before disclosure, Patient/$member-match, member data export, bundle validation, provenance, idempotent durable ingestion, and USCDI clinical resources served through Patient and Provider Access.",
+      "url": "https://cloudhealthoffice.com/evidence/payer-to-payer",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "CMS-0057-F Payer-to-Payer API",
+        "FHIR $member-match",
+        "USCDI clinical data exchange"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Payer-to-Payer",
+          "item": "https://cloudhealthoffice.com/evidence/payer-to-payer"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <script defer src="/js/evidence-snapshot.js"></script>
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/payer-to-payer">Payer-to-Payer</a></nav>
+        <span class="ev-eyebrow">Payer-to-Payer evidence</span>
+        <h1>What Payer-to-Payer <em>actually</em> requires.</h1>
+        <p class="ev-lede">Coverage transition, consent, member match, export, validation, provenance, durable ingestion, and a read path for the clinical data at the end of it. Nine stages, each with a decision that determines whether the implementation is safe or merely present.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">P2P-01 &middot; P2P-02 &middot; P2P-03 &middot; P2P-04</span>
+          <span class="ev-badge ev-badge--cyan">PAT-02 USCDI clinical</span>
+          <span class="ev-badge">Synthetic data</span>
+          <span class="ev-badge ev-badge--amber">No production exchange claimed</span></div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
+        </p>
+      </div>
+    </header>
+
+    <div class="ev-section ev-section--tight">
+      <nav class="ev-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+            <li><a href="#workflow">The nine-stage workflow</a></li>
+            <li><a href="#decisions">Five decisions that decide whether it is safe</a></li>
+            <li><a href="#clinical-data">Clinical data and USCDI</a></li>
+            <li><a href="#evidence">Traceability and limits</a></li>
+            <li><a href="#related">Related evidence</a></li>
+        </ol>
+      </nav>
+    </div>
+
+
+    <section class="ev-section" id="workflow">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The workflow</span>
+        <h2>"Supports Payer-to-Payer" is not a description of anything</h2>
+        <p class="ev-sub">
+          A member changes plans. The new payer needs the history the prior payer holds. Between those two
+          sentences sits a workflow with a member-matching problem, a consent problem, an SSRF problem, a
+          validation problem, an idempotency problem and a durability problem &mdash; each of which has to be
+          decided one way or another before any data moves. Here is how Cloud Health Office decided them.
+        </p>
+
+        <figure class="ev-figure">
+          <img src="/graphics/evidence/payer-to-payer-flow.svg" alt="A nine-stage outbound Payer-to-Payer workflow with Cloud Health Office as the new payer: coverage transition, endpoint resolution from configuration, consent gate, member match, consent re-check, the prior payer serving member-match and member-data-export, bundle validation, provenance, and durable ingestion. Below, the imported package reaches an import store separate from Cloud Health Office's authoritative stores, then the USCDI clinical read path, then Patient and Provider Access." />
+          <figcaption>
+            Cloud Health Office as the new payer. It serves the same two operations inbound, so there is one
+            wire format in both directions rather than a second Payer-to-Payer transport.
+          </figcaption>
+        </figure>
+
+        <ol class="ev-flow">
+          <li>
+            <strong>Coverage transition, inside one tenant</strong>
+            <p>
+              The member and their prior-payer coverage come from Cloud Health Office's own data. A member
+              belonging to another tenant is never initiated on. Where coverages with the target payer overlap,
+              the exchange <strong>refuses rather than guesses</strong> which one it is about.
+            </p>
+          </li>
+          <li>
+            <strong>Endpoint resolution &mdash; from configuration, never from the caller</strong>
+            <p>
+              A caller names a <em>payer id</em>. A resolver maps that id to endpoints held in trusted
+              configuration. No request type in this surface accepts a URL, non-HTTPS entries are rejected, and
+              the HTTP client does not follow redirects. That is the SSRF boundary, and it is a boundary because
+              there is no code path through which a caller-supplied address can become a request target.
+            </p>
+          </li>
+          <li>
+            <strong>Consent, evaluated server-side before anything leaves</strong>
+            <p>
+              Cloud Health Office asks its own consent registry whether the member authorized the
+              <strong>Payer-to-Payer purpose</strong> specifically. This runs <em>before</em> any remote call, so an
+              unauthorized member's identity is never disclosed to the other payer in the first place. A denial is
+              terminal <code>NotAuthorized</code>, deliberately distinct from <code>Failed</code>: a member who has
+              not authorized an exchange is not an error to retry.
+            </p>
+          </li>
+          <li>
+            <strong>Remote <code>Patient/$member-match</code></strong>
+            <p>
+              Cloud Health Office builds the request and interprets the answer; it does not re-run the peer's
+              matching rules. <strong>No match and an ambiguous match are both terminal.</strong> Resolving an
+              ambiguity by picking one would mean importing a stranger's record into a member's history.
+            </p>
+          </li>
+          <li>
+            <strong>Consent again, immediately before the export</strong>
+            <p>
+              Consent is evaluated at the attempt, not carried forward from step three. A revocation that lands
+              while the match is in flight stops the data request. A retry clears the recorded decision and asks
+              again rather than reusing the answer it liked.
+            </p>
+          </li>
+          <li>
+            <strong>Member data export</strong>
+            <p>
+              Issued only once exactly one member has resolved <em>and</em> consent has been re-confirmed as of
+              that moment.
+            </p>
+          </li>
+          <li>
+            <strong>Validation of what came back</strong>
+            <p>
+              The Bundle must parse, must carry exactly one <code>Patient</code>, and that Patient &mdash; along with
+              every <code>Patient/&hellip;</code> reference in the package, relative or absolute &mdash; must be the
+              member who matched. A package that disagrees with itself about who it is describing is refused.
+            </p>
+          </li>
+          <li>
+            <strong>Provenance, and an archive of what was actually sent</strong>
+            <p>
+              The package is stamped with a <code>Provenance</code> naming the source payer, the exchange and the
+              receipt time, and is archived <strong>as received</strong> &mdash; before Cloud Health Office rewrites any
+              reference &mdash; so the archive answers "what did the payer actually send?" rather than "what did we
+              make of it?".
+            </p>
+          </li>
+          <li>
+            <strong>Durable ingestion, and only then <code>Completed</code></strong>
+            <p>
+              The exchange reaches <code>Completed</code> only once the import commits. <code>DataReceived</code>
+              exists as its own state precisely so that "retrieved but not stored" is a condition the system can be
+              in and report. Retrieval alone never reads as success.
+            </p>
+          </li>
+        </ol>
+
+        <p>
+          The state machine is explicit: <code>Pending &rarr; Matching &rarr; Matched &rarr; RequestingData &rarr;
+          DataReceived &rarr; Ingesting &rarr; Completed</code>, with terminal <code>NoMatch</code>,
+          <code>Ambiguous</code>, <code>NotAuthorized</code> and <code>Failed</code>.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="decisions">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The decisions behind it</span>
+        <h2>Five choices that decide whether an implementation is safe</h2>
+
+        <h3>Consent is purpose-scoped, and no caller can supply it</h3>
+        <p>
+          Only <code>PayerToPayerExchange</code> authorizes an exchange. An Active consent is not sufficient by
+          itself: a member holding a Provider Access consent, or a consent carrying no purpose, is denied with
+          <code>NoConsentForPurpose</code>. The required purpose is a constant in code, not configuration, so a
+          deployment cannot widen which purpose satisfies Payer-to-Payer.
+        </p>
+        <p>
+          <strong>No request type in this surface has a consent field.</strong> Not the inbound
+          <code>$member-data-export</code> request, not the outbound initiation request. A receiving payer cannot
+          self-attest that a member consented, and neither can an internal caller. Inbound and outbound ask the same
+          registry through the same policy, so responding cannot become more permissive than initiating.
+        </p>
+        <p>
+          The completed exchange records <em>what</em> authorized it &mdash; the consent id, the decision reason and
+          the instant it was evaluated &mdash; so a finished exchange names the consent record that permitted it and a
+          refused one names why.
+        </p>
+
+        <h3>Imported data cannot overwrite what Cloud Health Office owns</h3>
+        <p>
+          Imported resources live in their own store, separate from the authoritative member, enrollment, claim and
+          provider stores. <strong>Source ownership is structural, not a convention</strong>: an imported row
+          physically cannot be read as a Cloud Health Office record, so "did we originate this?" is answered by which
+          store the data lives in rather than by a flag somebody has to remember to set.
+        </p>
+        <ul>
+          <li>the remote <code>Patient</code> establishes source-side identity only &mdash; it never replaces the authoritative member record;</li>
+          <li>a prior payer's <code>Coverage</code> never touches the member's current enrollment;</li>
+          <li>administrative resources keep the peer's resource id as a source id while being filed under Cloud Health Office's own member id.</li>
+        </ul>
+
+        <h3>Replays resolve to the same rows; two payers never merge</h3>
+        <p>
+          The import key is a SHA-256 over
+          <code>tenant + local member + source payer + resource type + source resource id</code>, joined with a unit
+          separator so no two tuples can collide by concatenation. Replaying a package resolves to the same keys, so a
+          member's history does not double. <strong>The same source id from a different payer is a different key</strong>,
+          so two payers' records are never silently merged into one. A content hash distinguishes "same again" from
+          "changed".
+        </p>
+
+        <h3>A failed ingestion adds nothing and takes nothing away</h3>
+        <p>
+          Rows are versioned by exchange. Staging writes only that exchange's own rows; committing is a single
+          ledger write. Both halves follow without needing a multi-document transaction: a failed ingestion adds
+          nothing visible, because its rows belong to an uncommitted exchange; and it takes nothing away, because it
+          cannot overwrite or hide the version an earlier exchange committed. The member keeps the history they had.
+        </p>
+
+        <h3>Unsupported types are named, not dropped</h3>
+        <p>
+          A resource type Cloud Health Office cannot serve is counted and <strong>named on the exchange</strong>, and
+          preserved in the archived package. A clinical resource the payload validator refuses &mdash; no source id,
+          oversized, too deeply nested &mdash; is counted and named by reason, per resource, so one bad Observation
+          does not cost the member the rest of their history. Cloud Health Office never claims to have ingested a
+          type it cannot serve.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="clinical-data">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Clinical data / USCDI</span>
+        <h2>What happens to the clinical resources after they arrive</h2>
+        <p class="ev-sub">
+          Receiving a prior payer's <code>Condition</code>, <code>Observation</code> and <code>Procedure</code> is
+          only half of a Payer-to-Payer implementation. Until there is somewhere to put them and a read path to serve
+          them, they are validated, counted and archived &mdash; and honestly classified as unsupported.
+        </p>
+        <p>
+          Twelve FHIR R4 clinical types now have durable member-scoped storage and a standards-correct read path
+          through both Patient Access and Provider Access: <code>AllergyIntolerance</code>, <code>CarePlan</code>,
+          <code>CareTeam</code>, <code>Condition</code>, <code>Device</code>, <code>DiagnosticReport</code>,
+          <code>Goal</code>, <code>Immunization</code>, <code>MedicationDispense</code>,
+          <code>MedicationRequest</code>, <code>Observation</code> and <code>Procedure</code>.
+        </p>
+
+        <h3>One table, five consumers</h3>
+        <p>
+          The resource inventory is a single source of truth read by the SMART scope layer, the Provider Access
+          authorization filter, the Payer-to-Payer import classification, the CapabilityStatement and the
+          controller's route constraint &mdash; with structural tests pinning each of them to it.
+        </p>
+        <p>
+          That is not tidiness. A clinical type reachable through SMART but missing from the governed set would be
+          readable by any provider holding a scope, attributed or not, consented or not. Taking both from one table
+          removes the possibility rather than relying on a reviewer to notice. The same table decides what is
+          ingested, so <strong>a type is ingested exactly when it is served</strong>.
+        </p>
+
+        <h3>The import store was promoted, not copied</h3>
+        <p>
+          The clinical serving store <em>is</em> the Payer-to-Payer import store, resolved through a second
+          interface. There is no projection to fall behind the source, no dual write to reconcile, and no second
+          place a resource could be stale in &mdash; and "which store did this come from?" still answers "the
+          imported one". Clinical data therefore stays out of the authoritative member, enrollment, coverage and
+          claim stores by construction.
+        </p>
+
+        <h3>Native and imported coexist rather than merge</h3>
+        <p>
+          Every served clinical resource today is imported from a payer; no Cloud Health Office component authors
+          native clinical data. The origin axis exists so that when a native writer appears it coexists with
+          imported data instead of overwriting it: two sources for the same clinical fact would be two resources
+          rather than one silently merged one. Until then it is an unexercised seam, and it is described here as one.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="evidence">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Traceability</span>
+        <h2>What proves the above</h2>
+
+        <div class="ev-ref">
+          <h4>Implementation evidence</h4>
+          <dl>
+            <dt>Scenarios</dt><dd>P2P-01 inbound respond &middot; P2P-02 outbound initiate and ingest &middot; P2P-03 consent enforcement &middot; P2P-04 <code>$member-match</code> and concurrent coverage &middot; PAT-02 USCDI clinical &middot; CONSENT-01 one registry</dd>
+            <dt>Role</dt><dd>Cloud Health Office as the new payer (outbound) and as the prior payer (inbound) &mdash; the same two operations in both directions</dd>
+            <dt>Test data</dt><dd>Synthetic. No exchange described here has moved production member data.</dd>
+            <dt>Architecture docs</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/payer-to-payer.md">payer-to-payer.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/consent.md">consent.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/clinical-fhir.md">clinical-fhir.md</a></dd>
+            <dt>Pull requests</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1148">#1148</a> member data export &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1149">#1149</a> <code>$member-match</code> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1150">#1150</a> outbound initiation &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1151">#1151</a> durable ingestion &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1152">#1152</a> purpose-scoped consent &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1157">#1157</a> USCDI clinical read path</dd>
+            <dt>Result</dt><dd>The latest published acceptance snapshot below &mdash; generated from the suite, not typed into this page</dd>
+          </dl>
+        </div>
+
+        
+        <p class="ev-sub">Payer-to-Payer, Patient Access and consent scenarios from the latest published acceptance evidence. The Replace column is Cloud Health Office product capability; each Augment column is integration capability against one external core.</p>
+        <div class="ev-snapshot" data-evidence="cms0057" data-src="/insights/cms-0057-f/cms0057-public-evidence.json" data-view="scenarios" data-capability="PayerToPayer,PatientAccess,Consent">
+          <p class="ev-fallback" data-evidence-fallback>
+            Loading the latest published CMS-0057-F acceptance evidence. It is generated in CI from the
+            acceptance suite at a named source revision and committed to this repository, so the status
+            shown here is the tested status rather than a claim typed into a page.
+          </p>
+          <div data-evidence-body hidden></div>
+        </div>
+
+        <div class="ev-limits">
+          <h3>What is not proven here</h3>
+          <ul>
+            <li><strong>Synthetic data only</strong>, and no production exchange with a real payer is claimed or evidenced.</li>
+            <li><strong>Consent must be recorded with the Payer-to-Payer purpose.</strong> A pre-existing generic consent does not carry it and is not reinterpreted, so a deployment upgrading to this code authorizes nothing until purposes are recorded. That is deliberate, and it is a real migration step.</li>
+            <li><strong>Imported member history &mdash; EOB, Claim, ClaimResponse, Encounter, DocumentReference &mdash; is ingested and archived but is not yet projected into the Patient and Provider Access read paths.</strong> Imported clinical resources are.</li>
+            <li><strong>FHIR R4 resource support is not US Core certification.</strong> Resources are parsed and served as R4; this page does not claim independently validated US Core profile conformance.</li>
+            <li><strong>Audit is emitted to the log, not to a durable audit store.</strong> The FHIR service has no audit sink.</li>
+            <li><strong>Target payers come from configuration.</strong> There is no directory of live payer endpoints in this repository, and connecting one is deployment work.</li>
+            <li><strong>Transport credentials for a specific payer are not supplied.</strong> SMART Backend Services or UDAP client registration and mTLS sit behind a credential provider seam that supplies none by default, so authenticating to a real peer payer is deployment integration.</li>
+            <li><strong>No external-core Payer-to-Payer integration exists.</strong> Nothing here runs against QNXT, Facets or HealthEdge.</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Related evidence</span>
+        <h2>Where to read next</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/evidence/provider-access-security"><h3>Provider Access security evidence</h3><p>The four controls that govern who may read the data once it has been ingested.</p></a>
+          <a class="ev-card" href="/insights/cms-0057-f/acceptance-scenarios"><h3>CMS-0057-F implementation evidence</h3><p>The full scenario inventory and the live acceptance snapshot.</p></a>
+          <a class="ev-card" href="/evidence/davinci-interoperability"><h3>Independently tested interoperability</h3><p>Exchanges performed against software Cloud Health Office did not write.</p></a>
+          <a class="ev-card" href="/evidence/replace-vs-augment"><h3>Replace vs Augment</h3><p>What changes when Cloud Health Office sits in front of an existing core.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>Walk the exchange against your own coverage data.</h2>
+          <p>The operations, the consent model and the ingestion path are in the repository. The interesting conversation is what your prior-payer directory looks like.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact">Talk about a deployment &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice">Read the source on GitHub &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Evidence</h5>
+          <ul>
+            <li><a href="/evidence">Evidence Hub</a></li>
+            <li><a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F implementation evidence</a></li>
+            <li><a href="/evidence/davinci-interoperability">Da Vinci interoperability evidence</a></li>
+            <li><a href="/evidence/payer-to-payer">Payer-to-Payer implementation evidence</a></li>
+            <li><a href="/evidence/prior-authorization">CRD, DTR and PAS workflow evidence</a></li>
+            <li><a href="/evidence/provider-access-security">Provider Access security evidence</a></li>
+            <li><a href="/evidence/replace-vs-augment">Replace vs Augment architecture</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/prior-auth-guide">Prior Authorization Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

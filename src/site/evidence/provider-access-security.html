@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Provider Access Security and Consent — Implementation Evidence — Cloud Health Office</title>
+  <meta name="description" content="Provider Access is not just a FHIR endpoint. The four independent controls — authentication, SMART scope and tenant binding, attribution, and purpose-scoped consent — plus the production external-issuer trust model: issuer-first resolution, JWKS discovery, rotation, SSRF boundaries and tenant conflict." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/evidence/provider-access-security" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/evidence/provider-access-security" />
+  <meta property="og:title" content="How Provider Access is secured — implementation evidence" />
+  <meta property="og:description" content="Provider Access is not just a FHIR endpoint. The four independent controls — authentication, SMART scope and tenant binding, attribution, and purpose-scoped consent — plus the production external-issuer trust model: issuer-first resolution, JWKS discovery, rotation, SSRF boundaries and tenant conflict." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/provider-access-controls.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="How Provider Access is secured — implementation evidence" />
+  <meta name="twitter:description" content="Provider Access is not just a FHIR endpoint. The four independent controls — authentication, SMART scope and tenant binding, attribution, and purpose-scoped consent — plus the production external-issuer trust model: issuer-first resolution, JWKS discovery, rotation, SSRF boundaries and tenant conflict." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/provider-access-controls.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Provider Access security and consent: implementation evidence",
+      "description": "Provider Access is not just a FHIR endpoint. The four independent controls — authentication, SMART scope and tenant binding, attribution, and purpose-scoped consent — plus the production external-issuer trust model: issuer-first resolution, JWKS discovery, rotation, SSRF boundaries and tenant conflict.",
+      "url": "https://cloudhealthoffice.com/evidence/provider-access-security",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "CMS-0057-F Provider Access API",
+        "SMART on FHIR",
+        "OAuth 2.0",
+        "FHIR consent"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Provider Access security",
+          "item": "https://cloudhealthoffice.com/evidence/provider-access-security"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <script defer src="/js/evidence-snapshot.js"></script>
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/provider-access-security">Provider Access security</a></nav>
+        <span class="ev-eyebrow">Security evidence</span>
+        <h1>Provider Access is not <em>just</em> a FHIR endpoint.</h1>
+        <p class="ev-lede">Four independent controls have to agree before any member data is assembled, and a production deployment has to trust an identity provider it does not run. Both are decisions with a wrong answer that keeps working right up until it matters.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">PROV-01 &middot; PROV-02 &middot; PROV-03</span>
+          <span class="ev-badge ev-badge--cyan">SEC-01 &middot; CONSENT-01</span>
+          <span class="ev-badge ev-badge--green">Fails closed</span>
+          <span class="ev-badge ev-badge--amber">No customer IdP onboarded</span></div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
+        </p>
+      </div>
+    </header>
+
+    <div class="ev-section ev-section--tight">
+      <nav class="ev-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+            <li><a href="#caller-shape">A caller shape, not a route</a></li>
+            <li><a href="#four-controls">The four controls</a></li>
+            <li><a href="#issuer-trust">Trusting an IdP you do not run</a></li>
+            <li><a href="#refusals">Uniform refusals</a></li>
+            <li><a href="#evidence">Traceability and limits</a></li>
+            <li><a href="#related">Related evidence</a></li>
+        </ol>
+      </nav>
+    </div>
+
+
+    <section class="ev-section" id="caller-shape">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The starting point</span>
+        <h2>Provider Access is a caller shape, not a route</h2>
+        <p class="ev-sub">
+          There is no <code>/provider-access</code> endpoint. Provider Access is the ordinary
+          <code>/fhir/r4/{Resource}</code> read surface reached by a <strong>provider-shaped token</strong> &mdash;
+          one carrying <code>user/&hellip;</code> or <code>system/&hellip;</code> scopes, meaning a provider or backend
+          service reading <em>someone else's</em> record.
+        </p>
+        <p>
+          A patient-scoped token is Patient Access: the member reading their own record, governed by the SMART
+          patient binding rather than by Provider Access consent &mdash; a member does not need to authorize a
+          disclosure to themselves. <strong>The distinction is drawn from the token, never from a controller name
+          or route string</strong>, so it cannot be lost by someone adding an endpoint.
+        </p>
+        <p>
+          Enforcement lives in a global action filter rather than middleware, for a reason worth stating: the
+          decision needs the tenant, and tenant resolution runs after the SMART check in the pipeline. A filter runs
+          after the whole middleware pipeline &mdash; so authentication, scope and tenant are established facts
+          &mdash; and still before any action body, so an unauthorized request never assembles or retrieves member
+          data. It is registered once, globally: a new member-scoped FHIR controller is governed the moment it
+          exists, and there is nothing to remember to opt into.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="four-controls">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The composed decision</span>
+        <h2>Four independent controls, all mandatory</h2>
+
+        <figure class="ev-figure">
+          <img src="/graphics/evidence/provider-access-controls.svg" alt="A request passes downward through four independent mandatory controls: authentication against a configured trusted issuer; SMART scope enforcement with tenant binding taken from the token; provider and member attribution; and purpose-scoped ProviderAccess consent. Member data is assembled only past all four. To the side, the refusal path shows that not attributed, no consent and no such member all return one identical 403 with a byte-identical FHIR OperationOutcome, with the distinguishing category kept in the audit record." />
+          <figcaption>
+            Any one refusal denies. So does a missing tenant, a missing member context, an unidentified caller, or
+            an unreadable consent registry &mdash; the composed decision fails closed.
+          </figcaption>
+        </figure>
+
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead><tr><th>Having this</th><th>Does not imply</th></tr></thead>
+            <tbody>
+              <tr><td>a correct SMART scope</td><td>attribution, or consent</td></tr>
+              <tr><td>attribution</td><td>consent</td></tr>
+              <tr><td>consent</td><td>attribution</td></tr>
+              <tr><td>a Payer-to-Payer consent</td><td>Provider Access</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>What the filter governs, and where the list comes from</h3>
+        <p>
+          Every member-scoped resource the FHIR surface serves: the administrative and claims types &mdash;
+          <code>Patient</code>, <code>Coverage</code>, <code>ExplanationOfBenefit</code>, <code>Encounter</code>,
+          <code>Claim</code>, <code>Task</code>, <code>Communication</code>, <code>DocumentReference</code>,
+          <code>ClaimResponse</code> &mdash; plus the twelve USCDI clinical types. The clinical list is not restated
+          in the filter: it is read from the same inventory the SMART layer, the routes and the
+          CapabilityStatement read, with a test pinning them together.
+        </p>
+        <p>
+          Protecting <code>Patient</code> alone would leave the claims history readable; protecting the claims
+          history alone would leave the clinical record readable. Taking both from one table removes the
+          possibility rather than relying on a reviewer to notice.
+        </p>
+
+        <h3>Resolving the member &mdash; and refusing when there is none</h3>
+        <p>
+          A resource id alone is <strong>not</strong> resolved to a member, because resolving it means reading the
+          resource &mdash; which is the access being authorized. No member context therefore <strong>denies rather
+          than guesses</strong>. That is why a provider-shaped search across the whole membership is refused, and
+          why a provider reading a clinical resource by id must also name the member.
+        </p>
+        <p>
+          FHIR operations are deliberately not routed through this gate. Payer-to-Payer runs its own gate for its
+          own purpose, and an operation name is not a member id &mdash; a control applied to the wrong surface is
+          not a stronger control.
+        </p>
+
+        <h3>Consent is purpose-scoped, and the separation runs both ways</h3>
+        <p>
+          Provider Access requires the <code>ProviderAccess</code> purpose specifically. It is the same registry and
+          the same policy Payer-to-Payer uses; the only difference is the purpose asked for, so neither direction
+          can drift more permissive than the other. A member with only a Payer-to-Payer consent is denied here; a
+          member with only a Provider Access consent is denied there. A generic consent carrying no purpose
+          authorizes neither. The required purpose is a constant in code, not configuration.
+        </p>
+        <p>
+          Consent is evaluated at the authorization instant chosen by the plan &mdash; never a timestamp supplied
+          in the request &mdash; and the effective period is applied by the policy, so a record persisted as Active
+          past its expiry still denies.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="issuer-trust">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Production identity</span>
+        <h2>What it takes to trust an identity provider you do not run</h2>
+        <p class="ev-sub">
+          Cloud Health Office's FHIR service is a resource server. It does not issue production tokens and hosts no
+          production authorization flow &mdash; the bundled authorization server is a development and
+          acceptance-suite issuer only. Trusting a payer's real IdP is therefore a set of explicit decisions, and
+          each of them is one that quietly goes wrong if left implicit.
+        </p>
+
+        <h3>Two modes, stated rather than inferred</h3>
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead><tr><th>Mode</th><th>Trusts</th><th>Permitted where</th></tr></thead>
+            <tbody>
+              <tr><td>Demo</td><td>the bundled development issuer</td><td>development hosts only</td></tr>
+              <tr><td>ExternalIssuer</td><td>the configured trusted issuers</td><td>anywhere</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>A Demo deployment on a non-development host fails startup.</strong> The mode is not derived from
+          "is any external issuer configured?", because that would turn a missing config file into a silent
+          downgrade to demo trust &mdash; the one failure nobody notices, since everything keeps working and the
+          service simply trusts the wrong authorization server. There is no production fallback to Demo: the host
+          does not start, and the error names the setting. The legacy single-issuer settings still work in Demo and
+          are ignored in ExternalIssuer mode, so a half-migrated configuration cannot keep trusting the demo issuer
+          by accident.
+        </p>
+
+        <h3>The issuer is resolved first, and supplies everything else</h3>
+        <p>
+          A token validates only if its <code>iss</code> matches a configured issuer exactly. That entry then
+          supplies its own keys, its own audiences, its own permitted algorithms, its own claim mapping and its own
+          permitted tenants.
+        </p>
+        <p>
+          The alternative &mdash; a global key set and a global audience list &mdash; quietly makes trust the
+          <em>union</em> of every configured issuer's, so a token from issuer A would be accepted bearing issuer B's
+          audience and verified against B's keys. With one IdP that is invisible. With two it is the difference
+          between per-customer trust and one shared trust blob. Trust is administrator-controlled: nothing in a
+          token can add an issuer, change an audience or redirect key retrieval, and keys are never fetched for an
+          issuer that was not configured. Trust-on-first-use is not a weaker form of trust; it is the absence of it.
+        </p>
+
+        <h3>Rotation, and a refresh signal that is attacker-controlled</h3>
+        <p>
+          An issuer rotates on its own schedule and does not announce it. The only signal is a token whose key id is
+          unknown &mdash; and <em>anyone</em> can present a token with a random key id. So refreshes are rate-limited
+          per issuer and single-flighted: a burst carrying one new key id produces exactly one fetch and the rest
+          wait for its result. A forged key id costs at most one fetch per interval.
+        </p>
+        <p>
+          Keys already retrieved stay usable while the issuer is unreachable, up to a bounded staleness age. Within
+          that window previously-seen key ids keep working and unknown ones fail closed, so an IdP outage degrades
+          <em>rotation</em> rather than signature validation. Past the bound the keys are dropped, because
+          indefinitely stale trust would keep honouring a revoked key. Failing to retrieve keys never disables
+          authentication &mdash; no keys, no validated tokens.
+        </p>
+
+        <h3>Algorithms, audience, and why HMAC is absent</h3>
+        <p>
+          <code>RS</code>, <code>PS</code> and <code>ES</code> families are accepted; <code>none</code> is absent and
+          signed tokens are required. <strong>HMAC is absent deliberately.</strong> A symmetric verifier will accept
+          a token signed with the issuer's <em>public</em> key as the shared secret &mdash; the classic
+          algorithm-confusion attack. A resource server validating a third-party IdP only ever holds public keys, so
+          admitting HMAC has no legitimate use and one catastrophic misuse; symmetric keys are filtered out of a key
+          set at ingestion rather than relied on being unreachable later.
+        </p>
+        <p>
+          Audience is validated against the audiences of the issuer that actually signed the token, so a correctly
+          signed token minted for another API is refused &mdash; issuer plus signature alone would have accepted it.
+          Clock skew is configurable but capped at startup: skew large enough to meaningfully extend a token's life
+          is lifetime validation switched off wearing a clock-drift costume.
+        </p>
+
+        <h3>Discovery and JWKS fetches cannot be redirected</h3>
+        <p>
+          A fetch target is refused unless configuration already named it: the issuer's own host or an explicitly
+          listed additional host, HTTPS outside development, and never a loopback, link-local (cloud instance
+          metadata) or private address &mdash; an allow-list entry does not override that bar. A discovery document
+          pointing its key-set URI at an unapproved origin is refused <em>before</em> the request is made, because a
+          refusal after the fetch has already performed the SSRF.
+        </p>
+        <p>
+          Only literal IP addresses are checked. A DNS name resolving into private space is a network-egress concern
+          owned by the platform; re-resolving here would be a time-of-check/time-of-use check that reads as
+          protection without being any.
+        </p>
+
+        <h3>Tenant binding: a header may fill a vacuum, never contradict a token</h3>
+        <p>
+          Tenant comes from the token's mapped claim first, and a service-to-service header second. A header that
+          <em>disagrees</em> with the token is a 403 tenant conflict, not an override. Previously the header was
+          consulted whenever the token carried no tenant claim, which meant any authenticated caller whose issuer
+          did not map a tenant could name any tenant and be believed. Where an issuer declares its permitted
+          tenants, the resolved tenant must be one of them &mdash; so customer A's IdP cannot authenticate into
+          customer B's data however its claims are shaped. Tenant is never taken from a FHIR body or query parameter.
+        </p>
+
+        <h3>Provider identity is believed only when an issuer vouches for it</h3>
+        <p>
+          An NPI is public information, so a claim merely <em>named</em> <code>npi</code> proves nothing. It becomes
+          authoritative only when a trusted issuer was configured, by an administrator, to assert it. Only the
+          configured claim is read &mdash; never a conventionally named one &mdash; its shape is validated, and
+          absence is treated as <em>"no issuer has vouched for this caller's identity"</em> rather than as "the
+          caller has no NPI".
+        </p>
+        <p>
+          The default is unset. Where an issuer <em>does</em> assert provider identity, the CDex attachment
+          submission compares the token's NPI against the provider the request was addressed to &mdash; closing the
+          substitution a corroborating key cannot detect, namely a caller who knows another provider's public NPI
+          and puts it in the payload. This only ever tightens: deployments without a provider identity claim behave
+          exactly as before.
+        </p>
+
+        <h3>Configuration errors fail startup; network conditions fail readiness</h3>
+        <p>
+          Demo mode on a production host, no trusted issuer, an invalid issuer URI, a missing audience, an
+          unsupported algorithm, a duplicate issuer or a disallowed key-set host all prevent the host from starting.
+          An unreachable IdP does not: the service starts and readiness reports it, degraded or unhealthy according
+          to whether any issuer has usable keys. A flood of 401s from expired tokens is a healthy resource server
+          doing its job, and conflating that with a trust outage would make the signal fire during an attack and
+          stay silent during an outage.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="refusals">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Refusals</span>
+        <h2>Every refusal looks the same from outside</h2>
+        <p class="ev-sub">
+          "Not attributed", "no consent" and "no such member" are deliberately indistinguishable: one
+          <code>403</code> with a FHIR <code>OperationOutcome</code> reading <em>"Provider Access is not authorized
+          for this request."</em> An acceptance test asserts the response bodies are byte-identical.
+        </p>
+        <p>
+          A differentiated refusal would confirm which members exist and let a caller enumerate the membership. The
+          structured category is kept in the audit record instead, where an operator can act on it &mdash; and every
+          decision is recorded with PHI-free identifiers only: tenant, member id, caller id, resource type, the
+          authorizing consent id, the decision category and the evaluation instant. Grants log at information,
+          refusals at warning. Never logged: demographics, clinical payloads, consent narrative, tokens, or
+          credentials.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="evidence">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Traceability</span>
+        <h2>What proves the above</h2>
+
+        <div class="ev-ref">
+          <h4>Implementation evidence</h4>
+          <dl>
+            <dt>Scenarios</dt><dd>PROV-01 attributed member data pull &middot; PROV-02 attribution enforcement &middot; PROV-03 opt-out honored &middot; CONSENT-01 one consent registry &middot; SEC-01 SMART on FHIR / OAuth &middot; PAT-02 USCDI clinical through the same gate</dd>
+            <dt>Enforcement point</dt><dd>A global MVC action filter, running after authentication, SMART scope and tenant resolution and before any action body</dd>
+            <dt>Architecture docs</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/provider-access.md">provider-access.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/smart-oauth-trust.md">smart-oauth-trust.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/consent.md">consent.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/idp-integration-contract.md">idp-integration-contract.md</a></dd>
+            <dt>Pull requests</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1152">#1152</a> purpose-scoped consent &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1153">#1153</a> Provider Access consent and attribution enforcement &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1157">#1157</a> clinical resources through the same gate &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/pull/1158">#1158</a> production SMART/OAuth external issuer trust</dd>
+            <dt>Test data</dt><dd>Synthetic. The acceptance suite runs against a test issuer in Demo mode &mdash; a test configuration, never a bypass.</dd>
+          </dl>
+        </div>
+
+        
+        <p class="ev-sub">Provider Access, security and consent scenarios from the latest published acceptance evidence.</p>
+        <div class="ev-snapshot" data-evidence="cms0057" data-src="/insights/cms-0057-f/cms0057-public-evidence.json" data-view="scenarios" data-capability="ProviderAccess,Security,Consent">
+          <p class="ev-fallback" data-evidence-fallback>
+            Loading the latest published CMS-0057-F acceptance evidence. It is generated in CI from the
+            acceptance suite at a named source revision and committed to this repository, so the status
+            shown here is the tested status rather than a claim typed into a page.
+          </p>
+          <div data-evidence-body hidden></div>
+        </div>
+
+        <div class="ev-limits">
+          <h3>What is not proven here</h3>
+          <ul>
+            <li><strong>No customer identity provider has been onboarded.</strong> There is a real difference between <em>the product implements production external-issuer trust</em> and <em>a particular payer's IdP is connected</em>. Only the first is claimed. Connecting a specific IdP is deployment work against the documented integration contract.</li>
+            <li><strong>No live attribution feed.</strong> Provider panels come from a configured catalog. It enforces for real &mdash; an empty catalog attributes nobody, and unknown provider, unknown member or blank ids all return false &mdash; but a roster integration from a payer source system is engagement work behind the same interface, and no code claims otherwise.</li>
+            <li><strong>Attribution is membership-level, not date-scoped.</strong> A panel entry does not yet carry an effective period the way a consent record does.</li>
+            <li><strong>Audit is emitted to the log, not to a durable audit store.</strong> The FHIR service has no audit sink.</li>
+            <li><strong>Cloud Health Office does not host a production authorization flow.</strong> It is a resource server; it advertises only the configured authorization server's own endpoints, and never an authorization flow it does not host.</li>
+            <li><strong>Passing every security scenario is not a security certification</strong>, a penetration test result, or an assessment by any third party.</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Related evidence</span>
+        <h2>Where to read next</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/evidence/payer-to-payer"><h3>Payer-to-Payer implementation evidence</h3><p>Where the imported clinical data these controls govern comes from.</p></a>
+          <a class="ev-card" href="/insights/cms-0057-f/acceptance-scenarios"><h3>CMS-0057-F implementation evidence</h3><p>The full scenario inventory and the live acceptance snapshot.</p></a>
+          <a class="ev-card" href="/trust"><h3>Trust and security</h3><p>Platform-level security posture, deployment model and data handling.</p></a>
+          <a class="ev-card" href="/docs/api"><h3>API documentation</h3><p>The FHIR surface these controls sit in front of.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>Bring your IdP's discovery document.</h2>
+          <p>The trust model is configuration an administrator controls: issuers, audiences, algorithms, claim mapping and permitted tenants. The onboarding conversation starts there.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact">Talk about a deployment &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice">Read the source on GitHub &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Evidence</h5>
+          <ul>
+            <li><a href="/evidence">Evidence Hub</a></li>
+            <li><a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F implementation evidence</a></li>
+            <li><a href="/evidence/davinci-interoperability">Da Vinci interoperability evidence</a></li>
+            <li><a href="/evidence/payer-to-payer">Payer-to-Payer implementation evidence</a></li>
+            <li><a href="/evidence/prior-authorization">CRD, DTR and PAS workflow evidence</a></li>
+            <li><a href="/evidence/provider-access-security">Provider Access security evidence</a></li>
+            <li><a href="/evidence/replace-vs-augment">Replace vs Augment architecture</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/prior-auth-guide">Prior Authorization Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

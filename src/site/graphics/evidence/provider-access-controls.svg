@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 560" role="img" aria-labelledby="pac-title pac-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="pac-title">The four independent controls a Provider Access request passes before member data is read</title>
+  <desc id="pac-desc">A request travels downward through four independent, mandatory controls. First, authentication: the token must be signed by a configured trusted issuer, with the audience of that issuer and a valid lifetime. Second, SMART scope enforcement: the client's granted scopes must permit reading this resource type, and tenant binding is resolved from the token, with a header that disagrees with the token refused as a conflict. Third, provider and member attribution: the member must be on this provider's panel. Fourth, purpose-scoped consent: the member must have authorized the ProviderAccess purpose specifically — a Payer-to-Payer consent, an unspecified consent and a lapsed consent all authorize nothing here. Only past all four is any member data assembled or read. To the side, the refusal path shows that not attributed, no consent, and no such member all return one identical 403 with the same FHIR OperationOutcome body, so a caller cannot tell them apart and cannot enumerate the membership; the distinguishing category is kept in the audit record instead. A footnote states that each control is independent: a correct scope implies neither attribution nor consent, attribution does not imply consent, and consent does not imply attribution.</desc>
+
+  <rect x="0" y="0" width="1120" height="560" fill="#05070a"/>
+
+  <defs>
+    <marker id="pac-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+    <marker id="pac-deny" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ff7a7a"/>
+    </marker>
+  </defs>
+
+  <!-- Request -->
+  <rect x="40" y="30" width="620" height="48" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)"/>
+  <text x="350" y="60" text-anchor="middle" font-size="14" font-weight="700" fill="#e0e0e0">GET /fhir/r4/{Resource}?patient=… with a provider-shaped token</text>
+
+  <!-- Control 1 -->
+  <line x1="350" y1="78" x2="350" y2="98" stroke="#00ffff" stroke-width="1.5" marker-end="url(#pac-arrow)"/>
+  <rect x="40" y="100" width="620" height="76" rx="10" fill="rgba(0,255,255,0.055)" stroke="#00ffff" stroke-width="1.5"/>
+  <text x="66" y="128" font-size="13.5" font-weight="700" fill="#00ffff">1 · Authentication</text>
+  <text x="66" y="150" font-size="11.5" fill="#a0a0a0">signed by a configured trusted issuer · issuer resolved first, and it supplies its own keys,</text>
+  <text x="66" y="168" font-size="11.5" fill="#a0a0a0">audiences, algorithms and claim mapping · no trust-on-first-use, no unsigned tokens</text>
+
+  <!-- Control 2 -->
+  <line x1="350" y1="176" x2="350" y2="196" stroke="#00ffff" stroke-width="1.5" marker-end="url(#pac-arrow)"/>
+  <rect x="40" y="198" width="620" height="76" rx="10" fill="rgba(0,255,255,0.055)" stroke="#00ffff" stroke-width="1.5"/>
+  <text x="66" y="226" font-size="13.5" font-weight="700" fill="#00ffff">2 · SMART scope and tenant</text>
+  <text x="66" y="248" font-size="11.5" fill="#a0a0a0">may this client read this resource type? · tenant comes from the token; a header that</text>
+  <text x="66" y="266" font-size="11.5" fill="#a0a0a0">disagrees with the token is a conflict, not an override</text>
+
+  <!-- Control 3 -->
+  <line x1="350" y1="274" x2="350" y2="294" stroke="#00ffff" stroke-width="1.5" marker-end="url(#pac-arrow)"/>
+  <rect x="40" y="296" width="620" height="76" rx="10" fill="rgba(0,255,255,0.055)" stroke="#00ffff" stroke-width="1.5"/>
+  <text x="66" y="324" font-size="13.5" font-weight="700" fill="#00ffff">3 · Attribution</text>
+  <text x="66" y="346" font-size="11.5" fill="#a0a0a0">is this member on this provider's panel? · a request naming no member is denied rather</text>
+  <text x="66" y="364" font-size="11.5" fill="#a0a0a0">than resolved, so a provider cannot search across the membership</text>
+
+  <!-- Control 4 -->
+  <line x1="350" y1="372" x2="350" y2="392" stroke="#00ffff" stroke-width="1.5" marker-end="url(#pac-arrow)"/>
+  <rect x="40" y="394" width="620" height="76" rx="10" fill="rgba(0,255,136,0.06)" stroke="#00ff88" stroke-width="1.5"/>
+  <text x="66" y="422" font-size="13.5" font-weight="700" fill="#00ff88">4 · Purpose-scoped consent</text>
+  <text x="66" y="444" font-size="11.5" fill="#a0a0a0">the ProviderAccess purpose specifically · a Payer-to-Payer consent, an Unspecified consent</text>
+  <text x="66" y="462" font-size="11.5" fill="#a0a0a0">and a lapsed consent each authorize nothing here</text>
+
+  <!-- Read -->
+  <line x1="350" y1="470" x2="350" y2="490" stroke="#00ff88" stroke-width="1.5" marker-end="url(#pac-arrow)"/>
+  <rect x="40" y="492" width="620" height="42" rx="10" fill="rgba(0,255,136,0.08)" stroke="rgba(0,255,136,0.4)"/>
+  <text x="350" y="518" text-anchor="middle" font-size="13.5" font-weight="700" fill="#00ff88">member data is assembled only past all four</text>
+
+  <!-- Refusal path -->
+  <rect x="700" y="100" width="380" height="370" rx="12" fill="rgba(255,122,122,0.04)" stroke="rgba(255,122,122,0.28)" stroke-width="1.4"/>
+  <text x="726" y="132" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">ANY ONE REFUSAL DENIES</text>
+  <text x="726" y="162" font-size="16" font-weight="800" fill="#ff7a7a">One uniform 403</text>
+  <text x="726" y="190" font-size="12" fill="#e0e0e0">Not attributed, no consent and no such</text>
+  <text x="726" y="210" font-size="12" fill="#e0e0e0">member return byte-identical bodies.</text>
+
+  <rect x="726" y="230" width="328" height="72" rx="8" fill="rgba(0,0,0,0.5)" stroke="rgba(255,122,122,0.25)"/>
+  <text x="742" y="254" font-size="11" fill="#ff7a7a" font-family="JetBrains Mono, monospace">403 OperationOutcome</text>
+  <text x="742" y="276" font-size="11" fill="#a0a0a0" font-family="JetBrains Mono, monospace">"Provider Access is not authorized</text>
+  <text x="742" y="292" font-size="11" fill="#a0a0a0" font-family="JetBrains Mono, monospace">for this request."</text>
+
+  <text x="726" y="332" font-size="12" fill="#a0a0a0">A differentiated refusal would confirm</text>
+  <text x="726" y="350" font-size="12" fill="#a0a0a0">which members exist and let a caller</text>
+  <text x="726" y="368" font-size="12" fill="#a0a0a0">enumerate the membership.</text>
+
+  <text x="726" y="404" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">KEPT IN THE AUDIT RECORD</text>
+  <text x="726" y="428" font-size="11.5" fill="#a0a0a0" font-family="JetBrains Mono, monospace">NotAttributed · ConsentDenied</text>
+  <text x="726" y="446" font-size="11.5" fill="#a0a0a0" font-family="JetBrains Mono, monospace">NoMemberContext · NoCallerIdentity</text>
+
+  <line x1="662" y1="138" x2="698" y2="138" stroke="#ff7a7a" stroke-width="1.3" marker-end="url(#pac-deny)"/>
+  <line x1="662" y1="236" x2="698" y2="236" stroke="#ff7a7a" stroke-width="1.3" marker-end="url(#pac-deny)"/>
+  <line x1="662" y1="334" x2="698" y2="334" stroke="#ff7a7a" stroke-width="1.3" marker-end="url(#pac-deny)"/>
+  <line x1="662" y1="432" x2="698" y2="432" stroke="#ff7a7a" stroke-width="1.3" marker-end="url(#pac-deny)"/>
+
+  <text x="560" y="552" text-anchor="middle" font-size="12" fill="#909090">The controls are independent: a correct scope implies neither attribution nor consent; attribution does not imply consent; consent does not imply attribution.</text>
+</svg>

@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 600" role="img" aria-labelledby="cdp2-title cdp2-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="cdp2-title">How CRD, DTR and PAS chain into one prior-authorization workflow</title>
+  <desc id="cdp2-desc">A four-stage chain read left to right, with the hand-off between each stage named. First, a provider signs an order and CRD answers whether prior authorization is required; the payer's coverage determination arrives in the CDS Hooks system action, not necessarily in a card, and it names a questionnaire canonical. Second, that canonical — chosen by the payer, not by the requester — is followed into the DTR questionnaire-package operation, which returns a package containing exactly the questionnaire and the dependencies that questionnaire declares. Third, the completed documentation is submitted with PAS Claim dollar-submit, which creates one authorization record carrying a preAuthRef authorization number. Fourth, PAS Claim dollar-inquire reads that same record; it is a read projection with no store and no status of its own, so an inquiry can never move a decision. Below the chain, the pended branch: when the payer returns review action A4 and names what documentation it wants, a CDex Task Attachment Request is served for retrieval, the provider answers with a submit-attachment operation, and the authorization returns to In Review — never directly to approved.</desc>
+
+  <rect x="0" y="0" width="1120" height="600" fill="#05070a"/>
+
+  <defs>
+    <marker id="cdp2-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+    <marker id="cdp2-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ffcc66"/>
+    </marker>
+  </defs>
+
+  <text x="24" y="38" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">THE CHAIN — EACH STAGE HANDS THE NEXT ONE ITS INPUT</text>
+
+  <!-- CRD -->
+  <rect x="24" y="56" width="240" height="164" rx="12" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.6"/>
+  <text x="144" y="88" text-anchor="middle" font-size="21" font-weight="800" fill="#00ffff">CRD</text>
+  <text x="144" y="110" text-anchor="middle" font-size="12.5" fill="#e0e0e0">Is prior authorization required?</text>
+  <text x="144" y="140" text-anchor="middle" font-size="11.5" fill="#a0a0a0">CDS Hooks order-sign</text>
+  <text x="144" y="160" text-anchor="middle" font-size="11.5" fill="#a0a0a0">coverage-information extension</text>
+  <text x="144" y="180" text-anchor="middle" font-size="11.5" fill="#a0a0a0">covered · pa-needed · doc-needed</text>
+  <text x="144" y="204" text-anchor="middle" font-size="11" fill="#ffcc66">the answer arrives in the system action</text>
+
+  <!-- DTR -->
+  <rect x="304" y="56" width="240" height="164" rx="12" fill="rgba(0,180,255,0.06)" stroke="#00b4ff" stroke-width="1.6"/>
+  <text x="424" y="88" text-anchor="middle" font-size="21" font-weight="800" fill="#00b4ff">DTR</text>
+  <text x="424" y="110" text-anchor="middle" font-size="12.5" fill="#e0e0e0">Collect what the payer asked for</text>
+  <text x="424" y="140" text-anchor="middle" font-size="11.5" fill="#a0a0a0">$questionnaire-package</text>
+  <text x="424" y="160" text-anchor="middle" font-size="11.5" fill="#a0a0a0">Questionnaire + declared dependencies</text>
+  <text x="424" y="180" text-anchor="middle" font-size="11.5" fill="#a0a0a0">QuestionnaireResponse completed</text>
+  <text x="424" y="204" text-anchor="middle" font-size="11" fill="#ffcc66">the requester never picks the questionnaire</text>
+
+  <!-- PAS submit -->
+  <rect x="584" y="56" width="240" height="164" rx="12" fill="rgba(0,255,136,0.06)" stroke="#00ff88" stroke-width="1.6"/>
+  <text x="704" y="88" text-anchor="middle" font-size="21" font-weight="800" fill="#00ff88">PAS $submit</text>
+  <text x="704" y="110" text-anchor="middle" font-size="12.5" fill="#e0e0e0">Request the authorization</text>
+  <text x="704" y="140" text-anchor="middle" font-size="11.5" fill="#a0a0a0">Claim, use = preauthorization</text>
+  <text x="704" y="160" text-anchor="middle" font-size="11.5" fill="#a0a0a0">ClaimResponse + preAuthRef</text>
+  <text x="704" y="180" text-anchor="middle" font-size="11.5" fill="#a0a0a0">X12 278 review action A1–A4</text>
+  <text x="704" y="204" text-anchor="middle" font-size="11" fill="#ffcc66">one authorization record is created</text>
+
+  <!-- PAS inquire -->
+  <rect x="864" y="56" width="232" height="164" rx="12" fill="rgba(0,255,136,0.06)" stroke="#00ff88" stroke-width="1.6"/>
+  <text x="980" y="88" text-anchor="middle" font-size="21" font-weight="800" fill="#00ff88">PAS $inquire</text>
+  <text x="980" y="110" text-anchor="middle" font-size="12.5" fill="#e0e0e0">Ask where it stands</text>
+  <text x="980" y="140" text-anchor="middle" font-size="11.5" fill="#a0a0a0">read projection of that record</text>
+  <text x="980" y="160" text-anchor="middle" font-size="11.5" fill="#a0a0a0">no store, no status of its own</text>
+  <text x="980" y="180" text-anchor="middle" font-size="11.5" fill="#a0a0a0">corroborating key required</text>
+  <text x="980" y="204" text-anchor="middle" font-size="11" fill="#ffcc66">repeating it can never move a decision</text>
+
+  <!-- Hand-off labels -->
+  <line x1="264" y1="138" x2="302" y2="138" stroke="#00ffff" stroke-width="1.6" marker-end="url(#cdp2-arrow)"/>
+  <text x="283" y="126" text-anchor="middle" font-size="10" fill="#00ffff" font-family="JetBrains Mono, monospace">questionnaire</text>
+  <text x="283" y="252" text-anchor="middle" font-size="10.5" fill="#a0a0a0" font-family="JetBrains Mono, monospace">canonical</text>
+
+  <line x1="544" y1="138" x2="582" y2="138" stroke="#00ffff" stroke-width="1.6" marker-end="url(#cdp2-arrow)"/>
+  <text x="563" y="252" text-anchor="middle" font-size="10.5" fill="#a0a0a0" font-family="JetBrains Mono, monospace">response</text>
+
+  <line x1="824" y1="138" x2="862" y2="138" stroke="#00ffff" stroke-width="1.6" marker-end="url(#cdp2-arrow)"/>
+  <text x="843" y="252" text-anchor="middle" font-size="10.5" fill="#a0a0a0" font-family="JetBrains Mono, monospace">preAuthRef</text>
+
+  <text x="283" y="238" text-anchor="middle" font-size="10" fill="#606060" font-family="JetBrains Mono, monospace">HANDS OVER</text>
+  <text x="563" y="238" text-anchor="middle" font-size="10" fill="#606060" font-family="JetBrains Mono, monospace">HANDS OVER</text>
+  <text x="843" y="238" text-anchor="middle" font-size="10" fill="#606060" font-family="JetBrains Mono, monospace">HANDS OVER</text>
+
+  <!-- Pended branch -->
+  <text x="24" y="308" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">THE PENDED BRANCH — WHAT A4 ACTUALLY REQUIRES</text>
+
+  <rect x="24" y="326" width="1072" height="184" rx="14" fill="rgba(255,204,102,0.035)" stroke="rgba(255,204,102,0.3)" stroke-width="1.4"/>
+
+  <rect x="52" y="356" width="228" height="126" rx="10" fill="rgba(0,0,0,0.45)" stroke="rgba(255,204,102,0.28)"/>
+  <text x="166" y="382" text-anchor="middle" font-size="13" font-weight="700" fill="#ffcc66">A4 · pended</text>
+  <text x="166" y="406" text-anchor="middle" font-size="11.5" fill="#a0a0a0">a status code is not a request.</text>
+  <text x="166" y="426" text-anchor="middle" font-size="11.5" fill="#a0a0a0">A request is raised only when</text>
+  <text x="166" y="446" text-anchor="middle" font-size="11.5" fill="#a0a0a0">the decision also names what</text>
+  <text x="166" y="466" text-anchor="middle" font-size="11.5" fill="#a0a0a0">documentation is wanted.</text>
+
+  <rect x="316" y="356" width="228" height="126" rx="10" fill="rgba(0,0,0,0.45)" stroke="rgba(255,204,102,0.28)"/>
+  <text x="430" y="382" text-anchor="middle" font-size="13" font-weight="700" fill="#ffcc66">CDex Task</text>
+  <text x="430" y="406" text-anchor="middle" font-size="11.5" fill="#a0a0a0">Task Attachment Request,</text>
+  <text x="430" y="426" text-anchor="middle" font-size="11.5" fill="#a0a0a0">served for retrieval at</text>
+  <text x="430" y="446" text-anchor="middle" font-size="11.5" fill="#a0a0a0">GET Task/{id}, focused on</text>
+  <text x="430" y="466" text-anchor="middle" font-size="11.5" fill="#a0a0a0">the authorization number.</text>
+
+  <rect x="580" y="356" width="228" height="126" rx="10" fill="rgba(0,0,0,0.45)" stroke="rgba(255,204,102,0.28)"/>
+  <text x="694" y="382" text-anchor="middle" font-size="13" font-weight="700" fill="#ffcc66">$submit-attachment</text>
+  <text x="694" y="406" text-anchor="middle" font-size="11.5" fill="#a0a0a0">the provider answers.</text>
+  <text x="694" y="426" text-anchor="middle" font-size="11.5" fill="#a0a0a0">Payload controls, provider</text>
+  <text x="694" y="446" text-anchor="middle" font-size="11.5" fill="#a0a0a0">binding and idempotency</text>
+  <text x="694" y="466" text-anchor="middle" font-size="11.5" fill="#a0a0a0">applied at intake.</text>
+
+  <rect x="844" y="356" width="224" height="126" rx="10" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.28)"/>
+  <text x="956" y="382" text-anchor="middle" font-size="13" font-weight="700" fill="#00ff88">Back to In Review</text>
+  <text x="956" y="406" text-anchor="middle" font-size="11.5" fill="#a0a0a0">documentation received</text>
+  <text x="956" y="426" text-anchor="middle" font-size="11.5" fill="#a0a0a0">returns the authorization</text>
+  <text x="956" y="446" text-anchor="middle" font-size="11.5" fill="#a0a0a0">to review — never straight</text>
+  <text x="956" y="466" text-anchor="middle" font-size="11.5" fill="#a0a0a0">to approved.</text>
+
+  <line x1="280" y1="419" x2="314" y2="419" stroke="#ffcc66" stroke-width="1.5" marker-end="url(#cdp2-amber)"/>
+  <line x1="544" y1="419" x2="578" y2="419" stroke="#ffcc66" stroke-width="1.5" marker-end="url(#cdp2-amber)"/>
+  <line x1="808" y1="419" x2="842" y2="419" stroke="#ffcc66" stroke-width="1.5" marker-end="url(#cdp2-amber)"/>
+
+  <line x1="704" y1="220" x2="704" y2="290" stroke="#ffcc66" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <line x1="704" y1="290" x2="168" y2="290" stroke="#ffcc66" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <line x1="168" y1="290" x2="168" y2="354" stroke="#ffcc66" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#cdp2-amber)"/>
+
+  <line x1="956" y1="482" x2="956" y2="530" stroke="#00ff88" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="956" y="548" text-anchor="middle" font-size="11.5" fill="#00ff88">$inquire reports the new status on the next call</text>
+
+  <text x="560" y="580" text-anchor="middle" font-size="12" fill="#909090">Every stage above is exercised by the acceptance suite on synthetic data. CRD, DTR and PAS $submit are also exercised against an independently developed HL7 Da Vinci implementation.</text>
+</svg>
