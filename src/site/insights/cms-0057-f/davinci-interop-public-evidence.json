@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "davinci-interoperability",
-  "generatedAtUtc": "2026-09-08T00:33:38Z",
-  "sourceCommit": "ee16b215e4484cc6499958d4bfbca71d19b824dc",
-  "sourceCommitShort": "ee16b215e448",
-  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/ee16b215e4484cc6499958d4bfbca71d19b824dc",
+  "generatedAtUtc": "2026-09-08T15:48:10Z",
+  "sourceCommit": "048029184e1640b5ca196631e52646726533921d",
+  "sourceCommitShort": "048029184e16",
+  "sourceCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/048029184e1640b5ca196631e52646726533921d",
   "inventoryReviewedUtc": "2026-09-06T00:00:00Z",
   "dataClassification": "synthetic",
-  "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result.",
+  "relationshipToCmsAcceptance": "Independent of CMS-0057-F acceptance evidence. External interoperability results never change a CMS-0057-F scenario status, and CMS acceptance statuses never imply an interoperability result. See docs/interop/davinci.md and docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md.",
   "targets": [
     {
       "name": "HL7-DaVinci/br-payer",
@@ -109,9 +109,9 @@
       "implemented": true,
       "linkedFromScenario": null,
       "description": "CHO's harness submits a synthetic PAS request bundle to the independent payer RI's Claim/$submit and parses/validates the PAS response bundle with the same FHIR parser CHO uses.",
-      "status": "NotPublished",
+      "status": "Passed",
       "linkedArtifact": null,
-      "testedVersion": null
+      "testedVersion": "sha256:6074aebc39929a00cf93c1efa28c227eb46aab2418afa208eb293133cb150d8c"
     },
     {
       "id": "BR-CRD-001",
@@ -122,9 +122,9 @@
       "implemented": true,
       "linkedFromScenario": null,
       "description": "CHO acts as the provider-side CRD client: it discovers the payer RI's CDS Hooks services, selects the order-sign CRD service from discovery, invokes it with synthetic draft orders, and validates the CDS Hooks response and the Da Vinci coverage-information determinations it carries.",
-      "status": "NotPublished",
+      "status": "Passed",
       "linkedArtifact": null,
-      "testedVersion": null
+      "testedVersion": "sha256:6074aebc39929a00cf93c1efa28c227eb46aab2418afa208eb293133cb150d8c"
     },
     {
       "id": "BR-DTR-001",
@@ -135,9 +135,9 @@
       "implemented": true,
       "linkedFromScenario": "BR-CRD-001",
       "description": "CHO acts as the provider-side DTR client: it enters from the payer's own CRD determination, takes the DTR questionnaire canonical the payer named, requests exactly that canonical from the payer's $questionnaire-package, and validates the returned package and its declared dependencies.",
-      "status": "NotPublished",
-      "linkedArtifact": null,
-      "testedVersion": null
+      "status": "Passed",
+      "linkedArtifact": "http://example.org/fhir/Questionnaire/PriorAuthRequired",
+      "testedVersion": "sha256:6074aebc39929a00cf93c1efa28c227eb46aab2418afa208eb293133cb150d8c"
     },
     {
       "id": "BR-PAS-INQUIRE-001",
@@ -148,7 +148,7 @@
       "implemented": false,
       "linkedFromScenario": null,
       "description": "Inquire on a prior authorization previously established by BR-PAS-SUBMIT-001 and validate the returned Parameters/responseBundle set.",
-      "status": "NotImplemented",
+      "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
     },
@@ -161,7 +161,7 @@
       "implemented": false,
       "linkedFromScenario": null,
       "description": "Run the davinci-dtr-test-kit dtr_payer_server suite with CHO's FHIR base as the suite input and map Inferno result statuses into InteropResult.",
-      "status": "NotImplemented",
+      "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
     },
@@ -174,7 +174,7 @@
       "implemented": false,
       "linkedFromScenario": null,
       "description": "Run the davinci-pdex-test-kit pdex_payer_server suite with CHO's FHIR base as the suite input.",
-      "status": "NotImplemented",
+      "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
     },
@@ -187,12 +187,160 @@
       "implemented": false,
       "linkedFromScenario": null,
       "description": "Run the davinci-pdex-test-kit pdex_payer_client suite with CHO acting as the payer client performing $member-match and clinical data retrieval.",
-      "status": "NotImplemented",
+      "status": "NotRun",
       "linkedArtifact": null,
       "testedVersion": null
     }
   ],
-  "latestRun": null,
+  "latestRun": {
+    "generatedAtUtc": "2026-09-08T15:47:57.7471016+00:00",
+    "environment": "CI",
+    "choCommit": "048029184e1640b5ca196631e52646726533921d",
+    "choCommitUrl": "https://github.com/aurelianware/cloudhealthoffice/commit/048029184e1640b5ca196631e52646726533921d",
+    "dataClassification": "synthetic",
+    "summary": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "notRun": 4,
+      "total": 7
+    },
+    "findings": [
+      {
+        "code": "crd.discovery.services",
+        "severity": "Info",
+        "summary": "The payer advertises 6 CRD service(s): appointment-book-crd[appointment-book], encounter-discharge-crd[encounter-discharge], encounter-start-crd[encounter-start], order-dispatch-crd[order-dispatch], order-select-crd[order-select], order-sign-crd[order-sign]. Selected 'order-sign-crd' for hook 'order-sign' by hook match, not list position.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "crd.discovery.prefetch",
+        "severity": "Info",
+        "summary": "Service 'order-sign-crd' advertises prefetch keys: coverage, deviceHistory, encounter, medicationHistory, patient, practitioner, practitionerRoles, questionnaireResponses, serviceHistory.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "crd.determination.priorAuthRequired",
+        "severity": "Info",
+        "summary": "Billing code L8000 -> covered=covered, pa-needed=auth-needed, doc-needed=no-doc, questionnaire=present, billingCode=L8000.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "crd.determination.questionnaireOffered",
+        "severity": "Info",
+        "summary": "The payer named a DTR questionnaire alongside its prior-authorization determination, which is the CRD-to-DTR hand-off a later scenario can follow.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "crd.determination.contrast",
+        "severity": "Info",
+        "summary": "Three billing codes produced three distinct determinations — L8000: covered=covered, pa-needed=auth-needed, doc-needed=no-doc, questionnaire=present, billingCode=L8000; J3490: covered=not-covered, billingCode=J3490; E0100: covered=conditional, info-needed=detail-code.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "crd.surface.hooks",
+        "severity": "Info",
+        "summary": "CHO advertises CRD hooks [order-select, order-sign]; the payer advertises [appointment-book, encounter-discharge, encounter-start, order-dispatch, order-select, order-sign].",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "crd.surface.serviceIdDiffers",
+        "severity": "Info",
+        "summary": "CHO and the payer use different service ids for hook 'order-select'. Service ids are server-chosen and clients resolve them from discovery, so this is expected rather than a defect — recorded because a client that hard-coded an id would break on it.",
+        "choObserved": "cho-order-select",
+        "externalObserved": "order-select-crd"
+      },
+      {
+        "code": "crd.surface.noVersionExtension",
+        "severity": "Warning",
+        "summary": "CHO's CDS Hooks discovery does not advertise a davinci-crd.version extension, which the payer does. A CRD client cannot tell from CHO's discovery which CRD version CHO implements. Recorded as an observation for follow-up, not adjudicated here.",
+        "choObserved": "no davinci-crd.version extension",
+        "externalObserved": "davinci-crd.version advertised"
+      },
+      {
+        "code": "dtr.chain.crdServiceResolved",
+        "severity": "Info",
+        "summary": "Resolved CRD service 'order-sign-crd' for hook 'order-sign' from discovery, by hook match rather than a hard-coded id.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "dtr.discovery.operationAdvertised",
+        "severity": "Info",
+        "summary": "The payer advertises Questionnaire/$questionnaire-package under http://hl7.org/fhir/us/davinci-dtr/OperationDefinition/questionnaire-package.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "dtr.chain.L8000",
+        "severity": "Info",
+        "summary": "CRD (L8000) named http://example.org/fhir/Questionnaire/PriorAuthRequired; $questionnaire-package returned resources: Questionnaire=1, QuestionnaireResponse=1; questionnaires: http://example.org/fhir/Questionnaire/PriorAuthRequired; outcome issues: 1",
+        "choObserved": null,
+        "externalObserved": "http://example.org/fhir/Questionnaire/PriorAuthRequired"
+      },
+      {
+        "code": "dtr.package.noDeclaredDependencies.L8000",
+        "severity": "Info",
+        "summary": "http://example.org/fhir/Questionnaire/PriorAuthRequired declares no Library, ValueSet or sub-questionnaire dependencies, so the package is complete without them. Recorded so a future upstream change that adds a dependency is visible as a change rather than passing silently.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "dtr.package.outcomeIssue",
+        "severity": "Info",
+        "summary": "The payer reported alongside the package for L8000: Warning/Informational: Patient demographic pre-population skipped: no Patient in this payer's records matched Coverage.beneficiary.identifier or Coverage.subscriberId (sender-supplied reference 'Patient/interop-member-001' is not trusted as a lookup key to avoid PHI leakage on id collision). Supply Coverage.subscriberId or Coverage.beneficiary.identifier matching a payer member identifier.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "dtr.chain.E0466",
+        "severity": "Info",
+        "summary": "CRD (E0466) named http://example.org/fhir/Questionnaire/DocumentationRequired; $questionnaire-package returned resources: Questionnaire=1, QuestionnaireResponse=1; questionnaires: http://example.org/fhir/Questionnaire/DocumentationRequired; outcome issues: 1",
+        "choObserved": null,
+        "externalObserved": "http://example.org/fhir/Questionnaire/DocumentationRequired"
+      },
+      {
+        "code": "dtr.package.noDeclaredDependencies.E0466",
+        "severity": "Info",
+        "summary": "http://example.org/fhir/Questionnaire/DocumentationRequired declares no Library, ValueSet or sub-questionnaire dependencies, so the package is complete without them. Recorded so a future upstream change that adds a dependency is visible as a change rather than passing silently.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "dtr.package.outcomeIssue",
+        "severity": "Info",
+        "summary": "The payer reported alongside the package for E0466: Warning/Informational: Patient demographic pre-population skipped: no Patient in this payer's records matched Coverage.beneficiary.identifier or Coverage.subscriberId (sender-supplied reference 'Patient/interop-member-001' is not trusted as a lookup key to avoid PHI leakage on id collision). Supply Coverage.subscriberId or Coverage.beneficiary.identifier matching a payer member identifier.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "dtr.chain.contrast",
+        "severity": "Info",
+        "summary": "Billing code L8000 led to http://example.org/fhir/Questionnaire/PriorAuthRequired; E0466 led to http://example.org/fhir/Questionnaire/DocumentationRequired.",
+        "choObserved": null,
+        "externalObserved": null
+      },
+      {
+        "code": "pas.operation.inquire.canonicalMismatch",
+        "severity": "Warning",
+        "summary": "CHO and the payer RI advertise different OperationDefinition canonicals for Claim/$inquire. Recorded as an interoperability finding; which side matches the PAS IG is for the follow-up PR to establish against the published IG, not for the harness to assume.",
+        "choObserved": "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquire",
+        "externalObserved": "http://hl7.org/fhir/us/davinci-pas/OperationDefinition/Claim-inquiry"
+      },
+      {
+        "code": "pas.reviewAction.observed",
+        "severity": "Info",
+        "summary": "The payer RI returned review action code(s) [A3] for the submitted synthetic item.",
+        "choObserved": null,
+        "externalObserved": null
+      }
+    ]
+  },
   "disclaimers": [
     "External interoperability evidence shows that Cloud Health Office exchanged standards-conformant requests and responses with an independently developed implementation it does not own. It is not CMS certification, ONC certification, or an HL7 endorsement.",
     "Every exchange uses synthetic data against a pinned reference implementation. A pin represents the version tested, not every implementation of the same specification.",
