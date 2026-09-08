@@ -47,6 +47,22 @@
     NotImplemented: { cls: 'na', label: 'Defined, not executed' }
   };
 
+  // Whether a pinned external implementation is actually driven by a scenario.
+  // Keyed by the string form of the boolean rather than by the boolean itself:
+  // an object literal written `{ true: … }` has the *string* key "true", and
+  // reading it back with a raw boolean would be relying on implicit coercion.
+  var EXERCISED_STATUS = {
+    'true': { cls: 'pass', label: 'Exercised' },
+    'false': { cls: 'na', label: 'Pinned only' }
+  };
+
+  // Findings are observations, not verdicts: a Warning never fails a run.
+  var FINDING_SEVERITY = {
+    Error: { cls: 'gap', label: 'Error' },
+    Warning: { cls: 'part', label: 'Warning' },
+    Info: { cls: 'info', label: 'Info' }
+  };
+
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -294,7 +310,7 @@
             .join(' · ') || '—'
         )
       );
-      tr.appendChild(pillCell({ true: { cls: 'pass', label: 'Exercised' }, false: { cls: 'na', label: 'Pinned only' } }, String(t.exercised)));
+      tr.appendChild(pillCell(EXERCISED_STATUS, t.exercised === true ? 'true' : 'false'));
       return tr;
     });
     if (targetRows.length) {
@@ -302,14 +318,13 @@
       body.appendChild(table(['Implementation', 'Protocols', 'Pin', 'IG versions', 'Exercised'], targetRows));
     }
 
-    // Findings are observations, not verdicts: a Warning does not fail a run.
     if (run && run.findings && run.findings.length) {
       var findingRows = run.findings.map(function (f) {
         var tr = document.createElement('tr');
         var codeTd = document.createElement('td');
         codeTd.appendChild(el('code', null, f.code));
         tr.appendChild(codeTd);
-        tr.appendChild(pillCell({ Warning: { cls: 'part', label: 'Warning' }, Info: { cls: 'info', label: 'Info' }, Error: { cls: 'gap', label: 'Error' } }, f.severity));
+        tr.appendChild(pillCell(FINDING_SEVERITY, f.severity));
         var summaryTd = document.createElement('td');
         summaryTd.appendChild(el('span', 'ev-what', f.summary));
         if (f.choObserved || f.externalObserved) {
