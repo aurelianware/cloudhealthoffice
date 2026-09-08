@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 560" role="img" aria-labelledby="rva-title rva-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="rva-title">Replace and Augment: two deployment patterns behind the same FHIR boundary</title>
+  <desc id="rva-desc">A side-by-side comparison of two Cloud Health Office deployment patterns. Both present the same FHIR and Da Vinci boundary to external callers — patient apps, provider systems and other payers. In Replace mode, requests pass from the FHIR and Da Vinci boundary into Cloud Health Office, which serves them from its own native authorization, member, claims and consent capabilities; Cloud Health Office is the authoritative system of record, and this is the mode the acceptance suite proves. In Augment mode, requests pass from the same boundary into Cloud Health Office, which acts as the interoperability and API layer in front of an existing core administration platform such as QNXT, Facets or HealthEdge through a per-engagement adapter; the external core remains authoritative. The diagram notes that the external-core adapters in this repository are documented stubs, so Augment scenarios are scored separately as integration capability and appear as tracked gaps rather than as product capability.</desc>
+
+  <rect x="0" y="0" width="1120" height="560" fill="#05070a"/>
+
+  <!-- Shared boundary band -->
+  <rect x="24" y="24" width="1072" height="70" rx="12" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.4"/>
+  <text x="560" y="52" text-anchor="middle" font-size="15" font-weight="800" fill="#00ffff">The same FHIR / Da Vinci boundary in both patterns</text>
+  <text x="560" y="76" text-anchor="middle" font-size="12.5" fill="#a0a0a0">Patient Access · Provider Access · Payer-to-Payer · CRD, DTR, PAS, CDex · SMART on FHIR</text>
+
+  <line x1="290" y1="94" x2="290" y2="122" stroke="#00ffff" stroke-width="1.4" marker-end="url(#rva-arrow)"/>
+  <line x1="830" y1="94" x2="830" y2="122" stroke="#00b4ff" stroke-width="1.4" marker-end="url(#rva-arrowb)"/>
+
+  <defs>
+    <marker id="rva-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+    <marker id="rva-arrowb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00b4ff"/>
+    </marker>
+  </defs>
+
+  <line x1="560" y1="118" x2="560" y2="520" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="4 6"/>
+
+  <!-- ── LEFT: Replace ── -->
+  <text x="290" y="150" text-anchor="middle" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">PATTERN — REPLACE</text>
+  <text x="290" y="180" text-anchor="middle" font-size="20" font-weight="800" fill="#00ff88">Cloud Health Office is the backend</text>
+
+  <rect x="56" y="200" width="468" height="122" rx="12" fill="rgba(0,255,136,0.06)" stroke="#00ff88" stroke-width="1.6"/>
+  <text x="290" y="228" text-anchor="middle" font-size="15" font-weight="700" fill="#00ff88">Cloud Health Office</text>
+  <text x="290" y="252" text-anchor="middle" font-size="12" fill="#e0e0e0">authoritative system of record</text>
+  <g font-size="11.5" fill="#a0a0a0" text-anchor="middle">
+    <text x="150" y="282">Authorization</text>
+    <text x="290" y="282">Member / coverage</text>
+    <text x="430" y="282">Claims</text>
+    <text x="150" y="302">Consent registry</text>
+    <text x="290" y="302">Prior-auth rules</text>
+    <text x="430" y="302">Metrics</text>
+  </g>
+
+  <rect x="56" y="346" width="468" height="60" rx="10" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.22)"/>
+  <text x="76" y="370" font-size="11.5" font-weight="600" fill="#00ff88" font-family="JetBrains Mono, monospace">Cms0057:Authorization:OperatingMode = "Replace"</text>
+  <text x="76" y="392" font-size="12" fill="#a0a0a0">the default; selection fails loudly rather than falling back</text>
+
+  <rect x="56" y="424" width="468" height="96" rx="10" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+  <text x="76" y="448" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">WHAT THE EVIDENCE COVERS</text>
+  <text x="76" y="472" font-size="12.5" fill="#e0e0e0">Product capability — the acceptance suite runs here.</text>
+  <text x="76" y="494" font-size="12" fill="#a0a0a0">Every scenario is scored against the CHO-native backend,</text>
+  <text x="76" y="512" font-size="12" fill="#a0a0a0">on synthetic data, at a named source revision.</text>
+
+  <!-- ── RIGHT: Augment ── -->
+  <text x="830" y="150" text-anchor="middle" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">PATTERN — AUGMENT</text>
+  <text x="830" y="180" text-anchor="middle" font-size="20" font-weight="800" fill="#00b4ff">Cloud Health Office in front of your core</text>
+
+  <rect x="596" y="200" width="468" height="66" rx="12" fill="rgba(0,180,255,0.06)" stroke="#00b4ff" stroke-width="1.6"/>
+  <text x="830" y="226" text-anchor="middle" font-size="15" font-weight="700" fill="#00b4ff">Cloud Health Office</text>
+  <text x="830" y="250" text-anchor="middle" font-size="12" fill="#e0e0e0">interoperability / API layer — not the record</text>
+
+  <line x1="830" y1="266" x2="830" y2="292" stroke="#00b4ff" stroke-width="1.4" marker-end="url(#rva-arrowb)"/>
+
+  <rect x="596" y="294" width="468" height="46" rx="10" fill="rgba(0,0,0,0.5)" stroke="rgba(255,204,102,0.35)" stroke-dasharray="5 4"/>
+  <text x="830" y="322" text-anchor="middle" font-size="12.5" fill="#ffcc66">Per-engagement core adapter — documented stub in this repository</text>
+
+  <line x1="830" y1="340" x2="830" y2="366" stroke="#00b4ff" stroke-width="1.4" marker-end="url(#rva-arrowb)"/>
+
+  <rect x="596" y="368" width="468" height="38" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)"/>
+  <text x="830" y="392" text-anchor="middle" font-size="13" fill="#e0e0e0">QNXT · Facets · HealthEdge · another core — stays authoritative</text>
+
+  <rect x="596" y="424" width="468" height="96" rx="10" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+  <text x="616" y="448" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">WHAT THE EVIDENCE COVERS</text>
+  <text x="616" y="472" font-size="12.5" fill="#e0e0e0">Integration capability — scored on its own axis.</text>
+  <text x="616" y="494" font-size="12" fill="#a0a0a0">The adapters are stubs, so these rows read GAP or N/A.</text>
+  <text x="616" y="512" font-size="12" fill="#a0a0a0">A core gap is not a Cloud Health Office product gap.</text>
+</svg>

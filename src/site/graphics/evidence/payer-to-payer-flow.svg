@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 620" role="img" aria-labelledby="p2p-title p2p-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="p2p-title">Payer-to-Payer exchange, from coverage transition to Patient and Provider Access</title>
+  <desc id="p2p-desc">A nine-stage outbound Payer-to-Payer workflow with Cloud Health Office acting as the new payer. A coverage transition starts the exchange. Cloud Health Office then resolves tenant scope and prior-payer coverage from its own data; resolves the prior payer's endpoint from trusted configuration, never from a caller-supplied URL; evaluates the member's Payer-to-Payer purpose consent server-side before anything leaves; calls the prior payer's Patient dollar-member-match and treats no match or an ambiguous match as terminal; re-confirms consent and requests the member data export; validates the returned FHIR bundle so that it parses, carries exactly one Patient, and that Patient is the matched member; stamps a Provenance record naming the source payer, exchange and receipt time; and durably ingests the package into an import store that is physically separate from Cloud Health Office's authoritative member, coverage and claims stores. Imported clinical resources are then served through the Patient Access and Provider Access FHIR read paths, governed by SMART scopes, attribution and consent. Three gates are highlighted along the path: consent is checked before any data leaves, endpoints come only from configuration, and the exchange reaches Completed only once the import commits.</desc>
+
+  <rect x="0" y="0" width="1120" height="620" fill="#05070a"/>
+
+  <defs>
+    <marker id="p2p-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+  </defs>
+
+  <!-- Lane labels -->
+  <text x="24" y="40" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">CLOUD HEALTH OFFICE — NEW PAYER</text>
+  <text x="24" y="330" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">PRIOR PAYER — INDEPENDENT SYSTEM</text>
+  <text x="24" y="452" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">AFTER INGESTION</text>
+
+  <!-- Lane 1: CHO gates -->
+  <g>
+    <rect x="24" y="56" width="200" height="86" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.4"/>
+    <text x="124" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#00ffff">1 · Coverage transition</text>
+    <text x="124" y="104" text-anchor="middle" font-size="11.5" fill="#a0a0a0">tenant scope, member and</text>
+    <text x="124" y="122" text-anchor="middle" font-size="11.5" fill="#a0a0a0">prior coverage from CHO data</text>
+
+    <rect x="248" y="56" width="200" height="86" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.4"/>
+    <text x="348" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#00ffff">2 · Endpoint resolution</text>
+    <text x="348" y="104" text-anchor="middle" font-size="11.5" fill="#a0a0a0">payer id → configured HTTPS</text>
+    <text x="348" y="122" text-anchor="middle" font-size="11.5" fill="#a0a0a0">endpoint; no redirects followed</text>
+
+    <rect x="472" y="56" width="200" height="86" rx="10" fill="rgba(0,255,136,0.07)" stroke="#00ff88" stroke-width="1.6"/>
+    <text x="572" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#00ff88">3 · Consent gate</text>
+    <text x="572" y="104" text-anchor="middle" font-size="11.5" fill="#a0a0a0">PayerToPayerExchange purpose,</text>
+    <text x="572" y="122" text-anchor="middle" font-size="11.5" fill="#a0a0a0">evaluated before anything leaves</text>
+
+    <rect x="696" y="56" width="200" height="86" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.4"/>
+    <text x="796" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#00ffff">4 · $member-match</text>
+    <text x="796" y="104" text-anchor="middle" font-size="11.5" fill="#a0a0a0">exactly one member, or the</text>
+    <text x="796" y="122" text-anchor="middle" font-size="11.5" fill="#a0a0a0">exchange ends NoMatch/Ambiguous</text>
+
+    <rect x="920" y="56" width="176" height="86" rx="10" fill="rgba(0,255,136,0.07)" stroke="#00ff88" stroke-width="1.6"/>
+    <text x="1008" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#00ff88">5 · Re-check consent</text>
+    <text x="1008" y="104" text-anchor="middle" font-size="11.5" fill="#a0a0a0">a revocation in flight</text>
+    <text x="1008" y="122" text-anchor="middle" font-size="11.5" fill="#a0a0a0">stops the data request</text>
+  </g>
+
+  <line x1="224" y1="99" x2="246" y2="99" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <line x1="448" y1="99" x2="470" y2="99" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <line x1="672" y1="99" x2="694" y2="99" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <line x1="896" y1="99" x2="918" y2="99" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+
+  <!-- Second CHO row -->
+  <g>
+    <rect x="248" y="176" width="200" height="86" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.4"/>
+    <text x="348" y="202" text-anchor="middle" font-size="13" font-weight="700" fill="#00ffff">7 · Bundle validation</text>
+    <text x="348" y="224" text-anchor="middle" font-size="11.5" fill="#a0a0a0">parses; exactly one Patient;</text>
+    <text x="348" y="242" text-anchor="middle" font-size="11.5" fill="#a0a0a0">that Patient is the matched member</text>
+
+    <rect x="472" y="176" width="200" height="86" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.4"/>
+    <text x="572" y="202" text-anchor="middle" font-size="13" font-weight="700" fill="#00ffff">8 · Provenance</text>
+    <text x="572" y="224" text-anchor="middle" font-size="11.5" fill="#a0a0a0">source payer, exchange, receipt</text>
+    <text x="572" y="242" text-anchor="middle" font-size="11.5" fill="#a0a0a0">time; package archived as received</text>
+
+    <rect x="696" y="176" width="200" height="86" rx="10" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.4"/>
+    <text x="796" y="202" text-anchor="middle" font-size="13" font-weight="700" fill="#00ffff">9 · Durable ingestion</text>
+    <text x="796" y="224" text-anchor="middle" font-size="11.5" fill="#a0a0a0">stage, then a single commit;</text>
+    <text x="796" y="242" text-anchor="middle" font-size="11.5" fill="#a0a0a0">Completed only once it lands</text>
+  </g>
+
+  <line x1="672" y1="219" x2="694" y2="219" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <line x1="448" y1="219" x2="470" y2="219" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+
+  <!-- Lane 2: prior payer -->
+  <rect x="248" y="344" width="648" height="76" rx="12" fill="rgba(0,180,255,0.05)" stroke="#00b4ff" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="572" y="372" text-anchor="middle" font-size="14" font-weight="700" fill="#00b4ff">6 · Prior payer serves Patient/$member-match and $member-data-export</text>
+  <text x="572" y="398" text-anchor="middle" font-size="12" fill="#a0a0a0">Cloud Health Office serves the same two operations inbound — one wire format in both directions</text>
+
+  <line x1="1008" y1="142" x2="1008" y2="382" stroke="#00ffff" stroke-width="1.4"/>
+  <line x1="1008" y1="382" x2="898" y2="382" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <line x1="348" y1="344" x2="348" y2="266" stroke="#00b4ff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+
+  <!-- Lane 3: after ingestion -->
+  <rect x="24" y="468" width="340" height="90" rx="10" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.12)"/>
+  <text x="194" y="494" text-anchor="middle" font-size="13" font-weight="700" fill="#e0e0e0">Import store</text>
+  <text x="194" y="516" text-anchor="middle" font-size="11.5" fill="#a0a0a0">physically separate from CHO's</text>
+  <text x="194" y="534" text-anchor="middle" font-size="11.5" fill="#a0a0a0">authoritative member, coverage,</text>
+  <text x="194" y="552" text-anchor="middle" font-size="11.5" fill="#a0a0a0">enrollment and claim stores</text>
+
+  <rect x="392" y="468" width="340" height="90" rx="10" fill="rgba(0,255,255,0.05)" stroke="rgba(0,255,255,0.25)"/>
+  <text x="562" y="494" text-anchor="middle" font-size="13" font-weight="700" fill="#00ffff">USCDI clinical read path</text>
+  <text x="562" y="516" text-anchor="middle" font-size="11.5" fill="#a0a0a0">twelve FHIR R4 clinical types served</text>
+  <text x="562" y="534" text-anchor="middle" font-size="11.5" fill="#a0a0a0">from that same store — no projection</text>
+  <text x="562" y="552" text-anchor="middle" font-size="11.5" fill="#a0a0a0">to fall behind the source</text>
+
+  <rect x="760" y="468" width="336" height="90" rx="10" fill="rgba(0,255,136,0.06)" stroke="rgba(0,255,136,0.3)"/>
+  <text x="928" y="494" text-anchor="middle" font-size="13" font-weight="700" fill="#00ff88">Patient / Provider Access</text>
+  <text x="928" y="516" text-anchor="middle" font-size="11.5" fill="#a0a0a0">SMART scopes, tenant binding,</text>
+  <text x="928" y="534" text-anchor="middle" font-size="11.5" fill="#a0a0a0">attribution and ProviderAccess</text>
+  <text x="928" y="552" text-anchor="middle" font-size="11.5" fill="#a0a0a0">consent, all four required</text>
+
+  <line x1="364" y1="513" x2="390" y2="513" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <line x1="732" y1="513" x2="758" y2="513" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <line x1="194" y1="436" x2="194" y2="466" stroke="#00ffff" stroke-width="1.4" marker-end="url(#p2p-arrow)"/>
+  <text x="24" y="430" font-size="11.5" fill="#00ffff" font-family="JetBrains Mono, monospace">exchange committed</text>
+</svg>

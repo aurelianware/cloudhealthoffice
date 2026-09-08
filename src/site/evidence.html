@@ -3,21 +3,73 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Evidence — Cloud Health Office</title>
-  <meta name="description" content="One million deterministic synthetic claims adjudicated on local Kubernetes at 155.89 claims/sec, zero dead letters, published with limits." />
+  <title>Implementation Evidence — Cloud Health Office</title>
+  <meta name="description" content="Executable evidence for the Cloud Health Office CMS-0057-F implementation: acceptance scenarios, Payer-to-Payer, CRD/DTR/PAS, Provider Access security, and interoperability tested against an independently developed HL7 Da Vinci implementation — with the limits stated." />
+  <meta name="author" content="Aurelianware, Inc." />
   <link rel="canonical" href="https://cloudhealthoffice.com/evidence" />
+
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Cloud Health Office" />
   <meta property="og:url" content="https://cloudhealthoffice.com/evidence" />
-  <meta property="og:title" content="Evidence — Cloud Health Office" />
-  <meta property="og:description" content="One million deterministic synthetic claims adjudicated on local Kubernetes at 155.89 claims/sec, zero dead letters, published with limits." />
+  <meta property="og:title" content="Implementation Evidence — Cloud Health Office" />
+  <meta property="og:description" content="Executable evidence for the Cloud Health Office CMS-0057-F implementation: acceptance scenarios, Payer-to-Payer, CRD/DTR/PAS, Provider Access security, and interoperability tested against an independently developed HL7 Da Vinci implementation — with the limits stated." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Implementation Evidence — Cloud Health Office" />
+  <meta name="twitter:description" content="Executable evidence for the Cloud Health Office CMS-0057-F implementation: acceptance scenarios, Payer-to-Payer, CRD/DTR/PAS, Provider Access security, and interoperability tested against an independently developed HL7 Da Vinci implementation — with the limits stated." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/evidence-model.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "CollectionPage",
+      "name": "Cloud Health Office Implementation Evidence",
+      "description": "Executable evidence for the Cloud Health Office CMS-0057-F implementation: acceptance scenarios, Payer-to-Payer, CRD/DTR/PAS, Provider Access security, and interoperability tested against an independently developed HL7 Da Vinci implementation — with the limits stated.",
+      "url": "https://cloudhealthoffice.com/evidence",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/sentinel.css" />
-  <link rel="stylesheet" href="/css/editorial-visuals.css" />
-  <link rel="stylesheet" href="/css/conversion.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
   <script src="/js/auth.js"></script>
   <script src="/js/mobile-nav.js"></script>
+  <script defer src="/js/evidence-snapshot.js"></script>
 </head>
-<body>
+<body class="ev">
   <a href="#main-content" class="skip-to-main">Skip to main content</a>
   <nav>
     <div class="nav-inner">
@@ -49,49 +101,216 @@
 
   <main id="main-content">
 
-    <section class="hero-section" style="min-height:auto; padding:120px 24px 40px;">
-      <div class="hero-content">
-        <div class="hero-badge">Evidence &nbsp;&middot;&nbsp; Published with limits</div>
-        <h1 class="hero-headline" style="font-size:clamp(1.9rem,4vw,3rem);">The proof is public.</h1>
-        <p class="hero-subheadline">
-          We validated adjudication at one million deterministic synthetic claims &mdash; and we publish the honest
-          limits alongside the numbers.
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a></nav>
+        <span class="ev-eyebrow">Evidence Hub</span>
+        <h1>Evidence you can <em>execute</em>.</h1>
+        <p class="ev-lede">Recent engineering work on CMS-0057-F, Payer-to-Payer, Da Vinci prior authorization and Provider Access security, published as technical evidence rather than as claims. Every status on this hub is generated from a test run at a named source revision, and every page ends with what has not been proven.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">Synthetic data</span>
+          <span class="ev-badge">Source revision named</span>
+          <span class="ev-badge ev-badge--amber">Not CMS certification</span>
+          <span class="ev-badge">Two evidence systems, never merged</span></div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
         </p>
+      </div>
+    </header>
+
+
+    <section class="ev-section" id="how-to-read">
+      <div class="ev-container">
+        <span class="ev-eyebrow">How to read this hub</span>
+        <h2>Every claim on this site should end at something you can run</h2>
+        <p class="ev-sub">
+          Cloud Health Office publishes two kinds of executable evidence, and keeps them apart on purpose.
+          One shows that the platform does what its own CMS-0057-F acceptance specification requires. The
+          other shows that it can exchange standards-conformant requests and responses with Da Vinci
+          software written by someone else. Both run on synthetic data, both name the source revision they
+          were produced from, and neither is CMS certification.
+        </p>
+
+        <figure class="ev-figure">
+          <img src="/graphics/evidence/evidence-model.svg" alt="Two separate evidence systems. On the left, the internal CMS-0057-F acceptance suite runs Cloud Health Office code against Cloud Health Office fixtures and scores each scenario Passable, Partial, Gap or N/A. On the right, the external Da Vinci interoperability harness performs real exchanges against a pinned HL7 reference implementation and records Passed, Failed, Skipped or Not run. A barrier between them states the two are never merged into one score." />
+          <figcaption>
+            The vocabularies differ deliberately — <code>PASSABLE</code> / <code>PARTIAL</code> / <code>GAP</code>
+            on one side, <code>Passed</code> / <code>Failed</code> / <code>Skipped</code> on the other — so the two
+            results cannot be added together by accident. There is no single combined compliance score.
+          </figcaption>
+        </figure>
+
+        <div class="ev-split">
+          <div class="ev-split__col ev-split__col--replace">
+            <h3>Internal acceptance evidence</h3>
+            <p>
+              Answers <strong>does Cloud Health Office implement the behaviour its acceptance specification
+              requires?</strong> Twenty-one repository-defined scenarios run against the real services, and each
+              is scored on two independent axes: Cloud Health Office as the backend, and integration with an
+              external core.
+            </p>
+            <p><a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F implementation evidence &rarr;</a></p>
+          </div>
+          <div class="ev-split__col ev-split__col--augment">
+            <h3>External interoperability evidence</h3>
+            <p>
+              Answers <strong>can Cloud Health Office interoperate with an implementation it does not own?</strong>
+              A separate harness starts a pinned HL7 Da Vinci reference implementation in a container and performs
+              real FHIR and CDS Hooks exchanges against it. Nothing is mocked or replayed.
+            </p>
+            <p><a href="/evidence/davinci-interoperability">Independently tested interoperability &rarr;</a></p>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section aria-label="Million Claim Challenge evidence card" style="padding:10px 24px 40px; background:#000;">
-      <div class="section-wrapper">
+    <section class="ev-section ev-section--alt" id="paths">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Start with your question</span>
+        <h2>Evidence by workflow</h2>
+        <p class="ev-sub">
+          Each page below explains one workflow the way an engineer who implemented it would: what the protocol
+          exchange actually is, which decisions the implementation had to make, what is proven by an executable
+          test, and what remains unproven.
+        </p>
+
+        <div class="ev-grid">
+          <a class="ev-card" href="/insights/cms-0057-f/acceptance-scenarios">
+            <span class="ev-card__tag">Acceptance</span>
+            <h3>CMS-0057-F implementation evidence</h3>
+            <p>The scenario inventory, what Passable / Partial / Gap mean, and the live snapshot generated from the suite at a named commit.</p>
+            <span class="ev-card__more">Read the evidence &rarr;</span>
+          </a>
+          <a class="ev-card" href="/evidence/replace-vs-augment">
+            <span class="ev-card__tag">Architecture</span>
+            <h3>Replace vs Augment</h3>
+            <p>Can a payer meet CMS-0057-F without replacing its core? What changes when Cloud Health Office sits in front of QNXT, Facets or HealthEdge — and how the evidence is scored differently in each mode.</p>
+            <span class="ev-card__more">Compare the patterns &rarr;</span>
+          </a>
+          <a class="ev-card" href="/evidence/payer-to-payer">
+            <span class="ev-card__tag">Payer-to-Payer</span>
+            <h3>Payer-to-Payer implementation evidence</h3>
+            <p>Coverage transition, consent, <code>$member-match</code>, export, validation, provenance, durable ingestion — and what happens to the clinical data afterwards.</p>
+            <span class="ev-card__more">Follow the exchange &rarr;</span>
+          </a>
+          <a class="ev-card" href="/evidence/prior-authorization">
+            <span class="ev-card__tag">Prior authorization</span>
+            <h3>CRD, DTR and PAS workflow evidence</h3>
+            <p>How the three chain into one workflow, what <code>$inquire</code> is allowed to do, and what actually has to happen after a payer answers A4.</p>
+            <span class="ev-card__more">Follow the chain &rarr;</span>
+          </a>
+          <a class="ev-card" href="/evidence/davinci-interoperability">
+            <span class="ev-card__tag">External</span>
+            <h3>Da Vinci interoperability evidence</h3>
+            <p>Real PAS, CRD and DTR exchanges against a pinned HL7 Da Vinci burden-reduction payer reference implementation — software Cloud Health Office did not write.</p>
+            <span class="ev-card__more">See what was exchanged &rarr;</span>
+          </a>
+          <a class="ev-card" href="/evidence/provider-access-security">
+            <span class="ev-card__tag">Security</span>
+            <h3>Provider Access security evidence</h3>
+            <p>The four independent controls, the production external-issuer trust model, and why every refusal looks the same from outside.</p>
+            <span class="ev-card__more">Read the controls &rarr;</span>
+          </a>
+          <a class="ev-card" href="/evidence/payer-to-payer#clinical-data">
+            <span class="ev-card__tag">Clinical data</span>
+            <h3>USCDI clinical exchange evidence</h3>
+            <p>Twelve FHIR R4 clinical resource types, ingested from a prior payer and served through Patient and Provider Access — without overwriting anything Cloud Health Office owns.</p>
+            <span class="ev-card__more">Read the ingestion path &rarr;</span>
+          </a>
+          <a class="ev-card" href="/docs/million-claim-challenge/evidence">
+            <span class="ev-card__tag">Throughput</span>
+            <h3>Million Claim Challenge</h3>
+            <p>One million deterministic synthetic claims adjudicated on local Kubernetes, published with artifacts and with its limits stated.</p>
+            <span class="ev-card__more">Inspect the archive &rarr;</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section" id="acceptance-snapshot">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Live snapshot</span>
+
+        <h2>The latest published CMS-0057-F acceptance evidence</h2>
+        <p class="ev-sub">Generated by CI from the acceptance suite, then committed to this repository against the exact revision it was produced from. Capability status is deliberately kept separate from raw test execution: a passing test that confirms a known gap is still reported as a Gap.</p>
+        <div class="ev-snapshot" data-evidence="cms0057" data-src="/insights/cms-0057-f/cms0057-public-evidence.json" data-view="summary">
+          <p class="ev-fallback" data-evidence-fallback>
+            Loading the latest published CMS-0057-F acceptance evidence. It is generated in CI from the
+            acceptance suite at a named source revision and committed to this repository, so the status
+            shown here is the tested status rather than a claim typed into a page.
+          </p>
+          <div data-evidence-body hidden></div>
+        </div>
+
+        <div class="ev-actions">
+          <a class="ev-btn" href="/insights/cms-0057-f/acceptance-scenarios">See the full scenario matrix &rarr;</a>
+          <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md">Read the acceptance inventory &rarr;</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="million-claim-challenge">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Throughput evidence</span>
+        <h2>The Million Claim Challenge</h2>
+        <p class="ev-sub">
+          Adjudication was validated at one million deterministic synthetic claims, and the honest limits are
+          published alongside the numbers.
+        </p>
         <div class="stats-inner stats-inner--proof" style="margin:12px 0 24px;">
           <div class="stat-item"><span class="stat-number">1M</span><span class="stat-label">Claims<br>Adjudicated</span></div>
           <div class="stat-item"><span class="stat-number">155.89</span><span class="stat-label">Claims/Sec<br>at 1M</span></div>
           <div class="stat-item"><span class="stat-number">0</span><span class="stat-label">Dead-Letter<br>Messages</span></div>
           <div class="stat-item"><span class="stat-number">$0.00</span><span class="stat-label">Average Payment<br>Delta</span></div>
         </div>
-        <div style="max-width:760px; margin:0 auto; text-align:center;">
-          <p style="color:rgba(200,200,200,0.85); line-height:1.75;">
-            <strong>Million Claim Challenge:</strong> 1,000,000 deterministic synthetic claims on local Docker Desktop
-            Kubernetes at 155.89 claims/sec, zero dead letters, with published artifacts.
+        <div class="ev-note">
+          <p>
+            <strong>Million Claim Challenge:</strong> 1,000,000 deterministic synthetic claims on local Docker
+            Desktop Kubernetes at 155.89 claims/sec, zero dead letters, with published artifacts. Every one of the
+            1,000,000 claims was verified terminal, with zero dead letters or pod restarts.
           </p>
-          <p style="color:#ffcf6a; font-size:0.95rem; line-height:1.7; margin-top:14px;">
-            This is local engineering evidence, not a production-cloud capacity claim. Every one of the 1,000,000 claims
-            was verified terminal, with zero dead letters or pod restarts.
+          <p style="color:#ffcf6a;">
+            This is local engineering evidence, not a production-cloud capacity claim.
           </p>
         </div>
-        <div style="text-align:center; margin-top:28px;">
-          <a href="/docs/million-claim-challenge/evidence#episode-016" class="button">Inspect the evidence archive &rarr;</a>
-          <a href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus" class="button button-secondary">Read the write-up &rarr;</a>
+        <div class="ev-actions">
+          <a class="ev-btn" href="/docs/million-claim-challenge/evidence#episode-016">Inspect the evidence archive &rarr;</a>
+          <a class="ev-btn ev-btn--ghost" href="/insights/million-claim-challenge/part-16-the-million-went-through-the-bus">Read the write-up &rarr;</a>
         </div>
       </div>
     </section>
 
-    <section aria-label="Email the evidence summary" style="padding:50px 24px 80px; background:linear-gradient(180deg,#05060c,#000);">
-      <div style="max-width:560px; margin:0 auto;">
-        <div class="section-header" style="text-align:center; margin-bottom:24px;">
-          <span class="section-eyebrow" style="color:#00ff88;">Send it on</span>
-          <h2 class="section-title" style="font-size:clamp(1.4rem,3vw,2rem);">Email the evidence summary to your architect.</h2>
-          <p class="section-subtitle">The numbers and their limits are on this page. We can also send the full evidence packet.</p>
+    <section class="ev-section" id="not-claiming">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Stated plainly</span>
+        <h2>What this evidence is not</h2>
+        <p class="ev-sub">
+          The point of publishing evidence is that a reader can tell where it stops. These limits apply to
+          everything in this hub, and each page repeats the ones specific to it.
+        </p>
+
+        <div class="ev-limits">
+          <h3>Limitations that apply across the hub</h3>
+          <ul>
+            <li><strong>This is implementation evidence, not CMS certification.</strong> No scenario status, and no interoperability result, constitutes certification by CMS, ONC, HL7 or anyone else.</li>
+            <li><strong>All test data is synthetic.</strong> No exchange described here has moved production member data.</li>
+            <li><strong>Passing every acceptance scenario is not complete CMS-0057-F compliance.</strong> The suite proves the scenarios this repository defines, at the revision it was run against.</li>
+            <li><strong>External interoperability is not production validation.</strong> It shows that a pinned reference implementation accepted Cloud Health Office's requests and that Cloud Health Office accepted its responses.</li>
+            <li><strong>No customer identity provider has been onboarded.</strong> The platform implements production external-issuer trust; that is a capability, not a statement that a particular payer's IdP is connected.</li>
+            <li><strong>QNXT, Facets and HealthEdge adapters are documented stubs in this repository.</strong> Integration with a specific core administration platform is engagement work, and it is scored on its own axis so it can never be read as product capability.</li>
+            <li><strong>Protocol interoperability is not payer rule parity.</strong> Two payers running different rule content can interoperate perfectly and still reach different coverage decisions.</li>
+          </ul>
         </div>
+
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" aria-label="Email the evidence summary">
+      <div class="ev-container ev-narrow">
+        <span class="ev-eyebrow">Send it on</span>
+        <h2>Email the evidence summary to your architect.</h2>
+        <p class="ev-sub">The numbers and their limits are on this page. We can also send the full evidence packet.</p>
         <form data-lead-form data-lead-interest="evidence-packet"
               action="__FORMSPREE_LEADS_ENDPOINT__" method="POST" id="evidenceForm"
               class="cho-leadform" aria-label="Email the evidence summary">
@@ -105,7 +324,7 @@
           <div>
             <label for="ev-role">Role *</label>
             <select id="ev-role" name="role" required>
-              <option value="">Select…</option>
+              <option value="">Select&hellip;</option>
               <option>CIO / CTO</option>
               <option>Architect</option>
               <option>Compliance</option>
@@ -135,15 +354,15 @@
           <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
         </div>
         <div class="footer-col">
-          <h5>Product</h5>
+          <h5>Evidence</h5>
           <ul>
-            <li><a href="/what-is">What is Cloud Health Office?</a></li>
-            <li><a href="/platform">Platform</a></li>
-            <li><a href="/solutions-payers">Solutions</a></li>
-            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
-            <li><a href="/evidence">Evidence</a></li>
-            <li><a href="/deploy">Deploy</a></li>
-            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/evidence">Evidence Hub</a></li>
+            <li><a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F implementation evidence</a></li>
+            <li><a href="/evidence/davinci-interoperability">Da Vinci interoperability evidence</a></li>
+            <li><a href="/evidence/payer-to-payer">Payer-to-Payer implementation evidence</a></li>
+            <li><a href="/evidence/prior-authorization">CRD, DTR and PAS workflow evidence</a></li>
+            <li><a href="/evidence/provider-access-security">Provider Access security evidence</a></li>
+            <li><a href="/evidence/replace-vs-augment">Replace vs Augment architecture</a></li>
           </ul>
         </div>
         <div class="footer-col">
@@ -152,6 +371,7 @@
             <li><a href="/docs/quickstart">Quick Start</a></li>
             <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
             <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/prior-auth-guide">Prior Authorization Guide</a></li>
             <li><a href="/docs/architecture">Architecture</a></li>
             <li><a href="/trust">Trust &amp; Security</a></li>
             <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
@@ -173,5 +393,6 @@
       </div>
     </div>
   </footer>
+
 </body>
 </html>

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>External Da Vinci Interoperability Evidence — Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office performs real PAS, CRD and DTR exchanges against a pinned HL7 Da Vinci burden-reduction payer reference implementation — an independently developed system it does not own. What is exchanged, how it is pinned, and why it is never merged with CMS-0057-F acceptance evidence." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/evidence/davinci-interoperability" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/evidence/davinci-interoperability" />
+  <meta property="og:title" content="Tested against Da Vinci software we did not write" />
+  <meta property="og:description" content="Cloud Health Office performs real PAS, CRD and DTR exchanges against a pinned HL7 Da Vinci burden-reduction payer reference implementation — an independently developed system it does not own. What is exchanged, how it is pinned, and why it is never merged with CMS-0057-F acceptance evidence." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/evidence/external-interop-chain.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Tested against Da Vinci software we did not write" />
+  <meta name="twitter:description" content="Cloud Health Office performs real PAS, CRD and DTR exchanges against a pinned HL7 Da Vinci burden-reduction payer reference implementation — an independently developed system it does not own. What is exchanged, how it is pinned, and why it is never merged with CMS-0057-F acceptance evidence." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/evidence/external-interop-chain.svg" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "External Da Vinci interoperability evidence",
+      "description": "Cloud Health Office performs real PAS, CRD and DTR exchanges against a pinned HL7 Da Vinci burden-reduction payer reference implementation — an independently developed system it does not own. What is exchanged, how it is pinned, and why it is never merged with CMS-0057-F acceptance evidence.",
+      "url": "https://cloudhealthoffice.com/evidence/davinci-interoperability",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "HL7 Da Vinci",
+        "CDS Hooks",
+        "FHIR interoperability testing",
+        "CMS-0057-F"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Da Vinci interoperability",
+          "item": "https://cloudhealthoffice.com/evidence/davinci-interoperability"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <script defer src="/js/evidence-snapshot.js"></script>
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/davinci-interoperability">Da Vinci interoperability</a></nav>
+        <span class="ev-eyebrow">External interoperability evidence</span>
+        <h1>Exchanged with software <em>we did not write</em>.</h1>
+        <p class="ev-lede">A separate harness starts a pinned HL7 Da Vinci burden-reduction payer reference implementation in a container and performs real PAS, CRD and DTR exchanges against it. Nothing is mocked, nothing is replayed, and the result is never added to the CMS-0057-F acceptance score.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">BR-PAS-SUBMIT-001 &middot; BR-CRD-001 &middot; BR-DTR-001</span>
+          <span class="ev-badge">Pinned by image digest</span>
+          <span class="ev-badge">Synthetic data</span>
+          <span class="ev-badge ev-badge--amber">Not certification</span></div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
+        </p>
+      </div>
+    </header>
+
+    <div class="ev-section ev-section--tight">
+      <nav class="ev-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+            <li><a href="#why-separate">Why this evidence is separate</a></li>
+            <li><a href="#exchanges">What is actually exchanged</a></li>
+            <li><a href="#reproducible">Pinning and reproducibility</a></li>
+            <li><a href="#run">Inventory and latest published run</a></li>
+            <li><a href="#limits">What this does not establish</a></li>
+            <li><a href="#related">Related evidence</a></li>
+        </ol>
+      </nav>
+    </div>
+
+
+    <section class="ev-section" id="why-separate">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Why this is a different kind of evidence</span>
+        <h2>A test suite you wrote against fixtures you wrote proves something narrower</h2>
+        <p class="ev-sub">
+          Cloud Health Office has a mature acceptance suite that proves it implements what its own CMS-0057-F
+          acceptance specification requires. Everything that suite exercises is Cloud Health Office code against
+          Cloud Health Office fixtures. This harness answers a different question, and the only way to answer it
+          is to talk to somebody else's code.
+        </p>
+
+        <div class="ev-note">
+          <p>
+            <strong>Can Cloud Health Office exchange standards-conformant requests and responses with an
+            independent Da Vinci implementation it does not own?</strong>
+          </p>
+        </div>
+
+        <p>
+          So the harness starts real HL7 Da Vinci reference implementations in containers, pinned by image digest,
+          and performs real FHIR and CDS Hooks exchanges across a process boundary. <strong>Nothing is mocked,
+          replayed, or reproduced inside Cloud Health Office and then called external validation.</strong>
+        </p>
+
+        <figure class="ev-figure">
+          <img src="/graphics/evidence/evidence-model.svg" alt="Two separate evidence systems. On the left, the internal CMS-0057-F acceptance suite runs Cloud Health Office code against Cloud Health Office fixtures and scores each scenario Passable, Partial, Gap or N/A. On the right, the external Da Vinci interoperability harness performs real exchanges against a pinned HL7 reference implementation and records Passed, Failed, Skipped or Not run. A barrier between them states the two are never merged into one score." />
+          <figcaption>
+            Different projects, different workflows, different published artifacts, and deliberately different
+            vocabularies so the two cannot be added together by accident.
+          </figcaption>
+        </figure>
+
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th></th><th>Internal acceptance</th><th>External interoperability</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Question</td><td>Does Cloud Health Office implement the required behaviour?</td><td>Can it interoperate with an independent implementation?</td></tr>
+              <tr><td>Vocabulary</td><td><code>PASSABLE</code> / <code>PARTIAL</code> / <code>GAP</code> / <code>N/A</code></td><td><code>Passed</code> / <code>Failed</code> / <code>Skipped</code> / <code>NotRun</code></td></tr>
+              <tr><td>Counterparty</td><td>Cloud Health Office fixtures</td><td>Software Cloud Health Office did not write</td></tr>
+              <tr><td>Published as</td><td>the acceptance evidence snapshot</td><td>the interoperability run snapshot</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <strong>The two are never merged into one score.</strong> An interoperability result never changes a
+          CMS-0057-F scenario status, and a CMS-0057-F status never implies an interoperability result. The run
+          document states that separation inside the artifact itself, so a consumer reading only the JSON still
+          sees it.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="exchanges">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The exchanges</span>
+        <h2>What is actually sent, and what comes back</h2>
+        <p class="ev-sub">
+          Three exchanges run today against the pinned HL7 Da Vinci burden-reduction payer reference
+          implementation, with Cloud Health Office acting as the provider-side client through its own production
+          code paths.
+        </p>
+
+        <figure class="ev-figure">
+          <img src="/graphics/evidence/external-interop-chain.svg" alt="Three exchanges across a process boundary between the Cloud Health Office harness and the pinned HL7 Da Vinci burden-reduction payer. PAS: a synthetic prior-authorization bundle is posted to Claim submit and the response is parsed with the same FHIR parser Cloud Health Office runs. CRD: discovery is fetched, the order-sign service is resolved by hook, and three synthetic draft orders return three different determinations, one naming a questionnaire canonical. DTR: that canonical is requested from the questionnaire-package operation and every declared dependency is checked to resolve inside the package." />
+          <figcaption>
+            Cloud Health Office is the client in all three. The payer's rules are never reimplemented on the
+            Cloud Health Office side.
+          </figcaption>
+        </figure>
+
+        <h3>CRD &mdash; three codes, three different answers from the payer's own rules</h3>
+        <p>
+          Cloud Health Office fetches the payer's CDS Hooks discovery document, which advertises six CRD services,
+          and resolves <code>order-sign</code> <strong>from discovery by hook</strong> &mdash; never hard-coded and
+          never taken by list position. A server may reorder or rename services between releases, and a client that
+          indexed into the array would quietly start testing something else instead of failing honestly.
+        </p>
+        <p>
+          It then submits three synthetic draft orders carrying different billing codes, and the payer's own rule
+          fixtures return three genuinely different determinations:
+        </p>
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th>Billing code</th><th>Upstream rule fixture</th><th>The payer's determination</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>L8000</td><td>PriorAuthRequired</td><td><code>covered</code>, <code>pa-needed=auth-needed</code>, <code>doc-needed=no-doc</code>, plus a DTR questionnaire canonical</td></tr>
+              <tr><td>J3490</td><td>ExcludedServices</td><td><code>covered=not-covered</code></td></tr>
+              <tr><td>E0100</td><td><em>matches no fixture</em></td><td><code>covered=conditional</code>, <code>info-needed=detail-code</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The third code is what makes the first two meaningful. Two differing answers could be two hard-coded
+          branches; three distinct answers, one of which is the no-rule default, show the payer actually resolving
+          rules per billing code. The scenario asserts all three are distinct.
+        </p>
+        <p>
+          A CDS Hooks request must name a FHIR server the service may dereference for anything prefetch did not
+          supply. Rather than pointing that at a placeholder and hoping it is never called, the harness points it at
+          a listener it actually runs and <strong>fails if any callback arrives</strong> &mdash; so the scenario is
+          correct by construction rather than accidentally successful.
+        </p>
+        <p>
+          The implementation observation worth carrying forward: <strong>this payer answers <code>order-sign</code>
+          with zero cards and one system action carrying the whole determination.</strong> A client that inspected
+          only <code>cards</code> would conclude nothing happened.
+        </p>
+
+        <h3>DTR &mdash; chained from the payer's determination, not from a local fixture</h3>
+        <p>
+          This is the exchange that makes the set a workflow rather than three unrelated endpoint demos.
+          <strong>Cloud Health Office does not choose the questionnaire.</strong> The payer decides which one
+          applies when it evaluates coverage, and the scenario follows that decision into the payer's DTR surface
+          &mdash; which is exactly what a provider system must do in production.
+        </p>
+        <div class="ev-stack">CHO --CRD order-sign------------------------&gt; br-payer
+    &lt;-- coverage-information:
+          pa-needed   = auth-needed
+          questionnaire = &lt;canonical&gt;
+
+CHO --$questionnaire-package(&lt;canonical&gt;)---&gt; br-payer
+    &lt;-- Parameters: packagebundle containing that Questionnaire</div>
+        <p>
+          Selecting a questionnaire from a Cloud Health Office fixture would have tested a much weaker thing: that
+          the payer answers for a canonical Cloud Health Office already knew. Chaining means the payer's
+          questionnaire-selection rule is consumed rather than mirrored, and the run evidence records the linkage
+          &mdash; the scenario it chained from, and the exact canonical it followed &mdash; so a run reads as a
+          workflow rather than as isolated green rows.
+        </p>
+        <p>
+          Two CRD determinations lead to two different questionnaires, and the scenario asserts the canonicals
+          differ. That is what shows the chain follows the payer's decision rather than returning a constant.
+        </p>
+        <p>
+          The request carries only what the operation requires &mdash; the coverage, and the canonical CRD returned,
+          verbatim. Padding it with resources the operation does not use would make it look richer while proving
+          less. The synthetic member will not match on the payer's side, the payer says so in an
+          <code>OperationOutcome</code>, and the scenario records that rather than suppressing it: refusing to trust
+          a sender-supplied reference as a lookup key is a sensible privacy property, not a defect.
+        </p>
+
+        <h3>PAS <code>$submit</code></h3>
+        <p>
+          A synthetic PAS request bundle is posted to the payer's <code>Claim/$submit</code>, and the returned PAS
+          response bundle is parsed and validated with the same FHIR parser Cloud Health Office's own service runs
+          &mdash; profiles, <code>ClaimResponse</code> shape and X12 review-action coding. The submitted service code
+          matches no rule on the reference implementation, so the payer answers review action <code>A3</code>. That
+          is a deterministic, content-independent path <strong>on purpose</strong>: this scenario is a proof of
+          protocol interoperability, not of prior-authorization decision logic.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section" id="reproducible">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Reproducibility</span>
+        <h2>A pinned dependency, or the result means nothing next month</h2>
+        <p class="ev-sub">
+          Every external artifact is an image digest, or a release tag plus the commit it resolves to. Never a
+          floating tag, never an unpinned branch &mdash; and a test fails the build if one appears.
+        </p>
+        <ul>
+          <li>The upstream commit for each image comes from its <code>org.opencontainers.image.revision</code> label: what the image was actually built from, not an assumption about a default branch.</li>
+          <li>The compose stack must start exactly the digests recorded in the manifest, asserted by test, and containers run with pulls disabled so an unpinned image cannot be fetched mid-scenario.</li>
+          <li><strong>Pins never move on their own.</strong> There is no auto-update. A nightly failure after an upstream change is a finding to triage, not a signal to bump &mdash; and an upgrade is always a reviewable diff naming the exact old and new upstream artifact.</li>
+          <li>When a scenario fails after a pin upgrade, Cloud Health Office is fixed <em>only if Cloud Health Office is wrong</em>. A discrepancy may equally be an upstream bug or an IG ambiguity, and the harness does not assign blame automatically.</li>
+        </ul>
+
+        <h3>Version awareness, stated rather than assumed</h3>
+        <p>
+          Each result records which IG version each side was operating under. Where Cloud Health Office declares an
+          IG <em>family</em> (STU 2.2.x) and the reference implementation reports a <em>point release</em>, the run
+          reports a mismatch rather than claiming an agreement it cannot demonstrate. Two live examples the harness
+          has recorded:
+        </p>
+        <ul>
+          <li>The <code>Claim/$inquire</code> <code>OperationDefinition</code> canonical differs between the two sides. It is recorded as a <strong>Warning</strong> and deliberately not adjudicated &mdash; the follow-up is to check the published IG and correct whichever side is wrong. <code>Claim/$submit</code>, which both sides name identically, <em>is</em> asserted.</li>
+          <li>Cloud Health Office advertises no <code>davinci-crd.version</code> extension in its own CDS Hooks discovery while the payer does, so a CRD client cannot tell which CRD version Cloud Health Office implements. Recorded, not adjudicated.</li>
+        </ul>
+        <p>
+          A Warning does not fail a scenario. Only assertions do, and they are limited to things that are
+          unambiguously protocol requirements.
+        </p>
+
+        <h3>Security posture of the harness itself</h3>
+        <ul>
+          <li><strong>Opt-in.</strong> External scenarios skip unless explicitly enabled, so an ordinary test run never downloads or starts third-party code.</li>
+          <li><strong>No secrets.</strong> The interop stack references no repository secret, cloud credential or token, and no external container is given the Docker socket.</li>
+          <li><strong>Network isolation.</strong> External containers sit on their own bridge network with host ports bound to loopback.</li>
+          <li><strong>The trust model is untouched.</strong> There is no authentication-disable switch, and nothing here weakens the SMART middleware.</li>
+          <li><strong>Synthetic only.</strong> Every value that reaches an external implementation comes from one synthetic identity set &mdash; identifiers valid in <em>format</em>, so a format-validating implementation accepts them, and naming nobody.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="run">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Live snapshot</span>
+
+        <h2>Scenario inventory and the latest published run</h2>
+        <p class="ev-sub">The inventory is the source of truth for which scenarios exist; execution status comes from a harness run, never from the inventory. A scenario listed with no result in a run is reported NotRun — deliberately, because a placeholder must never look like a result.</p>
+        <div class="ev-snapshot" data-evidence="interop" data-src="/insights/cms-0057-f/davinci-interop-public-evidence.json">
+          <p class="ev-fallback" data-evidence-fallback>
+            Loading the published external interoperability evidence. It records the scenarios the harness
+            runs, the pinned implementation each was run against, and what the last published run found.
+          </p>
+          <div data-evidence-body hidden></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="ev-section" id="limits">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Stated plainly</span>
+        <h2>What this evidence does not establish</h2>
+
+        <div class="ev-limits">
+          <h3>Limitations</h3>
+          <ul>
+            <li><strong>This is not certification.</strong> Using an HL7 reference implementation does not make the result an HL7, CMS or ONC endorsement, and no independent body has assessed anything here.</li>
+            <li><strong>A pin is the version tested</strong>, not every implementation of the same specification, and not that implementation forever.</li>
+            <li><strong>Protocol interoperability is not payer rule parity.</strong> Cloud Health Office and the reference implementation are two different payers with two different rule sets; a difference in coverage decisions is not a defect, and comparing them on non-identical content would compare rule content rather than implementations. Parity on identical rule content is deferred.</li>
+            <li><strong>Cloud Health Office is the client in every executed scenario.</strong> The profile for running Cloud Health Office as the server under test exists but is exercised by no scenario yet.</li>
+            <li><strong>No CQL is executed.</strong> A returned Library's structure would be validated; its CQL is not run. This proves package exchange, not rule evaluation.</li>
+            <li><strong>FHIR structure is validated; DTR profile conformance is not independently validated.</strong> Resources are parsed and DTR-specific structure is checked by hand, but no IG profile validator is run against the StructureDefinitions. A declared <code>meta.profile</code> is a claim by the sender, and is not treated here as validation.</li>
+            <li><strong>No Inferno conformance suite executes.</strong> The PDex and DTR test kits are pinned and the runner seam exists; no suite has been run, and the inventory reports those scenarios as not executed rather than omitting them.</li>
+            <li><strong>Synthetic data only</strong>, and no exchange with a real payer's production system is claimed.</li>
+          </ul>
+        </div>
+
+        <h3>Designed to extend without redesign</h3>
+        <p>
+          The inventory, the version manifest and the evidence document are all list-shaped: adding PAS
+          <code>$inquire</code> against the same payer, an Inferno DTR payer-server suite, a PDex suite, or a
+          second reference implementation means adding rows, not reworking the harness. Scenarios that are defined
+          but not yet executed are published as such, so the surface a reader sees always distinguishes <em>built
+          and run</em> from <em>declared</em>.
+        </p>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Related evidence</span>
+        <h2>Where to read next</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/evidence/prior-authorization"><h3>CRD, DTR and PAS workflow evidence</h3><p>The same three protocols as Cloud Health Office implements them internally.</p></a>
+          <a class="ev-card" href="/insights/cms-0057-f/acceptance-scenarios"><h3>CMS-0057-F implementation evidence</h3><p>The internal acceptance evidence this page is deliberately kept separate from.</p></a>
+          <a class="ev-card" href="/evidence"><h3>Evidence Hub</h3><p>How the two evidence systems fit together, and what neither of them claims.</p></a>
+          <a class="ev-card" href="/evidence/replace-vs-augment"><h3>Replace vs Augment</h3><p>Which backend is behind the FHIR surface these exchanges reach.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>Independently exercised, and pinned so you can reproduce it.</h2>
+          <p>The scenario inventory, the pinned digests and the run command are all in the repository. One command starts the dependency, runs the exchange and tears the stack down.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact">Talk about a deployment &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice">Read the source on GitHub &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Evidence</h5>
+          <ul>
+            <li><a href="/evidence">Evidence Hub</a></li>
+            <li><a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F implementation evidence</a></li>
+            <li><a href="/evidence/davinci-interoperability">Da Vinci interoperability evidence</a></li>
+            <li><a href="/evidence/payer-to-payer">Payer-to-Payer implementation evidence</a></li>
+            <li><a href="/evidence/prior-authorization">CRD, DTR and PAS workflow evidence</a></li>
+            <li><a href="/evidence/provider-access-security">Provider Access security evidence</a></li>
+            <li><a href="/evidence/replace-vs-augment">Replace vs Augment architecture</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/prior-auth-guide">Prior Authorization Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

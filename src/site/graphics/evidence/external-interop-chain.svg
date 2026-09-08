@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 520" role="img" aria-labelledby="eic-title eic-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="eic-title">Exchanges the harness performs against an independently developed HL7 Da Vinci payer</title>
+  <desc id="eic-desc">Three exchanges across a process boundary between the Cloud Health Office interoperability harness on the left and the pinned HL7 Da Vinci burden-reduction payer reference implementation on the right. First, PAS: Cloud Health Office posts a synthetic prior-authorization bundle to the payer's Claim dollar-submit and parses the returned PAS response with the same FHIR parser its own service uses. Second, CRD: Cloud Health Office fetches the payer's CDS Hooks discovery document, resolves the order-sign service by hook rather than by list position, and invokes it with three synthetic draft orders carrying different billing codes; the payer's own rules return three genuinely different coverage determinations, and one of them names a DTR questionnaire canonical. Third, DTR: Cloud Health Office takes that canonical — the one the payer chose — and requests exactly it from the payer's questionnaire-package operation, then checks that every dependency the returned questionnaire declares resolves inside the package. A note records that a CRD determination can arrive in the system action rather than in cards, and that the payer's rules are never reimplemented inside Cloud Health Office.</desc>
+
+  <rect x="0" y="0" width="1120" height="520" fill="#05070a"/>
+
+  <defs>
+    <marker id="eic-out" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00ffff"/>
+    </marker>
+    <marker id="eic-in" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00b4ff"/>
+    </marker>
+  </defs>
+
+  <!-- Actors -->
+  <rect x="24" y="28" width="268" height="76" rx="12" fill="rgba(0,255,255,0.06)" stroke="#00ffff" stroke-width="1.6"/>
+  <text x="158" y="58" text-anchor="middle" font-size="15" font-weight="800" fill="#00ffff">Cloud Health Office</text>
+  <text x="158" y="82" text-anchor="middle" font-size="12" fill="#a0a0a0">provider-side client · CHO code</text>
+
+  <rect x="828" y="28" width="268" height="76" rx="12" fill="rgba(0,180,255,0.06)" stroke="#00b4ff" stroke-width="1.6"/>
+  <text x="962" y="52" text-anchor="middle" font-size="15" font-weight="800" fill="#00b4ff">HL7 Da Vinci br-payer</text>
+  <text x="962" y="74" text-anchor="middle" font-size="12" fill="#a0a0a0">payer server · software CHO does not own</text>
+  <text x="962" y="94" text-anchor="middle" font-size="11" fill="#606060" font-family="JetBrains Mono, monospace">pinned by image digest</text>
+
+  <line x1="158" y1="104" x2="158" y2="470" stroke="rgba(0,255,255,0.2)" stroke-width="1.2" stroke-dasharray="3 5"/>
+  <line x1="962" y1="104" x2="962" y2="470" stroke="rgba(0,180,255,0.2)" stroke-width="1.2" stroke-dasharray="3 5"/>
+
+  <text x="560" y="128" text-anchor="middle" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">A REAL PROCESS BOUNDARY — NOTHING MOCKED OR REPLAYED</text>
+
+  <!-- PAS -->
+  <text x="24" y="168" font-size="12" font-weight="700" fill="#00ff88" font-family="JetBrains Mono, monospace">PAS</text>
+  <line x1="158" y1="180" x2="958" y2="180" stroke="#00ffff" stroke-width="1.5" marker-end="url(#eic-out)"/>
+  <text x="560" y="172" text-anchor="middle" font-size="12" fill="#e0e0e0">POST Claim/$submit — a synthetic prior-authorization bundle</text>
+  <line x1="962" y1="206" x2="162" y2="206" stroke="#00b4ff" stroke-width="1.5" marker-end="url(#eic-in)"/>
+  <text x="560" y="226" text-anchor="middle" font-size="11.5" fill="#a0a0a0">PAS response bundle, parsed and validated with the same FHIR parser CHO's own service runs</text>
+
+  <!-- CRD -->
+  <text x="24" y="270" font-size="12" font-weight="700" fill="#00ff88" font-family="JetBrains Mono, monospace">CRD</text>
+  <line x1="158" y1="282" x2="958" y2="282" stroke="#00ffff" stroke-width="1.5" marker-end="url(#eic-out)"/>
+  <text x="560" y="274" text-anchor="middle" font-size="12" fill="#e0e0e0">GET /cds-services, then POST the order-sign service resolved from discovery by hook</text>
+  <line x1="962" y1="308" x2="162" y2="308" stroke="#00b4ff" stroke-width="1.5" marker-end="url(#eic-in)"/>
+  <text x="560" y="328" text-anchor="middle" font-size="11.5" fill="#a0a0a0">three billing codes, three different determinations from the payer's own rules — one names a questionnaire canonical</text>
+
+  <!-- DTR -->
+  <text x="24" y="372" font-size="12" font-weight="700" fill="#00ff88" font-family="JetBrains Mono, monospace">DTR</text>
+  <line x1="158" y1="384" x2="958" y2="384" stroke="#00ffff" stroke-width="1.5" marker-end="url(#eic-out)"/>
+  <text x="560" y="376" text-anchor="middle" font-size="12" fill="#e0e0e0">POST Questionnaire/$questionnaire-package — for exactly the canonical the payer just named</text>
+  <line x1="962" y1="410" x2="162" y2="410" stroke="#00b4ff" stroke-width="1.5" marker-end="url(#eic-in)"/>
+  <text x="560" y="430" text-anchor="middle" font-size="11.5" fill="#a0a0a0">the package bundle, checked so every dependency the questionnaire declares resolves inside it</text>
+
+  <!-- Chain annotation -->
+  <path d="M 300 316 C 340 344 340 356 300 376" fill="none" stroke="#ffcc66" stroke-width="1.4" stroke-dasharray="4 4"/>
+  <text x="352" y="352" font-size="11.5" fill="#ffcc66">the payer chooses the questionnaire; CHO follows it</text>
+
+  <!-- Footer -->
+  <rect x="24" y="452" width="1072" height="48" rx="10" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+  <text x="560" y="472" text-anchor="middle" font-size="12" fill="#e0e0e0">A CRD determination can arrive in the system action rather than in cards. A client that inspected only cards would conclude nothing happened.</text>
+  <text x="560" y="491" text-anchor="middle" font-size="12" fill="#909090">The payer's rules are never reimplemented inside Cloud Health Office. Protocol interoperability is not payer rule parity.</text>
+</svg>

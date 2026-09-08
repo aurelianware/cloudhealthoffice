@@ -180,6 +180,7 @@
       <div class="nav-links">
         <a href="/solutions-payers">Solutions</a>
         <a href="/cms-0057f-compliance">CMS Compliance</a>
+        <a href="/evidence">Evidence</a>
         <a href="/platform">Platform</a>
         <a href="/pricing">Pricing</a>
         <a href="/insights">Insights</a>
@@ -208,7 +209,8 @@
           <span class="badge">Consent</span>
         </div>
         <div class="hero-actions">
-          <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas" class="btn btn-primary">Read the architecture article →</a>
+          <a href="/evidence" class="btn btn-primary">Evidence Hub →</a>
+          <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas" class="btn btn-ghost">Read the architecture article →</a>
           <a href="/cms-0057f-compliance" class="btn btn-ghost">CMS-0057-F readiness overview</a>
           <a href="/contact" class="btn btn-green">Book a readiness review</a>
         </div>
@@ -325,46 +327,53 @@
     <section>
       <div class="container">
         <div class="section-label">The scenarios</div>
-        <h2 class="section-title">What we prove, and how it scores today</h2>
-        <p class="section-desc">Each scenario states what it proves and its status today, scored on two dimensions: Cloud Health Office as the native backend (Replace), and integration with an external core (Augment). Statuses are deliberately honest — passable, partial, or a tracked gap. The prior-authorization scenarios below reflect the Replace-mode result.</p>
-
-        <div class="legend">
-          <span><span class="pill pass">Passable</span> proven in the compliance surface today</span>
-          <span><span class="pill part">Partial</span> core is present; some part is engagement or roadmap work</span>
-          <span><span class="pill gap">Gap</span> not built yet; tracked so it can't be silently claimed</span>
-        </div>
+        <h2 class="section-title">The scenario inventory, and what each one proves</h2>
+        <p class="section-desc">These are the twenty-one scenarios the acceptance suite defines. This table says
+          what each one proves; it deliberately carries no status column, because status belongs to the published
+          snapshot below &mdash; generated from an actual run of the suite at a named source revision, rather than
+          typed into a page where it can quietly fall behind the code.</p>
 
         <div class="scroll-x">
         <table class="scenarios">
-          <thead><tr><th>ID</th><th>Scenario</th><th>Status</th></tr></thead>
+          <thead><tr><th>ID</th><th>What the scenario proves</th></tr></thead>
           <tbody>
-            <tr><td>PAS-01</td><td><span class="what">CRD — is prior auth required?</span><p>Order-select / order-sign returns a card with the governing rule.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PAS-02</td><td><span class="what">DTR — correct documentation</span><p>The right Questionnaire; a completed response validates and is consumable by PAS.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PAS-03</td><td><span class="what">PAS submit</span><p>A prior-auth request yields a decision, a tracking id, and the requested service detail.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PAS-04</td><td><span class="what">Inquiry &amp; status</span><p>Status by tracking id or member and service. FHIR PAS inquiry is roadmap.</p></td><td><span class="pill part">Partial</span></td></tr>
-            <tr><td>PAS-05</td><td><span class="what">Specific denial reason</span><p>Denials and partials carry a coded reason — never a bare "not medically necessary."</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PAS-06</td><td><span class="what">Decision timeframe</span><p>Expedited vs standard priority preserved; timestamps make 72-hour / 7-day clocks auditable.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PAS-07</td><td><span class="what">Additional information</span><p>A pended request signals outstanding review. A full documentation round-trip is roadmap.</p></td><td><span class="pill part">Partial</span></td></tr>
-            <tr><td>PAS-08</td><td><span class="what">Drug exclusion</span><p>Pharmacy prior auth must stay outside the CMS-0057-F medical scope; enforcement is roadmap.</p></td><td><span class="pill gap">Gap</span></td></tr>
-            <tr><td>PROV-01</td><td><span class="what">Attributed member pull</span><p>Member, claims, and prior-auth data projected for an attributed provider.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PROV-02</td><td><span class="what">Attribution enforcement</span><p>A non-attributed member returns no data.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PROV-03</td><td><span class="what">Opt-out honored</span><p>A member's opt-out withholds provider access.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>P2P-01</td><td><span class="what">Payer-to-Payer inbound</span><p>Inbound exchange with the five-year window and required exclusions.</p></td><td><span class="pill gap">Gap</span></td></tr>
-            <tr><td>P2P-02</td><td><span class="what">Payer-to-Payer outbound</span><p>Enrollment- and opt-in-triggered initiation with a recorded ingestion target.</p></td><td><span class="pill gap">Gap</span></td></tr>
-            <tr><td>P2P-03</td><td><span class="what">Opt-in enforcement</span><p>Opt-in is modeled in the consent registry; a dedicated exchange type is roadmap.</p></td><td><span class="pill part">Partial</span></td></tr>
-            <tr><td>P2P-04</td><td><span class="what">Member match / concurrent coverage</span><p>Member matching and concurrent-coverage exchange.</p></td><td><span class="pill gap">Gap</span></td></tr>
-            <tr><td>PAT-01</td><td><span class="what">Member claims / CARIN EOB</span><p>Member claims projected to CARIN Explanation of Benefit.</p></td><td><span class="pill pass">Passable</span></td></tr>
-            <tr><td>PAT-02</td><td><span class="what">US Core clinical</span><p>US Core demographics validate; broader clinical data comes from an external store.</p></td><td><span class="pill part">Partial</span></td></tr>
-            <tr><td>PAT-03</td><td><span class="what">Prior-auth data, drugs excluded</span><p>Prior-auth data is a recognized type; the one-year retention job is roadmap.</p></td><td><span class="pill part">Partial</span></td></tr>
-            <tr><td>SEC-01</td><td><span class="what">SMART on FHIR / OAuth</span><p>SMART discovery, scopes, and PKCE. The identity provider is configured per customer.</p></td><td><span class="pill part">Partial</span></td></tr>
-            <tr><td>CONSENT-01</td><td><span class="what">Single consent registry</span><p>One registry carries the opt-out and opt-in lifecycle.</p></td><td><span class="pill part">Partial</span></td></tr>
-            <tr><td>METRICS-01</td><td><span class="what">Prior-auth metrics</span><p>Decision times and coded reasons feed the CMS public metric set; the full extract is engagement work.</p></td><td><span class="pill part">Partial</span></td></tr>
+            <tr><td>PAS-01</td><td><span class="what">CRD — is prior authorization required?</span><p>The order-sign CRD service answers with a coverage determination: covered, whether prior authorization is needed, and — when documentation is wanted — the questionnaire canonical to follow.</p></td></tr>
+            <tr><td>PAS-02</td><td><span class="what">DTR — correct documentation</span><p>The questionnaire the payer named is retrieved through $questionnaire-package, and a completed response validates and is consumable by PAS.</p></td></tr>
+            <tr><td>PAS-03</td><td><span class="what">PAS submit — create prior authorization</span><p>A prior-auth request yields a decision, an authorization number carried as preAuthRef, and the requested service detail.</p></td></tr>
+            <tr><td>PAS-04</td><td><span class="what">PAS inquiry / status</span><p>Claim/$inquire reads the authorization record as a projection — no store and no status of its own. The authorization number alone is never sufficient: a corroborating key must match.</p></td></tr>
+            <tr><td>PAS-05</td><td><span class="what">PAS specific denial reason</span><p>Denials and partial decisions carry a coded reason — never a bare &ldquo;not medically necessary.&rdquo;</p></td></tr>
+            <tr><td>PAS-06</td><td><span class="what">PAS decision timeframe (72h / 7 calendar days)</span><p>Expedited versus standard priority is preserved, and timestamps make the 72-hour and 7-calendar-day clocks auditable.</p></td></tr>
+            <tr><td>PAS-07</td><td><span class="what">CDex additional-information exchange</span><p>A pended A4 decision that names required documentation raises a CDex Task Attachment Request; the provider answers with $submit-attachment and the authorization returns to review.</p></td></tr>
+            <tr><td>PAS-08</td><td><span class="what">Drug exclusion from medical PA scope</span><p>Pharmacy prior authorization stays outside the CMS-0057-F medical scope, and the exclusion is enforced rather than documented.</p></td></tr>
+            <tr><td>PROV-01</td><td><span class="what">Provider Access — attributed member data pull</span><p>Member, claims and prior-authorization data assembled for a provider the member is attributed to.</p></td></tr>
+            <tr><td>PROV-02</td><td><span class="what">Provider Access — attribution enforcement</span><p>A non-attributed member returns no data, and the refusal is indistinguishable from every other refusal.</p></td></tr>
+            <tr><td>PROV-03</td><td><span class="what">Provider Access — patient opt-out honored</span><p>A member's opt-out withholds provider access, evaluated at the authorization instant rather than a caller-supplied time.</p></td></tr>
+            <tr><td>P2P-01</td><td><span class="what">Payer-to-Payer inbound respond</span><p>Cloud Health Office serves Patient/$member-match and $member-data-export as the prior payer, gated by the member's Payer-to-Payer consent.</p></td></tr>
+            <tr><td>P2P-02</td><td><span class="what">Payer-to-Payer outbound initiate</span><p>A coverage transition initiates an exchange against a payer resolved from configuration, and reaches Completed only once the returned package is durably ingested.</p></td></tr>
+            <tr><td>P2P-03</td><td><span class="what">Payer-to-Payer opt-in enforcement</span><p>Payer-to-Payer has its own consent purpose. An Active consent recorded for another purpose authorizes nothing, and consent is never supplied by a caller.</p></td></tr>
+            <tr><td>P2P-04</td><td><span class="what">Payer-to-Payer member-match / concurrent coverage</span><p>Deterministic member matching, with no match and ambiguous match both terminal, and overlapping coverage refusing rather than guessing.</p></td></tr>
+            <tr><td>PAT-01</td><td><span class="what">Patient Access — member claims / CARIN EOB</span><p>Member claims projected to a CARIN Blue Button ExplanationOfBenefit.</p></td></tr>
+            <tr><td>PAT-02</td><td><span class="what">Patient Access — US Core clinical</span><p>Twelve USCDI clinical resource types stored durably and served through Patient and Provider Access. This is FHIR R4 resource support, not US Core profile certification.</p></td></tr>
+            <tr><td>PAT-03</td><td><span class="what">Patient Access — PA data (drugs excluded)</span><p>Prior-authorization data retained durably and served through Patient Access, with drug items excluded.</p></td></tr>
+            <tr><td>SEC-01</td><td><span class="what">SMART on FHIR / OAuth</span><p>Explicit Demo versus ExternalIssuer mode with no production fallback, issuer-first trust resolution, per-issuer audience and algorithms, JWKS discovery and bounded rotation.</p></td></tr>
+            <tr><td>CONSENT-01</td><td><span class="what">Single consent registry</span><p>One registry and one policy for both purposes, so Provider Access and Payer-to-Payer can neither imply nor widen one another.</p></td></tr>
+            <tr><td>METRICS-01</td><td><span class="what">Prior-authorization public metric set</span><p>Decision times and coded reasons feed the CMS public prior-authorization metric set.</p></td></tr>
           </tbody>
         </table>
         </div>
+
+        <p class="section-desc" style="margin-top:1.4rem;">Each scenario is scored on two independent dimensions:
+          Cloud Health Office as the native backend (<strong>Replace</strong>, product capability) and integration
+          with an external core (<strong>Augment</strong>, integration capability). A gap on one is not a gap on the
+          other &mdash; see <a href="/evidence/replace-vs-augment">Replace vs Augment</a>. For the workflows behind
+          these scenarios, read the <a href="/evidence/payer-to-payer">Payer-to-Payer implementation evidence</a>,
+          the <a href="/evidence/prior-authorization">CRD, DTR and PAS workflow evidence</a> and the
+          <a href="/evidence/provider-access-security">Provider Access security evidence</a>. Exchanges performed
+          against an independently developed HL7 Da Vinci implementation are reported separately, and never merged
+          into these statuses: see <a href="/evidence/davinci-interoperability">Da Vinci interoperability
+          evidence</a>.</p>
       </div>
     </section>
-
     <div class="divider"></div>
 
     <!-- Latest published evidence (data-driven) -->

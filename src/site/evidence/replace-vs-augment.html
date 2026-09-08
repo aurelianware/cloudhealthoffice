@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Replace vs Augment: CMS-0057-F Without a Core Replacement — Cloud Health Office</title>
+  <meta name="description" content="Cloud Health Office runs as the authoritative backend (Replace) or as the interoperability layer in front of QNXT, Facets or HealthEdge (Augment). How the two patterns differ, and why product capability and external-core integration capability are scored on separate evidence axes." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/evidence/replace-vs-augment" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/evidence/replace-vs-augment" />
+  <meta property="og:title" content="Replace vs Augment — CMS-0057-F deployment architecture" />
+  <meta property="og:description" content="Cloud Health Office runs as the authoritative backend (Replace) or as the interoperability layer in front of QNXT, Facets or HealthEdge (Augment). How the two patterns differ, and why product capability and external-core integration capability are scored on separate evidence axes." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Replace vs Augment — CMS-0057-F deployment architecture" />
+  <meta name="twitter:description" content="Cloud Health Office runs as the authoritative backend (Replace) or as the interoperability layer in front of QNXT, Facets or HealthEdge (Augment). How the two patterns differ, and why product capability and external-core integration capability are scored on separate evidence axes." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Replace vs Augment: meeting CMS-0057-F with or without a core replacement",
+      "description": "Cloud Health Office runs as the authoritative backend (Replace) or as the interoperability layer in front of QNXT, Facets or HealthEdge (Augment). How the two patterns differ, and why product capability and external-core integration capability are scored on separate evidence axes.",
+      "url": "https://cloudhealthoffice.com/evidence/replace-vs-augment",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cloud Health Office",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc."
+      },
+      "about": [
+        "CMS-0057-F",
+        "Payer core administration",
+        "FHIR API architecture"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Evidence",
+          "item": "https://cloudhealthoffice.com/evidence"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Replace vs Augment",
+          "item": "https://cloudhealthoffice.com/evidence/replace-vs-augment"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+  <script defer src="/js/evidence-snapshot.js"></script>
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/evidence">Evidence</a><span>/</span><a href="/evidence/replace-vs-augment">Replace vs Augment</a></nav>
+        <span class="ev-eyebrow">Architecture evidence</span>
+        <h1>Cloud Health Office can <em>be</em> the core, or sit in front of yours.</h1>
+        <p class="ev-lede">The FHIR and Da Vinci boundary is identical in both deployment patterns. What changes is which system owns the record — and that is exactly why the evidence scores product capability and external-core integration capability on two separate axes.</p>
+        <div class="ev-badges"><span class="ev-badge ev-badge--cyan">Replace &middot; Augment &middot; Demo</span>
+          <span class="ev-badge">Two evidence axes</span>
+          <span class="ev-badge ev-badge--amber">Adapters are stubs today</span></div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
+        </p>
+      </div>
+    </header>
+
+    <div class="ev-section ev-section--tight">
+      <nav class="ev-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+            <li><a href="#two-patterns">The two deployment patterns</a></li>
+            <li><a href="#two-axes">Why the evidence has two axes</a></li>
+            <li><a href="#matrix">Every scenario, on both axes</a></li>
+            <li><a href="#qnxt-facets-healthedge">QNXT, Facets and HealthEdge</a></li>
+            <li><a href="#related">Related evidence</a></li>
+        </ol>
+      </nav>
+    </div>
+
+
+    <section class="ev-section" id="two-patterns">
+      <div class="ev-container">
+        <span class="ev-eyebrow">The question</span>
+        <h2>Can a payer meet CMS-0057-F without replacing its core administration system?</h2>
+        <p class="ev-sub">
+          Yes — and the choice is a deployment decision, not a different product. Cloud Health Office runs in
+          two materially different patterns behind the same FHIR and Da Vinci boundary. What changes between
+          them is <strong>who owns the record</strong>, and therefore what the evidence can honestly say.
+        </p>
+
+        <div class="ev-split">
+          <div class="ev-split__col ev-split__col--replace">
+            <h3>Replace &mdash; Cloud Health Office is the backend</h3>
+            <div class="ev-stack">FHIR / Da Vinci
+   &darr;
+Cloud Health Office
+   &darr;
+CHO-native authorization,
+member, claims and consent</div>
+            <p>
+              Cloud Health Office is the authoritative system of record for the workflow. Authorizations,
+              consent records, member history and prior-auth rules live in Cloud Health Office's own stores.
+              This is the default: <code>Cms0057:Authorization:OperatingMode = "Replace"</code>.
+            </p>
+          </div>
+          <div class="ev-split__col ev-split__col--augment">
+            <h3>Augment &mdash; Cloud Health Office in front of your core</h3>
+            <div class="ev-stack">FHIR / Da Vinci
+   &darr;
+Cloud Health Office
+   &darr;
+QNXT / Facets / HealthEdge
+or another core platform</div>
+            <p>
+              Cloud Health Office provides the interoperability and API layer; the existing core administration
+              platform stays authoritative. The FHIR surface external callers see is identical. What differs is
+              where the answer comes from behind it.
+            </p>
+          </div>
+        </div>
+
+        <figure class="ev-figure">
+          <img src="/graphics/evidence/replace-vs-augment.svg" alt="Side-by-side comparison of the Replace and Augment deployment patterns. Both present the same FHIR and Da Vinci boundary. In Replace, Cloud Health Office serves requests from its own native authorization, member, claims and consent capabilities as the authoritative system of record. In Augment, Cloud Health Office acts as the interoperability layer in front of an existing core such as QNXT, Facets or HealthEdge through a per-engagement adapter, and the external core remains authoritative." />
+          <figcaption>
+            The external callers cannot tell the two apart, and that is the point. The evidence, however, can and
+            must: product capability and integration capability are scored on separate axes.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="two-axes">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Why the evidence has two axes</span>
+        <h2>A core gap is not a product gap</h2>
+        <p class="ev-sub">
+          CMS-0057-F readiness has two independent dimensions, and collapsing them into one number is how
+          compliance claims stop meaning anything. The acceptance suite scores them separately.
+        </p>
+
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th>Axis</th><th>The question it answers</th><th>Proven in</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Product capability</td>
+                <td><span class="ev-what">Can Cloud Health Office itself perform the workflow?</span>
+                  <p>Scored against the CHO-native backend, on synthetic data, at a named revision.</p></td>
+                <td>Replace mode</td>
+              </tr>
+              <tr>
+                <td>Integration capability</td>
+                <td><span class="ev-what">Can Cloud Health Office perform the workflow against a specific external core right now?</span>
+                  <p>Requires a live adapter for that core. The adapters in this repository are documented stubs.</p></td>
+                <td>Augment mode</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          So a scenario reads, for example, <strong>PAS-03 &rarr; CHO Replace: Passable; QNXT Augment: Gap</strong>.
+          The Gap is real and is published rather than hidden — it says an adapter for that core has not been
+          built in this repository, not that the prior-authorization workflow does not work.
+        </p>
+
+        <h3>Mode selection never falls back silently</h3>
+        <p>
+          A deployment configured for Augment does not quietly serve requests from the Cloud Health Office
+          backend when the external adapter is missing. <code>AuthorizationBackendSelector</code> fails loudly if
+          the configured backend is not registered, and <code>GET /api/authorizations/backend-status</code>
+          reports the mode and backend actually in force. A silent downgrade is the failure nobody notices,
+          because everything keeps working and the answers simply come from the wrong system.
+        </p>
+
+        <h3>Demo is a third thing, and is not a synonym for either</h3>
+        <p>
+          <strong>Demo</strong> is synthetic demonstration data. <strong>Replace</strong> is Cloud Health Office
+          operating as the system of record. The FHIR projection layer defaults to Demo with synthetic data
+          precisely so a deployment can never accidentally look live. The three are kept distinct in
+          configuration so that no environment is ambiguous about which one it is in.
+        </p>
+
+        <div class="ev-ref">
+          <h4>Implementation evidence</h4>
+          <dl>
+            <dt>Scenario axes</dt><dd>Every scenario carries both a <code>replace</code> status and a per-core <code>integrations</code> status</dd>
+            <dt>Selector</dt><dd><code>src/engines/CloudHealthOffice.OperatingMode</code> &middot; <code>AuthorizationBackendSelector</code></dd>
+            <dt>Adapter seam</dt><dd><code>IAuthorizationBackend</code> &mdash; <code>ChoAuthorizationBackend</code> (Replace) and <code>QnxtAuthorizationBackend</code> (Augment, documented stub)</dd>
+            <dt>Documentation</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md">CMS0057-ACCEPTANCE-INVENTORY.md</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/OPERATING-MODE.md">OPERATING-MODE.md</a></dd>
+            <dt>Pull requests</dt><dd><a href="https://github.com/aurelianware/cloudhealthoffice/pull/1144">#1144</a> made Cloud Health Office the native CMS-0057-F backend and introduced the Replace/Augment split</dd>
+          </dl>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="ev-section" id="matrix">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Live snapshot</span>
+
+        <h2>Every scenario, on both axes</h2>
+        <p class="ev-sub">The Replace column is product capability. Each Augment column is integration capability against one named external core, and is reported separately so the two can never be summed.</p>
+        <div class="ev-snapshot" data-evidence="cms0057" data-src="/insights/cms-0057-f/cms0057-public-evidence.json" data-view="scenarios">
+          <p class="ev-fallback" data-evidence-fallback>
+            Loading the latest published CMS-0057-F acceptance evidence. It is generated in CI from the
+            acceptance suite at a named source revision and committed to this repository, so the status
+            shown here is the tested status rather than a claim typed into a page.
+          </p>
+          <div data-evidence-body hidden></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="qnxt-facets-healthedge">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Named core platforms</span>
+        <h2>What is, and is not, evidenced for QNXT, Facets and HealthEdge</h2>
+        <p class="ev-sub">
+          These names appear on this site because payers ask about them, and because Augment mode exists to
+          sit in front of them. It is worth being exact about what that does and does not mean today.
+        </p>
+
+        <div class="ev-grid ev-grid--two">
+          <div class="ev-card">
+            <h3>Evidenced</h3>
+            <ul>
+              <li>The <strong>seam</strong> exists: a single domain interface every backend implements, selected by explicit configuration.</li>
+              <li>Augment is a <strong>scored dimension</strong> in the acceptance evidence, not an assertion in prose.</li>
+              <li>Where an adapter is absent, the scenario reads <strong>Gap</strong> in that core's column, and the suite asserts the stub rather than papering over it.</li>
+              <li>The FHIR and Da Vinci surface external callers see is the same in both modes.</li>
+            </ul>
+          </div>
+          <div class="ev-card">
+            <h3>Not evidenced</h3>
+            <ul>
+              <li>No production integration with QNXT, Facets or HealthEdge is claimed or shown.</li>
+              <li>The external-core adapters in this repository are <strong>documented stubs</strong>. Binding a customer's system of record is engagement work.</li>
+              <li>Nothing here has been exercised against a licensed core administration platform.</li>
+              <li>A Passable Replace status says nothing about how a specific core behaves behind an adapter.</li>
+            </ul>
+          </div>
+        </div>
+
+        <p>
+          For the workflow-level view of how CRD, DTR and PAS map onto an existing core, see
+          <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">CMS-0057-F with QNXT, Facets or HealthEdge</a>.
+          For the reference architecture behind both patterns, see
+          <a href="/cms-0057-f/implementation-architecture">CMS-0057-F implementation architecture</a>. If you need the
+          regulatory text itself rather than the implementation, the
+          <a href="https://cms-0057-f.com/guides/cms-0057-f-qnxt" rel="noopener">CMS-0057-F and QNXT guide</a> on our
+          sister reference site covers the requirement side.
+        </p>
+
+        <div class="ev-limits">
+          <h3>What this page does not claim</h3>
+          <ul>
+            <li><strong>No production QNXT, Facets or HealthEdge integration is claimed.</strong> The adapters in this repository throw rather than pretend, and the acceptance suite asserts that they do.</li>
+            <li><strong>Augment evidence is separate from Replace capability</strong> and must not be read as either supporting or undermining it.</li>
+            <li><strong>An adapter built for one engagement is not evidence for another.</strong> Core administration deployments differ per plan, and a working integration is specific to the system it was built against.</li>
+            <li><strong>Replace-mode Passable is not CMS certification</strong> and does not establish production readiness for a particular payer deployment.</li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="ev-section ev-section--alt" id="related">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Related evidence</span>
+        <h2>Where to read next</h2>
+        <div class="ev-grid">
+          <a class="ev-card" href="/insights/cms-0057-f/acceptance-scenarios"><h3>CMS-0057-F implementation evidence</h3><p>The full scenario inventory and the live acceptance snapshot.</p></a>
+          <a class="ev-card" href="/evidence/prior-authorization"><h3>CRD, DTR and PAS workflow evidence</h3><p>The prior-authorization chain that Replace mode serves natively.</p></a>
+          <a class="ev-card" href="/cms-0057-f/implementation-architecture"><h3>CMS-0057-F implementation architecture</h3><p>The reference architecture behind both deployment patterns.</p></a>
+          <a class="ev-card" href="/evidence/davinci-interoperability"><h3>Independently tested interoperability</h3><p>What was exchanged with software Cloud Health Office did not write.</p></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="ev-section">
+      <div class="ev-container">
+        <div class="ev-cta">
+          <h2>Work out which pattern your plan needs.</h2>
+          <p>Replace and Augment start from the same FHIR boundary. Which one you deploy depends on what your core still owns.</p>
+          <div class="ev-actions">
+            <a class="ev-btn" href="/contact">Talk about a deployment &rarr;</a>
+            <a class="ev-btn ev-btn--ghost" href="https://github.com/aurelianware/cloudhealthoffice">Read the source on GitHub &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Evidence</h5>
+          <ul>
+            <li><a href="/evidence">Evidence Hub</a></li>
+            <li><a href="/insights/cms-0057-f/acceptance-scenarios">CMS-0057-F implementation evidence</a></li>
+            <li><a href="/evidence/davinci-interoperability">Da Vinci interoperability evidence</a></li>
+            <li><a href="/evidence/payer-to-payer">Payer-to-Payer implementation evidence</a></li>
+            <li><a href="/evidence/prior-authorization">CRD, DTR and PAS workflow evidence</a></li>
+            <li><a href="/evidence/provider-access-security">Provider Access security evidence</a></li>
+            <li><a href="/evidence/replace-vs-augment">Replace vs Augment architecture</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Documentation</h5>
+          <ul>
+            <li><a href="/docs/quickstart">Quick Start</a></li>
+            <li><a href="/docs/million-claim-challenge/evidence">MCC Evidence Archive</a></li>
+            <li><a href="/docs/compliance">CMS-0057-F Guide</a></li>
+            <li><a href="/docs/prior-auth-guide">Prior Authorization Guide</a></li>
+            <li><a href="/docs/architecture">Architecture</a></li>
+            <li><a href="/trust">Trust &amp; Security</a></li>
+            <li><a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer">View Source on GitHub &rarr;</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 520" role="img" aria-labelledby="evm-title evm-desc" preserveAspectRatio="xMidYMid meet" font-family="Outfit, system-ui, sans-serif">
+  <title id="evm-title">Two separate evidence systems: internal acceptance and external interoperability</title>
+  <desc id="evm-desc">Two independent columns. On the left, the internal CMS-0057-F acceptance suite asks whether Cloud Health Office implements the behaviour its own acceptance specification requires; it runs Cloud Health Office code against Cloud Health Office fixtures and scores each scenario Passable, Partial, Gap or Not applicable, publishing cms0057-public-evidence.json. On the right, the external Da Vinci interoperability harness asks whether Cloud Health Office can exchange standards-conformant requests and responses with an independently developed HL7 Da Vinci implementation; it runs real exchanges against a pinned reference implementation and records Passed, Failed, Skipped or Not run, publishing an interoperability run document. A barrier between the two columns states that the vocabularies are deliberately different and the two results are never merged into a single compliance score: an interoperability result never changes a CMS-0057-F scenario status, and a CMS-0057-F status never implies an interoperability result.</desc>
+
+  <rect x="0" y="0" width="1120" height="520" fill="#05070a"/>
+
+  <!-- ── Left column: internal acceptance ── -->
+  <rect x="24" y="24" width="480" height="404" rx="14" fill="rgba(0,255,136,0.045)" stroke="#00ff88" stroke-width="1.6"/>
+  <text x="48" y="58" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">INTERNAL</text>
+  <text x="48" y="88" font-size="20" font-weight="800" fill="#00ff88">CMS-0057-F acceptance suite</text>
+  <text x="48" y="114" font-size="13" fill="#e0e0e0">Does CHO implement what its own</text>
+  <text x="48" y="134" font-size="13" fill="#e0e0e0">acceptance specification requires?</text>
+
+  <rect x="48" y="156" width="432" height="72" rx="9" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.22)"/>
+  <text x="66" y="180" font-size="11.5" font-weight="600" fill="#a0a0a0" font-family="JetBrains Mono, monospace">tests/Cms0057Acceptance.Tests</text>
+  <text x="66" y="202" font-size="12" fill="#a0a0a0">CHO code, CHO fixtures, synthetic data</text>
+  <text x="66" y="220" font-size="12" fill="#a0a0a0">21 repository-defined scenarios</text>
+
+  <text x="48" y="258" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">VOCABULARY</text>
+  <g font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="600">
+    <rect x="48" y="270" width="86" height="26" rx="5" fill="rgba(0,255,136,0.09)" stroke="rgba(0,255,136,0.4)"/>
+    <text x="91" y="288" text-anchor="middle" fill="#00ff88">PASSABLE</text>
+    <rect x="144" y="270" width="76" height="26" rx="5" fill="rgba(255,204,102,0.09)" stroke="rgba(255,204,102,0.4)"/>
+    <text x="182" y="288" text-anchor="middle" fill="#ffcc66">PARTIAL</text>
+    <rect x="230" y="270" width="54" height="26" rx="5" fill="rgba(255,122,122,0.09)" stroke="rgba(255,122,122,0.4)"/>
+    <text x="257" y="288" text-anchor="middle" fill="#ff7a7a">GAP</text>
+    <rect x="294" y="270" width="50" height="26" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
+    <text x="319" y="288" text-anchor="middle" fill="#909090">N/A</text>
+  </g>
+
+  <text x="48" y="336" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">PUBLISHED ARTIFACT</text>
+  <rect x="48" y="348" width="432" height="56" rx="9" fill="rgba(0,0,0,0.45)" stroke="rgba(0,255,136,0.22)"/>
+  <text x="66" y="370" font-size="11.5" fill="#00ff88" font-family="JetBrains Mono, monospace">cms0057-public-evidence.json</text>
+  <text x="66" y="390" font-size="11.5" fill="#a0a0a0">tied to the tested source revision</text>
+
+  <!-- ── Right column: external interoperability ── -->
+  <rect x="616" y="24" width="480" height="404" rx="14" fill="rgba(0,180,255,0.045)" stroke="#00b4ff" stroke-width="1.6"/>
+  <text x="640" y="58" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2.2">EXTERNAL</text>
+  <text x="640" y="88" font-size="20" font-weight="800" fill="#00b4ff">Da Vinci interoperability harness</text>
+  <text x="640" y="114" font-size="13" fill="#e0e0e0">Can CHO interoperate with software</text>
+  <text x="640" y="134" font-size="13" fill="#e0e0e0">it does not own?</text>
+
+  <rect x="640" y="156" width="432" height="72" rx="9" fill="rgba(0,0,0,0.45)" stroke="rgba(0,180,255,0.22)"/>
+  <text x="658" y="180" font-size="11.5" font-weight="600" fill="#a0a0a0" font-family="JetBrains Mono, monospace">tests/DaVinciInterop.Tests</text>
+  <text x="658" y="202" font-size="12" fill="#a0a0a0">real exchanges across a process boundary</text>
+  <text x="658" y="220" font-size="12" fill="#a0a0a0">pinned HL7 Da Vinci reference implementation</text>
+
+  <text x="640" y="258" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">VOCABULARY</text>
+  <g font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="600">
+    <rect x="640" y="270" width="70" height="26" rx="5" fill="rgba(0,255,136,0.09)" stroke="rgba(0,255,136,0.4)"/>
+    <text x="675" y="288" text-anchor="middle" fill="#00ff88">Passed</text>
+    <rect x="720" y="270" width="64" height="26" rx="5" fill="rgba(255,122,122,0.09)" stroke="rgba(255,122,122,0.4)"/>
+    <text x="752" y="288" text-anchor="middle" fill="#ff7a7a">Failed</text>
+    <rect x="794" y="270" width="74" height="26" rx="5" fill="rgba(255,204,102,0.09)" stroke="rgba(255,204,102,0.4)"/>
+    <text x="831" y="288" text-anchor="middle" fill="#ffcc66">Skipped</text>
+    <rect x="878" y="270" width="72" height="26" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.16)"/>
+    <text x="914" y="288" text-anchor="middle" fill="#909090">NotRun</text>
+  </g>
+
+  <text x="640" y="336" font-size="11" font-weight="600" fill="#606060" font-family="JetBrains Mono, monospace" letter-spacing="2">PUBLISHED ARTIFACT</text>
+  <rect x="640" y="348" width="432" height="56" rx="9" fill="rgba(0,0,0,0.45)" stroke="rgba(0,180,255,0.22)"/>
+  <text x="658" y="370" font-size="11.5" fill="#00b4ff" font-family="JetBrains Mono, monospace">davinci-interop-public-evidence.json</text>
+  <text x="658" y="390" font-size="11.5" fill="#a0a0a0">names the pinned external implementation</text>
+
+  <!-- ── The barrier ── -->
+  <line x1="560" y1="40" x2="560" y2="412" stroke="rgba(255,255,255,0.16)" stroke-width="1.5" stroke-dasharray="5 7"/>
+  <g>
+    <rect x="516" y="196" width="88" height="88" rx="44" fill="#05070a" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="560" y="232" text-anchor="middle" font-size="13" font-weight="800" fill="#e0e0e0">NEVER</text>
+    <text x="560" y="252" text-anchor="middle" font-size="13" font-weight="800" fill="#e0e0e0">MERGED</text>
+  </g>
+
+  <!-- ── Footer statement ── -->
+  <rect x="24" y="446" width="1072" height="50" rx="10" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+  <text x="560" y="470" text-anchor="middle" font-size="13" fill="#e0e0e0">An interoperability result never changes a CMS-0057-F scenario status. A CMS-0057-F status never implies an interoperability result.</text>
+  <text x="560" y="488" text-anchor="middle" font-size="12" fill="#909090">Neither is CMS certification. There is no single combined compliance score.</text>
+</svg>
