@@ -15,6 +15,7 @@ the architecture, and find an area to contribute.
 | Reproduce benchmark evidence | [Benchmarks](benchmarks/README.md) |
 | Deploy beyond local development | [Deployment](deployment/DEPLOYMENT.md) |
 | Sell the first Layer 1 pilot | [CMS-0057-F Accelerator offer](sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) and [diligence binder](diligence/README.md) |
+| Position software + professional services | [Product-led services ADR](adr/012-product-led-professional-services.md), [services content plan](sales-materials/SERVICES-CONTENT-PLAN.md), and the [assistant plan](sales-materials/ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md) |
 | Contribute | [Developer guide](developer/README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 
 ## Getting Started
@@ -104,6 +105,7 @@ healthcare payer systems.
 - [X12 remains first-class](adr/009-x12-first-class.md)
 - [Event evidence before full event sourcing](adr/010-event-evidence-not-full-event-sourcing.md)
 - [Separate rules, scoring, and claims](adr/011-rules-and-evidence-model.md)
+- [Product-led professional services and labelled operating models](adr/012-product-led-professional-services.md)
 
 ## Roadmap
 

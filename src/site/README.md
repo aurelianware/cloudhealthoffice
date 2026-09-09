@@ -29,10 +29,15 @@ site/
 ├── index.html              # Homepage with hero and Calendly integration
 ├── login.html              # Login/registration page with multi-tenant Entra ID
 ├── platform.html           # Platform overview and capabilities
+├── services.html           # Professional Services landing page (see docs/adr/012)
+├── deploy.html             # Deployment and operating models, with status labels
 ├── insights.html           # Market and engineering insights
 ├── assessment.html         # Generated from assets/cho-assessment.md
+├── MESSAGE_SHEET.md        # Locked marketing sentences — update before any copy change
 ├── css/
-│   └── sentinel.css        # Sentinel theme styling (Absolute black, neon cyan/green)
+│   ├── sentinel.css        # Sentinel theme styling (Absolute black, neon cyan/green)
+│   ├── evidence-hub.css    # Long-form reading treatment, scoped to body.ev
+│   └── services.css        # /services and /deploy components, scoped to body.ev
 ├── js/
 │   ├── auth.js             # Authentication helper library
 │   ├── markdown-converter.js  # Build script to convert .md to .html

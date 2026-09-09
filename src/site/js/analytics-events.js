@@ -196,6 +196,16 @@
     return out;
   }
 
+  /* ---------- page-specific view events ----------
+   * A handful of commercial pages get their own named view event so the
+   * services and deployment funnels can be reported without filtering
+   * page_view_cho by path. Keyed on the normalized path (no trailing slash).
+   */
+  var PAGE_VIEW_EVENTS = {
+    '/services': 'services_page_view',
+    '/deploy': 'deployment_page_view'
+  };
+
   /* ---------- page_view ---------- */
   function firePageView() {
     var path = pagePath();
@@ -208,10 +218,13 @@
     var utm = utmParams();
     for (var k in utm) { if (utm.hasOwnProperty(k)) params[k] = utm[k]; }
     choTrack('page_view_cho', params);
+
+    var named = PAGE_VIEW_EVENTS[path.replace(/\/$/, '') || '/'];
+    if (named) choTrack(named, params);
   }
 
   /* ---------- scroll depth on key pages ---------- */
-  var SCROLL_PAGES = ['/', '/platform', '/cms-0057f-compliance', '/evidence', '/what-is', '/deploy'];
+  var SCROLL_PAGES = ['/', '/platform', '/cms-0057f-compliance', '/evidence', '/what-is', '/deploy', '/services'];
   function initScrollDepth() {
     var path = pagePath().replace(/\/$/, '') || '/';
     if (SCROLL_PAGES.indexOf(path) === -1) return;
@@ -243,6 +256,7 @@
     { match: '/contact', event: 'contact_cta_click' },
     { match: '/start', event: 'start_cta_click' },
     { match: '/deploy', event: 'deploy_cta_click' },
+    { match: '/services', event: 'services_cta_click' },
     { match: '/pricing', event: 'pricing_cta_click' },
     { match: '/evidence', event: 'evidence_cta_click' },
     { match: '/docs/quickstart', event: 'quickstart_click' }
