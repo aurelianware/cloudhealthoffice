@@ -43,6 +43,27 @@ services language. A query about *what the rule requires* goes to
 `/cms-0057f-compliance`. A query about *who will help us meet it* goes to
 `/services`. A query about *where the software runs* goes to `/deploy`.
 
+## 1b. The companion property: cms-0057-f.com
+
+cms-0057-f.com is operated by Aurelianware and owns **informational** CMS-0057-F
+intent. cloudhealthoffice.com owns **commercial** intent. The full contract —
+CTA blocks, anchor targets, attribution parameters, editorial rules — is in
+[CROSS-SITE-CMS-0057-F-STRATEGY.md](CROSS-SITE-CMS-0057-F-STRATEGY.md) and
+[ADR 013](../adr/013-cms-0057-f-com-companion-property.md).
+
+| Intent | Property |
+| --- | --- |
+| What does CMS-0057-F require · deadline · prior authorization requirements · CRD vs DTR vs PAS · CMS-0057-F architecture · payer-to-payer API requirements · CMS-0057-F and QNXT/Facets/HealthEdge | cms-0057-f.com |
+| CMS-0057-F consulting · implementation services · readiness assessment · payer interoperability consulting · QNXT integration consulting · payer core administration advisory · Da Vinci PAS implementation · FHIR implementation for health plans · vendor SOW review · fractional payer solution architect | cloudhealthoffice.com |
+
+Never publish substantially identical service pages on both domains. Where a
+backlog item below could plausibly live on either property, the test is intent:
+if it explains the rule, it belongs there; if it describes what we would do
+about it, it belongs here.
+
+`/cms-0057f-compliance` stays the commercial CMS-0057-F pillar on this site and
+is not flattened into the reference site's coverage.
+
 ## 2. Concept clusters and their target page
 
 ### Commercial-intent, services
@@ -60,6 +81,10 @@ services language. A query about *what the rule requires* goes to
 | payer core administration modernization | `/services#offer-core-admin` |
 | QNXT integration / QNXT FHIR / QNXT CMS-0057-F | `/services#offer-core-admin` supported by `/evidence/replace-vs-augment` |
 | Da Vinci PAS implementation | `/services#offer-interop` supported by `/evidence/prior-authorization` |
+| payer operations / core administration support | `/services#payer-operations` |
+| fee schedule implementation / update services | `/services#offer-fee-schedule` |
+| claims repricing validation / payment variance analysis | `/services#offer-repricing-validation` supported by `/claims-repricing` |
+| QNXT / Facets production support, configuration troubleshooting | `/services#offer-core-admin-support` |
 
 ### Commercial-intent, product
 
@@ -101,6 +126,10 @@ there are no customers, ratings, or published service prices to describe.
 | `/services/qnxt` | **Hold.** High intent, but a page here risks reading as a QNXT-affiliated offering. Needs careful wording and probably a legal read before it ships |
 | `/services/fractional-architect` | **Hold.** Low volume; the anchor section is sufficient |
 | `/platform/deployment` | **Rejected.** Near-duplicate of `/deploy`. See ADR 012 |
+| `/services/payer-operations` | **Hold — measure first.** The section on `/services` is substantive; split it out only when search demand, lead activity, or customer need warrants it |
+| `/services/fee-schedule-management` | **Hold — measure first.** Same reasoning |
+| `/services/claims-repricing-validation` | **Hold — measure first.** Strongest of the four, because `/claims-repricing` already draws related traffic |
+| `/services/core-admin-support` | **Hold — measure first.** Overlaps `/services#offer-core-admin`; needs a clear boundary before it earns a page |
 | Per-keyword landing pages | **Rejected.** Doorway pages |
 
 ## 5. Content backlog
@@ -125,6 +154,9 @@ product discovery and services discovery.
 | 12 | How Cloud Health Office Can Complement Existing Core Administration Platforms | Evidence | `/services#offer-core-admin`, `/platform` |
 | 13 | What Belongs in the Core, Beside the Core, and at the Interoperability Layer? | Evidence | `/platform`, `/services` |
 | 14 | Planning a Cloud Health Office Implementation Across Multiple Vendors | Insights | `/services#offer-implementation` |
+| 15 | What to Validate Before a Fee Schedule Goes Live | Insights | `/services#offer-fee-schedule` |
+| 16 | Isolating a Payment Variance: Contract, Fee Schedule, Provider, Benefit, or Adjudication? | Evidence | `/services#offer-repricing-validation` |
+| 17 | Regression Testing a Core Administration Configuration Change | Evidence | `/services#offer-core-admin-support` |
 
 ### Writing constraints for all of the above
 
@@ -152,6 +184,10 @@ Track, per page, in GA4:
   `sow_review_interest`, `saas_interest`, `payer_cloud_interest`,
   `managed_operations_interest`
 - `advisory_contact_started`, `advisory_contact_submitted`
+- Payer operations interest: `payer_operations_interest`, `fee_schedule_interest`,
+  `repricing_validation_interest`, `core_admin_support_interest`
+- Cross-site: `cross_site_referral` (landing), `cross_site_lead` (submission),
+  grouped by `ref_article` and `ref_cta`
 
 Revisit the "justified later" pages once there are at least two quarters of
 Search Console impressions for the corresponding queries on `/services`.

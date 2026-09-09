@@ -16,6 +16,8 @@ the architecture, and find an area to contribute.
 | Deploy beyond local development | [Deployment](deployment/DEPLOYMENT.md) |
 | Sell the first Layer 1 pilot | [CMS-0057-F Accelerator offer](sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) and [diligence binder](diligence/README.md) |
 | Position software + professional services | [Product-led services ADR](adr/012-product-led-professional-services.md), [services content plan](sales-materials/SERVICES-CONTENT-PLAN.md), and the [assistant plan](sales-materials/ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md) |
+| Run the cms-0057-f.com companion property | [ADR 013](adr/013-cms-0057-f-com-companion-property.md) and the [cross-site contract](sales-materials/CROSS-SITE-CMS-0057-F-STRATEGY.md) |
+| Turn payer operations work into product | [Payer operations productization backlog](roadmap/payer-operations-productization.md) |
 | Contribute | [Developer guide](developer/README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 
 ## Getting Started
@@ -106,6 +108,7 @@ healthcare payer systems.
 - [Event evidence before full event sourcing](adr/010-event-evidence-not-full-event-sourcing.md)
 - [Separate rules, scoring, and claims](adr/011-rules-and-evidence-model.md)
 - [Product-led professional services and labelled operating models](adr/012-product-led-professional-services.md)
+- [cms-0057-f.com as a companion educational property](adr/013-cms-0057-f-com-companion-property.md)
 
 ## Roadmap
 

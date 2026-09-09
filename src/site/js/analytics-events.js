@@ -26,6 +26,12 @@
 
   var ANON_KEY = 'cho_anonymous_id';
   var PAGES_KEY = 'cho_session_pages';
+  var ATTRIB_KEY = 'cho_attribution';
+
+  // Companion properties operated by Aurelianware. A referral from one of these
+  // is reported as a cross-site referral so regulatory content on the reference
+  // site can be attributed to the commercial conversation it produced here.
+  var COMPANION_HOSTS = ['cms-0057-f.com', 'www.cms-0057-f.com'];
 
   /* ---------- storage helpers (never throw) ---------- */
   function lsGet(key) {
@@ -169,6 +175,7 @@
     getAnonymousId: getAnonymousId,
     getViewedPages: getViewedPages,
     getIdentity: getIdentity,
+    getAttribution: getAttribution,
     identify: identify
   };
 
@@ -181,6 +188,103 @@
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 100);
+  }
+
+  /* ---------- cross-site attribution (first touch, session scoped) ----------
+   * Records where a visit came from so a lead can be traced back to the
+   * content that produced it — in particular a regulatory article on the
+   * companion reference site cms-0057-f.com.
+   *
+   * What is recorded: originating host, originating article path, the CTA that
+   * was clicked, campaign parameters, and the page this session landed on.
+   * What is never recorded: PHI, member or patient data, anything the visitor
+   * typed, and any identifier beyond the site's own anonymous_id. Values are
+   * whitelisted character-by-character and length-capped so a crafted inbound
+   * URL cannot smuggle arbitrary content into the lead record.
+   *
+   * First touch wins: once a session has attribution, later navigation inside
+   * cloudhealthoffice.com does not overwrite it.
+   */
+  function cleanToken(value, maxLength) {
+    if (!value) return '';
+    return String(value).replace(/[^A-Za-z0-9._~:/?#@!$&*+,;=%\- ]/g, '').slice(0, maxLength).trim();
+  }
+
+  function cleanHost(value) {
+    if (!value) return '';
+    return String(value).toLowerCase().replace(/[^a-z0-9.-]/g, '').slice(0, 100);
+  }
+
+  function cleanPath(value) {
+    if (!value) return '';
+    // Strip any query string or fragment: only the article path is useful and
+    // a query string is exactly where unexpected content would arrive.
+    return String(value).split('?')[0].split('#')[0].replace(/[^A-Za-z0-9._~/\-]/g, '').slice(0, 160);
+  }
+
+  function referrerParts() {
+    var out = { host: '', path: '' };
+    try {
+      if (!document.referrer) return out;
+      var url = new URL(document.referrer);
+      if (url.hostname.toLowerCase() === window.location.hostname.toLowerCase()) return out;
+      out.host = cleanHost(url.hostname);
+      out.path = cleanPath(url.pathname);
+    } catch (e) { /* ignore */ }
+    return out;
+  }
+
+  function readAttribution() {
+    var raw = ssGet(ATTRIB_KEY);
+    if (!raw) return null;
+    try { return JSON.parse(raw) || null; } catch (e) { return null; }
+  }
+
+  function captureAttribution() {
+    var existing = readAttribution();
+    if (existing) return existing;
+
+    var q;
+    try { q = new URLSearchParams(window.location.search); } catch (e) { q = null; }
+    var param = function (name) { return q ? cleanToken(q.get(name), 120) : ''; };
+
+    var ref = referrerParts();
+    var attribution = {
+      // An explicit ?ref= wins over the referrer header, which is often
+      // stripped or truncated by browsers and privacy tooling.
+      ref_site: cleanHost(param('ref')) || ref.host,
+      ref_article: cleanPath(param('ref_article')) || ref.path,
+      ref_cta: cleanToken(param('ref_cta'), 60),
+      landing_path: pagePath(),
+      utm_source: param('utm_source'),
+      utm_medium: param('utm_medium'),
+      utm_campaign: param('utm_campaign'),
+      utm_term: param('utm_term'),
+      utm_content: param('utm_content')
+    };
+
+    var hasAny = false;
+    for (var k in attribution) {
+      if (attribution.hasOwnProperty(k) && k !== 'landing_path' && attribution[k]) hasAny = true;
+    }
+    if (!hasAny) return null;
+
+    ssSet(ATTRIB_KEY, JSON.stringify(attribution));
+
+    if (COMPANION_HOSTS.indexOf(attribution.ref_site) !== -1) {
+      choTrack('cross_site_referral', {
+        ref_site: attribution.ref_site,
+        ref_article: attribution.ref_article,
+        ref_cta: attribution.ref_cta,
+        landing_path: attribution.landing_path,
+        utm_campaign: attribution.utm_campaign
+      });
+    }
+    return attribution;
+  }
+
+  function getAttribution() {
+    return readAttribution();
   }
 
   /* ---------- UTM capture ---------- */
@@ -315,6 +419,7 @@
 
   function init() {
     getAnonymousId();
+    captureAttribution();
     firePageView();
     initScrollDepth();
     document.addEventListener(

@@ -155,6 +155,55 @@ enterprise@cloudhealthoffice.com, not a public marketing form.
 
 ---
 
+## Payer operations & core administration (locked)
+
+**Positioning line:** Technical and operational expertise for maintaining, validating, troubleshooting, and
+modernizing payer operations.
+
+**Boundary sentence (reuse verbatim):** This is not business process outsourcing, an outsourced claims
+department, or staffing. The work is payer technology — configuration, validation, architecture, and
+operational problem solving — performed alongside your team, not instead of it.
+
+**Product loop:** Solve the immediate payer problem. Identify the repeatable pattern. Automate the
+repeatable pattern in Cloud Health Office.
+
+Never promise a recovery amount, a payment-accuracy rate, or any financial outcome. Never imply we supply
+proprietary fee schedules, licensed code sets, or contractual reimbursement data. Never publish or expose
+payer-confidential reimbursement information. Never say Cloud Health Office replaces contracted repricing
+networks, provider contracts, or third-party pricing services. Productization candidates are described as
+candidates under evaluation, never as shipped features.
+
+## cms-0057-f.com (companion property)
+
+| Property | Primary purpose | Search intent |
+| --- | --- | --- |
+| **cms-0057-f.com** | Educational and regulatory discovery. What the rule requires, CRD/DTR/PAS, architecture guidance, checklists, decision frameworks, coexistence with existing cores | Informational |
+| **cloudhealthoffice.com** | Authoritative commercial destination. Software, deployment, pricing, Professional Services, assessments, engagement, support, lead capture, future assistant escalation | Commercial |
+
+Detailed service descriptions, engagement information, conversion flows, and lead capture live **only** on
+cloudhealthoffice.com. cms-0057-f.com carries contextual CTAs that link to the corresponding service anchor
+here — never a duplicated services site.
+
+**Disclosure sentence (reuse verbatim):** cms-0057-f.com is operated by Aurelianware, Inc., the same company
+behind Cloud Health Office.
+
+**Approved cross-site CTA blocks** (for use on cms-0057-f.com; each links to the matching anchor here):
+
+1. *Need help applying this to your payer environment?* — Cloud Health Office Professional Services provides
+   CMS-0057-F architecture assessments and implementation guidance for health plans. **Request an assessment →**
+   `/services#offer-assessment`
+2. *Have a CMS-0057-F vendor proposal or SOW already?* — Get an independent technical review of the
+   architecture, scope, assumptions, dependencies, and vendor responsibilities. **Request a technical review →**
+   `/services#offer-sow-review`
+3. *Running QNXT, Facets, HealthEdge, or another payer core?* — Talk with a payer architect about how
+   CMS-0057-F can be implemented alongside your existing environment. **Discuss your architecture →**
+   `/services#offer-core-admin`
+
+Keep cms-0057-f.com technically credible and evidence-based even where Cloud Health Office is not required to
+solve the problem being discussed. Thin promotional content on that property defeats its purpose.
+
+---
+
 ## BANNED phrases on public marketing pages
 - open source
 - founding client / founding client program / we are selecting one
@@ -169,6 +218,11 @@ enterprise@cloudhealthoffice.com, not a public marketing form.
 - certified by, partnered with, or endorsed by any named vendor
 - managed service with SLAs / 24x7 support (not offered as a standard package)
 - "we replace your core" as a default framing
+- guaranteed recovery / guaranteed payment accuracy / guaranteed financial outcome
+- BPO / outsourced claims department / staff augmentation (for Payer Operations)
+- claiming we supply proprietary fee schedules, licensed code sets, or contracted reimbursement data
+- replacing contracted repricing networks or third-party pricing services
+- duplicating Professional Services pages onto cms-0057-f.com
 
 ## Replacement dictionary (search → replace)
 | Search | Replace with |

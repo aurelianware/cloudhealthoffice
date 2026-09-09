@@ -31,6 +31,7 @@ const analytics = read('js/analytics-events.js');
 const messageSheet = read('MESSAGE_SHEET.md');
 const knowledge = read('assistant/knowledge.md');
 const servicesCss = read('css/services.css');
+const leadCapture = read('js/lead-capture.js');
 
 /** Every HTML page that carries the shared primary navigation. */
 function htmlPagesWithNav(): string[] {
@@ -322,6 +323,10 @@ describe('Services & deployment positioning', () => {
       'interop',
       'fractional-architect',
       'managed-ops',
+      'payer-operations',
+      'fee-schedule',
+      'repricing-validation',
+      'core-admin-support',
       'support',
       'other'
     ];
@@ -437,7 +442,11 @@ describe('Services & deployment positioning', () => {
         'sow_review_interest',
         'saas_interest',
         'payer_cloud_interest',
-        'managed_operations_interest'
+        'managed_operations_interest',
+        'payer_operations_interest',
+        'fee_schedule_interest',
+        'repricing_validation_interest',
+        'core_admin_support_interest'
       ]) {
         expect(contact).toContain(event);
       }
@@ -501,6 +510,145 @@ describe('Services & deployment positioning', () => {
     });
   });
 
+  describe('payer operations and core administration', () => {
+    it('gives the practice its own section with stable anchors', () => {
+      expect(services).toContain('id="payer-operations"');
+      for (const id of ['offer-fee-schedule', 'offer-repricing-validation', 'offer-core-admin-support']) {
+        expect(services).toContain(`id="${id}"`);
+      }
+    });
+
+    it('is linked from the in-page table of contents', () => {
+      const toc = services.match(/<nav class="ev-toc"[\s\S]*?<\/nav>/)?.[0] ?? '';
+      expect(toc).toContain('href="#payer-operations"');
+    });
+
+    it('rules out BPO, outsourced claims, and staffing positioning', () => {
+      expect(services).toMatch(/not business process outsourcing, an outsourced claims\s+department, or staffing/i);
+    });
+
+    it('promises no recovery amount, accuracy rate, or financial outcome', () => {
+      expect(services).toMatch(/No guaranteed recovery amount, payment-accuracy rate, or financial outcome/i);
+      expect(services).not.toMatch(/(?<!\bno )guaranteed recovery/i);
+      expect(services).not.toMatch(/we (?:will )?recover \$/i);
+    });
+
+    it('does not claim to supply fee schedules or licensed code sets', () => {
+      expect(services).toMatch(/does not supply proprietary fee schedules or licensed code sets/i);
+      expect(services).toMatch(/never published or exposed/i);
+    });
+
+    it('does not claim to replace repricing networks or pricing services', () => {
+      expect(services).toMatch(/not a replacement for contracted repricing networks, provider contracts, or third-party pricing\s+services/i);
+    });
+
+    it('describes productization candidates as candidates, not shipped features', () => {
+      expect(services).toMatch(/candidates under evaluation, not shipped\s+features/i);
+      expect(services).toContain('Solve the immediate payer problem');
+    });
+
+    it('advertises the new offerings in the service structured data', () => {
+      const graph = (jsonLdBlocks(services)[0] as {
+        '@graph': Array<{ '@type': string; serviceType?: string[] }>;
+      })['@graph'];
+      const service = graph.find((node) => node['@type'] === 'ProfessionalService');
+      expect(service?.serviceType).toEqual(
+        expect.arrayContaining([
+          'Fee schedule and reimbursement configuration services',
+          'Claims repricing and payment validation',
+          'Core administration operational support'
+        ])
+      );
+    });
+
+    it('does not ship thin per-service pages before demand is measured (plan section 4)', () => {
+      for (const page of [
+        'payer-operations.html',
+        'fee-schedule-management.html',
+        'claims-repricing-validation.html',
+        'core-admin-support.html'
+      ]) {
+        expect(fs.existsSync(path.join(SITE, 'services', page))).toBe(false);
+      }
+    });
+  });
+
+  describe('cms-0057-f.com companion property', () => {
+    it('discloses that the reference site is operated by Aurelianware', () => {
+      expect(services).toMatch(/cms-0057-f\.com is operated by Aurelianware, Inc\., the same company behind\s+Cloud Health Office/i);
+    });
+
+    it('keeps the commercial content here rather than duplicating it there', () => {
+      expect(services).toMatch(/Regulatory guidance lives there; software, deployment and services live here|Commercial information[\s\S]{0,200}published here on cloudhealthoffice\.com/i);
+    });
+
+    it('keeps the cross-site CTA anchors that the reference site links to', () => {
+      // These anchors are a published contract with cms-0057-f.com.
+      // See docs/sales-materials/CROSS-SITE-CMS-0057-F-STRATEGY.md section 2.
+      for (const anchorId of [
+        'offer-assessment',
+        'offer-sow-review',
+        'offer-core-admin',
+        'offer-implementation',
+        'offer-interop',
+        'offer-fractional',
+        'payer-operations'
+      ]) {
+        expect(services).toContain(`id="${anchorId}"`);
+      }
+    });
+  });
+
+  describe('cross-site lead attribution', () => {
+    it('captures first-touch attribution before the first page view', () => {
+      expect(analytics).toContain('captureAttribution');
+      expect(analytics).toMatch(/captureAttribution\(\);\s*\n\s*firePageView\(\);/);
+      expect(analytics).toContain("var ATTRIB_KEY = 'cho_attribution';");
+    });
+
+    it('accepts explicit ref parameters and falls back to the referrer', () => {
+      expect(analytics).toContain("param('ref')");
+      expect(analytics).toContain("param('ref_article')");
+      expect(analytics).toContain("param('ref_cta')");
+      expect(analytics).toContain('referrerParts');
+    });
+
+    it('recognizes the companion property', () => {
+      expect(analytics).toContain("'cms-0057-f.com'");
+      expect(analytics).toContain('cross_site_referral');
+    });
+
+    it('sanitizes and length-caps every attribution value', () => {
+      expect(analytics).toContain('function cleanHost');
+      expect(analytics).toContain('function cleanPath');
+      expect(analytics).toContain('function cleanToken');
+      // The article path must never carry a query string or fragment through.
+      expect(analytics).toMatch(/split\('\?'\)\[0\]\.split\('#'\)\[0\]/);
+    });
+
+    it('exposes attribution to the lead forms', () => {
+      expect(analytics).toContain('getAttribution: getAttribution');
+      expect(leadCapture).toContain('window.choIdentity.getAttribution');
+      expect(contact).toContain('window.choIdentity.getAttribution');
+    });
+
+    it('attaches attribution to submitted leads and reports a cross-site lead', () => {
+      expect(contact).toContain('cross_site_lead');
+      expect(contact).toMatch(/formData\.set\(key, attribution\[key\]\)/);
+    });
+
+    it('sends no personal or health identifiers across the boundary', () => {
+      const attributionBlock = analytics.slice(
+        analytics.indexOf('function captureAttribution'),
+        analytics.indexOf('function getAttribution')
+      );
+      expect(attributionBlock.length).toBeGreaterThan(0);
+      for (const forbidden of ['email', 'member', 'patient', 'claim', 'name', 'phone']) {
+        expect(attributionBlock.toLowerCase()).not.toContain(`'${forbidden}'`);
+      }
+    });
+  });
+
   describe('message sheet consistency', () => {
     it('locks the operating-model status labels', () => {
       expect(messageSheet).toContain('Deployment & operating models (locked status labels)');
@@ -511,6 +659,19 @@ describe('Services & deployment positioning', () => {
     it('adds Services to the documented information architecture', () => {
       expect(messageSheet).toMatch(/Primary nav:.*Services.*Contact/);
       expect(messageSheet).toContain('/services');
+    });
+
+    it('locks the payer operations boundary and the cross-site split', () => {
+      expect(messageSheet).toContain('Payer operations & core administration (locked)');
+      expect(messageSheet).toMatch(/not business process outsourcing, an outsourced claims/i);
+      expect(messageSheet).toContain('cms-0057-f.com (companion property)');
+      expect(messageSheet).toMatch(/operated by Aurelianware, Inc\., the same company/i);
+    });
+
+    it('keeps the assistant knowledge pack aligned on both', () => {
+      expect(knowledge).toMatch(/not.{0,20}business process\s+outsourcing/i);
+      expect(knowledge).toContain('cms-0057-f.com');
+      expect(knowledge).toContain('/services#payer-operations');
     });
 
     it('bans the unsupported services and deployment claims', () => {

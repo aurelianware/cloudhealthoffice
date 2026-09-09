@@ -397,6 +397,12 @@
               <option value="interop">Interoperability &amp; prior authorization implementation</option>
               <option value="fractional-architect">Fractional payer solution architect</option>
             </optgroup>
+            <optgroup label="Payer operations &amp; core administration">
+              <option value="payer-operations">Payer operations &amp; core administration support</option>
+              <option value="fee-schedule">Fee schedule &amp; reimbursement configuration</option>
+              <option value="repricing-validation">Claims repricing &amp; payment validation</option>
+              <option value="core-admin-support">Core administration production support</option>
+            </optgroup>
             <optgroup label="Other">
               <option value="support">Technical support</option>
               <option value="other">Something else</option>
@@ -518,6 +524,10 @@
       'sow-review':           { kind: 'service',    event: 'sow_review_interest' },
       'interop':              { kind: 'service',    event: '' },
       'fractional-architect': { kind: 'service',    event: '' },
+      'payer-operations':     { kind: 'service',    event: 'payer_operations_interest' },
+      'fee-schedule':         { kind: 'service',    event: 'fee_schedule_interest' },
+      'repricing-validation': { kind: 'service',    event: 'repricing_validation_interest' },
+      'core-admin-support':   { kind: 'service',    event: 'core_admin_support_interest' },
       'support':              { kind: 'support',    event: '' },
       'other':                { kind: 'other',      event: '' }
     };
@@ -621,6 +631,22 @@
         var formData = new FormData(form);
         formData.set('_replyto', email);
 
+        // Carry cross-site attribution into the lead record so a regulatory
+        // article on cms-0057-f.com can be traced to the conversation it
+        // produced. Sanitized upstream; never PHI or personal identifiers.
+        var attribution = (window.choIdentity && window.choIdentity.getAttribution)
+          ? window.choIdentity.getAttribution() : null;
+        if (attribution) {
+          for (var key in attribution) {
+            if (attribution.hasOwnProperty(key) && attribution[key]) {
+              formData.set(key, attribution[key]);
+            }
+          }
+        }
+        var anonId = (window.choIdentity && window.choIdentity.getAnonymousId)
+          ? window.choIdentity.getAnonymousId() : '';
+        if (anonId) formData.set('anonymous_id', anonId);
+
         var response = await fetch(form.action, {
           method: 'POST',
           headers: {
@@ -645,8 +671,20 @@
           interest_kind: meta.kind,
           evaluating: evaluating.value,
           deployment_model: deploymentEl ? deploymentEl.value : '',
+          ref_site: attribution ? attribution.ref_site : '',
+          ref_article: attribution ? attribution.ref_article : '',
+          ref_cta: attribution ? attribution.ref_cta : '',
           page_path: '/contact'
         });
+        if (attribution && attribution.ref_site) {
+          track('cross_site_lead', {
+            ref_site: attribution.ref_site,
+            ref_article: attribution.ref_article,
+            ref_cta: attribution.ref_cta,
+            form_topic: topic,
+            interest_kind: meta.kind
+          });
+        }
         if (meta.kind === 'service') {
           track('advisory_contact_submitted', { topic: topic, page_path: '/contact' });
         }

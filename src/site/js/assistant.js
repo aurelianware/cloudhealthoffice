@@ -84,6 +84,19 @@
       link: { href: '/deploy', text: 'Compare the operating models' }
     },
     {
+      id: 'payer-ops',
+      label: 'Fee schedules & payment validation',
+      keywords: ['fee schedule', 'reimbursement', 'repricing', 'pricing', 'payment', 'variance',
+        'configuration', 'regression', 'accumulator', 'benefit config', 'production issue',
+        'root cause', 'discrepancy'],
+      answer: 'Professional Services also covers payer operations and core administration: fee schedule and ' +
+        'reimbursement configuration, claims repricing and payment validation, and production issue ' +
+        'investigation on QNXT, Facets, HealthEdge and other cores. It is technical and configuration work ' +
+        'done alongside your team — not business process outsourcing, an outsourced claims department, or ' +
+        'staffing. We do not promise a recovery amount or a payment-accuracy rate.',
+      link: { href: '/services#payer-operations', text: 'Payer operations & core administration' }
+    },
+    {
       id: 'services',
       label: 'Professional services',
       keywords: ['services', 'consulting', 'assessment', 'advisory', 'architect', 'sow',
