@@ -54,17 +54,20 @@ Visit: `http://localhost:8000`
 Push to `main` branch:
 
 ```bash
-git add site/
+git add src/site/
 git commit -m "Update website content"
 git push origin main
 ```
 
-GitHub Actions workflow (`.github/workflows/deploy-static-site.yml`) automatically:
-1. Authenticates with Azure via OIDC
-2. Retrieves Static Web App deployment token
-3. Deploys site content
-4. Configures custom domain
-5. Verifies deployment
+GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) automatically:
+1. Builds the site artifact (`npm run build` in `src/site`)
+2. Uploads it as a Pages artifact
+3. Publishes to GitHub Pages, which serves `cloudhealthoffice.com` via `CNAME`
+
+> **Restore-only.** `.github/workflows/deploy-static-site.yml` deploys to Azure
+> Static Web Apps and is manual-dispatch only; it no longer runs on push and its
+> target resource does not resolve. Every Azure step described in the rest of
+> this guide belongs to that dormant path.
 
 #### Manual Deployment
 

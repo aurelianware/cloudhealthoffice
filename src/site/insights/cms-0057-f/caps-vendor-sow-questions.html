@@ -127,7 +127,7 @@
     article ul,article ol{margin:1rem 0 1rem 1.3rem;color:var(--text)}
     article li{margin:.4rem 0}
     article strong{color:#fff}
-    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(0,255,136,.08);padding:.1rem .35rem;border-radius:4px}
+    code{font-family:var(--mono);font-size:.86em;color:var(--green);background:rgba(0,255,136,.08);padding:.1rem .35rem;border-radius:4px;overflow-wrap:anywhere}
     .lead{font-size:1.05rem}
 
     .callout{border-left:3px solid var(--blue);background:rgba(0,180,255,.06);padding:1.1rem 1.3rem;border-radius:0 8px 8px 0;margin:1.6rem 0}
@@ -185,7 +185,16 @@
     footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;color:var(--text-dim);font-size:.82rem}
     footer a{color:rgba(0,255,255,.7);text-decoration:none}
 
-    @media(max-width:820px){.nav-links{display:none}}
+    @media(max-width:820px){
+      /* Never hide the primary nav without a way back to it: there is no mobile
+         toggle on these article pages, so the links stack and scroll instead of
+         disappearing. Keyboard and screen-reader users keep full reach. */
+      nav{padding:0 1rem}
+      .nav-inner{height:auto;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.55rem 0}
+      .nav-links{width:100%;gap:1.1rem;overflow-x:auto;padding-bottom:.15rem;scrollbar-width:none}
+      .nav-links::-webkit-scrollbar{display:none}
+      .nav-links a,.nav-cta{white-space:nowrap;flex:0 0 auto}
+    }
     @media(max-width:768px){article,.article-head{padding-left:1.2rem;padding-right:1.2rem}}
   </style>
 </head>
@@ -310,7 +319,7 @@
         <div class="ans weak"><span class="k">A weak answer</span><p>&ldquo;Standard OAuth.&rdquo; The standard part is the easy part.</p></div>
 
         <h2 id="q8"><span class="num">08</span>What does the test evidence consist of, and against what?</h2>
-        <p>Ask what you will be shown at the end, and what it was run against. There is a real difference between a demo, a suite of tests against synthetic data, exchanges performed against a published reference implementation, and a formal conformance result. All four are legitimate; only one of them is evidence you can hand a regulator's question to.</p>
+        <p>Ask what you will be shown at the end, and what it was run against. There is a real difference between a demo, a suite of tests against synthetic data, exchanges performed against a published reference implementation, and a formal conformance result. All four are legitimate; only one of them is evidence that answers a regulator's question on its own.</p>
         <p>Also ask what the tests do <em>not</em> cover. A test suite that only asserts the happy path tells you the surface exists, not that it behaves under the conditions that will actually occur.</p>
         <div class="ans good"><span class="k">A good answer</span><p>Names the data (synthetic or real), the target (reference implementation, sandbox, your environment), the pinned version, and the scenarios explicitly not covered.</p></div>
         <div class="ans weak"><span class="k">A weak answer</span><p>&ldquo;Certified.&rdquo; Ask by whom, against what, and to see the certificate &mdash; there is no CMS certification for CMS-0057-F implementations.</p></div>

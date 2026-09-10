@@ -364,7 +364,12 @@ consistent with the page inventory if you intend to keep those hosts as options.
 is now **manual-dispatch only**. It is not the live path and its target resource
 no longer resolves. See the header of that workflow before re-enabling it.
 
-### Manual Deployment
+### Manual Deployment (Azure — restore-only)
+
+> These commands target Azure Static Web Apps, which is **not** the live host.
+> They are kept for restoring that path and will not deploy the live site. There
+> is no manual deploy step for GitHub Pages: pushing to `main` runs
+> `deploy-pages.yml`.
 
 ```bash
 # Get deployment token
@@ -507,13 +512,21 @@ git commit -m "Add new page"
 git push origin main
 ```
 
-GitHub Actions will automatically deploy to Azure Static Web Apps.
+GitHub Actions will build and publish the site to GitHub Pages via
+`deploy-pages.yml`.
 
 ## Custom Domain Configuration
 
-The site is configured for `cloudhealthoffice.com` custom domain.
+The site is configured for the `cloudhealthoffice.com` custom domain. It is
+served by **GitHub Pages**, which reads the domain from the `CNAME` file in this
+directory and provisions the certificate itself. DNS therefore points at GitHub
+Pages, not at Azure.
 
-### DNS Records Required
+### DNS Records Required (Azure — restore-only)
+
+> The records below are for the dormant Azure Static Web Apps path and do **not**
+> describe the live DNS configuration. Do not apply them without first moving the
+> site off GitHub Pages.
 
 **For Root Domain:**
 ```

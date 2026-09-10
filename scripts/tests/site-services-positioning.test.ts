@@ -734,13 +734,45 @@ describe('Services & deployment positioning', () => {
   describe('CAPS vendor SOW article', () => {
     it('is routed, listed in the sitemap, and linked from the series index', () => {
       const slug = '/insights/cms-0057-f/caps-vendor-sow-questions';
+      // The canonical redirects can regress independently of the rewrite, so
+      // assert all three rules the way the /services route does.
       expect(redirects).toMatch(new RegExp(`^${slug}\\s+${slug}\\.html\\s+200$`, 'm'));
-      expect((swaConfig.routes as Array<Record<string, unknown>>)).toContainEqual({
-        route: slug,
-        rewrite: `${slug}.html`
+      expect(redirects).toMatch(new RegExp(`^${slug}\\.html\\s+${slug}\\s+301$`, 'm'));
+      expect(redirects).toMatch(new RegExp(`^${slug}/\\s+${slug}\\s+301$`, 'm'));
+      const routes = swaConfig.routes as Array<Record<string, unknown>>;
+      expect(routes).toContainEqual({ route: slug, rewrite: `${slug}.html` });
+      expect(routes).toContainEqual({
+        route: `${slug}.html`,
+        redirect: slug,
+        statusCode: 301
       });
       expect(sitemap).toContain(`<loc>https://cloudhealthoffice.com${slug}</loc>`);
       expect(insightsIndex).toContain(`href="${slug}"`);
+    });
+
+    it('refreshes the lastmod of the pages this change links from', () => {
+      for (const loc of [
+        'https://cloudhealthoffice.com/services',
+        'https://cloudhealthoffice.com/insights/cms-0057-f'
+      ]) {
+        expect(sitemap).toMatch(
+          new RegExp(`<loc>${loc.replace(/[.*+?^$()|[\]\\]/g, '\\$&')}</loc>\\s*\\n\\s*<lastmod>2026-09-10</lastmod>`)
+        );
+      }
+    });
+
+    it('keeps the primary nav reachable on mobile across the series', () => {
+      // These article pages carry no mobile toggle, so the nav must never be
+      // display:none — it stacks and scrolls instead.
+      for (const article of [
+        'insights/cms-0057-f/caps-vendor-sow-questions.html',
+        'insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html',
+        'insights/cms-0057-f/acceptance-scenarios.html'
+      ]) {
+        const html = read(article);
+        expect(html).not.toMatch(/\.nav-links\{display:none\}/);
+        expect(html).toMatch(/@media\(max-width:820px\)\{[\s\S]*?\.nav-links\{[^}]*overflow-x:auto/);
+      }
     });
 
     it('carries article metadata and parseable structured data', () => {
