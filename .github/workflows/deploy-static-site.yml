@@ -1,13 +1,27 @@
 name: Deploy Marketing Website (Azure Static Web Apps)
 
 # =============================================================================
-# Marketing Website Deployment - Azure Static Web Apps
+# Marketing Website Deployment - Azure Static Web Apps (MANUAL ONLY)
 # =============================================================================
-# Purpose: Deploy Cloud Health Office marketing website (/site folder)
-# Status: ACTIVE - Separate from portal (which deploys to AKS)
+# Purpose: Deploy Cloud Health Office marketing website (src/site) to Azure
+#          Static Web Apps.
+# Status: DORMANT - kept for manual dispatch only. NOT the live deployment path.
+#
+# cloudhealthoffice.com is served by GitHub Pages via deploy-pages.yml. That is
+# verifiable from the live response headers (server: GitHub.com). This workflow
+# previously also ran on every push to main touching src/site/**, and failed on
+# every such run: "Get Static Web App Deployment Token" is skipped because
+# `az staticwebapp show` does not find the resource, so the deploy step has no
+# token and fails. Two deploy workflows fired per site change and one was always
+# red, which buries real failures.
+#
+# The push trigger is therefore removed. The file is kept, rather than deleted,
+# so the path can be restored if Azure Static Web Apps is ever reinstated -- in
+# which case the SWA resource and its OIDC federation must be recreated first.
 #
 # Architecture:
-#   - Marketing site (/site) → Azure Static Web Apps (this workflow)
+#   - Marketing site (src/site) → GitHub Pages (deploy-pages.yml)  ← LIVE
+#   - Marketing site (src/site) → Azure Static Web Apps (this workflow, dormant)
 #   - Portal (/portal) → AKS via Docker (docker-build.yml workflow)
 #
 # Required Secrets:
@@ -17,15 +31,10 @@ name: Deploy Marketing Website (Azure Static Web Apps)
 #   - AZURE_STATIC_WEB_APPS_API_TOKEN_*: Auto-generated deployment token
 # =============================================================================
 
-# Re-enabled for marketing site deployment
+# Manual dispatch only. GitHub Pages (deploy-pages.yml) is the live path; see
+# the header above before re-adding a push trigger.
 on:
   workflow_dispatch:  # Manual trigger
-  push:
-    branches: ["main"]
-    paths:
-      - 'src/site/**'
-      - '.github/workflows/deploy-static-site.yml'
-      - 'infrastructure/azure/main.bicep'
 
 permissions:
   id-token: write
