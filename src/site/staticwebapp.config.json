@@ -41,6 +41,15 @@
       "rewrite": "/start.html"
     },
     {
+      "route": "/services.html",
+      "redirect": "/services",
+      "statusCode": 301
+    },
+    {
+      "route": "/services",
+      "rewrite": "/services.html"
+    },
+    {
       "route": "/deploy.html",
       "redirect": "/deploy",
       "statusCode": 301

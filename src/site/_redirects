@@ -29,6 +29,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /what-is/                                  /what-is                                  301
 /evidence/                                 /evidence                                 301
 /deploy/                                   /deploy                                   301
+/services/                                 /services                                 301
 /start/                                    /start                                    301
 /solutions-payers/                         /solutions-payers                         301
 /solutions-providers/                      /solutions-providers                      301
@@ -128,6 +129,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /what-is.html                              /what-is                           301
 /start.html                                /start                             301
 /deploy.html                               /deploy                            301
+/services.html                             /services                          301
 /evidence.html                             /evidence                          301
 /trust.html                                /trust                             301
 /cms-0057f-compliance.html                 /cms-0057f-compliance              301
@@ -215,6 +217,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /what-is                                   /what-is.html                      200
 /start                                     /start.html                        200
 /deploy                                    /deploy.html                       200
+/services                                  /services.html                     200
 /evidence                                  /evidence.html                     200
 /trust                                     /trust.html                        200
 /cms-0057f-compliance                      /cms-0057f-compliance.html         200
