@@ -1,5 +1,13 @@
 # Cloud Health Office Website - Deployment Guide
 
+> **Status note (September 2026).** The live site at `cloudhealthoffice.com` is
+> served by **GitHub Pages** via `.github/workflows/deploy-pages.yml`. The Azure
+> Static Web Apps path described in much of this guide is **dormant**: its
+> workflow is manual-dispatch only and its target resource no longer resolves.
+> Treat the Azure sections below as reference for restoring that path, not as a
+> description of how the site currently ships. See `README.md` in this directory
+> for the current deployment.
+
 This guide explains how to build, test, and deploy the Cloud Health Office static website.
 
 ## Prerequisites

@@ -492,6 +492,15 @@
       "rewrite": "/insights/cms-0057-f/index.html"
     },
     {
+      "route": "/insights/cms-0057-f/caps-vendor-sow-questions.html",
+      "redirect": "/insights/cms-0057-f/caps-vendor-sow-questions",
+      "statusCode": 301
+    },
+    {
+      "route": "/insights/cms-0057-f/caps-vendor-sow-questions",
+      "rewrite": "/insights/cms-0057-f/caps-vendor-sow-questions.html"
+    },
+    {
       "route": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html",
       "redirect": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas",
       "statusCode": 301

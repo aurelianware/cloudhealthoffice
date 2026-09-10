@@ -47,6 +47,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/                                 /insights                                 301
 /insights/cms-0057-f/                      /insights/cms-0057-f                      301
 /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas/ /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas 301
+/insights/cms-0057-f/caps-vendor-sow-questions/ /insights/cms-0057-f/caps-vendor-sow-questions 301
 /insights/cms-0057-f/acceptance-scenarios/ /insights/cms-0057-f/acceptance-scenarios 301
 /evidence/provider-access-security/        /evidence/provider-access-security        301
 /evidence/davinci-interoperability/        /evidence/davinci-interoperability        301
@@ -188,6 +189,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-16-the-million-went-through-the-bus.html /insights/million-claim-challenge/part-16-the-million-went-through-the-bus 301
 /insights/cms-0057-f/index.html            /insights/cms-0057-f               301
 /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas 301
+/insights/cms-0057-f/caps-vendor-sow-questions.html /insights/cms-0057-f/caps-vendor-sow-questions 301
 /insights/cms-0057-f/acceptance-scenarios.html /insights/cms-0057-f/acceptance-scenarios 301
 /evidence/provider-access-security.html    /evidence/provider-access-security        301
 /evidence/davinci-interoperability.html    /evidence/davinci-interoperability        301
@@ -276,6 +278,7 @@ https://www.cloudhealthoffice.com/*        https://cloudhealthoffice.com/:splat 
 /insights/million-claim-challenge/part-16-the-million-went-through-the-bus /insights/million-claim-challenge/part-16-the-million-went-through-the-bus.html 200
 /insights/cms-0057-f                        /insights/cms-0057-f/index.html    200
 /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas /insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html 200
+/insights/cms-0057-f/caps-vendor-sow-questions /insights/cms-0057-f/caps-vendor-sow-questions.html 200
 /insights/cms-0057-f/acceptance-scenarios  /insights/cms-0057-f/acceptance-scenarios.html 200
 /evidence/provider-access-security         /evidence/provider-access-security.html   200
 /evidence/davinci-interoperability         /evidence/davinci-interoperability.html   200

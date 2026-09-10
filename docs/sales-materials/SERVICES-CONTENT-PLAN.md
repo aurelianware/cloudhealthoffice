@@ -138,10 +138,10 @@ These should become **Evidence** or **Insights** content — technical writing t
 happens to support discovery — not thin promotional posts. Each supports both
 product discovery and services discovery.
 
-| # | Working title | Hub | Supports |
-| --- | --- | --- | --- |
+| # | Working title | Hub | Supports | Status |
+| --- | --- | --- | --- | --- |
 | 1 | CMS-0057-F Payer Readiness Checklist | Insights | `/services#offer-assessment` |
-| 2 | 10 Questions to Ask Your CAPS Vendor Before Signing a CMS-0057-F SOW | Insights | `/services#offer-sow-review` |
+| 2 | 10 Questions to Ask Your CAPS Vendor Before Signing a CMS-0057-F SOW | Insights | `/services#offer-sow-review` | **Shipped** 2026-09-10 — [`/insights/cms-0057-f/caps-vendor-sow-questions`](../../src/site/insights/cms-0057-f/caps-vendor-sow-questions.html) |
 | 3 | QNXT + CMS-0057-F Architecture Checklist | Evidence | `/services#offer-core-admin` |
 | 4 | CMS-0057-F Vendor SOW Review Checklist | Insights | `/services#offer-sow-review` |
 | 5 | When Should CMS-0057-F Logic Live Inside vs. Outside Your Core? | Evidence | `/services#offer-core-admin`, `/platform` |

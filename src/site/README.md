@@ -339,15 +339,30 @@ If validation fails, the PR will be blocked until issues are fixed.
 
 ## Deployment
 
-The site is automatically deployed to Azure Static Web Apps when changes are pushed to the `main` branch.
+The site is deployed to **GitHub Pages** when changes are pushed to the `main`
+branch. `cloudhealthoffice.com` is served by GitHub Pages; you can confirm this
+from the live response headers (`server: GitHub.com`).
 
 ### GitHub Actions Workflow
 
-`.github/workflows/deploy-static-site.yml` handles deployment:
-- Triggers on push to `main` branch (paths: `site/**`)
-- Authenticates with Azure via OIDC (no secrets in code)
-- Deploys to Static Web App using deployment token
-- Configures custom domain `cloudhealthoffice.com`
+`.github/workflows/deploy-pages.yml` handles deployment:
+- Triggers on push to `main` (paths: `src/site/**`)
+- Builds the artifact with `npm run build` in `src/site`
+- Publishes to GitHub Pages, which serves the custom domain via `CNAME`
+
+GitHub Pages resolves extensionless URLs to their `.html` file, so `/services`
+serves `services.html` with no rewrite configuration required.
+
+`_redirects` (Netlify format) and `staticwebapp.config.json` (Azure format) are
+still maintained in this directory, but **neither is read by GitHub Pages** —
+they are configuration for other hosts and are inert on the live site. Keep them
+consistent with the page inventory if you intend to keep those hosts as options.
+
+### Azure Static Web Apps (dormant)
+
+`.github/workflows/deploy-static-site.yml` deployed to Azure Static Web Apps and
+is now **manual-dispatch only**. It is not the live path and its target resource
+no longer resolves. See the header of that workflow before re-enabling it.
 
 ### Manual Deployment
 

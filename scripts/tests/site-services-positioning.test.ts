@@ -33,6 +33,10 @@ const knowledge = read('assistant/knowledge.md');
 const servicesCss = read('css/services.css');
 const leadCapture = read('js/lead-capture.js');
 const assistant = read('js/assistant.js');
+const sowArticle = read('insights/cms-0057-f/caps-vendor-sow-questions.html');
+const insightsIndex = read('insights/cms-0057-f/index.html');
+const REPO = path.join(__dirname, '..', '..');
+const readRepo = (relative: string): string => fs.readFileSync(path.join(REPO, relative), 'utf8');
 
 /** Every HTML page that carries the shared primary navigation. */
 function htmlPagesWithNav(): string[] {
@@ -724,6 +728,98 @@ describe('Services & deployment positioning', () => {
       for (const forbidden of ['email', 'member', 'patient', 'claim', 'name', 'phone']) {
         expect(attributionBlock.toLowerCase()).not.toContain(`'${forbidden}'`);
       }
+    });
+  });
+
+  describe('CAPS vendor SOW article', () => {
+    it('is routed, listed in the sitemap, and linked from the series index', () => {
+      const slug = '/insights/cms-0057-f/caps-vendor-sow-questions';
+      expect(redirects).toMatch(new RegExp(`^${slug}\\s+${slug}\\.html\\s+200$`, 'm'));
+      expect((swaConfig.routes as Array<Record<string, unknown>>)).toContainEqual({
+        route: slug,
+        rewrite: `${slug}.html`
+      });
+      expect(sitemap).toContain(`<loc>https://cloudhealthoffice.com${slug}</loc>`);
+      expect(insightsIndex).toContain(`href="${slug}"`);
+    });
+
+    it('carries article metadata and parseable structured data', () => {
+      expect(sowArticle).toContain(
+        '<link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/caps-vendor-sow-questions"/>'
+      );
+      expect(sowArticle).toMatch(/<meta name="description" content="[^"]{80,}"/);
+      const graph = (jsonLdBlocks(sowArticle)[0] as { '@graph': Array<{ '@type': string }> })['@graph'];
+      expect(graph.map((n) => n['@type'])).toEqual(
+        expect.arrayContaining(['TechArticle', 'BreadcrumbList'])
+      );
+    });
+
+    it('actually contains ten questions', () => {
+      const questions = [...sowArticle.matchAll(/<h2 id="q(\d+)"/g)].map((m) => Number(m[1]));
+      expect(questions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    });
+
+    it('attributes the WEDI survey, links the source, and dates it', () => {
+      // Third-party data must never read as our own evidence.
+      expect(sowArticle).toContain(
+        'https://www.wedi.org/2026/03/11/wedi-survey-shows-progress-in-implementing-cms-interoperability-and-prior-authorization-final-rule/'
+      );
+      expect(sowArticle).toMatch(/WEDI surveyed 86 organizations/);
+      expect(sowArticle).toMatch(/fielded in February 2026 and published on 11 March 2026/);
+      expect(sowArticle).toMatch(/figures here are WEDI's, not ours/);
+      expect(sowArticle).toMatch(/no affiliation with or endorsement by WEDI/i);
+    });
+
+    it('discloses the commercial interest and keeps the advisory independent', () => {
+      expect(sowArticle).toContain('id="disclosure"');
+      expect(sowArticle).toMatch(/a review that always concluded/i);
+      expect(sowArticle).toMatch(/do not claim certification by, affiliation with, or an implementation partnership/i);
+      expect(sowArticle).toMatch(/make no claim of savings/i);
+    });
+
+    it('links both ways with the service it supports', () => {
+      expect(sowArticle).toContain('/services#offer-sow-review');
+      expect(services).toContain('/insights/cms-0057-f/caps-vendor-sow-questions');
+    });
+
+    it('carries the locked CMS-0057-F definition and the sensitive-data warning', () => {
+      expect(sowArticle).toMatch(
+        /CMS-0057-F<\/strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some/
+      );
+      expect(sowArticle).toMatch(/do not send PHI, member data, claim data, production credentials/i);
+    });
+
+    it('keeps the accessibility affordances the other pages have', () => {
+      expect(sowArticle).toContain('class="skip-to-main"');
+      expect(sowArticle).toContain('<main id="main-content">');
+      expect((sowArticle.match(/<h1[^>]*>/g) || []).length).toBe(1);
+      expect(sowArticle).toContain('aria-label="Breadcrumb"');
+    });
+  });
+
+  describe('site deployment workflows', () => {
+    const azure = readRepo('.github/workflows/deploy-static-site.yml');
+    const pages = readRepo('.github/workflows/deploy-pages.yml');
+    const siteReadme = read('README.md');
+
+    it('keeps GitHub Pages as the workflow that deploys on push to main', () => {
+      expect(pages).toMatch(/on:\s*\n\s*workflow_dispatch:\s*\n\s*push:\s*\n\s*branches: \[main\]/);
+    });
+
+    it('leaves the Azure Static Web Apps workflow on manual dispatch only', () => {
+      // It failed on every push to main because its target resource no longer
+      // resolves, so two deploys fired per site change and one was always red.
+      const trigger = azure.slice(azure.indexOf('\non:'), azure.indexOf('permissions:'));
+      expect(trigger).toContain('workflow_dispatch:');
+      expect(trigger).not.toContain('push:');
+      expect(azure).toContain('DORMANT');
+    });
+
+    it('documents GitHub Pages as the live deployment path', () => {
+      expect(siteReadme).toContain('deploy-pages.yml');
+      expect(siteReadme).not.toMatch(/The site is automatically deployed to Azure Static Web Apps/);
+      // _redirects and staticwebapp.config.json are inert on Pages; say so.
+      expect(siteReadme).toMatch(/neither is read by GitHub Pages/);
     });
   });
 
