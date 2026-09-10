@@ -58,6 +58,25 @@ const mainNavOf = (html: string): string => {
   return match ? match[0] : '';
 };
 
+/** Collapse runs of whitespace so markup line wrapping does not affect a comparison. */
+const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim();
+
+/**
+ * Decode the named entities the site's markup actually uses. `&amp;` is decoded
+ * last so a decoded value can never be decoded a second time (`&amp;lt;` must
+ * become `&lt;`, not `<`).
+ */
+const decodeEntities = (value: string): string =>
+  normalizeText(value)
+    .replace(/&#39;|&rsquo;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&mdash;/g, '\u2014')
+    .replace(/&ndash;/g, '\u2013')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+
 const jsonLdBlocks = (html: string): unknown[] =>
   [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
     .map((m) => JSON.parse(m[1]));
@@ -175,9 +194,13 @@ describe('Services & deployment positioning', () => {
       })['@graph'];
       const faq = graph.find((node) => node['@type'] === 'FAQPage');
       expect(faq?.mainEntity?.length).toBeGreaterThan(0);
+      // Compare by decoding the rendered <summary> text rather than re-escaping
+      // the JSON-LD text: escaping in the wrong order double-escapes '&'
+      // (`&#39;` -> `&amp;#39;`), and the entity set a page uses can change.
+      const rendered = [...services.matchAll(/<summary>([\s\S]*?)<\/summary>/g)]
+        .map((m) => decodeEntities(m[1]));
       for (const question of faq!.mainEntity!) {
-        // The rendered <summary> carries the same question text.
-        expect(services).toContain(question.name.replace(/'/g, '&#39;').replace(/&/g, '&amp;'));
+        expect(rendered).toContain(normalizeText(question.name));
       }
     });
 
