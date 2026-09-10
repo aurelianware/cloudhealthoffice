@@ -753,13 +753,14 @@ for service in member coverage claims eligibility authorization provider benefit
   docker push ghcr.io/aurelianware/cloudhealthoffice-$service-service:latest
 done
 
-# Build portal and site
-docker build -t ghcr.io/aurelianware/cloudhealthoffice-portal:latest portal/CloudHealthOffice.Portal
+# Build the portal
+docker build -t ghcr.io/aurelianware/cloudhealthoffice-portal:latest src/portal/CloudHealthOffice.Portal
 docker push ghcr.io/aurelianware/cloudhealthoffice-portal:latest
-
-docker build -t ghcr.io/aurelianware/cloudhealthoffice-site:latest site
-docker push ghcr.io/aurelianware/cloudhealthoffice-site:latest
 ```
+
+> The marketing site is **not** containerised. `cloudhealthoffice.com` is served
+> by GitHub Pages via `.github/workflows/deploy-pages.yml`, which publishes the
+> build output from `src/site`. There is no site image to build or push.
 
 #### Verify Images in GHCR
 

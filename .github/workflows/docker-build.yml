@@ -4,8 +4,12 @@ name: Build Portal / Site / Utility Containers
 # consolidation (PRs #691, #692, and the δ3 PR introducing pr-validation.yml).
 # Production service builds run via deploy-azure-aks.yml; PR validation runs
 # via pr-validation.yml. This workflow now covers only the non-service
-# concerns: the Blazor portal, the static marketing site, and the utility
-# containers under containers/. The service trigger path 'src/services/**'
+# concerns: the Blazor portal and the utility containers under containers/.
+#
+# The static marketing site is NOT built or deployed here. cloudhealthoffice.com
+# is served by GitHub Pages via deploy-pages.yml; the site's Azure Container Apps
+# deploy was removed once 'cho-site' ceased to exist. Do not reintroduce a site
+# build in this workflow. The service trigger path 'src/services/**'
 # is intentionally absent below; service-only changes should NOT spin this
 # workflow up.
 
@@ -15,7 +19,6 @@ on:
       - main
     paths:
       - 'src/portal/**'
-      - 'src/site/**'
       - 'containers/**'
       - '.github/workflows/docker-build.yml'
   pull_request:
@@ -23,7 +26,6 @@ on:
       - main
     paths:
       - 'src/portal/**'
-      - 'src/site/**'
       - 'containers/**'
       - '.github/workflows/docker-build.yml'
   workflow_dispatch:
@@ -142,176 +144,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
-
-  build-site:
-    name: Build Static Site
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Azure Login (OIDC)
-        if: github.event_name != 'pull_request'
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Log in to Azure Container Registry
-        if: github.event_name != 'pull_request'
-        run: az acr login --name ${{ vars.ACR_NAME || 'clouhealthoffice' }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: ./src/site
-          file: ./src/site/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
-
-
-  deploy-site:
-    name: Deploy Static Site to Azure Container Apps
-    runs-on: ubuntu-latest
-    needs: build-site
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Azure Login (OIDC)
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy to Container App
-        uses: azure/cli@v3
-        with:
-          inlineScript: |
-            set -euo pipefail
-            RG="${{ vars.AZURE_RG_NAME }}"
-            APP_NAME="${{ vars.SITE_CONTAINER_APP_NAME || 'cho-site' }}"
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-site:sha-${GITHUB_SHA::7}"
-
-            echo "==========================================="
-            echo "Deploying Static Site Container"
-            echo "==========================================="
-            echo "Resource Group: $RG"
-            echo "Container App:  $APP_NAME"
-            echo "Image:          $IMAGE"
-            echo ""
-
-            # Update container app with new image
-            az containerapp update \
-              --name "$APP_NAME" \
-              --resource-group "$RG" \
-              --image "$IMAGE"
-
-            echo ""
-            echo "✅ Container App image updated"
-
-            # Fix health probes: nginx-unprivileged listens on 8080, not 80.
-            # Probes on port 80 keep the revision stuck in "activating" state.
-            bash scripts/deploy/fix-aca-site-probes.sh "$APP_NAME" "$RG"
-
-            echo ""
-
-            # Ensure ACA ingress targetPort is 8080 (infra may default to 80).
-            CURRENT_TARGET_PORT=$(az containerapp show \
-              --name "$APP_NAME" \
-              --resource-group "$RG" \
-              --query "properties.configuration.ingress.targetPort" -o tsv 2>/dev/null) || {
-              echo "⚠️  Could not query ingress targetPort; skipping targetPort check."
-              CURRENT_TARGET_PORT=""
-            }
-
-            if [ "$CURRENT_TARGET_PORT" != "8080" ]; then
-              echo "Ingress targetPort is '${CURRENT_TARGET_PORT:-unknown}', updating to 8080..."
-              az containerapp ingress update \
-                --name "$APP_NAME" \
-                --resource-group "$RG" \
-                --target-port 8080
-              echo "✅ Container App ingress targetPort updated to 8080"
-            else
-              echo "✅ Container App ingress targetPort already set to 8080; no update needed"
-            fi
-
-            echo ""
-            echo "✅ Container App updated successfully (image + health probes + ingress)"
-
-            # Get the FQDN for verification
-            FQDN=$(az containerapp show \
-              --name "$APP_NAME" \
-              --resource-group "$RG" \
-              --query "properties.configuration.ingress.fqdn" -o tsv)
-
-            echo "🌐 Site URL: https://$FQDN"
-
-      - name: Verify Deployment
-        uses: azure/cli@v3
-        with:
-          inlineScript: |
-            set -euo pipefail
-            RG="${{ vars.AZURE_RG_NAME }}"
-            APP_NAME="${{ vars.SITE_CONTAINER_APP_NAME || 'cho-site' }}"
-
-            FQDN=$(az containerapp show \
-              --name "$APP_NAME" \
-              --resource-group "$RG" \
-              --query "properties.configuration.ingress.fqdn" -o tsv)
-
-            echo "Waiting 15 seconds for deployment to propagate..."
-            sleep 15
-
-            for i in $(seq 1 5); do
-              echo "⏳ Health check attempt $i/5..."
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN" || echo "000")
-
-              if [ "$HTTP_STATUS" = "200" ]; then
-                echo "✅ Site is healthy - HTTP $HTTP_STATUS"
-
-                # Verify sitemap and robots.txt
-                SITEMAP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/sitemap.xml" || echo "000")
-                ROBOTS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/robots.txt" || echo "000")
-                echo "📄 sitemap.xml: HTTP $SITEMAP_STATUS"
-                echo "🤖 robots.txt: HTTP $ROBOTS_STATUS"
-                exit 0
-              fi
-
-              echo "   HTTP $HTTP_STATUS - retrying in 10s..."
-              sleep 10
-            done
-
-            echo "⚠️  Site may need more time to stabilize"
-            exit 0
 
   build-containers:
     name: Build Utility Containers

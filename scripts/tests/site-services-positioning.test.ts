@@ -850,6 +850,46 @@ describe('Services & deployment positioning', () => {
       expect(azure).toContain('DORMANT');
     });
 
+    it('is the only workflow that deploys the marketing site', () => {
+      // The site has had four hosts: Azure Static Web Apps, Kubernetes, Azure
+      // Container Apps, and now GitHub Pages. Each move left the previous path
+      // behind, and the two Container Apps deploys stayed red for months
+      // against a 'cho-site' resource that no longer exists. Pages is the only
+      // live path; assert no workflow grows a fifth one.
+      const workflows = fs
+        .readdirSync(path.join(REPO, '.github/workflows'))
+        .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
+
+      // Guard against the glob silently matching nothing.
+      expect(workflows.length).toBeGreaterThan(5);
+
+      for (const file of workflows) {
+        if (file === 'deploy-pages.yml') continue;
+        // deploy-static-site.yml is retained on workflow_dispatch as the
+        // documented restore path, and is covered by its own assertion above.
+        if (file === 'deploy-static-site.yml') continue;
+
+        // Assert on what the workflow *does*, not what it says: the comments
+        // explaining why the site deploys were removed name them on purpose.
+        const steps = readRepo(`.github/workflows/${file}`)
+          .split('\n')
+          .filter((line) => !/^\s*#/.test(line))
+          .join('\n');
+
+        expect(`${file}: ${steps}`).not.toContain('cho-site');
+        expect(`${file}: ${steps}`).not.toMatch(/IMAGE_PREFIX \}\}-site/);
+      }
+    });
+
+    it('leaves no build for the retired site container', () => {
+      // Dockerfile, nginx.conf and the ACA probe-fix script were deleted with
+      // the Container Apps deploys; nothing should reference them again.
+      expect(fs.existsSync(path.join(SITE, 'Dockerfile'))).toBe(false);
+      expect(fs.existsSync(path.join(SITE, 'nginx.conf'))).toBe(false);
+      expect(fs.existsSync(path.join(REPO, 'scripts/deploy/fix-aca-site-probes.sh'))).toBe(false);
+      expect(readRepo('scripts/deploy-local.sh')).not.toContain('src/site/Dockerfile');
+    });
+
     it('documents GitHub Pages as the live deployment path', () => {
       expect(siteReadme).toContain('deploy-pages.yml');
       expect(siteReadme).not.toMatch(/The site is automatically deployed to Azure Static Web Apps/);
