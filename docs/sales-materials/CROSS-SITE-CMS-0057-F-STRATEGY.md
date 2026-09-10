@@ -77,14 +77,19 @@ Append these parameters to every outbound CTA link so attribution survives even
 when the browser strips the referrer header:
 
 ```
-https://cloudhealthoffice.com/services#offer-sow-review
+https://cloudhealthoffice.com/services
   ?ref=cms-0057-f.com
   &ref_article=/guides/cms-0057-f-qnxt
   &ref_cta=sow-review
   &utm_source=cms-0057-f.com
   &utm_medium=referral
   &utm_campaign=<content-cluster>
+  #offer-sow-review
 ```
+
+The query string must come **before** the fragment. A URL written as
+`/services#offer-sow-review?ref=...` puts the parameters inside the fragment,
+where `location.search` is empty and the receiving code captures nothing.
 
 To land directly on the contact form with the topic preselected, use
 `/contact?interest=<key>` with the same `ref` parameters. Valid keys are listed
@@ -104,7 +109,7 @@ attribution on landing and stores it in `sessionStorage` under
 | `ref_article` | `?ref_article=`, else referrer path | query and fragment stripped, `[A-Za-z0-9._~/-]` only, ≤160 chars |
 | `ref_cta` | `?ref_cta=` | whitelisted characters, ≤60 chars |
 | `utm_source` / `_medium` / `_campaign` / `_term` / `_content` | query string | whitelisted characters, ≤120 chars |
-| `landing_path` | the page that received the visit | — |
+| `landing_path` | the page that received the visit | query and fragment stripped, `[A-Za-z0-9._~/-]` only, ≤160 chars |
 
 First touch wins: navigating around cloudhealthoffice.com does not overwrite it.
 The attribution is attached to Formspree lead submissions (contact form and every

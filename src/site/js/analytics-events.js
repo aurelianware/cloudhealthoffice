@@ -255,7 +255,9 @@
       ref_site: cleanHost(param('ref')) || ref.host,
       ref_article: cleanPath(param('ref_article')) || ref.path,
       ref_cta: cleanToken(param('ref_cta'), 60),
-      landing_path: pagePath(),
+      // Same treatment as every other stored field: the path is attacker-
+      // influenceable through a crafted link and is persisted and transmitted.
+      landing_path: cleanPath(pagePath()),
       utm_source: param('utm_source'),
       utm_medium: param('utm_medium'),
       utm_campaign: param('utm_campaign'),

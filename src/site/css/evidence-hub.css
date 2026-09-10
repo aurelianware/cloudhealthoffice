@@ -291,13 +291,15 @@
 
 .ev-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  /* min() lets the track shrink below its preferred floor on very narrow
+     viewports (~320px) instead of forcing the page to scroll sideways. */
+  grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr));
   gap: 1.1rem;
   margin-top: 1.6rem;
 }
 
 .ev-grid--two {
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr));
 }
 
 .ev-card {

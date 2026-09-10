@@ -32,6 +32,7 @@ const messageSheet = read('MESSAGE_SHEET.md');
 const knowledge = read('assistant/knowledge.md');
 const servicesCss = read('css/services.css');
 const leadCapture = read('js/lead-capture.js');
+const assistant = read('js/assistant.js');
 
 /** Every HTML page that carries the shared primary navigation. */
 function htmlPagesWithNav(): string[] {
@@ -401,6 +402,20 @@ describe('Services & deployment positioning', () => {
       expect(contact).toContain('enterprise@cloudhealthoffice.com');
     });
 
+    it('closes the submit path entirely for the support topic', () => {
+      // A visible notice is not enough on its own: the form must refuse the
+      // submission so logs or member data cannot reach the sales inbox.
+      expect(contact).toContain("submitBtn.disabled = isSupport");
+      expect(contact).toContain("if (topic === 'support') {");
+      expect(contact).toMatch(/Technical support is not handled through this form/);
+    });
+
+    it('keeps the support option out of the picker when JavaScript is unavailable', () => {
+      const noscript = contact.match(/<noscript>[\s\S]*?<\/noscript>/)?.[0] ?? '';
+      expect(noscript).toContain('#cs-topic option[value="support"] { display: none; }');
+      expect(noscript).toContain('enterprise@cloudhealthoffice.com');
+    });
+
     it('deep-links from /services and /deploy carry a known interest key', () => {
       const links = [...services.matchAll(/\/contact\?interest=([a-z0-9-]+)/g), ...deploy.matchAll(/\/contact\?interest=([a-z0-9-]+)/g)];
       expect(links.length).toBeGreaterThan(0);
@@ -528,8 +543,44 @@ describe('Services & deployment positioning', () => {
       expect(servicesCss).toContain('minmax(');
     });
 
+    it('lets every grid track shrink below its floor rather than scroll sideways', () => {
+      // A bare minmax(320px, 1fr) overflows a 320px viewport once section
+      // padding is subtracted. min(x, 100%) keeps the same layout everywhere
+      // wider and simply lets the track collapse when it cannot fit.
+      const floors = [
+        ...servicesCss.matchAll(
+          /grid-template-columns: repeat\(auto-fit, minmax\((min\([^)]*\)|[^,]+),/g
+        )
+      ].map((m) => m[1].trim());
+      expect(floors.length).toBeGreaterThan(3);
+      for (const floor of floors) {
+        expect(floor).toMatch(/^min\(\d+px, 100%\)$/);
+      }
+    });
+
     it('respects prefers-reduced-motion', () => {
       expect(servicesCss).toContain('@media (prefers-reduced-motion: reduce)');
+    });
+  });
+
+  describe('on-site assistant', () => {
+    it('carries the topic into the contact handoff instead of a bare /contact link', () => {
+      expect(assistant).toContain("'/contact?interest=' + encodeURIComponent(lastContactKey)");
+      expect(assistant).toContain('contactHref()');
+    });
+
+    it('maps every assistant contactKey to a real contact topic', () => {
+      const keys = [...assistant.matchAll(/contactKey: '([a-z0-9-]+)'/g)].map((m) => m[1]);
+      expect(keys.length).toBeGreaterThan(3);
+      for (const key of keys) {
+        expect(contact).toContain(`<option value="${key}">`);
+      }
+    });
+
+    it('does not let the payer-operations topic hijack the generic pricing question', () => {
+      const payerOps = assistant.slice(assistant.indexOf("id: 'payer-ops'"), assistant.indexOf("id: 'services'"));
+      expect(payerOps).toContain("'repricing'");
+      expect(payerOps).not.toMatch(/'pricing'/);
     });
   });
 
@@ -639,6 +690,10 @@ describe('Services & deployment positioning', () => {
     it('recognizes the companion property', () => {
       expect(analytics).toContain("'cms-0057-f.com'");
       expect(analytics).toContain('cross_site_referral');
+    });
+
+    it('sanitizes the landing path like every other stored field', () => {
+      expect(analytics).toContain('landing_path: cleanPath(pagePath())');
     });
 
     it('sanitizes and length-caps every attribution value', () => {

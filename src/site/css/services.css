@@ -215,7 +215,7 @@
 
 .svc-lanes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 1.1rem;
   margin-top: 1.6rem;
 }
@@ -286,7 +286,7 @@
 
 .svc-offer__cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 1rem 2rem;
   margin-top: 1.1rem;
 }
@@ -316,7 +316,7 @@
 
 .svc-models {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 1.1rem;
   margin-top: 1.6rem;
 }
@@ -402,7 +402,7 @@
 
 .svc-engagements {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 1.1rem;
   margin-top: 1.6rem;
 }
@@ -515,7 +515,7 @@
 
 .cho-band__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 20px;
   margin-top: 34px;
 }

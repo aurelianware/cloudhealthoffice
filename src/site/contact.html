@@ -302,6 +302,35 @@
       display: none;
     }
 
+    .contact-form-notice--support {
+      border-color: rgba(255, 204, 102, 0.45);
+      background: rgba(255, 204, 102, 0.07);
+      color: rgba(226, 216, 196, 0.92);
+    }
+
+    .contact-form-notice--support strong {
+      display: block;
+      color: #ffcc66;
+      margin-bottom: 6px;
+    }
+
+    .contact-form-notice--support p {
+      margin: 0 0 12px;
+    }
+
+    .contact-support-link {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #d9a441, #ffcc66);
+      color: #000;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
     .contact-form-notice a {
       color: #00ffff;
     }
@@ -365,6 +394,21 @@
         or the <a href="/docs">documentation</a> rather than this form.
       </div>
 
+      <noscript>
+        <div class="contact-phi-warning" role="note">
+          <strong>Technical support does not go through this form.</strong>
+          If you need help with a running deployment, email
+          <a href="mailto:enterprise@cloudhealthoffice.com">enterprise@cloudhealthoffice.com</a>
+          instead of submitting below &mdash; and keep logs, member data, and credentials out of the message.
+        </div>
+        <style>
+          /* Without JavaScript the support routing below cannot run, so keep the
+             option out of the picker rather than accepting a support request
+             into the public marketing inbox. */
+          #cs-topic option[value="support"] { display: none; }
+        </style>
+      </noscript>
+
       <form id="salesContactForm" action="https://formspree.io/f/xgojygon" method="POST" novalidate aria-label="Contact form">
 
         <fieldset class="contact-form-fieldset">
@@ -410,10 +454,19 @@
           </select>
         </div>
 
-        <div id="cs-support-notice" class="contact-form-notice" role="status" hidden>
-          For a live technical issue, email
-          <a href="mailto:enterprise@cloudhealthoffice.com">enterprise@cloudhealthoffice.com</a>
-          instead of using this form &mdash; and please keep logs, member data, and credentials out of the message.
+        <div id="cs-support-notice" class="contact-form-notice contact-form-notice--support" role="status" hidden>
+          <strong>Technical support is not handled through this form.</strong>
+          <p>
+            This inbox is monitored by sales, not by engineering, and it is a public marketing form &mdash; the
+            wrong place for logs, member data, or credentials. Email enterprise support directly and we will pick
+            it up from there.
+          </p>
+          <a class="contact-support-link" href="mailto:enterprise@cloudhealthoffice.com?subject=Technical%20support%20request">
+            Email enterprise@cloudhealthoffice.com
+          </a>
+          <p class="contact-form-help">
+            Please describe the problem without attaching PHI, member data, claim data, or credentials.
+          </p>
         </div>
 
         <div class="contact-form-field">
@@ -574,8 +627,16 @@
       var meta = TOPICS[value];
       if (topicLabelEl) topicLabelEl.value = topicLabel(value);
 
-      // Route live technical issues away from the public marketing form.
-      if (supportNotice) supportNotice.hidden = (value !== 'support');
+      // Route live technical issues away from the public marketing form. The
+      // notice alone is not enough: without disabling the submit path a visitor
+      // can still post logs or member data into a sales inbox, so the form is
+      // closed for this topic and replaced by the support mailbox.
+      var isSupport = (value === 'support');
+      if (supportNotice) supportNotice.hidden = !isSupport;
+      if (submitBtn) {
+        submitBtn.disabled = isSupport;
+        submitBtn.textContent = isSupport ? 'Use enterprise support instead' : 'Send message';
+      }
 
       if (!fireEvents || !meta) return;
 
@@ -607,6 +668,12 @@
       var topic = topicEl ? topicEl.value : '';
       var message = document.getElementById('cs-message').value.trim();
       var evaluating = form.querySelector('input[name="evaluating"]:checked');
+
+      if (topic === 'support') {
+        showError('Technical support is not handled through this form. Please email enterprise@cloudhealthoffice.com so the request reaches engineering.');
+        if (supportNotice) supportNotice.hidden = false;
+        return;
+      }
 
       if (!name || !org || !email || !topic || !message || !evaluating) {
         showError('Please fill in all required fields before submitting.');

@@ -34,6 +34,10 @@ submission, and an analytics report all describe intent the same way.
 | `sow-review` | Architecture / vendor review | Vendor proposals, SOWs, estimates, responsibilities |
 | `interop` | Professional services | FHIR, Da Vinci, X12, prior authorization implementation |
 | `fractional-architect` | Professional services | Ongoing payer-side architecture leadership |
+| `payer-operations` | Payer operations | Core administration operations support generally |
+| `fee-schedule` | Payer operations | Fee schedule and reimbursement configuration |
+| `repricing-validation` | Payer operations | Claims repricing and payment validation |
+| `core-admin-support` | Payer operations | Production support on QNXT, Facets, HealthEdge |
 | `support` | Technical support | A live technical issue |
 | `other` | Other | Anything else |
 
@@ -47,8 +51,9 @@ The condensed set the assistant classifies against:
 6. QNXT and core administration
 7. architecture / vendor review
 8. professional services
-9. technical support
-10. other
+9. payer operations and core administration
+10. technical support
+11. other
 
 ## What the assistant may say about how Cloud Health Office is consumed
 

@@ -80,8 +80,10 @@ founder page, and explicitly distinguished from a vendor relationship.
 The contact form, the GA4 events, and the planned "Ask Cloud Health Office"
 assistant share one set of intent keys (`platform`, `saas`, `payer-cloud`,
 `managed`, `hybrid`, `cms0057-assessment`, `implementation`, `core-admin`,
-`sow-review`, `interop`, `fractional-architect`, `managed-ops`, `support`,
-`other`). `/contact?interest=<key>` preselects the topic so a CTA can carry
+`sow-review`, `interop`, `fractional-architect`, `managed-ops`,
+`payer-operations`, `fee-schedule`, `repricing-validation`,
+`core-admin-support`, `support`, `other`). The assistant's topics carry the
+same keys so its handoff CTA preselects the matching contact topic. `/contact?interest=<key>` preselects the topic so a CTA can carry
 intent across the page boundary.
 
 ## Consequences
