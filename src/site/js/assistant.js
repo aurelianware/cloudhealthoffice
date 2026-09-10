@@ -29,6 +29,7 @@
   var TOPICS = [
     {
       id: 'what',
+      contactKey: 'platform',
       label: 'What is Cloud Health Office?',
       keywords: ['what is', 'what', 'about', 'product', 'overview', 'clearinghouse'],
       answer: 'Cloud Health Office is the claims platform you can put beside QNXT, Facets, ' +
@@ -40,6 +41,7 @@
     },
     {
       id: 'cms',
+      contactKey: 'cms0057-assessment',
       label: 'CMS-0057-F',
       keywords: ['cms', '0057', 'mandate', 'deadline', 'fhir', 'rule', 'prior auth', 'compliance'],
       answer: CMS_DEF + ' Cloud Health Office ships the FHIR compliance surface you deploy ' +
@@ -48,6 +50,7 @@
     },
     {
       id: 'qnxt',
+      contactKey: 'core-admin',
       label: 'How it sits on QNXT / Facets',
       keywords: ['qnxt', 'facets', 'healthedge', 'core', 'sit', 'beside', 'replace', 'alongside', 'amisys', 'foothold', 'cutover'],
       answer: 'It deploys alongside your core admin system. Layer 1 — Foothold — serves the CMS-0057-F ' +
@@ -66,11 +69,51 @@
     },
     {
       id: 'deploy',
+      contactKey: 'payer-cloud',
       label: 'Deploy in your cloud',
       keywords: ['deploy', 'cloud', 'azure', 'aws', 'gcp', 'install', 'run', 'host', 'phi', 'data'],
       answer: 'You deploy Cloud Health Office in your own Azure, AWS, or GCP. PHI stays inside ' +
         'your boundary. You can also evaluate and run it locally for free.',
       link: { href: '/deploy', text: 'How deployment works' }
+    },
+    {
+      id: 'operating-model',
+      contactKey: 'payer-cloud',
+      label: 'SaaS vs. your own cloud',
+      keywords: ['saas', 'managed', 'operate', 'operating model', 'hosted', 'shared responsibility',
+        'hybrid', 'who runs', 'operations'],
+      answer: 'Payer-controlled cloud deployment and free local evaluation are available today. ' +
+        'Aurelianware-managed deployment and a hybrid shared-responsibility model are offered by ' +
+        'engagement, with responsibilities defined per environment. A hosted SaaS operated by ' +
+        'Aurelianware is under evaluation and is not offered today.',
+      link: { href: '/deploy', text: 'Compare the operating models' }
+    },
+    {
+      id: 'payer-ops',
+      contactKey: 'payer-operations',
+      label: 'Fee schedules & payment validation',
+      keywords: ['fee schedule', 'reimbursement', 'repricing', 'payment variance', 'variance',
+        'configuration', 'regression', 'accumulator', 'benefit config', 'production issue',
+        'root cause', 'discrepancy'],
+      answer: 'Professional Services also covers payer operations and core administration: fee schedule and ' +
+        'reimbursement configuration, claims repricing and payment validation, and production issue ' +
+        'investigation on QNXT, Facets, HealthEdge and other cores. It is technical and configuration work ' +
+        'done alongside your team — not business process outsourcing, an outsourced claims department, or ' +
+        'staffing. We do not promise a recovery amount or a payment-accuracy rate.',
+      link: { href: '/services#payer-operations', text: 'Payer operations & core administration' }
+    },
+    {
+      id: 'services',
+      contactKey: 'cms0057-assessment',
+      label: 'Professional services',
+      keywords: ['services', 'consulting', 'assessment', 'advisory', 'architect', 'sow',
+        'statement of work', 'vendor review', 'implementation', 'readiness', 'fractional'],
+      answer: 'Cloud Health Office Professional Services covers CMS-0057-F readiness and architecture ' +
+        'assessment, Cloud Health Office implementation, core administration advisory, vendor and SOW ' +
+        'technical review, interoperability and prior authorization advisory, and fractional payer ' +
+        'solution architect engagements. You do not have to license or deploy Cloud Health Office to ' +
+        'engage them, and an assessment can conclude that a different path is the right one.',
+      link: { href: '/services', text: 'Explore Professional Services' }
     },
     {
       id: 'license',
@@ -106,6 +149,9 @@
   var transcript = [];
   var assistantTurns = 0;
   var handoffOffered = false;
+  // Contact-form interest key for the last topic answered, so the handoff CTA
+  // preselects the right topic instead of dropping the visitor on a blank form.
+  var lastContactKey = '';
 
   function logTurn(role, text) {
     transcript.push(role + ': ' + text);
@@ -147,6 +193,7 @@
   }
 
   function answerTopic(topic) {
+    if (topic && topic.contactKey) lastContactKey = topic.contactKey;
     var linkHtml = topic.link
       ? ' <a href="' + topic.link.href + '" class="cho-asst__link">' + topic.link.text + ' &rarr;</a>'
       : '';
@@ -196,6 +243,12 @@
     answerTopic(match);
   }
 
+  // Deep link into the contact form with the topic preselected. Keys are the
+  // shared interest taxonomy; see docs/sales-materials/ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md.
+  function contactHref() {
+    return lastContactKey ? '/contact?interest=' + encodeURIComponent(lastContactKey) : '/contact';
+  }
+
   function offerHandoff() {
     handoffOffered = true;
     var wrap = el('div', { class: 'cho-asst__handoff' });
@@ -205,7 +258,7 @@
       '  <input type="email" name="email" placeholder="you@healthplan.org" aria-label="Work email" required />' +
       '  <button type="submit">Email me</button>' +
       '</form>' +
-      '<a href="/contact" class="cho-asst__book" data-ga-event="assistant_book_click">Book 30 minutes &rarr;</a>' +
+      '<a href="' + contactHref() + '" class="cho-asst__book" data-ga-event="assistant_book_click">Book 30 minutes &rarr;</a>' +
       '<p class="cho-asst__note" hidden></p>';
     log.appendChild(wrap);
     log.scrollTop = log.scrollHeight;

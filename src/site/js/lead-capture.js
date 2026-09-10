@@ -112,6 +112,19 @@
         ? window.choIdentity.getViewedPages() : [];
       setHidden(form, 'anonymous_id', anonId);
       setHidden(form, 'pages_viewed', pages.join(' > '));
+
+      // Cross-site attribution: where this visit came from (originating site,
+      // article, CTA, campaign). Sanitized and length-capped upstream in
+      // analytics-events.js; never contains PHI or personal identifiers.
+      var attribution = (window.choIdentity && window.choIdentity.getAttribution)
+        ? window.choIdentity.getAttribution() : null;
+      if (attribution) {
+        for (var key in attribution) {
+          if (attribution.hasOwnProperty(key) && attribution[key]) {
+            setHidden(form, key, attribution[key]);
+          }
+        }
+      }
       setHidden(form, 'interest', form.getAttribute('data-lead-interest') || (
         (form.querySelector('[name="interest"]') || {}).value || 'general'));
       if (email) {

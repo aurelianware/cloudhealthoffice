@@ -49,5 +49,6 @@ behavior from active work and future goals.
 ## Related Roadmap Documents
 
 - [Claims phase 2 backlog](claims-phase-2-backlog.md)
+- [Payer operations productization backlog](payer-operations-productization.md)
 - [Enhancement checklist](CHO-ENHANCEMENT-CHECKLIST.md)
 - [Enhancement status](CHO-ENHANCEMENT-STATUS.md)

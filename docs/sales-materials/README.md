@@ -3,6 +3,10 @@
 
 **Start here for the first customer:** [CMS-0057-F-ACCELERATOR-OFFER.md](CMS-0057-F-ACCELERATOR-OFFER.md) and the [diligence binder](../diligence/README.md). Demo: [cms-0057-f-accelerator-demo.md](demo-materials/cms-0057-f-accelerator-demo.md). Targets: [FOUNDING-PARTNER-TARGET-LIST.md](../diligence/FOUNDING-PARTNER-TARGET-LIST.md).
 
+**Professional Services positioning:** [SERVICES-CONTENT-PLAN.md](SERVICES-CONTENT-PLAN.md) (SEO architecture and content backlog for `/services` and `/deploy`) and [ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md](ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md) (intent taxonomy and escalation model for the future on-site assistant). The decision behind both is [ADR 012](../adr/012-product-led-professional-services.md); the locked wording is in [`src/site/MESSAGE_SHEET.md`](../../src/site/MESSAGE_SHEET.md).
+
+**Cross-site strategy:** [CROSS-SITE-CMS-0057-F-STRATEGY.md](CROSS-SITE-CMS-0057-F-STRATEGY.md) is the implementation contract between the cms-0057-f.com reference property and this commercial site (CTA blocks, stable anchors, attribution parameters, editorial rules). The decision is [ADR 013](../adr/013-cms-0057-f-com-companion-property.md).
+
 This directory contains sales, marketing, and customer onboarding materials. The retired “60-day free complete platform” language in older files is not the SKU.
 
 ---
