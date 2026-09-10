@@ -141,9 +141,16 @@
     footer a{color:rgba(0,255,255,.7);text-decoration:none}
 
     @media(max-width:820px){
+      /* Never hide the primary nav without a way back to it: there is no mobile
+         toggle on this page, so the links stack and scroll instead of
+         disappearing. Keyboard and screen-reader users keep full reach. */
       .featured{grid-template-columns:1fr}
       .featured-figure{border-left:none;border-top:1px solid var(--border)}
-      .nav-links{display:none}
+      nav{padding:0 1rem}
+      .nav-inner{height:auto;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.55rem 0}
+      .nav-links{width:100%;gap:1.1rem;overflow-x:auto;padding-bottom:.15rem;scrollbar-width:none}
+      .nav-links::-webkit-scrollbar{display:none}
+      .nav-links a,.nav-cta{white-space:nowrap;flex:0 0 auto}
     }
     @media(max-width:768px){section{padding:2.6rem 1.2rem}.hero{padding:3rem 1.2rem 2rem}}
   </style>

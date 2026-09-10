@@ -762,9 +762,12 @@ describe('Services & deployment positioning', () => {
     });
 
     it('keeps the primary nav reachable on mobile across the series', () => {
-      // These article pages carry no mobile toggle, so the nav must never be
-      // display:none — it stacks and scrolls instead.
+      // These pages carry no mobile toggle, so the nav must never be
+      // display:none — it stacks and scrolls instead. The series hub is
+      // included: it links to every article, so losing its nav strands a
+      // mobile visitor at the entry point to the whole series.
       for (const article of [
+        'insights/cms-0057-f/index.html',
         'insights/cms-0057-f/caps-vendor-sow-questions.html',
         'insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html',
         'insights/cms-0057-f/acceptance-scenarios.html'

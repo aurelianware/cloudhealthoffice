@@ -507,7 +507,7 @@ Visit `http://localhost:8000`
 Push to `main` branch:
 
 ```bash
-git add site/
+git add src/site/
 git commit -m "Add new page"
 git push origin main
 ```

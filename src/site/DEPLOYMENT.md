@@ -24,11 +24,11 @@ This guide explains how to build, test, and deploy the Cloud Health Office stati
 Convert Markdown files to HTML:
 
 ```bash
-cd /home/runner/work/cloudhealthoffice/cloudhealthoffice
+cd <repository root>
 npm run build:site
 ```
 
-This generates `site/assessment.html` from `site/assets/cho-assessment.md`.
+This generates `src/site/assessment.html` from `src/site/assets/cho-assessment.md`.
 
 ### 2. Test Locally
 
@@ -36,13 +36,13 @@ Serve the site on localhost:
 
 ```bash
 # Option 1: Python
-python3 -m http.server 8000 --directory site
+python3 -m http.server 8000 --directory src/site
 
 # Option 2: Node.js http-server
-npx http-server site -p 8000
+npx http-server src/site -p 8000
 
 # Option 3: PHP
-php -S localhost:8000 -t site
+php -S localhost:8000 -t src/site
 ```
 
 Visit: `http://localhost:8000`
@@ -82,16 +82,16 @@ az account set --subscription "<subscription-id>"
 az staticwebapp deploy \
   --name "<static-web-app-name>" \
   --resource-group "<resource-group-name>" \
-  --source ./site
+  --source ./src/site
 ```
 
 ## Build Process
 
 ### Markdown to HTML Conversion
 
-The build script (`site/js/markdown-converter.js`) performs the following:
+The build script (`src/site/js/markdown-converter.js`) performs the following:
 
-1. **Reads Markdown files** from `site/assets/*.md`
+1. **Reads Markdown files** from `src/site/assets/*.md`
 2. **Converts to HTML** with basic Markdown syntax support:
    - Headings (h1-h6)
    - Paragraphs
@@ -106,7 +106,7 @@ The build script (`site/js/markdown-converter.js`) performs the following:
    - Hero section with logo
    - Footer with branding
    - Sentinel CSS styling
-4. **Outputs HTML files** to `site/` directory
+4. **Outputs HTML files** to `src/site/` directory
 
 ### Supported Markdown Syntax
 
@@ -141,9 +141,9 @@ Horizontal rule
 
 ### Adding New Pages
 
-1. Create Markdown file in `site/assets/`:
+1. Create Markdown file in `src/site/assets/`:
    ```bash
-   touch site/assets/new-page.md
+   touch src/site/assets/new-page.md
    ```
 
 2. Write content:
@@ -173,9 +173,11 @@ Horizontal rule
 
 ### GitHub Actions: deploy-static-site.yml
 
-**Trigger:**
-- Push to `main` branch with changes in `site/**`
-- Manual workflow dispatch
+**Trigger:** manual workflow dispatch only.
+
+> The `push` trigger was removed — this workflow no longer runs on changes to
+> `src/site/**`. GitHub Pages (`deploy-pages.yml`) publishes the live site. The
+> steps below describe the dormant Azure path as it would need to be restored.
 
 **Steps:**
 1. **Validate secrets** (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID)
@@ -230,7 +232,7 @@ Azure automatically provisions certificates after DNS verification (5-10 minutes
 
 ```bash
 npm install -g html-validator-cli
-html-validator site/*.html
+html-validator src/site/*.html
 ```
 
 ### Link Checking
@@ -285,10 +287,10 @@ node --version
 ```bash
 # Verify you're in repository root
 pwd
-# Should be: /home/runner/work/cloudhealthoffice/cloudhealthoffice
+# Should be: the repository root
 
 # Verify assets directory exists
-ls -la site/assets/
+ls -la src/site/assets/
 ```
 
 ### Deployment Fails
@@ -343,7 +345,7 @@ az staticwebapp secrets list \
 ### Images Missing
 
 **Graphics not displaying:**
-- Verify SVG files exist: `ls site/graphics/`
+- Verify SVG files exist: `ls src/site/graphics/`
 - Check image paths in HTML
 - Verify alt text is present
 - Test in browser dev tools Network tab
@@ -364,14 +366,14 @@ az staticwebapp secrets list \
 
 ```bash
 # Find commit hash of working version
-git log --oneline site/
+git log --oneline src/site/
 
 # Revert changes
 git revert <commit-hash>
 git push origin main
 
 # Or checkout specific files
-git checkout <commit-hash> -- site/
+git checkout <commit-hash> -- src/site/
 git commit -m "Rollback site to previous version"
 git push origin main
 ```
@@ -444,11 +446,11 @@ curl -vI https://cloudhealthoffice.com 2>&1 | grep -E "subject|issuer|expire"
 ```bash
 # Minify CSS (optional)
 npm install -g csso-cli
-csso site/css/sentinel.css -o site/css/sentinel.min.css
+csso src/site/css/sentinel.css -o src/site/css/sentinel.min.css
 
 # Optimize SVG files
 npm install -g svgo
-svgo site/graphics/*.svg
+svgo src/site/graphics/*.svg
 ```
 
 ### Enable Caching
