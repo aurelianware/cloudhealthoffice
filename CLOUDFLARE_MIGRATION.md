@@ -138,8 +138,9 @@ After you confirm the Cloudflare setup works, these will be removed/updated:
   `src/site/DEPLOYMENT.md`, `src/site/IMPLEMENTATION-SUMMARY.md` (and relevant
   `docs/**` files).
 
-`Dockerfile` / `nginx.conf` in `src/site/` are unrelated to SWA (they're for the
-container/AKS path) and will be left alone unless you say otherwise.
+`Dockerfile` / `nginx.conf` in `src/site/` have been **deleted**: they served the
+Azure Container Apps path, which was retired once `cho-site` ceased to exist and
+GitHub Pages became the live host. There is no site container to preserve.
 
 ---
 

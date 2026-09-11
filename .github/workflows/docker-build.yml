@@ -1,4 +1,4 @@
-name: Build Portal / Site / Utility Containers
+name: Build Portal / Utility Containers
 
 # Service-image builds moved out of this workflow as part of the δ-series
 # consolidation (PRs #691, #692, and the δ3 PR introducing pr-validation.yml).

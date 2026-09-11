@@ -717,20 +717,25 @@ For Kubernetes deployments, container images must be built and pushed to GitHub 
 
 #### Automated Build via GitHub Actions
 
-The `.github/workflows/docker-build.yml` workflow automatically builds all container images on push to `main`:
+Container builds are split across two workflows.
 
-**17 Container Images Built:**
-- **9 Microservices**: member-service, coverage-service, claims-service, eligibility-service, authorization-service, provider-service, benefit-plan-service, reference-data-service, sponsor-service
-- **2 UI**: portal (Blazor), site (static)
-- **6 Utility Containers**: x12-parser, claims-publisher, kafka-publisher, sftp-fetcher, x12-encoder, metadata-extractor
+`.github/workflows/docker-build.yml` covers the non-service images:
 
-**Trigger Paths:**
-- `services/**` → Builds affected microservices
-- `portal/**` → Builds portal
-- `site/**` → Builds site
-- `containers/**` → Builds utility containers
+- **Portal**: the Blazor portal
+- **8 Utility Containers**: x12-parser, x12-276-parser, x12-834-parser, x12-encoder,
+  claims-publisher, kafka-publisher, sftp-fetcher, metadata-extractor
 
-**Images pushed to**: `ghcr.io/aurelianware/cloudhealthoffice-*:latest`
+**Trigger paths:** `src/portal/**`, `containers/**`, and the workflow file itself.
+
+`.github/workflows/deploy-azure-aks.yml` builds and deploys the microservices.
+
+**Images pushed to**: the Azure Container Registry named by `vars.ACR_LOGIN_SERVER`
+(`clouhealthoffice.azurecr.io` by default — the missing `d` is the registry's real
+name, not a typo to correct).
+
+> The marketing site is **not** among these. `cloudhealthoffice.com` is served by
+> GitHub Pages via `.github/workflows/deploy-pages.yml`; there is no site image,
+> and a change under `src/site/**` triggers neither of these workflows.
 
 #### Manual Container Build
 
@@ -750,7 +755,8 @@ for service in member coverage claims eligibility authorization provider benefit
 done
 
 # Build the portal
-docker build -t ghcr.io/aurelianware/cloudhealthoffice-portal:latest src/portal/CloudHealthOffice.Portal
+docker build -t ghcr.io/aurelianware/cloudhealthoffice-portal:latest \
+  -f src/portal/CloudHealthOffice.Portal/Dockerfile .
 docker push ghcr.io/aurelianware/cloudhealthoffice-portal:latest
 ```
 

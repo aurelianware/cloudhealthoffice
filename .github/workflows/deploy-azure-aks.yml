@@ -6,6 +6,10 @@ on:
     branches: ["main"]
     paths:
       - 'src/**'
+      # The marketing site deploys via GitHub Pages only; a site-only change
+      # must not start the base-image import, the portal/service builds, or an
+      # AKS deploy — nor a paused run when deployments are off.
+      - '!src/site/**'
       - 'containers/**'
       - 'infrastructure/k8s/**'
       - 'infrastructure/azure/aks-main.bicep'
@@ -302,9 +306,6 @@ jobs:
           cache-from: type=gha
           platforms: linux/amd64
 
-  # ─────────────────────────────────────────────────────────────
-  # Deploy marketing site to Azure Container Apps
-  # ─────────────────────────────────────────────────────────────
   # ─────────────────────────────────────────────────────────────
   # Deploy portal + services to AKS
   # ─────────────────────────────────────────────────────────────

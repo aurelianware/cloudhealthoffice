@@ -850,12 +850,17 @@ describe('Services & deployment positioning', () => {
       expect(azure).toContain('DORMANT');
     });
 
-    it('is the only workflow that deploys the marketing site', () => {
+    it('leaves no workflow deploying the site to Azure Container Apps', () => {
       // The site has had four hosts: Azure Static Web Apps, Kubernetes, Azure
       // Container Apps, and now GitHub Pages. Each move left the previous path
       // behind, and the two Container Apps deploys stayed red for months
-      // against a 'cho-site' resource that no longer exists. Pages is the only
-      // live path; assert no workflow grows a fifth one.
+      // against a 'cho-site' resource that no longer exists.
+      //
+      // Deliberately narrower than "Pages is the only deployer":
+      // deploy-static-site.yml can still deploy the site to Static Web Apps on
+      // workflow_dispatch, which is the documented restore path. What must
+      // never come back is the retired Container Apps resource or its image —
+      // so every workflow is checked, with no exemptions.
       const workflows = fs
         .readdirSync(path.join(REPO, '.github/workflows'))
         .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
@@ -864,11 +869,6 @@ describe('Services & deployment positioning', () => {
       expect(workflows.length).toBeGreaterThan(5);
 
       for (const file of workflows) {
-        if (file === 'deploy-pages.yml') continue;
-        // deploy-static-site.yml is retained on workflow_dispatch as the
-        // documented restore path, and is covered by its own assertion above.
-        if (file === 'deploy-static-site.yml') continue;
-
         // Assert on what the workflow *does*, not what it says: the comments
         // explaining why the site deploys were removed name them on purpose.
         const steps = readRepo(`.github/workflows/${file}`)
@@ -879,6 +879,24 @@ describe('Services & deployment positioning', () => {
         expect(`${file}: ${steps}`).not.toContain('cho-site');
         expect(`${file}: ${steps}`).not.toMatch(/IMAGE_PREFIX \}\}-site/);
       }
+    });
+
+    it('stops site-only changes from triggering the container workflows', () => {
+      // Neither workflow builds the site any more, so a change under
+      // src/site/** must not start either one. docker-build.yml drops the path
+      // outright; deploy-azure-aks.yml matches 'src/**' and so needs the
+      // explicit negation.
+      const dockerBuild = readRepo('.github/workflows/docker-build.yml');
+      const dockerTriggers = dockerBuild.slice(
+        dockerBuild.indexOf('\non:'),
+        dockerBuild.indexOf('concurrency:')
+      );
+      expect(dockerTriggers).not.toContain('src/site/**');
+
+      const aks = readRepo('.github/workflows/deploy-azure-aks.yml');
+      const aksTriggers = aks.slice(aks.indexOf('\non:'), aks.indexOf('concurrency:'));
+      expect(aksTriggers).toContain("- 'src/**'");
+      expect(aksTriggers).toContain("- '!src/site/**'");
     });
 
     it('leaves no build for the retired site container', () => {
