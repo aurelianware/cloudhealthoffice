@@ -139,13 +139,6 @@ if [[ "$SKIP_BUILD" == false ]]; then
     && { ok "portal"; load_kind_image "ghcr.io/aurelianware/${IMAGE_PREFIX}-portal:latest"; } \
     || { warn "portal build failed"; failed_builds+=("portal"); }
 
-  # Site
-  log "Building site"
-  docker build -t ${IMAGE_PREFIX}-site:latest \
-    -f src/site/Dockerfile src/site/ \
-    && { ok "site"; load_kind_image "${IMAGE_PREFIX}-site:latest"; } \
-    || { warn "site build failed"; failed_builds+=("site"); }
-
   # Microservices — all use repo root as build context (Dockerfiles COPY from src/services/...)
   log "Building microservices"
   for svc in "${!SERVICES[@]}"; do
