@@ -289,6 +289,38 @@ inconsistency, because it is the proof point everything else rests on:
 out of "Stretch Goals."** Roughly an hour of work; disproportionate credibility
 payoff.
 
+### 4.2b Published coverage claims contradict measured coverage
+
+This surfaced from the Codecov bot's own comment on this PR, which makes it especially
+awkward: **CI publishes the real number on every pull request.**
+
+| Source | Claim | Measured (CI, this PR) |
+| --- | --- | --- |
+| `src/site/cms-0057f-compliance.html:796` — **public marketing site** | "85.93% coverage" | **57%** line / 46% branch |
+| `docs/guides/FEATURES.md:357` and `:900` | "Test Coverage: 100% (FHIR module)" | `fhir-service` **78%** |
+| `docs/features/IMPLEMENTATION-SUMMARY.md:251` | "Test suite passes with >80% coverage" | 57% |
+| `docs/features/WEBSITE-UPDATES-FINAL.md:97`, `WEBSITE-PHASE2-COMPLETE.md:155` | "480+ tests (100% pass, 80% coverage)" | 57%; test count is now ~6,900 |
+
+A reviewer can find both the 85.93% claim and the 57% CI badge inside five minutes. Note
+this is *not* a case of the tests being weak — 6,900 tests is real work, and several
+components are genuinely well covered (`CobEngine` 94%, `EncounterEngine` 96%,
+`RiskAdjustmentEngine` 93%, `Infrastructure` 80%, `ClaimsScrubEngine` 81%). The problem is
+purely that the *published numbers* were written once and never re-derived.
+
+**The uncomfortable detail worth knowing before someone else finds it:** coverage is
+weakest on several of the adjudication engines the investment story rests on —
+`BenefitEngine` 53%, `FeeScheduleEngine` 52%, `NcciEngine` 47%, `PriorAuthRuleEngine` 41%
+— and lowest on `sponsor-service` (13%), `attachment-service` (19%),
+`member-document-service` (21%), `CHO.TerminologyService` (23%), `Portal` (26%),
+`PricingApi` (27%), with `CloudHealthOffice.ReferenceData` at 0%.
+
+**Recommendation:** replace every hardcoded coverage figure with the CI-generated value
+(the repo already auto-refreshes the test *count* via `scripts/inject-test-metrics.js` —
+extend the same mechanism to coverage), and drop the "100% (FHIR module)" line, which is
+true only of a narrow module and reads as a repo-wide claim. Raising coverage on the four
+adjudication engines is the substantive follow-up, but *fixing the published numbers costs
+an hour and removes the contradiction immediately.*
+
 ### 4.3 Two smaller consistency gaps
 
 - **README architecture diagram overclaims X12.** `README.md:78` lists
@@ -392,6 +424,8 @@ answer is much better than the current documentation implies.
    loudest negative one.
 2. Reconcile the benchmark number across the four documents (§4.2).
 3. Decide on the marketing copy (§4.1) — the table gives drop-in replacements.
+3b. Fix the published coverage numbers (§4.2b). The public site claims 85.93% while CI
+   publishes 57% on every PR; this is the cheapest contradiction in the repo to remove.
 4. Correct the README X12 diagram and the test-project count (§4.3).
 5. Close out or merge PR #1104 and #1141 so the data room has no stale open audits.
 
