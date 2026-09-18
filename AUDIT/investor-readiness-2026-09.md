@@ -29,9 +29,38 @@ CI discipline — not fabricated capability.
 | Committed credentials | 🟠 → 🟢 **fixed here** (5 manifests) |
 | Repo hygiene (stray archive) | 🟠 → 🟢 **fixed here** |
 | Buildability by an outsider | 🔴 → 🟢 **fixed here** (35 Dockerfiles) |
-| Marketing claims vs. code | 🟠 **open** — needs a founder decision (§4) |
-| Benchmark number consistency | 🟠 **open** (§4) |
+| Published coverage figures vs. CI | 🔴 → 🟢 **fixed** — injection reconnected to the live deploy (§4.2b) |
+| Local dev setup on a clean machine | 🔴 → 🟢 **fixed** — `deploy-local.sh` shebang + `bootstrap-macos.sh` |
+| Marketing claims vs. code | 🟠 **open** — needs a founder decision (§4.1) |
+| Benchmark number consistency | 🟠 **open** — highest remaining payoff (§4.2) |
+| What the Azure subscription hosts | ⚪ **unverified** — not checkable from the audit environment (§4.4) |
 | Internal service auth / tenant isolation | 🟡 **open, by design** — needs documenting (§5) |
+
+---
+
+## 1b. Before the next investor conversation — ordered by payoff per hour
+
+Everything in §2–§3 is already fixed and merged. This is what is left, ordered for
+someone with limited time before a meeting rather than by severity.
+
+| # | Do this | Time | Why it earns the time |
+| --- | --- | --- | --- |
+| 1 | **Confirm what the Azure subscription hosts** (commands in §4.4) | 2 min | "What's running in production?" is an early question. You want a precise answer, not a hedge a reviewer can check faster than you can give it. |
+| 2 | **Reconcile the benchmark number** across README, `docs/benchmarks/`, `POSITIONING.md`, `roadmap/README.md` (§4.2) | ~1 hr | Your flagship proof point is currently stated four ways, including as a **Stretch Goal** in the roadmap *and* as achieved in the README. This is the single most damaging inconsistency left. |
+| 3 | **Decide on `assessment.html`** (§4.1, drop-in replacements provided) | ~30 min | "Resistance to adoption is futile" and a "99.9% uptime SLA" read as vaporware next to a README that carefully says the opposite. One overclaim discounts the honest 95%. |
+| 4 | **Rotate the Postgres credential** if `reference-data-service` ran anywhere shared (§2.2) | 15 min | Cheap, and it closes the only credential that was ever genuinely live. |
+
+**What you can now invite a reviewer to do, which was impossible yesterday:** clone the
+repo and build it. The dead-registry fix (§2.1) means `docker compose` no longer requires
+Azure tenant access, and `main` is green. "Clone it and run it" is a strong offer; it was
+a broken one 24 hours ago.
+
+**The honest framing that works.** This repo's real advantage is that it under-claims and
+publishes reproducible evidence — the CMS-0057-F matrix separating "implemented" from
+"integration required," `trust.html` explicitly disclaiming SOC 2 and HITRUST, the
+benchmark methodology's stated limitations. That posture is worth more in healthcare
+diligence than any single number, and the open items in §4 are the places where the repo
+currently breaks its own rule. Fixing them is defending the thesis, not polishing.
 
 ---
 
@@ -388,18 +417,50 @@ Mongo-wire-protocol-everywhere design that gap **should not exist as a category*
 there is one code path rather than two. Worth confirming whether the native-SDK path is
 still live or is vestigial.
 
-### Deployment reality (confirmed with the founder)
+### Deployment reality — what is verified, and what is not
 
-Current operation is **local Kubernetes on Docker Desktop**; **AKS is a historical path**.
-This matches the code: `AZURE_DEPLOYMENTS_ENABLED` is opt-in and documented as paused
-"while the Azure subscription is inactive." Two implications for a data room:
+**Separate the two claims carefully, because a reviewer will.**
 
-- The repo carries substantial AKS machinery for a path not currently exercised. That is
-  fine, but it should be *described* as a recovery/target path rather than implied to be
-  live — consistent with the README's existing, correct framing of benchmark evidence as
-  local.
-- It means the deploy regression described in §3 was latent rather than an active outage.
-  It still had to be fixed properly: the local path applies the same manifests.
+**Verified from the repository (high confidence):**
+
+- Day-to-day operation is **local Kubernetes on Docker Desktop**, via
+  `scripts/deploy-local.sh`.
+- Automatic Azure deploys are **gated off in code**: `AZURE_DEPLOYMENTS_ENABLED` is
+  opt-in, with the in-file comment "while the Azure subscription is inactive."
+- `deploy-static-site.yml` (Azure Static Web Apps) declares itself **DORMANT**; the
+  marketing site is served by **GitHub Pages**.
+- All published benchmark evidence is from local runs, which the README already states
+  correctly.
+
+**NOT verified — do not assert either way without checking:** what the Azure
+subscription actually hosts today. This audit ran in an environment with no Azure CLI and
+no credentials, so the live subscription was never queried. The founder's recollection is
+that it hosts some services, *possibly supporting a different product (CloudDentalOffice)
+rather than CloudHealthOffice* — a shared subscription is common and would explain a live
+subscription alongside a gated CloudHealthOffice deploy path.
+
+**Check it before the conversation** (about two minutes):
+
+```bash
+az login
+az account show --query '{name:name, id:id}' -o table
+az resource list --query "[].{name:name, type:type, group:resourceGroup}" -o table
+az aks list -o table                      # is there a live AKS cluster at all?
+```
+
+**Why this matters more than it looks.** "What's running in production?" is an early
+question in any technical diligence conversation, and the strong answer is a precise one.
+*"CloudHealthOffice runs on local Kubernetes today; here is a reproducible 1M-claim run
+with a seed and a command line; the Azure subscription hosts <X>"* is credible and
+defensible. A vague "it's on Azure" invites a follow-up that a reviewer can check faster
+than you can answer, and this repo's own evidence would contradict it.
+
+**Consequence for §3.** Whether the `reference-data-service` Postgres change is an
+*imminent prerequisite* or a *latent one* depends entirely on the above. If AKS is live
+and running that service, `POSTGRES_PASSWORD` (or Key Vault `Postgres--Password`) must be
+configured **before the next deploy**, and that credential was live there and should be
+rotated. If AKS is not running CloudHealthOffice, both are latent. **Confirm before
+relying on either reading.**
 
 ---
 
