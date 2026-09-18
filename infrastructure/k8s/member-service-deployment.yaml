@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -5,17 +6,6 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: member-service-secrets
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  # Supply at deploy time — do not commit a real credential.
-  # See infrastructure/k8s/secrets/database-secret.yaml for the shared template.
-  MongoDb__ConnectionString: "REPLACE_WITH_CONNECTION_STRING"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -48,8 +38,8 @@ spec:
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: member-service-secrets
-              key: MongoDb__ConnectionString
+              name: database-secret
+              key: connectionString
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:

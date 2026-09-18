@@ -93,13 +93,16 @@ Two things made this worse than a broken job:
 
 Live at HEAD, in `Secret` manifests for **PHI-bearing services**:
 
+Values are **redacted here deliberately** — an audit trail should identify the affected
+credential, not reproduce it. Retrieve the actual values from git history when rotating.
+
 | File | Credential |
 | --- | --- |
-| `infrastructure/k8s/coverage-service-deployment.yaml` | `securepassword123` |
-| `infrastructure/k8s/member-service-deployment.yaml` | `securepassword123` |
-| `infrastructure/k8s/sponsor-service-deployment.yaml` | `securepassword123` |
-| `infrastructure/k8s/services/attachment-service.yaml` | `securepassword123` |
-| `src/services/reference-data-service/k8s/reference-data-service-deployment.yaml` | `CloudHealthOffice2026!` (in an `ASPNETCORE_ENVIRONMENT: "Production"` manifest) |
+| `infrastructure/k8s/coverage-service-deployment.yaml` | MongoDB password (shared literal A) |
+| `infrastructure/k8s/member-service-deployment.yaml` | MongoDB password (shared literal A) |
+| `infrastructure/k8s/sponsor-service-deployment.yaml` | MongoDB password (shared literal A) |
+| `infrastructure/k8s/services/attachment-service.yaml` | MongoDB password (shared literal A) |
+| `src/services/reference-data-service/k8s/reference-data-service-deployment.yaml` | PostgreSQL password (literal B), in an `ASPNETCORE_ENVIRONMENT: "Production"` manifest |
 
 These target in-cluster, self-hosted datastores — this is **not** a leaked cloud
 key or a PHI breach — but "committed password in a Production-labelled manifest
@@ -123,8 +126,32 @@ so it had been force-added.
 | 1 | Aligned `MongoDB.Driver` → 3.11.2 and `Microsoft.Azure.Cosmos` → 3.63.0 in `benefit-plan-service` to match `BenefitEngine` | 1 |
 | 1b | Aligned **every** `Microsoft.Azure.Cosmos` pin repo-wide to 3.63.0 | 27 additional projects |
 | 2 | Repointed base-image registry default to `mcr.microsoft.com` | 35 Dockerfiles |
-| 3 | Replaced committed credentials with `REPLACE_WITH_*` placeholders + a pointer to the shared secret template | 5 manifests |
+| 3 | Removed committed credentials and rewired the manifests to externally-provisioned secrets (see below) | 5 manifests + 2 deploy paths |
 | 4 | Removed the stray source archive | 1 |
+| 5 | Corrected `docs/deployment/DOCKER-BUILD-STATUS.md`, which still documented the ACR host as the no-argument default | 1 |
+
+**On change #3 — placeholders were the wrong fix, and review caught it.** The first
+attempt replaced each committed password with a `REPLACE_WITH_*` placeholder *in the same
+`Secret` manifest*. That removes the credential but leaves a manifest that, when applied,
+creates a live `Secret` holding a non-functional value — so the pods come up unable to
+connect. Three of the five manifests are applied by real deploy paths, so this would have
+been a genuine regression. The corrected approach:
+
+- **The four MongoDB services** (coverage, member, sponsor, attachment) now read
+  `secretKeyRef: {name: database-secret, key: connectionString}` — the shared secret that
+  **both** `scripts/deploy-local.sh` and `deploy-azure-aks.yml` already provision, and that
+  20+ canonical `src/services/*/k8s/` manifests already use. Their redundant per-service
+  `Secret` objects are gone. This required no new configuration on either path.
+- **reference-data-service (PostgreSQL)** had no external provisioner at all — its
+  committed `Secret` was the only source, for both the Postgres StatefulSet and the app.
+  The `Secret` is removed from the manifest and now created by each deploy path in that
+  path's existing idiom: an env-overridable local-dev default in `deploy-local.sh`
+  (matching `MONGO_PASS`), and a Key Vault / repo-secret lookup in `deploy-azure-aks.yml`
+  that **fails loudly** if unset rather than silently deploying a known password.
+
+Note also that `infrastructure/k8s/coverage-service-deployment.yaml` and
+`member-service-deployment.yaml` are referenced by **no** deploy path — canonical copies
+live under `src/services/*/k8s/`. They are dead duplicates and are candidates for deletion.
 
 **Why 1b was necessary.** Change #1 alone cleared the `NU1605` restore error, which let the
 `benefit-plan-service` image build progress further — and hit the *next* symptom of the
@@ -247,6 +274,52 @@ payoff.
 
 ---
 
+## 4.4 Stated data-layer strategy, and two things inconsistent with it
+
+Confirmed with the founder during this pass, and worth stating explicitly because it
+reframes two earlier findings:
+
+> **Intent:** everything speaks the **MongoDB wire protocol**, so the platform stays
+> cloud-agnostic; on Azure, that same Mongo driver runs against **Cosmos DB's API for
+> MongoDB** rather than the native Cosmos SDK.
+
+This is a *stronger* story than the one the repo currently tells, and it is worth making
+explicit in the architecture docs — "one data-access path, portable across MongoDB, Cosmos
+DB for MongoDB, and any Mongo-compatible service" beats "dual backend" in a diligence
+conversation, because dual backends invite the parity question. Two things in the tree
+currently contradict it:
+
+1. **The native `Microsoft.Azure.Cosmos` SDK is a direct dependency of 31 projects.** If
+   Cosmos is reached through the Mongo API, this SDK is largely the wrong dependency —
+   and it is the one that produced *both* CI breaks in this PR (`NU1605`, then
+   `NETSDK1152`, the latter caused specifically by its RID-specific native assets, which
+   `MongoDB.Driver` does not ship). Auditing whether it is still needed would remove a
+   recurring build-fragility source and simplify the story at the same time.
+2. **`reference-data-service` uses PostgreSQL**, with its own StatefulSet — a third
+   persistence technology, and the one outlier from "everything supports Mongo." It is
+   also the only service whose credential had no external provisioner (§3).
+
+The August audit's "Cosmos vs MongoDB parity gap" finding (`ClaimAdjustmentRepository`
+throwing `NotImplementedException` on the Cosmos path) is best read in this light: under a
+Mongo-wire-protocol-everywhere design that gap **should not exist as a category**, because
+there is one code path rather than two. Worth confirming whether the native-SDK path is
+still live or is vestigial.
+
+### Deployment reality (confirmed with the founder)
+
+Current operation is **local Kubernetes on Docker Desktop**; **AKS is a historical path**.
+This matches the code: `AZURE_DEPLOYMENTS_ENABLED` is opt-in and documented as paused
+"while the Azure subscription is inactive." Two implications for a data room:
+
+- The repo carries substantial AKS machinery for a path not currently exercised. That is
+  fine, but it should be *described* as a recovery/target path rather than implied to be
+  live — consistent with the README's existing, correct framing of benchmark evidence as
+  local.
+- It means the deploy regression described in §3 was latent rather than an active outage.
+  It still had to be fixed properly: the local path applies the same manifests.
+
+---
+
 ## 5. Standing findings carried forward (unchanged from August)
 
 These were verified as still accurate and are **not** regressions — they are known
@@ -275,8 +348,9 @@ answer is much better than the current documentation implies.
   vendor connectors.
 - `appsettings.Development.json` is tracked in 37 places and the portal copy
   carries a literal Mongo credential. Local-dev defaults in
-  `docker-compose.development.yml` use `${MONGO_PASSWORD:-securepassword123}`,
-  which is a legitimate pattern and was left alone.
+  `docker-compose.development.yml` use an env-overridable
+  `${MONGO_PASSWORD:-...}` form, which is a legitimate pattern and was left alone
+  (the same posture as `MONGO_PASS` in `scripts/deploy-local.sh`).
 - PR #1141 (portal/API security audit) and PR #1104 (the August DD audit) are both
   still open and unmerged.
 
