@@ -27,6 +27,9 @@ LOCAL_ENABLE_AI_CLAIMS_EXAMINER="${LOCAL_ENABLE_AI_CLAIMS_EXAMINER:-false}"
 # Defaults — overridden by .env.local if present
 MONGO_USER="admin"
 MONGO_PASS="localdev123"
+# reference-data-service runs its own in-cluster Postgres StatefulSet.
+# Local-dev default only; override via POSTGRES_PASSWORD for anything shared.
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-localdev123}"
 STRIPE_PUBLISHABLE_KEY="pk_test_local"
 STRIPE_SECRET_KEY="sk_test_local"
 STRIPE_STARTER_PRICE_ID="price_local_starter"
@@ -250,6 +253,13 @@ kubectl create secret generic database-secret \
   --from-literal=key= \
   --dry-run=client -o yaml | kubectl apply -f -
 ok "database-secret"
+
+# reference-data-service Postgres credentials (StatefulSet + service read this)
+kubectl create secret generic reference-data-service-secret \
+  --namespace "$NAMESPACE" \
+  --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+  --dry-run=client -o yaml | kubectl apply -f -
+ok "reference-data-service-secret"
 
 # CosmosDB secret alias (portal uses this key name)
 kubectl create secret generic cosmosdb-secret \

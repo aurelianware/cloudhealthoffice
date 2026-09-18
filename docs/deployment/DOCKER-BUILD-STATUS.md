@@ -114,16 +114,23 @@ az acr import --name clouhealthoffice \
   --image dotnet/aspnet:8.0-alpine
 ```
 
-Each Dockerfile exposes an `ARG REGISTRY` (defaulting to `clouhealthoffice.azurecr.io`) so local builds can override:
+Each Dockerfile exposes an `ARG REGISTRY` **defaulting to `mcr.microsoft.com`**, so a
+plain `docker build` works for anyone with no Azure access. Builds that should pull base
+images through the ACR mirror must pass the registry explicitly:
 
 ```bash
-# Local build using MCR directly (no ACR needed)
-docker build --build-arg REGISTRY=mcr.microsoft.com \
-  -f src/services/member-service/Dockerfile .
-
-# CI build using ACR mirror (default)
+# Default build — pulls base images straight from MCR (no ACR needed)
 docker build -f src/services/member-service/Dockerfile .
+
+# Build through the ACR mirror (requires ACR access; pass it explicitly)
+docker build --build-arg REGISTRY=clouhealthoffice.azurecr.io \
+  -f src/services/member-service/Dockerfile .
 ```
+
+> The default was previously the ACR host. That made `docker build` fail with a 401 for
+> anyone outside the Azure tenant, and broke the Quality Gate E2E/Load jobs, which build
+> via `docker compose` without passing a registry. `scripts/deploy-local.sh` already
+> defaulted to MCR (`LOCAL_DOTNET_REGISTRY`); the Dockerfiles now match.
 
 **PR builds:** The workflow logs in to ACR using a dedicated read-only token (`ACR_USERNAME` / `ACR_PASSWORD` secrets) so pull requests can fetch base images without Azure OIDC. A preceding check step inspects whether `ACR_USERNAME` is set; if the secret is absent (e.g. fork PRs), the login step is skipped entirely and the build falls back to pulling base images directly from `mcr.microsoft.com`.
 

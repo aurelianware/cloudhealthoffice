@@ -1,4 +1,4 @@
-ARG REGISTRY=clouhealthoffice.azurecr.io
+ARG REGISTRY=mcr.microsoft.com
 # Stage 1: Build
 FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo

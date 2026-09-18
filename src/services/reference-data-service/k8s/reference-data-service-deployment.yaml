@@ -8,15 +8,6 @@ data:
   ASPNETCORE_ENVIRONMENT: "Production"
   ASPNETCORE_URLS: "http://+:8080"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: reference-data-service-secret
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  POSTGRES_PASSWORD: "REDACTED-POSTGRES-PASSWORD"
----
 # PostgreSQL StatefulSet
 apiVersion: v1
 kind: Service

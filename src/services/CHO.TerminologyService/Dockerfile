@@ -1,4 +1,4 @@
-ARG REGISTRY=clouhealthoffice.azurecr.io
+ARG REGISTRY=mcr.microsoft.com
 FROM ${REGISTRY}/dotnet/sdk:8.0-alpine AS build
 WORKDIR /repo
 
