@@ -3,8 +3,12 @@
 **Date:** 2026-09-18
 **Scope:** `aurelianware/cloudhealthoffice` @ `main` (HEAD `9dd308d`)
 **Method:** static read of code, manifests, docs and site copy; live GitHub Actions
-history and failure-log analysis. A clean .NET build was **not** run — no .NET SDK
-is available in this environment (see §5).
+history and failure-log analysis; and, on a later pass, a real .NET 8.0.425 SDK (the
+version CI uses) installed in the audit environment. `dotnet restore` on
+`benefit-plan-service` completes cleanly, independently confirming the `NU1605` fix that
+previously had only CI as evidence. A full `dotnet test` run and the local Kubernetes
+path were **not** exercised here — this environment has a Docker CLI but no daemon, so no
+containers and no cluster.
 **Relationship to the prior audit:** this is a **follow-up** to
 `AUDIT/dd-readiness.md` (2026-08-21, open in PR #1104). That audit's findings were
 re-verified against today's HEAD. Most remain unfixed; this pass fixes the two that
@@ -32,7 +36,7 @@ CI discipline — not fabricated capability.
 | Published coverage figures vs. CI | 🔴 → 🟢 **fixed** — injection reconnected to the live deploy (§4.2b) |
 | Local dev setup on a clean machine | 🔴 → 🟢 **fixed** — `deploy-local.sh` shebang + `bootstrap-macos.sh` |
 | Marketing claims vs. code | 🟠 **open** — needs a founder decision (§4.1) |
-| Benchmark number consistency | 🟠 **open** — highest remaining payoff (§4.2) |
+| Benchmark number consistency | 🟠 → 🟢 **fixed** — one canonical two-part result across all four docs (§4.2) |
 | What the Azure subscription hosts | ⚪ **unverified** — not checkable from the audit environment (§4.4) |
 | Internal service auth / tenant isolation | 🟡 **open, by design** — needs documenting (§5) |
 
@@ -46,7 +50,7 @@ someone with limited time before a meeting rather than by severity.
 | # | Do this | Time | Why it earns the time |
 | --- | --- | --- | --- |
 | 1 | **Confirm what the Azure subscription hosts** (commands in §4.4) | 2 min | "What's running in production?" is an early question. You want a precise answer, not a hedge a reviewer can check faster than you can give it. |
-| 2 | **Reconcile the benchmark number** across README, `docs/benchmarks/`, `POSITIONING.md`, `roadmap/README.md` (§4.2) | ~1 hr | Your flagship proof point is currently stated four ways, including as a **Stretch Goal** in the roadmap *and* as achieved in the README. This is the single most damaging inconsistency left. |
+| 2 | ~~Reconcile the benchmark number~~ — **done** (§4.2) | — | Was stated four ways, including as a Stretch Goal *and* as achieved. Now one canonical two-part result: episode 15 correctness baseline, episode 16 throughput high-water. |
 | 3 | **Decide on `assessment.html`** (§4.1, drop-in replacements provided) | ~30 min | "Resistance to adoption is futile" and a "99.9% uptime SLA" read as vaporware next to a README that carefully says the opposite. One overclaim discounts the honest 95%. |
 | 4 | **Rotate the Postgres credential** if `reference-data-service` ran anywhere shared (§2.2) | 15 min | Cheap, and it closes the only credential that was ever genuinely live. |
 
@@ -302,7 +306,7 @@ it is that a reviewer who catches one overclaim discounts the honest 95%.
 Note on `99.9% uptime SLA`: the copy already says **"target"**, which is softer
 than the August audit implied. The fix is mostly placement, not deletion.
 
-### 4.2 The flagship benchmark number disagrees across four documents
+### 4.2 The flagship benchmark number disagreed across four documents — RESOLVED
 
 Still unreconciled since August. This is the worst possible place for
 inconsistency, because it is the proof point everything else rests on:
@@ -314,9 +318,32 @@ inconsistency, because it is the proof point everything else rests on:
 | `docs/POSITIONING.md:288` | Episode **16**, 155.89 claims/sec, 129,980/130,000 |
 | `docs/roadmap/README.md:44` | "Full one-million-claim benchmark" — listed under **Stretch Goals** |
 
-**Pick one canonical result, update all four, and move the achieved 1M milestone
-out of "Stretch Goals."** Roughly an hour of work; disproportionate credibility
-payoff.
+**Resolved.** The evidence supports a clean two-part statement rather than one number,
+and all four documents now carry it consistently:
+
+- **Correctness baseline — episode 15, run 2:** 1,000,000 processed, **zero platform
+  failures**, 129,981/130,000 workflow checks, payment gate 20,000/20,000 exact within
+  $0.01, 123.81 claims/sec.
+- **Throughput high-water — episode 16, same corpus:** 155.89 claims/sec (P95 910 ms,
+  P99 1,205 ms), 129,980/130,000 workflow checks, 19,982/19,982 payments exact, and 122
+  claims that became terminal *after* the validator's 180-second observation window.
+
+The 122 are an **observation deadline, not lost claims** — post-run verification found
+all 1,000,000 terminal, zero dead letters, zero pod restarts. They are still disclosed,
+because they produced a nonzero validator exit and left 20 workflow checks and 18 payment
+scenarios unreconciled inside the run artifact. That is precisely why episode 15, not 16,
+is the cited baseline.
+
+Changes made: `docs/benchmarks/README.md` had never been updated past the 100K run and now
+carries both 1M results; `docs/roadmap/README.md` listed the achieved benchmark under
+**Stretch Goals** and now records it under Current Strengths, with episode 17's post-window
+reconciliation taking its place as the real next benchmark goal; `README.md` gained the
+episode 16 throughput figure alongside the episode 15 baseline it already cited.
+
+`docs/POSITIONING.md` was left alone — it was already the most accurate of the four, and
+its framing ("the published result should not be overstated") is the model the others were
+brought up to. Verified afterwards that every cited figure matches across all four
+documents and that none lists the 1M benchmark as unachieved.
 
 ### 4.2b Published coverage claims contradict measured coverage
 
