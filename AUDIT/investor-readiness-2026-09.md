@@ -120,10 +120,32 @@ so it had been force-added.
 
 | # | Change | Files |
 | --- | --- | --- |
-| 1 | Aligned `MongoDB.Driver` → 3.11.2 and `Microsoft.Azure.Cosmos` → 3.63.0 to match `BenefitEngine` | 1 |
+| 1 | Aligned `MongoDB.Driver` → 3.11.2 and `Microsoft.Azure.Cosmos` → 3.63.0 in `benefit-plan-service` to match `BenefitEngine` | 1 |
+| 1b | Aligned **every** `Microsoft.Azure.Cosmos` pin repo-wide to 3.63.0 | 27 additional projects |
 | 2 | Repointed base-image registry default to `mcr.microsoft.com` | 35 Dockerfiles |
 | 3 | Replaced committed credentials with `REPLACE_WITH_*` placeholders + a pointer to the shared secret template | 5 manifests |
 | 4 | Removed the stray source archive | 1 |
+
+**Why 1b was necessary.** Change #1 alone cleared the `NU1605` restore error, which let the
+`benefit-plan-service` image build progress further — and hit the *next* symptom of the
+same underlying inconsistency:
+
+```
+error NETSDK1152: Found multiple publish output files with the same relative path:
+  .../microsoft.azure.cosmos/3.62.1/runtimes/win-x64/native/Microsoft.Azure.Cosmos.ServiceInterop.dll,
+  .../microsoft.azure.cosmos/3.63.0/runtimes/win-x64/native/Microsoft.Azure.Cosmos.ServiceInterop.dll, ...
+```
+
+Dependabot had bumped a *group* of three projects (`BenefitEngine`, `NcciEngine`,
+`FeeScheduleEngine`) to Cosmos 3.63.0 and left 27 others on 3.62.1, so a single publish
+collected native assets from both versions. Bumping only the projects inside
+`benefit-plan-service`'s reference graph was not viable: `CloudHealthOffice.Infrastructure`
+is referenced by nearly every service, so raising it alone would have produced `NU1605` in
+every service still pinned at 3.62.1. A uniform bump has zero blast radius by construction.
+
+All 31 projects now pin 3.63.0. A graph walk over every `.csproj` (resolving
+`ProjectReference` transitively and comparing pinned versions) confirms **0 remaining
+package-downgrade risks** for both `Microsoft.Azure.Cosmos` and `MongoDB.Driver`.
 
 **Verification performed:**
 
@@ -143,8 +165,8 @@ in this environment. CI on this branch is the real gate — see §6.
 
 ### The structural fix that still needs doing
 
-Change #1 fixes today's break but **not the cause**. `MongoDB.Driver` is pinned
-independently in 35 projects:
+Changes #1 and #1b fix today's break but **not the cause**. `MongoDB.Driver` is still
+pinned independently across 35 projects:
 
 | Version | Projects |
 | --- | --- |
@@ -153,11 +175,23 @@ independently in 35 projects:
 | 3.11.2 | 4 |
 | 2.28.0 | 1 |
 
-Any Dependabot bump that moves one project ahead of a project that references it
-reproduces `NU1605`. **Recommendation:** adopt Central Package Management
-(`Directory.Packages.props`) so every project resolves one version. This is the
-difference between "they fixed it twice" and "it can't happen again" — and a
-technical reviewer will read it that way.
+This spread is currently *safe* — the graph walk confirms no project pins below a
+project it references, so there is no `NU1605` today, and `MongoDB.Driver` ships no
+RID-specific native assets, so `NETSDK1152` does not apply. It was left alone to keep
+this PR minimal. But it is one grouped Dependabot bump away from reproducing exactly
+what happened here.
+
+The sequence in this PR is the argument: a grouped bump moved three projects ahead of
+27, which produced `NU1605` at restore; fixing that surfaced `NETSDK1152` at publish —
+**two different errors, in two different build phases, from one root cause.** That is
+the failure mode of per-project version pinning, and it has now cost this repo three
+separate red-CI incidents (the August `MongoDB.Driver` 3.10.0/3.11.0 break, and both
+symptoms here).
+
+**Recommendation:** adopt Central Package Management (`Directory.Packages.props`) so
+every project resolves one version by construction. This is the difference between
+"they fixed it three times" and "it can't happen again" — and a technical reviewer
+will read it that way.
 
 ---
 
