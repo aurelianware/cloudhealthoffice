@@ -19,6 +19,7 @@ the architecture, and find an area to contribute.
 | Run the cms-0057-f.com companion property | [ADR 013](adr/013-cms-0057-f-com-companion-property.md) and the [cross-site contract](sales-materials/CROSS-SITE-CMS-0057-F-STRATEGY.md) |
 | Turn payer operations work into product | [Payer operations productization backlog](roadmap/payer-operations-productization.md) |
 | Contribute | [Developer guide](developer/README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
+| Portal UX and API security audit | [Audits](audits/README.md) |
 
 ## Getting Started
 
