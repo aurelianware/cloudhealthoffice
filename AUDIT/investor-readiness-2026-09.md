@@ -314,12 +314,36 @@ weakest on several of the adjudication engines the investment story rests on —
 `member-document-service` (21%), `CHO.TerminologyService` (23%), `Portal` (26%),
 `PricingApi` (27%), with `CloudHealthOffice.ReferenceData` at 0%.
 
-**Recommendation:** replace every hardcoded coverage figure with the CI-generated value
-(the repo already auto-refreshes the test *count* via `scripts/inject-test-metrics.js` —
-extend the same mechanism to coverage), and drop the "100% (FHIR module)" line, which is
-true only of a narrow module and reads as a repo-wide claim. Raising coverage on the four
-adjudication engines is the substantive follow-up, but *fixing the published numbers costs
-an hour and removes the contradiction immediately.*
+**Root cause (found on follow-up — the mechanism existed and was orphaned).** This was
+never a case of nobody building automation. `scripts/inject-test-metrics.js` already reads
+`summary.coverage_pct` from the `test-metrics.yml` artifact and already rewrites
+`NN.NN% coverage` in `src/site/*.html`. Two wiring gaps stopped it working:
+
+1. **The injection ran only in `deploy-static-site.yml`** (Azure Static Web Apps), which
+   that file's own header declares **DORMANT** — GitHub Pages became the live path for
+   cloudhealthoffice.com. `deploy-pages.yml` did `npm ci && npm run build` with **no
+   injection**, so the live site published whatever was committed in `src/site/*.html`.
+   Retiring the Azure path (PR #1169) silently orphaned the injection.
+2. **The commit-back in `test-metrics.yml` stages only** `README.md` and
+   `docs/guides/FEATURES.md` (`git add README.md docs/guides/FEATURES.md`), never the site
+   HTML — so the repo's copy could never self-correct either.
+
+Compounding both: **`test-metrics.yml` was itself red on `main` for weeks** (§2.1), so even
+the two files it does maintain were not being refreshed.
+
+**Fixed here:** the injection now runs in `deploy-pages.yml` before the site build, so
+published figures track CI instead of drifting. Verified locally — running the script
+against a metrics file rewrote the site's `85.93% coverage` to the CI-measured value,
+changing exactly that one line and nothing else.
+
+**Still hand-maintained (no regex covers these), corrected here:** the
+"Test Coverage: 100% (FHIR module)" claims in `docs/guides/FEATURES.md` (two places), and
+the test-project count, which said 44 against an actual 55. Note the auto-injection updates
+"6,933 automated tests" but *not* the "across NN test projects" suffix — worth folding into
+the script if that number is going to keep being published.
+
+Raising coverage on the four adjudication engines is the substantive follow-up; the
+published-number contradiction is now closed.
 
 ### 4.3 Two smaller consistency gaps
 
