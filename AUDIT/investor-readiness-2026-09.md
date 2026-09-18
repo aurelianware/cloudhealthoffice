@@ -110,6 +110,33 @@ for the member service" is the first thing a healthcare security reviewer greps
 for, and it bypassed the repo's own `infrastructure/k8s/secrets/database-secret.yaml`
 template.
 
+**Exposure analysis — the two credentials are not equivalent.** This was traced
+after the initial finding, and it materially lowers the urgency of one of them:
+
+| | MongoDB literal (A) | PostgreSQL literal (B) |
+| --- | --- | --- |
+| Was it the datastore's real password? | **No.** The MongoDB StatefulSet takes its root password from the `mongodb-auth` Secret, created by `deploy-local.sh` (a local dev value) or from Key Vault on AKS. `infrastructure/k8s/mongodb-deployment.yaml` says so explicitly: *"mongodb-auth Secret is created by CI/CD from GitHub Secrets. Do NOT hardcode credentials here."* The literal in the four service manifests therefore **never matched** the actual root password on either Kubernetes path. | **Yes.** The Postgres StatefulSet set `POSTGRES_PASSWORD` *from* the committed Secret, so wherever `reference-data-service` ran, this was the live database password. |
+| Where was it genuinely live? | The local **Docker Compose** stack only (`docker-compose.development.yml`, `.env.example`). | Any cluster that deployed `reference-data-service` — local Kubernetes, and AKS while it was in use. |
+| Reachable from outside the cluster? | No — target host is `mongodb:27017`; the Service is headless (`clusterIP: None`). | No — headless `postgres-service`. |
+| Data held | Local dev data. | Reference data (code sets). **Not PHI.** |
+| History footprint | 3 commits touch the literal. | Introduced with the service. |
+
+**Conclusion:** (A) is a hygiene fix, not an incident — it was both stale *and*
+non-functional on Kubernetes. (B) is worth rotating on any cluster where
+`reference-data-service` actually ran; on the current local-Kubernetes setup a
+re-deploy picks up the new externally-provisioned value. Neither credential ever
+pointed at Atlas, Cosmos, or any internet-reachable host.
+
+### 2.2b A third committed credential — documented, not accidental
+
+`docs/features/MONITORING-AND-OBSERVABILITY.md` **instructed** operators to install
+Grafana with a fixed admin password (`--set grafana.adminPassword=<literal>`) and then
+documented `admin / <literal>` as the login. Access is via `kubectl port-forward` to
+localhost, so real-world exposure is low — but a *documented* default is worse practice
+than an accidental literal, because every reader who follows the guide reproduces the
+same known admin password. Fixed here: the guide now generates a password
+(`openssl rand -base64 24`) into `$GRAFANA_ADMIN_PASSWORD`.
+
 ### 2.3 A stray source archive at the repo root
 
 `CHO-ProviderEnrollment-PriorAuthRuleEngine.zip` (93 KB, 41 source files) was a

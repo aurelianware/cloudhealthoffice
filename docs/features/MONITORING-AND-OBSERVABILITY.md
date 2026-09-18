@@ -49,7 +49,7 @@ helm install cho-monitoring prometheus-community/kube-prometheus-stack \
   --namespace cho-monitoring \
   --set prometheus.prometheusSpec.retention=15d \
   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=50Gi \
-  --set grafana.adminPassword=CloudHealthOffice2026 \
+  --set grafana.adminPassword="$GRAFANA_ADMIN_PASSWORD" \
   --set grafana.persistence.enabled=true \
   --set grafana.persistence.size=10Gi
 
@@ -58,7 +58,14 @@ kubectl port-forward -n cho-monitoring svc/cho-monitoring-grafana 3000:80
 ```
 
 **Grafana URL**: http://localhost:3000  
-**Login**: admin / CloudHealthOffice2026
+**Login**: `admin` / the value of `$GRAFANA_ADMIN_PASSWORD`
+
+> Generate a password before installing rather than using a shared literal —
+> a documented default is a password every reader of this repo already knows:
+>
+> ```bash
+> export GRAFANA_ADMIN_PASSWORD="$(openssl rand -base64 24)"
+> ```
 
 ## Key Dashboards to Import
 
