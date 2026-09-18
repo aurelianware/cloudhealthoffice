@@ -120,9 +120,16 @@ and reports payment accuracy independently from workflow correctness.
 
 Current published local evidence includes:
 
-- Full 1,000,000-claim corpus run (episode 15) with zero platform failures,
-  129,981/130,000 workflow checks matched, zero unsupported scenarios, and a
-  payment-amount gate of 20,000/20,000 exact within one cent.
+- **Correctness baseline — full 1,000,000-claim corpus run (episode 15):**
+  1,000,000 processed, zero platform failures, 129,981/130,000 workflow checks
+  matched, zero unsupported scenarios, and a payment-amount gate of
+  20,000/20,000 exact within one cent, at 123.81 claims/sec.
+- **Highest sustained throughput (episode 16), same corpus:** 155.89 claims/sec
+  (P95 910 ms, P99 1,205 ms), 129,980/130,000 workflow checks, 19,982/19,982
+  payments exact within one cent. 122 claims became terminal after the
+  validator's 180-second observation window — post-run verification found all
+  1,000,000 terminal with zero dead letters, so episode 15 remains the strict
+  zero-failure baseline.
 - 100,000-claim local Kubernetes run with zero platform failures, zero scoreable
   workflow mismatches, zero unexpected pends across scoreable non-pend claims,
   and 2,000 of 2,000 comparable payments within one cent.

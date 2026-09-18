@@ -15,7 +15,7 @@ This document provides a comprehensive overview of all features available in Clo
 | **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
 | **Security Hardening** | 6 deployment controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
 | **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
-| **Testing** | 6,933 automated tests across 44 test projects | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Testing** | 6,933 automated tests across 55 test projects | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
 | **Premium Billing** | Monthly premium invoicing, NACHA/ACH EFT drafts, Stripe ACH | ✅ Complete | [src/services/premium-billing-service/](../src/services/premium-billing-service/) |
 
@@ -354,7 +354,7 @@ const { patient, eligibility } = mapX12270ToFhirEligibility(x12Data);
 #### Quality Metrics
 
 - **Lines of Code**: 1,140 (production), 450 (tests), 1,190 (docs)
-- **Test Coverage**: 100% (FHIR module)
+- **Test Coverage**: see the CI coverage report; `fhir-service` measured 78% line coverage at 2026-09-18 (repo-wide: 57%)
 - **Test Pass Rate**: Estimated 100% pass rate in internal tests (19/19 tests)
 - **Dependencies**: @types/fhir (type definitions only)
 - **Vulnerabilities**: 0 (core mapper)
@@ -897,7 +897,7 @@ Automatic scanning on every PR:
 | **Security Score** | High security maturity (self-assessed) | ✅ |
 | **HIPAA Compliance** | Addresses key technical safeguards | ✅ |
 | **Test Pass Rate** | Estimated 100% in internal tests (62/62) | 100% ✅ |
-| **Test Coverage** | 100% (FHIR module) | >80% ✅ |
+| **Test Coverage** | 57% repo-wide line coverage (CI-measured, 2026-09-18); `fhir-service` 78% | >80% ⚠️ |
 | **Build Success Rate** | 100% | 100% ✅ |
 | **Vulnerabilities** | 0 (core mapper) | 0 ✅ |
 

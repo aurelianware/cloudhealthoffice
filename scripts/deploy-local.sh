@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/bash
+#!/usr/bin/env bash
 # deploy-local.sh — Build and deploy the full CloudHealthOffice platform
 # to Docker Desktop Kubernetes for local development.
 #
@@ -10,6 +10,17 @@
 # Prerequisites:
 #   - Docker Desktop with Kubernetes enabled
 #   - kubectl context set to docker-desktop
+
+# This script uses bash 4+ features (associative arrays). macOS ships bash 3.2,
+# so fail with an actionable message rather than a confusing syntax error.
+# Uses only bash 3.2-compatible syntax so the check itself always runs.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+  echo "error: this script needs bash 4 or newer; found ${BASH_VERSION:-unknown}." >&2
+  echo "       macOS ships bash 3.2. Install a newer one and re-run:" >&2
+  echo '         brew install bash' >&2
+  echo '       then re-run this script.' >&2
+  exit 1
+fi
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

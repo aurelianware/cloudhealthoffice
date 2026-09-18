@@ -6,7 +6,10 @@ behavior from active work and future goals.
 ## Current Strengths
 
 - Kubernetes-first local development and benchmark path.
-- Claims adjudication evidence through the Million Claim Challenge.
+- Claims adjudication evidence through the Million Claim Challenge, including a
+  **full 1,000,000-claim local Kubernetes run with zero platform failures**
+  (episode 15: 129,981/130,000 workflow checks, payment gate 20,000/20,000 exact
+  within $0.01). Local engineering benchmark, not a production-cloud claim.
 - Mass Adjudication console with run summaries and claim-level drilldown.
 - Pended-claim observability and false-pend validation in benchmark scoring.
 - Payment-comparable scoring for clean professional paid claims.
@@ -18,6 +21,9 @@ behavior from active work and future goals.
 - Improve benchmark evidence visibility in the portal.
 - Tighten payment accuracy gates and evidence filters.
 - Reduce fixture-preparation cost for large MCC runs.
+- Post-window reconciliation for Service Bus runs, so claims that become terminal
+  after the validator's observation window are re-scored automatically rather than
+  verified by hand (the 122 observation timeouts in episode 16).
 - Continue replacing stale marketing or release-number claims with dated
   evidence.
 - Improve developer onboarding and docs navigation.
@@ -41,7 +47,6 @@ behavior from active work and future goals.
 
 ## Stretch Goals
 
-- Full one-million-claim benchmark with strict correctness gates.
 - Production cloud reference architecture and cost model.
 - Public demo environment with synthetic data only.
 - Contributor-friendly scenario authoring for the benchmark corpus.
