@@ -13,7 +13,9 @@ metadata:
   namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
+  # Supply at deploy time — do not commit a real credential.
+  # See infrastructure/k8s/secrets/database-secret.yaml for the shared template.
+  MongoDb__ConnectionString: "REPLACE_WITH_CONNECTION_STRING"
 ---
 apiVersion: apps/v1
 kind: Deployment
