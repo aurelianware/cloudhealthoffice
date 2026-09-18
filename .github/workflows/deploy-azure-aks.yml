@@ -375,6 +375,7 @@ jobs:
 
             # Redis
             fetch_secret "Redis--ConnectionString"       "KV_REDIS_CONNECTION_STRING"
+            fetch_secret "Postgres--Password"            "KV_POSTGRES_PASSWORD"
 
             # Service Bus
             fetch_secret "ServiceBus--ConnectionString"  "KV_SERVICEBUS_CONNECTION_STRING"
@@ -491,6 +492,21 @@ jobs:
             --from-literal=connectionString="${CONN}" \
             --from-literal=endpoint="${ENDPOINT}" \
             --from-literal=key="${KEY}" \
+            -n ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create reference-data Postgres secret
+        run: |
+          set -euo pipefail
+          # reference-data-service runs its own in-cluster Postgres StatefulSet.
+          # The manifest no longer ships a committed password, so provision it here.
+          PG_PASS="${KV_POSTGRES_PASSWORD:-${{ secrets.POSTGRES_PASSWORD }}}"
+          if [ -z "$PG_PASS" ]; then
+            echo "::error::POSTGRES_PASSWORD is not configured (Key Vault 'Postgres--Password' or repo secret POSTGRES_PASSWORD). reference-data-service cannot be deployed without it."
+            exit 1
+          fi
+          kubectl create secret generic reference-data-service-secret \
+            --from-literal=POSTGRES_PASSWORD="$PG_PASS" \
             -n ${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 

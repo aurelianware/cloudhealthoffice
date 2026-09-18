@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -14,7 +15,6 @@ metadata:
   namespace: cloudhealthoffice
 type: Opaque
 stringData:
-  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
   BlobStorage__ConnectionString: "UseDevelopmentStorage=true"
 ---
 apiVersion: apps/v1
@@ -48,8 +48,8 @@ spec:
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: attachment-service-secret
-              key: MongoDb__ConnectionString
+              name: database-secret
+              key: connectionString
         - name: BlobStorage__ContainerName
           valueFrom:
             configMapKeyRef:

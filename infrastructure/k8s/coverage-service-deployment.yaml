@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -5,15 +6,6 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: coverage-service-secrets
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  MongoDb__ConnectionString: "mongodb://admin:securepassword123@mongodb:27017"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -46,8 +38,8 @@ spec:
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:
-              name: coverage-service-secrets
-              key: MongoDb__ConnectionString
+              name: database-secret
+              key: connectionString
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:
