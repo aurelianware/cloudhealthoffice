@@ -3,8 +3,12 @@
 **Date:** 2026-09-18
 **Scope:** `aurelianware/cloudhealthoffice` @ `main` (HEAD `9dd308d`)
 **Method:** static read of code, manifests, docs and site copy; live GitHub Actions
-history and failure-log analysis. A clean .NET build was **not** run — no .NET SDK
-is available in this environment (see §5).
+history and failure-log analysis; and, on a later pass, a real .NET 8.0.425 SDK (the
+version CI uses) installed in the audit environment. `dotnet restore` on
+`benefit-plan-service` completes cleanly, independently confirming the `NU1605` fix that
+previously had only CI as evidence. A full `dotnet test` run and the local Kubernetes
+path were **not** exercised here — this environment has a Docker CLI but no daemon, so no
+containers and no cluster.
 **Relationship to the prior audit:** this is a **follow-up** to
 `AUDIT/dd-readiness.md` (2026-08-21, open in PR #1104). That audit's findings were
 re-verified against today's HEAD. Most remain unfixed; this pass fixes the two that
@@ -29,9 +33,38 @@ CI discipline — not fabricated capability.
 | Committed credentials | 🟠 → 🟢 **fixed here** (5 manifests) |
 | Repo hygiene (stray archive) | 🟠 → 🟢 **fixed here** |
 | Buildability by an outsider | 🔴 → 🟢 **fixed here** (35 Dockerfiles) |
-| Marketing claims vs. code | 🟠 **open** — needs a founder decision (§4) |
-| Benchmark number consistency | 🟠 **open** (§4) |
+| Published coverage figures vs. CI | 🔴 → 🟢 **fixed** — injection reconnected to the live deploy (§4.2b) |
+| Local dev setup on a clean machine | 🔴 → 🟢 **fixed** — `deploy-local.sh` shebang + `bootstrap-macos.sh` |
+| Marketing claims vs. code | 🟠 **open** — needs a founder decision (§4.1) |
+| Benchmark number consistency | 🟠 → 🟢 **fixed** — one canonical two-part result across all four docs (§4.2) |
+| What the Azure subscription hosts | ⚪ **unverified** — not checkable from the audit environment (§4.4) |
 | Internal service auth / tenant isolation | 🟡 **open, by design** — needs documenting (§5) |
+
+---
+
+## 1b. Before the next investor conversation — ordered by payoff per hour
+
+Everything in §2–§3 is already fixed and merged. This is what is left, ordered for
+someone with limited time before a meeting rather than by severity.
+
+| # | Do this | Time | Why it earns the time |
+| --- | --- | --- | --- |
+| 1 | **Confirm what the Azure subscription hosts** (commands in §4.4) | 2 min | "What's running in production?" is an early question. You want a precise answer, not a hedge a reviewer can check faster than you can give it. |
+| 2 | ~~Reconcile the benchmark number~~ — **done** (§4.2) | — | Was stated four ways, including as a Stretch Goal *and* as achieved. Now one canonical two-part result: episode 15 correctness baseline, episode 16 throughput high-water. |
+| 3 | **Decide on `assessment.html`** (§4.1, drop-in replacements provided) | ~30 min | "Resistance to adoption is futile" and a "99.9% uptime SLA" read as vaporware next to a README that carefully says the opposite. One overclaim discounts the honest 95%. |
+| 4 | **Rotate the Postgres credential** if `reference-data-service` ran anywhere shared (§2.2) | 15 min | Cheap, and it closes the only credential that was ever genuinely live. |
+
+**What you can now invite a reviewer to do, which was impossible yesterday:** clone the
+repo and build it. The dead-registry fix (§2.1) means `docker compose` no longer requires
+Azure tenant access, and `main` is green. "Clone it and run it" is a strong offer; it was
+a broken one 24 hours ago.
+
+**The honest framing that works.** This repo's real advantage is that it under-claims and
+publishes reproducible evidence — the CMS-0057-F matrix separating "implemented" from
+"integration required," `trust.html` explicitly disclaiming SOC 2 and HITRUST, the
+benchmark methodology's stated limitations. That posture is worth more in healthcare
+diligence than any single number, and the open items in §4 are the places where the repo
+currently breaks its own rule. Fixing them is defending the thesis, not polishing.
 
 ---
 
@@ -273,7 +306,7 @@ it is that a reviewer who catches one overclaim discounts the honest 95%.
 Note on `99.9% uptime SLA`: the copy already says **"target"**, which is softer
 than the August audit implied. The fix is mostly placement, not deletion.
 
-### 4.2 The flagship benchmark number disagrees across four documents
+### 4.2 The flagship benchmark number disagreed across four documents — RESOLVED
 
 Still unreconciled since August. This is the worst possible place for
 inconsistency, because it is the proof point everything else rests on:
@@ -285,9 +318,32 @@ inconsistency, because it is the proof point everything else rests on:
 | `docs/POSITIONING.md:288` | Episode **16**, 155.89 claims/sec, 129,980/130,000 |
 | `docs/roadmap/README.md:44` | "Full one-million-claim benchmark" — listed under **Stretch Goals** |
 
-**Pick one canonical result, update all four, and move the achieved 1M milestone
-out of "Stretch Goals."** Roughly an hour of work; disproportionate credibility
-payoff.
+**Resolved.** The evidence supports a clean two-part statement rather than one number,
+and all four documents now carry it consistently:
+
+- **Correctness baseline — episode 15, run 2:** 1,000,000 processed, **zero platform
+  failures**, 129,981/130,000 workflow checks, payment gate 20,000/20,000 exact within
+  $0.01, 123.81 claims/sec.
+- **Throughput high-water — episode 16, same corpus:** 155.89 claims/sec (P95 910 ms,
+  P99 1,205 ms), 129,980/130,000 workflow checks, 19,982/19,982 payments exact, and 122
+  claims that became terminal *after* the validator's 180-second observation window.
+
+The 122 are an **observation deadline, not lost claims** — post-run verification found
+all 1,000,000 terminal, zero dead letters, zero pod restarts. They are still disclosed,
+because they produced a nonzero validator exit and left 20 workflow checks and 18 payment
+scenarios unreconciled inside the run artifact. That is precisely why episode 15, not 16,
+is the cited baseline.
+
+Changes made: `docs/benchmarks/README.md` had never been updated past the 100K run and now
+carries both 1M results; `docs/roadmap/README.md` listed the achieved benchmark under
+**Stretch Goals** and now records it under Current Strengths, with episode 17's post-window
+reconciliation taking its place as the real next benchmark goal; `README.md` gained the
+episode 16 throughput figure alongside the episode 15 baseline it already cited.
+
+`docs/POSITIONING.md` was left alone — it was already the most accurate of the four, and
+its framing ("the published result should not be overstated") is the model the others were
+brought up to. Verified afterwards that every cited figure matches across all four
+documents and that none lists the 1M benchmark as unachieved.
 
 ### 4.2b Published coverage claims contradict measured coverage
 
@@ -314,12 +370,36 @@ weakest on several of the adjudication engines the investment story rests on —
 `member-document-service` (21%), `CHO.TerminologyService` (23%), `Portal` (26%),
 `PricingApi` (27%), with `CloudHealthOffice.ReferenceData` at 0%.
 
-**Recommendation:** replace every hardcoded coverage figure with the CI-generated value
-(the repo already auto-refreshes the test *count* via `scripts/inject-test-metrics.js` —
-extend the same mechanism to coverage), and drop the "100% (FHIR module)" line, which is
-true only of a narrow module and reads as a repo-wide claim. Raising coverage on the four
-adjudication engines is the substantive follow-up, but *fixing the published numbers costs
-an hour and removes the contradiction immediately.*
+**Root cause (found on follow-up — the mechanism existed and was orphaned).** This was
+never a case of nobody building automation. `scripts/inject-test-metrics.js` already reads
+`summary.coverage_pct` from the `test-metrics.yml` artifact and already rewrites
+`NN.NN% coverage` in `src/site/*.html`. Two wiring gaps stopped it working:
+
+1. **The injection ran only in `deploy-static-site.yml`** (Azure Static Web Apps), which
+   that file's own header declares **DORMANT** — GitHub Pages became the live path for
+   cloudhealthoffice.com. `deploy-pages.yml` did `npm ci && npm run build` with **no
+   injection**, so the live site published whatever was committed in `src/site/*.html`.
+   Retiring the Azure path (PR #1169) silently orphaned the injection.
+2. **The commit-back in `test-metrics.yml` stages only** `README.md` and
+   `docs/guides/FEATURES.md` (`git add README.md docs/guides/FEATURES.md`), never the site
+   HTML — so the repo's copy could never self-correct either.
+
+Compounding both: **`test-metrics.yml` was itself red on `main` for weeks** (§2.1), so even
+the two files it does maintain were not being refreshed.
+
+**Fixed here:** the injection now runs in `deploy-pages.yml` before the site build, so
+published figures track CI instead of drifting. Verified locally — running the script
+against a metrics file rewrote the site's `85.93% coverage` to the CI-measured value,
+changing exactly that one line and nothing else.
+
+**Still hand-maintained (no regex covers these), corrected here:** the
+"Test Coverage: 100% (FHIR module)" claims in `docs/guides/FEATURES.md` (two places), and
+the test-project count, which said 44 against an actual 55. Note the auto-injection updates
+"6,933 automated tests" but *not* the "across NN test projects" suffix — worth folding into
+the script if that number is going to keep being published.
+
+Raising coverage on the four adjudication engines is the substantive follow-up; the
+published-number contradiction is now closed.
 
 ### 4.3 Two smaller consistency gaps
 
@@ -364,18 +444,50 @@ Mongo-wire-protocol-everywhere design that gap **should not exist as a category*
 there is one code path rather than two. Worth confirming whether the native-SDK path is
 still live or is vestigial.
 
-### Deployment reality (confirmed with the founder)
+### Deployment reality — what is verified, and what is not
 
-Current operation is **local Kubernetes on Docker Desktop**; **AKS is a historical path**.
-This matches the code: `AZURE_DEPLOYMENTS_ENABLED` is opt-in and documented as paused
-"while the Azure subscription is inactive." Two implications for a data room:
+**Separate the two claims carefully, because a reviewer will.**
 
-- The repo carries substantial AKS machinery for a path not currently exercised. That is
-  fine, but it should be *described* as a recovery/target path rather than implied to be
-  live — consistent with the README's existing, correct framing of benchmark evidence as
-  local.
-- It means the deploy regression described in §3 was latent rather than an active outage.
-  It still had to be fixed properly: the local path applies the same manifests.
+**Verified from the repository (high confidence):**
+
+- Day-to-day operation is **local Kubernetes on Docker Desktop**, via
+  `scripts/deploy-local.sh`.
+- Automatic Azure deploys are **gated off in code**: `AZURE_DEPLOYMENTS_ENABLED` is
+  opt-in, with the in-file comment "while the Azure subscription is inactive."
+- `deploy-static-site.yml` (Azure Static Web Apps) declares itself **DORMANT**; the
+  marketing site is served by **GitHub Pages**.
+- All published benchmark evidence is from local runs, which the README already states
+  correctly.
+
+**NOT verified — do not assert either way without checking:** what the Azure
+subscription actually hosts today. This audit ran in an environment with no Azure CLI and
+no credentials, so the live subscription was never queried. The founder's recollection is
+that it hosts some services, *possibly supporting a different product (CloudDentalOffice)
+rather than CloudHealthOffice* — a shared subscription is common and would explain a live
+subscription alongside a gated CloudHealthOffice deploy path.
+
+**Check it before the conversation** (about two minutes):
+
+```bash
+az login
+az account show --query '{name:name, id:id}' -o table
+az resource list --query "[].{name:name, type:type, group:resourceGroup}" -o table
+az aks list -o table                      # is there a live AKS cluster at all?
+```
+
+**Why this matters more than it looks.** "What's running in production?" is an early
+question in any technical diligence conversation, and the strong answer is a precise one.
+*"CloudHealthOffice runs on local Kubernetes today; here is a reproducible 1M-claim run
+with a seed and a command line; the Azure subscription hosts <X>"* is credible and
+defensible. A vague "it's on Azure" invites a follow-up that a reviewer can check faster
+than you can answer, and this repo's own evidence would contradict it.
+
+**Consequence for §3.** Whether the `reference-data-service` Postgres change is an
+*imminent prerequisite* or a *latent one* depends entirely on the above. If AKS is live
+and running that service, `POSTGRES_PASSWORD` (or Key Vault `Postgres--Password`) must be
+configured **before the next deploy**, and that credential was live there and should be
+rotated. If AKS is not running CloudHealthOffice, both are latent. **Confirm before
+relying on either reading.**
 
 ---
 
