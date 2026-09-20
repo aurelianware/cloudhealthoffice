@@ -172,6 +172,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `npm run lint` was broken on main and no workflow ran it, so nothing
+      # caught that. Running it here keeps it from silently rotting again.
+      # Warnings do not fail the build; errors do (eslint exits 1 on error).
+      - name: Lint (ESLint)
+        run: npm run lint
+
       - name: Run Jest tests with coverage
         run: npm test -- --coverage --passWithNoTests
 
