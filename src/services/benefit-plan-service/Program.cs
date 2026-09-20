@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using CloudHealthOffice.Infrastructure.Extensions;
 using BenefitPlanService.Adapters;
 using BenefitPlanService.HostedServices;
 using BenefitPlanService.Middleware;
@@ -39,15 +40,11 @@ builder.Services.Configure<EstimateApiOptions>(
 var estimateOnly = estimateApiOptions.IsEstimateOnlyEnabled;
 
 // ── Database backend ──────────────────────────────────────────────────────────
-var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
 
 if (useMongo)
 {
-    builder.Services.AddSingleton<IMongoClient>(sp =>
-        new MongoClient(builder.Configuration["MongoDb:ConnectionString"]));
-    builder.Services.AddScoped<IMongoDatabase>(sp =>
-        sp.GetRequiredService<IMongoClient>()
-          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
     builder.Services.AddScoped<IBenefitPlanRepository, BenefitPlanRepositoryMongo>();
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     builder.Services.AddScoped<IPlanVersionTransitionRepository, MongoPlanVersionTransitionRepository>();

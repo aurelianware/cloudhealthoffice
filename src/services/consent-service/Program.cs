@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
@@ -32,19 +33,10 @@ builder.Services.AddSwaggerGen(options =>
 
 // ── Database Configuration ───────────────────────────────────────────
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(_ =>
-        new MongoDB.Driver.MongoClient(mongoConnectionString));
-
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
-        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(databaseName);
-    });
-
     builder.Services.AddSingleton<IConsentEventRepository, ConsentEventRepositoryMongo>();
     builder.Services.AddSingleton<IConsentEventSink>(sp => (IConsentEventSink)sp.GetRequiredService<IConsentEventRepository>());
     builder.Services.AddSingleton<IConsentRepository, ConsentRepositoryMongo>();

@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
@@ -30,21 +31,12 @@ builder.Services.AddSwaggerGen(options =>
 
 // ── Database Configuration ───────────────────────────────────────────
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 var eventsContainerName = builder.Configuration["CosmosDb:EventsContainerName"] ?? "member-events";
 var eventsCollectionName = builder.Configuration["MongoDb:EventsCollectionName"] ?? "member-events";
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(_ =>
-        new MongoDB.Driver.MongoClient(mongoConnectionString));
-
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
-        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(databaseName);
-    });
-
     // Repositories are constructed without I/O side effects; indexes are provisioned
     // by the hosted services below, which lets us register these as singletons.
     builder.Services.AddSingleton<IMemberRepository, MemberRepositoryMongo>();
