@@ -22,7 +22,8 @@ public class MongoComplianceConfigRepository : IComplianceConfigRepository
 
     public async Task<TenantComplianceConfig?> GetAsync(string tenantId)
     {
-        var filter = Builders<TenantComplianceConfig>.Filter.Eq(x => x.TenantId, tenantId);
+        // Id carries the tenantId and maps to _id, so this is a single indexed read.
+        var filter = Builders<TenantComplianceConfig>.Filter.Eq(x => x.Id, tenantId);
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
@@ -32,7 +33,9 @@ public class MongoComplianceConfigRepository : IComplianceConfigRepository
         // One config per tenant; callers should treat Id as managed by the repository.
         config.Id = config.TenantId;
 
-        var filter = Builders<TenantComplianceConfig>.Filter.Eq(x => x.TenantId, config.TenantId);
+        // Match on _id so the upsert is deterministic and cannot create a second document for
+        // the same tenant.
+        var filter = Builders<TenantComplianceConfig>.Filter.Eq(x => x.Id, config.Id);
 
         await _collection.ReplaceOneAsync(
             filter,
