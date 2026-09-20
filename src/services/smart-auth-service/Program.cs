@@ -114,11 +114,20 @@ builder.Services.AddOpenIddict()
             .AddDevelopmentSigningCertificate();
 
         // ── ASP.NET Core integration ─────────────────────────────────────────
-        options.UseAspNetCore()
+        var aspNetCore = options.UseAspNetCore()
                .EnableAuthorizationEndpointPassthrough()
                .EnableEndSessionEndpointPassthrough()
                .EnableTokenEndpointPassthrough()
                .EnableStatusCodePagesIntegration();
+
+        // Development only. OpenIddict refuses plain HTTP, but inside a local cluster TLS
+        // terminates at the ingress and service-to-service traffic is HTTP, so discovery and JWKS
+        // would return "This server only accepts HTTPS requests" to every in-cluster caller.
+        // Never relaxed outside Development: this is what keeps tokens off the wire in the clear.
+        if (builder.Environment.IsDevelopment())
+        {
+            aspNetCore.DisableTransportSecurityRequirement();
+        }
     })
     .AddValidation(options =>
     {

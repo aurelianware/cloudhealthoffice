@@ -17,5 +17,12 @@ public enum SecretProviderType
 
     /// <summary>HashiCorp Vault with Kubernetes auth.</summary>
     [Description("HashiCorp Vault with Kubernetes auth")]
-    HashiCorpVault = 2
+    HashiCorpVault = 2,
+
+    /// <summary>
+    /// Secrets read from IConfiguration's "Secrets" section. Local development and tests only —
+    /// values are visible to anything that can read the process environment.
+    /// </summary>
+    [Description("Configuration-backed secrets — local development only")]
+    Configuration = 3
 }

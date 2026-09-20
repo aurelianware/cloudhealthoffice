@@ -40,6 +40,20 @@ public static class SecretProviderServiceCollectionExtensions
                     "HashiCorp Vault secret provider requires the CloudHealthOffice.HashiCorpVault package (planned for v4.1). " +
                     "Use SecretProviderType.AzureKeyVault or SecretProviderType.None.");
 
+            case SecretProviderType.Configuration:
+                // Local development and tests only: Azure Key Vault needs a real vault and
+                // workload identity, and NullSecretProvider resolves nothing, which leaves
+                // services that require a rotating encryption key permanently unready off-Azure.
+                services.AddSingleton<ISecretProvider>(sp =>
+                {
+                    sp.GetRequiredService<ILogger<ConfigurationSecretProvider>>().LogWarning(
+                        "Secrets are being read from configuration. This is intended for local " +
+                        "development only and must not be used where real PHI or production keys " +
+                        "are handled.");
+                    return new ConfigurationSecretProvider(configuration);
+                });
+                break;
+
             case SecretProviderType.None:
             default:
                 services.AddSingleton<ISecretProvider, NullSecretProvider>();
