@@ -105,16 +105,30 @@ public class RegisterDatabaseTests
             ("CosmosDb:Key", CosmosKey));
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*MongoDb:ConnectionString*");
+            .WithMessage("*CosmosDb settings are present*");
     }
 
     [Fact]
-    public void Default_WithNoDatabaseConfiguration_Throws()
+    public void Default_WithNoDatabaseConfiguration_RegistersNothing()
     {
-        var act = () => BuildServices();
+        // Nothing is configured, so there is no wrong database to reach. Services that fall back
+        // to in-memory storage, and smoke tests that substitute the repositories, rely on the host
+        // still booting here.
+        var services = BuildServices();
 
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*MongoDb:ConnectionString*");
+        services.Should().NotContain(d => d.ServiceType == typeof(IMongoClient));
+        services.Should().NotContain(d => d.ServiceType == typeof(CosmosClient));
+        services.Should().NotContain(d => d.ServiceType == typeof(MongoDbConnectionFactory));
+    }
+
+    [Fact]
+    public void Default_WithNoDatabaseConfiguration_ReturnsNoProvider()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+
+        services.AddChoDatabase(configuration).Should().BeNull();
     }
 
     [Fact]

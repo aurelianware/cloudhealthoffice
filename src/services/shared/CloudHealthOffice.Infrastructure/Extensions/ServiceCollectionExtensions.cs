@@ -3,6 +3,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Serialization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -154,7 +155,7 @@ public static class ServiceCollectionExtensions
     /// missing.
     /// </para>
     /// </summary>
-    public static ChoDatabaseProvider AddChoDatabase(this IServiceCollection services, IConfiguration configuration)
+    public static ChoDatabaseProvider? AddChoDatabase(this IServiceCollection services, IConfiguration configuration)
     {
         var provider = configuration["Database:Provider"];
         var useCosmos = string.Equals(provider, CosmosProviderName, StringComparison.OrdinalIgnoreCase);
@@ -172,17 +173,43 @@ public static class ServiceCollectionExtensions
             var mongoConnectionString = configuration["MongoDb:ConnectionString"];
             if (string.IsNullOrEmpty(mongoConnectionString))
             {
-                throw new InvalidOperationException(
-                    "MongoDb:ConnectionString must be configured. Set it to a MongoDB or Cosmos DB " +
-                    $"for MongoDB connection string, or set Database:Provider={CosmosProviderName} " +
-                    "to use the Cosmos DB native SDK instead.");
+                // Cosmos DB is configured but was never opted into. This is the case that used to
+                // silently start the service against Cosmos because one Mongo setting was absent,
+                // so refuse rather than guess which database was meant.
+                if (!string.IsNullOrEmpty(configuration["CosmosDb:ConnectionString"])
+                    || !string.IsNullOrEmpty(configuration["CosmosDb:Endpoint"]))
+                {
+                    throw new InvalidOperationException(
+                        "CosmosDb settings are present but MongoDb:ConnectionString is not. Set " +
+                        "MongoDb:ConnectionString (a MongoDB or Cosmos DB for MongoDB connection " +
+                        $"string), or set Database:Provider={CosmosProviderName} to use the Cosmos " +
+                        "DB native SDK explicitly.");
+                }
+
+                // Nothing is configured at all. Register nothing and let the caller decide: some
+                // services fall back to in-memory storage, and smoke tests boot the host with the
+                // repositories substituted. There is no risk of reaching the wrong database here.
+                return null;
             }
 
             services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoConnectionString));
 
+            // The factory needs IHttpContextAccessor to resolve the tenant. Register it here so
+            // this method stands alone, rather than only working inside AddChoInfrastructure.
+            services.AddHttpContextAccessor();
+
             // The factory resolves the tenant through IHttpContextAccessor at call time, so it is
             // safe as a singleton regardless of scoping.
-            services.AddSingleton<MongoDbConnectionFactory>();
+            //
+            // Registered through a factory delegate rather than by implementation type: the
+            // container validates constructor dependencies of type-based descriptors when
+            // ValidateOnBuild is on, and test hosts that strip IMongoClient to avoid touching a
+            // real server would otherwise fail to build. IMongoClient is always registered
+            // alongside it here, so nothing real is lost.
+            services.AddSingleton(sp => new MongoDbConnectionFactory(
+                sp.GetRequiredService<IMongoClient>(),
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                sp.GetRequiredService<IConfiguration>()));
 
             // The resolved database only varies per request when tenant scoping is on. Registering
             // it as a singleton otherwise lets services keep singleton repositories and hosted
