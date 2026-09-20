@@ -4,6 +4,7 @@ using Microsoft.Identity.Web;
 using CloudHealthOffice.TradingPartnerService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 
@@ -35,22 +36,36 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Administrator"));
 });
 
-// Cosmos DB Client (singleton)
-builder.Services.AddSingleton(sp =>
-{
-    var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT") 
-        ?? builder.Configuration["CosmosDb:Endpoint"]
-        ?? throw new InvalidOperationException("COSMOS_ENDPOINT not configured");
-    
-    var key = Environment.GetEnvironmentVariable("COSMOS_KEY") 
-        ?? builder.Configuration["CosmosDb:Key"]
-        ?? throw new InvalidOperationException("COSMOS_KEY not configured");
+// Database provider selection. MongoDB is the default so the service stays cloud-agnostic;
+// Cosmos DB's native SDK is opt-in via Database:Provider=CosmosDb.
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 
-    return new CosmosClient(endpoint, key);
-});
+if (databaseProvider == ChoDatabaseProvider.CosmosDb)
+{
+    // Cosmos DB Client (singleton)
+    builder.Services.AddSingleton(sp =>
+    {
+        var endpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")
+            ?? builder.Configuration["CosmosDb:Endpoint"]
+            ?? throw new InvalidOperationException("COSMOS_ENDPOINT not configured");
+
+        var key = Environment.GetEnvironmentVariable("COSMOS_KEY")
+            ?? builder.Configuration["CosmosDb:Key"]
+            ?? throw new InvalidOperationException("COSMOS_KEY not configured");
+
+        return new CosmosClient(endpoint, key);
+    });
+}
 
 // Repository and services
-builder.Services.AddScoped<ITradingPartnerRepository, TradingPartnerRepository>();
+if (databaseProvider == ChoDatabaseProvider.CosmosDb)
+{
+    builder.Services.AddScoped<ITradingPartnerRepository, TradingPartnerRepository>();
+}
+else
+{
+    builder.Services.AddScoped<ITradingPartnerRepository, TradingPartnerRepositoryMongo>();
+}
 builder.Services.AddScoped<PathResolver>();
 
 // CORS
