@@ -44,6 +44,22 @@ public static class SecretProviderServiceCollectionExtensions
                 // Local development and tests only: Azure Key Vault needs a real vault and
                 // workload identity, and NullSecretProvider resolves nothing, which leaves
                 // services that require a rotating encryption key permanently unready off-Azure.
+                //
+                // Fails closed rather than warning. The provider is selected from configuration,
+                // so without this an operator could set SecretProvider__Provider=Configuration on
+                // a production host and route real PHI keys through process configuration, where
+                // anything able to read the environment can see them. A log line does not prevent
+                // that; refusing to start does.
+                if (!IsDevelopmentEnvironment(configuration))
+                {
+                    throw new InvalidOperationException(
+                        $"SecretProvider:Provider={SecretProviderType.Configuration} reads secrets " +
+                        "from configuration and is restricted to the Development environment. " +
+                        $"Set ASPNETCORE_ENVIRONMENT=Development, or use " +
+                        $"{SecretProviderType.AzureKeyVault} for any environment handling real " +
+                        "PHI or production keys.");
+                }
+
                 services.AddSingleton<ISecretProvider>(sp =>
                 {
                     sp.GetRequiredService<ILogger<ConfigurationSecretProvider>>().LogWarning(
@@ -68,5 +84,19 @@ public static class SecretProviderServiceCollectionExtensions
         services.AddHostedService<SecretRefreshService>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Reads the host environment from configuration. AddSecretProvider runs during service
+    /// registration and is not handed an IHostEnvironment, but the host populates the same value
+    /// from ASPNETCORE_ENVIRONMENT / DOTNET_ENVIRONMENT before any of this executes.
+    /// </summary>
+    private static bool IsDevelopmentEnvironment(IConfiguration configuration)
+    {
+        var environment = configuration["ASPNETCORE_ENVIRONMENT"]
+            ?? configuration["DOTNET_ENVIRONMENT"]
+            ?? configuration["Environment"];
+
+        return string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Configuration;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CloudHealthOffice.Infrastructure.Tests;
 
@@ -94,5 +95,64 @@ public class ConfigurationSecretProviderTests
     {
         // Configuration holds one value per name, so there is no version history to report.
         (await Build().ListSecretVersionsAsync("key")).Should().BeEmpty();
+    }
+}
+
+public class ConfigurationSecretProviderRegistrationTests
+{
+    private static IServiceCollection Register(string? environment)
+    {
+        var settings = new Dictionary<string, string?>
+        {
+            ["SecretProvider:Provider"] = "Configuration"
+        };
+        if (environment is not null) settings["ASPNETCORE_ENVIRONMENT"] = environment;
+
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSecretProvider(configuration);
+        return services;
+    }
+
+    [Fact]
+    public void ConfigurationProvider_InDevelopment_IsRegistered()
+    {
+        var provider = Register("Development").BuildServiceProvider();
+
+        provider.GetRequiredService<ISecretProvider>().Should().BeOfType<ConfigurationSecretProvider>();
+    }
+
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Staging")]
+    [InlineData(null)]
+    public void ConfigurationProvider_OutsideDevelopment_FailsClosed(string? environment)
+    {
+        // The provider is selected from configuration, so an operator could otherwise route real
+        // PHI keys through process configuration on a production host. Refusing to start is what
+        // prevents that; a log line is not.
+        var act = () => Register(environment);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Development*");
+    }
+
+    [Fact]
+    public void NoneProvider_OutsideDevelopment_StillRegisters()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ASPNETCORE_ENVIRONMENT"] = "Production"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSecretProvider(configuration);
+
+        services.BuildServiceProvider().GetRequiredService<ISecretProvider>()
+            .Should().BeOfType<NullSecretProvider>();
     }
 }
