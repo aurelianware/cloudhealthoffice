@@ -235,10 +235,11 @@ if (!builder.Environment.IsDevelopment())
 {
     // In production, persist keys to MongoDB so all replicas share the same key ring
     builder.Services.AddOptions<KeyManagementOptions>()
-        .Configure<IMongoClient, ILoggerFactory>((options, mongoClient, loggerFactory) =>
+        .Configure<IMongoClient, IConfiguration, ILoggerFactory>((options, mongoClient, configuration, loggerFactory) =>
         {
             options.XmlRepository = new MongoDbXmlRepository(
                 mongoClient,
+                configuration,
                 loggerFactory.CreateLogger<MongoDbXmlRepository>());
         });
 }
