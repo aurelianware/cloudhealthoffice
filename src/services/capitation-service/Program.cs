@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using CapitationService.Middleware;
@@ -33,18 +34,10 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddHttpContextAccessor();
 
 // Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
-if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<IMongoClient>(sp =>
-        new MongoClient(sp.GetRequiredService<IConfiguration>()["MongoDb:ConnectionString"]));
-
-    builder.Services.AddScoped<IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<IMongoClient>();
-        var dbName = sp.GetRequiredService<IConfiguration>()["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(dbName);
-    });
-
     builder.Services.AddScoped<ICapitationContractRepository, CapitationContractRepositoryMongo>();
     builder.Services.AddScoped<ICapitationRunRepository, CapitationRunRepositoryMongo>();
     builder.Services.AddScoped<ICapitationStatementRepository, CapitationStatementRepositoryMongo>();

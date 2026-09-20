@@ -1,4 +1,5 @@
 using Microsoft.OpenApi.Models;
+using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Bson.Serialization.Conventions;
 using MongoDB.Driver;
 using TenantService.Services;
@@ -29,22 +30,15 @@ builder.Services.AddSwaggerGen(c =>
 var camelCasePack = new ConventionPack { new CamelCaseElementNameConvention() };
 ConventionRegistry.Register("CamelCase", camelCasePack, _ => true);
 
-builder.Services.AddSingleton<IMongoClient>(sp =>
+// This service historically also accepted a Cosmos DB for MongoDB connection string under
+// CosmosDb:ConnectionString. Promote it to the shared key so that keeps working.
+if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"])
+    && !string.IsNullOrEmpty(builder.Configuration["CosmosDb:ConnectionString"]))
 {
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var connectionString = configuration["MongoDb:ConnectionString"]
-        ?? configuration["CosmosDb:ConnectionString"]
-        ?? throw new InvalidOperationException("MongoDb:ConnectionString must be configured");
-    return new MongoClient(connectionString);
-});
+    builder.Configuration["MongoDb:ConnectionString"] = builder.Configuration["CosmosDb:ConnectionString"];
+}
 
-builder.Services.AddSingleton<IMongoDatabase>(sp =>
-{
-    var mongoClient = sp.GetRequiredService<IMongoClient>();
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var databaseName = configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-    return mongoClient.GetDatabase(databaseName);
-});
+builder.Services.AddChoDatabase(builder.Configuration);
 
 // Repositories and services
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();

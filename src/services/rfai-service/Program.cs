@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using RfaiService.Middleware;
 using RfaiService.Repositories;
@@ -32,19 +33,10 @@ builder.Services.AddSwaggerGen(c =>
 // ── Database ─────────────────────────────────────────────────────────────────
 
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(
-        _ => new MongoDB.Driver.MongoClient(mongoConnectionString));
-
-    builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
-        var dbName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(dbName);
-    });
-
     builder.Services.AddScoped<IRfaiRepository, RfaiRepositoryMongo>();
     Console.WriteLine("Using MongoDB database provider");
 }

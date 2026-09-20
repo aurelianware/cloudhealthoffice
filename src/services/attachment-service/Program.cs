@@ -8,6 +8,7 @@ using AttachmentService.Repositories;
 using AttachmentService.Services;
 using CloudHealthOffice.DocumentStore;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
@@ -92,13 +93,20 @@ var cosmosOptions = new CosmosClientOptions
         })
 };
 
-builder.Services.AddSingleton(s =>
+// Database provider selection. MongoDB is the default so the service stays cloud-agnostic;
+// Cosmos DB's native SDK is opt-in via Database:Provider=CosmosDb.
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+
+if (databaseProvider == ChoDatabaseProvider.CosmosDb)
 {
-    var config = s.GetRequiredService<IConfiguration>();
-    var endpoint = config["CosmosDb:Endpoint"] ?? throw new InvalidOperationException("CosmosDb:Endpoint not configured");
-    var key = config["CosmosDb:Key"] ?? throw new InvalidOperationException("CosmosDb:Key not configured");
-    return new CosmosClient(endpoint, key, cosmosOptions);
-});
+    builder.Services.AddSingleton(s =>
+    {
+        var config = s.GetRequiredService<IConfiguration>();
+        var endpoint = config["CosmosDb:Endpoint"] ?? throw new InvalidOperationException("CosmosDb:Endpoint not configured");
+        var key = config["CosmosDb:Key"] ?? throw new InvalidOperationException("CosmosDb:Key not configured");
+        return new CosmosClient(endpoint, key, cosmosOptions);
+    });
+}
 
 // Configure Azure Blob Storage + IDocumentStore
 builder.Services.AddSingleton(s =>
@@ -109,7 +117,14 @@ builder.Services.AddSingleton(s =>
 });
 builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
 
-builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+if (databaseProvider == ChoDatabaseProvider.CosmosDb)
+{
+    builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+}
+else
+{
+    builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
+}
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Extensions;
 using System.Threading.RateLimiting;
 using IdCardService;
 using IdCardService.Adapters;
@@ -39,24 +40,24 @@ builder.Services.AddSwaggerGen(c =>
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 var cosmosConnectionString = builder.Configuration["CosmosDb:ConnectionString"];
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+// With neither provider configured the service falls back to in-memory storage, so
+// AddChoDatabase is only called once one is actually configured.
+ChoDatabaseProvider? databaseProvider = null;
+if (!string.IsNullOrEmpty(mongoConnectionString)
+    || string.Equals(builder.Configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase))
 {
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(_ =>
-        new MongoDB.Driver.MongoClient(mongoConnectionString));
+    databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+}
 
-    builder.Services.AddScoped(sp =>
-    {
-        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
-        var dbName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(dbName);
-    });
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
+{
 
     builder.Services.AddScoped<IIdCardOrderRepository, MongoIdCardOrderRepository>();
     builder.Services.AddScoped<IIdCardRecordRepository, MongoIdCardRecordRepository>();
     builder.Services.AddScoped<IIdCardTemplateRepository, MongoIdCardTemplateRepository>();
     Console.WriteLine("idcard-service: using MongoDB storage");
 }
-else if (!string.IsNullOrEmpty(cosmosConnectionString))
+else if (databaseProvider == ChoDatabaseProvider.CosmosDb)
 {
     builder.Services.AddSingleton(_ =>
     {

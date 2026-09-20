@@ -1,4 +1,5 @@
 using FhirService.Formatters;
+using CloudHealthOffice.Infrastructure.Extensions;
 using FhirService.Middleware;
 using FhirService.Models;
 using FhirService.Services;
@@ -33,23 +34,17 @@ builder.Services.AddSmartTrust(builder.Configuration, builder.Environment);
 // it. See docs/architecture/shared-cache.md.
 builder.Services.AddChoCaching(builder.Configuration, builder.Environment);
 
-var useMongo = !string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]);
+// Database wiring is optional here: with neither provider configured the service still starts
+// and the engine wiring below is skipped, so AddChoDatabase is only called once a provider is
+// actually configured (it throws by design rather than guessing).
+ChoDatabaseProvider? databaseProvider = null;
+if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"])
+    || string.Equals(builder.Configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase))
+{
+    databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+}
 
-if (useMongo)
-{
-    builder.Services.AddSingleton<IMongoClient>(_ =>
-        new MongoClient(builder.Configuration["MongoDb:ConnectionString"]));
-    builder.Services.AddScoped<IMongoDatabase>(sp =>
-        sp.GetRequiredService<IMongoClient>()
-          .GetDatabase(builder.Configuration["MongoDb:DatabaseName"]));
-}
-else if (!string.IsNullOrEmpty(builder.Configuration["CosmosDb:Endpoint"]))
-{
-    builder.Services.AddSingleton<CosmosClient>(_ =>
-        new CosmosClient(
-            builder.Configuration["CosmosDb:Endpoint"],
-            builder.Configuration["CosmosDb:Key"]));
-}
+var useMongo = databaseProvider == ChoDatabaseProvider.MongoDb;
 
 // ── Provider Enrollment Service ───────────────────────────────────────────────
 // Supplies IEnrollmentDecisionGate → PasAutoAdjudicator Rule 0.
@@ -61,7 +56,7 @@ else if (!string.IsNullOrEmpty(builder.Configuration["CosmosDb:Endpoint"]))
 //     "Tmhp": { "ApiKey": "...(from AKV)" },
 //     "Caqh": { "Username": "...", "Password": "...(from AKV)" }
 //   }
-var hasDb = useMongo || !string.IsNullOrEmpty(builder.Configuration["CosmosDb:Endpoint"]);
+var hasDb = databaseProvider is not null;
 // Cache backend presence is decided by AddChoCaching (Redis when a
 // connection string is configured AND env is Production; InMemory
 // otherwise). Either resolves to a working ICacheProvider, so the

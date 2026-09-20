@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Identity.Web;
 using ReferenceDataService.Repositories;
 using CloudHealthOffice.Infrastructure.Configuration;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
@@ -43,7 +44,17 @@ var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")
 var cosmosKey = Environment.GetEnvironmentVariable("COSMOS_KEY")
     ?? builder.Configuration["CosmosDb:Key"];
 
-if (!string.IsNullOrEmpty(cosmosEndpoint) && !string.IsNullOrEmpty(cosmosKey))
+// MongoDB is preferred so the service stays cloud-agnostic; Cosmos DB's native SDK is opt-in
+// via Database:Provider=CosmosDb. With neither configured the in-memory repository is used,
+// which does not survive a restart and is only suitable for local runs and tests.
+var useCosmosCompliance =
+    string.Equals(builder.Configuration["Database:Provider"], "CosmosDb", StringComparison.OrdinalIgnoreCase)
+    && !string.IsNullOrEmpty(cosmosEndpoint)
+    && !string.IsNullOrEmpty(cosmosKey);
+
+var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+
+if (useCosmosCompliance)
 {
     builder.Services.AddSingleton(sp =>
     {
@@ -57,6 +68,13 @@ if (!string.IsNullOrEmpty(cosmosEndpoint) && !string.IsNullOrEmpty(cosmosKey))
         return new CosmosClient(cosmosEndpoint, cosmosKey, options);
     });
     builder.Services.AddSingleton<IComplianceConfigRepository, CosmosComplianceConfigRepository>();
+}
+else if (!string.IsNullOrEmpty(mongoConnectionString))
+{
+    builder.Services.AddChoDatabase(builder.Configuration);
+    // Scoped, not singleton: IMongoDatabase is resolved per request so tenant-scoped database
+    // names stay correct.
+    builder.Services.AddScoped<IComplianceConfigRepository, MongoComplianceConfigRepository>();
 }
 else
 {

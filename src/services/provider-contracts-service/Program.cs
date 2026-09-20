@@ -1,4 +1,5 @@
 using Microsoft.OpenApi.Models;
+using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
 using ProviderContractsService.Middleware;
 using ProviderContractsService.Repositories;
@@ -31,18 +32,10 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddHttpContextAccessor();
 
 // Database Configuration — MongoDB
-if (!string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"]))
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<IMongoClient>(sp =>
-        new MongoClient(sp.GetRequiredService<IConfiguration>()["MongoDb:ConnectionString"]));
-
-    builder.Services.AddScoped<IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<IMongoClient>();
-        var dbName = sp.GetRequiredService<IConfiguration>()["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(dbName);
-    });
-
     builder.Services.AddScoped<IProviderContractRepository, MongoProviderContractRepository>();
     Console.WriteLine("Using MongoDB repository");
 }

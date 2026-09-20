@@ -22,6 +22,23 @@ spec:
     limits.memory: 64Gi
     pods: "80"
 ---
+# Intra-namespace traffic. The policy below selects every pod in the namespace,
+# so without this rule service-to-service calls and access to the in-cluster
+# datastores (mongodb:27017, redis:6379) are denied wherever a NetworkPolicy
+# engine is actually enforcing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: cloudhealthoffice
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+---
 # Network Policies (optional - for production security)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

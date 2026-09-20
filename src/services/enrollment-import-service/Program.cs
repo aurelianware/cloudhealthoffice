@@ -1,4 +1,5 @@
 using EnrollmentImportService;
+using CloudHealthOffice.Infrastructure.Extensions;
 using EnrollmentImportService.Clients;
 using EnrollmentImportService.HostedServices;
 using EnrollmentImportService.Repositories;
@@ -22,20 +23,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // MongoDB
-builder.Services.AddSingleton<IMongoClient>(sp =>
-{
-    var config = sp.GetRequiredService<IConfiguration>();
-    var connectionString = config["MongoDb:ConnectionString"]
-        ?? throw new InvalidOperationException("MongoDb:ConnectionString is required.");
-    return new MongoClient(connectionString);
-});
-builder.Services.AddSingleton<IMongoDatabase>(sp =>
-{
-    var client = sp.GetRequiredService<IMongoClient>();
-    var databaseName = sp.GetRequiredService<IConfiguration>()["MongoDb:DatabaseName"] ?? "cloudhealthoffice";
-    return client.GetDatabase(databaseName);
-});
-
+builder.Services.AddChoDatabase(builder.Configuration);
 // Repositories and services. Constructed without I/O side effects (index
 // creation happens in EnrollmentIndexInitializer below), so these can be
 // singletons rather than scoped — same pattern as member-service.

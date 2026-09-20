@@ -1,4 +1,5 @@
 using AccumulatorService.Middleware;
+using CloudHealthOffice.Infrastructure.Extensions;
 using AccumulatorService.Repositories;
 using AccumulatorService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -32,15 +33,9 @@ builder.Services.AddSwaggerGen(c =>
 // ── Database ─────────────────────────────────────────────────────────
 // Mirrors eligibility-service's auto-detect pattern: Mongo if configured, else Cosmos.
 var mongoConnection = builder.Configuration["MongoDb:ConnectionString"];
-if (!string.IsNullOrWhiteSpace(mongoConnection))
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoConnection));
-    builder.Services.AddScoped(sp =>
-    {
-        var client = sp.GetRequiredService<IMongoClient>();
-        var dbName = builder.Configuration["MongoDb:DatabaseName"] ?? "AccumulatorDB";
-        return client.GetDatabase(dbName);
-    });
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     builder.Services.AddScoped<IProcessedClaimStore, ProcessedClaimStoreMongo>();
     Console.WriteLine("Using MongoDB database provider");

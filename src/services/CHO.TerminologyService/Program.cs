@@ -1,4 +1,5 @@
 using CHO.TerminologyService.Configuration;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CHO.TerminologyService.Data;
 using CHO.TerminologyService.Services;
 using CHO.TerminologyService.Services.CodeSystemCatalog;
@@ -36,12 +37,11 @@ builder.Services.Configure<TerminologyServiceOptions>(
 // ──────────────────────────────────────────────────────
 // MongoDB
 // ──────────────────────────────────────────────────────
-builder.Services.AddSingleton<IMongoClient>(sp =>
-    new MongoClient(terminologyOptions.MongoConnectionString));
-
-builder.Services.AddSingleton<IMongoDatabase>(sp =>
-    sp.GetRequiredService<IMongoClient>()
-        .GetDatabase(terminologyOptions.MongoDatabaseName));
+// Connection details come from this service's own options section; feed them to the shared
+// registration so the driver wiring stays in one place.
+builder.Configuration["MongoDb:ConnectionString"] = terminologyOptions.MongoConnectionString;
+builder.Configuration["MongoDb:DatabaseName"] = terminologyOptions.MongoDatabaseName;
+builder.Services.AddChoDatabase(builder.Configuration);
 
 // ──────────────────────────────────────────────────────
 // Services

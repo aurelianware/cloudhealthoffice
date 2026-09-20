@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CoverageService.Middleware;
 using CoverageService.Repositories;
 using CoverageService.Services;
@@ -27,22 +28,12 @@ builder.Services.AddSwaggerGen(options =>
 
 // Database Configuration
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
     // MongoDB Registration
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(sp => 
-    {
-        return new MongoDB.Driver.MongoClient(mongoConnectionString);
-    });
     
-    builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
-        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(databaseName);
-    });
-
     builder.Services.AddScoped<ICoverageRepository, CoverageRepositoryMongo>();
     builder.Services.AddScoped<IPcpAssignmentRepository, PcpAssignmentRepositoryMongo>();
     Console.WriteLine("Using MongoDB database provider");

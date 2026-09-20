@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
 using OpenIddict.Abstractions;
 using SmartAuthService.Middleware;
@@ -21,9 +22,8 @@ var mongoDbName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthO
 
 if (!string.IsNullOrEmpty(mongoConnStr))
 {
-    builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoConnStr));
-    builder.Services.AddSingleton<IMongoDatabase>(sp =>
-        sp.GetRequiredService<IMongoClient>().GetDatabase(mongoDbName));
+    builder.Configuration["MongoDb:DatabaseName"] = mongoDbName;
+    builder.Services.AddChoDatabase(builder.Configuration);
     Console.WriteLine("OpenIddict: using MongoDB token/application store");
 }
 else
