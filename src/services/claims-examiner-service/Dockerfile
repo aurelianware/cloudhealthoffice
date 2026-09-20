@@ -1,6 +1,9 @@
 ARG REGISTRY=mcr.microsoft.com
 FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo
+# Central Package Management: every PackageReference resolves its version from
+# Directory.Packages.props, so restore fails without it in the build context.
+COPY Directory.Packages.props ./
 
 # Copy csproj files and restore (preserves layer caching).
 # Directory.Build.props pins minimum versions for CVE-2024-43485
