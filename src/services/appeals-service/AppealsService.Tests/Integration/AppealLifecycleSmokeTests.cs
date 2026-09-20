@@ -421,6 +421,10 @@ public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program
             // try to resolve against the sentinel connection string.
             services.RemoveAll<MongoDB.Driver.IMongoClient>();
             services.RemoveAll<MongoDB.Driver.IMongoDatabase>();
+            // The shared registration also adds the tenant-aware connection factory, which
+            // resolves IMongoClient and would fail service-descriptor validation once the client
+            // above is gone.
+            services.RemoveAll<CloudHealthOffice.Infrastructure.Data.MongoDbConnectionFactory>();
 
             // Swap in the in-memory fakes.
             services.RemoveAll<IAppealRepository>();

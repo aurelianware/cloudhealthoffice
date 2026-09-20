@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Extensions;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using CloudHealthOffice.PricingApi.Configuration;
@@ -37,11 +38,11 @@ try
         builder.Configuration.GetSection(PricingApiOptions.SectionName));
 
     // ── MongoDB ──
-    builder.Services.AddSingleton<IMongoClient>(
-        new MongoClient(pricingOptions.MongoConnectionString));
-
-    builder.Services.AddSingleton(sp =>
-        sp.GetRequiredService<IMongoClient>().GetDatabase(pricingOptions.DatabaseName));
+    // Connection details come from this service's own options section; feed them to the shared
+    // registration so the driver wiring stays in one place.
+    builder.Configuration["MongoDb:ConnectionString"] = pricingOptions.MongoConnectionString;
+    builder.Configuration["MongoDb:DatabaseName"] = pricingOptions.DatabaseName;
+    builder.Services.AddChoDatabase(builder.Configuration);
 
     // ── Repositories ──
     builder.Services.AddSingleton<IFeeScheduleRepository, MongoFeeScheduleRepository>();

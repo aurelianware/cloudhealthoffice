@@ -1,4 +1,5 @@
 using Azure.Storage.Blobs;
+using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
@@ -39,18 +40,10 @@ builder.Services.AddScoped<IMemberDocumentBlobService, MemberDocumentBlobService
 builder.Services.AddSingleton<IRetentionPolicyService, RetentionPolicyService>();
 
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoConnectionString));
-
-    builder.Services.AddScoped<IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<IMongoClient>();
-        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(databaseName);
-    });
-
     builder.Services.AddScoped<IMemberDocumentRepository, MemberDocumentRepositoryMongo>();
 }
 else

@@ -1,4 +1,5 @@
 using AppealsService.HostedServices;
+using CloudHealthOffice.Infrastructure.Extensions;
 using AppealsService.Middleware;
 using AppealsService.Repositories;
 using AppealsService.Services;
@@ -49,19 +50,10 @@ builder.Services.AddSwaggerGen(c =>
 
 // ── Database Configuration ───────────────────────────────────────────
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
+var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 
-if (!string.IsNullOrEmpty(mongoConnectionString))
+if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoClient>(_ =>
-        new MongoDB.Driver.MongoClient(mongoConnectionString));
-
-    builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(sp =>
-    {
-        var client = sp.GetRequiredService<MongoDB.Driver.IMongoClient>();
-        var databaseName = builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
-        return client.GetDatabase(databaseName);
-    });
-
     builder.Services.AddSingleton<IAppealEventRepository, AppealEventRepositoryMongo>();
     builder.Services.AddSingleton<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRequiredService<IAppealEventRepository>());
     builder.Services.AddSingleton<IAppealRepository, AppealRepositoryMongo>();
