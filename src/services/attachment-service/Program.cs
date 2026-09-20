@@ -120,10 +120,12 @@ builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
 if (databaseProvider == ChoDatabaseProvider.CosmosDb)
 {
     builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+    builder.Services.AddScoped<ITradingPartnerLookup, CosmosTradingPartnerLookup>();
 }
 else
 {
     builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
+    builder.Services.AddScoped<ITradingPartnerLookup, MongoTradingPartnerLookup>();
 }
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();

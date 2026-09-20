@@ -5,7 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  MongoDb__DatabaseName: "cloudhealthoffice"
+  MongoDb__DatabaseName: "CloudHealthOffice"
   Kafka__AdjudicationCompletedTopic: "adjudication-completed"
   Kafka__DeadlineWarningTopic: "encounter-deadline-warning"
   Worker__IntervalHours: "4"
@@ -52,7 +52,7 @@ spec:
               name: database-secret
               key: connectionString
         - name: MongoDb__DatabaseName
-          value: "cloudhealthoffice"
+          value: "CloudHealthOffice"
         - name: AzureStorage__ConnectionString
           valueFrom:
             secretKeyRef:
