@@ -1,6 +1,11 @@
 ARG REGISTRY=mcr.microsoft.com
 FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo
+# Central Package Management: every PackageReference resolves its version from
+# Directory.Packages.props, so restore fails without it in the build context.
+COPY Directory.Packages.props ./
+# Carries the CVE-motivated pins applied to every project under src/.
+COPY src/Directory.Build.props src/
 
 COPY src/services/idcard-service/idcard-service.csproj src/services/idcard-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/

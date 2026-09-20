@@ -12,14 +12,14 @@
     <ProjectReference Include="..\..\engines\CloudHealthOffice.DocumentStore\CloudHealthOffice.DocumentStore.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Azure.Core" Version="1.55.0" />
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.29.2" />
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.63.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
-    <PackageReference Include="Microsoft.Identity.Web" Version="4.3.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.4" />
+    <PackageReference Include="Azure.Core" VersionOverride="1.55.0" />
+    <PackageReference Include="Azure.Storage.Blobs" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.Identity.Web" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="System.Security.Cryptography.Xml" />
   </ItemGroup>
 
 </Project>

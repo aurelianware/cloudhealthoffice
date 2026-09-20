@@ -20,7 +20,7 @@
   <ItemGroup>
     <!-- Read [Trait] attribute arguments from the compiled test assembly without
          executing it or resolving its full dependency graph. -->
-    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
+    <PackageReference Include="System.Reflection.MetadataLoadContext" />
   </ItemGroup>
 
 </Project>

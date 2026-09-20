@@ -9,18 +9,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="FluentAssertions" Version="6.12.2" />
-    <PackageReference Include="Moq" Version="4.20.72" />
-    <PackageReference Include="Hl7.Fhir.R4" Version="5.10.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="Hl7.Fhir.R4" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="System.Text.Json" />
     <ProjectReference Include="..\..\src\services\fhir-service\fhir-service.csproj" />
     <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>

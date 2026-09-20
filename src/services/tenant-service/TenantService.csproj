@@ -10,10 +10,10 @@
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.OperatingMode\CloudHealthOffice.OperatingMode.csproj" />
-    <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
-    <PackageReference Include="Stripe.net" Version="47.0.0" />
+    <PackageReference Include="MongoDB.Driver" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Stripe.net" />
   </ItemGroup>
 
 </Project>

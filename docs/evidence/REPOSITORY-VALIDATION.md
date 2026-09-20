@@ -79,14 +79,14 @@ outputs created by validation commands.
 | npm install | Pass with warnings | `npm ci` installed 643 packages. npm reported 3 total vulnerabilities in all dependencies. |
 | TypeScript build | Pass | `npm run build` completed. |
 | Jest tests | Pass | 24 suites passed, 525 tests passed. Coverage: 88.36% statements, 76.44% branches, 93.37% functions, 88.71% lines. |
-| npm lint | Fail locally | ESLint 9.39.5 crashed under Node 26 with an AJV/eslintrc `defaultMeta` error. |
+| npm lint | Pass (fixed 2026-09-20) | Was failing two ways. The `ajv` override forced ajv 8 into ESLint, which is written against the ajv 6 API (`defaultMeta` crash); the override is now scoped so `eslint` and `@eslint/eslintrc` resolve ajv 6. Underneath that, ESLint 9 no longer reads `.eslintrc.json`, so the config was migrated to `eslint.config.js`. Now exits 0 with 90 warnings, 0 errors, and runs in CI. |
 | Root site build script | Remediated after baseline | The root `build:site` script now delegates to the current `src/site` package. |
 | Root site accessibility script | Remediated after baseline | The root `validate:site` script now runs the current `src/site` accessibility validator. |
 | Root validation script | Remediated after baseline | The root `validate` script now checks active TypeScript, Jest, and static-site surfaces instead of the legacy template generator path. |
 | Current static site build path | Pass | Running `node build.mjs` from a copied `src/site` tree produced a deployable artifact. |
 | Current site accessibility validator | Pass with reported issues | `node src/site/js/validate-accessibility.js` exited 0 and reported 36 potential accessibility issues. |
 | actionlint | Pass | `.github/workflows/*.yml` passed local actionlint. |
-| npm audit, all dependencies | Fail | 3 advisories: `@babel/core`, `brace-expansion`, and `js-yaml`. |
+| npm audit, all dependencies | Pass (fixed 2026-09-20) | Was 3 high advisories (`brace-expansion`, `js-yaml`, `smol-toml`) — all DoS-only, all dev-only transitives. Lockfile bumped to patched versions within the same majors; `npm audit` now reports 0. |
 | npm audit, production only | Pass | `npm audit --omit=dev --audit-level=moderate` found 0 vulnerabilities. |
 | audit-ci | Pass | `.audit-ci.json` passed; audit-ci noted an allowlisted advisory may no longer be needed. |
 | .NET vulnerable packages | Findings present | High-severity transitive findings in three test projects via `System.Text.Json` 8.0.0 and one E2E project via `System.Security.Cryptography.Xml` 8.0.1. |
