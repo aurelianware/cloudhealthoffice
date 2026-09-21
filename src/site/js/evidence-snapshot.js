@@ -278,7 +278,15 @@
       tr.appendChild(el('td', null, sc.id));
       var what = document.createElement('td');
       what.appendChild(el('span', 'ev-what', sc.title));
-      var role = 'CHO as ' + String(sc.choRole || '').toLowerCase() + ' · ' + sc.externalTarget;
+      // Every interpolated field is coerced through a falsy guard. The
+      // published evidence documents legitimately carry nulls (testedVersion,
+      // linkedArtifact, igVersionProvenance and others are null on scenarios
+      // that do not have them), and string concatenation would render those as
+      // the literal text "null" into a page Googlebot executes and indexes.
+      // el() already guards its own text argument; these inline concatenations
+      // are the only places that need doing by hand.
+      var role = 'CHO as ' + String(sc.choRole || '').toLowerCase();
+      if (sc.externalTarget) role += ' · ' + sc.externalTarget;
       if (sc.linkedFromScenario) role += ' · chained from ' + sc.linkedFromScenario;
       what.appendChild(el('p', null, role));
       tr.appendChild(what);
