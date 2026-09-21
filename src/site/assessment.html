@@ -142,7 +142,8 @@
 <li><strong>834</strong> &mdash; enrollment, with plan-code mapping.</li>
 <li><strong>270 / 271</strong> &mdash; eligibility request and response.</li>
 </ul>
-<p>X12 276/277 (claim status), 278 (prior authorization) and 835 (remittance) are <strong>on the roadmap</strong> as X12 transactions. Prior authorization is available today through FHIR PAS instead &mdash; see below.</p>
+<p><strong>835 (remittance advice) is generated today</strong> &mdash; real X12 005010X221A1 ERA output with BPR, CLP and SVC segment construction, single and batch. Inbound 835 <em>parsing</em> is not implemented; remittance that arrives from a clearinghouse is consumed through the gateway integration in normalised form rather than parsed from raw X12 here.</p>
+<p>X12 276/277 (claim status) and 278 (prior authorization) are <strong>on the roadmap</strong> as X12 transactions. Prior authorization is available today through FHIR PAS instead &mdash; see below.</p>
 
 <h3>FHIR R4 and CMS-0057-F surfaces</h3>
 <p>Implemented API surfaces with SMART-on-FHIR scope enforcement: Prior Authorization Support (PAS), Coverage Requirements Discovery (CRD), Documentation Templates and Rules (DTR), Bulk Export, Patient Access, Provider Directory, and Payer-to-Payer exchange.</p>
@@ -212,7 +213,7 @@
 <li><strong>Reference customer</strong> &mdash; pre-sales with a first pilot partner. No production customer runs CHO as system of record yet.</li>
 <li><strong>Coordination of benefits when CHO is secondary or tertiary</strong> &mdash; primary adjudication and secondary <em>detection</em> ship today; secondary <em>calculation</em> is next.</li>
 <li><strong>Benefit augment / compare-against-legacy mode</strong> &mdash; Replace mode ships today; Augment mode is Phase 2.</li>
-<li><strong>X12 276/277, 278 and 835</strong> as X12 transactions.</li>
+<li><strong>X12 276/277 and 278</strong> as X12 transactions, and <strong>inbound 835 parsing</strong> (outbound 835 generation ships today).</li>
 <li><strong>Test coverage on some core services</strong> &mdash; claims-service around 24% line coverage, provider-service around 12%, sponsor-service around 13%. These are the lowest-covered and the most operationally critical; they are on a known hardening backlog.</li>
 <li><strong>Cosmos DB parity with MongoDB</strong> &mdash; MongoDB is the reference and tested backend; some capabilities are MongoDB-only today.</li>
 <li><strong>Correspondence and letter generation</strong> &mdash; appeal decisions emit structured events today; the consuming correspondence service has not shipped.</li>
