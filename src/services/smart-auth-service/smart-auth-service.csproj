@@ -16,15 +16,15 @@
       first-class MongoDB stores for applications, authorizations, scopes, and tokens.
     -->
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
-    <PackageReference Include="OpenIddict.AspNetCore" Version="7.4.0" />
-    <PackageReference Include="OpenIddict.Server.AspNetCore" Version="7.4.0" />
-    <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="7.4.0" />
-    <PackageReference Include="OpenIddict.MongoDb" Version="7.4.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.25" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+    <PackageReference Include="OpenIddict.AspNetCore" />
+    <PackageReference Include="OpenIddict.Server.AspNetCore" />
+    <PackageReference Include="OpenIddict.Validation.AspNetCore" />
+    <PackageReference Include="OpenIddict.MongoDb" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
     <!-- Security: force patched transitive versions (CVE-2024-30105, CVE-2024-43485, CVE-2024-43483) -->
-    <PackageReference Include="System.Text.Json" Version="8.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
+    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
   </ItemGroup>
 
 </Project>

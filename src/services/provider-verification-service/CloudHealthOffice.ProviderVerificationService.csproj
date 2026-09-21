@@ -7,8 +7,8 @@
     <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
-    <PackageReference Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="AspNetCore.HealthChecks.Uris" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\engines\CloudHealthOffice.ProviderVerificationEngine\CloudHealthOffice.ProviderVerificationEngine.csproj" />
