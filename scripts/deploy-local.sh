@@ -427,7 +427,7 @@ log "Seeding demo data into MongoDB"
 kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
   --username "$MONGO_USER" --password "$MONGO_PASS" --authenticationDatabase admin \
   --eval '
-    db = db.getSiblingDB("cloudhealthoffice");
+    db = db.getSiblingDB("CloudHealthOffice");
 
     // Demo tenant
     db.tenants.updateOne(
@@ -469,7 +469,7 @@ kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
 # Local MongoDB can retain malformed seed rows from previous interrupted runs.
 kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
   --username "$MONGO_USER" --password "$MONGO_PASS" --authenticationDatabase admin --quiet \
-  --eval 'db = db.getSiblingDB("cloudhealthoffice"); db.prior_auth_rules.deleteMany({ _id: "" });' \
+  --eval 'db = db.getSiblingDB("CloudHealthOffice"); db.prior_auth_rules.deleteMany({ _id: "" });' \
   >/dev/null 2>&1 || true
 
 # ── Deploy all services ───────────────────────────────────────────────────────
