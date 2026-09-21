@@ -1,4 +1,5 @@
 using CloudHealthOffice.Portal.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -8,6 +9,9 @@ namespace CloudHealthOffice.Portal.Tests.Infrastructure;
 
 public class InfrastructureTests
 {
+    private static readonly IConfiguration TestConfiguration =
+        new ConfigurationBuilder().Build();
+
     // ── DataProtectionKeyDocument ────────────────────────────────────────────
 
     [Fact]
@@ -58,7 +62,7 @@ public class InfrastructureTests
             It.IsAny<CancellationToken>()))
             .Throws(new Exception("MongoDB connection failed"));
 
-        var sut = new MongoDbXmlRepository(mongoClient.Object, logger.Object);
+        var sut = new MongoDbXmlRepository(mongoClient.Object, TestConfiguration, logger.Object);
 
         var result = sut.GetAllElements();
 
@@ -83,7 +87,7 @@ public class InfrastructureTests
             It.IsAny<CancellationToken>()))
             .Throws(new Exception("Insert failed"));
 
-        var sut = new MongoDbXmlRepository(mongoClient.Object, logger.Object);
+        var sut = new MongoDbXmlRepository(mongoClient.Object, TestConfiguration, logger.Object);
         var element = XElement.Parse("<key id=\"test\" />");
 
         var act = () => sut.StoreElement(element, "test-key");
@@ -122,7 +126,7 @@ public class InfrastructureTests
             It.IsAny<CancellationToken>()))
             .Returns(cursor.Object);
 
-        var sut = new MongoDbXmlRepository(mongoClient.Object, logger.Object);
+        var sut = new MongoDbXmlRepository(mongoClient.Object, TestConfiguration, logger.Object);
 
         var result = sut.GetAllElements();
 
@@ -161,7 +165,7 @@ public class InfrastructureTests
             It.IsAny<CancellationToken>()))
             .Returns(cursor.Object);
 
-        var sut = new MongoDbXmlRepository(mongoClient.Object, logger.Object);
+        var sut = new MongoDbXmlRepository(mongoClient.Object, TestConfiguration, logger.Object);
 
         var result = sut.GetAllElements();
 
@@ -186,7 +190,7 @@ public class InfrastructureTests
             It.IsAny<InsertOneOptions>(),
             It.IsAny<CancellationToken>()));
 
-        var sut = new MongoDbXmlRepository(mongoClient.Object);
+        var sut = new MongoDbXmlRepository(mongoClient.Object, TestConfiguration);
         var element = XElement.Parse("<key id=\"fresh\" version=\"1\" />");
 
         sut.StoreElement(element, "fresh-key");

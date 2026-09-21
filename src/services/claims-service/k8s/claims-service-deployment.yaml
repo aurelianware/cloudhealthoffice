@@ -5,7 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  MongoDb__DatabaseName: "cloudhealthoffice"
+  MongoDb__DatabaseName: "CloudHealthOffice"
   Services__BenefitPlanService: "http://benefit-plan-service"
   Services__CoverageService: "http://coverage-service"
   Services__MemberService: "http://member-service"

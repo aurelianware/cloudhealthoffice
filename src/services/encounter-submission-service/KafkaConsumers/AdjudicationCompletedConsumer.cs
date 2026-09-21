@@ -61,6 +61,12 @@ public class AdjudicationCompletedConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Yield before the consume loop. Consumer.Consume blocks the calling thread, and without
+        // an await first this method runs synchronously inside StartAsync, so host startup never
+        // completes and Kestrel never begins listening — the service stays unreachable and its
+        // health probes fail for as long as Kafka is configured.
+        await Task.Yield();
+
         var bootstrapServers = _configuration["Kafka:BootstrapServers"];
         if (string.IsNullOrEmpty(bootstrapServers))
         {

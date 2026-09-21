@@ -27,7 +27,7 @@ data:
   Services__Prometheus: "http://cho-monitoring-prometheus-server.cho-monitoring"
   Portal__Title: "Cloud Health Office"
   Portal__Version: "1.0.0"
-  MongoDB__DatabaseName: "cloudhealthoffice"
+  MongoDB__DatabaseName: "CloudHealthOffice"
   Redis__ConnectionString: "redis-dataprotection.cloudhealthoffice.svc.cluster.local:6379"
 ---
 apiVersion: apps/v1

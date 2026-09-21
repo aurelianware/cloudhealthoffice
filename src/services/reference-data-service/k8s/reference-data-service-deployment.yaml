@@ -109,7 +109,7 @@ spec:
               name: database-secret
               key: connectionString
         - name: MongoDb__DatabaseName
-          value: "cloudhealthoffice"
+          value: "CloudHealthOffice"
         resources:
           requests:
             memory: "256Mi"

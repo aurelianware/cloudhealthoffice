@@ -5,7 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  MongoDb__DatabaseName: "cloudhealthoffice"
+  MongoDb__DatabaseName: "CloudHealthOffice"
   BlobStorage__ContainerName: "member-documents"
 ---
 apiVersion: v1
