@@ -232,7 +232,7 @@ kubectl rollout status deployment/claims-service -n cloudhealthoffice
 kubectl port-forward -n cloudhealthoffice svc/mongodb 27017:27017
 
 # In another terminal:
-mongosh "mongodb://admin:localdev123@localhost:27017/?authSource=admin"
+mongosh "mongodb://admin:local-dev-only@localhost:27017/?authSource=admin"
 ```
 
 ### View all services and endpoints

@@ -1,15 +1,16 @@
 ---
 # Backend API Integration Secret
-# Store your actual API credentials here
-apiVersion: v1
-kind: Secret
-metadata:
-  name: backend-api-credentials
-  namespace: cho-workflows
-type: Opaque
-stringData:
-  token: "dev-token-replace-in-production"
-  url: "http://backend-api.cloudhealthoffice.svc.cluster.local/api/v1"
+#
+# This manifest deliberately does NOT carry a token. Provision the Secret
+# out of band so no credential is ever committed:
+#
+#   kubectl create secret generic backend-api-credentials -n cho-workflows \
+#     --from-literal=token='<token>' \
+#     --from-literal=url='http://backend-api.cloudhealthoffice.svc.cluster.local/api/v1'
+#
+# Consumers reference it with `optional: true`, so the workflows fall back to
+# their built-in sample payloads when it is absent — which is what local
+# development and the Million Claim Challenge use.
 ---
 # Backend API Mock Service (for testing without real backend)
 apiVersion: v1
@@ -86,6 +87,9 @@ spec:
               secretKeyRef:
                 name: backend-api-credentials
                 key: token
+                # Optional so this test job still runs against the mock
+                # service when no backend credential has been provisioned.
+                optional: true
         command: ["/bin/sh", "-c"]
         args:
           - |

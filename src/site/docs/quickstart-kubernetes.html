@@ -368,7 +368,7 @@ kubectl rollout status deployment/claims-service -n cloudhealthoffice</code></pr
 <pre><code>kubectl port-forward -n cloudhealthoffice svc/mongodb 27017:27017
 
 <span class="code-comment"># In another terminal:</span>
-mongosh "mongodb://admin:localdev123@localhost:27017/?authSource=admin"</code></pre>
+mongosh "mongodb://admin:local-dev-only@localhost:27017/?authSource=admin"</code></pre>
 
         <h3>Scale a service</h3>
 <pre><code>kubectl scale deployment/claims-service -n cloudhealthoffice --replicas=3</code></pre>

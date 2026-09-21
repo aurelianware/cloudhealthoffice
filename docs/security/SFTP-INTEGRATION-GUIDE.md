@@ -88,7 +88,8 @@ az keyvault secret set \
 ```bash
 # Test from local machine
 sftp logicapp@52.168.45.123
-# Password: changeme123 (default)
+# Password: the value you set in the 'sftp-users' Secret
+#           (the manifest ships REPLACE_WITH_SFTP_PASSWORD)
 
 # Test from Azure
 az resource invoke-action \

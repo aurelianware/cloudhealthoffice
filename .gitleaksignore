@@ -1,0 +1,28 @@
+# .gitleaksignore — findings gitleaks should not fail the build on.
+#
+# Each entry is <commit>:<path>:<rule>:<line>. Entries fall into two groups.
+#
+# ---------------------------------------------------------------------
+# 1. HISTORICAL LEAKS — REMOVED FROM HEAD, CREDENTIAL TREATED AS BURNED
+# ---------------------------------------------------------------------
+# Git history is deliberately NOT rewritten (it would break every existing
+# clone, fork and PR). These entries acknowledge a secret that is provably
+# gone from HEAD and whose credential is on the rotation list in
+# docs/security/CREDENTIAL-ROTATION.md. They are NOT a judgement that the
+# value was harmless — the opposite: it is burned and must be rotated.
+#
+# SFTP password for the `logicapp` account, committed 2026-02-04 and
+# present at HEAD until it was removed in the same change that added this
+# file. Rotate the account before the manifests are used again.
+f9da612c2e62501b0ff5a6c37770bafa65bf7ef0:k8s/x12-275-upload-job.yaml:generic-api-key:272
+328828f5ccf8a5044b67eb642495ed563ea5da36:k8s/x12-275-upload-job.yaml:generic-api-key:272
+
+# ---------------------------------------------------------------------
+# 2. FALSE POSITIVES IN HISTORY
+# ---------------------------------------------------------------------
+# Azure AD *client ID* (a public identifier, not a credential) and a
+# literal `Bearer invalid.token.here` used to assert a 401 response.
+4f28ef4c0ca66b4aa01eb3abfefc8e268a91baa2:test-attachment-oauth.sh:curl-auth-header:63
+4f28ef4c0ca66b4aa01eb3abfefc8e268a91baa2:test-attachment-oauth.sh:generic-api-key:8
+e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:curl-auth-header:63
+e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:generic-api-key:8
