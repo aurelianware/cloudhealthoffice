@@ -405,11 +405,29 @@ log "Waiting for MongoDB to be ready"
 kubectl rollout status statefulset/mongodb -n "$NAMESPACE" --timeout=120s || warn "MongoDB not ready yet"
 
 # ── Seed demo data ────────────────────────────────────────────────────────────
+# `rollout status` returns as soon as the pod reports ready, which is before
+# mongod accepts authenticated connections. Without this wait the seed below
+# fails, the script carries on, and the deploy "succeeds" with no demo tenant.
+log "Waiting for MongoDB to accept authenticated connections"
+mongo_ready=false
+for attempt in $(seq 1 30); do
+  if kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
+      --username "$MONGO_USER" --password "$MONGO_PASS" \
+      --authenticationDatabase admin --quiet \
+      --eval 'db.adminCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
+    mongo_ready=true
+    ok "MongoDB accepting connections (attempt $attempt)"
+    break
+  fi
+  sleep 2
+done
+[[ "$mongo_ready" == true ]] || warn "MongoDB never accepted an authenticated connection; the seed below will fail"
+
 log "Seeding demo data into MongoDB"
 kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
   --username "$MONGO_USER" --password "$MONGO_PASS" --authenticationDatabase admin \
   --eval '
-    db = db.getSiblingDB("cloudhealthoffice");
+    db = db.getSiblingDB("CloudHealthOffice");
 
     // Demo tenant
     db.tenants.updateOne(
@@ -443,12 +461,15 @@ kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
     );
 
     print("✓ Demo data seeded");
-  ' 2>/dev/null && ok "seeded" || warn "seed failed (MongoDB may still be starting)"
+  ' 2>/dev/null && ok "seeded" || warn "demo tenant seed FAILED — the 'demo' tenant used by the
+      quickstart (X-Tenant-ID: demo) does not exist. The Million Claim Challenge
+      seeds its own fixtures and is unaffected, but portal and API walkthroughs
+      that assume the demo tenant will not work. Re-run this script to retry."
 
 # Local MongoDB can retain malformed seed rows from previous interrupted runs.
 kubectl exec -n "$NAMESPACE" mongodb-0 -- mongosh \
   --username "$MONGO_USER" --password "$MONGO_PASS" --authenticationDatabase admin --quiet \
-  --eval 'db = db.getSiblingDB("cloudhealthoffice"); db.prior_auth_rules.deleteMany({ _id: "" });' \
+  --eval 'db = db.getSiblingDB("CloudHealthOffice"); db.prior_auth_rules.deleteMany({ _id: "" });' \
   >/dev/null 2>&1 || true
 
 # ── Deploy all services ───────────────────────────────────────────────────────
@@ -527,7 +548,7 @@ kubectl create secret generic sponsor-service-secrets \
 kubectl create secret generic smart-auth-service-secrets \
   --namespace "$NAMESPACE" \
   --from-literal=MongoDb__ConnectionString="$MONGO_CONN" \
-  --from-literal=MongoDb__DatabaseName=cloudhealthoffice \
+  --from-literal=MongoDb__DatabaseName=CloudHealthOffice \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 for dep in $(kubectl get deployments -n "$NAMESPACE" -o name); do
