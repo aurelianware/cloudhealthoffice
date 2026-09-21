@@ -161,7 +161,7 @@ Cloud Health Office deploys HIPAA-oriented EDI infrastructure through a focused,
 
 ```bash
 # Step 1: Run onboarding wizard (5 minutes)
-node dist/scripts/cli/payer-onboarding-wizard.js
+node dist/scripts/cli/interactive-wizard.js
 
 # Step 2: Generate infrastructure and workflows (10 minutes)
 node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json

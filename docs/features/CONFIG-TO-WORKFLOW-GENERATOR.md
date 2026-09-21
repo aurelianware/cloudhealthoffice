@@ -549,7 +549,7 @@ The platform includes an interactive onboarding wizard to simplify payer configu
 ### Launching the Wizard
 
 ```bash
-node dist/scripts/cli/payer-onboarding-wizard.js
+node dist/scripts/cli/interactive-wizard.js
 ```
 
 ### Wizard Flow
@@ -631,7 +631,7 @@ The wizard generates:
 ### Example Wizard Session
 
 ```
-$ node dist/scripts/cli/payer-onboarding-wizard.js
+$ node dist/scripts/cli/interactive-wizard.js
 
 ┌─────────────────────────────────────────────────────┐
 │  Clearinghouse Integration Platform - Onboarding Wizard  │
