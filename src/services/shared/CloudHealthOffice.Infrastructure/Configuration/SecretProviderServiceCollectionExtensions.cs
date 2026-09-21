@@ -36,9 +36,11 @@ public static class SecretProviderServiceCollectionExtensions
                 break;
 
             case SecretProviderType.HashiCorpVault:
-                throw new NotSupportedException(
-                    "HashiCorp Vault secret provider requires the CloudHealthOffice.HashiCorpVault package (planned for v4.1). " +
-                    "Use SecretProviderType.AzureKeyVault or SecretProviderType.None.");
+                services.AddSingleton<ISecretProvider>(sp =>
+                    new HashiCorpVaultSecretProvider(
+                        options,
+                        sp.GetRequiredService<ILogger<HashiCorpVaultSecretProvider>>()));
+                break;
 
             case SecretProviderType.None:
             default:
