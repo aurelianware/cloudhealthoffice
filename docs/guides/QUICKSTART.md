@@ -264,9 +264,19 @@ hardware-dependent and will not reproduce on different hardware:
 
 | Run | Processed | Platform failures | Workflow checks | Payment gate | Throughput |
 | --- | --- | --- | --- | --- | --- |
-| 1K | 1,000 | 0 | 130/130 | 20/20 exact | 191.69 claims/sec |
-| 10K | 10,000 | 0 | 1,297/1,300 | 200/200 exact | 388.65 claims/sec |
+| 1K (clean-clone run A) | 1,000 | 0 | 130/130 | 20/20 exact | 191.69 claims/sec |
+| 1K (clean-clone run B) | 1,000 | 0 | 130/130 | 20/20 exact | 169.65 claims/sec |
+| 10K (clean-clone run A) | 10,000 | 0 | 1,297/1,300 | 200/200 exact | 388.65 claims/sec |
+| 10K (clean-clone run B) | 10,000 | 0 | 1,300/1,300 | 200/200 exact | 406.91 claims/sec |
 | 1M (Episode 015) | 1,000,000 | 0 | 129,981/130,000 | 20,000/20,000 exact | 123.81 claims/sec |
+
+Note the two 10K runs: the same seed produced 3 `EdgeCase:CobPrimaryPayer`
+mismatches on run A and none on run B. Run A was executed against a deployment
+where the demo-data seed had silently failed, so the likeliest explanation is
+environment state rather than the validator. It is recorded here rather than
+smoothed over, because "correctness gates are seed-reproducible" is a claim the
+benchmark makes, and a mismatch count that moves between runs is worth
+investigating before it is quoted to anyone.
 
 Small runs show *higher* claims/sec than the 1M run because they never reach
 sustained load. Do not read a small-run figure as a platform throughput number.
