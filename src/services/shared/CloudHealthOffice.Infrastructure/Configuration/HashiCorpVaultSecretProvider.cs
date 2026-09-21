@@ -132,7 +132,11 @@ public sealed class HashiCorpVaultSecretProvider : ISecretProvider, IDisposable
             var payload = await response.Content.ReadFromJsonAsync<KvListResponse>(cancellationToken: ct);
             var keys = payload?.Data?.Keys ?? [];
 
-            foreach (var key in keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)))
+            // A LIST names nested paths with a trailing slash. Those are folders, not secrets:
+            // reading one always 404s, so it would be a wasted round trip and a misleading log
+            // line for every subtree.
+            foreach (var key in keys.Where(k =>
+                         !k.EndsWith('/') && k.StartsWith(prefix, StringComparison.Ordinal)))
             {
                 var value = await GetSecretAsync(key, ct);
                 if (value is not null) results[key] = value;
@@ -229,12 +233,12 @@ public sealed class HashiCorpVaultSecretProvider : ISecretProvider, IDisposable
         return response;
     }
 
-    private void InvalidateToken()
-    {
-        _tokenLock.Wait();
-        try { _cachedToken = null; }
-        finally { _tokenLock.Release(); }
-    }
+    /// <summary>
+    /// Clears the cached token. Deliberately lock-free: this is a single reference write, and
+    /// taking the semaphore synchronously from the async request path would block a thread pool
+    /// thread. A racing GetTokenAsync simply re-authenticates, which is the intended outcome.
+    /// </summary>
+    private void InvalidateToken() => Volatile.Write(ref _cachedToken, null);
 
     private async Task<string> GetTokenAsync(CancellationToken ct)
     {
@@ -243,12 +247,14 @@ public sealed class HashiCorpVaultSecretProvider : ISecretProvider, IDisposable
             return _options.HashiCorpVaultToken!;
         }
 
-        if (_cachedToken is not null) return _cachedToken;
+        var cached = Volatile.Read(ref _cachedToken);
+        if (cached is not null) return cached;
 
         await _tokenLock.WaitAsync(ct);
         try
         {
-            if (_cachedToken is not null) return _cachedToken;
+            cached = Volatile.Read(ref _cachedToken);
+            if (cached is not null) return cached;
 
             var tokenPath = string.IsNullOrWhiteSpace(_options.HashiCorpVaultServiceAccountTokenPath)
                 ? DefaultServiceAccountTokenPath
@@ -283,7 +289,7 @@ public sealed class HashiCorpVaultSecretProvider : ISecretProvider, IDisposable
                     "Vault Kubernetes login succeeded but returned no client token.");
             }
 
-            _cachedToken = clientToken;
+            Volatile.Write(ref _cachedToken, clientToken);
             return clientToken;
         }
         finally

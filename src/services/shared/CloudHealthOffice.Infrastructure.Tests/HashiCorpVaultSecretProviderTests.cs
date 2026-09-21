@@ -184,6 +184,79 @@ public class HashiCorpVaultSecretProviderTests
             .Should().BeEmpty();
     }
 
+    // ── Bulk load ───────────────────────────────────────────────────────────
+    //
+    // GetSecretsAsync is what SecretProviderConfigurationProvider calls with an empty prefix to
+    // load everything at startup, so a fault here surfaces as a service failing to boot.
+
+    [Fact]
+    public async Task GetSecretsAsync_ReturnsEveryKeyForAnEmptyPrefix()
+    {
+        var handler = new RoutingHandler(["alpha", "beta"]);
+        var provider = new HashiCorpVaultSecretProvider(
+            TokenOptions(), NullLogger<HashiCorpVaultSecretProvider>.Instance,
+            new HttpClient(handler) { BaseAddress = new Uri(VaultAddress + "/") });
+
+        var results = await provider.GetSecretsAsync(string.Empty);
+
+        results.Keys.Should().BeEquivalentTo("alpha", "beta");
+    }
+
+    [Fact]
+    public async Task GetSecretsAsync_FiltersByPrefix()
+    {
+        var handler = new RoutingHandler(["appeal-key-v1", "consent-key-v1"]);
+        var provider = new HashiCorpVaultSecretProvider(
+            TokenOptions(), NullLogger<HashiCorpVaultSecretProvider>.Instance,
+            new HttpClient(handler) { BaseAddress = new Uri(VaultAddress + "/") });
+
+        var results = await provider.GetSecretsAsync("appeal-");
+
+        results.Keys.Should().BeEquivalentTo("appeal-key-v1");
+    }
+
+    [Fact]
+    public async Task GetSecretsAsync_SkipsDirectoryKeys()
+    {
+        // A LIST names nested paths with a trailing slash. Reading one always 404s, so fetching
+        // it is a wasted round trip and a misleading log line for every subtree.
+        var handler = new RoutingHandler(["real-secret", "nested/"]);
+        var provider = new HashiCorpVaultSecretProvider(
+            TokenOptions(), NullLogger<HashiCorpVaultSecretProvider>.Instance,
+            new HttpClient(handler) { BaseAddress = new Uri(VaultAddress + "/") });
+
+        var results = await provider.GetSecretsAsync(string.Empty);
+
+        results.Keys.Should().BeEquivalentTo("real-secret");
+        handler.ReadPaths.Should().NotContain(p => p.Contains("nested"));
+    }
+
+    [Fact]
+    public async Task GetSecretsAsync_ReturnsEmptyWhenTheMountIsAbsent()
+    {
+        var handler = new RoutingHandler([], HttpStatusCode.NotFound);
+        var provider = new HashiCorpVaultSecretProvider(
+            TokenOptions(), NullLogger<HashiCorpVaultSecretProvider>.Instance,
+            new HttpClient(handler) { BaseAddress = new Uri(VaultAddress + "/") });
+
+        (await provider.GetSecretsAsync(string.Empty)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSecretsAsync_ThrowsWhenVaultIsSealedOrErroring()
+    {
+        // A sealed Vault must not read as "no secrets exist", which would let a service start
+        // with none of its configuration loaded.
+        var handler = new RoutingHandler([], HttpStatusCode.ServiceUnavailable);
+        var provider = new HashiCorpVaultSecretProvider(
+            TokenOptions(), NullLogger<HashiCorpVaultSecretProvider>.Instance,
+            new HttpClient(handler) { BaseAddress = new Uri(VaultAddress + "/") });
+
+        var act = async () => await provider.GetSecretsAsync(string.Empty);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
     // ── Health ──────────────────────────────────────────────────────────────
 
     [Fact]
@@ -205,6 +278,43 @@ public class HashiCorpVaultSecretProviderTests
     public async Task HealthCheckAsync_IsUnhealthyWhenUnreachable()
     {
         (await Build(StubHandler.Throws()).HealthCheckAsync()).Should().BeFalse();
+    }
+
+    private sealed class RoutingHandler : HttpMessageHandler
+    {
+        private readonly IReadOnlyList<string> _keys;
+        private readonly HttpStatusCode _listStatus;
+
+        public RoutingHandler(IReadOnlyList<string> keys, HttpStatusCode listStatus = HttpStatusCode.OK)
+            => (_keys, _listStatus) = (keys, listStatus);
+
+        public List<string> ReadPaths { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri?.PathAndQuery ?? string.Empty;
+
+            if (request.Method.Method == "LIST")
+            {
+                if (_listStatus != HttpStatusCode.OK)
+                    return Task.FromResult(new HttpResponseMessage(_listStatus));
+
+                var body = "{\"data\":{\"keys\":[" +
+                           string.Join(",", _keys.Select(k => $"\"{k}\"")) + "]}}";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "application/json")
+                });
+            }
+
+            ReadPaths.Add(path);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"data":{"data":{"value":"v"}}}""", Encoding.UTF8, "application/json")
+            });
+        }
     }
 
     private sealed class StubHandler : HttpMessageHandler
