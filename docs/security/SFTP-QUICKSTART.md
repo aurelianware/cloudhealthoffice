@@ -90,7 +90,7 @@ az resource invoke-action \
 
 ## 🔐 Security Checklist
 
-- [ ] Changed default SFTP password from `changeme123`
+- [ ] Replaced `REPLACE_WITH_SFTP_PASSWORD` in the `sftp-users` Secret
 - [ ] Stored password in Azure Key Vault
 - [ ] Updated `infra/main.parameters.json` with KeyVault reference
 - [ ] Configured LoadBalancer source IP restrictions

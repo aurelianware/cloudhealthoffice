@@ -30,10 +30,21 @@ metadata:
 type: Opaque
 stringData:
   # Format: username:password:uid:gid:directory
-  # Password should be changed for production!
+  #
+  # Placeholder passwords only — this manifest is committed, so anything
+  # written here is public. Replace the Secret after applying, or create it
+  # out of band and skip this document entirely:
+  #
+  #   kubectl create secret generic sftp-users -n cho-sftp \
+  #     --from-literal=users.conf="$(printf '%s\n%s\n' \
+  #       "cho-edi:<password>:1000:1000:upload" \
+  #       "clearinghouse:<password>:1001:1001:edi")"
+  #
+  # The same passwords must be supplied to clients through the
+  # 'sftp-credentials' Secret that the X12 jobs read.
   users.conf: |
-    cho-edi:changeme123:1000:1000:upload
-    clearinghouse:changeme456:1001:1001:edi
+    cho-edi:REPLACE_WITH_SFTP_PASSWORD:1000:1000:upload
+    clearinghouse:REPLACE_WITH_SFTP_PASSWORD:1001:1001:edi
 ---
 apiVersion: v1
 kind: ConfigMap

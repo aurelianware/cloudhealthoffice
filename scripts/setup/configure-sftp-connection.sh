@@ -46,9 +46,13 @@ echo "SFTP Credentials (from infrastructure/k8s/sftp-server-deployment.yaml):"
 read -p "Username [cho-edi]: " SFTP_USER
 SFTP_USER=${SFTP_USER:-cho-edi}
 
-read -sp "Password [changeme123]: " SFTP_PASS
-SFTP_PASS=${SFTP_PASS:-changeme123}
+read -sp "Password: " SFTP_PASS
 echo ""
+if [ -z "$SFTP_PASS" ]; then
+  echo "ERROR: a password is required. It is the one you set in the" >&2
+  echo "       'sftp-users' Secret; the manifest ships only a placeholder." >&2
+  exit 1
+fi
 
 echo ""
 echo "=========================================="

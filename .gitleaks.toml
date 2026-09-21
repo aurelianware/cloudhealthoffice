@@ -4,6 +4,21 @@
 
 title = "Cloud Health Office Gitleaks Config"
 
+# ---------------------------------------------------------------
+# Inherit gitleaks' built-in rule set.
+#
+# This is load-bearing. A config that declares an [allowlist] but no
+# [[rules]] and no [extend] leaves gitleaks with ZERO detection rules:
+# it loads, scans, reports "no leaks found", and exits 0 no matter what
+# the tree contains. The CI secret-scan job passed that way and could
+# never have failed.
+#
+# Regression test: scripts/ci/verify-gitleaks-rules.sh plants a
+# known-detectable canary and asserts gitleaks finds it.
+# ---------------------------------------------------------------
+[extend]
+useDefault = true
+
 [allowlist]
 
   # ---------------------------------------------------------------
@@ -32,11 +47,22 @@ title = "Cloud Health Office Gitleaks Config"
     '''services/tenant-service/README\.md''',
     # Argo workflow uses Stripe *test* keys (not live)
     '''argo-workflows/tenant-onboarding\.yaml''',
-    # Test scripts and K8s manifests use placeholder credentials
+    # Test scripts use placeholder credentials
     '''docs/testing/test-attachment-oauth\.sh''',
-    '''k8s/.*\.yaml''',
-    '''infra/k8s/.*\.yaml''',
   ]
+
+  # ---------------------------------------------------------------
+  # NOTE ON K8S MANIFESTS
+  #
+  # A blanket 'k8s/.*\.yaml' / 'infra/k8s/.*\.yaml' allowlist used to sit
+  # here. Because gitleaks matches these path patterns unanchored, it also
+  # covered infrastructure/k8s/**, and it hid a real, high-entropy SFTP
+  # password that lived at HEAD in three X12 job manifests for seven months.
+  #
+  # Manifests are now scanned like everything else. Placeholders in them must
+  # be recognisable as placeholders — REPLACE_WITH_*, <angle-brackets>, or an
+  # obvious local-dev marker — rather than exempted by path.
+  # ---------------------------------------------------------------
 
   # ---------------------------------------------------------------
   # Known safe patterns (Cosmos DB Emulator key, placeholder tokens)
@@ -53,6 +79,27 @@ title = "Cloud Health Office Gitleaks Config"
     # SECURITY.md example key names (not values)
     '''qnxt_api_key''',
     '''claims_backend_api_key''',
+    # Documentation placeholders for a bearer token the reader supplies
+    '''YOUR_JWT_TOKEN''',
+    '''YOUR_TOKEN''',
+    '''invalid\.token\.here''',
+    # Azure built-in role-definition GUID for "Key Vault Secrets User".
+    # A public, documented Azure constant, identical in every tenant.
+    '''4633458b-17de-408a-b874-0445c86b69e6''',
+    # Key Vault secret *names*, not values
+    '''x12-receiver-qualifier''',
+    # Azure AD application (client) IDs shown on the admin-consent error
+    # page. A client ID is a public identifier by design — it is sent to the
+    # browser in every auth request — and is not a credential.
+    '''^cfada1ac-f251-48ea-9330-39212aa4c862$''',
+    '''^31f76844-b2cb-47b1-aede-f5b2b6dc59c8$''',
+    # Synthetic identifiers in tests: prior-auth numbers, rule-set keys and
+    # payer-to-payer transition keys. None is a credential.
+    # NOTE: gitleaks matches these against the captured secret value, not the
+    # surrounding line — so each pattern must describe the value itself.
+    '''PAS-\d{8}-[A-Z0-9]{8}''',
+    '''^[a-z0-9]+/[A-Z]{2}/Medicaid/any$''',
+    '''transition-\d{4}-\d{2}''',
     # TypeScript named imports/exports flagged as API keys
     '''mapX12\d+To\w+''',
     # Stripe price IDs are public identifiers, not secrets

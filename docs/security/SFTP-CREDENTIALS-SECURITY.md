@@ -184,7 +184,7 @@ kubectl -n cho-sftp port-forward svc/sftp-service 12022:22
 
 - Commit passwords to git
 - Share passwords via email/Slack
-- Use weak passwords (e.g., `changeme123`)
+- Use weak or placeholder passwords (e.g. `REPLACE_WITH_SFTP_PASSWORD`)
 - Reuse passwords across environments
 - Store passwords in plaintext files tracked by git
 

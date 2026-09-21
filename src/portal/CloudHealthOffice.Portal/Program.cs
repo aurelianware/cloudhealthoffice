@@ -214,8 +214,18 @@ ConventionRegistry.Register("CamelCase", camelCasePack, _ => true);
 builder.Services.AddSingleton<IMongoClient>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
-    var connectionString = configuration["MongoDB:ConnectionString"]
-        ?? "mongodb://admin:securepassword123@mongodb:27017";
+    // No hardcoded fallback: a literal credential here would be a committed
+    // secret, and would let a misconfigured deployment silently connect
+    // somewhere unintended instead of failing where the mistake is visible.
+    var connectionString = configuration["MongoDB:ConnectionString"];
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException(
+            "MongoDB:ConnectionString is not configured. Set it via the " +
+            "MongoDB__ConnectionString environment variable — supplied by the " +
+            "'database-secret' Kubernetes Secret (key: connectionString) in " +
+            "cluster deployments, and by docker-compose.development.yml locally.");
+    }
     return new MongoClient(connectionString);
 });
 
