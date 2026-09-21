@@ -72,7 +72,7 @@ spec:
               name: database-secret
               key: connectionString
         - name: MongoDb__DatabaseName
-          value: "cloudhealthoffice"
+          value: "CloudHealthOffice"
         # Appeal body encryption — key material is in Key Vault under
         # appeal-body-encryption-key-v1. Must be provisioned BEFORE first
         # deployment; otherwise the readiness check fails and the pod is

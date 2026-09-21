@@ -43,6 +43,11 @@ public class RfaiDocsReceivedConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Yield before the consume loop: Consumer.Consume blocks, and without an await
+        // first this runs synchronously inside StartAsync, so host startup never completes
+        // and Kestrel never begins listening.
+        await Task.Yield();
+
         var bootstrapServers = _configuration["Kafka:BootstrapServers"];
         if (string.IsNullOrEmpty(bootstrapServers))
         {

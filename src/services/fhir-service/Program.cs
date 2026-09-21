@@ -333,7 +333,11 @@ else
 // and IPriorAuthRuleEngine (Rule 5) via constructor injection.
 builder.Services.Configure<PasAutoAdjudicationConfig>(
     builder.Configuration.GetSection("Cms0057:PasAutoAdjudication"));
-builder.Services.AddSingleton<IPasAutoAdjudicator, PasAutoAdjudicator>();
+// Scoped, not singleton: once a database is configured the provider-enrollment registration
+// supplies IEnrollmentDecisionGate as scoped, and a singleton consuming it is a captive
+// dependency that fails service-descriptor validation at startup. Only the PAS controller
+// resolves this, which is itself scoped.
+builder.Services.AddScoped<IPasAutoAdjudicator, PasAutoAdjudicator>();
 builder.Services.AddSingleton<PasResponseBuilder>();
 
 // PAS $inquire (PAS-04). Read-only projection of the authoritative

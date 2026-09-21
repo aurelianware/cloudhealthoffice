@@ -5,7 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  MongoDb__DatabaseName: "cloudhealthoffice"
+  MongoDb__DatabaseName: "CloudHealthOffice"
   ConsentEncryption__KeySecretPrefix: "consent-body-encryption-key"
   ConsentEncryption__CurrentKeyVersion: "v1"
   ConsentEncryption__AcceptedKeyVersions__0: "v1"

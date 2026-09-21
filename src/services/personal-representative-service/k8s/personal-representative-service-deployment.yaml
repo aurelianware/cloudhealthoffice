@@ -5,7 +5,7 @@ metadata:
   namespace: cloudhealthoffice
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  MongoDb__DatabaseName: "cloudhealthoffice"
+  MongoDb__DatabaseName: "CloudHealthOffice"
   PersonalRepEncryption__KeySecretPrefix: "personal-rep-body-encryption-key"
   PersonalRepEncryption__CurrentKeyVersion: "v1"
   PersonalRepEncryption__AcceptedKeyVersions__0: "v1"

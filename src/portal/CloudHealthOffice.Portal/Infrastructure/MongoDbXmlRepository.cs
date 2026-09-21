@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.DataProtection.Repositories;
+using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using System.Xml.Linq;
@@ -16,9 +17,20 @@ public class MongoDbXmlRepository : IXmlRepository
     private readonly IMongoCollection<DataProtectionKeyDocument> _collection;
     private readonly ILogger<MongoDbXmlRepository>? _logger;
 
-    public MongoDbXmlRepository(IMongoClient mongoClient, ILogger<MongoDbXmlRepository>? logger = null)
+    public MongoDbXmlRepository(
+        IMongoClient mongoClient,
+        IConfiguration configuration,
+        ILogger<MongoDbXmlRepository>? logger = null)
     {
-        var db = mongoClient.GetDatabase("cloudhealthoffice");
+        // Takes the configured name rather than hard-coding one. MongoDB refuses to create a
+        // case-variant of an existing database, so a lowercase name here would collide with the
+        // CloudHealthOffice database the services use — whichever started first would win and the
+        // other would fail outright.
+        var databaseName = configuration["MongoDB:DatabaseName"]
+            ?? configuration["MongoDb:DatabaseName"]
+            ?? "CloudHealthOffice";
+
+        var db = mongoClient.GetDatabase(databaseName);
         _collection = db.GetCollection<DataProtectionKeyDocument>("dataprotection_keys");
         _logger = logger;
     }
