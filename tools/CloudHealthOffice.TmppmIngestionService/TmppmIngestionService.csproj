@@ -22,7 +22,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
     <!-- DI -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" VersionOverride="8.0.1" />
     <!-- HTTP for TMHP downloads -->
     <PackageReference Include="Microsoft.Extensions.Http" />
     <!-- JSON -->
