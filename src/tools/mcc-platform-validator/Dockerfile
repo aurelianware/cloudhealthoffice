@@ -2,6 +2,9 @@ ARG REGISTRY=mcr.microsoft.com
 
 FROM ${REGISTRY}/dotnet/sdk:8.0 AS build
 WORKDIR /repo
+# Central Package Management: every PackageReference resolves its version from
+# Directory.Packages.props, so restore fails without it in the build context.
+COPY Directory.Packages.props ./
 
 COPY src/Directory.Build.props src/
 COPY src/tools/mcc-platform-validator/mcc-platform-validator.csproj src/tools/mcc-platform-validator/

@@ -21,23 +21,23 @@
 
   <ItemGroup>
     <!-- Azure -->
-    <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.63.0" />
+    <PackageReference Include="Microsoft.Azure.Cosmos" />
     <!-- MongoDB -->
-    <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
+    <PackageReference Include="MongoDB.Driver" />
     <!-- HTTP resilience -->
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <!-- Hosting / DI -->
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
     <!-- Cache is consumed through ICacheProvider from CloudHealthOffice.Infrastructure.
          StackExchange.Redis lives there and arrives transitively. See Addendum A.7.2
          and docs/architecture/shared-cache.md. -->
     <!-- Polly (resilience) -->
-    <PackageReference Include="Polly.Extensions" Version="8.5.0" />
+    <PackageReference Include="Polly.Extensions" />
     <!-- SFTP for batch file pulls -->
-    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <PackageReference Include="SSH.NET" />
   </ItemGroup>
 
 </Project>
