@@ -225,7 +225,10 @@ public class CapitationEraServiceTests
         var segments = edi.Split('~');
 
         var bpr = segments.First(s => s.StartsWith("BPR*"));
-        bpr.Should().Contain("*NON*");
+        // A non-payment carries no money, so BPR05-BPR16 are not used and the
+        // segment terminates at BPR04.
+        bpr.Should().EndWith("*NON");
+        bpr.Split('*').Should().HaveCount(5);
     }
 
     [Fact]
@@ -243,7 +246,88 @@ public class CapitationEraServiceTests
         bpr.Should().StartWith("BPR*I*"); // Remittance info only
     }
 
+    // ── BPR element positions (005010X221A1) ─────────────────────────────
+    // The assertions above check only that certain values appear somewhere in
+    // the segment, so they would still pass if the effective date shifted back
+    // into BPR10 (Originating Company Identifier) or BPR08 (Account Number
+    // Qualifier). These pin each element to its specified position.
+
+    [Fact]
+    public void Generate835_AchBpr_PlacesEveryElementAtItsSpecifiedPosition()
+    {
+        var edi = _service.Generate835ForStatement(CreateStatement(), CreateContract(), _defaultTp);
+
+        var el = edi.Split('~').First(s => s.StartsWith("BPR*")).Split('*');
+
+        el[4].Should().Be("ACH");            // BPR04 payment method
+        el[5].Should().Be("CCP");            // BPR05 payment format
+        el[6].Should().Be("01");             // BPR06 sender DFI qualifier
+        el[7].Should().Be("091000019");      // BPR07 sender routing
+        el[8].Should().Be("DA");             // BPR08 sender acct qualifier
+        el[9].Should().Be("1234567890");     // BPR09 sender account
+        el[10].Should().Be("CHO12345");      // BPR10 originating company id
+        el[11].Should().BeEmpty();           // BPR11 not used
+        el[12].Should().Be("01");            // BPR12 receiver DFI qualifier
+        el[13].Should().Be("021000089");     // BPR13 receiver routing
+        el[14].Should().Be("DA");            // BPR14 receiver acct qualifier
+        el[15].Should().Be("9876543210");    // BPR15 receiver account
+        el.Should().HaveCount(17);           // BPR16 effective date present
+    }
+
+    [Fact]
+    public void Generate835_AchBpr_DoesNotPutADateInTheOriginatingCompanyIdentifier()
+    {
+        var edi = _service.Generate835ForStatement(CreateStatement(), CreateContract(), _defaultTp);
+
+        var bpr10 = edi.Split('~').First(s => s.StartsWith("BPR*")).Split('*')[10];
+
+        (bpr10.Length == 8 && bpr10.All(char.IsDigit)).Should().BeFalse(
+            "BPR10 must be the originating company identifier, not a date");
+    }
+
+    [Fact]
+    public void Generate835_CheckBpr_CarriesIssueDateInBpr16AndLeavesBankFieldsEmpty()
+    {
+        var stmt = CreateStatement();
+        stmt.CheckNumber = "CHK-12345";
+        var tp = new CapitationEraTradingPartnerInfo
+        {
+            PayerName = "CHO", PayerId = "CHO1",
+            PayerRoutingNumber = null, PayeeRoutingNumber = null
+        };
+
+        var el = _service.Generate835ForStatement(stmt, CreateContract(), tp)
+            .Split('~').First(s => s.StartsWith("BPR*")).Split('*');
+
+        el[4].Should().Be("CHK");
+        for (var i = 5; i <= 15; i++) el[i].Should().BeEmpty();
+        el.Should().HaveCount(17);
+    }
+
+    [Fact]
+    public void Generate835_BlankPayerId_ThrowsRatherThanEmittingAFabricatedIdentity()
+    {
+        var tp = new CapitationEraTradingPartnerInfo { PayerName = "CHO", PayerId = "  " };
+
+        Action act = () => _ = _service.Generate835ForStatement(CreateStatement(), CreateContract(), tp);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*PayerId*");
+    }
+
+    [Fact]
+    public void Generate835_PayerIdentity_IsConsistentAcrossBpr10Trn03AndN1Pr()
+    {
+        var segments = _service
+            .Generate835ForStatement(CreateStatement(), CreateContract(), _defaultTp)
+            .Split('~');
+
+        segments.First(s => s.StartsWith("BPR*")).Split('*')[10].Should().Be("CHO12345");
+        segments.First(s => s.StartsWith("TRN*")).Split('*')[3].Should().Be("CHO12345");
+        segments.First(s => s.StartsWith("N1*PR*")).Split('*')[4].Should().Be("CHO12345");
+    }
+
     #endregion
+
 
     #region TRN / DTM / N1 Loops
 

@@ -358,14 +358,18 @@ public class EraGeneratorServiceTests
     [Fact]
     public void Generate835_NonPayment_EmitsNoFinancialDetail()
     {
+        // A non-payment remittance carries no money, so BPR01 is "I"
+        // (remittance only) and BPR05-BPR16 are not used at all.
         var payment = CreateTestPayment();
         payment.PaymentMethod = "NON";
+        payment.TotalPaymentAmount = 0m;
+        foreach (var claimPay in payment.ClaimPayments) claimPay.PaymentAmount = 0m;
 
         var era = _generator.Generate835(payment, CreateTestTradingPartner());
 
         var bpr = era.Split('~').First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal));
 
-        Assert.Equal("BPR*I*1250.00*C*NON", bpr);
+        Assert.Equal("BPR*I*0.00*C*NON", bpr);
     }
 
     // ── Payer identity is required, never defaulted ──────────────────────

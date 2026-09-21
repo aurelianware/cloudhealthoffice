@@ -109,6 +109,19 @@ public class CapitationEraService : ICapitationEraService
         sb.Append(Seg(ref segmentCount, true, "ST*835*0001*005010X221A1~"));
 
         // ── BPR — Financial Information ──────────────────────────────────
+        // BPR10 (Originating Company Identifier), TRN03 and N1*PR all identify
+        // the payer to the provider's bank and posting system. A fabricated or
+        // blank value produces a well-formed 835 naming the wrong originator,
+        // which is worse than a failure because it is silent.
+        if (string.IsNullOrWhiteSpace(tp.PayerId))
+        {
+            throw new InvalidOperationException(
+                "Trading partner has no PayerId. PayerId is the ACH Originating " +
+                "Company Identifier and is required for BPR10, TRN03 and N1*PR " +
+                "(1000A). Supply the carrier's payer identifier before generating " +
+                "an 835.");
+        }
+
         var bprCode = statement.NetPayable > 0 ? "C" : "I";
         string bpr;
         if (tp.PayerRoutingNumber is not null && tp.PayeeRoutingNumber is not null)
