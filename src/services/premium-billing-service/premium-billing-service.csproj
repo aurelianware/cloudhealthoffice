@@ -21,7 +21,7 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="MongoDB.Driver" />
-    <PackageReference Include="Stripe.net" VersionOverride="45.15.0" />
+    <PackageReference Include="Stripe.net" VersionOverride="46.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 

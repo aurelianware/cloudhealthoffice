@@ -35,7 +35,9 @@
                           versions that build today.
       MongoDB.Driver      One project remains on 2.x; 2.x -> 3.x is a breaking
                           API change. Every other consumer is unified on 3.11.2.
-      Stripe.net          45/46/47 across three projects; major API differences.
+      Stripe.net          46 (capitation, premium-billing) and 47 (the default,
+                          used by portal and tenant-service); major API
+                          differences between them.
       Microsoft.Extensions.*  A few projects sit on 9.x/10.x against an 8.x base.
       FluentAssertions    One project on 7.x; v7 has breaking changes from v6.
       xunit.runner.visualstudio  Four test projects on 3.x, the rest on 2.x.
