@@ -37,9 +37,13 @@ kubectl create job --from=cronjob/x12-837p-upload-job test-837p -n cho-workflows
 kubectl logs -f job/test-277 -n cho-workflows
 
 # Check SFTP files
-kubectl run sftp-ls --image=alpine --rm -i --restart=Never -- sh -c "
+# Supply the SFTP password via the environment; never inline it.
+# export SSHPASS="$(kubectl get secret sftp-credentials -n cho-workflows \
+#   -o jsonpath='{.data.password}' | base64 -d)"
+kubectl run sftp-ls --image=alpine --env="SSHPASS=$SSHPASS" \
+  --rm -i --restart=Never -- sh -c "
   apk add -q sshpass openssh-client
-  sshpass -p 'sJ8p8WAsE4Es6PgMbUACErOs' sftp logicapp@sftp-service.cho-sftp.svc.cluster.local <<EOF
+  sshpass -e sftp logicapp@sftp-service.cho-sftp.svc.cluster.local <<EOF
 ls -lh upload/275/
 ls -lh upload/278/
 ls -lh upload/837/

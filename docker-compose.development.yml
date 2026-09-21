@@ -40,7 +40,7 @@
 #   PostgreSQL:                 localhost:5432
 
 x-mongo-env: &mongo-env
-  MongoDb__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+  MongoDb__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-local-dev-only}@mongodb:27017/?authSource=admin
   MongoDb__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
 
 x-common-env: &common-env
@@ -64,7 +64,7 @@ services:
       - "${MONGO_PORT:-27017}:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-securepassword123}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-local-dev-only}
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -89,7 +89,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: cho
-      POSTGRES_PASSWORD: chodevpass
+      POSTGRES_PASSWORD: local-dev-only
       POSTGRES_DB: referencedata
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -351,7 +351,7 @@ services:
       - "5016:8080"
     environment:
       <<: *common-env
-      ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=referencedata;Username=cho;Password=chodevpass
+      ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=referencedata;Username=cho;Password=local-dev-only
     depends_on:
       mongodb:
         condition: service_healthy
@@ -367,7 +367,7 @@ services:
       - "5017:8080"
     environment:
       <<: *common-env
-      PricingApi__MongoConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+      PricingApi__MongoConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-local-dev-only}@mongodb:27017/?authSource=admin
       PricingApi__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
     depends_on:
       mongodb:
@@ -479,7 +479,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: https://+:8443;http://+:8080
       ASPNETCORE_Kestrel__Certificates__Default__Path: /https/dev-cert.pfx
-      ASPNETCORE_Kestrel__Certificates__Default__Password: devpassword
+      ASPNETCORE_Kestrel__Certificates__Default__Password: local-dev-only
       AzureAd__Instance: https://login.microsoftonline.com/
       AzureAd__TenantId: common
       AzureAd__ClientId: ${AzureAd_ClientId:-54f3419d-0d69-4b06-939a-c1a260596556}
@@ -504,7 +504,7 @@ services:
       Services__CapitationService: http://capitation-service:8080/api
       Services__PricingApi: http://pricing-api:8080
       Services__BillingService: http://premium-billing-service:8080/api
-      MongoDB__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/?authSource=admin
+      MongoDB__ConnectionString: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-local-dev-only}@mongodb:27017/?authSource=admin
       MongoDB__DatabaseName: ${MONGO_DATABASE:-cloudhealthoffice}
       Redis__ConnectionString: redis:6379
     volumes:
@@ -534,7 +534,7 @@ services:
     volumes:
       - ./scripts/setup:/scripts:ro
     command: >
-      mongosh mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/${MONGO_DATABASE:-cloudhealthoffice}?authSource=admin
+      mongosh mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-local-dev-only}@mongodb:27017/${MONGO_DATABASE:-cloudhealthoffice}?authSource=admin
       /scripts/seed-demo-data.js
       --eval 'var tenantId="dev-tenant", groupNumber="GRP-DEV-2026"'
     restart: "no"
@@ -548,7 +548,7 @@ services:
     volumes:
       - ./scripts/setup:/scripts:ro
     command: >
-      mongosh mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-securepassword123}@mongodb:27017/${MONGO_DATABASE:-cloudhealthoffice}?authSource=admin
+      mongosh mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-local-dev-only}@mongodb:27017/${MONGO_DATABASE:-cloudhealthoffice}?authSource=admin
       /scripts/seed-capitation-pcp-assignments.js
       --eval 'var tenantId="dev-tenant"'
     restart: "no"

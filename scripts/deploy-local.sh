@@ -37,10 +37,10 @@ LOCAL_ENABLE_AI_CLAIMS_EXAMINER="${LOCAL_ENABLE_AI_CLAIMS_EXAMINER:-false}"
 
 # Defaults — overridden by .env.local if present
 MONGO_USER="admin"
-MONGO_PASS="localdev123"
+MONGO_PASS="local-dev-only"
 # reference-data-service runs its own in-cluster Postgres StatefulSet.
 # Local-dev default only; override via POSTGRES_PASSWORD for anything shared.
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-localdev123}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-local-dev-only}"
 STRIPE_PUBLISHABLE_KEY="pk_test_local"
 STRIPE_SECRET_KEY="sk_test_local"
 STRIPE_STARTER_PRICE_ID="price_local_starter"

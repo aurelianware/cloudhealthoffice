@@ -75,7 +75,14 @@ spec:
                 apk add --no-cache sshpass openssh-client curl jq coreutils
                 
                 # Use default if not set
-                SFTP_PASS=${SFTP_PASS:-"sJ8p8WAsE4Es6PgMbUACErOs"}
+                if [ -z "${SFTP_PASS}" ]; then
+                  echo "ERROR: SFTP_PASS is empty. It is supplied by the" >&2
+                  echo "       'sftp-credentials' Secret (key: password)." >&2
+                  echo "       Create it before running this job:" >&2
+                  echo "       kubectl create secret generic sftp-credentials \\" >&2
+                  echo "         --from-literal=password='<password>' -n <namespace>" >&2
+                  exit 1
+                fi
                 
                 echo "Step 1: Download 277 files from clearinghouse"
                 echo "=============================================="

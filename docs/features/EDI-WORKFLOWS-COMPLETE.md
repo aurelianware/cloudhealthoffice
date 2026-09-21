@@ -93,9 +93,13 @@ kubectl logs -f job/test-275-upload -n cho-workflows
 **Test**:
 ```bash
 # Create test 277 file on SFTP
-kubectl run sftp-test --image=alpine --rm -i --restart=Never -- sh -c "
+# Supply the SFTP password via the environment; never inline it.
+# export SSHPASS="$(kubectl get secret sftp-credentials -n cho-workflows \
+#   -o jsonpath='{.data.password}' | base64 -d)"
+kubectl run sftp-test --image=alpine --env="SSHPASS=$SSHPASS" \
+  --rm -i --restart=Never -- sh -c "
   apk add -q sshpass openssh-client
-  sshpass -p 'sJ8p8WAsE4Es6PgMbUACErOs' sftp logicapp@sftp-service.cho-sftp.svc.cluster.local <<EOF
+  sshpass -e sftp logicapp@sftp-service.cho-sftp.svc.cluster.local <<EOF
 cd download
 -mkdir 277
 cd 277
@@ -325,9 +329,13 @@ kubectl patch cronjob x12-277-download-job -n cho-workflows -p '{"spec":{"suspen
 
 ```bash
 # Count processed files
-kubectl run sftp-count --image=alpine --rm -i --restart=Never -- sh -c "
+# Supply the SFTP password via the environment; never inline it.
+# export SSHPASS="$(kubectl get secret sftp-credentials -n cho-workflows \
+#   -o jsonpath='{.data.password}' | base64 -d)"
+kubectl run sftp-count --image=alpine --env="SSHPASS=$SSHPASS" \
+  --rm -i --restart=Never -- sh -c "
   apk add -q sshpass openssh-client
-  sshpass -p 'sJ8p8WAsE4Es6PgMbUACErOs' sftp logicapp@sftp-service.cho-sftp.svc.cluster.local <<'EOF'
+  sshpass -e sftp logicapp@sftp-service.cho-sftp.svc.cluster.local <<'EOF'
 ls -l upload/275/ | wc -l
 ls -l upload/278/ | wc -l
 ls -l upload/837/ | wc -l

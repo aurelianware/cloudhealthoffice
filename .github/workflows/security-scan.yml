@@ -170,7 +170,22 @@ jobs:
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
 
-      - name: Run gitleaks
+      # Prove the scanner can actually fail before trusting that it passed.
+      # .gitleaks.toml previously declared an allowlist but no rules, so
+      # gitleaks ran with zero detectors and this job passed unconditionally.
+      - name: Verify gitleaks rules are active
+        run: ./scripts/ci/verify-gitleaks-rules.sh
+
+      # Gate on the current tree first. This is the check that must never be
+      # weakened: nothing secret may be present at HEAD.
+      - name: Run gitleaks against the working tree
+        run: gitleaks detect --redact --verbose --no-banner --exit-code 1 --no-git --source .
+
+      # Then the full history. Known historical leaks are acknowledged by
+      # fingerprint in .gitleaksignore, each one recorded in
+      # docs/security/CREDENTIAL-ROTATION.md and treated as compromised.
+      # History is deliberately not rewritten.
+      - name: Run gitleaks against full history
         run: gitleaks detect --redact --verbose --no-banner --exit-code 1 --source .
 
   security-summary:
