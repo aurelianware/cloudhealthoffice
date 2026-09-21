@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using PaymentService.Models;
 using PaymentService.Services;
@@ -248,5 +250,83 @@ public class BatchEraGeneratorServiceTests
     {
         Assert.Throws<ArgumentNullException>(() =>
             _generator.GenerateBatch(Array.Empty<EraPaymentInput>(), null!));
+    }
+
+    // ── BPR element positions (005010X221A1) ─────────────────────────────
+    // BatchEraGeneratorService is the production path: PaymentRunService and
+    // ReversalRunService both generate through GenerateBatch, not through
+    // EraGeneratorService.Generate835. These assertions pin each BPR element
+    // to its specified position so a shift cannot reach live 835s unnoticed.
+
+    [Fact]
+    public void GenerateBatch_AchBpr_PlacesEveryElementAtItsSpecifiedPosition()
+    {
+        var inputs = new[] { new EraPaymentInput { TradingPartnerId = "TP-A", Payment = Pay("0001", "c1", 500m) } };
+        var partners = new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = TpAch("A") };
+
+        var envelope = Assert.Single(_generator.GenerateBatch(inputs, partners));
+        var el = envelope.EdiContent.Split('~')
+            .First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal)).Split('*');
+
+        Assert.Equal("C", el[1]);              // BPR01 transaction handling
+        Assert.Equal("500.00", el[2]);         // BPR02 amount
+        Assert.Equal("C", el[3]);              // BPR03 credit
+        Assert.Equal("ACH", el[4]);            // BPR04 payment method
+        Assert.Equal("CCP", el[5]);            // BPR05 payment format
+        Assert.Equal("01", el[6]);             // BPR06 sender DFI qualifier
+        Assert.Equal("021000021", el[7]);      // BPR07 sender routing
+        Assert.Equal("DA", el[8]);             // BPR08 sender acct qualifier
+        Assert.Equal("111", el[9]);            // BPR09 sender account
+        Assert.Equal("BCBS001", el[10]);       // BPR10 originating company id
+        Assert.Equal(string.Empty, el[11]);    // BPR11 not used
+        Assert.Equal("01", el[12]);            // BPR12 receiver DFI qualifier
+        Assert.Equal("021000089", el[13]);     // BPR13 receiver routing
+        Assert.Equal("DA", el[14]);            // BPR14 receiver acct qualifier
+        Assert.Equal("222", el[15]);           // BPR15 receiver account
+        Assert.Equal("20260501", el[16]);      // BPR16 EFT effective date
+        Assert.Equal(17, el.Length);
+    }
+
+    [Fact]
+    public void GenerateBatch_AchBpr_DoesNotPutADateInTheOriginatingCompanyIdentifier()
+    {
+        var inputs = new[] { new EraPaymentInput { TradingPartnerId = "TP-A", Payment = Pay("0001", "c1", 500m) } };
+        var partners = new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = TpAch("A") };
+
+        var envelope = Assert.Single(_generator.GenerateBatch(inputs, partners));
+        var bpr10 = envelope.EdiContent.Split('~')
+            .First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal)).Split('*')[10];
+
+        Assert.False(
+            bpr10.Length == 8 && bpr10.All(char.IsDigit),
+            $"BPR10 must be the originating company identifier, not a date. Got '{bpr10}'.");
+    }
+
+    [Fact]
+    public void GenerateBatch_PayerIdentity_IsConsistentAcrossBpr10Trn03AndN1Pr()
+    {
+        var inputs = new[] { new EraPaymentInput { TradingPartnerId = "TP-A", Payment = Pay("0001", "c1", 500m) } };
+        var partners = new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = TpAch("A") };
+
+        var segments = Assert.Single(_generator.GenerateBatch(inputs, partners)).EdiContent.Split('~');
+
+        Assert.Equal("BCBS001",
+            segments.First(s => s.StartsWith("BPR*", StringComparison.Ordinal)).Split('*')[10]);
+        Assert.Equal("BCBS001",
+            segments.First(s => s.StartsWith("TRN*", StringComparison.Ordinal)).Split('*')[3]);
+        Assert.Equal("BCBS001",
+            segments.First(s => s.StartsWith("N1*PR*", StringComparison.Ordinal)).Split('*')[4]);
+    }
+
+    [Fact]
+    public void GenerateBatch_MissingPayerId_ThrowsRatherThanEmittingAPlaceholder()
+    {
+        var inputs = new[] { new EraPaymentInput { TradingPartnerId = "TP-A", Payment = Pay("0001", "c1", 500m, payerId: null) } };
+        var partners = new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = TpAch("A") };
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => _generator.GenerateBatch(inputs, partners));
+
+        Assert.Contains("PayerId", ex.Message, StringComparison.Ordinal);
     }
 }

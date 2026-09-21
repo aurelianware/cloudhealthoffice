@@ -107,7 +107,7 @@ public class EraGeneratorService : IEraGeneratorService
         //   D = Payment/remittance info sent separately
         //   I = Remittance information only (zero-pay ERA)
         var bprCode = payment.TotalPaymentAmount > 0 ? "C" : "I";
-        // BPR06: Payment method code  CHK=check, ACH=EFT, NON=non-payment
+        // BPR04: Payment method code  CHK=check, ACH=EFT, NON=non-payment
         var payMethod = payment.PaymentMethod switch
         {
             "CHK" => "CHK",
@@ -115,33 +115,62 @@ public class EraGeneratorService : IEraGeneratorService
             _     => "NON"
         };
 
+        // BPR10 (Originating Company Identifier) and TRN03 (Originating
+        // Company Identifier) both identify the payer to the provider's bank
+        // and posting system. There is no safe default: a placeholder here
+        // produces an 835 that names the wrong originator, which trading
+        // partners either reject or mis-post. Fail loudly instead.
+        if (string.IsNullOrWhiteSpace(payment.PayerId))
+        {
+            throw new InvalidOperationException(
+                $"Payment {payment.Id} has no PayerId. PayerId is the ACH Originating " +
+                "Company Identifier and is required for BPR10, TRN03 and N1*PR (1000A). " +
+                "Configure the payer identifier for this carrier before generating an 835.");
+        }
+
         string bpr;
         if (payMethod == "ACH" && tp.PayerRoutingNumber is not null)
         {
-            // Full ACH EFT detail (BPR04-BPR16)
+            // Full ACH EFT detail. Element positions per 005010X221A1:
+            //   BPR05 CCP  payment format          BPR11 (not used)
+            //   BPR06 01   sender DFI qualifier    BPR12 01  receiver DFI qualifier
+            //   BPR07      sender DFI (routing)    BPR13     receiver DFI (routing)
+            //   BPR08 DA   sender acct qualifier   BPR14 DA  receiver acct qualifier
+            //   BPR09      sender account          BPR15     receiver account
+            //   BPR10      originating company id  BPR16     EFT effective date
             bpr = $"BPR*{bprCode}*{payment.TotalPaymentAmount:F2}*C*ACH" +
                   $"*CCP*01*{tp.PayerRoutingNumber}*DA*{tp.PayerAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(payment.PaymentDate)}" +
+                  $"*{payment.PayerId}*" +
                   $"*01*{tp.PayeeRoutingNumber ?? string.Empty}*DA*{tp.PayeeAccountNumber ?? string.Empty}" +
                   $"*{FormatDate(payment.PaymentDate)}~";
         }
         else if (payMethod == "CHK")
         {
+            // BPR05-BPR15 are not used for a check; BPR16 carries the issue date.
             bpr = $"BPR*{bprCode}*{payment.TotalPaymentAmount:F2}*C*CHK" +
-                  $"****{FormatDate(payment.PaymentDate)}~";
+                  $"************{FormatDate(payment.PaymentDate)}~";
         }
         else
         {
-            // NON — remittance only
-            bpr = $"BPR*{bprCode}*{payment.TotalPaymentAmount:F2}*C*NON" +
-                  $"****{FormatDate(payment.PaymentDate)}~";
+            // NON — remittance only, no funds move, so no financial detail.
+            bpr = $"BPR*{bprCode}*{payment.TotalPaymentAmount:F2}*C*NON~";
         }
         sb.Append(Seg(ref segmentCount, true, bpr));
 
         // ── TRN — Reassociation Trace Number ────────────────────────────
-        // TRN01=1 (check/eft), TRN02=check/EFT number, TRN03=payer ID
+        // TRN01=1 (current transaction trace), TRN02=check/EFT number,
+        // TRN03=originating company identifier. Per CAQH CORE 370, TRN02 is
+        // what the provider matches against the CCD+ addenda to reassociate
+        // the deposit with this remittance, so it must be the real trace.
+        if (string.IsNullOrWhiteSpace(payment.CheckNumber))
+        {
+            throw new InvalidOperationException(
+                $"Payment {payment.Id} has no CheckNumber. TRN02 is the reassociation " +
+                "trace number and cannot be empty.");
+        }
+
         sb.Append(Seg(ref segmentCount, true,
-            $"TRN*1*{payment.CheckNumber}*{payment.PayerId ?? "1999999999"}~"));
+            $"TRN*1*{payment.CheckNumber}*{payment.PayerId}~"));
 
         // ── DTM — Production Date ────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
@@ -149,7 +178,7 @@ public class EraGeneratorService : IEraGeneratorService
 
         // ── 1000A — Payer Identification ────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
-            $"N1*PR*{Esc(payment.PayerName)}*XV*{payment.PayerId ?? "UNASSIGNED"}~"));
+            $"N1*PR*{Esc(payment.PayerName)}*XV*{payment.PayerId}~"));
 
         // ── 1000B — Payee Identification ────────────────────────────────
         // NM109 qualifier: XX=NPI
