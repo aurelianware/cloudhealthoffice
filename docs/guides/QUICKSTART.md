@@ -311,14 +311,17 @@ Use the console to review:
 These are current, reproduced on a clean clone, and do not affect the Million
 Claim Challenge:
 
-- **`fhir-service` and `smart-auth-service` do not become ready.**
-  `fhir-service` runs SMART trust in `Demo` mode and resolves its trusted issuer
-  from `SmartAuth:Issuer`, which defaults to the public
-  `https://auth.cloudhealthoffice.com` rather than the in-cluster
+- **`fhir-service` does not become ready.** It runs SMART trust in `Demo` mode
+  and resolves its trusted issuer from `SmartAuth:Issuer`, which defaults to the
+  public `https://auth.cloudhealthoffice.com` rather than the in-cluster
   `smart-auth-service`. Its readiness probe reports
   `No trusted issuer has usable signing keys` and it stays `0/1`. The
-  adjudication pipeline, portal and MCC are unaffected; the FHIR/CMS-0057-F
+  adjudication pipeline, portal and MCC are unaffected, but the FHIR/CMS-0057-F
   surfaces are not exercisable from a default local deploy.
+
+  `smart-auth-service` itself is **fixed** by this change and reaches `1/1`;
+  it previously failed for a different reason (the database-name casing
+  conflict) and is no longer a known issue.
 
 - **`idcard-service — manifest has no Kubernetes objects`** is harmless noise.
   `src/services/idcard-service/k8s/idcard-service-deployment.yaml` is an alias
