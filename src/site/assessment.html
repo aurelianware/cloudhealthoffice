@@ -91,492 +91,221 @@
     <div class="container-narrow">
       <article class="assessment-section">
         <h1>Cloud Health Office Platform Assessment</h1>
-<div style="text-align: center; padding: 20px 0;">
-  <em>Just emerged from the void</em>
+<div style="text-align:center; padding:12px 0 24px;">
+  <em>A capability assessment of the Cloud Health Office platform &mdash; September 2026</em>
+</div>
+
+<div style="border-left:3px solid #00ffff; padding:14px 18px; margin:0 0 28px; background:rgba(0,255,255,0.04);">
+  <p style="margin:0 0 8px;"><strong>How to read this page.</strong> Every capability below is labelled <strong>Available today</strong> or <strong>On the roadmap</strong>. "Available today" means the code exists, is exercised by tests or by the published benchmark, and can be inspected in the public repository. "On the roadmap" means designed, partially built, or deliberately left as engagement work &mdash; not shipping.</p>
+  <p style="margin:0;">Where this page and <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a> differ, POSITIONING.md is the source of truth. Where either differs from the code, the code is.</p>
 </div>
 
 <hr>
 <h2>Executive Summary</h2>
-<p>Cloud Health Office represents the inevitable evolution of healthcare payer EDI integration. This assessment examines why traditional EDI platforms fail, how Cloud Health Office solves these systemic problems, and why resistance to adoption is futile.</p>
-<p><strong>Key Finding:</strong> Manual EDI processing is now optional. The transformation begins today.</p>
+<p>Cloud Health Office is a source-available, Kubernetes-native claims administration platform for healthcare payers. It is built around a working adjudication pipeline &mdash; not a roadmap for one &mdash; and it publishes reproducible benchmark evidence for that pipeline against a one-million-claim corpus.</p>
+<p>What makes it worth evaluating is narrow and specific: the adjudication path is real and staged, the calculation engines behind it are substantial code rather than wrappers, the CMS-0057-F FHIR surfaces are implemented, and the whole thing can be re-run from a clean clone by someone who does not work here.</p>
+<p><strong>What it is not, today:</strong> there is no production reference customer, no uptime SLA, no security certification, and no shipped connector to a legacy core administration system. Those are stated plainly below rather than left for you to discover.</p>
+
 <hr>
-<!-- ===== PRODUCT LINE CONTEXT (W3.2) ===== -->
 <h2>Product Line Context</h2>
-<p>This assessment evaluates Cloud Health Office (CHO) as a four-product-line portfolio, not a single product. Sophisticated readers &mdash; analysts, evaluators, technical buyers &mdash; need that portfolio context before the architectural and competitive analysis below makes sense.</p>
-<p>CHO ships four complementary product lines: <strong>Public Tools</strong> (free utilities &mdash; fee schedule lookup, free-tier repricing), <strong>Transactional Services</strong> (per-call APIs &mdash; Claims Repricing, Pricing), <strong>Managed Data Services</strong> (subscription data services &mdash; state Medicaid updates, CMS fee schedule updates, provider verification, terminology), and <strong>Platform Engagement</strong> (per member per month (PMPM) payer-scale relationships across three layers: <strong>Layer 1 &mdash; Compliance Accelerator</strong>, <strong>Layer 2 &mdash; Progressive Modernization</strong>, <strong>Layer 3 &mdash; Full CAPS Platform</strong>).</p>
-<p>The assessment that follows examines the platform infrastructure that powers all four. The competitive comparisons primarily contrast Platform Engagement against legacy core admin platforms (HealthEdge, QNXT, Facets); the developer-experience comparisons primarily reflect Transactional Services; the data-coverage comparisons reflect Managed Data Services. Read each section against the relevant product line.</p>
+<p>Cloud Health Office is a four-product-line portfolio, not a single product. Customers enter at any line and expand.</p>
+<ul>
+<li><strong>Public Tools</strong> &mdash; free utilities (fee schedule lookup, free-tier claims repricing).</li>
+<li><strong>Transactional Services</strong> &mdash; per-call APIs (Claims Repricing, Pricing API).</li>
+<li><strong>Managed Data Services</strong> &mdash; subscriptions for data that changes constantly (state Medicaid compliance updates, CMS fee schedule updates, provider verification, terminology).</li>
+<li><strong>Platform Engagement</strong> &mdash; payer-scale relationships priced per member per month, across three layers: <strong>Layer 1 &mdash; Compliance Accelerator</strong>, <strong>Layer 2 &mdash; Progressive Modernization</strong>, <strong>Layer 3 &mdash; Full CAPS Platform</strong>.</li>
+</ul>
 <p style="font-size:0.95rem; color:#888;"><a href="/pricing" style="color:#00ffff;">See full pricing &rarr;</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Canonical positioning (POSITIONING.md) &rarr;</a></p>
-<hr>
-<h2>The Problem: Legacy EDI Integration in 2025</h2>
-<h3>Traditional Approach Failures</h3>
-<p><strong>Timeline Catastrophe:</strong></p>
-<ul>
-<li>6–18 months deployment cycles</li>
-<li>$500k–$2M implementation costs</li>
-<li>Custom code per payer</li>
-<li>Single-tenant architectural silos</li>
-</ul>
-<p><strong>Security Theatre:</strong></p>
-<ul>
-<li>Public endpoints exposing sensitive data</li>
-<li>Shared secrets across environments</li>
-<li>No audit trails for PHI access</li>
-<li>Compliance is afterthought, not foundation</li>
-</ul>
-<p><strong>Technical Debt Accumulation:</strong></p>
-<ul>
-<li>Proprietary vendor lock-in</li>
-<li>Unmaintainable custom integrations</li>
-<li>No multi-payer support</li>
-<li>Manual intervention required for every transaction type</li>
-</ul>
-<p><strong>Outcome:</strong> Payers remain trapped in 1990s technology while shouldering 21st-century costs.</p>
-<hr>
-<h2>The Solution: Cloud Health Office Sentinel</h2>
-<h3>Core Architecture</h3>
-<p>Cloud Health Office deploys HIPAA-oriented EDI infrastructure through a focused, configuration-first pilot path.</p>
-<p><strong>Azure-Native Foundation:</strong></p>
-<ul>
-<li>Argo Workflows on AKS for Kubernetes-native workflow orchestration</li>
-<li>Service Bus for event-driven architecture</li>
-<li>Data Lake Gen2 for hierarchical storage</li>
-<li>Container-based microservices for X12 processing</li>
-<li>Key Vault Premium with HSM-backed keys</li>
-</ul>
-<p><strong>Multi-Payer by Design:</strong></p>
-<ul>
-<li>Unlimited payer tenant support</li>
-<li>Complete logical isolation per tenant</li>
-<li>Shared infrastructure, zero shared secrets</li>
-<li>Configuration-driven onboarding</li>
-</ul>
-<h3>Capabilities Beyond Question</h3>
-<h4>1. Real-Time Prior Authorization (278)</h4>
-<p><strong>Before Cloud Health Office:</strong></p>
-<ul>
-<li>12-day average turnaround</li>
-<li>Manual faxing and phone calls</li>
-<li>Zero visibility into status</li>
-<li>No automated correlation with backend systems</li>
-</ul>
-<p><strong>After Cloud Health Office:</strong></p>
-<ul>
-<li>Sub-2-minute processing</li>
-<li>Automated claims adjudication systems/HealthEdge correlation</li>
-<li>Complete audit trail</li>
-<li>Automated workflow routing</li>
-</ul>
-<p><strong>ROI:</strong> 60-80% staff time reclamation</p>
-<h4>2. Claims Processing (837)</h4>
-<p><strong>Supported Transaction Types:</strong></p>
-<ul>
-<li>837P (Professional)</li>
-<li>837I (Institutional)</li>
-<li>837D (Dental)</li>
-</ul>
-<p><strong>Capabilities:</strong></p>
-<ul>
-<li>Automated validation via X12 schemas</li>
-<li>Real-time status updates</li>
-<li>Deterministic replay for failed transactions</li>
-<li>PHI-redacted Application Insights logging</li>
-</ul>
-<h4>3. Eligibility Verification (270/271)</h4>
-<p><strong>Integration Points:</strong></p>
-<ul>
-<li>Clearinghouse, Change Healthcare, Optum 360, Inovalon</li>
-<li>Direct payer connectivity</li>
-<li>Backend system correlation (claims adjudication systems such as HealthEdge)</li>
-</ul>
-<p><strong>Performance:</strong></p>
-<ul>
-<li>Sub-second response times</li>
-<li>99.9% uptime SLA target</li>
-<li>Automated retry with exponential backoff</li>
-</ul>
-<h4>4. Claim Status</h4>
-<p><strong>X215 Authorization Inquiry:</strong></p>
-<ul>
-<li>Real-time authorization status</li>
-<li>Historical lookup capabilities</li>
-<li>NCPDP and HIPAA format support</li>
-</ul>
-<p><strong>X217 Authorization Request:</strong></p>
-<ul>
-<li>Prior authorization submission</li>
-<li>Automated follow-up</li>
-<li>Status tracking and notifications</li>
-</ul>
-<h4>5. Appeals Integration</h4>
-<p><strong>Automated Workflow:</strong></p>
-<ul>
-<li>277 RFAI (Request for Additional Information) generation</li>
-<li>275 Attachment processing</li>
-<li>Deadline tracking and notifications</li>
-<li>Complete audit trail for regulatory compliance</li>
-</ul>
-<hr>
-<h2>Security That Actually Passes Audits</h2>
-<h3>HIPAA Technical Safeguards Implementation</h3>
-<p><strong>Private Endpoints Everywhere:</strong></p>
-<ul>
-<li>No public IP addresses exposed</li>
-<li>All traffic flows through private networks</li>
-<li>Azure Private Link for all PaaS services</li>
-</ul>
-<p><strong>Encryption Standards:</strong></p>
-<ul>
-<li>TLS 1.3 for data in transit</li>
-<li>AES-256 for data at rest</li>
-<li>HSM-backed Key Vault for key management</li>
-<li>Soft-delete + purge protection enabled</li>
-</ul>
-<p><strong>Access Control:</strong></p>
-<ul>
-<li>Managed identities only—no secrets in code</li>
-<li>Azure RBAC with least-privilege principle</li>
-<li>Conditional Access policies enforced</li>
-<li>Multi-factor authentication required</li>
-</ul>
-<p><strong>Audit &amp; Monitoring:</strong></p>
-<ul>
-<li>DCR-based PHI redaction in Application Insights</li>
-<li>Immutability policies for audit logs</li>
-<li>7-year retention minimum</li>
-<li>Real-time security alerts</li>
-</ul>
-<p><strong>Compliance Matrix:</strong> See <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/HIPAA-COMPLIANCE-MATRIX.md">HIPAA Compliance Matrix</a> for complete technical safeguards documentation.</p>
-<hr>
-<h2>Deployment: From Compliance Pilot to Platform Engagement</h2>
-<h3>Onboarding Process</h3>
-<pre><code class="language-bash"># Step 1: Run onboarding wizard (5 minutes)
-node dist/scripts/cli/payer-onboarding-wizard.js
 
-# Step 2: Generate infrastructure and workflows (10 minutes)
-node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json
+<hr>
+<h2>Available Today</h2>
 
-# Step 3: Deploy to Azure (25 minutes)
-cd generated/your-payer/infrastructure &amp;&amp; ./deploy.sh
+<h3>Claims adjudication pipeline</h3>
+<p>A staged, event-driven adjudication orchestrator running eight registered stages: structural scrubbing, provider integrity, network and credentialing, benefit calculation, NCCI/MUE edits, coordination of benefits, AI examination, and persistence. Each stage can short-circuit, the pipeline is idempotent and tenant-pinned, and degraded-mode handling is explicit rather than implicit.</p>
+<p>This is the path the Million Claim Challenge exercises end to end.</p>
 
-# Step 4: Configure trading partners (10 minutes)
-./configure-hipaa-trading-partners.ps1
+<h3>Adjudication engines</h3>
+<p>The engines are first-class code, unit-tested, and invoked by the pipeline rather than sitting beside it:</p>
+<ul>
+<li><strong>Benefit Engine</strong> &mdash; cost share, accumulators, plan resolution.</li>
+<li><strong>NCCI/MUE Engine</strong> &mdash; procedure-to-procedure and medically-unlikely edits, with per-tenant enforcement modes (pend, deny, soft validation).</li>
+<li><strong>Claims Scrub Engine</strong> &mdash; structural validation with 277CA-aligned rejects.</li>
+<li><strong>Fee Schedule Engine</strong> &mdash; Medicare RBRVS, OPPS APC, and MS-DRG pricing.</li>
+<li><strong>Coordination of Benefits Engine</strong> &mdash; primary-payer adjudication and secondary detection.</li>
+<li><strong>Prior Auth Rule Engine</strong>, <strong>Risk Adjustment Engine</strong>, <strong>Encounter Engine</strong>, <strong>Provider Verification Engine</strong>.</li>
+</ul>
 
-# Total: ~50 minutes
-</code></pre>
-<p><strong>What Gets Deployed:</strong></p>
+<h3>X12 transaction intake</h3>
+<p>Real tokenizer, parser and mapper implementations &mdash; not schema validation alone:</p>
 <ul>
-<li>Complete Azure infrastructure (Bicep)</li>
-<li>All Argo workflow templates with X12 processing</li>
-<li>Trading partner configurations and schemas</li>
-<li>Service Bus topics and subscriptions</li>
-<li>Data Lake storage with hierarchical namespace</li>
-<li>Key Vault with HSM-backed keys</li>
-<li>Application Insights with PHI redaction</li>
-<li>Private endpoints for all services</li>
+<li><strong>837P / 837I / 837D</strong> &mdash; professional, institutional and dental claims.</li>
+<li><strong>834</strong> &mdash; enrollment, with plan-code mapping.</li>
+<li><strong>270 / 271</strong> &mdash; eligibility request and response.</li>
 </ul>
-<p><strong>Configuration Required:</strong></p>
-<ul>
-<li>Payer details (name, ID, backend system)</li>
-<li>Clearinghouse credentials (Clearinghouse, etc.)</li>
-<li>Backend API endpoints (claims adjudication systems such as HealthEdge)</li>
-<li>Trading partner agreements</li>
-</ul>
-<p><strong>No Custom Code Required:</strong> Entire deployment is configuration-driven.</p>
+<p><strong>835 (remittance advice) is generated today</strong> &mdash; real X12 005010X221A1 ERA output with BPR, CLP and SVC segment construction, single and batch. Inbound 835 <em>parsing</em> is not implemented; remittance that arrives from a clearinghouse is consumed through the gateway integration in normalised form rather than parsed from raw X12 here.</p>
+<p>X12 276/277 (claim status) and 278 (prior authorization) are <strong>on the roadmap</strong> as X12 transactions. Prior authorization is available today through FHIR PAS instead &mdash; see below.</p>
+
+<h3>FHIR R4 and CMS-0057-F surfaces</h3>
+<p>Implemented API surfaces with SMART-on-FHIR scope enforcement: Prior Authorization Support (PAS), Coverage Requirements Discovery (CRD), Documentation Templates and Rules (DTR), Bulk Export, Patient Access, Provider Directory, and Payer-to-Payer exchange.</p>
+<p>These are technical readiness surfaces. Production compliance additionally requires your source-system integration, configuration, and your own legal and compliance review. We do not claim certified compliance &mdash; see <a href="#compliance">Regulatory posture</a>.</p>
+
+<h3>AI claims examiner (advisory)</h3>
+<p>A real asynchronous pipeline: claims pended for NCCI modifier review publish to Kafka, a typed model client produces a recommendation, and an advisory result is written back. <strong>Default mode is advisory only, with no payment effect.</strong> It is decision support, not autonomous adjudication.</p>
+
+<h3>Operator portal</h3>
+<p>A Blazor operations console covering claims search and detail, mass adjudication run summaries with claim-level drilldown, work queues, eligibility and enrollment, authorizations, provider and member views, and benefit plans. Lifecycle timing, payment evidence and unsupported-scenario filters are inspectable per run.</p>
+
+<h3>Payments and revenue cycle</h3>
+<p>Capitation, premium billing, accounts receivable and payment services, including Stripe Connect disbursement and NACHA credit file generation. These are implemented services with test coverage, not integration placeholders.</p>
+
 <hr>
-<h2>Comparative Analysis: Market Positioning</h2>
-<h3>Market Landscape</h3>
-<p><strong>Traditional Vendors (Declining):</strong></p>
-<ul>
-<li>Proprietary systems with vendor lock-in</li>
-<li>Multi-year implementation timelines</li>
-<li>Limited multi-payer support</li>
-<li>Legacy security models</li>
-</ul>
-<p><strong>Cloud Health Office (Inevitable Evolution):</strong></p>
-<ul>
-<li>Source-available, BSL 1.1 licensed</li>
-<li>Sub-1-hour deployment</li>
-<li>Self-service onboarding and configuration</li>
-<li>Unlimited multi-payer support</li>
-<li>Security-first architecture</li>
-</ul>
-<p><strong>Positioning:</strong> Cloud Health Office is a source-available, Kubernetes-native compliance and modernization layer for payer core admin systems.</p>
-<p><strong>Market Trajectory:</strong> Source-available, cloud-native solutions will dominate by 2027. Resistance is futile.</p>
-<hr>
-<h2>Economic Impact</h2>
-<h3>Total Cost of Ownership (5-Year Projection)</h3>
-<p><strong>Traditional EDI Platform:</strong></p>
-<ul>
-<li>Initial implementation: $1.5M</li>
-<li>Annual licensing: $250k × 5 = $1.25M</li>
-<li>Professional services: $500k over 5 years</li>
-<li>Infrastructure: $200k/year × 5 = $1M</li>
-<li><strong>Total:</strong> $4.25M</li>
-</ul>
-<p><strong>Cloud Health Office:</strong></p>
-<ul>
-<li>Initial implementation: $0 (non-production use)</li>
-<li>Azure infrastructure: $150k/year × 5 = $750k</li>
-<li>Implementation: Configuration-driven (partner services available)</li>
-<li>Licensing: free for non-production (BSL 1.1)</li>
-<li><strong>Total:</strong> $750k</li>
-</ul>
-<p><strong>Savings:</strong> pilot-scoped commercial model with lower migration risk</p>
-<h3>Operational Efficiency Gains</h3>
-<p><strong>Staff Time Reclamation:</strong></p>
-<ul>
-<li>Prior authorization processing: 60-80% reduction</li>
-<li>Claims status inquiry: 90% reduction</li>
-<li>Manual faxing/phone calls: 100% elimination</li>
-<li>Error remediation: 70% reduction</li>
-</ul>
-<p><strong>Processing Time Improvements:</strong></p>
-<ul>
-<li>Prior authorization: 12 days → &lt;2 minutes (99.86% faster)</li>
-<li>Claims status: 24 hours → &lt;5 seconds (99.99% faster)</li>
-<li>Eligibility verification: 15 minutes → &lt;1 second (99.89% faster)</li>
-</ul>
-<p><strong>Error Rate Reduction:</strong></p>
-<ul>
-<li>X12 validation errors: 95% reduction</li>
-<li>Manual data entry errors: 100% elimination</li>
-<li>Trading partner agreement violations: 99% reduction</li>
-</ul>
-<hr>
-<h2>Risk Assessment</h2>
-<h3>Implementation Risks</h3>
-<p><strong>Low Risk Factors:</strong></p>
-<ul>
-<li>Mature Azure platform</li>
-<li>Battle-tested Argo Workflows runtime on Kubernetes</li>
-<li>Standard X12 transaction sets</li>
-<li>Proven deployment automation</li>
-</ul>
-<p><strong>Mitigation Strategies:</strong></p>
-<ul>
-<li>Comprehensive test plan included</li>
-<li>Deterministic replay for failed transactions</li>
-<li>Complete audit trail for troubleshooting</li>
-<li>Active community support (GitHub)</li>
-</ul>
-<h3>Security Risks</h3>
-<p><strong>Threat Model:</strong></p>
-<ul>
-<li>Unauthorized PHI access: <strong>Mitigated</strong> via private endpoints + RBAC</li>
-<li>Data exfiltration: <strong>Mitigated</strong> via network isolation + DLP</li>
-<li>Compliance violations: <strong>Mitigated</strong> via immutable audit logs + 7-year retention</li>
-<li>Service disruption: <strong>Mitigated</strong> via Azure 99.9% SLA + geo-redundancy</li>
-</ul>
-<p><strong>Residual Risk:</strong> Negligible</p>
-<hr>
-<h2>Competitive Advantages</h2>
-<h3>Technical Superiority</h3>
-<ol>
-<li><p><strong>Configuration-First Deployment</strong></p>
-<ul>
-<li>Configuration-driven architecture</li>
-<li>Complete automation via CLI wizard</li>
-<li>No programming expertise required</li>
-</ul>
-</li>
-<li><p><strong>Multi-Payer Scale</strong></p>
-<ul>
-<li>Tenant-aware routing and data-access patterns</li>
-<li>Logical-isolation controls that require deployment validation</li>
-<li>Shared or dedicated infrastructure options</li>
-</ul>
-</li>
-<li><p><strong>Backend Agnostic</strong></p>
-<ul>
-<li>claims adjudication systems such as HealthEdge support</li>
-<li>REST API integration</li>
-<li>Extensible for additional backends</li>
-</ul>
-</li>
-<li><p><strong>Security First</strong></p>
-<ul>
-<li>HIPAA-oriented technical safeguard patterns</li>
-<li>Private-endpoint deployment options</li>
-<li>HSM-backed key-management options</li>
-</ul>
-</li>
-<li><p><strong>Source Transparency</strong></p>
-<ul>
-<li>BSL 1.1 license</li>
-<li>Complete codebase visibility</li>
-<li>No vendor lock-in</li>
-</ul>
-</li>
-</ol>
-<h3>Strategic Advantages</h3>
-<ol>
-<li><p><strong>Time to Market</strong></p>
-<ul>
-<li>Deploy a focused compliance pilot in weeks, not months</li>
-<li>Immediate ROI realization</li>
-<li>Rapid multi-payer expansion</li>
-</ul>
-</li>
-<li><p><strong>Cost Structure</strong></p>
-<ul>
-<li>Pilot-scoped PMPM commercial model</li>
-<li>Zero licensing fees</li>
-<li>Pay-for-consumption Azure model</li>
-</ul>
-</li>
-<li><p><strong>Community Support</strong></p>
-<ul>
-<li>GitHub issue tracking</li>
-<li>Active development community</li>
-<li>Transparent roadmap</li>
-</ul>
-</li>
-<li><p><strong>Innovation Velocity</strong></p>
-<ul>
-<li>Continuous delivery pipeline</li>
-<li>Feature additions without disruption</li>
-<li>Configuration updates without redeployment</li>
-</ul>
-</li>
-</ol>
-<hr>
-<h2>Adoption Roadmap</h2>
-<h3>Phase 1: Foundation (Weeks 1-2)</h3>
-<ul>
-<li><input disabled="" type="checkbox"> Azure subscription setup</li>
-<li><input disabled="" type="checkbox"> GitHub repository access</li>
-<li><input disabled="" type="checkbox"> Initial payer configuration</li>
-<li><input disabled="" type="checkbox"> Test environment deployment</li>
-<li><input disabled="" type="checkbox"> Trading partner agreements review</li>
-</ul>
-<h3>Phase 2: Pilot Deployment (Weeks 3-4)</h3>
-<ul>
-<li><input disabled="" type="checkbox"> Production infrastructure deployment</li>
-<li><input disabled="" type="checkbox"> Integration Account configuration</li>
-<li><input disabled="" type="checkbox"> Backend API integration (claims adjudication systems/HealthEdge)</li>
-<li><input disabled="" type="checkbox"> Clearinghouse credentials setup (Clearinghouse, etc.)</li>
-<li><input disabled="" type="checkbox"> End-to-end testing</li>
-</ul>
-<h3>Phase 3: Production Launch (Week 5)</h3>
-<ul>
-<li><input disabled="" type="checkbox"> Production traffic cutover</li>
-<li><input disabled="" type="checkbox"> Monitoring and alerting validation</li>
-<li><input disabled="" type="checkbox"> Backup and disaster recovery testing</li>
-<li><input disabled="" type="checkbox"> Staff training and documentation</li>
-</ul>
-<h3>Phase 4: Scale &amp; Optimize (Week 6+)</h3>
-<ul>
-<li><input disabled="" type="checkbox"> Additional payer tenant onboarding</li>
-<li><input disabled="" type="checkbox"> Performance optimization</li>
-<li><input disabled="" type="checkbox"> Advanced features activation (Claim Status, Appeals)</li>
-<li><input disabled="" type="checkbox"> Cost optimization</li>
-</ul>
-<p><strong>Timeline target:</strong> A scoped technical pilot can begin in approximately 6–8 weeks. Production timing depends on security review, integrations, testing, contracting, and operational acceptance.</p>
-<hr>
-<h2>Regulatory Compliance</h2>
-<h3>HIPAA Readiness</h3>
-<p><strong>Technical Safeguards:</strong> Reference controls implemented in code and infrastructure templates; deployment validation required<br><strong>Administrative Safeguards:</strong> Defined with the customer for each production engagement<br><strong>Physical Safeguards:</strong> Shared responsibility across the selected cloud provider, customer, and Aurelianware  </p>
-<p><strong>Business Associate Agreement (BAA):</strong> Confirm that every cloud service in scope is eligible for PHI workloads and covered by the required Microsoft terms and customer agreements. Azure eligibility does not by itself certify the application or deployment.</p>
-<p><strong>Audit-readiness foundations:</strong></p>
-<ul>
-<li>PHI-aware access and audit logging components</li>
-<li>Immutable-audit and configurable-retention patterns</li>
-<li>Compliance-reporting foundations</li>
-<li>Security-monitoring and alerting patterns</li>
-</ul>
-<h3>Industry Standards</h3>
-<p><strong>X12 Transaction Sets:</strong> 005010X212 (277), 005010X217 (278), 005010X222 (837)<br><strong>NCPDP Support:</strong> Telecom D.0, Script 10.6<br><strong>FHIR R4:</strong> Implemented API surfaces with environment-specific conformance and integration validation required<br><strong>HL7 v2.x:</strong> Extensible via workflow adapters</p>
-<hr>
-<h2>Target Success Metrics</h2>
-<p>What a pilot deployment is designed to achieve, based on the platform's architecture:</p>
-<h3>Deployment Targets</h3>
-<ul>
-<li>Infrastructure deployed in &lt;60 minutes</li>
-<li>Configuration-first tenant setup</li>
-<li>All Argo workflow templates operational</li>
-<li>Trading partner connectivity validated</li>
-</ul>
-<h3>Operational Targets</h3>
-<ul>
-<li>99.9% uptime SLA target</li>
-<li>Sub-2-minute prior authorization processing</li>
-<li>60-80% staff time reclamation</li>
-<li>Zero PHI exposure incidents</li>
-</ul>
-<h3>Financial Success</h3>
-<ul>
-<li>Pilot-scoped commercial model defined</li>
-<li>Professional services cost eliminated: ✅</li>
-<li>Multi-payer expansion without incremental cost: ✅</li>
-</ul>
-<hr>
-<h2>Conclusion</h2>
-<p>The practical path: <strong>compliance first, then progressive modernization.</strong></p>
-<p>Cloud Health Office represents the inevitable evolution of healthcare payer operations. Organizations that resist adoption will face:</p>
-<ul>
-<li>Escalating operational costs</li>
-<li>Competitive disadvantage</li>
-<li>Regulatory risk</li>
-<li>Technical debt accumulation</li>
-<li>Staff attrition</li>
-</ul>
-<p>Organizations that embrace Cloud Health Office will achieve:</p>
-<ul>
-<li>Pilot-scoped PMPM pricing</li>
-<li>Sub-1-hour deployment timelines</li>
-<li>60-80% staff time reclamation</li>
-<li>Unbreachable security posture</li>
-<li>Unlimited multi-payer scale</li>
-</ul>
-<p><strong>Compliance first. Progressive modernization next.</strong></p>
-<hr>
-<h2>Next Steps</h2>
-<h3>Immediate Actions</h3>
-<ol>
-<li><p><strong>Schedule Demo</strong></p>
-<ul>
-<li><a href="/contact">Contact sales for platform walkthrough</a></li>
-<li>Review your specific payer requirements</li>
-<li>See live deployment demonstration</li>
-</ul>
-</li>
-<li><p><strong>Review Documentation</strong></p>
-<ul>
-<li><a href="https://github.com/aurelianware/cloudhealthoffice">GitHub Repository</a></li>
-<li><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/HIPAA-COMPLIANCE-MATRIX.md">HIPAA Compliance Matrix</a></li>
-<li><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/DEPLOYMENT.md">Deployment Guide</a></li>
-</ul>
-</li>
-<li><p><strong>Start Free Trial</strong></p>
-<ul>
-<li>Clone repository</li>
-<li>Run onboarding wizard</li>
-<li>Deploy to your Azure subscription (bring-your-own)</li>
-<li>Test with your backend systems</li>
-</ul>
-</li>
-<li><p><strong>Join Community</strong></p>
-<ul>
-<li>GitHub Discussions</li>
-<li>Issue tracking</li>
-<li>Feature requests</li>
-</ul>
-</li>
-</ol>
-<h3>Contact Information</h3>
-<p><strong>Website:</strong> cloudhealthoffice.com<br><strong>Email:</strong> <a href="mailto:mark@aurelianware.com">mark@aurelianware.com</a><br><strong>GitHub:</strong> <a href="https://github.com/aurelianware/cloudhealthoffice">github.com/aurelianware/cloudhealthoffice</a><br><strong>License:</strong> BSL 1.1</p>
-<hr>
-<div style="text-align: center; padding: 40px 0; font-size: 0.9em; opacity: 0.7;">
-  <p><strong>Cloud Health Office v1.0.0 — The Sentinel</strong></p>
-  <p>Source-available healthcare payer infrastructure.</p>
-  <p>© 2026 Aurelianware, Inc • BSL 1.1 License</p>
+<h2>Benchmark Evidence: The Million Claim Challenge</h2>
+<p>The Million Claim Challenge is the platform's proof ladder. It is deliberately not just a throughput test &mdash; it separates paid claims, business denials, expected pends, unexpected pends, platform failures, scoreable workflow matches and mismatches, unsupported scenarios, and payment deltas, and it reports each independently.</p>
+
+<h3>Correctness baseline &mdash; full 1,000,000-claim corpus (episode 15, run 2)</h3>
+<table>
+  <thead><tr><th>Measure</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Corpus</td><td>1,000,000 claims</td></tr>
+    <tr><td>Processed</td><td>1,000,000</td></tr>
+    <tr><td>Platform failures</td><td><strong>0</strong></td></tr>
+    <tr><td>Workflow checks matched</td><td>129,981 / 130,000 (19 mismatched, 0 unsupported, 0 observation timeouts)</td></tr>
+    <tr><td>Payment gate</td><td>20,000 / 20,000 exact within $0.01</td></tr>
+    <tr><td>Throughput</td><td>123.81 claims/sec</td></tr>
+  </tbody>
+</table>
+
+<h3>Highest sustained throughput (episode 16), same corpus</h3>
+<table>
+  <thead><tr><th>Measure</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Throughput</td><td>155.89 claims/sec (P95 910 ms, P99 1,205 ms)</td></tr>
+    <tr><td>Workflow checks matched</td><td>129,980 / 130,000</td></tr>
+    <tr><td>Payment gate</td><td>19,982 / 19,982 exact within $0.01</td></tr>
+    <tr><td>Observation timeouts</td><td>122 &mdash; claims that became terminal after the validator's 180-second window</td></tr>
+  </tbody>
+</table>
+<p>Those 122 are an observation deadline, not lost claims: post-run verification found all 1,000,000 claims terminal, 2,000,000 lifecycle events, zero dead letters and zero pod restarts. Because they left 20 workflow checks unreconciled inside the run artifact, <strong>episode 15 &mdash; not 16 &mdash; is cited as the strict zero-failure baseline.</strong></p>
+
+<div style="border-left:3px solid #ffaa00; padding:14px 18px; margin:22px 0; background:rgba(255,170,0,0.05);">
+  <p style="margin:0;"><strong>Environment, stated plainly.</strong> These are <strong>local Docker Desktop Kubernetes</strong> runs on a developer workstation. They are engineering benchmarks, <strong>not production cloud capacity claims</strong>. Correctness gates are seed-reproducible; throughput figures are hardware-dependent and will not reproduce exactly elsewhere. The platform has not been run against a top-tier payer's production volume.</p>
 </div>
 
+<p>Every published run carries its commit SHA, seed, exact command line, environment description and raw validator output, so the result can be audited rather than taken on trust. The generator, validator and runner are all in the repository.</p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/benchmarks/README.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Benchmark methodology and reproducibility checklist &rarr;</a></p>
+
+<hr>
+<h2 id="roadmap">On the Roadmap</h2>
+<p>Stated here because a capability assessment that only lists strengths is a brochure.</p>
+
+<h3>Core administration system adapters &mdash; engagement work by design</h3>
+<p>Adapter interfaces for <strong>Facets, QNXT and HealthEdge</strong> are defined and stable. <strong>No vendor connector ships in the box, and that is deliberate.</strong> Every Facets, QNXT or HealthEdge installation differs by version, configuration and local customisation; a generic connector would be a liability rather than an asset, and would have to be rewritten for each engagement anyway. Connector implementation is scoped as project work within a Platform Engagement, against a stable interface the platform already exercises.</p>
+
+<h3>Clearinghouse adapters</h3>
+<p>Interface scaffolding exists for <strong>Availity</strong> and <strong>Change Healthcare</strong> eligibility. These are not implemented today. We do not currently have Optum 360 or Inovalon adapters.</p>
+
+<h3>Multi-tenant isolation enforcement</h3>
+<p>The platform is architecturally multi-tenant &mdash; per-tenant data partitioning, tenant-scoped queries, tenant-aware configuration and audit. <strong>Tenant isolation is not yet independently enforced:</strong> tenant identity resolves from request context, and internal services currently assume a trusted network rather than authenticating callers themselves.</p>
+<p>Deployments today are single-tenant, so there is no cross-tenant exposure. Enforcement &mdash; authenticated tenant identity and an authenticating gateway in front of internal services &mdash; is scheduled work, gated before any multi-tenant production deployment. We would rather state this than let you find it.</p>
+
+<h3>Other gaps we are closing deliberately</h3>
+<ul>
+<li><strong>Reference customer</strong> &mdash; pre-sales with a first pilot partner. No production customer runs CHO as system of record yet.</li>
+<li><strong>Coordination of benefits when CHO is secondary or tertiary</strong> &mdash; primary adjudication and secondary <em>detection</em> ship today; secondary <em>calculation</em> is next.</li>
+<li><strong>Benefit augment / compare-against-legacy mode</strong> &mdash; Replace mode ships today; Augment mode is Phase 2.</li>
+<li><strong>X12 276/277 and 278</strong> as X12 transactions, and <strong>inbound 835 parsing</strong> (outbound 835 generation ships today).</li>
+<li><strong>Test coverage on some core services</strong> &mdash; claims-service around 24% line coverage, provider-service around 12%, sponsor-service around 13%. These are the lowest-covered and the most operationally critical; they are on a known hardening backlog.</li>
+<li><strong>Cosmos DB parity with MongoDB</strong> &mdash; MongoDB is the reference and tested backend; some capabilities are MongoDB-only today.</li>
+<li><strong>Correspondence and letter generation</strong> &mdash; appeal decisions emit structured events today; the consuming correspondence service has not shipped.</li>
+<li><strong>Scale testing</strong> &mdash; not yet run against 10M+ claims/year production volume.</li>
+</ul>
+
+<hr>
+<h2>Architecture</h2>
+<p>Cloud Health Office runs as containerised .NET microservices on Kubernetes &mdash; local Docker Desktop, AKS, EKS, GKE, or customer-managed clusters. Services communicate over an event bus (Kafka or Azure Service Bus). Document persistence is MongoDB or Cosmos DB; PostgreSQL backs reference data; Redis accelerates cache and accumulators.</p>
+<p><strong>Argo Workflows</strong> orchestrates X12 file-transport and ingest pipelines &mdash; SFTP pickup, envelope handling, batch routing. <strong>Claims adjudication itself does not run on Argo</strong>: it runs as event-driven .NET services, which is the path the Million Claim Challenge measures. Both are current architecture; they do different jobs.</p>
+<p>Secrets resolve through a pluggable provider &mdash; Kubernetes Secrets and environment variables by default, with Azure Key Vault and HashiCorp Vault available. No secret store is required to run the platform locally or to reproduce the benchmark.</p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/architecture/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Full architecture reference &rarr;</a></p>
+
+<hr>
+<h2>Security Posture</h2>
+<p>Stated as what is implemented, what is templated, and what is your responsibility.</p>
+
+<h3>Implemented in the platform</h3>
+<ul>
+<li>SMART-on-FHIR OAuth scope enforcement on the external FHIR and partner APIs.</li>
+<li>PHI-aware log redaction and log-injection sanitisation in application code.</li>
+<li>Tenant-scoped data access with per-tenant partitioning.</li>
+<li>Pluggable secret management &mdash; Kubernetes Secrets, Azure Key Vault, or HashiCorp Vault with Kubernetes auth, so no long-lived credential is stored in the application.</li>
+<li>Secret scanning, dependency scanning, container scanning and a PHI-validation gate in continuous integration.</li>
+</ul>
+
+<h3>Provided as reference infrastructure templates</h3>
+<p>Bicep templates provision private endpoints for PaaS dependencies, Key Vault Premium with HSM-backed keys, and configurable audit retention (default seven years). These are templates you deploy and validate in your own subscription &mdash; not a managed service we operate for you today.</p>
+
+<h3>Your responsibility</h3>
+<p>Conditional Access policies, multi-factor authentication, and identity governance are configured in your Entra ID tenant. Administrative and physical safeguards are defined per engagement. Confirm every cloud service in scope is eligible for PHI workloads under your own agreements.</p>
+
+<h3>Known gaps</h3>
+<p>Internal services do not currently authenticate callers and rely on network trust; tenant isolation is not independently enforced. See <a href="#roadmap">On the roadmap</a>. This is appropriate for single-tenant deployment behind your own controls and is being hardened before multi-tenant production.</p>
+
+<hr>
+<h2 id="compliance">Regulatory Posture</h2>
+<p><strong>We make no compliance or certification claims.</strong> Specifically:</p>
+<ul>
+<li>Aurelianware does <strong>not</strong> hold SOC 2 Type II or HITRUST certification.</li>
+<li>We do <strong>not</strong> claim the platform is "HIPAA compliant." HIPAA compliance is a property of your deployment, your agreements and your operating practices &mdash; not of software. The licence carries no warranty of HIPAA compliance.</li>
+<li>We do <strong>not</strong> claim CMS-0057-F compliance. We provide implemented technical surfaces against the rule; compliance requires your integration, configuration and legal review.</li>
+</ul>
+<p>What we do provide is a readiness matrix that distinguishes "implemented" from "integration required" from "phase 2", so you can scope the gap honestly.</p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/compliance/CMS-0057-F-READINESS-MATRIX.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">CMS-0057-F readiness matrix &rarr;</a> &middot; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/features/HIPAA-COMPLIANCE-MATRIX.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">HIPAA technical safeguards matrix &rarr;</a></p>
+
+<hr>
+<h2>Evaluating It Yourself</h2>
+<p>The platform is source-available. The fastest honest evaluation is to run the benchmark yourself rather than read about it.</p>
+<pre><code># 1. Clone
+git clone https://github.com/aurelianware/cloudhealthoffice.git
+cd cloudhealthoffice
+
+# 2. Deploy to local Kubernetes (Docker Desktop)
+bash ./scripts/deploy-local.sh
+
+# 3. Run a scored 1,000-claim validation first
+CLAIMS=1000 MAX_CLAIMS=1000 PARALLELISM=10 PROGRESS_EVERY=100 \
+  JOB_NAME=mcc-quickstart-1k ./scripts/run-mcc-local-k8s.sh
+
+# 4. Inspect the published run in the portal
+kubectl port-forward -n cloudhealthoffice svc/portal 8080:80
+# http://localhost:8080/mass-adjudication-runs</code></pre>
+<p>Scale up deliberately &mdash; 10K as a confidence gate, then 100K, then the full corpus. No secret store, cloud subscription or licence key is required for any of this.</p>
+<p style="font-size:0.95rem;"><a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/guides/QUICKSTART.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">Full quickstart &rarr;</a></p>
+
+<hr>
+<h2>Commercial Model</h2>
+<ul>
+<li><strong>Licence:</strong> Business Source License 1.1. <strong>Free for all non-production use</strong> &mdash; evaluation, development, test and staging &mdash; with no licence key and no commercial conversation required. Converts to Apache 2.0 on the published change date.</li>
+<li><strong>Platform Engagement:</strong> priced per member per month, multi-year.</li>
+<li><strong>Transactional Services:</strong> per-call and subscription tiers, self-serve.</li>
+<li><strong>Managed Data Services:</strong> subscription, available standalone.</li>
+<li><strong>Hosting:</strong> bring your own cloud, or we host. We will stand up hosted infrastructure to support a customer who would rather not run it themselves &mdash; you do not need an existing cloud footprint to adopt the platform.</li>
+<li><strong>Professional services:</strong> available for connector implementation and migration work.</li>
+</ul>
+<p>Core administration connectors are scoped as engagement work, for the reasons given above. That is a real cost line in any Platform Engagement and we would rather price it honestly than imply it is free.</p>
+<p style="font-size:0.95rem;"><a href="/pricing" style="color:#00ffff;">Full pricing &rarr;</a> &middot; <a href="/services" style="color:#00ffff;">Professional services &rarr;</a></p>
+
+<hr>
+<h2>Next Steps</h2>
+<ul>
+<li><strong>Run the benchmark</strong> &mdash; the repository is public and the instructions above are the whole path.</li>
+<li><strong>Read the positioning document</strong> &mdash; <a href="https://github.com/aurelianware/cloudhealthoffice/blob/main/docs/POSITIONING.md" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">POSITIONING.md</a> is the canonical statement of what each product line is and is not.</li>
+<li><strong>Scope a pilot</strong> &mdash; <a href="/contact" style="color:#00ffff;">contact sales</a> for a technical walkthrough against your environment.</li>
+</ul>
+<p style="color:#888; font-size:0.95rem; margin-top:28px;">If any statement on this page is contradicted by the code, treat the code as the source of truth and <a href="https://github.com/aurelianware/cloudhealthoffice/issues" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">open an issue</a>. We would rather fix the copy than defend it.</p>
       </article>
 
       <section class="cta-section">
-        <h2>Ready to Transform Your Payer Operations?</h2>
-        <p>Compliance first. Progressive modernization next.</p>
+        <h2>Evaluate It Yourself</h2>
+        <p>The repository is public and the benchmark reproduces from a clean clone.</p>
         <div style="margin-top: 30px;">
           <a href="/platform" class="button">Platform Overview</a>
           <a href="/contact" class="button button-green">Contact Sales</a>
@@ -588,7 +317,7 @@ cd generated/your-payer/infrastructure &amp;&amp; ./deploy.sh
 
   <footer>
     <p>
-      <strong>Cloud Health Office v1.0.0 — The Sentinel</strong><br>
+      <strong>Cloud Health Office — The Sentinel</strong><br>
       Source-available healthcare payer infrastructure.
     </p>
     <p>

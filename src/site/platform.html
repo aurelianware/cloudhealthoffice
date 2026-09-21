@@ -1648,7 +1648,7 @@
         <p>The CLI can generate a payer-specific starting point. A production deployment still requires architecture review, security validation, integration testing, data migration planning, observability, and operational acceptance.</p>
         
         <pre><code># Step 1: Run onboarding wizard (5 minutes)
-node dist/scripts/cli/payer-onboarding-wizard.js
+node dist/scripts/cli/interactive-wizard.js
 
 # Step 2: Generate infrastructure and workflows (10 minutes)
 node dist/scripts/cli/payer-generator-cli.js generate -c payer-config.json
