@@ -376,7 +376,7 @@ An interactive onboarding wizard guides new payers through the configuration pro
 
 ```bash
 # Launch onboarding wizard
-node dist/scripts/cli/payer-onboarding-wizard.js
+node dist/scripts/cli/interactive-wizard.js
 ```
 
 **Wizard Steps:**

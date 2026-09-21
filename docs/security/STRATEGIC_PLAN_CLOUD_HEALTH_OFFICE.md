@@ -86,7 +86,7 @@ _Engineering Team: Copy/paste these comments in VS Code for Copilot code generat
 ### Onboarding Enhancements
 
 ```javascript
-// In Node.js, extend payer-onboarding-wizard.js to:
+// In Node.js, extend interactive-wizard.js to:
 // - Validate Azure credentials automatically
 // - Generate a test 837 claim payload
 // - Redact PHI from all logs
