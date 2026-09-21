@@ -75,7 +75,7 @@ flowchart LR
     Portal --> Benefits["benefit-plan-service"]
     Portal --> Fhir["fhir-service"]
 
-    X12["X12 / EDI Inputs\n837, 834, 270/271, 276/277, 278"] --> Claims
+    X12["X12 / EDI Inputs\n837, 834, 270/271"] --> Claims
     Claims --> Pipeline["Adjudication Pipeline"]
     Pipeline --> BenefitEngine["Benefit Engine"]
     Pipeline --> FeeEngine["Fee Schedule Engine"]
