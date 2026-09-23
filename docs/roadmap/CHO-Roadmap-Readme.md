@@ -204,7 +204,7 @@ Complete X12 transaction support: 270/271, 276/277, 278, 834, 835, 837 (P/I enco
 ### 4E. Conference-Ready Materials
 
 - [ ] Finalize Medium article (HIMSS26 timing)
-- [ ] Polish pitch deck content (`docs/sales-materials/PITCH-DECK-CONTENT.md`)
+- [ ] Polish pitch deck content (maintained in a private repository)
 - [ ] 15-minute live demo script
 - [ ] Recorded screencast
 

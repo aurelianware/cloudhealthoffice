@@ -174,7 +174,7 @@ A payer locked into QNXT, HealthEdge, Facets, or a comparable legacy core, stari
 
 #### Commercial shape
 
-Small annual subscription, weeks-to-deploy, Kubernetes cluster or Azure AKS target. The SKU we sell first is the founding-partner [CMS-0057-F Compliance Accelerator](sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) ($90,000 / 6–8 weeks / one LOB). Diligence packet: [docs/diligence/README.md](diligence/README.md). Broader PMPM list figures stay on the order form, not this document.
+Small annual subscription, weeks-to-deploy, Kubernetes cluster or Azure AKS target. The SKU we sell first is the founding-partner CMS-0057-F Compliance Accelerator (maintained in a private repository) ($90,000 / 6–8 weeks / one LOB). Diligence packet: [docs/diligence/README.md](diligence/README.md). Broader PMPM list figures stay on the order form, not this document.
 
 ### Layer 2 — Domain cutover
 
@@ -277,7 +277,7 @@ Cloud Health Office's Platform Engagement is priced PMPM across all three layers
 
 Layer 1 entry pricing is market-rate for CMS-0057-F compliance surfaces. Layer 2 PMPM expands per domain migrated. Layer 3 PMPM aspires to the range of incumbent CAPS platforms as the platform matures and production references accumulate; founding partners receive preferential terms reflecting both the strategic advantage of being first and the cost structure a cloud-native architecture supports.
 
-Specific indicative PMPM ranges and ARR projections are documented in `docs/sales-materials/FINANCIAL-MODEL.md`. Pilot-specific terms are set per engagement.
+Specific indicative PMPM ranges and ARR projections are maintained in a private repository. Pilot-specific terms are set per engagement.
 
 ## Million Claim Challenge
 

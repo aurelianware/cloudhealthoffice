@@ -116,7 +116,7 @@ kubectl apply -f argo-workflows/
 - 📧 **Email Templates**: 5 outreach templates for different personas
 - 🎪 **Pilot Program**: 60-day structured engagement
 
-**Documentation**: [sales-materials/](./sales-materials/)
+**Documentation**: sales materials (maintained in a private repository)
 
 ---
 
@@ -132,7 +132,7 @@ kubectl apply -f argo-workflows/
 - 🎤 **Meeting Script**: 30-minute pitch framework
 - 💡 **Alternative Funding**: SBIR, RBF, venture debt options
 
-**Documentation**: [fundraising/](./fundraising/)
+**Documentation**: fundraising materials (maintained in a private repository)
 
 ---
 

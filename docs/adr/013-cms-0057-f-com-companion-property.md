@@ -101,7 +101,7 @@ Tradeoffs:
 ## References
 
 - [`src/site/MESSAGE_SHEET.md`](../../src/site/MESSAGE_SHEET.md) — locked CTA blocks, disclosure sentence, property split
-- [Cross-site strategy](../sales-materials/CROSS-SITE-CMS-0057-F-STRATEGY.md) — implementation contract for cms-0057-f.com
+- Cross-site strategy (maintained in a private repository) — implementation contract for cms-0057-f.com
 - [`src/site/js/analytics-events.js`](../../src/site/js/analytics-events.js) — attribution capture and sanitization
 - [ADR 012](012-product-led-professional-services.md) — product-led professional services
-- [Services content plan](../sales-materials/SERVICES-CONTENT-PLAN.md) — keyword split and content backlog
+- Services content plan (maintained in a private repository) — keyword split and content backlog
