@@ -662,7 +662,7 @@ describe('Services & deployment positioning', () => {
 
     it('keeps the cross-site CTA anchors that the reference site links to', () => {
       // These anchors are a published contract with cms-0057-f.com.
-      // See docs/sales-materials/CROSS-SITE-CMS-0057-F-STRATEGY.md section 2.
+      // See the cross-site CMS-0057-F strategy (maintained in a private repository), section 2.
       for (const anchorId of [
         'offer-assessment',
         'offer-sow-review',

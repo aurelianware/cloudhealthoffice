@@ -4,7 +4,7 @@
 **This is a prospecting list, not a pipeline and not an endorsement.**
 None of these organizations is claimed as a customer, design partner, or conversation unless a later CRM export says so.
 
-Use with the [one-page offer](../sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md). One SKU. CIO + Chief Compliance Officer. Message: January 2027, sit beside the existing core, 6–8 weeks, founding partner, source-available FHIR surface.
+Use with the one-page offer (maintained in a private repository). One SKU. CIO + Chief Compliance Officer. Message: January 2027, sit beside the existing core, 6–8 weeks, founding partner, source-available FHIR surface.
 
 ## How to use
 

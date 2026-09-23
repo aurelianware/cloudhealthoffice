@@ -118,7 +118,7 @@ Tradeoffs:
 - [`src/site/deploy.html`](../../src/site/deploy.html) — deployment and operating models
 - [`src/site/MESSAGE_SHEET.md`](../../src/site/MESSAGE_SHEET.md) — locked positioning and status labels
 - [`src/site/assistant/knowledge.md`](../../src/site/assistant/knowledge.md) — constrained assistant knowledge pack
-- [Ask Cloud Health Office assistant plan](../sales-materials/ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md)
-- [Services and deployment content plan](../sales-materials/SERVICES-CONTENT-PLAN.md)
+- Ask Cloud Health Office assistant plan (maintained in a private repository)
+- Services and deployment content plan (maintained in a private repository)
 - [ADR 011](011-rules-and-evidence-model.md) — separating rules, scoring, and public claims
 - [`scripts/tests/site-services-positioning.test.ts`](../../scripts/tests/site-services-positioning.test.ts)

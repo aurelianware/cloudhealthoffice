@@ -14,9 +14,9 @@ the architecture, and find an area to contribute.
 | Learn payer-domain concepts | [Healthcare domain](domain/README.md) |
 | Reproduce benchmark evidence | [Benchmarks](benchmarks/README.md) |
 | Deploy beyond local development | [Deployment](deployment/DEPLOYMENT.md) |
-| Sell the first Layer 1 pilot | [CMS-0057-F Accelerator offer](sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) and [diligence binder](diligence/README.md) |
-| Position software + professional services | [Product-led services ADR](adr/012-product-led-professional-services.md), [services content plan](sales-materials/SERVICES-CONTENT-PLAN.md), and the [assistant plan](sales-materials/ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md) |
-| Run the cms-0057-f.com companion property | [ADR 013](adr/013-cms-0057-f-com-companion-property.md) and the [cross-site contract](sales-materials/CROSS-SITE-CMS-0057-F-STRATEGY.md) |
+| Sell the first Layer 1 pilot | CMS-0057-F Accelerator offer (maintained in a private repository) and [diligence binder](diligence/README.md) |
+| Position software + professional services | [Product-led services ADR](adr/012-product-led-professional-services.md), services content plan (maintained in a private repository), and the assistant plan (maintained in a private repository) |
+| Run the cms-0057-f.com companion property | [ADR 013](adr/013-cms-0057-f-com-companion-property.md) and the cross-site contract (maintained in a private repository) |
 | Turn payer operations work into product | [Payer operations productization backlog](roadmap/payer-operations-productization.md) |
 | Contribute | [Developer guide](developer/README.md) and [CONTRIBUTING.md](../CONTRIBUTING.md) |
 

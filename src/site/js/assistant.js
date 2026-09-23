@@ -244,7 +244,7 @@
   }
 
   // Deep link into the contact form with the topic preselected. Keys are the
-  // shared interest taxonomy; see docs/sales-materials/ASK-CLOUD-HEALTH-OFFICE-ASSISTANT.md.
+  // shared interest taxonomy; see the assistant plan (maintained in a private repository).
   function contactHref() {
     return lastContactKey ? '/contact?interest=' + encodeURIComponent(lastContactKey) : '/contact';
   }
