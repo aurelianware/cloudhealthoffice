@@ -2,7 +2,7 @@
 
 **Audience:** payer CISO, privacy counsel, interoperability lead, procurement
 **Status as of:** September 2026
-**Offer this binder supports:** [CMS-0057-F Compliance Accelerator](../sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md)
+**Offer this binder supports:** CMS-0057-F Compliance Accelerator (maintained in a private repository)
 
 This packet is what we hand a buyer **before** PHI, before a production cluster, and before anyone says “compliant.” It is not a completed SOC 2 report, not a CMS certification, and not a signed BAA.
 
@@ -32,8 +32,8 @@ Cloud Health Office is pre-pilot. There is no production reference customer. Fou
 
 ## How to use this in a sales cycle
 
-1. Send the [one-page offer](../sales-materials/CMS-0057-F-ACCELERATOR-OFFER.md) and this README.
-2. Run the [20-minute labeled demo](../sales-materials/demo-materials/cms-0057-f-accelerator-demo.md).
+1. Send the one-page offer (maintained in a private repository) and this README.
+2. Run the 20-minute labeled demo (maintained in a private repository).
 3. Walk CISO through the security one-pager and adapter-status table. Hit `GET /fhir/r4/adapter-status` live.
 4. Counsel redlines the BAA. No PHI until it is signed.
 5. Order form: founding-partner accelerator SKU, case-study clause, Layer 2 appeals as an optional amendment.

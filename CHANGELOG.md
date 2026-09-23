@@ -1506,7 +1506,7 @@ Cloud Health Office v3.0.0 is production-ready for both **health payers** (legac
 - **Sales Email Templates**: 5 targeted outreach templates
 - **Marketing Landing Page Copy**: Conversion-optimized content
 
-**Documentation**: [sales-materials/README.md](./sales-materials/)
+**Documentation**: sales materials (maintained in a private repository)
 
 #### VC Fundraising Strategy (December 2025)
 - **VC Target List**: 12+ prioritized healthcare and SaaS VCs with investment thesis fit
@@ -1518,7 +1518,7 @@ Cloud Health Office v3.0.0 is production-ready for both **health payers** (legac
 - **Alternative Funding**: Grants (SBIR), RBF, venture debt, strategic investors
 - **PR Strategy**: Thought leadership, podcasts, conferences, LinkedIn
 
-**Documentation**: [fundraising/README.md](./fundraising/)
+**Documentation**: fundraising materials (maintained in a private repository)
 
 #### Microservices Architecture (December 2025)
 - **Eligibility Service**: Azure Container Apps + Dapr with dual X12 270/271 and FHIR interface

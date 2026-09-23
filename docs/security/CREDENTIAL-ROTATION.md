@@ -16,12 +16,79 @@ rotation ends the exposure.
 
 | # | Credential | Purpose | First committed | Removed from HEAD | Action |
 |---|---|---|---|---|---|
-| 1 | `sJ8p8WAsE4Es6PgMbUACErOs` | SFTP password for the `logicapp` account on `sftp-service.cho-sftp.svc.cluster.local` | `328828f5` — 2026-02-04, *"Add SFTP workflows: test job and X12 275 attachment upload"* | **This change.** It was live at `HEAD` for ~7½ months. | **Rotate the `logicapp` SFTP account password.** Then recreate the `sftp-credentials` Secret in `cho-workflows` and the `sftp-users` Secret in `cho-sftp`. |
+| 1 | *(value not reproduced here — see `328828f5`, `b8818bff`, `7aa9059b`, `5a3d8b24`)* | SFTP password for the self-hosted SFTP server in namespace `cho-sftp`, reachable in-cluster at `sftp-service.cho-sftp.svc.cluster.local` and publicly at `20.115.193.245:22`. Originally the `logicapp` account; **renamed to `cho-edi` in `8281d4d1` (2026-03-22) with the password carried forward unchanged.** | `328828f5` — 2026-02-04, *"Add SFTP workflows: test job and X12 275 attachment upload"* | `c11950b9` (#1184, 2026-09-21). It was live at `HEAD` for ~7½ months. | **Rotate the `cho-edi` SFTP account password — not `logicapp`, which no longer exists.** Then recreate the `sftp-users` Secret in `cho-sftp` and the `sftp-credentials` Secret in `cho-workflows`. See "Item 1 — what this actually was" below. |
 | 2 | `CloudHealthOffice2026!` | PostgreSQL password for `reference-data-service`, in a manifest labelled `ASPNETCORE_ENVIRONMENT: "Production"` | `2f0f7cc3` — 2026-02-05, *"Add Reference Data Service — CPT/ICD-10/HCPCS code validation with PostgreSQL"* | Already removed, in PR #1173 (2026-09-18) | **Rotate the reference-data PostgreSQL password** in every environment where this manifest was ever applied. |
 
 Item 1 is the serious one. It is a 24-character generated password — not a
 placeholder — it named a specific account on a specific host, and it sat in
 three X12 job manifests and three documents at `HEAD`.
+
+The value itself is no longer printed in this document. It can be recovered from
+history if needed for rotation verification; the commits that carried it are
+`328828f5`, `b8818bff`, `7aa9059b`, `5a3d8b24`, and it was removed in `c11950b9`.
+
+### Item 1 — what this actually was
+
+> **[FOUNDER TO CONFIRM: decommission/rotation date]**
+>
+> As of 2026-09-23 this endpoint has **not** been confirmed decommissioned. Treat the
+> credential as potentially live until the checks below are run.
+
+A read-only investigation on 2026-09-23 found that two widely-held assumptions about
+this credential are wrong, and both change the remediation:
+
+1. **It was not a Logic App credential, and not an Azure Storage account SFTP local
+   user.** It is the password for a Linux user on a self-hosted `atmoz/sftp` container
+   (`infrastructure/k8s/sftp-server-deployment.yaml`), published to the internet by a
+   `type: LoadBalancer` Service at `20.115.193.245:22`. Retiring Azure Logic Apps
+   (ADR 004, `411e2fb2` / `70f8dd9f`, 2026-03-15 → 2026-03-22) could not have
+   decommissioned it, because it was never a Logic App resource. `git log --all -S`
+   for `isSftpEnabled`, `localUsers` and `sftpEnabled` returns zero commits — there
+   was never a storage-account SFTP endpoint in this repository.
+
+2. **The account was renamed, not retired.** `8281d4d1` (2026-03-22) renamed the SFTP
+   user from `logicapp` to `cho-edi` across infra and scripts, but did not change the
+   password. The value remained the hardcoded fallback
+   (`SFTP_PASS=${SFTP_PASS:-"<value>"}`) for the **`cho-edi`** account in
+   `x12-277-download-job.yaml`, `x12-278-upload-job.yaml` and
+   `x12-837-claims-jobs.yaml` until `c11950b9`. Rotating an account called `logicapp`
+   would therefore rotate nothing.
+
+Note also that the Argo migration replaced the *orchestrator*, not the SFTP data path:
+the workflows under `infrastructure/argo-workflows/` still mount the `sftp-credentials`
+/ `sftp-users` Secrets at `HEAD`.
+
+#### Checks the founder needs to run
+
+```bash
+# 1. Does the cluster still exist, and is the SFTP server still deployed?
+az aks list -o table
+az aks get-credentials -g <resource-group> -n <cluster-name>
+kubectl get deployment sftp-server -n cho-sftp
+kubectl get svc sftp-service -n cho-sftp -o wide
+
+# 2. Which accounts exist, and with which passwords?
+kubectl get secret sftp-users -n cho-sftp -o jsonpath='{.data.users\.conf}' | base64 -d
+#    -> look for 'cho-edi:' AND any leftover 'logicapp:' entry
+
+# 3. Is the public IP still allocated?
+az network public-ip list --query "[?ipAddress=='20.115.193.245']" -o table
+```
+
+Unauthenticated checks already performed on 2026-09-23, none of them conclusive:
+`az` CLI not available; `sftp.cloudhealthoffice.com` returns NODATA (the A record was
+never created, per `CHANGELOG.md:1452`); a TCP connect to `20.115.193.245:22` timed
+out rather than being refused, which is equally consistent with a deallocated IP and
+with a live server behind the NSG source-IP allowlist that
+`scripts/setup/setup-sftp-dns-whitelist.sh` exists to configure. No authentication was
+attempted.
+
+**Separately:** `scripts/setup/rotate-sftp-password.sh:63-66` restarts
+`deployment/sftp-service`, but the Deployment is named `sftp-server`
+(`infrastructure/k8s/sftp-server-deployment.yaml:82`); `sftp-service` is the Service.
+The script will patch the Secret and then fail on the restart, so rotation can appear
+to succeed while the running container keeps the old `users.conf`. Fix that before
+relying on the script.
 
 ### Why the scanner did not catch it
 
