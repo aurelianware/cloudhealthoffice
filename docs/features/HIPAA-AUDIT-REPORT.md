@@ -1,28 +1,46 @@
 > **Note:** This document references Azure Logic Apps, which were the original orchestration runtime. CHO has since migrated to Argo Workflows on AKS — see [ADR-004](../adr/004-remove-logic-apps.md) for details.
 
-# Cloud Health Office HIPAA Compliance Audit Report
+# Cloud Health Office Target-State HIPAA Security Rule Self-Assessment
+
+> **This is not an audit and not a compliance attestation.** It is an internal,
+> self-performed assessment of the HIPAA Security Rule safeguards Cloud Health Office
+> is building toward. It was not performed by an independent auditor, no third party has
+> reviewed or certified it, and it confers no certification. Items marked as satisfied
+> describe intended target-state design; several are not implemented today — see
+> "Known gaps" below.
 
 **Report Date:** November 23, 2025  
-**Audit Period:** October 1, 2025 - November 23, 2025  
-**Auditor:** Cloud Health Office Security & Compliance Team  
+**Assessment Period:** October 1, 2025 - November 23, 2025  
+**Prepared by:** Cloud Health Office Security & Compliance Team (self-assessed)  
 **Report Version:** 1.0
 
 ---
 
 ## Executive Summary
 
-This report presents the findings of a comprehensive HIPAA Security Rule compliance audit conducted for the Cloud Health Office platform. The audit evaluated all technical, administrative, and physical safeguards required under 45 CFR Parts 160, 162, and 164.
+This document records an internal self-assessment of the Cloud Health Office platform
+against the HIPAA Security Rule safeguards under 45 CFR Parts 160, 162, and 164. It
+describes the target-state design and, where the target state is not yet implemented,
+says so. It is not an audit finding and not an attestation of compliance.
 
-### Overall Compliance Status
+### Overall Status
 
-**✅ COMPLIANT** - Cloud Health Office demonstrates full compliance with all required HIPAA Security Rule standards.
+**Target-state self-assessment.** The table below counts the safeguards for which a
+target-state design has been documented. It does not assert that each is implemented,
+operating, or independently verified.
 
-| Category | Required Standards | Implemented | Compliance Rate |
+| Category | Required Standards | Target-state design documented | Coverage |
 |----------|-------------------|-------------|-----------------|
 | **Technical Safeguards** | 5 | 5 | 100% |
 | **Administrative Safeguards** | 9 | 9 | 100% |
 | **Physical Safeguards** | 4 | 4 | 100% |
 | **Total** | **18** | **18** | **100%** |
+
+### Known gaps
+
+- **§ 164.312(b) Audit Controls — PHI read-access auditing is not yet implemented.**
+  The platform does not currently record an audit event when a user reads PHI. The
+  section below describes the intended logging design, not shipped behaviour.
 
 ### Key Findings Summary
 
@@ -107,7 +125,7 @@ This report presents the findings of a comprehensive HIPAA Security Rule complia
 
 #### § 164.312(a)(1) - Access Control ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 
@@ -137,11 +155,12 @@ az storage account show --name "hipaa-storage-prod" --query "encryption"
 - Consider implementing adaptive session policies based on risk level
 - Document break-glass account testing schedule (currently quarterly)
 
-#### § 164.312(b) - Audit Controls ✅
+#### § 164.312(b) - Audit Controls — GAP
 
-**Finding:** COMPLIANT
+**Finding:** NOT YET IMPLEMENTED. PHI read-access auditing is not implemented in the
+platform today. The retention and query design below is target state.
 
-**Implementation Status:**
+**Target-state design:**
 
 | Log Type | Retention | Immutability | Review Frequency | Status |
 |----------|-----------|--------------|------------------|--------|
@@ -152,7 +171,7 @@ az storage account show --name "hipaa-storage-prod" --query "encryption"
 
 **Evidence:**
 ```kusto
-// Verified comprehensive PHI access logging
+// Target-state query: PHI access logging (not yet emitting these events)
 customEvents
 | where timestamp > ago(30d)
 | where name in ("file_accessed", "claim_linked", "attachment_processed")
@@ -176,7 +195,7 @@ AzureDiagnostics
 
 #### § 164.312(c)(1) - Integrity ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 
@@ -208,7 +227,7 @@ az storage container immutability-policy show --account-name "hipaa-storage-prod
 
 #### § 164.312(d) - Person or Entity Authentication ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 
@@ -244,7 +263,7 @@ SigninLogs
 
 #### § 164.312(e)(1) - Transmission Security ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 
@@ -280,7 +299,7 @@ az storage account show --name "hipaa-storage-prod" --query "publicNetworkAccess
 
 #### § 164.308(a)(1) - Security Management Process ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 
@@ -304,7 +323,7 @@ az storage account show --name "hipaa-storage-prod" --query "publicNetworkAccess
 
 #### § 164.308(a)(3) - Workforce Security ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 
@@ -332,7 +351,7 @@ az role assignment list --all --assignee "{principal-id}" --query "[?roleDefinit
 
 #### § 164.308(a)(4) - Information Access Management ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 
@@ -357,7 +376,7 @@ az role assignment list --all --assignee "{principal-id}" --query "[?roleDefinit
 
 #### § 164.310(a)(1) - Facility Access Controls ✅
 
-**Finding:** COMPLIANT (Azure Responsibility)
+**Assessment:** Target-state design documented (Azure responsibility)
 
 **Implementation Status:**
 
@@ -378,7 +397,7 @@ az role assignment list --all --assignee "{principal-id}" --query "[?roleDefinit
 
 #### § 164.310(d)(1) - Device and Media Controls ✅
 
-**Finding:** COMPLIANT
+**Assessment:** Target-state design documented
 
 **Implementation Status:**
 

@@ -401,6 +401,6 @@
   <g transform="translate(600, 1220)">
     <rect x="-480" y="-16" width="960" height="32" rx="4" fill="rgba(8,8,8,0.9)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
     <text x="0" y="4" font-family="Segoe UI, system-ui, sans-serif" font-size="10" fill="#606060"
-          text-anchor="middle">C# / .NET 8 &#x2022; Cosmos DB + MongoDB &#x2022; YARP Gateway &#x2022; Kubernetes &#x2022; Multi-Tenant &#x2022; HIPAA Compliant</text>
+          text-anchor="middle">C# / .NET 8 &#x2022; MongoDB wire protocol &#x2022; YARP Gateway &#x2022; Kubernetes &#x2022; Multi-Tenant &#x2022; Built toward HIPAA safeguards</text>
   </g>
 </svg>

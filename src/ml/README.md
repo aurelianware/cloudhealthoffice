@@ -4,7 +4,11 @@ This directory contains machine learning models used by the Cloud Health Office 
 
 ## claim-fraud-v1.pt
 
-A PyTorch model for scoring fraud/abuse risk on healthcare claims (837 transactions).
+> **The committed `claim-fraud-v1.pt` is a placeholder, not a trained model.** The file is a
+> 646-byte text stub whose first line reads `# Placeholder for PyTorch model file`. No trained
+> weights ship in this repository. The specification below describes the intended model contract.
+
+The intended PyTorch model scores fraud/abuse risk on healthcare claims (837 transactions).
 
 ### Model Specification
 
@@ -48,8 +52,10 @@ To retrain the model:
 3. Train using PyTorch (see scripts/train-fraud-model.py if available)
 4. Save the model state dict to this directory
 
-### HIPAA Compliance
+### Intended data-handling constraints
 
-- Model training uses only de-identified aggregate data
-- No PHI is stored in the model weights
-- Feature extraction redacts all personally identifiable information
+These are design constraints for a future trained model, not properties of anything shipped here:
+
+- Training to use only de-identified aggregate data
+- No PHI to be stored in the model weights
+- Feature extraction to redact personally identifiable information
