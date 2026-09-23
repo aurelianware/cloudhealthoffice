@@ -38,7 +38,11 @@ SEED_PARALLELISM="${SEED_PARALLELISM:-$PARALLELISM}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-docker-desktop}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
-JOB_TIMEOUT="${JOB_TIMEOUT:-30m}"
+# 30m is not enough for 100K+ claim runs: the Episode 8 100K run took 30:05 of
+# timed processing and 38:05 of tracked lifecycle. Default raised to 60m; set
+# JOB_TIMEOUT explicitly for 1,000,000-claim runs (allow several hours).
+# This script is not invoked by any CI workflow, so the new default is local-only.
+JOB_TIMEOUT="${JOB_TIMEOUT:-60m}"
 ORIGINAL_ADJUDICATION_MAX_CONCURRENT_CALLS=""
 
 log() {

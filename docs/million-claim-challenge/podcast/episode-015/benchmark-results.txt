@@ -145,3 +145,50 @@ The 19 workflow mismatches in Run 2 (11 in Run 1) are scattered across 9 differe
 with no dominant pattern (0.015% and 0.008% of scoreable checks respectively) -- consistent with
 statistical noise at genuine scale rather than a systemic defect, not investigated claim-by-claim
 in this episode.
+
+═══════════════════════════════════════════════════════════════════════════════
+ERRATUM — 2026-09-23
+═══════════════════════════════════════════════════════════════════════════════
+
+The original text above is preserved unchanged. One factual claim in it is wrong.
+
+CLAIM (above, and in article.txt):
+  "The `768mb`/`volatile-lru` configuration existed nowhere in the repository."
+  "The live cluster had been hand-patched with these args at some point in its
+   history and never synced back to the committed manifest."
+
+CORRECTION:
+  The configuration did exist in the repository. `scripts/deploy-local.sh`
+  applied it on every local deploy via `kubectl patch deployment
+  redis-dataprotection`, setting the container args to:
+
+      ["redis-server","--save","","--appendonly","no",
+       "--maxmemory","768mb","--maxmemory-policy","volatile-lru"]
+
+  It was introduced by commit dd9aedab, "Stabilize MCC benefit calculation
+  dependencies" (#873), on 2026-07-10 — two weeks before this episode was
+  published.
+
+  It was present at this episode's own publish commit: at 3d2063bf
+  ("Publish Part 15", 2026-07-24), `scripts/deploy-local.sh:307` contained
+  "768mb". Verify with:
+
+      git show 3d2063bf:scripts/deploy-local.sh | grep -n 768mb
+
+  So this was not undocumented cluster drift from a forgotten hand-patch. The
+  deploy script re-applied the 768mb cap on every run, overriding whatever
+  `infrastructure/k8s/redis-dataprotection.yaml` specified. The manifest was
+  never authoritative for this value on local deploys, which is why raising the
+  manifest to 3072mb alone would not have held across a redeploy.
+
+RESOLUTION:
+  The override has been removed from `scripts/deploy-local.sh` in the pull
+  request carrying this erratum. `infrastructure/k8s/redis-dataprotection.yaml`
+  (--maxmemory 3072mb) is now the single authoritative source for Redis args on
+  local deploys. The manifest itself was not changed.
+
+SCOPE:
+  No benchmark number in this file has been altered. The measurements, the
+  eviction analysis, and the conclusions about the 768mb ceiling's effect on
+  P56 latency all stand. Only the account of where the 768mb value came from
+  was wrong.

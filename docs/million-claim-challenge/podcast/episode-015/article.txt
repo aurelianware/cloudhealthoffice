@@ -55,3 +55,17 @@ Part 13 went back for that mystery one more time, and found it wasn't in the pla
 Part 14 closed the scoring surface this series has carried since Part 9, then found — by reading a dashboard, not chasing a theory — that this series' highest concurrency setting had been quietly underperforming for its entire run.
 
 Part 15 ran the number the series named from the beginning, found a bug that only existed at that scale, fixed it, and is handing the next one — a sustained-throughput gap short bursts can't reproduce — to whatever comes after.
+
+---
+
+## ERRATUM — 2026-09-23
+
+The article text above is preserved unchanged. One factual claim in it is wrong.
+
+This article states that the `768mb` limit "turned out not to exist anywhere in the repository," and attributes it to an undocumented hand-patch on the live cluster that was "never synced back to the file that was supposed to describe it."
+
+That is incorrect. The value was in the repository. `scripts/deploy-local.sh` applied it on every local deploy through a `kubectl patch deployment redis-dataprotection` call that set the container args to `["redis-server","--save","","--appendonly","no","--maxmemory","768mb","--maxmemory-policy","volatile-lru"]`. It was introduced by commit `dd9aedab` (#873, "Stabilize MCC benefit calculation dependencies") on 2026-07-10, two weeks before this article was published, and it was present at this article's own publish commit `3d2063bf` on 2026-07-24 — `scripts/deploy-local.sh:307` contained `768mb`. You can confirm this with `git show 3d2063bf:scripts/deploy-local.sh | grep -n 768mb`.
+
+This changes the lesson of the episode rather than the measurements. The problem was not a manifest that drifted from an unrecorded live change; it was a deploy script that overrode the manifest on every run. That distinction matters, because raising `infrastructure/k8s/redis-dataprotection.yaml` to 3072mb would not have survived the next local deploy while the patch remained in place.
+
+The override has since been removed from `scripts/deploy-local.sh`, making the manifest the single authoritative source for Redis arguments on local deploys. No benchmark number in this episode has been changed; the eviction analysis and the conclusions about the 768mb ceiling's effect on P56 latency stand.

@@ -376,29 +376,11 @@ ok "mongodb"
 
 log "Deploying Redis"
 kubectl apply -f infrastructure/k8s/redis-dataprotection.yaml
-# Local Docker Desktop runs use Redis as regeneratable cache/hot storage.
-# Keep the shared AKS manifest persistence-safe, but avoid local RDB growth
-# causing OOMKilled crash loops during MCC accumulator-heavy runs.
-kubectl patch deployment redis-dataprotection \
-  --namespace "$NAMESPACE" \
-  --type='json' \
-  --patch='[
-    {
-      "op": "add",
-      "path": "/spec/template/spec/containers/0/args",
-      "value": [
-        "redis-server",
-        "--save",
-        "",
-        "--appendonly",
-        "no",
-        "--maxmemory",
-        "768mb",
-        "--maxmemory-policy",
-        "volatile-lru"
-      ]
-    }
-  ]' >/dev/null
+# infrastructure/k8s/redis-dataprotection.yaml is authoritative for Redis args,
+# including --maxmemory. This script previously patched the deployment down to
+# --maxmemory 768mb, silently overriding the manifest's 3072mb. That override
+# caused the Episode 15 eviction stall and has been removed; see the ERRATUM in
+# docs/million-claim-challenge/podcast/episode-015/benchmark-results.txt.
 ok "redis"
 
 log "Waiting for MongoDB to be ready"
