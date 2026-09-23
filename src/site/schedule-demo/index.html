@@ -154,7 +154,26 @@
       line-height: 1.5;
     }
 
+    .scheduler {
+      margin: 30px 0 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .scheduler iframe {
+      display: block;
+      width: 100%;
+      height: 720px;
+      border: 0;
+    }
+
     @media (max-width: 720px) {
+      .scheduler iframe {
+        height: 900px;
+      }
+
       .nav {
         align-items: flex-start;
         flex-direction: column;
@@ -184,19 +203,27 @@
       <p class="eyebrow">Product demo</p>
       <h1 id="schedule-title">Book time to review Cloud Health Office.</h1>
       <p>
-        Use the calendar link to schedule a product walkthrough focused on your priorities:
+        Pick a time below to schedule a product walkthrough focused on your priorities:
         claims adjudication evidence, the Mass Adjudication console, CMS-0057-F APIs,
         source-available deployment, or the Million Claim Challenge benchmark path.
       </p>
 
+      <div class="scheduler">
+        <iframe
+          src="https://calendar.google.com/calendar/appointments/schedules/AcZssZ0MrsUuPmb7Nw-ND9IOA7GvDo4fSxjy71pnegt4LLaFr7EpFs5zWT0J8_4hyC-rhMDt53DkbKAx?gv=true"
+          title="Book a Cloud Health Office product demo"
+          loading="lazy"
+        ></iframe>
+      </div>
+
       <div class="actions">
         <a
           class="button button-primary"
-          href="https://calendar.proton.me/bookings#t8cx42xrcsdyKpyO-u6tOusw7bHVaQdosjyL0txXTQA="
+          href="https://calendar.google.com/calendar/appointments/schedules/AcZssZ0MrsUuPmb7Nw-ND9IOA7GvDo4fSxjy71pnegt4LLaFr7EpFs5zWT0J8_4hyC-rhMDt53DkbKAx?gv=true"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Book on Proton Calendar
+          Open in Google Calendar
         </a>
         <a class="button button-secondary" href="/contact">Send details first</a>
       </div>

@@ -387,7 +387,8 @@
 
     var host = url.hostname.toLowerCase();
 
-    if (host === 'calendar.proton.me') {
+    if (host === 'calendar.proton.me' ||
+        (host === 'calendar.google.com' && url.pathname.indexOf('/calendar/appointments/') === 0)) {
       choTrack('demo_booking_click', { link_url: url.href, page_path: pagePath() });
       return;
     }
