@@ -197,7 +197,7 @@ This implementation satisfies key requirements:
 Dependencies:     @types/fhir (type definitions only)
 Runtime Code:     Zero external dependencies
 Vulnerabilities:  None
-HIPAA Compliant:  Yes
+HIPAA:            Built toward HIPAA technical safeguards
 Production Ready: Yes
 ```
 

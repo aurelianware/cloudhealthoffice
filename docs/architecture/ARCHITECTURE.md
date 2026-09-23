@@ -55,8 +55,8 @@ Production deployments are Kubernetes-first and can run on:
 Common cloud dependencies:
 
 - Azure Service Bus or Kafka-compatible messaging
-- MongoDB or Cosmos DB for document persistence
-- PostgreSQL for structured reference data where appropriate
+- MongoDB wire protocol for document persistence (MongoDB or Azure Cosmos DB for MongoDB)
+- PostgreSQL for reference code sets only
 - Redis for cache and accumulator acceleration
 - object storage for EDI files and audit artifacts
 - cloud key management or HashiCorp Vault for secrets
@@ -242,10 +242,12 @@ See [shared message bus](shared-messagebus.md) for the current message bus desig
 
 Data is tenant-scoped and domain-owned.
 
-Typical storage model:
+Canonical data path: MongoDB wire protocol is the supported data path (MongoDB or Azure Cosmos DB for MongoDB). The native Cosmos SDK path is legacy and opt-in; Postgres is used only for reference code sets.
 
-- MongoDB / Cosmos DB for document-oriented service data
-- PostgreSQL for structured reference datasets where relational access is useful
+Storage model:
+
+- MongoDB wire protocol for document-oriented service data (MongoDB or Azure Cosmos DB for MongoDB)
+- PostgreSQL for reference code sets only
 - Redis for low-latency cache and accumulator workloads
 - object storage for EDI files, generated artifacts, audit packets, and long-lived evidence
 

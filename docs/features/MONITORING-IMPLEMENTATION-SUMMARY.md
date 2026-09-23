@@ -369,7 +369,7 @@ All comprehensive, production-ready, and HIPAA-compliant.
 - Alert rules evaluate every 5 minutes (configurable)
 - Cost: ~$2/month for 6 alert rules + 100 SMS notifications
 - Multi-tenant: Filter by payer ID in all dashboards
-- HIPAA Compliant: All queries exclude PHI, compliance validation built-in
+- Built toward HIPAA technical safeguards: queries exclude PHI
 
 ---
 

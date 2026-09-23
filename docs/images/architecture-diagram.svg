@@ -43,7 +43,7 @@
   <text x="600" y="155" font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="900"
         fill="#ffffff" text-anchor="middle">Cloud Health Office</text>
   <text x="600" y="177" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="#b0b0b0"
-        text-anchor="middle">Kubernetes-Native &#x2022; HIPAA Compliant &#x2022; Vendor-Neutral CMS-0057-F Compliance Layer</text>
+        text-anchor="middle">Kubernetes-Native &#x2022; Built toward HIPAA technical safeguards &#x2022; Vendor-Neutral CMS-0057-F Readiness Layer</text>
 
   <!-- Row 1: API Gateway -->
   <g transform="translate(600, 215)">
@@ -192,22 +192,17 @@
     <g transform="translate(210, 0)">
       <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
       <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
-            fill="#00b4ff" text-anchor="middle">Availity</text>
+            fill="#00b4ff" text-anchor="middle">Stedi</text>
     </g>
     <g transform="translate(450, 0)">
       <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
-            fill="#ff9900" text-anchor="middle">Change Healthcare</text>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="600"
+            fill="#ff9900" text-anchor="middle">Availity (scaffold)</text>
     </g>
     <g transform="translate(700, 0)">
       <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
-            fill="#4285f4" text-anchor="middle">Optum</text>
-    </g>
-    <g transform="translate(950, 0)">
-      <rect x="-100" y="-22" width="200" height="44" rx="8" fill="rgba(8,8,8,0.9)" stroke="rgba(0,255,255,0.3)" stroke-width="1"/>
-      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600"
-            fill="#00ff88" text-anchor="middle">Inovalon</text>
+      <text x="0" y="5" font-family="Segoe UI, system-ui, sans-serif" font-size="10" font-weight="600"
+            fill="#4285f4" text-anchor="middle">Change Healthcare (scaffold)</text>
     </g>
   </g>
 </svg>

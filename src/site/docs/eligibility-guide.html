@@ -273,7 +273,7 @@
 
         <ol>
           <li><strong>Provider submits 270 inquiry</strong> &mdash; Contains member identification (name, DOB, member ID), provider NPI, and the type of eligibility information requested (service type code)</li>
-          <li><strong>Clearinghouse routing</strong> &mdash; Inbound 270s arrive via Availity, Change Healthcare, or Optum and are routed based on the submitter ID and payer ID in the ISA/GS segments</li>
+          <li><strong>Clearinghouse routing</strong> &mdash; Inbound 270s arrive via Stedi and are routed based on the submitter ID and payer ID in the ISA/GS segments. Availity and Change Healthcare adapters are scaffolds; additional clearinghouses are built per engagement.</li>
           <li><strong>Member lookup</strong> &mdash; System matches the 270 inquiry to an enrolled member using the submitted identifiers</li>
           <li><strong>Eligibility evaluation</strong> &mdash; Coverage status is checked as of the service date; benefit plan details, cost sharing, and PCP information are assembled</li>
           <li><strong>271 response generated</strong> &mdash; Response returned through the originating clearinghouse channel</li>
@@ -282,7 +282,7 @@
         <!-- Diagram: 270/271 eligibility verification flow -->
         <figure class="docs-diagram">
           <figcaption><strong>270/271 eligibility verification flow</strong></figcaption>
-          <p><code>Provider submits X12 270</code> &rarr; <code>Clearinghouse Routing</code> (Availity / Change Healthcare / Optum) &rarr; <code>Member Lookup</code> &rarr; <code>Eligibility Evaluation</code> (coverage, benefits, cost sharing, PCP) &rarr; <code>X12 271 Response</code> returned</p>
+          <p><code>Provider submits X12 270</code> &rarr; <code>Clearinghouse Routing</code> (Stedi) &rarr; <code>Member Lookup</code> &rarr; <code>Eligibility Evaluation</code> (coverage, benefits, cost sharing, PCP) &rarr; <code>X12 271 Response</code> returned</p>
         </figure>
 
         <h3 id="271-response-content">271 Response Content</h3>
@@ -494,7 +494,7 @@
         <ol>
           <li><strong>Configure member ID assignment rules</strong> &mdash; Define the member ID format and auto-generation rules</li>
           <li><strong>Set up 834 file ingestion</strong> &mdash; Configure the SFTP path, sponsor/exchange mapping, and member match criteria</li>
-          <li><strong>Configure 270/271 clearinghouse routing</strong> &mdash; Map submitter IDs and payer IDs for Availity, Change Healthcare, Optum, etc.</li>
+          <li><strong>Configure 270/271 clearinghouse routing</strong> &mdash; Map submitter IDs and payer IDs for your clearinghouse (Stedi today)</li>
           <li><strong>Define PCP auto-assignment rules</strong> &mdash; Set the assignment window, scoring weights, and panel capacity thresholds</li>
           <li><strong>Configure coverage lifecycle rules per LOB</strong> &mdash; Set grace periods, runout periods, COBRA parameters, and SEP rules</li>
           <li><strong>Process a test 834 file</strong> &mdash; Submit a sample enrollment file and verify member creation, coverage activation, and PCP assignment</li>

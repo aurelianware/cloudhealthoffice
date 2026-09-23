@@ -329,7 +329,7 @@
         <p>The fee schedule engine operates differently depending on the platform&rsquo;s configured operating mode for the line of business.</p>
 
         <h3>Augment Mode</h3>
-        <p>CHO prices the claim independently and passes the allowed amount to QNXT. Can be used as a validation/override check against QNXT&rsquo;s native pricing, or as the authoritative price if QNXT pricing is disabled for the line of business.</p>
+        <p>CHO prices the claim independently and passes the allowed amount to the core admin system. Can be used as a validation/override check against the core&rsquo;s native pricing, or as the authoritative price if core pricing is disabled for the line of business. The core-system adapter is built per engagement.</p>
 
         <h3>Replace Mode</h3>
         <p>CHO pricing IS the adjudication price. The allowed amount flows directly into CHO&rsquo;s claim record as the system-of-record determination.</p>

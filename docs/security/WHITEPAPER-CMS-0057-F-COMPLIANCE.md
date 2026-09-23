@@ -741,7 +741,7 @@ Cloud Health Office transforms the CMS-0057-F compliance challenge from an insur
 |---------|-----------------|----------------------------|
 | **Vendor Independence** | Lock-in with $800K-3.5M annual licensing | Source-available agility; no vendor lock-in |
 | **CMS Compliance** | 18-36 month uncertain timeline | 90-day technical accelerator toward payer-specific January 2027 readiness |
-| **claims adjudication systems Integration** | Custom $2-5M development | Modular replacement via pre-built connectors |
+| **claims adjudication systems Integration** | Custom $2-5M development | Modular replacement via adapter interfaces built per engagement |
 | **5-Year TCO** | $16.7M+ | $2.6M ($10M+ savings) |
 | **Technical Debt** | Compounds annually | Zero; source-available community-maintained |
 

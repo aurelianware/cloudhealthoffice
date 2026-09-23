@@ -40,7 +40,7 @@
         <div class="docs-breadcrumb"><a href="/">Home</a><span class="sep">&#x25B8;</span><a href="/docs">Docs</a><span class="sep">&#x25B8;</span><span class="current">Architecture</span></div>
 
         <h1>Architecture</h1>
-        <p class="docs-subtitle">Cloud Health Office is a cloud-native multi-tenant SaaS platform that processes healthcare EDI transactions for unlimited health plans. Configuration-driven, backend-agnostic, and deployable to any Kubernetes cluster.</p>
+        <p class="docs-subtitle">Cloud Health Office is a cloud-native multi-tenant SaaS platform that processes healthcare EDI transactions for multiple health plans. Configuration-driven, backend-agnostic, and deployable to any Kubernetes cluster.</p>
 
         <figure class="docs-diagram">
           <img src="/graphics/platform-overview.svg" alt="Cloud Health Office platform overview showing 36 microservices, 9 adjudication engines, 5 FHIR R4 APIs, 60 portal pages, and multi-cloud deployment" />
@@ -54,9 +54,9 @@
         <table>
           <thead><tr><th>Principle</th><th>Implementation</th></tr></thead>
           <tbody>
-            <tr><td>Multi-Tenant SaaS</td><td>Single codebase serves unlimited payers with per-tenant isolation via <code>X-Tenant-ID</code> header routing</td></tr>
+            <tr><td>Multi-Tenant SaaS</td><td>Single codebase serves multiple payers, with per-tenant query filtering on <code>TenantId</code></td></tr>
             <tr><td>Configuration-First Onboarding</td><td>Add new payers through tenant-aware configuration and implementation-specific validation</td></tr>
-            <tr><td>Backend Agnostic</td><td>Works with any claims admin system (QNXT, Facets, HealthEdge, Epic, custom) via <code>ICoreAdminAdapter</code> pattern</td></tr>
+            <tr><td>Backend Agnostic</td><td>Adapter interfaces per core system (QNXT, Facets, HealthEdge, custom); integrations built per engagement</td></tr>
             <tr><td>Cloud Agnostic</td><td>Deploy to Azure, AWS, GCP, or on-premises with Kubernetes and Helm charts</td></tr>
             <tr><td>Standards-Based</td><td>X12 EDI (270/275/277/278/834/835/837), FHIR R4, Da Vinci IGs, HL7, USCDI</td></tr>
           </tbody>
@@ -74,7 +74,7 @@
         <p>Five inbound parsers — 837 Claims, 835 Remittance, 834 Enrollment, 276/277 Claim Status, and 278 Prior Auth — plus a shared X12 Encoder for outbound generation. All written in C# (.NET 8) with zero external dependencies.</p>
 
         <h2 id="adjudication">Claims Adjudication Pipeline</h2>
-        <p>The 10-step claims adjudication pipeline processes an 837 from SFTP ingestion through Argo Workflows to real-time adjudication with full benefit calculation, completing in under 500ms end-to-end.</p>
+        <p>The 10-step claims adjudication pipeline processes an 837 from SFTP ingestion through Argo Workflows to adjudication with full benefit calculation.</p>
 
         <figure class="docs-diagram">
           <img src="/graphics/claims-adjudication-flow.svg" alt="837 claims adjudication pipeline showing 10-step flow from SFTP ingestion through Kafka, claims service API, benefit engine, to approved or denied outcome" />

@@ -389,7 +389,6 @@ This guide does not claim:
 - public `portal.cloudhealthoffice.com` or `api.cloudhealthoffice.com` endpoints
   are deployed
 - the clean 100K local result is a production-cloud capacity claim
-- the full one-million-claim challenge has been completed
 - every edge-case scenario is scoreable today
 
 The current proof ladder is evidence-first: make outcomes observable, keep

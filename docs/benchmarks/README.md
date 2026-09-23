@@ -33,7 +33,7 @@ and will not reproduce exactly elsewhere; the correctness gates are seed-reprodu
 | Payment gate | 20,000/20,000 exact within $0.01 |
 | Throughput | 123.81 claims/sec |
 
-**Highest sustained throughput (episode 16), same corpus:**
+**Highest sustained throughput at 1M claims (episode 16), same corpus:**
 
 | Measure | Result |
 | --- | --- |
