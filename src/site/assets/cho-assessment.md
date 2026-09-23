@@ -54,8 +54,8 @@ Cloud Health Office deploys HIPAA-oriented EDI infrastructure through a focused,
 - Key Vault Premium with HSM-backed keys
 
 **Multi-Payer by Design:**
-- Unlimited payer tenant support
-- Complete logical isolation per tenant
+- Multi-tenant by design
+- Per-tenant query filtering
 - Shared infrastructure, zero shared secrets
 - Configuration-driven onboarding
 
@@ -93,7 +93,7 @@ Cloud Health Office deploys HIPAA-oriented EDI infrastructure through a focused,
 #### 3. Eligibility Verification (270/271)
 
 **Integration Points:**
-- Clearinghouse, Change Healthcare, Optum 360, Inovalon
+- Clearinghouse connectivity via Stedi; Availity and Change Healthcare adapters are scaffolds
 - Direct payer connectivity
 - Backend system correlation (claims adjudication systems such as HealthEdge)
 
@@ -209,7 +209,7 @@ cd generated/your-payer/infrastructure && ./deploy.sh
 - Source-available, BSL 1.1 licensed
 - Sub-1-hour deployment
 - Self-service onboarding and configuration
-- Unlimited multi-payer support
+- Multi-payer support
 - Security-first architecture
 
 **Positioning:** Cloud Health Office is a source-available, Kubernetes-native compliance and modernization layer for payer core admin systems.
@@ -296,8 +296,8 @@ cd generated/your-payer/infrastructure && ./deploy.sh
    - No programming expertise required
 
 2. **Multi-Payer Scale**
-   - Unlimited tenant support
-   - Complete logical isolation
+   - Multi-tenant by design
+   - Per-tenant query filtering
    - Shared infrastructure efficiency
 
 3. **Backend Agnostic**

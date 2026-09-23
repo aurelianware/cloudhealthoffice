@@ -192,6 +192,6 @@
   <g transform="translate(0, 555)">
     <rect x="0" y="0" width="1200" height="45" fill="rgba(0,255,255,0.03)"/>
     <text x="600" y="28" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="rgba(176,176,176,0.6)"
-          text-anchor="middle">Orchestrated by Argo Workflows &#x2022; Event-driven &#x2022; HIPAA Compliant &#x2022; Multi-cloud &#x2022; &lt;500ms end-to-end</text>
+          text-anchor="middle">Orchestrated by Argo Workflows &#x2022; Event-driven &#x2022; Built toward HIPAA technical safeguards &#x2022; Multi-cloud</text>
   </g>
 </svg>

@@ -42,7 +42,7 @@ Cloud Health Office includes four production-grade Azure Monitor Workbooks for r
 - ✅ **Multi-Tenant Support**: Filter by payer ID across all dashboards
 - ✅ **PHI Redaction**: Automatic exclusion of patient identifiers (SSN, DOB, Member IDs)
 - ✅ **Alerting Ready**: Pre-configured KQL queries for Azure Monitor alerts
-- ✅ **HIPAA Compliant**: All queries comply with HIPAA privacy requirements
+- **Built toward HIPAA technical safeguards**: Queries are written to exclude PHI
 - ✅ **Parameterized**: Flexible time ranges and filtering options
 - ✅ **Export to PDF**: All workbooks support PDF export for compliance reporting
 - ✅ **Scheduled Email Alerts**: Configure weekly compliance summaries via Azure Monitor

@@ -170,7 +170,7 @@
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x1F4E5;</span>
             <h3>Claim Ingestion</h3>
-            <p>837 EDI receipt via SFTP/API, clearinghouse connectors (Availity, Change Healthcare, Optum), real-time and batch modes.</p>
+            <p>837 EDI receipt via SFTP/API, clearinghouse connectivity via Stedi, real-time and batch modes.</p>
           </div>
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x2699;</span>
@@ -227,16 +227,13 @@
 
         <h3 id="clearinghouse-connectors">Clearinghouse Connectors</h3>
 
-        <p>Cloud Health Office includes pre-built connectors for the major healthcare clearinghouses. Each connector handles SFTP polling, file format translation, acknowledgment generation, and failover:</p>
+        <p>Clearinghouse connectivity via Stedi today. Availity and Change Healthcare adapters are scaffolds; additional clearinghouses are built per engagement.</p>
 
         <ul>
-          <li><strong>Availity</strong> &mdash; Primary connector for commercial and Medicare Advantage claims; supports real-time 276/277 status inquiries</li>
-          <li><strong>Change Healthcare</strong> &mdash; High-volume connector with batch and real-time modes; integrated with Change Healthcare&rsquo;s claims status and eligibility services</li>
-          <li><strong>Optum</strong> &mdash; Connector for UnitedHealthcare-affiliated providers and Optum clearinghouse clients</li>
-          <li><strong>Inovalon</strong> &mdash; Connector for Medicaid managed care plans using Inovalon&rsquo;s NASCO clearinghouse services</li>
+          <li><strong>Stedi</strong> &mdash; The clearinghouse path wired today, covering eligibility and claim submission/response routing</li>
+          <li><strong>Availity</strong> &mdash; Adapter scaffold; the 270/271 API integration is not yet implemented</li>
+          <li><strong>Change Healthcare</strong> &mdash; Adapter scaffold; the eligibility API integration is not yet implemented</li>
         </ul>
-
-        <p>Each connector supports <strong>failover configuration</strong>: if the primary clearinghouse connection fails, claims are automatically routed through a backup connector after a configurable timeout.</p>
 
         <h3 id="claim-receipt-workflow">Claim Receipt Workflow</h3>
 
@@ -650,7 +647,7 @@
         <p>Recommended setup order for a new health plan implementation:</p>
 
         <ol>
-          <li><strong>Configure clearinghouse connectors</strong> &mdash; Set up SFTP connections for Availity, Change Healthcare, or your primary clearinghouse</li>
+          <li><strong>Configure clearinghouse connectivity</strong> &mdash; Set up Stedi, or SFTP connections for your primary clearinghouse</li>
           <li><strong>Load NCCI/MUE edit files</strong> &mdash; Import the latest CMS quarterly release of NCCI physician/practitioner pairs and MUE values</li>
           <li><strong>Configure fee schedules</strong> &mdash; Load rate tables for Medicare RBRVS, Medicaid, and commercial contracts (see <a href="/docs/fee-schedule-guide">Fee Schedule Guide</a>)</li>
           <li><strong>Configure benefit plans</strong> &mdash; Set up plan structures, cost sharing rules, and accumulators (see <a href="/docs/benefit-plan-guide">Benefit Plan Guide</a>)</li>

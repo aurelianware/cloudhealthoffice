@@ -345,7 +345,7 @@ To onboard a new payer:
 
 ## Security & Compliance
 
-- **HIPAA Compliant:** All PHI encrypted at rest and in transit
+- **Built toward HIPAA technical safeguards:** PHI encrypted at rest and in transit
 - **Azure Blob Storage:** Private containers, no public access
 - **Cosmos DB:** TLS 1.2+, partition isolation by tenant
 - **Access Control:** Kubernetes RBAC, service-to-service authentication

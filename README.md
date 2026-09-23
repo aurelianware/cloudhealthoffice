@@ -124,7 +124,7 @@ Current published local evidence includes:
   1,000,000 processed, zero platform failures, 129,981/130,000 workflow checks
   matched, zero unsupported scenarios, and a payment-amount gate of
   20,000/20,000 exact within one cent, at 123.81 claims/sec.
-- **Highest sustained throughput (episode 16), same corpus:** 155.89 claims/sec
+- **Highest sustained throughput at 1M claims (episode 16), same corpus:** 155.89 claims/sec
   (P95 910 ms, P99 1,205 ms), 129,980/130,000 workflow checks, 19,982/19,982
   payments exact within one cent. 122 claims became terminal after the
   validator's 180-second observation window — post-run verification found all
