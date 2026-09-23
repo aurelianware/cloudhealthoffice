@@ -227,7 +227,7 @@
             <span class="section-eyebrow" style="color:#00ffff;">Or book directly</span>
             <h2 class="section-title" style="font-size:clamp(1.3rem,3vw,1.9rem);">Book 30 minutes on the calendar</h2>
           </div>
-          <a href="https://calendar.proton.me/bookings#t8cx42xrcsdyKpyO-u6tOusw7bHVaQdosjyL0txXTQA=" target="_blank" rel="noopener noreferrer" class="button" data-ga-event="calendar_open_click">Open the booking calendar &rarr;</a>
+          <a href="https://calendar.google.com/calendar/appointments/schedules/AcZssZ0MrsUuPmb7Nw-ND9IOA7GvDo4fSxjy71pnegt4LLaFr7EpFs5zWT0J8_4hyC-rhMDt53DkbKAx?gv=true" target="_blank" rel="noopener noreferrer" class="button" data-ga-event="calendar_open_click" data-booking-popup>Open the booking calendar &rarr;</a>
           <p style="margin-top:14px; font-size:0.85rem; color:rgba(160,160,160,0.7);">
             Engineers: you can skip all of this and <a href="https://github.com/aurelianware/cloudhealthoffice" target="_blank" rel="noopener noreferrer" style="color:#00ffff;">clone the repo</a>. The evaluator pack above emails you the notes.
           </p>
@@ -284,5 +284,64 @@
       </div>
     </div>
   </footer>
+  <dialog id="bookingDialog" class="booking-dialog" aria-label="Book a Cloud Health Office demo">
+    <div class="booking-dialog-bar">
+      <span>Book a demo</span>
+      <button type="button" class="booking-dialog-close" aria-label="Close booking calendar">&times;</button>
+    </div>
+    <iframe title="Book a Cloud Health Office product demo"></iframe>
+  </dialog>
+  <style>
+    .booking-dialog {
+      width: min(920px, calc(100vw - 32px));
+      height: min(760px, calc(100vh - 32px));
+      padding: 0;
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .booking-dialog:not([open]) { display: none; }
+    .booking-dialog[open] { display: flex; flex-direction: column; }
+    .booking-dialog::backdrop { background: rgba(0, 0, 0, 0.75); }
+    .booking-dialog-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: #050606;
+      color: #fff;
+      font-weight: 700;
+    }
+    .booking-dialog-close {
+      border: 0;
+      background: none;
+      color: #00ffff;
+      font-size: 1.8rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .booking-dialog iframe { flex: 1; width: 100%; border: 0; }
+    @media (max-width: 720px) {
+      .booking-dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; border: 0; border-radius: 0; }
+    }
+  </style>
+  <script>
+    (function () {
+      var dialog = document.getElementById('bookingDialog');
+      if (!dialog || typeof dialog.showModal !== 'function') return;
+      var frame = dialog.querySelector('iframe');
+      dialog.querySelector('.booking-dialog-close').addEventListener('click', function () { dialog.close(); });
+      dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.close(); });
+      document.querySelectorAll('a[data-booking-popup]').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          if (!frame.src) frame.src = link.href;
+          dialog.showModal();
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
