@@ -21,7 +21,7 @@ A Kubernetes-native FHIR / SMART / prior-authorization / audit layer that deploy
 | Encryption at rest | Store and Key Vault managed keys on Azure deployments; field-level encryption on appeals PHI. Customer-managed key module available; not yet wired into default deployment. | appeals-service (Layer 2, already shipped) |
 | PHI in telemetry | OpenTelemetry with PHI-scrubbing span processor | Infrastructure observability |
 | Audit | Request tenant + correlation headers; authorization and consent services emit events | correlation / tenant propagation handlers |
-| Dependency scanning | Dependabot + Trivy + gitleaks in GitHub Actions | `.github/workflows` |
+| Dependency and code scanning | Dependabot + Trivy + gitleaks in GitHub Actions; CodeQL static analysis via GitHub code scanning **default setup** (actions, csharp, javascript, javascript-typescript, python, typescript; default query suite; weekly plus per-PR) | `.github/workflows` for Dependabot, Trivy and gitleaks. CodeQL is configured in repository Security settings, not in a workflow file, so it does not appear under `.github/workflows`; verify with `gh api repos/aurelianware/cloudhealthoffice/code-scanning/default-setup` |
 | License / production use | BSL 1.1; production PHI or live operations require a commercial license | `COMMERCIAL-LICENSING.md` |
 
 ## What is explicitly not claimed
