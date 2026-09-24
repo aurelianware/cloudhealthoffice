@@ -29,10 +29,34 @@ history if needed for rotation verification; the commits that carried it are
 
 ### Item 1 — what this actually was
 
-> **[FOUNDER TO CONFIRM: decommission/rotation date]**
->
-> As of 2026-09-23 this endpoint has **not** been confirmed decommissioned. Treat the
-> credential as potentially live until the checks below are run.
+**Status: OPEN — awaiting Azure-side verification. Last reviewed 2026-09-23.**
+**Owner: repository owner. Target: before any external security review.**
+
+This item is deliberately recorded as unresolved rather than closed. The endpoint has
+not been confirmed decommissioned, and no evidence available from outside Azure can
+confirm it either way, so the credential must be treated as potentially live until the
+checks in "Resolving this item" below are run against the subscription.
+
+#### What has already been ruled out
+
+| Check | Date | Result | What it proves |
+|---|---|---|---|
+| `git log --all -S` for `isSftpEnabled`, `localUsers`, `sftpEnabled` | 2026-09-23 | zero commits | No Azure Storage account SFTP endpoint ever existed in this repository. The storage-account local-user check does **not** apply and must not be treated as an all-clear. |
+| `dig sftp.cloudhealthoffice.com A` | 2026-09-23 | `NOERROR`, no answer | The DNS record was never created (`CHANGELOG.md:1452`). Says nothing about the IP. |
+| TCP connect to `20.115.193.245` ports 22, 80, 443, 2222 | 2026-09-23 | no response on any port; control host on :22 succeeded | **Inconclusive.** Silent drops are produced both by a deallocated IP and by an NSG default-deny in front of a running server. This repository ships `scripts/setup/setup-sftp-dns-whitelist.sh` to configure exactly such an allowlist. |
+| `kubectl get ns` on the only locally configured context | 2026-09-23 | no `cho-sftp` / `cho-workflows` | Rules out the local Docker Desktop cluster only. |
+
+No authentication was attempted against any host at any point.
+
+#### Resolving this item
+
+Run the commands in "Checks the founder needs to run" below, then apply this reading:
+
+| Finding | Action |
+|---|---|
+| No AKS cluster **and** no public IP `20.115.193.245` | Decommissioned. Replace this Status block with the confirmed date and the command output that established it. |
+| Deployment or Service still exists | **Delete it rather than rotating** — this path is legacy; Argo replaced the orchestration and the SFTP server is no longer the intended data path. **Before deleting:** list the files on the volume and capture container logs. If any real EDI ever transited it, 834 and 837 payloads carry PHI, which makes this a potential-disclosure assessment rather than a leaked development password. Pre-pilot status makes synthetic data likely — confirm, do not assume. |
+| Public IP exists but nothing is bound to it | Release it. It is orphaned, billable, and still named in public documentation. |
 
 A read-only investigation on 2026-09-23 found that two widely-held assumptions about
 this credential are wrong, and both change the remediation:
@@ -71,16 +95,42 @@ kubectl get svc sftp-service -n cho-sftp -o wide
 kubectl get secret sftp-users -n cho-sftp -o jsonpath='{.data.users\.conf}' | base64 -d
 #    -> look for 'cho-edi:' AND any leftover 'logicapp:' entry
 
-# 3. Is the public IP still allocated?
-az network public-ip list --query "[?ipAddress=='20.115.193.245']" -o table
+# 3. Is the public IP still allocated, and is anything bound to it?
+az network public-ip list --query "[?ipAddress=='20.115.193.245']" \
+  -o json --query "[].{name:name,rg:resourceGroup,ip:ipAddress,attachedTo:ipConfiguration.id}"
+#    -> attachedTo == null means the IP is orphaned: release it.
+
+# 4. BEFORE deleting anything: what was actually on the server?
+#    834 and 837 payloads carry PHI. If real EDI ever transited this server, the
+#    exposure assessment is different from a leaked development password, so
+#    establish this first and record the output.
+kubectl exec -n cho-sftp deployment/sftp-server -- ls -lAR /home/cho-edi/ 2>/dev/null
+kubectl exec -n cho-sftp deployment/sftp-server -- ls -lAR /home/logicapp/ 2>/dev/null
+kubectl logs -n cho-sftp deployment/sftp-server --all-containers --timestamps \
+  --tail=-1 > sftp-server-access-history-$(date +%F).log
+#    -> the log gives a record of connections; retain it with the incident notes.
+
+# 5. Then decommission (preferred over rotation — this path is legacy)
+kubectl delete -f infrastructure/k8s/sftp-server-deployment.yaml
+#    -> removes the Deployment, Service (and therefore the LoadBalancer), PVC,
+#       ConfigMap and the sftp-users Secret. Confirm the public IP is released
+#       afterwards with the command in step 3, and delete it explicitly if Azure
+#       retained it as a static address.
 ```
 
+Note on the container logs: `atmoz/sftp` logs authentication events to the container
+log, but the log is bounded by the container's lifetime and the node's log rotation. If
+the pod has restarted since 2026-02-04, the log will not cover the full exposure
+window, so its absence of suspicious entries is **not** evidence that nothing connected.
+
 Unauthenticated checks already performed on 2026-09-23, none of them conclusive:
-`az` CLI not available; `sftp.cloudhealthoffice.com` returns NODATA (the A record was
-never created, per `CHANGELOG.md:1452`); a TCP connect to `20.115.193.245:22` timed
-out rather than being refused, which is equally consistent with a deallocated IP and
-with a live server behind the NSG source-IP allowlist that
-`scripts/setup/setup-sftp-dns-whitelist.sh` exists to configure. No authentication was
+`az` CLI not installed and no Azure credentials present on the machine used;
+`sftp.cloudhealthoffice.com` returns NODATA (the A record was never created, per
+`CHANGELOG.md:1452`); TCP connects to `20.115.193.245` on ports 22, 80, 443 and 2222
+all produced no response while a control connect to `github.com:22` succeeded. Silent
+drops on every port are equally consistent with a deallocated IP and with an NSG
+default-deny in front of a running server, which is the configuration
+`scripts/setup/setup-sftp-dns-whitelist.sh` exists to create. No authentication was
 attempted.
 
 **Separately:** `scripts/setup/rotate-sftp-password.sh:63-66` restarts
