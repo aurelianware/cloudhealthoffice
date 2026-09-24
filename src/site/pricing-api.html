@@ -291,8 +291,14 @@
       opacity: 0.6;
       cursor: not-allowed;
     }
+    /* lead-capture.js reveals these by clearing the `hidden` attribute, so the
+       base rule must not be `display: none` — an author-level display rule
+       overrides the UA stylesheet's [hidden] and the element would stay
+       invisible after a successful submit or a server error. The attribute
+       selectors below carry higher specificity than the bare class, so the
+       initial hidden state still applies. */
     .form-error {
-      display: none;
+      display: block;
       background: rgba(255,0,0,0.08);
       border: 1px solid rgba(255,0,0,0.3);
       border-radius: 8px;
@@ -303,8 +309,12 @@
       line-height: 1.5;
     }
     .form-success {
-      display: none;
+      display: block;
       text-align: center;
+    }
+    .form-error[hidden],
+    .form-success[hidden] {
+      display: none;
     }
     .form-success h3 {
       color: #00ff88;
@@ -760,9 +770,11 @@
     // [data-lead-error], and revealing [data-lead-thankyou] on success.
     //
     // This page previously defined its own submit handler that validated the
-    // fields and then ran `window.location.href = '/contact'`, discarding
-    // everything the visitor had typed and making them enter it again. No
-    // request was ever sent, so no notification could ever arrive.
+    // fields and then navigated to the contact page, discarding everything the
+    // visitor had typed and making them enter it again. No request was ever
+    // sent, so no notification could ever arrive. See PR #1202 for the diff;
+    // the literal redirect is not reproduced here because the site test suite
+    // greps for it as a regression guard.
 
     // ===== COPY CODE =====
     function copyCode(elementId) {
