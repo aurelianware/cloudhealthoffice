@@ -22,34 +22,48 @@ import { execFileSync } from 'node:child_process';
 /**
  * A shallow checkout (actions/checkout defaults to fetch-depth: 1) makes
  * `git log -1 -- <file>` resolve to the build commit for every file, so every
- * page would claim the same lastmod. That is the exact failure this script
- * exists to prevent, and it is invisible locally where history is complete —
- * so detect it and stop.
+ * page would claim the same lastmod — the exact failure this script exists to
+ * prevent, and invisible locally where history is complete.
+ *
+ * How strictly to treat that depends on what the build is for:
+ *
+ *   - A *deployed* build must not publish uniform dates, so the deploy
+ *     workflows set SITEMAP_STRICT=1 and this becomes a hard failure.
+ *   - A *validation* build (pr-lint) only checks that the site compiles. The
+ *     sitemap it produces is thrown away, and forcing a full-history clone on
+ *     every pull request would cost minutes for no benefit. There it warns and
+ *     falls back to file mtimes.
  */
-function assertFullHistory() {
+function checkHistoryDepth() {
+  const strict = process.env.SITEMAP_STRICT === '1';
+  let shallow = false;
   try {
-    const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+    shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
       cwd: SITE_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    if (shallow === 'true') {
-      console.error(
-        'ERROR: this is a shallow git checkout, so per-page lastmod cannot be derived.\n' +
-        'Every URL would receive the build date, which tells crawlers that nothing\n' +
-        'changed in particular. Set `fetch-depth: 0` on actions/checkout, or run\n' +
-        '`git fetch --unshallow`, before generating the sitemap.',
-      );
-      process.exit(1);
-    }
+    }).trim() === 'true';
   } catch {
-    // Not a git checkout at all — lastModified() falls back to file mtimes.
+    return; // not a git checkout — lastModified() falls back to file mtimes
   }
+  if (!shallow) return;
+
+  const explanation =
+    'This is a shallow git checkout, so per-page lastmod cannot be derived.\n' +
+    'Every URL would receive the build date, which tells crawlers that nothing\n' +
+    'changed in particular. Set `fetch-depth: 0` on actions/checkout, or run\n' +
+    '`git fetch --unshallow`, before generating a sitemap that will be published.';
+
+  if (strict) {
+    console.error(`ERROR: ${explanation}`);
+    process.exit(1);
+  }
+  console.warn(`WARNING: ${explanation}\nSITEMAP_STRICT is not set, so falling back to file mtimes.`);
 }
 
 const SITE_ROOT = process.cwd();
 const DIST = join(SITE_ROOT, 'dist');
 const ORIGIN = 'https://cloudhealthoffice.com';
 
-assertFullHistory();
+checkHistoryDepth();
 
 // Not marketing surface: error page, auth, and the authenticated portal.
 const EXCLUDED = [/^\/404$/, /^\/login$/, /^\/portal(\/|$)/];

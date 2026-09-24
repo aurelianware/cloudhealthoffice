@@ -74,6 +74,10 @@ jobs:
 
       - name: Build site artifact
         run: npm run build
+        env:
+          # Publishing a sitemap whose lastmod is uniform is worse than none;
+          # fail the deploy instead. See generate-sitemap.mjs.
+          SITEMAP_STRICT: '1'
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

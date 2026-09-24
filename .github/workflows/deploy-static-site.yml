@@ -328,6 +328,10 @@ jobs:
       - name: Build site artifact
         working-directory: src/site
         run: npm run build
+        env:
+          # Publishing a sitemap whose lastmod is uniform is worse than none;
+          # fail the deploy instead. See generate-sitemap.mjs.
+          SITEMAP_STRICT: '1'
 
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
