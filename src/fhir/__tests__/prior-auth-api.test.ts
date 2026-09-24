@@ -471,7 +471,21 @@ describe('Prior Authorization API - Da Vinci CRD Integration', () => {
   });
   
   describe('createCDSHooksRequest', () => {
-    
+    // fhirServer now falls back to CHO_FHIR_BASE_URL, so every case in this
+    // block must be isolated from whatever the ambient environment happens to
+    // have set. Without this, the omission test fails on any machine or CI
+    // runner that exports the variable.
+    const ambientFhirBaseUrl = process.env.CHO_FHIR_BASE_URL;
+
+    beforeEach(() => {
+      delete process.env.CHO_FHIR_BASE_URL;
+    });
+
+    afterEach(() => {
+      if (ambientFhirBaseUrl === undefined) delete process.env.CHO_FHIR_BASE_URL;
+      else process.env.CHO_FHIR_BASE_URL = ambientFhirBaseUrl;
+    });
+
     it('should create order-select hook request', () => {
       const request = createCDSHooksRequest('order-select', {
         userId: 'Practitioner/123',
@@ -496,8 +510,12 @@ describe('Prior Authorization API - Da Vinci CRD Integration', () => {
       
       expect(request.hook).toBe('order-sign');
       // No server configured and none passed: the optional CDS Hooks field is
-      // omitted rather than pointed at a host that does not exist.
-      expect(request.fhirServer).toBeUndefined();
+      // omitted rather than pointed at a host that does not exist. Assert the
+      // property is absent, not merely undefined — an own property carrying
+      // `undefined` would serialise as a present-but-empty field and would
+      // satisfy toBeUndefined() while breaking the documented contract.
+      expect(request).not.toHaveProperty('fhirServer');
+      expect(Object.keys(request)).not.toContain('fhirServer');
     });
 
     it('uses an explicitly supplied fhirServer', () => {
@@ -511,18 +529,27 @@ describe('Prior Authorization API - Da Vinci CRD Integration', () => {
     });
 
     it('falls back to CHO_FHIR_BASE_URL when set', () => {
-      const previous = process.env.CHO_FHIR_BASE_URL;
+      // beforeEach/afterEach handle isolation and restoration.
       process.env.CHO_FHIR_BASE_URL = 'https://fhir.configured-host.test';
-      try {
-        const request = createCDSHooksRequest('order-sign', {
-          userId: 'Practitioner/999',
-          patientId: 'Patient/888'
-        });
-        expect(request.fhirServer).toBe('https://fhir.configured-host.test');
-      } finally {
-        if (previous === undefined) delete process.env.CHO_FHIR_BASE_URL;
-        else process.env.CHO_FHIR_BASE_URL = previous;
-      }
+
+      const request = createCDSHooksRequest('order-sign', {
+        userId: 'Practitioner/999',
+        patientId: 'Patient/888'
+      });
+
+      expect(request.fhirServer).toBe('https://fhir.configured-host.test');
+    });
+
+    it('prefers an explicit argument over CHO_FHIR_BASE_URL', () => {
+      process.env.CHO_FHIR_BASE_URL = 'https://fhir.configured-host.test';
+
+      const request = createCDSHooksRequest(
+        'order-sign',
+        { userId: 'Practitioner/999', patientId: 'Patient/888' },
+        'https://fhir.explicit-host.test'
+      );
+
+      expect(request.fhirServer).toBe('https://fhir.explicit-host.test');
     });
     
     it('should create appointment-book hook request', () => {
