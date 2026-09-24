@@ -19,9 +19,37 @@ import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from '
 import { join, relative, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+/**
+ * A shallow checkout (actions/checkout defaults to fetch-depth: 1) makes
+ * `git log -1 -- <file>` resolve to the build commit for every file, so every
+ * page would claim the same lastmod. That is the exact failure this script
+ * exists to prevent, and it is invisible locally where history is complete —
+ * so detect it and stop.
+ */
+function assertFullHistory() {
+  try {
+    const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd: SITE_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (shallow === 'true') {
+      console.error(
+        'ERROR: this is a shallow git checkout, so per-page lastmod cannot be derived.\n' +
+        'Every URL would receive the build date, which tells crawlers that nothing\n' +
+        'changed in particular. Set `fetch-depth: 0` on actions/checkout, or run\n' +
+        '`git fetch --unshallow`, before generating the sitemap.',
+      );
+      process.exit(1);
+    }
+  } catch {
+    // Not a git checkout at all — lastModified() falls back to file mtimes.
+  }
+}
+
 const SITE_ROOT = process.cwd();
 const DIST = join(SITE_ROOT, 'dist');
 const ORIGIN = 'https://cloudhealthoffice.com';
+
+assertFullHistory();
 
 // Not marketing surface: error page, auth, and the authenticated portal.
 const EXCLUDED = [/^\/404$/, /^\/login$/, /^\/portal(\/|$)/];
@@ -94,8 +122,24 @@ function existingMetadata() {
 const curated = existingMetadata();
 const entries = [];
 
+// Both `docs.html` and `docs/index.html` ship, and both map to /docs. Emitting
+// the same <loc> twice is invalid and splits crawl signals, so collisions are
+// resolved in favour of the directory index, which is the canonical form the
+// flat file redirects to.
+const byUrlPath = new Map();
 for (const file of walk(DIST)) {
   const urlPath = toUrlPath(file);
+  const existing = byUrlPath.get(urlPath);
+  if (existing) {
+    const preferred = file.endsWith('/index.html') ? file : existing;
+    byUrlPath.set(urlPath, preferred);
+    console.log(`  collision on ${urlPath}: using ${relative(DIST, preferred)}`);
+    continue;
+  }
+  byUrlPath.set(urlPath, file);
+}
+
+for (const [urlPath, file] of byUrlPath) {
   if (EXCLUDED.some((re) => re.test(urlPath))) continue;
   const src = sourceFor(urlPath);
   const meta = curated.get(urlPath) ?? {};

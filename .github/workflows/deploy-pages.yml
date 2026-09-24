@@ -29,6 +29,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # Full history: src/site/scripts/generate-sitemap.mjs derives each page's
+          # <lastmod> from the last commit touching it. A shallow checkout would give
+          # every URL the build date, and the generator fails rather than emit that.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
