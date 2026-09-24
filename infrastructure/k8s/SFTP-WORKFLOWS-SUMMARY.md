@@ -4,7 +4,7 @@
 
 ### Infrastructure
 - **AKS Cluster**: 3 nodes, westus2, prod-cloudhealthoffice-rg
-- **SFTP Server**: Kubernetes-hosted, LoadBalancer IP `20.115.193.245`
+- **SFTP Server**: Kubernetes-hosted, LoadBalancer public IP (address removed; environment decommissioned 2026-09-23)
 - **Storage**: 10GB PVC with managed-csi
 - **Security**: Updated passwords, SSH keys generated
 
@@ -120,7 +120,7 @@ kubectl delete job -n cho-workflows -l app=sftp-test
 
 4. **Set up DNS** (optional):
    ```bash
-   # Configure sftp.cloudhealthoffice.com → 20.115.193.245
+   # Configure sftp.cloudhealthoffice.com → <LoadBalancer IP>
    # See docs/SFTP-DNS-SETUP.md
    ```
 

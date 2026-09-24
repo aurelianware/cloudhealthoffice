@@ -1426,7 +1426,7 @@ Based on comprehensive repository assessment, this release transforms FHIR APIs 
 
 #### SFTP Trading Partner Integration
 - **New Tenant**: clouddentaloffice (dental claims EDI)
-- **Endpoint**: 20.115.193.245:22 (pending DNS: sftp.cloudhealthoffice.com)
+- **Endpoint**: LoadBalancer public IP, port 22 (pending DNS: sftp.cloudhealthoffice.com). *Address removed 2026-09-23: the dev subscription was deleted and the IP returned to Microsoft's pool, where it may since have been reassigned.*
 - **Folder Structure**: /dental-claims/inbound/837/, /outbound/835/, /outbound/277/
 - **Credentials**: Stored in Azure Key Vault
 
@@ -1449,7 +1449,7 @@ Based on comprehensive repository assessment, this release transforms FHIR APIs 
 - **Multi-Tenant Headers**: Portal now sends `X-Tenant-ID` on all API calls (all services already compliant)
 
 #### Known Issues
-- DNS Configuration: sftp.cloudhealthoffice.com not yet pointed to 20.115.193.245
+- DNS Configuration: sftp.cloudhealthoffice.com never pointed at the LoadBalancer IP
 - Mock Data Fallback: Portal shows mock data when backend unavailable (configurable via `Portal.UseMockDataFallback`)
 - Stripe.net Warning: NU1603 - Package 46.4.0 not found, resolved to 47.0.0 (non-breaking)
 
