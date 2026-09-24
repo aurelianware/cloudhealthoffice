@@ -375,7 +375,7 @@ These are the ground-truth numbers for Cloud Health Office as of the most recent
 | Test methods | ~4,100 | xUnit Facts + Theories |
 | Production C# lines | ~190,000 | Excluding tests, bin, obj, and migrations |
 | Documentation lines | ~108,000 | Markdown and text under `docs/` |
-| Pricing framework | PMPM-based, pilot-specific | See FINANCIAL-MODEL.md for indicative ranges |
+| Pricing framework | PMPM-based, pilot-specific | Indicative ranges are maintained in a private repository |
 
 Verification procedure documented at `scripts/verify-canonical-facts.sh` (to be created in a follow-up PR). Numbers should be re-verified at each major release and when the Canonical Facts section is cited by another artifact.
 

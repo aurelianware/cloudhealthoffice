@@ -38,11 +38,16 @@ SEED_PARALLELISM="${SEED_PARALLELISM:-$PARALLELISM}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-500}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-docker-desktop}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
-# 30m is not enough for 100K+ claim runs: the Episode 8 100K run took 30:05 of
-# timed processing and 38:05 of tracked lifecycle. Default raised to 60m; set
-# JOB_TIMEOUT explicitly for 1,000,000-claim runs (allow several hours).
-# This script is not invoked by any CI workflow, so the new default is local-only.
-JOB_TIMEOUT="${JOB_TIMEOUT:-60m}"
+# 30m could not complete a 100K run, and 60m is also demonstrably too short:
+# episode-009/benchmark-results.txt:39 records the wrapper's kubectl wait timing
+# out at JOB_TIMEOUT=60m while the underlying Job ran on to completion at 69m,
+# losing the log tail. The later 100K p12 and p16 runs both used JOB_TIMEOUT=120m
+# (episode-008/benchmark-results.txt:159,212), so that is the default here.
+# wait_for_job_terminal returns 124 on timeout and this script exits that status,
+# so too low a default reports a healthy run as a failure.
+# 1,000,000-claim runs still need JOB_TIMEOUT raised explicitly (allow hours).
+# No CI workflow invokes this script, so the default is local-only.
+JOB_TIMEOUT="${JOB_TIMEOUT:-120m}"
 ORIGINAL_ADJUDICATION_MAX_CONCURRENT_CALLS=""
 
 log() {

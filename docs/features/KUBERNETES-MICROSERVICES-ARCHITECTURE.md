@@ -4,7 +4,15 @@
 
 Complete migration of Cloud Health Office components from Azure Static Web Apps and standalone services into a unified Kubernetes-based microservices platform running on AKS.
 
-## Current State
+## Current State (historical — as of 2026-02)
+
+> **The deployment described in this section no longer exists.** The AKS cluster and
+> its Azure subscription were deleted; it was a development environment that never held
+> PHI or production payer data. The components, namespaces, LoadBalancer and SFTP server
+> below record what was deployed at the time, not what is running now. Current Azure
+> workloads run on Azure Container Apps. The "Target State" section that follows remains
+> the design intent. Marked 2026-09-23.
+
 
 ### Existing Components
 - **Static Web App** (`site/`): Marketing site, login, portal pages hosted on Azure Static Web Apps
