@@ -28,6 +28,7 @@ const sitemap = read('sitemap.xml');
 const redirects = read('_redirects');
 const swaConfig = JSON.parse(read('staticwebapp.config.json'));
 const analytics = read('js/analytics-events.js');
+const pricingApi = read('pricing-api.html');
 const messageSheet = read('MESSAGE_SHEET.md');
 const knowledge = read('assistant/knowledge.md');
 const servicesCss = read('css/services.css');
@@ -946,6 +947,51 @@ describe('Services & deployment positioning', () => {
       expect(banned).toMatch(/guaranteed compliance/i);
       expect(banned).toMatch(/certified by, partnered with, or endorsed by/i);
       expect(banned).toMatch(/SaaS is "available"/i);
+    });
+  });
+
+  /**
+   * Lead forms have failed twice on /pricing-api: first by validating input and
+   * then discarding it with a redirect, and then by being wired to
+   * lead-capture.js while the page CSS still forced display:none on the very
+   * elements the handler reveals. Both failures were silent — the form looked
+   * fine and submissions vanished. These assertions encode the contract.
+   */
+  describe('pricing API lead form', () => {
+    it('submits through the shared lead-capture pipeline', () => {
+      expect(pricingApi).toContain('data-lead-form');
+      expect(pricingApi).toContain('data-lead-interest="pricing-api-access"');
+      expect(pricingApi).toContain('action="__FORMSPREE_LEADS_ENDPOINT__"');
+    });
+
+    it('never discards the submission by redirecting instead of posting', () => {
+      expect(pricingApi).not.toMatch(/window\.location\.href\s*=\s*['"]\/contact/);
+    });
+
+    it('exposes the hooks lead-capture.js needs to report outcomes', () => {
+      expect(pricingApi).toContain('data-lead-error');
+      expect(pricingApi).toContain('data-lead-thankyou');
+    });
+
+    it('does not force display:none on elements the handler reveals', () => {
+      // lead-capture.js only toggles the `hidden` attribute (el.hidden = false).
+      // An author-level `display: none` on the class outranks the UA stylesheet's
+      // [hidden] rule, so the element stays invisible and a successful submit
+      // looks broken. The base rules must be visible; [hidden] does the hiding.
+      expect(pricingApi).toMatch(/\.form-error\s*\{[^}]*display:\s*block/);
+      expect(pricingApi).toMatch(/\.form-success\s*\{[^}]*display:\s*block/);
+      expect(pricingApi).toMatch(/\.form-error\[hidden\][\s\S]{0,40}\{[^}]*display:\s*none/);
+    });
+
+    it('reveals by clearing `hidden`, which is what the CSS contract assumes', () => {
+      // If lead-capture.js ever switches to style.display the rules above stop
+      // matching the mechanism, so pin the assumption here too.
+      expect(leadCapture).toMatch(/\.hidden\s*=\s*false/);
+    });
+
+    it('does not promise an API key that is never issued', () => {
+      expect(pricingApi).not.toMatch(/Your API Key is Ready/i);
+      expect(pricingApi).not.toContain('apiKeyValue');
     });
   });
 });
