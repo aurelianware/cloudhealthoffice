@@ -29,13 +29,38 @@ history if needed for rotation verification; the commits that carried it are
 
 ### Item 1 — what this actually was
 
-**Status: OPEN — awaiting Azure-side verification. Last reviewed 2026-09-23.**
-**Owner: repository owner. Target: before any external security review.**
+**Status: NARROWED — the exposed endpoint is gone. Two residual resource checks remain.**
+**Last reviewed 2026-09-23. Owner: repository owner.**
 
-This item is deliberately recorded as unresolved rather than closed. The endpoint has
-not been confirmed decommissioned, and no evidence available from outside Azure can
-confirm it either way, so the credential must be treated as potentially live until the
-checks in "Resolving this item" below are run against the subscription.
+**The SFTP server is not running, and cannot be.** It was a Kubernetes `Deployment`
+plus a `type: LoadBalancer` `Service` in namespace `cho-sftp`
+(`infrastructure/k8s/sftp-server-deployment.yaml`), so it requires an AKS cluster to
+exist. As of 2026-09-23 there is no AKS cluster in the subscription — verified by the
+repository owner in the Azure portal. Current Azure workloads run on Azure Container
+Apps, not Kubernetes. This is consistent with the external probe: TCP connects to
+`20.115.193.245` on ports 22, 80, 443 and 2222 all went unanswered while a control host
+responded.
+
+**The live-exposure risk — an internet-facing SSH service accepting a password that sat
+in a public repository for roughly seven and a half months — is therefore retired.**
+There is no account to rotate, because there is no running server holding one.
+
+Two resource-level items remain open, neither of them an active exposure:
+
+1. **Public IP `20.115.193.245`.** A static public IP is an independent Azure resource
+   and survives deletion of the cluster that used it. If still allocated it is billable
+   and remains named in public documentation. Verify and release.
+2. **The `sftp-data-pvc` managed disk (10 GiB).** This is where any files that
+   transited the server lived. Its storage class is `managed-csi`, whose default
+   reclaim policy is `Delete`, so it most likely went with the cluster — but an
+   unattached 10 GiB disk, or a surviving `MC_*` node resource group, would mean the
+   volume persisted. If such a disk exists, inspect its contents before deleting: 834
+   and 837 payloads carry PHI, which would make this a potential-disclosure assessment
+   rather than a leaked development password. Pre-pilot status makes synthetic data
+   likely; confirm rather than assume.
+
+Commands for both are in "Checks the founder needs to run" below. This item closes when
+both return empty, or when the IP is released and the disk is accounted for.
 
 #### What has already been ruled out
 
@@ -50,13 +75,15 @@ No authentication was attempted against any host at any point.
 
 #### Resolving this item
 
-Run the commands in "Checks the founder needs to run" below, then apply this reading:
+With the cluster gone, the Kubernetes-side checks no longer apply — there is no
+Deployment, Service, Secret or pod to inspect. Two Azure resource checks remain:
 
-| Finding | Action |
-|---|---|
-| No AKS cluster **and** no public IP `20.115.193.245` | Decommissioned. Replace this Status block with the confirmed date and the command output that established it. |
-| Deployment or Service still exists | **Delete it rather than rotating** — this path is legacy; Argo replaced the orchestration and the SFTP server is no longer the intended data path. **Before deleting:** list the files on the volume and capture container logs. If any real EDI ever transited it, 834 and 837 payloads carry PHI, which makes this a potential-disclosure assessment rather than a leaked development password. Pre-pilot status makes synthetic data likely — confirm, do not assume. |
-| Public IP exists but nothing is bound to it | Release it. It is orphaned, billable, and still named in public documentation. |
+| Check | Finding | Action |
+|---|---|---|
+| Public IP `20.115.193.245` | Not allocated | Closed. Record the date. |
+| | Still allocated | Orphaned static IP — billable and still named in public docs. `az network public-ip delete -g <rg> -n <name>` |
+| Unattached ~10 GiB managed disk, or a surviving `MC_*` node resource group | None | Closed — the `sftp-data-pvc` volume went with the cluster, as `managed-csi`'s default `Delete` reclaim policy implies. |
+| | A 10 GiB orphan exists | That is the SFTP data volume. **Inspect before deleting** — attach it read-only to a throwaway VM and list its contents. If it holds real 834/837 files rather than synthetic ones, treat it as a potential PHI disclosure and escalate accordingly. |
 
 A read-only investigation on 2026-09-23 found that two widely-held assumptions about
 this credential are wrong, and both change the remediation:
@@ -84,54 +111,68 @@ the workflows under `infrastructure/argo-workflows/` still mount the `sftp-crede
 
 #### Checks the founder needs to run
 
-```bash
-# 1. Does the cluster still exist, and is the SFTP server still deployed?
-az aks list -o table
-az aks get-credentials -g <resource-group> -n <cluster-name>
-kubectl get deployment sftp-server -n cho-sftp
-kubectl get svc sftp-service -n cho-sftp -o wide
+Run from Azure Cloud Shell. All three iterate every subscription, because a leftover
+resource can sit in one that is not the default.
 
-# 2. Which accounts exist, and with which passwords?
-kubectl get secret sftp-users -n cho-sftp -o jsonpath='{.data.users\.conf}' | base64 -d
-#    -> look for 'cho-edi:' AND any leftover 'logicapp:' entry
+```bash
+# 1. Confirm no AKS cluster anywhere (corroborates the portal check)
+for s in $(az account list --query "[].id" -o tsv); do
+  echo "--- subscription $s"; az aks list --subscription "$s" -o table
+done
+
+# 2. Is the public IP still allocated, and is anything bound to it?
+for s in $(az account list --query "[].id" -o tsv); do
+  az network public-ip list --subscription "$s" \
+    --query "[?ipAddress=='20.115.193.245'].{name:name,rg:resourceGroup,alloc:publicIPAllocationMethod,boundTo:ipConfiguration.id}" -o json
+done
+
+# 3. Did the sftp-data-pvc disk survive the cluster?
+for s in $(az account list --query "[].id" -o tsv); do
+  az disk list --subscription "$s" \
+    --query "[?diskState=='Unattached'].{name:name,rg:resourceGroup,gb:diskSizeGb,created:timeCreated}" -o table
+done
+#    -> a ~10 GiB unattached disk, or any disk still in an MC_* resource group,
+#       is the SFTP volume. Inspect before deleting.
 
 # 3. Is the public IP still allocated, and is anything bound to it?
 az network public-ip list --query "[?ipAddress=='20.115.193.245']" \
   -o json --query "[].{name:name,rg:resourceGroup,ip:ipAddress,attachedTo:ipConfiguration.id}"
-#    -> attachedTo == null means the IP is orphaned: release it.
-
-# 4. BEFORE deleting anything: what was actually on the server?
-#    834 and 837 payloads carry PHI. If real EDI ever transited this server, the
-#    exposure assessment is different from a leaked development password, so
-#    establish this first and record the output.
-kubectl exec -n cho-sftp deployment/sftp-server -- ls -lAR /home/cho-edi/ 2>/dev/null
-kubectl exec -n cho-sftp deployment/sftp-server -- ls -lAR /home/logicapp/ 2>/dev/null
-kubectl logs -n cho-sftp deployment/sftp-server --all-containers --timestamps \
-  --tail=-1 > sftp-server-access-history-$(date +%F).log
-#    -> the log gives a record of connections; retain it with the incident notes.
-
-# 5. Then decommission (preferred over rotation — this path is legacy)
-kubectl delete -f infrastructure/k8s/sftp-server-deployment.yaml
-#    -> removes the Deployment, Service (and therefore the LoadBalancer), PVC,
-#       ConfigMap and the sftp-users Secret. Confirm the public IP is released
-#       afterwards with the command in step 3, and delete it explicitly if Azure
-#       retained it as a static address.
 ```
 
-Note on the container logs: `atmoz/sftp` logs authentication events to the container
-log, but the log is bounded by the container's lifetime and the node's log rotation. If
-the pod has restarted since 2026-02-04, the log will not cover the full exposure
-window, so its absence of suspicious entries is **not** evidence that nothing connected.
+#### What is no longer checkable, and what that means
 
-Unauthenticated checks already performed on 2026-09-23, none of them conclusive:
+With the cluster gone, the server's own records are gone with it. There is no pod to
+`kubectl exec` into and no container log to retain, so the question "did anyone ever
+connect with this password?" **cannot be answered from the platform.** That is a real
+limitation, not a clean bill of health. If a definitive answer is ever required — for a
+customer security questionnaire, a BAA negotiation, or a regulator — the honest response
+is that the server was torn down before its access history was captured, and the
+assessment rests on the points below rather than on logs.
+
+What argues against material exposure:
+
+- The account chrooted to `/home/<user>/upload` on a server that, on the evidence in
+  this repository, only ever carried synthetic EDI generated for the Million Claim
+  Challenge and integration tests. No pilot or production payer traffic is recorded
+  anywhere in the repo or its history.
+- `sftp.cloudhealthoffice.com` was never pointed at the IP (`CHANGELOG.md:1452`), so
+  the endpoint was only reachable by bare IP.
+- The platform has had no live payer customers to date.
+
+What argues for caution:
+
+- The IP was reachable from the public internet on port 22 for the period the cluster
+  ran, and the password was in a public repository for roughly seven and a half months.
+- `scripts/setup/setup-sftp-dns-whitelist.sh` exists to add an NSG allowlist, but there
+  is no evidence in the repository that it was ever actually run against the cluster.
+
+Unauthenticated checks performed on 2026-09-23, before the cluster status was known:
 `az` CLI not installed and no Azure credentials present on the machine used;
-`sftp.cloudhealthoffice.com` returns NODATA (the A record was never created, per
-`CHANGELOG.md:1452`); TCP connects to `20.115.193.245` on ports 22, 80, 443 and 2222
-all produced no response while a control connect to `github.com:22` succeeded. Silent
-drops on every port are equally consistent with a deallocated IP and with an NSG
-default-deny in front of a running server, which is the configuration
-`scripts/setup/setup-sftp-dns-whitelist.sh` exists to create. No authentication was
-attempted.
+`sftp.cloudhealthoffice.com` returns NODATA; TCP connects to `20.115.193.245` on ports
+22, 80, 443 and 2222 all produced no response while a control connect to
+`github.com:22` succeeded. At the time those silent drops were inconclusive, since an
+NSG default-deny produces the same signature as a deallocated address. They are now
+explained by the absence of the cluster. No authentication was attempted at any point.
 
 **Separately:** `scripts/setup/rotate-sftp-password.sh:63-66` restarts
 `deployment/sftp-service`, but the Deployment is named `sftp-server`
