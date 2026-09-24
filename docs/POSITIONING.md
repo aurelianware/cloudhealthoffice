@@ -42,11 +42,11 @@ Public Tools serve three commercial purposes:
 
 - `/claims-repricing` — Medicare claims repricing tool with professional CMS-1500, institutional UB-04, and dental ADA support.
 - `/docs/fee-schedule-engine` — fee schedule lookup tool.
-- **Free-tier authentication path** — not yet wired end-to-end. See [Customer-surface activation gap](#customer-surface-activation-gap-honest-disclosure) in Transactional Services for status.
+- **Free-tier self-serve signup** — not yet wired end-to-end; the Pricing API is not currently deployed. See [Customer-surface activation gap](#customer-surface-activation-gap-honest-disclosure) in Transactional Services for status.
 
 ### Commercial shape
 
-Free. No commercial relationship required. Usage metering is in place for free-tier enforcement; consumer-grade signup (Google SSO or email + password) is the outstanding gap to fully activate the conversion funnel from Public Tools to paid Transactional Services.
+Free. No commercial relationship required. Per-call usage metering and tier quotas are implemented in the Pricing API. The outstanding gaps to activate the funnel from Public Tools to paid Transactional Services are that the API is not deployed anywhere and that key issuance is admin-only rather than self-serve — see [Customer-surface activation gap](#customer-surface-activation-gap-honest-disclosure).
 
 ## Transactional Services
 
@@ -72,14 +72,54 @@ Transactional Services deliver specific healthcare calculations dramatically che
 
 ### Customer-surface activation gap (honest disclosure)
 
-Transactional Services have a known gap between "product built" and "customers onboarded." The engines work, the API endpoints respond, the tier definitions are in place, the landing pages are live. The outstanding work is:
+Transactional Services have a known gap between "product built" and "customers
+onboarded." The gap is narrower than earlier revisions of this document stated,
+and the correction matters in both directions — it was overstating the remaining
+work while understating what is not yet running.
 
-- Consumer-grade authentication path (currently Microsoft Entra ID multi-tenant, which requires enterprise-tenant configuration incompatible with self-serve developer signup).
-- End-to-end API key provisioning flow.
-- Stripe-integrated checkout beyond tier definition.
-- Usage telemetry beyond rate-metering.
+**Built, in `src/services/CloudHealthOffice.PricingApi`:**
 
-This is engineering work with a known scope and no unresolved product questions — it is sequenced as a fast-follow behind the positioning-documentation foundation work.
+| Capability | Where |
+|---|---|
+| Repricing, batch repricing, code lookup, fee-schedule endpoints | `Controllers/ApiControllers.cs` |
+| API-key authentication middleware | `Middleware/ApiKeyMiddleware.cs`, `UseApiKeyAuthentication()` |
+| Mongo-backed key store | `IApiKeyRepository` / `MongoApiKeyRepository` |
+| Key issuance | `Controllers/AdminController.cs` — `CreateApiKey`, behind `X-Admin-Secret` |
+| Tier quotas — Free 1,000/mo, Starter 10,000, Professional 100,000, Enterprise uncapped | `Configuration/PricingApiOptions.cs`, `AdminController.cs` |
+| Per-call usage metering | `IncrementUsageAsync`, `RecordUsageAsync`, `UsageRecord` |
+| Runtime per-minute rate limiting | `Program.cs` — global fixed-window limiter (100 requests/minute, queue 10) |
+| Container image, built in CI | `Dockerfile`; `pr-validation.yml`, `_build-service-image.yml` |
+
+**Correction to an earlier claim.** This section previously named the blocker as a
+"consumer-grade authentication path (currently Microsoft Entra ID multi-tenant,
+which requires enterprise-tenant configuration incompatible with self-serve
+developer signup)". That does not describe this service. The Pricing API
+authenticates with API keys: `Program.cs` calls `UseApiKeyAuthentication()` and
+nothing else, and `CloudHealthOffice.PricingApi.csproj` declares no
+authentication package at all — no `Microsoft.Identity.Web`, no JWT bearer
+handler. (`Azure.Identity` appears in the restore cache as a transitive
+dependency, but no Entra authentication is configured.) API-key auth is the model
+self-serve developer signup wants, so the stated obstacle does not exist.
+
+**Actually outstanding:**
+
+- **No active hosted deployment.** The image builds in CI and the automatic path
+  is `deploy-azure-aks.yml` (default `AKS_NAME=cho-aks`, gated by
+  `AZURE_DEPLOYMENTS_ENABLED`), with additional manual deployment paths documented
+  in the Pricing API README. There is still no running public Pricing API host.
+  This is the real blocker, and `/pricing-api` says so on the page.
+- **Public issuance path is incomplete.** `SignupController` exposes
+  unauthenticated `POST /api/v1/signup` and issues Free-tier keys, while
+  `CreateApiKey` remains the admin path behind `X-Admin-Secret`. Self-serve still
+  needs email verification and abuse controls (per-domain limits, burst caps),
+  reusing the existing repository and quotas.
+- **No Stripe checkout.** Tier definitions exist; payment collection does not.
+  Required for paid conversion, not for a usable free tier.
+
+Scope is understood and no product questions are unresolved, but this is not
+merely configuration: a public endpoint brings abuse handling, uptime expectations
+and a support surface. Until it is deployed, API access is arranged per
+engagement through the request form on `/pricing-api`.
 
 ### Commercial shape
 
