@@ -1591,10 +1591,20 @@ export function createPriorAuthConsent(
 /**
  * Creates a CDS Hooks request for Da Vinci CRD
  * Provider-facing hook for querying coverage requirements
- * 
+ *
  * @param hookType Hook type (order-select, order-sign, etc.)
  * @param context Hook context with patient and order details
- * @param fhirServer Optional FHIR server URL (defaults to cloudhealthoffice.com)
+ * @param fhirServer Base URL of the FHIR server the CDS Service should call
+ *   back into. Falls back to the CHO_FHIR_BASE_URL environment variable. If
+ *   neither is supplied the field is omitted from the payload, which the
+ *   CDS Hooks specification permits — `fhirServer` is an optional field, and
+ *   a CDS Service that receives no value simply does not prefetch.
+ *
+ *   This previously defaulted to `https://fhir.cloudhealthoffice.com`. That
+ *   host is the canonical *identifier* namespace for CHO-authored FHIR
+ *   profiles (see docs/fhir/profiles/README.md); it is not a deployed FHIR
+ *   server and does not resolve. Emitting it here produced a payload that
+ *   pointed every CDS Service at a host that does not exist.
  * @returns CDS Hooks request payload
  */
 export function createCDSHooksRequest(
@@ -1606,17 +1616,18 @@ export function createCDSHooksRequest(
     draftOrders?: Bundle;
     selections?: string[];
   },
-  fhirServer: string = 'https://fhir.cloudhealthoffice.com'
+  fhirServer: string | undefined = process.env.CHO_FHIR_BASE_URL
 ): any {
   // Extract patient ID if it's already in the form "Patient/123"
   const patientId = context.patientId.startsWith('Patient/')
     ? context.patientId.substring('Patient/'.length)
     : context.patientId;
-    
+
   return {
     hookInstance: randomUUID(),
     hook: hookType,
-    fhirServer,
+    // Omitted rather than fabricated when no server is configured.
+    ...(fhirServer ? { fhirServer } : {}),
     context,
     prefetch: {
       patient: `Patient/${patientId}`,

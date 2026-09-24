@@ -495,7 +495,34 @@ describe('Prior Authorization API - Da Vinci CRD Integration', () => {
       });
       
       expect(request.hook).toBe('order-sign');
-      expect(request.fhirServer).toBe('https://fhir.cloudhealthoffice.com');
+      // No server configured and none passed: the optional CDS Hooks field is
+      // omitted rather than pointed at a host that does not exist.
+      expect(request.fhirServer).toBeUndefined();
+    });
+
+    it('uses an explicitly supplied fhirServer', () => {
+      const request = createCDSHooksRequest(
+        'order-sign',
+        { userId: 'Practitioner/999', patientId: 'Patient/888' },
+        'https://fhir.example-payer.org'
+      );
+
+      expect(request.fhirServer).toBe('https://fhir.example-payer.org');
+    });
+
+    it('falls back to CHO_FHIR_BASE_URL when set', () => {
+      const previous = process.env.CHO_FHIR_BASE_URL;
+      process.env.CHO_FHIR_BASE_URL = 'https://fhir.configured-host.test';
+      try {
+        const request = createCDSHooksRequest('order-sign', {
+          userId: 'Practitioner/999',
+          patientId: 'Patient/888'
+        });
+        expect(request.fhirServer).toBe('https://fhir.configured-host.test');
+      } finally {
+        if (previous === undefined) delete process.env.CHO_FHIR_BASE_URL;
+        else process.env.CHO_FHIR_BASE_URL = previous;
+      }
     });
     
     it('should create appointment-book hook request', () => {
