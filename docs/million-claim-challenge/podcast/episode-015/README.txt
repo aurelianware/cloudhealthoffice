@@ -53,3 +53,28 @@ The episode must distinguish:
 - [x] The closing section connects this episode's finding to the series' established pattern (every scale increase finds something the previous one couldn't) rather than treating it as a one-off surprise.
 - [ ] Console screenshots captured (both runs' final summaries, the Redis before/after INFO output, the platform-failure stack trace).
 - [ ] Published article URL recorded once live.
+
+---------------------------------------------------------------------------
+ERRATUM — 2026-09-23
+---------------------------------------------------------------------------
+
+The text above is preserved unchanged. Its account of where the 768MB Redis
+ceiling came from is wrong, and the same correction applies to line 11 ("that
+768-megabyte number existed nowhere in the committed Kubernetes manifest") and
+to the checklist entry describing it as "undocumented live-cluster drift".
+
+The value was in the repository. scripts/deploy-local.sh applied it on every
+local deploy via `kubectl patch deployment redis-dataprotection`, introduced by
+commit dd9aedab (#873) on 2026-07-10 — two weeks before this episode was
+published — and present at this episode's own publish commit 3d2063bf, where
+scripts/deploy-local.sh:307 contained "768mb". Verify with:
+
+    git show 3d2063bf:scripts/deploy-local.sh | grep -n 768mb
+
+It was therefore not undocumented cluster drift. The deploy script re-applied
+the cap on every run, overriding the committed manifest, which is why raising
+infrastructure/k8s/redis-dataprotection.yaml alone would not have survived the
+next deploy. The override was removed in PR #1192.
+
+No benchmark number in this packet changed. See benchmark-results.txt and
+article.txt for the full erratum.

@@ -2,9 +2,30 @@
 
 ## Overview
 
-Complete migration of Cloud Health Office components from Azure Static Web Apps and standalone services into a unified Kubernetes-based microservices platform running on AKS.
+**Historical design document (2026-02).** This describes a planned migration of Cloud
+Health Office components from Azure Static Web Apps and standalone services into a
+unified Kubernetes-based microservices platform on AKS. **That AKS deployment no longer
+exists** — see the notice under "Current State" below. The "Target State" and service
+design sections are retained as design intent; they do not describe a running system.
 
-## Current State
+**What runs in Azure today.** Not this. The only Cloud Health Office workload deployed to
+Azure is the benefit-plan estimate slice — `benefit-plan-estimate` and `estimate-redis` in
+resource group `cho` — which runs as Container Apps inside an environment shared with
+another product (`infrastructure/azure/estimate-container-app.bicep:13-17` targets the
+"existing Container Apps environment shared with CloudDentalOffice";
+`scripts/deploy-estimate-container-app.sh` deploys only that slice). The marketing site is
+served by GitHub Pages. Nothing in this document describes a currently running Kubernetes
+deployment.
+
+## Current State (historical — as of 2026-02)
+
+> **The deployment described in this section no longer exists.** The AKS cluster and
+> its Azure subscription were deleted. The repository owner states it was a development
+> environment that never held PHI or production payer data.
+> The components, namespaces, LoadBalancer and SFTP server below record what was deployed
+> at the time, not what is running now. The "Target State" section that follows remains
+> design intent. Marked 2026-09-23.
+
 
 ### Existing Components
 - **Static Web App** (`site/`): Marketing site, login, portal pages hosted on Azure Static Web Apps

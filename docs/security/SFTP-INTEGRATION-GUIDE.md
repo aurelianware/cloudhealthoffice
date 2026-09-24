@@ -35,7 +35,7 @@ kubectl get svc sftp-service -n cho-sftp
 Example output:
 ```
 NAME            TYPE           EXTERNAL-IP      PORT(S)        AGE
-sftp-service    LoadBalancer   192.0.2.10    22:32022/TCP   2m
+sftp-service    LoadBalancer   <SFTP_LB_IP>    22:32022/TCP   2m
 ```
 
 ### 3. Configure Argo Workflows SFTP Connection
@@ -57,7 +57,7 @@ Edit `infra/main.parameters.json`:
 ```json
 {
   "sftpHost": {
-    "value": "192.0.2.10"  // Use your LoadBalancer IP
+    "value": "<SFTP_LB_IP>"  // Use your LoadBalancer IP
   },
   "sftpUsername": {
     "value": "logicapp"
@@ -87,7 +87,7 @@ az keyvault secret set \
 
 ```bash
 # Test from local machine
-sftp logicapp@192.0.2.10
+sftp logicapp@<SFTP_LB_IP>
 # Password: the value you set in the 'sftp-users' Secret
 #           (the manifest ships REPLACE_WITH_SFTP_PASSWORD)
 

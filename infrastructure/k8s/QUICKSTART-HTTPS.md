@@ -5,7 +5,7 @@
 ### Prerequisites
 - Kubernetes cluster with kubectl configured
 - Helm 3 installed
-- DNS records pointing to **4.149.83.133**
+- DNS records pointing to **<INGRESS_IP>**
 
 ### Step 1: Install NGINX Ingress Controller (2 min)
 
@@ -15,7 +15,7 @@ helm repo update
 helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
   --create-namespace \
-  --set controller.service.loadBalancerIP=4.149.83.133
+  --set controller.service.loadBalancerIP=<INGRESS_IP>
 ```
 
 ### Step 2: Install cert-manager (1 min)
@@ -35,9 +35,9 @@ Add these A records to your DNS provider:
 
 | Domain                         | Type | Value         |
 |--------------------------------|------|---------------|
-| cloudhealthoffice.com          | A    | 4.149.83.133  |
-| www.cloudhealthoffice.com      | A    | 4.149.83.133  |
-| portal.cloudhealthoffice.com   | A    | 4.149.83.133  |
+| cloudhealthoffice.com          | A    | <INGRESS_IP>  |
+| www.cloudhealthoffice.com      | A    | <INGRESS_IP>  |
+| portal.cloudhealthoffice.com   | A    | <INGRESS_IP>  |
 
 ### Step 4: Deploy Cloud Health Office with HTTPS (2 min)
 
@@ -94,7 +94,7 @@ Your Cloud Health Office website and portal are now secured with HTTPS.
 Check DNS propagation:
 ```bash
 dig +short cloudhealthoffice.com
-# Should return: 4.149.83.133
+# Should return: <INGRESS_IP>
 ```
 
 If DNS not propagated, wait and retry. If propagated but still failing:
@@ -139,7 +139,7 @@ kubectl get pods -n cloudhealthoffice -l app=portal
 ```
 Internet (HTTPS)
       ↓
-DNS (4.149.83.133)
+DNS (<INGRESS_IP>)
       ↓
 NGINX Ingress Controller (LoadBalancer)
       ↓

@@ -9,7 +9,7 @@ Use this template to configure your own custom domain instead of cloudhealthoffi
 ```bash
 # Set your custom domain
 export CUSTOM_DOMAIN="yourdomain.com"
-export CUSTOM_IP="4.149.83.133"  # Your LoadBalancer IP
+export CUSTOM_IP="<INGRESS_IP>"  # Your LoadBalancer IP
 
 # Update site ingress
 sed -i "s/cloudhealthoffice\.com/${CUSTOM_DOMAIN}/g" k8s/site-ingress.yaml
@@ -65,9 +65,9 @@ Add A records to your DNS provider:
 
 | Record Type | Name                  | Value           | TTL  |
 |-------------|-----------------------|-----------------|------|
-| A           | @                     | 4.149.83.133    | 300  |
-| A           | www                   | 4.149.83.133    | 300  |
-| A           | portal                | 4.149.83.133    | 300  |
+| A           | @                     | <INGRESS_IP>    | 300  |
+| A           | www                   | <INGRESS_IP>    | 300  |
+| A           | portal                | <INGRESS_IP>    | 300  |
 
 **Example for common DNS providers:**
 
@@ -75,10 +75,10 @@ Add A records to your DNS provider:
 1. Login to Cloudflare
 2. Select your domain
 3. Go to DNS → Records
-4. Add three A records with IP: 4.149.83.133
-   - Type: A, Name: @, IPv4: 4.149.83.133
-   - Type: A, Name: www, IPv4: 4.149.83.133
-   - Type: A, Name: portal, IPv4: 4.149.83.133
+4. Add three A records with IP: <INGRESS_IP>
+   - Type: A, Name: @, IPv4: <INGRESS_IP>
+   - Type: A, Name: www, IPv4: <INGRESS_IP>
+   - Type: A, Name: portal, IPv4: <INGRESS_IP>
 5. Set Proxy status: DNS only (orange cloud OFF)
 
 ### AWS Route 53
@@ -93,7 +93,7 @@ aws route53 change-resource-record-sets \
           "Name": "yourdomain.com",
           "Type": "A",
           "TTL": 300,
-          "ResourceRecords": [{"Value": "4.149.83.133"}]
+          "ResourceRecords": [{"Value": "<INGRESS_IP>"}]
         }
       },
       {
@@ -102,7 +102,7 @@ aws route53 change-resource-record-sets \
           "Name": "www.yourdomain.com",
           "Type": "A",
           "TTL": 300,
-          "ResourceRecords": [{"Value": "4.149.83.133"}]
+          "ResourceRecords": [{"Value": "<INGRESS_IP>"}]
         }
       },
       {
@@ -111,7 +111,7 @@ aws route53 change-resource-record-sets \
           "Name": "portal.yourdomain.com",
           "Type": "A",
           "TTL": 300,
-          "ResourceRecords": [{"Value": "4.149.83.133"}]
+          "ResourceRecords": [{"Value": "<INGRESS_IP>"}]
         }
       }
     ]
@@ -121,11 +121,11 @@ aws route53 change-resource-record-sets \
 ### GCP Cloud DNS
 ```bash
 gcloud dns record-sets transaction start --zone=your-zone
-gcloud dns record-sets transaction add 4.149.83.133 \
+gcloud dns record-sets transaction add <INGRESS_IP> \
   --name=yourdomain.com. --ttl=300 --type=A --zone=your-zone
-gcloud dns record-sets transaction add 4.149.83.133 \
+gcloud dns record-sets transaction add <INGRESS_IP> \
   --name=www.yourdomain.com. --ttl=300 --type=A --zone=your-zone
-gcloud dns record-sets transaction add 4.149.83.133 \
+gcloud dns record-sets transaction add <INGRESS_IP> \
   --name=portal.yourdomain.com. --ttl=300 --type=A --zone=your-zone
 gcloud dns record-sets transaction execute --zone=your-zone
 ```
@@ -136,19 +136,19 @@ az network dns record-set a add-record \
   --resource-group myResourceGroup \
   --zone-name yourdomain.com \
   --record-set-name @ \
-  --ipv4-address 4.149.83.133
+  --ipv4-address <INGRESS_IP>
 
 az network dns record-set a add-record \
   --resource-group myResourceGroup \
   --zone-name yourdomain.com \
   --record-set-name www \
-  --ipv4-address 4.149.83.133
+  --ipv4-address <INGRESS_IP>
 
 az network dns record-set a add-record \
   --resource-group myResourceGroup \
   --zone-name yourdomain.com \
   --record-set-name portal \
-  --ipv4-address 4.149.83.133
+  --ipv4-address <INGRESS_IP>
 ```
 
 ## Step 3: Verify DNS Propagation
@@ -159,7 +159,7 @@ dig +short yourdomain.com
 dig +short www.yourdomain.com
 dig +short portal.yourdomain.com
 
-# All should return: 4.149.83.133
+# All should return: <INGRESS_IP>
 ```
 
 Or use online tools:
@@ -288,7 +288,7 @@ kubectl logs -n cert-manager -l app=cert-manager --tail=100
 
 ### Wrong IP Address on LoadBalancer
 
-**Problem:** Ingress controller has different IP than 4.149.83.133
+**Problem:** Ingress controller has different IP than <INGRESS_IP>
 
 **Solution:**
 ```bash
@@ -298,14 +298,14 @@ kubectl get svc -n ingress-nginx ingress-nginx-controller
 # If different, update the ingress installation
 helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
-  --set controller.service.loadBalancerIP=4.149.83.133
+  --set controller.service.loadBalancerIP=<INGRESS_IP>
 ```
 
 ### Multiple Domains/Subdomains
 
 To add more subdomains (e.g., api.yourdomain.com):
 
-1. Add DNS A record: api → 4.149.83.133
+1. Add DNS A record: api → <INGRESS_IP>
 2. Update ingress to include new host:
 
 ```yaml

@@ -73,7 +73,7 @@ Namespace: cho-sftp
 │           └── Volume: sftp-config → /etc/sftp
 │
 ├── Service: sftp-service (LoadBalancer)
-│   ├── External IP: 192.0.2.10 (example)
+│   ├── External IP: <SFTP_LB_IP> (example)
 │   └── Port: 22:32022/TCP
 │
 ├── PersistentVolumeClaim: sftp-data (10Gi)
@@ -179,7 +179,7 @@ Namespace: cho-sftp
 │  │  Kubernetes Secret: cho-sftp-credentials                         │ │
 │  │                                                                  │ │
 │  │  Data:                                                           │ │
-│  │    hostName: 192.0.2.10                                       │ │
+│  │    hostName: <SFTP_LB_IP>                                       │ │
 │  │    portNumber: 22                                                │ │
 │  │    userName: argoworkflow                                        │ │
 │  │    password: <from Azure Key Vault via CSI driver>               │ │

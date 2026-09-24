@@ -170,7 +170,7 @@
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x1F4E5;</span>
             <h3>Claim Ingestion</h3>
-            <p>837 EDI receipt via SFTP/API, clearinghouse connectivity via Stedi, real-time and batch modes.</p>
+            <p>837 EDI receipt via SFTP/API, real-time and batch modes. Inbound clearinghouse delivery is configured per engagement.</p>
           </div>
           <div class="docs-hub-card" style="cursor:default;">
             <span class="docs-hub-card-icon">&#x2699;</span>
@@ -227,10 +227,10 @@
 
         <h3 id="clearinghouse-connectors">Clearinghouse Connectors</h3>
 
-        <p>Clearinghouse connectivity via Stedi today. Availity and Change Healthcare adapters are scaffolds; additional clearinghouses are built per engagement.</p>
+        <p>Outbound clearinghouse connectivity (CHO to payer) is implemented against Stedi; the shipped default gateway is Mock and the Stedi profile is sandbox. Availity and Change Healthcare adapters are scaffolds; additional clearinghouses are built per engagement.</p>
 
         <ul>
-          <li><strong>Stedi</strong> &mdash; The clearinghouse path wired today, covering eligibility and claim submission/response routing</li>
+          <li><strong>Stedi</strong> &mdash; The implemented outbound gateway: eligibility, claim submission and claim-response/remittance clients, with contract tests. Ships sandbox-configured with no API key, and the default gateway is Mock, so live submission is an engagement step rather than a demonstrated path</li>
           <li><strong>Availity</strong> &mdash; Adapter scaffold; the 270/271 API integration is not yet implemented</li>
           <li><strong>Change Healthcare</strong> &mdash; Adapter scaffold; the eligibility API integration is not yet implemented</li>
         </ul>
@@ -647,7 +647,7 @@
         <p>Recommended setup order for a new health plan implementation:</p>
 
         <ol>
-          <li><strong>Configure clearinghouse connectivity</strong> &mdash; Set up Stedi, or SFTP connections for your primary clearinghouse</li>
+          <li><strong>Configure clearinghouse connectivity</strong> &mdash; Set up the outbound Stedi gateway, or SFTP connections for your primary clearinghouse</li>
           <li><strong>Load NCCI/MUE edit files</strong> &mdash; Import the latest CMS quarterly release of NCCI physician/practitioner pairs and MUE values</li>
           <li><strong>Configure fee schedules</strong> &mdash; Load rate tables for Medicare RBRVS, Medicaid, and commercial contracts (see <a href="/docs/fee-schedule-guide">Fee Schedule Guide</a>)</li>
           <li><strong>Configure benefit plans</strong> &mdash; Set up plan structures, cost sharing rules, and accumulators (see <a href="/docs/benefit-plan-guide">Benefit Plan Guide</a>)</li>

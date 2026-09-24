@@ -1,6 +1,14 @@
-# EDI Workflow Suite - Deployment Summary
+# EDI Workflow Suite — Deployment Summary (historical)
 
-✅ **ALL WORKFLOWS DEPLOYED AND TESTED**
+> **HISTORICAL — this describes an environment that no longer exists.**
+> The AKS cluster and the Azure subscription that hosted it were deleted; the repository owner states it was a development environment that never held PHI or
+> production payer data.
+> **The `kubectl` commands and endpoints below cannot be run** and are retained
+> only as a record of what was deployed at the time. Orchestration has since moved
+> from these Kubernetes Jobs to Argo Workflows (see [ADR 004](../adr/004-remove-logic-apps.md)).
+> Credential status: [CREDENTIAL-ROTATION.md](../security/CREDENTIAL-ROTATION.md). Marked 2026-09-23.
+
+**All workflows were deployed and tested in that environment as of 2026-02.**
 
 ## What We Built
 
@@ -56,7 +64,7 @@ EOF
 
 ### Infrastructure
 - **AKS Cluster**: `rg-hipaa-logic-apps` (3 nodes, westus2)
-- **SFTP Server**: LoadBalancer public IP (address removed — see `docs/security/CREDENTIAL-ROTATION.md`)
+- **SFTP Server**: LoadBalancer public IP — **decommissioned 2026-09-23**; address removed (see [CREDENTIAL-ROTATION.md](../security/CREDENTIAL-ROTATION.md))
 - **Internal DNS**: `sftp-service.cho-sftp.svc.cluster.local`
 - **Namespaces**: `cho-sftp` (SFTP), `cho-workflows` (jobs)
 

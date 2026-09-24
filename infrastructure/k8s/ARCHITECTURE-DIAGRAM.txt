@@ -16,7 +16,7 @@
                                     │
                                     │ DNS Resolution
                                     ▼
-                              4.149.83.133
+                              <INGRESS_IP>
                                     │
 ┌───────────────────────────────────┼───────────────────────────────────────────┐
 │  Kubernetes Cluster               │                                           │
@@ -24,7 +24,7 @@
 │   ┌───────────────────────────────▼───────────────────────────────────────┐   │
 │   │            NGINX Ingress Controller (LoadBalancer)                    │   │
 │   │  ┌──────────────────────────────────────────────────────────────┐    │   │
-│   │  │  External IP: 4.149.83.133                                   │    │   │
+│   │  │  External IP: <INGRESS_IP>                                   │    │   │
 │   │  │  Ports: 80 (HTTP) → 443 (HTTPS redirect)                     │    │   │
 │   │  │         443 (HTTPS) → TLS termination                        │    │   │
 │   │  └──────────────────────────────────────────────────────────────┘    │   │
@@ -153,7 +153,7 @@ HTTPS Request (Port 443):
   https://cloudhealthoffice.com
        │
        ▼
-  NGINX Ingress Controller (4.149.83.133:443)
+  NGINX Ingress Controller (<INGRESS_IP>:443)
        │
        ├─ TLS Termination (using site-tls-secret)
        │
@@ -193,9 +193,9 @@ Required DNS A Records:
 ┌─────────────────────────────┬──────┬───────────────┐
 │ Domain                      │ Type │ Value         │
 ├─────────────────────────────┼──────┼───────────────┤
-│ cloudhealthoffice.com       │  A   │ 4.149.83.133  │
-│ www.cloudhealthoffice.com   │  A   │ 4.149.83.133  │
-│ portal.cloudhealthoffice.com│  A   │ 4.149.83.133  │
+│ cloudhealthoffice.com       │  A   │ <INGRESS_IP>  │
+│ www.cloudhealthoffice.com   │  A   │ <INGRESS_IP>  │
+│ portal.cloudhealthoffice.com│  A   │ <INGRESS_IP>  │
 └─────────────────────────────┴──────┴───────────────┘
 
 Alternative: CNAME Records (if using subdomain delegation)
