@@ -165,17 +165,31 @@ const card = createCRDCard(
 );
 ```
 
-**`createCDSHooksRequest(hook, context): any`**
+**`createCDSHooksRequest(hook, context, fhirServer?): any`**
 
 Creates CDS Hooks request for provider integration.
 
 ```typescript
-const hooksRequest = createCDSHooksRequest('order-select', {
-  userId: 'Practitioner/123',
-  patientId: 'Patient/456',
-  selections: ['ServiceRequest/MRI001']
-});
+const hooksRequest = createCDSHooksRequest(
+  'order-select',
+  {
+    userId: 'Practitioner/123',
+    patientId: 'Patient/456',
+    selections: ['ServiceRequest/MRI001']
+  },
+  'https://fhir.your-payer.example'   // or set CHO_FHIR_BASE_URL
+);
 ```
+
+`fhirServer` is the base URL the CDS Service should call back into. It falls
+back to the `CHO_FHIR_BASE_URL` environment variable, and is **omitted from the
+payload** when neither is supplied — the CDS Hooks specification makes the field
+optional, and a service that receives no value simply does not prefetch.
+
+Do not pass `https://fhir.cloudhealthoffice.com`. That host is the canonical
+identifier namespace for CHO-authored FHIR profiles
+([docs/fhir/profiles/README.md](../../docs/fhir/profiles/README.md)); it is not a
+deployed FHIR server and does not resolve.
 
 ### Attachments
 
