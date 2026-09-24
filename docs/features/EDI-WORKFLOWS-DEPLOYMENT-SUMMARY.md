@@ -56,7 +56,7 @@ EOF
 
 ### Infrastructure
 - **AKS Cluster**: `rg-hipaa-logic-apps` (3 nodes, westus2)
-- **SFTP Server**: `20.115.193.245` (LoadBalancer)
+- **SFTP Server**: LoadBalancer public IP (address removed — see `docs/security/CREDENTIAL-ROTATION.md`)
 - **Internal DNS**: `sftp-service.cho-sftp.svc.cluster.local`
 - **Namespaces**: `cho-sftp` (SFTP), `cho-workflows` (jobs)
 
