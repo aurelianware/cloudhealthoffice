@@ -125,7 +125,7 @@ All components running in AKS cluster aligned with HIPAA X12 transaction flows:
 │  │  Namespace: cho-sftp                                             │  │
 │  │  ──────────────────────────────────────────────────────────────  │  │
 │  │  • Clearinghouse file exchange                                   │  │
-│  │  • LoadBalancer: 20.115.193.245                                 │  │
+│  │  • LoadBalancer: (public IP, decommissioned)                    │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐  │

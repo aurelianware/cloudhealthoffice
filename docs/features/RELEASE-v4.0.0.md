@@ -80,7 +80,7 @@ Created `CloudHealthOffice.Infrastructure` package supporting:
 
 ### SFTP Integration
 - **New Tenant:** clouddentaloffice
-- **Endpoint:** 20.115.193.245:22 (sftp.cloudhealthoffice.com pending DNS)
+- **Endpoint:** LoadBalancer public IP, port 22 (sftp.cloudhealthoffice.com pending DNS). *Address removed 2026-09-23; environment decommissioned.*
 - **Password:** Stored in Azure Key Vault
 - **Folder Structure:** /dental-claims/inbound/837/, /outbound/835/, /outbound/277/
 
@@ -171,7 +171,7 @@ Created `CloudHealthOffice.Infrastructure` package supporting:
 
 ## 🎯 Known Issues
 
-1. **DNS Configuration:** sftp.cloudhealthoffice.com not yet pointed to 20.115.193.245
+1. **DNS Configuration:** sftp.cloudhealthoffice.com never pointed at the LoadBalancer IP
 2. **Mock Data Fallback:** Portal shows mock data when backend unavailable (configurable via `Portal.UseMockDataFallback`)
 3. **Stripe.net Warning:** NU1603 - Package 46.4.0 not found, resolved to 47.0.0 (non-breaking)
 
