@@ -15,7 +15,7 @@ This document provides a comprehensive overview of all features available in Clo
 | **Enhanced Claim Status** | ValueAdds277 (60+ fields) | ✅ Complete | [VALUEADDS277-IMPLEMENTATION-COMPLETE.md](./VALUEADDS277-IMPLEMENTATION-COMPLETE.md) |
 | **Security Hardening** | 6 deployment controls | ✅ Complete | [SECURITY-HARDENING.md](./SECURITY-HARDENING.md) |
 | **Deployment** | Gated release strategy | ✅ Complete | [DEPLOYMENT-GATES-GUIDE.md](./DEPLOYMENT-GATES-GUIDE.md) |
-| **Testing** | 6,972 automated tests across 51 test projects (count injected by CI from `.github/workflows/test-metrics.yml`, which discovers projects with `find src tests -name '*.Tests.csproj'`. The E2E and load suites are not included, because `CloudHealthOffice.FlAhca.E2ETests.csproj` and `CloudHealthOffice.LoadTests.csproj` do not match that pattern — it requires a literal `.Tests.csproj` suffix) | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
+| **Testing** | 6,978 automated tests across 51 test projects (count injected by CI from `.github/workflows/test-metrics.yml`, which discovers projects with `find src tests -name '*.Tests.csproj'`. The E2E and load suites are not included, because `CloudHealthOffice.FlAhca.E2ETests.csproj` and `CloudHealthOffice.LoadTests.csproj` do not match that pattern — it requires a literal `.Tests.csproj` suffix) | ✅ Complete | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | **Multi-Tenant Security** | Cross-tenant isolation | ✅ Complete | [portal/CloudHealthOffice.Portal.Tests/](./portal/CloudHealthOffice.Portal.Tests/) |
 | **Premium Billing** | Monthly premium invoicing, NACHA/ACH EFT drafts, Stripe ACH | ✅ Complete | [src/services/premium-billing-service/](../src/services/premium-billing-service/) |
 
