@@ -291,8 +291,14 @@
       opacity: 0.6;
       cursor: not-allowed;
     }
+    /* lead-capture.js reveals these by clearing the `hidden` attribute, so the
+       base rule must not be `display: none` — an author-level display rule
+       overrides the UA stylesheet's [hidden] and the element would stay
+       invisible after a successful submit or a server error. The attribute
+       selectors below carry higher specificity than the bare class, so the
+       initial hidden state still applies. */
     .form-error {
-      display: none;
+      display: block;
       background: rgba(255,0,0,0.08);
       border: 1px solid rgba(255,0,0,0.3);
       border-radius: 8px;
@@ -303,8 +309,12 @@
       line-height: 1.5;
     }
     .form-success {
-      display: none;
+      display: block;
       text-align: center;
+    }
+    .form-error[hidden],
+    .form-success[hidden] {
+      display: none;
     }
     .form-success h3 {
       color: #00ff88;
@@ -603,46 +613,38 @@
 
         <div class="signup-section">
           <div class="signup-form" id="signupFormContainer">
-            <div class="form-error" id="formError"></div>
-            <form id="signupForm">
+            <form data-lead-form data-lead-interest="pricing-api-access"
+                  action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
+                  id="signupForm" aria-label="Request pricing API access">
+              <input type="hidden" name="_subject" value="Pricing API access request" />
               <div class="form-group">
                 <label for="orgName">Organization Name <span style="color:#ff4444;">*</span></label>
-                <input type="text" id="orgName" name="organizationName" required placeholder="Acme Health Plan" />
+                <input type="text" id="orgName" name="company" required autocomplete="organization" placeholder="Acme Health Plan" />
               </div>
               <div class="form-group">
                 <label for="email">Contact Email <span style="color:#ff4444;">*</span></label>
-                <input type="email" id="email" name="email" required placeholder="you@yourorg.com" />
+                <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@yourorg.com" />
               </div>
               <div class="form-row">
                 <div class="form-group">
                   <label for="firstName">First Name</label>
-                  <input type="text" id="firstName" name="firstName" placeholder="Jane" />
+                  <input type="text" id="firstName" name="firstName" autocomplete="given-name" placeholder="Jane" />
                 </div>
                 <div class="form-group">
                   <label for="lastName">Last Name</label>
-                  <input type="text" id="lastName" name="lastName" placeholder="Smith" />
+                  <input type="text" id="lastName" name="lastName" autocomplete="family-name" placeholder="Smith" />
                 </div>
               </div>
-              <button type="submit" class="form-submit" id="submitBtn">Continue to Contact Sales</button>
+              <div class="form-error" id="formError" data-lead-error role="alert" aria-live="polite" hidden></div>
+              <button type="submit" class="form-submit" id="submitBtn">Request API access</button>
+              <p class="cho-leadform__note" style="margin-top:12px; font-size:0.85rem; opacity:0.6;">We reply within one business day. No PHI, ever.</p>
             </form>
           </div>
 
-          <div class="form-success" id="signupSuccess">
-            <h3>Your API Key is Ready</h3>
-            <p>Save this key securely — it will not be shown again. Use it in the <code style="color:#00ffff;">X-API-Key</code> header with every request.</p>
-            <div class="api-key-display">
-              <div class="api-key-label">Your API Key</div>
-              <div class="api-key-value" id="apiKeyValue"></div>
-            </div>
-            <div class="code-block" style="text-align:left; margin-bottom:24px;">
-              <div class="code-header">
-                <span>Try it now</span>
-                <button class="code-copy" onclick="copyCode('successCurl')">Copy</button>
-              </div>
-              <div class="code-body">
-                <pre id="successCurl"></pre>
-              </div>
-            </div>
+          <div class="form-success" data-lead-thankyou data-for="signupForm" hidden>
+            <h3>Request received.</h3>
+            <p>We reply within one business day to arrange pilot access. The public API host is not currently deployed, so access is provisioned per engagement.</p>
+            <p style="margin-top:16px;">In the meantime you can run the pricing engine locally &mdash; the quick start below needs no credentials.</p>
             <a href="/docs/api"
                class="button"
                style="font-size:0.95rem; padding:13px 32px;">View Full API Docs &rarr;</a>
@@ -762,47 +764,17 @@
 
   <script>
     // ===== SIGNUP FORM =====
-    document.getElementById('signupForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-
-      const submitBtn = document.getElementById('submitBtn');
-      const formError = document.getElementById('formError');
-      formError.style.display = 'none';
-
-      const orgName = document.getElementById('orgName').value.trim();
-      const email = document.getElementById('email').value.trim();
-      const firstName = document.getElementById('firstName').value.trim();
-      const lastName = document.getElementById('lastName').value.trim();
-
-      if (!orgName || !email) {
-        formError.textContent = 'Organization Name and Contact Email are required.';
-        formError.style.display = 'block';
-        return;
-      }
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Opening Contact Sales...';
-      window.location.href = '/contact';
-    });
-
-    function showSuccess(apiKey) {
-      document.getElementById('signupFormContainer').style.display = 'none';
-      var successEl = document.getElementById('signupSuccess');
-      successEl.style.display = 'block';
-      document.getElementById('apiKeyValue').textContent = apiKey;
-
-      document.getElementById('successCurl').textContent =
-        'curl -X POST https://api.your-domain.example/pricing/api/v1/reprice \\\n' +
-        '  -H "X-API-Key: ' + apiKey + '" \\\n' +
-        '  -H "Content-Type: application/json" \\\n' +
-        '  -d \'{\n' +
-        '    "feeScheduleId": "MEDICARE_RBRVS_2025",\n' +
-        '    "claimType": "Professional",\n' +
-        '    "lines": [\n' +
-        '      {"lineNumber": 1, "procedureCode": "99213", "units": 1, "billedAmount": 150.00}\n' +
-        '    ]\n' +
-        '  }\'';
-    }
+    // The signup form is handled by /js/lead-capture.js, which is injected on
+    // every page by build.mjs. It enhances any form carrying [data-lead-form]:
+    // posting to the Formspree leads endpoint, surfacing errors in
+    // [data-lead-error], and revealing [data-lead-thankyou] on success.
+    //
+    // This page previously defined its own submit handler that validated the
+    // fields and then navigated to the contact page, discarding everything the
+    // visitor had typed and making them enter it again. No request was ever
+    // sent, so no notification could ever arrive. See PR #1202 for the diff;
+    // the literal redirect is not reproduced here because the site test suite
+    // greps for it as a regression guard.
 
     // ===== COPY CODE =====
     function copyCode(elementId) {
