@@ -87,7 +87,7 @@ work while understating what is not yet running.
 | Key issuance | `Controllers/AdminController.cs` — `CreateApiKey`, behind `X-Admin-Secret` |
 | Tier quotas — Free 1,000/mo, Starter 10,000, Professional 100,000, Enterprise uncapped | `Configuration/PricingApiOptions.cs`, `AdminController.cs` |
 | Per-call usage metering | `IncrementUsageAsync`, `RecordUsageAsync`, `UsageRecord` |
-| Rate limiting options | `Configuration/PricingApiOptions.cs` — `RateLimitOptions` |
+| Runtime per-minute rate limiting | `Program.cs` — global fixed-window limiter (100 requests/minute, queue 10) |
 | Container image, built in CI | `Dockerfile`; `pr-validation.yml`, `_build-service-image.yml` |
 
 **Correction to an earlier claim.** This section previously named the blocker as a
@@ -103,13 +103,16 @@ self-serve developer signup wants, so the stated obstacle does not exist.
 
 **Actually outstanding:**
 
-- **No deployment.** The image builds in CI, but the only deployment path
-  (`deploy-azure-aks.yml`) targets the retired `cho-aks` cluster and is gated
-  behind `AZURE_DEPLOYMENTS_ENABLED`. There is no running Pricing API host. This
-  is the real blocker, and `/pricing-api` says so on the page.
-- **No public issuance path.** `CreateApiKey` requires the admin secret. Self-serve
-  needs a public Free-tier endpoint with email verification and abuse controls
-  (per-domain limits, burst caps), reusing the existing repository and quotas.
+- **No active hosted deployment.** The image builds in CI and the automatic path
+  is `deploy-azure-aks.yml` (default `AKS_NAME=cho-aks`, gated by
+  `AZURE_DEPLOYMENTS_ENABLED`), with additional manual deployment paths documented
+  in the Pricing API README. There is still no running public Pricing API host.
+  This is the real blocker, and `/pricing-api` says so on the page.
+- **Public issuance path is incomplete.** `SignupController` exposes
+  unauthenticated `POST /api/v1/signup` and issues Free-tier keys, while
+  `CreateApiKey` remains the admin path behind `X-Admin-Secret`. Self-serve still
+  needs email verification and abuse controls (per-domain limits, burst caps),
+  reusing the existing repository and quotas.
 - **No Stripe checkout.** Tier definitions exist; payment collection does not.
   Required for paid conversion, not for a usable free tier.
 
