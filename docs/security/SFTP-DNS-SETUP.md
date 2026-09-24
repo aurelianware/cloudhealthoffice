@@ -1,5 +1,12 @@
 # SFTP DNS and IP Whitelisting Setup
 
+> **HISTORICAL.** The AKS cluster and Azure subscription this runbook targeted have
+> been deleted. Per the repository owner these were development clusters; no PHI or
+> production payer data was ever exposed. Literal IP addresses have been replaced with
+> placeholders because the originals returned to Microsoft's pool and may since have
+> been reassigned to unrelated tenants. Third-party ranges (Availity, Change Healthcare)
+> and the TEST-NET-3 example are retained. Marked 2026-09-23.
+
 ## Overview
 
 Customer-owned SFTP configuration with:
@@ -53,11 +60,11 @@ Add an **A record** in your DNS provider:
 ```
 Type:  A
 Name:  sftp
-Value: 52.168.45.123  (your LoadBalancer IP)
+Value: <SFTP_LB_IP>  (your LoadBalancer IP)
 TTL:   300
 ```
 
-Result: `sftp.cloudhealthoffice.com` → `52.168.45.123`
+Result: `sftp.cloudhealthoffice.com` → `<SFTP_LB_IP>`
 
 ### Verify DNS Resolution
 
@@ -149,10 +156,10 @@ spec:
   # ADD THESE LINES:
   loadBalancerSourceRanges:
     # AKS cluster outbound IPs
-    - 13.88.3.11/32
-    - 13.88.3.12/32
-    - 13.88.3.13/32
-    - 13.88.3.14/32
+    - <AKS_OUTBOUND_IP_1>/32
+    - <AKS_OUTBOUND_IP_2>/32
+    - <AKS_OUTBOUND_IP_3>/32
+    - <AKS_OUTBOUND_IP_4>/32
     # Availity
     - 50.207.21.0/24
     - 50.207.22.0/24
@@ -175,10 +182,10 @@ spec:
 kubectl patch svc sftp-service -n cho-sftp -p '{
   "spec": {
     "loadBalancerSourceRanges": [
-      "13.88.3.11/32",
-      "13.88.3.12/32",
-      "13.88.3.13/32",
-      "13.88.3.14/32",
+      "<AKS_OUTBOUND_IP_1>/32",
+      "<AKS_OUTBOUND_IP_2>/32",
+      "<AKS_OUTBOUND_IP_3>/32",
+      "<AKS_OUTBOUND_IP_4>/32",
       "50.207.21.0/24",
       "50.207.22.0/24",
       "52.20.0.0/16",
@@ -272,10 +279,10 @@ spec:
   type: LoadBalancer
   loadBalancerSourceRanges:
     # AKS cluster outbound IPs (update with actual values)
-    - 13.88.3.11/32
-    - 13.88.3.12/32
-    - 13.88.3.13/32
-    - 13.88.3.14/32
+    - <AKS_OUTBOUND_IP_1>/32
+    - <AKS_OUTBOUND_IP_2>/32
+    - <AKS_OUTBOUND_IP_3>/32
+    - <AKS_OUTBOUND_IP_4>/32
     # Availity clearinghouse
     - 50.207.21.0/24
     - 50.207.22.0/24
@@ -469,13 +476,13 @@ Create environment-specific DNS records:
 
 ```bash
 # Production
-sftp-prod.cloudhealthoffice.com → 52.168.45.123
+sftp-prod.cloudhealthoffice.com → <SFTP_LB_IP>
 
 # UAT
-sftp-uat.cloudhealthoffice.com → 52.168.45.124
+sftp-uat.cloudhealthoffice.com → <SFTP_LB_IP_UAT>
 
 # Development
-sftp-dev.cloudhealthoffice.com → 52.168.45.125
+sftp-dev.cloudhealthoffice.com → <SFTP_LB_IP_DEV>
 ```
 
 **Deploy separate SFTP servers:**

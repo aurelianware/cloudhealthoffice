@@ -10,7 +10,7 @@ This guide explains how to configure Kubernetes ingress with HTTPS/TLS for the C
 - **Portal**: ASP.NET Core application at `portal.cloudhealthoffice.com`
 - **Ingress Controller**: NGINX Ingress Controller
 - **TLS Certificates**: Automated via cert-manager and Let's Encrypt
-- **External IP**: 4.149.83.133 (configured on ingress controller LoadBalancer)
+- **External IP**: <INGRESS_IP> (configured on ingress controller LoadBalancer)
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ helm repo update
 helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
   --create-namespace \
-  --set controller.service.loadBalancerIP=4.149.83.133 \
+  --set controller.service.loadBalancerIP=<INGRESS_IP> \
   --set controller.service.externalTrafficPolicy=Local \
   --set controller.publishService.enabled=true
 ```
@@ -38,7 +38,7 @@ kubectl get pods -n ingress-nginx
 
 # Verify the LoadBalancer service has the correct external IP
 kubectl get svc -n ingress-nginx
-# Should show EXTERNAL-IP: 4.149.83.133
+# Should show EXTERNAL-IP: <INGRESS_IP>
 ```
 
 ### 2. Install cert-manager
@@ -60,15 +60,15 @@ kubectl get pods -n cert-manager
 
 ### 3. Configure DNS Records
 
-Point your domains to the ingress controller external IP: **4.149.83.133**
+Point your domains to the ingress controller external IP: **<INGRESS_IP>**
 
 Add the following DNS A records:
 
 | Domain                         | Type | Value         | TTL  |
 |--------------------------------|------|---------------|------|
-| cloudhealthoffice.com          | A    | 4.149.83.133  | 300  |
-| www.cloudhealthoffice.com      | A    | 4.149.83.133  | 300  |
-| portal.cloudhealthoffice.com   | A    | 4.149.83.133  | 300  |
+| cloudhealthoffice.com          | A    | <INGRESS_IP>  | 300  |
+| www.cloudhealthoffice.com      | A    | <INGRESS_IP>  | 300  |
+| portal.cloudhealthoffice.com   | A    | <INGRESS_IP>  | 300  |
 
 **Verify DNS propagation:**
 
@@ -84,7 +84,7 @@ dig +short www.cloudhealthoffice.com
 dig +short portal.cloudhealthoffice.com
 ```
 
-All should return: **4.149.83.133**
+All should return: **<INGRESS_IP>**
 
 ## Deployment Steps
 
@@ -348,7 +348,7 @@ kubectl apply -f k8s/cert-manager-issuer.yaml
 
 To add or change domains:
 
-1. Add DNS A record pointing to 4.149.83.133
+1. Add DNS A record pointing to <INGRESS_IP>
 2. Update ingress YAML files with new hosts
 3. Apply changes: `kubectl apply -f k8s/site-ingress.yaml`
 4. cert-manager will automatically request certificates for new domains

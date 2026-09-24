@@ -167,8 +167,8 @@ spec:
   # See docs/SFTP-DNS-SETUP.md for instructions on getting IP addresses
   # loadBalancerSourceRanges:
   #   # Allowed client source IPs to the public SFTP endpoint
-  #   - 13.88.3.11/32
-  #   - 13.88.3.12/32
+  #   - <AKS_OUTBOUND_IP_1>/32
+  #   - <AKS_OUTBOUND_IP_2>/32
   #   # Clearinghouse IPs (Availity example)
   #   - 50.207.21.0/24
   #   - 50.207.22.0/24

@@ -2,12 +2,12 @@
 
 ## What Was Implemented
 
-Your Kubernetes cluster ingress has been configured to use HTTPS for routing to the Cloud Health Office website and portal using the IP address 4.149.83.133.
+Your Kubernetes cluster ingress has been configured to use HTTPS for routing to the Cloud Health Office website and portal using the IP address <INGRESS_IP>.
 
 ### Architecture Overview
 
 ```
-Internet (HTTPS) → 4.149.83.133 (NGINX Ingress) → Ingress Resources → Services → Pods
+Internet (HTTPS) → <INGRESS_IP> (NGINX Ingress) → Ingress Resources → Services → Pods
                          ↓
                    TLS Termination (Let's Encrypt Certificates)
 ```
@@ -71,7 +71,7 @@ helm repo update
 helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
   --create-namespace \
-  --set controller.service.loadBalancerIP=4.149.83.133 \
+  --set controller.service.loadBalancerIP=<INGRESS_IP> \
   --set controller.service.externalTrafficPolicy=Local \
   --set controller.publishService.enabled=true
 ```
@@ -79,7 +79,7 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
 **Verify:**
 ```bash
 kubectl get svc -n ingress-nginx
-# Should show EXTERNAL-IP: 4.149.83.133
+# Should show EXTERNAL-IP: <INGRESS_IP>
 ```
 
 #### 2. cert-manager
@@ -97,14 +97,14 @@ Configure these A records in your DNS provider:
 
 | Domain                         | Type | Value         |
 |--------------------------------|------|---------------|
-| cloudhealthoffice.com          | A    | 4.149.83.133  |
-| www.cloudhealthoffice.com      | A    | 4.149.83.133  |
-| portal.cloudhealthoffice.com   | A    | 4.149.83.133  |
+| cloudhealthoffice.com          | A    | <INGRESS_IP>  |
+| www.cloudhealthoffice.com      | A    | <INGRESS_IP>  |
+| portal.cloudhealthoffice.com   | A    | <INGRESS_IP>  |
 
 **Verify DNS:**
 ```bash
 dig +short cloudhealthoffice.com
-# Should return: 4.149.83.133
+# Should return: <INGRESS_IP>
 ```
 
 ### Deploy Cloud Health Office with HTTPS
@@ -163,7 +163,7 @@ http://cloudhealthoffice.com
 **HTTPS Request (port 443):**
 ```
 https://cloudhealthoffice.com
-  → NGINX Ingress Controller (4.149.83.133:443)
+  → NGINX Ingress Controller (<INGRESS_IP>:443)
   → TLS Termination (using site-tls-secret)
   → site-ingress (routes based on host header)
   → site Service (ClusterIP)
@@ -278,7 +278,7 @@ echo | openssl s_client -servername cloudhealthoffice.com \
 ### After (Ingress)
 - Website: ClusterIP service (internal only)
 - Portal: ClusterIP service (internal only)
-- Single NGINX Ingress LoadBalancer (4.149.83.133)
+- Single NGINX Ingress LoadBalancer (<INGRESS_IP>)
 - Automatic TLS via cert-manager + Let's Encrypt
 - Auto-renewal 30 days before expiration
 - Security headers (HSTS, X-Frame-Options, etc.)
@@ -295,7 +295,7 @@ echo | openssl s_client -servername cloudhealthoffice.com \
 ## Next Steps
 
 1. **Deploy Prerequisites** - Install NGINX ingress and cert-manager
-2. **Configure DNS** - Point domains to 4.149.83.133
+2. **Configure DNS** - Point domains to <INGRESS_IP>
 3. **Apply Manifests** - Deploy ingress resources
 4. **Wait for Certificates** - Monitor with `kubectl get certificate -n cloudhealthoffice -w`
 5. **Test Access** - Verify HTTPS at https://cloudhealthoffice.com

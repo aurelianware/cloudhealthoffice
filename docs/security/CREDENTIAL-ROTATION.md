@@ -1,6 +1,6 @@
 # Credential Rotation — Committed Secrets
 
-**Status:** Item 1 closed 2026-09-23 (environment decommissioned). Item 2 rotation outstanding.
+**Status:** Items 1 and 2 both closed 2026-09-23 — the hosting subscription was deleted. No rotation outstanding.
 **Last full-history scan:** 2026-09-21, gitleaks 8.30.1, 3,426 commits, root commit `5bc015b`
 
 Every value listed here was committed to a **public** repository. Git history has
@@ -12,12 +12,12 @@ pushed to a public remote must be assumed to have been fetched and indexed.
 "development-only" it looks.** Removing it from `HEAD` stops the bleeding; only
 rotation ends the exposure.
 
-## 1. Rotate now — real credentials
+## 1. Real credentials — both resolved, see each row
 
 | # | Credential | Purpose | First committed | Removed from HEAD | Action |
 |---|---|---|---|---|---|
 | 1 | *(value not reproduced here — see `328828f5`, `b8818bff`, `7aa9059b`, `5a3d8b24`)* | SFTP password for the self-hosted SFTP server in namespace `cho-sftp`, reachable in-cluster at `sftp-service.cho-sftp.svc.cluster.local` and publicly on a LoadBalancer IP at port 22. Originally the `logicapp` account; **renamed to `cho-edi` in `8281d4d1` (2026-03-22) with the password carried forward unchanged.** | `328828f5` — 2026-02-04, *"Add SFTP workflows: test job and X12 275 attachment upload"* | `c11950b9` (#1184, 2026-09-21). It was live at `HEAD` for ~7½ months. | **No action — CLOSED 2026-09-23.** The hosting subscription was deleted, so the server, the account and the IP no longer exist. Dev-only environment; never held PHI. See "Item 1" below. |
-| 2 | `CloudHealthOffice2026!` | PostgreSQL password for `reference-data-service`, in a manifest labelled `ASPNETCORE_ENVIRONMENT: "Production"` | `2f0f7cc3` — 2026-02-05, *"Add Reference Data Service — CPT/ICD-10/HCPCS code validation with PostgreSQL"* | Already removed, in PR #1173 (2026-09-18) | **Rotate the reference-data PostgreSQL password** in every environment where this manifest was ever applied. |
+| 2 | *(value not reproduced here — see `2f0f7cc3`, `449cc8d8`)* | PostgreSQL password for `reference-data-service`, in a manifest labelled `ASPNETCORE_ENVIRONMENT: "Production"` despite targeting an in-cluster StatefulSet | `2f0f7cc3` — 2026-02-05, *"Add Reference Data Service — CPT/ICD-10/HCPCS code validation with PostgreSQL"* | `7ce7cd2d` (#1173, 2026-09-17) | **No action — CLOSED 2026-09-23.** See "Item 2" below. |
 
 Item 1 is the serious one. It is a 24-character generated password — not a
 placeholder — it named a specific account on a specific host, and it sat in
@@ -83,6 +83,40 @@ this credential are wrong, and both change the remediation:
 Note also that the Argo migration replaced the *orchestrator*, not the SFTP data path:
 the workflows under `infrastructure/argo-workflows/` still mount the `sftp-credentials`
 / `sftp-users` Secrets at `HEAD`.
+
+### Item 2 — reference-data PostgreSQL
+
+**Status: CLOSED — decommissioned. 2026-09-23.**
+
+Same resolution as item 1, and for the same reason: the database lived in the Azure
+subscription that no longer exists.
+
+- **Only one service uses PostgreSQL.** `reference-data-service` is the sole consumer
+  (`Npgsql.EntityFrameworkCore.PostgreSQL` in `reference-data-service.csproj:25`; no
+  other service references Npgsql).
+- **It held reference code sets only — no PHI.** The schema is `cpt_codes`,
+  `icd10_codes`, `hcpcs_codes`, `modifiers`, `drg_codes`, `place_of_service` and
+  `revenue_codes` (`src/services/reference-data-service/Models/ReferenceCodes.cs`).
+  These are public CMS and AMA code reference data. No member, claim or eligibility
+  data was stored in PostgreSQL.
+- **The server was in the deleted cluster.** The connection string targets
+  `Server=postgres-0.postgres-service` (`appsettings.json:11`) — a Kubernetes
+  StatefulSet hostname, not a managed database. There is no PostgreSQL manifest under
+  `infrastructure/` at `HEAD`, and no PostgreSQL workload in the current Azure Container
+  Apps environment.
+
+The `ASPNETCORE_ENVIRONMENT: "Production"` label on the manifest was misleading: it set
+the application environment for a service pointing at an in-cluster development
+StatefulSet, not at a production managed instance. That label is what made this item
+look more serious than it was during the original scan.
+
+**No rotation is required**, because the instance no longer exists. As with item 1 this
+is an owner attestation for the subscription's deletion; the technical findings above
+are verifiable from the repository.
+
+Remaining PostgreSQL use is local development only (`docker-compose.development.yml`,
+`scripts/deploy-local.sh`), with credentials documented as local-dev defaults in
+section 2.
 
 ### Why the scanner did not catch it
 
