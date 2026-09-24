@@ -1,8 +1,8 @@
 # EDI Workflow Suite — Deployment Summary (historical)
 
 > **HISTORICAL — this describes an environment that no longer exists.**
-> The AKS cluster and the Azure subscription that hosted it were deleted; the
-> environment was development-only and never held PHI or production payer data.
+> The AKS cluster and the Azure subscription that hosted it were deleted; the repository owner states it was a development environment that never held PHI or
+> production payer data.
 > **The `kubectl` commands and endpoints below cannot be run** and are retained
 > only as a record of what was deployed at the time. Orchestration has since moved
 > from these Kubernetes Jobs to Argo Workflows (see [ADR 004](../adr/004-remove-logic-apps.md)).
