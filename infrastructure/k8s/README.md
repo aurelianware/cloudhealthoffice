@@ -70,7 +70,7 @@ k8s/
    helm install ingress-nginx ingress-nginx/ingress-nginx \
      --namespace ingress-nginx \
      --create-namespace \
-     --set controller.service.loadBalancerIP=4.149.83.133
+     --set controller.service.loadBalancerIP=<INGRESS_IP>
    ```
 
 2. **cert-manager**
@@ -79,9 +79,9 @@ k8s/
    ```
 
 3. **DNS Configuration**
-   - cloudhealthoffice.com → 4.149.83.133
-   - www.cloudhealthoffice.com → 4.149.83.133
-   - portal.cloudhealthoffice.com → 4.149.83.133
+   - cloudhealthoffice.com → <INGRESS_IP>
+   - www.cloudhealthoffice.com → <INGRESS_IP>
+   - portal.cloudhealthoffice.com → <INGRESS_IP>
 
 ## Deployment Order
 

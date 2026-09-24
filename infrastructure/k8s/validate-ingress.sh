@@ -15,7 +15,10 @@ NC='\033[0m' # No Color
 NAMESPACE="cloudhealthoffice"
 INGRESS_NAMESPACE="ingress-nginx"
 CERTMANAGER_NAMESPACE="cert-manager"
-EXPECTED_IP="4.149.83.133"
+# Set to the ingress LoadBalancer IP for the cluster you are validating.
+# The original AKS cluster this script was written for has been deleted, so there
+# is no default worth hard-coding; the check is skipped when this is unset.
+EXPECTED_IP="${EXPECTED_IP:-}"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║  Cloud Health Office - HTTPS Ingress Validation              ║${NC}"
@@ -80,7 +83,9 @@ INGRESS_IP=$(kubectl get svc -n "$INGRESS_NAMESPACE" ingress-nginx-controller -o
 if [ -z "$INGRESS_IP" ]; then
     print_status "WARN" "LoadBalancer IP not assigned yet (this may take a few minutes)"
 else
-    if [ "$INGRESS_IP" = "$EXPECTED_IP" ]; then
+    if [ -z "$EXPECTED_IP" ]; then
+        print_status "OK" "LoadBalancer IP: $INGRESS_IP (no EXPECTED_IP set — skipping match)"
+    elif [ "$INGRESS_IP" = "$EXPECTED_IP" ]; then
         print_status "OK" "LoadBalancer IP: $INGRESS_IP (matches expected)"
     else
         print_status "WARN" "LoadBalancer IP: $INGRESS_IP (expected: $EXPECTED_IP)"
