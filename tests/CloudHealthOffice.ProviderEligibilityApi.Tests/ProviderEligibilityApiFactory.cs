@@ -20,9 +20,10 @@ namespace CloudHealthOffice.ProviderEligibilityApi.Tests;
 /// </summary>
 public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Program>
 {
-    public const string PracticeKey = "practice-key-1234567890";
+    // Generated per test run so no credential-shaped literal is committed.
+    public static readonly string PracticeKey = Guid.NewGuid().ToString("N");
     public const string PracticeTenant = "third-set-smiles";
-    public const string OtherKey = "other-key-0987654321";
+    public static readonly string OtherKey = Guid.NewGuid().ToString("N");
     public const string OtherTenant = "other-practice";
 
     private readonly bool _useRealGateway;
@@ -54,10 +55,10 @@ public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Progra
     public IPayerReferenceService Payers { get; } = Substitute.For<IPayerReferenceService>();
     public ConcurrentQueue<string> LogMessages { get; } = new();
 
-    public HttpClient CreateAuthorizedClient(string key = PracticeKey, string? tenant = PracticeTenant)
+    public HttpClient CreateAuthorizedClient(string? key = null, string? tenant = PracticeTenant)
     {
         var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Api-Key", key);
+        client.DefaultRequestHeaders.Add("X-Api-Key", key ?? PracticeKey);
         if (tenant is not null) client.DefaultRequestHeaders.Add("X-Tenant-ID", tenant);
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         return client;
