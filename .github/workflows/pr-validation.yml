@@ -162,11 +162,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The canonical 35-service list. MUST stay in sync with
+          # The canonical 36-service list. MUST stay in sync with
           # .github/paths-filter.yml (per-service filter names) and with
           # deploy-azure-aks.yml's matrix (33 entries; this list adds
           # idcard-service and provider-verification-service which are
-          # PR-validated but not yet deploy-targeted). ffs-service is
+          # PR-validated but not yet deploy-targeted, and
+          # provider-eligibility-api, which deploys to Container Apps via
+          # its own bicep rather than AKS). ffs-service is
           # intentionally absent — see paths-filter.yml header.
           #
           # Order doesn't matter for matrix correctness; alphabetical for
@@ -201,6 +203,7 @@ jobs:
             {"service":"personal-representative-service"},
             {"service":"premium-billing-service"},
             {"service":"provider-contracts-service"},
+            {"service":"provider-eligibility-api"},
             {"service":"provider-service"},
             {"service":"provider-verification-service"},
             {"service":"reference-data-service"},
@@ -222,7 +225,7 @@ jobs:
 
             # Build a human-readable reason string for the diagnostic echo.
             # Future debuggers reading the workflow log should be able to
-            # answer "why did this PR fan out to 35 builds?" by skimming
+            # answer "why did this PR fan out to 36 builds?" by skimming
             # this single line, instead of cross-referencing the dorny
             # output table against the meta-filter names.
             TRIGGER_REASON=""
