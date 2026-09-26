@@ -22,6 +22,21 @@ public sealed class ProductionStartupTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    [Theory]
+    [InlineData("Mock")]
+    [InlineData("mock")]
+    [InlineData("")]
+    public void Refuses_to_start_on_the_mock_gateway_outside_development(string gateway)
+    {
+        using var factory = new ProviderEligibilityApiFactory(
+            useRealGateway: true,
+            settings: new Dictionary<string, string?> { ["HealthcareTransactions:DefaultGateway"] = gateway });
+
+        var start = () => factory.CreateClient();
+
+        start.Should().Throw<InvalidOperationException>().WithMessage("*mock gateway*");
+    }
+
     [Fact]
     public async Task Missing_stedi_credential_fails_closed()
     {

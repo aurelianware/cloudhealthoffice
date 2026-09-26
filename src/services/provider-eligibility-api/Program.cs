@@ -4,6 +4,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using ProviderEligibilityApi.Eligibility;
 using ProviderEligibilityApi.Security;
 
 // Provider eligibility API: the narrow, authenticated surface a provider
@@ -26,10 +27,17 @@ builder.Services.TryAddSingleton(TimeProvider.System);
 // Claim lifecycle stores are registered by this call but never used here.
 builder.Services.AddChoHealthcareGateways(builder.Configuration);
 
-builder.Services.AddChoHealthChecks();
+// Readiness waits for the payer directory; see PayerDirectoryReadiness.
+builder.Services.AddSingleton<PayerDirectoryReadiness>();
+builder.Services.AddHostedService<PayerDirectoryStartupRetryService>();
+builder.Services.AddChoHealthChecks()
+    .AddCheck<PayerDirectoryHealthCheck>("payer-directory", tags: ["ready"]);
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
+
+// Checked against the final configuration, after every source has applied.
+ProductionGatewayGuard.EnsureNotMock(app.Configuration, app.Environment);
 
 app.UseChoObservability();
 app.UseMiddleware<ProviderApiAuthenticationMiddleware>();

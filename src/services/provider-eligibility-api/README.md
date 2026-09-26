@@ -45,7 +45,7 @@ Omit `patient` when the patient is the subscriber. `serviceTypeCode` defaults to
 | 400 | Request invalid; `fields` names each problem. No payer call was made |
 | 422 | Caller-fixable: unknown payer, enrollment required, or the clearinghouse rejected the data |
 | 502 | CHO or clearinghouse configuration/credential problem — not fixable by the caller |
-| 503 | Temporary: rate limit, timeout or clearinghouse outage — retry later |
+| 503 | Temporary: rate limit, timeout, clearinghouse outage, or the payer directory is still loading (`ReferenceDataUnavailable`, with `Retry-After`) — retry later |
 
 Responses never echo member ids, names or dates of birth.
 
@@ -60,7 +60,7 @@ practice can link each insurance plan to a routable payer. Returns `id`, `name`,
 | Setting | Notes |
 | --- | --- |
 | `ProviderApi:Clients:N:Name` / `ApiKey` / `Tenants:M` | One entry per calling application. Missing or incomplete clients fail closed (503) |
-| `HealthcareTransactions:DefaultGateway` | `Stedi` by default. `Mock` only in Development |
+| `HealthcareTransactions:DefaultGateway` | `Stedi` by default. `Mock` only in Development; outside Development the service refuses to start on Mock (an unset value counts as Mock) |
 | `HealthcareTransactions:Gateways:Stedi:ApiKey` | From Key Vault. Missing key → 502 `Configuration`, never a mock answer |
 | `HealthcareTransactions:Gateways:Stedi:Environment` | `test` or `production`, matching the key's mode |
 
@@ -92,3 +92,13 @@ curl -s localhost:5000/api/v1/eligibility/check \
 ```
 
 Development uses the Mock gateway and synthetic payers.
+
+## Readiness
+
+The payer directory is held in memory and loaded from Stedi when the replica
+starts. `/health/ready` stays unhealthy until that first load succeeds, and
+until then both endpoints answer 503 `ReferenceDataUnavailable` with
+`Retry-After` rather than a 422 "payer not found". If the startup load fails,
+the service retries with backoff (from 60 seconds, capped at 5 minutes) instead
+of waiting for the next daily sync. `/health/live` does not wait for the
+directory.

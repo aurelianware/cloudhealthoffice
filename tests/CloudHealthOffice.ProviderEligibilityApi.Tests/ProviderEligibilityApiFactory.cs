@@ -53,6 +53,12 @@ public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Progra
 
     public IEligibilityGateway Gateway { get; } = Substitute.For<IEligibilityGateway>();
     public IPayerReferenceService Payers { get; } = Substitute.For<IPayerReferenceService>();
+
+    /// <summary>
+    /// Replaces the payer directory synchronizer when set. Used with
+    /// <c>PayerReference:Sync:Enabled=true</c> to control readiness.
+    /// </summary>
+    public IPayerDirectorySynchronizer? Synchronizer { get; init; }
     public ConcurrentQueue<string> LogMessages { get; } = new();
 
     public HttpClient CreateAuthorizedClient(string? key = null, string? tenant = PracticeTenant)
@@ -84,6 +90,11 @@ public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Progra
             services.AddSingleton(resolver);
             services.RemoveAll<IPayerReferenceService>();
             services.AddSingleton(Payers);
+            if (Synchronizer is not null)
+            {
+                services.RemoveAll<IPayerDirectorySynchronizer>();
+                services.AddSingleton(Synchronizer);
+            }
         });
     }
 

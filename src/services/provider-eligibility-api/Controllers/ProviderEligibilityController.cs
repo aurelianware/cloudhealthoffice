@@ -21,20 +21,26 @@ namespace ProviderEligibilityApi.Controllers;
 public sealed class ProviderEligibilityController : ControllerBase
 {
     private const int MaxPayerResults = 25;
+    private const string RetryAfterSeconds = "30";
+    private const string DirectoryLoadingMessage =
+        "The payer directory is still loading. Retry shortly.";
 
     private readonly IHealthcareGatewayResolver _resolver;
     private readonly IPayerReferenceService _payers;
+    private readonly PayerDirectoryReadiness _directory;
     private readonly TimeProvider _time;
     private readonly ILogger<ProviderEligibilityController> _logger;
 
     public ProviderEligibilityController(
         IHealthcareGatewayResolver resolver,
         IPayerReferenceService payers,
+        PayerDirectoryReadiness directory,
         TimeProvider time,
         ILogger<ProviderEligibilityController> logger)
     {
         _resolver = resolver;
         _payers = payers;
+        _directory = directory;
         _time = time;
         _logger = logger;
     }
@@ -59,6 +65,24 @@ public sealed class ProviderEligibilityController : ControllerBase
 
         var tenantId = (string)HttpContext.Items[ProviderApiAuthenticationMiddleware.TenantItemKey]!;
         var client = (string)HttpContext.Items[ProviderApiAuthenticationMiddleware.ClientItemKey]!;
+
+        if (!await _directory.IsReadyAsync(ct))
+        {
+            _logger.LogWarning(
+                "Provider eligibility check for client {Client} tenant {TenantId} refused: payer directory not loaded",
+                client,
+                tenantId);
+            Response.Headers.RetryAfter = RetryAfterSeconds;
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ProviderEligibilityCheckResponse
+            {
+                Outcome = "Failed",
+                ErrorCategory = nameof(GatewayErrorCategory.ReferenceDataUnavailable),
+                Message = DirectoryLoadingMessage,
+                CorrelationId = request!.CorrelationId,
+                CheckedAtUtc = now
+            });
+        }
+
         var gatewayRequest = ProviderEligibilityMapper.ToGatewayRequest(request!, tenantId, today);
 
         var eligibility = _resolver.ResolveCapability<IEligibilityGateway>();
@@ -89,6 +113,7 @@ public sealed class ProviderEligibilityController : ControllerBase
     /// </summary>
     [HttpGet("payers")]
     [ProducesResponseType(typeof(IReadOnlyList<ProviderPayerSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> SearchPayers(
         [FromQuery] string? q,
         [FromQuery] int maxResults = 10,
@@ -97,6 +122,13 @@ public sealed class ProviderEligibilityController : ControllerBase
         if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2 || q.Length > 80)
         {
             return BadRequest(new { error = "Query must be 2 to 80 characters." });
+        }
+
+        // An empty result while loading would read as "no such payer".
+        if (!await _directory.IsReadyAsync(ct))
+        {
+            Response.Headers.RetryAfter = RetryAfterSeconds;
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = DirectoryLoadingMessage });
         }
 
         var payers = await _payers.SearchAsync(new PayerSearchQuery
