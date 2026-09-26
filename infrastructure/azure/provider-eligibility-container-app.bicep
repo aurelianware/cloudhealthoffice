@@ -73,16 +73,6 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-resource keyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, identity.id, 'provider-eligibility-key-vault-secrets-user')
-  scope: keyVault
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 resource stediApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
   name: 'provider-eligibility-stedi-api-key'
@@ -96,6 +86,31 @@ resource cdoClientApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   name: 'provider-eligibility-cdo-api-key'
   properties: {
     value: cdoClientApiKey
+  }
+}
+
+// Key Vault Secrets User on the two secrets this app reads, not on the vault:
+// cho-kv is shared, and a vault-scoped grant would let this identity read
+// every secret in it.
+var keyVaultSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+
+resource stediApiKeySecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(stediApiKeySecret.id, identity.id, 'provider-eligibility-key-vault-secrets-user')
+  scope: stediApiKeySecret
+  properties: {
+    roleDefinitionId: keyVaultSecretsUserRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource cdoClientApiKeySecretReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(cdoClientApiKeySecret.id, identity.id, 'provider-eligibility-key-vault-secrets-user')
+  scope: cdoClientApiKeySecret
+  properties: {
+    roleDefinitionId: keyVaultSecretsUserRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -194,7 +209,7 @@ resource providerEligibility 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
-  dependsOn: [ acrPull, keyVaultSecretsUser ]
+  dependsOn: [ acrPull, stediApiKeySecretReader, cdoClientApiKeySecretReader ]
 }
 
 output providerEligibilityFqdn string = providerEligibility.properties.configuration.ingress.fqdn
