@@ -8,12 +8,16 @@ unified Kubernetes-based microservices platform on AKS. **That AKS deployment no
 exists** — see the notice under "Current State" below. The "Target State" and service
 design sections are retained as design intent; they do not describe a running system.
 
-**What runs in Azure today.** Not this. The only Cloud Health Office workload deployed to
-Azure is the benefit-plan estimate slice — `benefit-plan-estimate` and `estimate-redis` in
+**What runs in Azure today.** Not this. The Cloud Health Office workloads deployed to
+Azure are small Container Apps slices beside CloudDentalOffice, starting with the
+benefit-plan estimate slice — `benefit-plan-estimate` and `estimate-redis` in
 resource group `cho` — which runs as Container Apps inside an environment shared with
 another product (`infrastructure/azure/estimate-container-app.bicep:13-17` targets the
 "existing Container Apps environment shared with CloudDentalOffice";
-`scripts/deploy-estimate-container-app.sh` deploys only that slice). The marketing site is
+`scripts/deploy-estimate-container-app.sh` deploys only that slice). A second slice,
+`provider-eligibility` (outbound eligibility for CloudDentalOffice, internal ingress only),
+is defined in `infrastructure/azure/provider-eligibility-container-app.bicep` and deployed
+by `scripts/deploy-provider-eligibility-container-app.sh`. The marketing site is
 served by GitHub Pages. Nothing in this document describes a currently running Kubernetes
 deployment.
 
