@@ -26,3 +26,9 @@ f9da612c2e62501b0ff5a6c37770bafa65bf7ef0:k8s/x12-275-upload-job.yaml:generic-api
 4f28ef4c0ca66b4aa01eb3abfefc8e268a91baa2:test-attachment-oauth.sh:generic-api-key:8
 e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:curl-auth-header:63
 e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:generic-api-key:8
+#
+# Fixed placeholder API keys for the provider eligibility API test factory
+# (never real credentials). Replaced by per-run generated keys in the next
+# commit on the same branch.
+88ded4b079db7886eabdb9f65b768ad754e59a9c:tests/CloudHealthOffice.ProviderEligibilityApi.Tests/ProviderEligibilityApiFactory.cs:generic-api-key:23
+88ded4b079db7886eabdb9f65b768ad754e59a9c:tests/CloudHealthOffice.ProviderEligibilityApi.Tests/ProviderEligibilityApiFactory.cs:generic-api-key:25

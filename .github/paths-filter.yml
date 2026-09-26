@@ -24,12 +24,16 @@
 #     containerized, so a "build" filter would never have a matching
 #     Dockerfile to invoke.
 #
-# Service set: 35 services = 33 currently in deploy-azure-aks.yml's matrix
+# Service set: 36 services = 33 currently in deploy-azure-aks.yml's matrix
 # plus idcard-service and provider-verification-service (both already
 # PR-validated by docker-build.yml today; preserved here so δ3 doesn't
 # regress existing coverage). Both services have a separate doc-gap on
 # main: they build but don't deploy. That's a pre-existing condition, not
 # a δ3 concern.
+#
+# provider-eligibility-api is the 36th: it is not an AKS service. It deploys
+# into the CloudDentalOffice Container Apps environment through
+# infrastructure/azure/provider-eligibility-container-app.bicep.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Per-service filters (alphabetical) ──────────────────────────────────────
@@ -62,6 +66,7 @@ personal-representative-service: ['src/services/personal-representative-service/
 premium-billing-service:       ['src/services/premium-billing-service/**']
 provider-contracts-service:    ['src/services/provider-contracts-service/**']
 provider-service:              ['src/services/provider-service/**']
+provider-eligibility-api:      ['src/services/provider-eligibility-api/**']
 provider-verification-service: ['src/services/provider-verification-service/**']
 reference-data-service:        ['src/services/reference-data-service/**']
 rfai-service:                  ['src/services/rfai-service/**']

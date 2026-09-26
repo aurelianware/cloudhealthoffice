@@ -223,8 +223,20 @@ public class StediLiveSmokeTests
         response.Should().NotBeNull();
         response.Metadata.GatewayName.Should().Be("Stedi");
         response.Metadata.TransactionType.Should().Be(HealthcareTransactionType.Eligibility270271);
-        response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.PayerNotFound);
-        response.Metadata.ErrorCategory.Should().NotBe(GatewayErrorCategory.Configuration);
+
+        // The default fixture is intentionally minimal, so Stedi may reject it
+        // as invalid. What this smoke proves is that the credential and
+        // configuration were accepted: an invalid or wrong-mode key surfaces as
+        // Authentication/Authorization, and a missing key as Configuration.
+        var because = $"Stedi returned status {response.Metadata.Status}, " +
+                      $"error category {response.Metadata.ErrorCategory}: {response.ErrorMessage}";
+        new[]
+        {
+            GatewayErrorCategory.Authentication,
+            GatewayErrorCategory.Authorization,
+            GatewayErrorCategory.Configuration,
+            GatewayErrorCategory.PayerNotFound
+        }.Should().NotContain(response.Metadata.ErrorCategory, because);
     }
 
     /// <summary>
@@ -257,7 +269,9 @@ public class StediLiveSmokeTests
             CorrelationId = Guid.NewGuid().ToString("N")
         });
 
-        response.IsSuccess.Should().BeTrue();
+        response.IsSuccess.Should().BeTrue(
+            "Stedi returned status {0}, error category {1}: {2}",
+            response.Metadata.Status, response.Metadata.ErrorCategory, response.ErrorMessage);
         response.Metadata.GatewayName.Should().Be("Stedi");
         response.Metadata.TransactionType.Should().Be(HealthcareTransactionType.Eligibility270271);
         response.Metadata.Status.Should().Be(GatewayTransactionStatus.Completed);
