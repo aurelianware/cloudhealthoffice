@@ -178,11 +178,21 @@ public class CapitationStatementsController : ControllerBase
         if (contract == null)
             return BadRequest(new { error = $"Contract {statement.ContractId} not found for statement" });
 
-        var tp = tradingPartner ?? new CapitationEraTradingPartnerInfo
+        // No default payer identity. PayerId becomes BPR10/TRN03/N1*PR in the
+        // generated 835 -- the value the provider's bank and posting system use
+        // to identify who paid them. Defaulting it here would emit a fabricated
+        // originator on a real financial document, so require it explicitly.
+        if (tradingPartner is null || string.IsNullOrWhiteSpace(tradingPartner.PayerId))
         {
-            PayerName = "Cloud Health Office",
-            PayerId = "CHO"
-        };
+            return BadRequest(new
+            {
+                error = "A trading partner with a non-empty payerId is required. "
+                      + "payerId is the ACH Originating Company Identifier and is "
+                      + "written to BPR10, TRN03 and N1*PR of the generated 835."
+            });
+        }
+
+        var tp = tradingPartner;
 
         var edi = _eraService.Generate835ForStatement(statement, contract, tp);
 

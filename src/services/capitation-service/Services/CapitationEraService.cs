@@ -109,26 +109,46 @@ public class CapitationEraService : ICapitationEraService
         sb.Append(Seg(ref segmentCount, true, "ST*835*0001*005010X221A1~"));
 
         // ── BPR — Financial Information ──────────────────────────────────
+        // BPR10 (Originating Company Identifier), TRN03 and N1*PR all identify
+        // the payer to the provider's bank and posting system. A fabricated or
+        // blank value produces a well-formed 835 naming the wrong originator,
+        // which is worse than a failure because it is silent.
+        if (string.IsNullOrWhiteSpace(tp.PayerId))
+        {
+            throw new InvalidOperationException(
+                "Trading partner has no PayerId. PayerId is the ACH Originating " +
+                "Company Identifier and is required for BPR10, TRN03 and N1*PR " +
+                "(1000A). Supply the carrier's payer identifier before generating " +
+                "an 835.");
+        }
+
         var bprCode = statement.NetPayable > 0 ? "C" : "I";
         string bpr;
         if (tp.PayerRoutingNumber is not null && tp.PayeeRoutingNumber is not null)
         {
-            // Full ACH EFT detail
+            // Full ACH EFT detail. Element positions per 005010X221A1:
+            //   BPR05 CCP  payment format          BPR11 (not used)
+            //   BPR06 01   sender DFI qualifier    BPR12 01  receiver DFI qualifier
+            //   BPR07      sender DFI (routing)    BPR13     receiver DFI (routing)
+            //   BPR08 DA   sender acct qualifier   BPR14 DA  receiver acct qualifier
+            //   BPR09      sender account          BPR15     receiver account
+            //   BPR10      originating company id  BPR16     EFT effective date
             bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*ACH" +
                   $"*CCP*01*{tp.PayerRoutingNumber}*DA*{tp.PayerAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(statement.PaymentDate ?? now)}" +
+                  $"*{tp.PayerId}*" +
                   $"*01*{tp.PayeeRoutingNumber}*DA*{tp.PayeeAccountNumber ?? string.Empty}" +
                   $"*{FormatDate(statement.PaymentDate ?? now)}~";
         }
         else if (!string.IsNullOrEmpty(statement.CheckNumber))
         {
+            // BPR05-BPR15 are not used for a check; BPR16 carries the issue date.
             bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*CHK" +
-                  $"****{FormatDate(statement.PaymentDate ?? now)}~";
+                  $"************{FormatDate(statement.PaymentDate ?? now)}~";
         }
         else
         {
-            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*NON" +
-                  $"****{FormatDate(statement.PaymentDate ?? now)}~";
+            // NON — remittance only, no funds move, so no financial detail.
+            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*NON~";
         }
         sb.Append(Seg(ref segmentCount, true, bpr));
 

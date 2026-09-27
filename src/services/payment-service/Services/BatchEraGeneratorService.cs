@@ -194,30 +194,58 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
             _     => "NON"
         };
 
+        // BPR10 (Originating Company Identifier) and TRN03 both identify the
+        // payer to the provider's bank and posting system. There is no safe
+        // default: a placeholder produces a well-formed 835 that names the
+        // wrong originator, which is worse than a failure because it is
+        // silent. Fail loudly instead.
+        if (string.IsNullOrWhiteSpace(first.PayerId))
+        {
+            throw new InvalidOperationException(
+                "Envelope has no PayerId. PayerId is the ACH Originating Company " +
+                "Identifier and is required for BPR10, TRN03 and N1*PR (1000A). " +
+                "Configure the payer identifier for this carrier before generating an 835.");
+        }
+
+        if (string.IsNullOrWhiteSpace(traceCheckNumber))
+        {
+            throw new InvalidOperationException(
+                "Envelope has no trace/check number. TRN02 is the reassociation " +
+                "trace number and cannot be empty.");
+        }
+
         string bpr;
         if (payMethod == "ACH" && tp.PayerRoutingNumber is not null)
         {
+            // Element positions per 005010X221A1:
+            //   BPR05 CCP  payment format          BPR11 (not used)
+            //   BPR06 01   sender DFI qualifier    BPR12 01  receiver DFI qualifier
+            //   BPR07      sender DFI (routing)    BPR13     receiver DFI (routing)
+            //   BPR08 DA   sender acct qualifier   BPR14 DA  receiver acct qualifier
+            //   BPR09      sender account          BPR15     receiver account
+            //   BPR10      originating company id  BPR16     EFT effective date
             bpr = $"BPR*{bprCode}*{totalAmount:F2}*C*ACH" +
                   $"*CCP*01*{tp.PayerRoutingNumber}*DA*{tp.PayerAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(paymentDate)}" +
+                  $"*{first.PayerId}*" +
                   $"*01*{tp.PayeeRoutingNumber ?? string.Empty}*DA*{tp.PayeeAccountNumber ?? string.Empty}" +
                   $"*{FormatDate(paymentDate)}~";
         }
         else if (payMethod == "CHK")
         {
+            // BPR05-BPR15 are not used for a check; BPR16 carries the issue date.
             bpr = $"BPR*{bprCode}*{totalAmount:F2}*C*CHK" +
-                  $"****{FormatDate(paymentDate)}~";
+                  $"************{FormatDate(paymentDate)}~";
         }
         else
         {
-            bpr = $"BPR*{bprCode}*{totalAmount:F2}*C*NON" +
-                  $"****{FormatDate(paymentDate)}~";
+            // NON — remittance only, no funds move, so no financial detail.
+            bpr = $"BPR*{bprCode}*{totalAmount:F2}*C*NON~";
         }
         sb.Append(Seg(ref segmentCount, true, bpr));
 
         // ── TRN ─ Reassociation Trace Number (envelope) ────────────────
         sb.Append(Seg(ref segmentCount, true,
-            $"TRN*1*{traceCheckNumber}*{first.PayerId ?? "1999999999"}~"));
+            $"TRN*1*{traceCheckNumber}*{first.PayerId}~"));
 
         // ── DTM ─ Production Date ──────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
@@ -225,7 +253,7 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
 
         // ── 1000A ─ Payer Identification ───────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
-            $"N1*PR*{Esc(first.PayerName)}*XV*{first.PayerId ?? "UNASSIGNED"}~"));
+            $"N1*PR*{Esc(first.PayerName)}*XV*{first.PayerId}~"));
 
         // ── 1000B ─ Payee Identification ───────────────────────────────
         var payeeNpiQual = string.IsNullOrEmpty(first.PayeeNPI) ? "" : $"*XX*{first.PayeeNPI}";
