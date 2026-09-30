@@ -98,10 +98,11 @@ describe('Services & deployment positioning', () => {
       expect(fs.existsSync(path.join(SITE, 'platform', 'deployment.html'))).toBe(false);
     });
 
-    it('routes the clean /services URL in _redirects', () => {
-      expect(redirects).toMatch(/^\/services\s+\/services\.html\s+200$/m);
-      expect(redirects).toMatch(/^\/services\.html\s+\/services\s+301$/m);
-      expect(redirects).toMatch(/^\/services\/\s+\/services\s+301$/m);
+    it('serves /services at its clean URL via Cloudflare Pages defaults', () => {
+      // Pages serves services.html at /services and 308s /services.html and
+      // /services/ there by default; restating that in _redirects loops.
+      expect(fs.existsSync(path.join(SITE, 'services.html'))).toBe(true);
+      expect(redirects).not.toMatch(/^\/services/m);
     });
 
     it('routes the clean /services URL in staticwebapp.config.json', () => {
@@ -735,11 +736,9 @@ describe('Services & deployment positioning', () => {
   describe('CAPS vendor SOW article', () => {
     it('is routed, listed in the sitemap, and linked from the series index', () => {
       const slug = '/insights/cms-0057-f/caps-vendor-sow-questions';
-      // The canonical redirects can regress independently of the rewrite, so
-      // assert all three rules the way the /services route does.
-      expect(redirects).toMatch(new RegExp(`^${slug}\\s+${slug}\\.html\\s+200$`, 'm'));
-      expect(redirects).toMatch(new RegExp(`^${slug}\\.html\\s+${slug}\\s+301$`, 'm'));
-      expect(redirects).toMatch(new RegExp(`^${slug}/\\s+${slug}\\s+301$`, 'm'));
+      // Served at its clean URL by Cloudflare Pages defaults (see _redirects).
+      expect(fs.existsSync(path.join(SITE, `${slug}.html`))).toBe(true);
+      expect(redirects).not.toContain(slug);
       const routes = swaConfig.routes as Array<Record<string, unknown>>;
       expect(routes).toContainEqual({ route: slug, rewrite: `${slug}.html` });
       expect(routes).toContainEqual({
@@ -993,5 +992,59 @@ describe('Services & deployment positioning', () => {
       expect(pricingApi).not.toMatch(/Your API Key is Ready/i);
       expect(pricingApi).not.toContain('apiKeyValue');
     });
+  });
+});
+
+/**
+ * Cloudflare Pages already serves foo.html at /foo and foo/index.html at /foo/,
+ * 308-redirecting the other spellings, in one hop. A 258-rule _redirects that
+ * restated this (translated from staticwebapp.config.json) looped on /founder,
+ * /login and every directory page under `wrangler pages dev`, and silently lost
+ * everything past Pages' 100-dynamic-rule limit. These assertions keep the file
+ * to rules that move a page.
+ */
+describe('Cloudflare Pages routing config', () => {
+  const rules = redirects
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .map((line) => line.split(/\s+/));
+  const clean = (url: string): string => url.replace(/(\/index)?\.html$/, '').replace(/\/$/, '') || '/';
+
+  it('has well-formed, relative, in-limit rules', () => {
+    expect(rules.length).toBeLessThanOrEqual(100);
+    for (const rule of rules) {
+      expect(rule).toHaveLength(3);
+      expect(rule[0].startsWith('/')).toBe(true);
+      expect(rule[1].startsWith('/')).toBe(true);
+    }
+  });
+
+  it('never restates the Pages defaults (no .html rewrites, no slash catch-all)', () => {
+    for (const [from, to, status] of rules) {
+      expect(status).not.toBe('200');
+      expect(from).not.toContain('*');
+      // /docs/ -> /docs is the one allowed normalization: docs.html and
+      // docs/index.html both exist, so Pages would otherwise serve both.
+      if (from === '/docs/' && to === '/docs') continue;
+      expect(clean(from)).not.toBe(clean(to));
+    }
+  });
+
+  it('collapses /docs/ onto the canonical /docs', () => {
+    expect(fs.existsSync(path.join(SITE, 'docs.html'))).toBe(true);
+    expect(fs.existsSync(path.join(SITE, 'docs', 'index.html'))).toBe(true);
+    expect(rules).toContainEqual(['/docs/', '/docs', '301']);
+  });
+
+  it('does not cache un-hashed CSS, JS or images as immutable', () => {
+    const headers = read('_headers');
+    expect(headers).not.toMatch(/Cache-Control:[^\n]*immutable/);
+    // Pages joins Cache-Control across matching rules, so every override of the
+    // /* default must detach it first.
+    for (const block of headers.split(/\n(?=\/)/).filter((b) => b.startsWith('/') && !b.startsWith('/*\n'))) {
+      if (/Cache-Control:/.test(block)) expect(block).toMatch(/! Cache-Control/);
+    }
+    expect(headers).toMatch(/Strict-Transport-Security: max-age=\d{7,}/);
   });
 });
