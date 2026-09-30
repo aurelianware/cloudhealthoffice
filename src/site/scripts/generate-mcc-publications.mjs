@@ -241,7 +241,7 @@ for (const publication of publications) {
       <a href="${githubBase}/episode-${publication.episode}/article.txt" target="_blank" rel="noopener noreferrer">View article source</a>
     </div>
     ${rendered.body}
-    <div class="article-links"><a href="/insights/million-claim-challenge">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>`;
+    <div class="article-links"><a href="/insights/million-claim-challenge/">All MCC articles</a><a href="/docs/million-claim-challenge/evidence">Evidence archive</a></div>`;
   writeFileSync(join(outputDir, `${publication.slug}.html`), pageShell({ title: rendered.title, description: publication.summary, canonical, content }));
 }
 
@@ -253,7 +253,7 @@ const cards = publications.map((publication) => {
 writeFileSync(join(outputDir, 'index.html'), pageShell({
   title: 'Million Claim Challenge Engineering Series',
   description: 'Engineering field notes documenting how the Million Claim Challenge became a repeatable, inspectable claims-adjudication benchmark.',
-  canonical: 'https://cloudhealthoffice.com/insights/million-claim-challenge',
+  canonical: 'https://cloudhealthoffice.com/insights/million-claim-challenge/',
   type: 'website',
   content: `<div class="eyebrow">Engineering series</div><h1>Million Claim Challenge Field Notes</h1><p>How the benchmark moved from local Kubernetes runs to repeatable measurement, honest workflow scoring, and operator-facing evidence.</p><div class="disclosure"><strong>Current verified scope:</strong> the latest asynchronous local Kubernetes run reached the full 1,000,000-claim corpus at 155.89 claims/sec, with all claims eventually terminal. A separate 100,000-claim raw X12 837 run reached 199.42 claims/sec end-to-end. These are local validation results, not production-cloud capacity claims.</div>${cards}`
 }));

@@ -754,7 +754,7 @@ describe('Services & deployment positioning', () => {
     it('refreshes the lastmod of the pages this change links from', () => {
       for (const loc of [
         'https://cloudhealthoffice.com/services',
-        'https://cloudhealthoffice.com/insights/cms-0057-f'
+        'https://cloudhealthoffice.com/insights/cms-0057-f/'
       ]) {
         expect(sitemap).toMatch(
           new RegExp(`<loc>${loc.replace(/[.*+?^$()|[\]\\]/g, '\\$&')}</loc>\\s*\\n\\s*<lastmod>2026-09-10</lastmod>`)
