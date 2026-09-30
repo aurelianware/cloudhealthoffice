@@ -97,7 +97,15 @@ jobs:
           # Pull requests get a preview deployment on their own branch alias;
           # main is the production branch of the Pages project.
           DEPLOY_BRANCH: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
-        run: npx --yes wrangler@4 pages deploy dist --project-name="$CLOUDFLARE_PAGES_PROJECT" --branch="$DEPLOY_BRANCH" --commit-dirty=true
+        run: |
+          # First run: create the Pages project if it doesn't exist yet, so no
+          # dashboard setup (and no manual upload) is needed. Creating an
+          # existing project fails harmlessly; a real auth or permission error
+          # still fails the deploy command below.
+          if ! npx --yes wrangler@4 pages project list 2>/dev/null | grep -qw "$CLOUDFLARE_PAGES_PROJECT"; then
+            npx --yes wrangler@4 pages project create "$CLOUDFLARE_PAGES_PROJECT" --production-branch=main
+          fi
+          npx --yes wrangler@4 pages deploy dist --project-name="$CLOUDFLARE_PAGES_PROJECT" --branch="$DEPLOY_BRANCH" --commit-dirty=true
 
       - name: Explain skipped deploy
         if: env.HAS_CLOUDFLARE_TOKEN != 'true'

@@ -64,18 +64,24 @@ curl -sI  http://localhost:8788/css/sentinel.css    # a single Cache-Control
 
 ## Manual steps
 
-### 1. Create the Pages project (Direct Upload)
-Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
-**Upload assets** (Direct Upload, *not* Connect to Git). Name it
-`cloudhealthoffice`, or set the repository variable
-`CLOUDFLARE_PAGES_PROJECT` to the name you choose. Production branch: `main`.
-
-### 2. Add GitHub secrets
+### 1. Add GitHub secrets (the only setup step)
 Repository → **Settings → Secrets and variables → Actions**:
-- `CLOUDFLARE_API_TOKEN` — API token with **Account → Cloudflare Pages: Edit**.
-- `CLOUDFLARE_ACCOUNT_ID` — from the dashboard sidebar.
+- `CLOUDFLARE_API_TOKEN`: create it at Cloudflare dashboard → **My Profile →
+  API Tokens → Create Token → Custom token**, with permission
+  **Account → Cloudflare Pages → Edit**, scoped to your account.
+- `CLOUDFLARE_ACCOUNT_ID`: shown on the right side of the Cloudflare dashboard
+  **Overview** page (or under **Workers & Pages**).
 
-Re-run **Deploy marketing site to Cloudflare Pages**, or push to `src/site/`.
+There is no need to create the project or upload anything by hand. On its first
+run, the workflow creates the Pages project (`cloudhealthoffice`, production
+branch `main`; set the repository variable `CLOUDFLARE_PAGES_PROJECT` to use
+another name), then builds and uploads `src/site/dist`. Do **not** upload a
+zip of the repo or of `src/site`: that is the unbuilt source, with no
+sitemap, analytics, or generated articles.
+
+### 2. Run the deploy
+**Actions → Deploy marketing site to Cloudflare Pages → Run workflow** on
+`main`, or push any change under `src/site/`.
 
 ### 3. Check the preview
 On `https://cloudhealthoffice.pages.dev` (or the project's `*.pages.dev`
