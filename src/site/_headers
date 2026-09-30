@@ -9,28 +9,38 @@
 #
 # IMPORTANT — path matching: Cloudflare Pages matches _headers patterns against
 # the REQUEST path, not the file that is ultimately served. Because pages are
-# served at clean URLs (e.g. /pricing, rewritten to /pricing.html via
-# _redirects), a "/*.html" rule would never match those requests. So the HTML
-# cache policy is set as the default on "/*" instead, and the long-lived asset
-# caches override it on their more specific paths. (When multiple rules match,
-# the more specific path wins for a conflicting header; "/*" is listed first so
-# the behavior is unambiguous under either precedence interpretation.)
+# served at clean URLs (e.g. /pricing, which Pages serves from pricing.html
+# by default), a "/*.html" rule would never match those requests. So the HTML
+# cache policy is set as the default on "/*" instead, and the asset paths
+# override it below. Pages does NOT let the more specific rule win: it joins
+# the values of every matching rule into one header (verified with
+# `wrangler pages dev`: "public, max-age=3600, public, max-age=604800"). So each
+# override first detaches the inherited header with "! Cache-Control".
 
 # Global: security headers + default short cache (covers HTML at clean URLs,
 # /sitemap.xml, /robots.txt, and anything else not overridden below)
 /*
+  Strict-Transport-Security: max-age=31536000
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=()
   Cache-Control: public, max-age=3600
 
-# Fingerprint-free static assets: long, immutable cache (overrides the default)
+# CSS and JS keep stable, un-hashed filenames (css/sentinel.css, js/*.js), so
+# they must NOT be cached as immutable: a one-year immutable cache would pin
+# returning visitors to the old file after every change. Short cache plus
+# stale-while-revalidate keeps repeat views fast while picking up changes
+# within the hour.
 /css/*
-  Cache-Control: public, max-age=31536000, immutable
+  ! Cache-Control
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
 
 /js/*
-  Cache-Control: public, max-age=31536000, immutable
+  ! Cache-Control
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
 
+# Images also keep stable filenames (og images, logos), so a week, not immutable.
 /graphics/*
-  Cache-Control: public, max-age=31536000, immutable
+  ! Cache-Control
+  Cache-Control: public, max-age=604800
