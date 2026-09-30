@@ -353,10 +353,18 @@ from the live response headers (`server: GitHub.com`).
 GitHub Pages resolves extensionless URLs to their `.html` file, so `/services`
 serves `services.html` with no rewrite configuration required.
 
-`_redirects` (Netlify format) and `staticwebapp.config.json` (Azure format) are
-still maintained in this directory, but **neither is read by GitHub Pages** —
-they are configuration for other hosts and are inert on the live site. Keep them
-consistent with the page inventory if you intend to keep those hosts as options.
+`_redirects`/`_headers` (Cloudflare Pages) and `staticwebapp.config.json`
+(Azure format) are in this directory, but **neither is read by GitHub Pages** —
+they are inert on the live site today.
+
+### Cloudflare Pages (staged, not live)
+
+`.github/workflows/deploy-cloudflare-pages.yml` builds the same artifact and
+uploads it to Cloudflare Pages (`*.pages.dev`) once the `CLOUDFLARE_API_TOKEN`
+and `CLOUDFLARE_ACCOUNT_ID` secrets exist. `cloudhealthoffice.com` moves only at
+the DNS cutover described in [`CLOUDFLARE_MIGRATION.md`](../../CLOUDFLARE_MIGRATION.md).
+Cloudflare's default routing already matches this site's URLs, so `_redirects`
+stays nearly empty: do not add rules that restate it (they loop).
 
 ### Azure Static Web Apps (dormant)
 

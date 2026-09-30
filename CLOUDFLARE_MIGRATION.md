@@ -1,156 +1,123 @@
 # Cloudflare Pages Migration — Cloud Health Office marketing site
 
-This document covers migrating the marketing website (`src/site/`) from
-**Azure Static Web Apps (SWA)** to **Cloudflare Pages**, and the steps you must
-perform **manually in the Cloudflare dashboard** (they can't be done from the
-repo).
+Moves the marketing site (`src/site/`) from **GitHub Pages** (the live host
+today) to **Cloudflare Pages**. DNS for `cloudhealthoffice.com` is already on
+Cloudflare (proxied to GitHub Pages), so the cutover is a DNS/custom-domain
+change and is reversible.
 
-> **Site location:** the site lives at **`src/site/`** (there is no top-level
-> `site/` folder). Use `src/site` wherever an output/root directory is requested.
+> **Site location:** `src/site/`. The deployable artifact is the **build
+> output** `src/site/dist/`, not `src/site/` itself: `npm run build` generates
+> the MCC articles, injects analytics and the Formspree endpoint, and writes
+> `dist/sitemap.xml` with per-page `lastmod` from git.
 
 ---
 
-## What's already in the repo (done for you)
-
-These file-based config files were translated from `staticwebapp.config.json`
-and live next to the site so Cloudflare Pages picks them up automatically:
+## What's in the repo
 
 | File | Purpose |
 |---|---|
-| `src/site/_redirects` | `*.html` → clean-URL 301 redirects + clean-URL → `.html` 200 rewrites |
-| `src/site/_headers` | Global security headers + per-path `Cache-Control` |
-| `src/site/404.html` | Custom 404 page (Cloudflare serves it automatically) |
+| `.github/workflows/deploy-cloudflare-pages.yml` | Builds exactly like `deploy-pages.yml` (full history, `SITEMAP_STRICT=1`, test-metrics injection) and runs `wrangler pages deploy dist`. `main` → production branch; pull requests → `pr-<n>` preview aliases. Skips the upload with a warning until the secrets below exist. |
+| `src/site/_redirects` | One rule (`/docs/ → /docs`). Everything else is Cloudflare Pages' default routing — see below. |
+| `src/site/_headers` | Security headers (incl. HSTS) and cache policy. |
+| `src/site/404.html` | Served automatically by Pages for unknown paths. |
 
-What was **dropped** in translation and why:
+### URL policy (and why `_redirects` is nearly empty)
 
-- **`mimeTypes`** — unnecessary on Cloudflare; Content-Type is inferred from the
-  file extension.
-- **`navigationFallback` / `404` rewrite to `/index.html`** — this is a
-  multi-page static site, so a SPA catch-all (`/* /index.html 200`) was
-  deliberately **not** added (it would swallow real pages). A `404.html` is the
-  correct equivalent.
-- **Azure AD auth** (`auth` block, `allowedRoles: authenticated` on `/portal/*`
-  and `/api/*`, `401 → /.auth/login/aad`) — **cannot** be expressed in
-  file-based config. See **"Protect the portal"** below.
+Cloudflare Pages already does this by default, in one hop:
 
----
-
-## Deploy method — recommendation: Cloudflare Git integration
-
-**Recommended: Git integration (no workflow file).**
-
-The site ships as **pre-built static HTML** (the Markdown→HTML output is already
-committed, and the old Azure deploy used `skip_app_build: true`). So there is no
-build to run, which makes Git integration the simplest, lowest-maintenance
-option.
-
-| | Git integration (recommended) | `wrangler pages deploy` GitHub Action |
+| File | Served at | Also redirected (308) |
 |---|---|---|
-| Setup | Connect repo once in dashboard; no YAML | Add workflow + `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secrets |
-| Maintenance | None in-repo | Maintain a workflow file |
-| Preview deploys | Automatic per PR | Manual to wire up |
-| Control over build | Limited (dashboard settings) | Full (can run `npm run build:site`, metrics injection) |
-| Secrets in GitHub | None needed | API token stored in repo secrets |
+| `founder.html` | `/founder` | `/founder.html`, `/founder/` |
+| `schedule-demo/index.html` | `/schedule-demo/` | `/schedule-demo`, `/schedule-demo/index.html` |
 
-Because the deploy is "upload static files," the extra control of a wrangler
-Action buys little here. **No GitHub workflow was added** — that's intentional.
-If you later need the optional `npm run build:site` (regenerates
-`assessment.html`) or `scripts/inject-test-metrics.js` to run on every deploy,
-switch to a wrangler Action or set a Cloudflare build command (see note below).
+That is the same URL for every page that GitHub Pages serves today, and it
+matches the canonical tags and the sitemap. The previous 258-rule
+`_redirects` (translated from the retired Azure `staticwebapp.config.json`)
+restated this with `200` rewrites plus a `/*/` catch-all. On top of the
+defaults, that **looped**: `/founder`, `/login`, `/schedule-demo`,
+`/portal/` and every directory page redirected 6+ times under
+`wrangler pages dev`. Pages also ignores everything after 100 dynamic rules
+and rejects absolute URLs, so the `www` rule never ran. Tests in
+`scripts/tests/site-services-positioning.test.ts` now fail on any rule that
+restates the defaults.
 
-### Build settings to enter in the dashboard
+### Cache headers
 
-| Setting | Value |
-|---|---|
-| **Framework preset** | None |
-| **Build command** | *(leave empty)* |
-| **Build output directory** | `src/site` |
-| **Root directory** | `/` (repo root) |
+Pages **joins** header values from every matching `_headers` rule; the
+more specific rule does not win. Each asset override therefore starts with
+`! Cache-Control` to drop the `/*` default. CSS, JS and images have stable,
+un-hashed filenames, so they get short caches (1 h with
+stale-while-revalidate; images 7 days), never `immutable`.
 
-> Optional: if you want the Markdown build to run on Cloudflare, set the build
-> command to `npm install && npm run build:site` — but note the `build:site`
-> script currently points at `site/js/...` and must be fixed to
-> `src/site/js/markdown-converter.js` first. Not required, since the HTML is
-> already committed.
+### Verify locally
 
----
-
-## Manual steps in the Cloudflare dashboard
-
-### 1. Create the Pages project
-1. Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** →
-   **Connect to Git**.
-2. Authorize and select the `aurelianware/cloudhealthoffice` repository.
-3. Set the **production branch** to `main`.
-4. Enter the build settings from the table above (build command empty, output
-   directory `src/site`).
-5. **Save and Deploy.**
-
-### 2. Set build environment variables
-Project → **Settings** → **Environment variables / Build** (only needed if you
-enable a build command):
-- `NODE_VERSION = 20`
-
-### 3. Add the custom domain (`cloudhealthoffice.com`)
-DNS is already on Cloudflare, so this is a few clicks:
-1. Project → **Custom domains** → **Set up a custom domain**.
-2. Add `cloudhealthoffice.com` (and `www.cloudhealthoffice.com` if you want the
-   `www` host too).
-3. Cloudflare auto-creates the CNAME and provisions the TLS certificate. No
-   ALIAS/ANAME juggling (that was an Azure constraint) — Cloudflare flattens the
-   apex CNAME automatically.
-4. If you add `www`, optionally add a redirect rule (`www` → apex, or vice
-   versa) under **Rules → Redirect Rules**.
-
-### 4. Protect the portal (replaces Azure AD auth) — **important**
-The old config gated `/portal/*` (and `/api/*`) behind Azure AD login. Pages
-file config can't do this. Use **Cloudflare Access (Zero Trust)**:
-1. Zero Trust dashboard → **Access** → **Applications** → **Add an application**
-   → **Self-hosted**.
-2. Application domain: `cloudhealthoffice.com`, path `/portal` (add another for
-   `/portal/*`).
-3. Add an **identity provider** (Azure AD / Entra ID is supported, so you can
-   reuse the existing app registration) under **Settings → Authentication**.
-4. Create an **Access policy** (e.g. allow your org's email domain, or specific
-   users/groups).
-5. Repeat for any `/api/*` paths that must stay authenticated.
-
-> If the portal isn't launched yet / doesn't need gating at go-live, you can
-> skip this and add it later — but the pages will be **publicly reachable** in
-> the meantime.
-
-### 5. Verify, then clean up
-1. Confirm the `*.pages.dev` preview and the custom domain serve the site and
-   that clean URLs, redirects, headers, and the 404 page behave as expected.
-2. Disable/disconnect the Azure Static Web App so it no longer serves or holds
-   the custom domain (do this in the Azure portal).
-3. In the repo, remove the Azure artifacts (handled as **Phase 4** — see below)
-   once you've confirmed Cloudflare is correct.
+```bash
+cd src/site && npm ci && npm run build
+npx wrangler@4 pages dev dist --port 8788
+# Restart the server after changing _redirects/_headers; hot reload is unreliable.
+curl -sIL http://localhost:8788/founder.html        # one 308 -> /founder
+curl -sIL http://localhost:8788/schedule-demo       # one 308 -> /schedule-demo/
+curl -sI  http://localhost:8788/css/sentinel.css    # a single Cache-Control
+```
 
 ---
 
-## Phase 4 — repo cleanup (pending your confirmation)
+## Manual steps
 
-After you confirm the Cloudflare setup works, these will be removed/updated:
-- **Delete** `.github/workflows/deploy-static-site.yml`
-- **Delete** `src/site/staticwebapp.config.json`
-- **Update** docs that reference Azure SWA: `src/site/README.md`,
-  `src/site/DEPLOYMENT.md`, `src/site/IMPLEMENTATION-SUMMARY.md` (and relevant
-  `docs/**` files).
+### 1. Create the Pages project (Direct Upload)
+Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
+**Upload assets** (Direct Upload, *not* Connect to Git). Name it
+`cloudhealthoffice`, or set the repository variable
+`CLOUDFLARE_PAGES_PROJECT` to the name you choose. Production branch: `main`.
 
-`Dockerfile` / `nginx.conf` in `src/site/` have been **deleted**: they served the
-Azure Container Apps path, which was retired once `cho-site` ceased to exist and
-GitHub Pages became the live host. There is no site container to preserve.
+### 2. Add GitHub secrets
+Repository → **Settings → Secrets and variables → Actions**:
+- `CLOUDFLARE_API_TOKEN` — API token with **Account → Cloudflare Pages: Edit**.
+- `CLOUDFLARE_ACCOUNT_ID` — from the dashboard sidebar.
+
+Re-run **Deploy marketing site to Cloudflare Pages**, or push to `src/site/`.
+
+### 3. Check the preview
+On `https://cloudhealthoffice.pages.dev` (or the project's `*.pages.dev`
+address), run the checklist at the bottom. `cloudhealthoffice.com` is still
+served by GitHub Pages at this point.
+
+### 4. Protect the portal (optional)
+`/portal/*` is public on GitHub Pages today (it is `noindex` only). To gate it,
+use **Cloudflare Access (Zero Trust)**: Access → Applications → Self-hosted,
+domain `cloudhealthoffice.com`, path `/portal`. Entra ID can be reused as the
+identity provider.
+
+### 5. Cut over
+1. Pages project → **Custom domains** → add `cloudhealthoffice.com`.
+   Cloudflare replaces the GitHub Pages DNS record and provisions TLS.
+   **Leave MX, SPF, DKIM and DMARC records untouched.**
+2. Also add `www.cloudhealthoffice.com`, then **Rules → Redirect Rules** →
+   create: *When* `http.host eq "www.cloudhealthoffice.com"`, *Then* Dynamic
+   301 to `concat("https://cloudhealthoffice.com", http.request.uri.path)`,
+   preserve query string. (GitHub Pages did this redirect before; `_redirects`
+   cannot.)
+3. Verify on the real domain (checklist below).
+4. Rollback, if needed: remove the custom domain from the Pages project and
+   restore the previous DNS records pointing at GitHub Pages.
+
+### 6. After a week of clean Search Console data
+- Disable GitHub Pages (repo **Settings → Pages**) and delete
+  `.github/workflows/deploy-pages.yml`.
+- Update `src/site/README.md` "Deployment" to name Cloudflare Pages as live.
+- Resubmit `https://cloudhealthoffice.com/sitemap.xml` in Search Console.
 
 ---
 
-## Quick verification checklist
+## Verification checklist
 
-- [ ] `https://<project>.pages.dev/` loads the homepage
-- [ ] `/pricing` serves `pricing.html`; `/pricing.html` 301s to `/pricing`
-- [ ] `/docs` serves the docs index
-- [ ] A bogus URL (e.g. `/nope`) shows the custom **404.html**
-- [ ] Response headers include `X-Frame-Options`, `X-Content-Type-Options`, etc.
-- [ ] `/css/*`, `/js/*`, `/graphics/*` return `Cache-Control: ...immutable`
-- [ ] `cloudhealthoffice.com` resolves to Pages with valid TLS
-- [ ] `/portal` is gated by Cloudflare Access (if required at launch)
+- [ ] Homepage loads; `/nope` shows the custom 404 with status 404
+- [ ] `/founder.html` and `/founder/` → one redirect → `/founder`
+- [ ] `/schedule-demo` → one redirect → `/schedule-demo/`
+- [ ] `/docs/` → `/docs`
+- [ ] `/sitemap.xml` lists 83 URLs, and `lastmod` dates vary (not all the build day)
+- [ ] Every response has `Strict-Transport-Security`, `X-Frame-Options`, `X-Content-Type-Options`
+- [ ] `/css/sentinel.css` has a single `Cache-Control` value, without `immutable`
+- [ ] The Formspree and Google Calendar demo forms still submit
+- [ ] `www.cloudhealthoffice.com/pricing` → one 301 → `cloudhealthoffice.com/pricing`
+- [ ] Google Analytics receives page views
