@@ -65,8 +65,9 @@ const ORIGIN = 'https://cloudhealthoffice.com';
 
 checkHistoryDepth();
 
-// Not marketing surface: error page, auth, and the authenticated portal.
-const EXCLUDED = [/^\/404$/, /^\/login$/, /^\/portal(\/|$)/];
+// Not marketing surface: error page, auth, the authenticated portal, and the
+// cho-*-marketing product mockups (fixed-width screenshot sources, noindexed).
+const EXCLUDED = [/^\/404$/, /^\/login$/, /^\/portal(\/|$)/, /^\/cho-[a-z0-9-]+-marketing$/];
 
 // Directories that hold assets rather than pages.
 const SKIP_DIRS = new Set(['assets', 'css', 'js', 'graphics', 'fonts', 'img', 'images']);
@@ -86,16 +87,25 @@ function walk(dir, out = []) {
   return out;
 }
 
+// A directory index (foo/index.html) is served at /foo/ — GitHub Pages
+// 301-redirects /foo to /foo/, so /foo/ is the canonical URL and the one the
+// page's <link rel="canonical"> declares. The exception is a directory that
+// also has a sibling foo.html (e.g. docs.html + docs/index.html): /foo serves
+// the flat file with a 200 and stays canonical, so the collision handling
+// below still maps both files to /foo.
 function toUrlPath(distFile) {
   const rel = relative(DIST, distFile).split('\\').join('/');
   if (rel === 'index.html') return '/';
-  if (rel.endsWith('/index.html')) return '/' + rel.slice(0, -'/index.html'.length);
+  if (rel.endsWith('/index.html')) {
+    const dir = rel.slice(0, -'/index.html'.length);
+    return existsSync(join(DIST, `${dir}.html`)) ? `/${dir}` : `/${dir}/`;
+  }
   return '/' + rel.slice(0, -'.html'.length);
 }
 
 // Prefer the checked-in source over the build artifact so git history applies.
 function sourceFor(urlPath) {
-  const base = urlPath === '/' ? 'index' : urlPath.replace(/^\//, '');
+  const base = urlPath === '/' ? 'index' : urlPath.replace(/^\//, '').replace(/\/$/, '');
   for (const c of [`${base}.html`, `${base}/index.html`]) {
     const p = join(SITE_ROOT, c);
     if (existsSync(p)) return p;

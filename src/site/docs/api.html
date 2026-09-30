@@ -173,7 +173,7 @@
           <li><strong>PAS (Prior Authorization Support)</strong> &mdash; submits the request through <code>Claim/$submit</code> (per PAS IG v2.1.0) and returns a structured decision; auto-adjudication and pended-status behavior are implemented.</li>
           <li><strong>Authorization decision &amp; service</strong> &mdash; approval, denial, or request-for-information outcomes are recorded and tracked by the authorization service; decision-window tracking and structured denial/status data are implemented, with payer denial taxonomy and reviewer workflow configured per deployment.</li>
         </ul>
-        <p>For the architecture in context, see <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">CMS-0057-F with QNXT, Facets, or HealthEdge</a> and the <a href="/insights/cms-0057-f">CMS-0057-F insights hub</a>.</p>
+        <p>For the architecture in context, see <a href="/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas">CMS-0057-F with QNXT, Facets, or HealthEdge</a> and the <a href="/insights/cms-0057-f/">CMS-0057-F insights hub</a>.</p>
 
         <h2 id="contract">A FHIR API Is Only the External Contract</h2>
         <p>FHIR endpoints standardize how the outside world reaches a plan, but every endpoint is backed by payer business logic and data: <strong>eligibility, benefits, provider networks, authorization rules, clinical policy, claims, accumulators, terminology, identity and security, and audit</strong>. A FHIR server with no payer logic behind it cannot answer a coverage question or adjudicate a prior authorization. Cloud Health Office supplies that logic, in one of two deployment models.</p>
