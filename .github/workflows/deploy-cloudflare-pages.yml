@@ -62,7 +62,7 @@ jobs:
           cache-dependency-path: src/site/package-lock.json
 
       - name: Download latest test metrics
-        uses: dawidd6/action-download-artifact@v24
+        uses: dawidd6/action-download-artifact@v26
         with:
           workflow: test-metrics.yml
           name: test-metrics
