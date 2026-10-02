@@ -20,6 +20,11 @@
  *   - Never collects PHI / member data — this is a B2B marketing site.
  *   - Fires form_start / form_submit / form_error / asset_download analytics.
  *   - Aliases anonymous_id -> email/company on success.
+ *   - A form may offer more than one submit button (e.g. "Get the
+ *     questionnaire" / "Request a call"). Give each a name and value; the
+ *     clicked one is sent as a hidden field, since FormData omits buttons.
+ *   - A thank-you block with tabindex="-1" receives focus when revealed, so
+ *     keyboard and screen-reader users land on the confirmation.
  */
 (function () {
   'use strict';
@@ -88,6 +93,7 @@
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       clearError(form);
+      var submitter = e.submitter || null;
 
       var emailField = form.querySelector('input[type="email"], input[name="email"]');
       var email = emailField ? emailField.value.trim() : '';
@@ -127,6 +133,8 @@
       }
       setHidden(form, 'interest', form.getAttribute('data-lead-interest') || (
         (form.querySelector('[name="interest"]') || {}).value || 'general'));
+      var cta = submitter && submitter.name ? (submitter.value || '') : '';
+      if (cta) setHidden(form, submitter.name, cta);
       if (email) {
         setHidden(form, 'consumer_inbox', isConsumerInbox(email) ? 'yes' : 'no');
         setHidden(form, '_replyto', email);
@@ -137,9 +145,11 @@
         return;
       }
 
-      var submitBtn = form.querySelector('[type="submit"]');
+      var submitBtn = (submitter && submitter.form === form) ? submitter : form.querySelector('[type="submit"]');
+      var allSubmits = form.querySelectorAll('[type="submit"]');
       var originalLabel = submitBtn ? submitBtn.textContent : '';
-      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending…'; }
+      for (var b = 0; b < allSubmits.length; b++) allSubmits[b].disabled = true;
+      if (submitBtn) submitBtn.textContent = 'Sending…';
 
       var company = (form.querySelector('[name="company"]') || {}).value || '';
       var role = (form.querySelector('[name="role"]') || {}).value || '';
@@ -166,11 +176,13 @@
             name: (firstName + ' ' + lastName).trim()
           });
         }
-        track('form_submit', {
+        var submitParams = {
           form_interest: interest,
           consumer_inbox: email ? isConsumerInbox(email) : false,
           page_path: location.pathname
-        });
+        };
+        if (cta) submitParams.form_cta = cta;
+        track('form_submit', submitParams);
         // Prefer the explicit data-for mapping so a container with more than
         // one lead form always reveals the matching thank-you block; fall back
         // to the nearest one under the same parent.
@@ -187,11 +199,15 @@
             });
           }
           try { thankyou.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+          if (thankyou.hasAttribute('tabindex')) {
+            try { thankyou.focus({ preventScroll: true }); } catch (e) { thankyou.focus(); }
+          }
         }
       }).catch(function (err) {
         track('form_error', { form_interest: interest, message: (err && err.message) || 'error' });
         showError(form, (err && err.message) || 'Something went wrong. Please email sales@cloudhealthoffice.com.');
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = originalLabel; }
+        for (var b = 0; b < allSubmits.length; b++) allSubmits[b].disabled = false;
+        if (submitBtn) submitBtn.textContent = originalLabel;
       });
     });
   }

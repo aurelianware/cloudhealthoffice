@@ -50,6 +50,15 @@
       "rewrite": "/services.html"
     },
     {
+      "route": "/services/qnxt-cms-0057-f-adapter.html",
+      "redirect": "/services/qnxt-cms-0057-f-adapter",
+      "statusCode": 301
+    },
+    {
+      "route": "/services/qnxt-cms-0057-f-adapter",
+      "rewrite": "/services/qnxt-cms-0057-f-adapter.html"
+    },
+    {
       "route": "/deploy.html",
       "redirect": "/deploy",
       "statusCode": 301

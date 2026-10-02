@@ -173,6 +173,27 @@ payer-confidential reimbursement information. Never say Cloud Health Office repl
 networks, provider contracts, or third-party pricing services. Productization candidates are described as
 candidates under evaluation, never as shipped features.
 
+## QNXT CMS-0057-F adapter scoping (locked) — `/services/qnxt-cms-0057-f-adapter`
+
+**H1:** Scoping a QNXT-to-CMS-0057-F adapter.
+
+**Subhead:** The four required APIs — Patient Access, Provider Access, Payer-to-Payer, and Prior
+Authorization — are due January 1, 2027, and most of the data behind them already lives in QNXT. The hard
+part is getting it out cleanly.
+
+**Process:** questionnaire → 90-minute discovery workshop → fixed-scope SOW. Read path first (Patient
+Access, Provider Access, Payer-to-Payer, metrics); Prior Authorization write-back is phase 2.
+
+**Credibility line:** Scoped by an architect with 25+ years in payer core systems, nearly two decades of
+them on QNXT.
+
+**Gate:** the page shows one or two sample questions per section (A–I). The full questionnaire is sent by
+email after the form is submitted and is never published on the site.
+
+Never state or imply a finished, packaged, or production QNXT adapter, or a customer running one. An
+adapter is per-implementation scoping and build work. No compliance guarantee, certification, or vendor
+partnership. "Cognizant-hosted" appears only as a neutral hosting option in the questionnaire.
+
 ## cms-0057-f.com (companion property)
 
 | Property | Primary purpose | Search intent |
