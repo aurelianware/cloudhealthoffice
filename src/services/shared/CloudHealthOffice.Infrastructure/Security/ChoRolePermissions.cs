@@ -25,7 +25,8 @@ public static class ChoRolePermissions
         "claims:read", "claims:work", "claims:override-request",
         "workqueue:read", "workqueue:work",
         "members:read", "accumulators:read", "providers:read",
-        "terminology:read", "reference-data:read"
+        "terminology:read", "reference-data:read",
+        "attachments:read", "attachments:write", "benefits:read"
     ];
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> Map =
@@ -36,13 +37,14 @@ public static class ChoRolePermissions
             [
                 .. ExaminerPermissions,
                 "claims:override-approve", "workqueue:assign", "workqueue:reassign",
-                "reports:claims", "claims:void", "claims:adjust"
+                "reports:claims", "claims:void", "claims:adjust", "trading-partners:read"
             ],
             [MemberServices] =
             [
                 "members:read", "members:search", "accumulators:read",
                 "eligibility:check", "claims:read", "coverage:read",
-                "authorizations:read", "reference-data:read"
+                "authorizations:read", "reference-data:read",
+                "attachments:read", "benefits:read", "consent:read", "consent:write"
             ],
             [EnrollmentSpecialist] =
             [
@@ -57,7 +59,8 @@ public static class ChoRolePermissions
                 "rfai:read", "rfai:write",
                 "correspondence:read", "correspondence:write",
                 "members:read", "claims:read",
-                "terminology:read", "reference-data:read"
+                "terminology:read", "reference-data:read",
+                "attachments:read", "attachments:write", "benefits:read", "consent:read"
             ],
             [ProviderRelations] =
             [
@@ -71,7 +74,8 @@ public static class ChoRolePermissions
                 "payments:read", "payments:run", "payments:approve",
                 "billing:read", "billing:run",
                 "finance:read", "finance:write",
-                "reports:financial", "claims:read", "contracts:read"
+                "reports:financial", "claims:read", "contracts:read",
+                "trading-partners:read", "risk-adjustment:read"
             ],
             [ComplianceOfficer] =
             [
