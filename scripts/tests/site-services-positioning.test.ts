@@ -1244,6 +1244,15 @@ describe('QNXT CMS-0057-F adapter scoping page', () => {
       expect(adapter).toContain('id="mobileMenuToggle"');
     });
 
+    it('gives keyboard focus a visible ring that outranks the .cho-leadform outline reset', () => {
+      // conversion.css loads after services.css and sets `outline: none` on
+      // `.cho-leadform input:focus`; an equally specific override would lose.
+      for (const el of ['input', 'select', 'button']) {
+        expect(servicesCss).toContain(`.cho-leadform.svc-gate ${el}:focus-visible`);
+      }
+      expect(adapter.indexOf('/css/services.css')).toBeLessThan(adapter.indexOf('/css/conversion.css'));
+    });
+
     it('lets the questionnaire grid collapse to one column on a phone', () => {
       expect(servicesCss).toMatch(/\.ev \.svc-qsections \{[\s\S]*?minmax\(min\(\d+px, 100%\), 1fr\)/);
     });

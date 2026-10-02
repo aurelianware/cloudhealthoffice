@@ -708,10 +708,12 @@
   cursor: progress;
 }
 
-/* .cho-leadform drops the outline on focus; keyboard users need a visible ring. */
-.svc-gate input:focus-visible,
-.svc-gate select:focus-visible,
-.svc-gate button:focus-visible,
+/* .cho-leadform drops the outline on focus, and conversion.css loads after this
+ * file, so the compound selector is needed to outrank it. Keyboard users need
+ * a visible ring. */
+.cho-leadform.svc-gate input:focus-visible,
+.cho-leadform.svc-gate select:focus-visible,
+.cho-leadform.svc-gate button:focus-visible,
 .cho-leadform__thanks:focus-visible {
   outline: 2px solid var(--ev-cyan);
   outline-offset: 2px;
