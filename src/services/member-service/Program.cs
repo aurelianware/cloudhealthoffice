@@ -3,6 +3,7 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using MemberService.HostedServices;
 using MemberService.Middleware;
 using MemberService.Repositories;
@@ -27,6 +28,14 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Manages health plan member data (subscribers and dependents) populated by X12 834 Enrollment transactions. Surfaces FHIR R4 Patient projection."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant comes from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "members:read";
+    auth.DefaultWritePermission = "members:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -317,8 +326,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

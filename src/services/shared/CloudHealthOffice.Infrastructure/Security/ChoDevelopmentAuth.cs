@@ -48,3 +48,39 @@ public static class ChoDevelopmentAuth
     public static string UserToken(string tenantId, params string[] roles)
         => UserTokenIssuer().IssueUserToken("dev-user-" + tenantId, tenantId, roles, name: "Development User");
 }
+
+/// <summary>
+/// Test/development client handler: turns an <c>X-Tenant-ID</c> on an outgoing
+/// request into a development-signed user token for that tenant. It exists so
+/// integration tests can keep naming the tenant they act in; the server still
+/// takes the tenant from the token this handler mints.
+/// </summary>
+public sealed class ChoDevelopmentTokenHandler : DelegatingHandler
+{
+    private readonly string[] _roles;
+    private readonly string _subject;
+
+    public ChoDevelopmentTokenHandler(params string[] roles)
+        : this("dev-user", roles)
+    {
+    }
+
+    public ChoDevelopmentTokenHandler(string subject, params string[] roles)
+    {
+        _subject = subject;
+        _roles = roles.Length > 0 ? roles : [ChoRolePermissions.TenantAdmin];
+    }
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.Headers.Authorization == null
+            && request.Headers.TryGetValues(Middleware.TenantMiddleware.TenantHeaderName, out var values)
+            && values.FirstOrDefault() is { Length: > 0 } tenant)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", ChoDevelopmentAuth.UserTokenIssuer().IssueUserToken(_subject, tenant, _roles));
+        }
+
+        return base.SendAsync(request, cancellationToken);
+    }
+}
