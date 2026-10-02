@@ -1063,7 +1063,9 @@ describe('QNXT CMS-0057-F adapter scoping page', () => {
   const form = adapter.match(/<form[^>]*id="qnxtAdapterForm"[\s\S]*?<\/form>/)?.[0] ?? '';
   const visibleText = decodeEntities(
     adapter
-      .replace(/<script[\s\S]*?<\/script>/g, ' ')
+      // Case-insensitive and tolerant of `</script >` so no script body can
+      // leak into the copy checks.
+      .replace(/<script\b[\s\S]*?<\/script[^>]*>/gi, ' ')
       .replace(/<[^>]+>/g, ' ')
   );
 
