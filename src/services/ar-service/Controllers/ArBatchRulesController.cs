@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ArService.Controllers;
 
@@ -10,13 +11,16 @@ namespace ArService.Controllers;
 public class ArBatchRulesController : ControllerBase
 {
     private readonly IArBatchRuleRepository _batchRuleRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ArBatchRulesController> _logger;
 
     public ArBatchRulesController(
         IArBatchRuleRepository batchRuleRepository,
+        ICurrentActor actor,
         ILogger<ArBatchRulesController> logger)
     {
         _batchRuleRepository = batchRuleRepository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -57,6 +61,8 @@ public class ArBatchRulesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ArBatchRule>> CreateBatchRule([FromBody] ArBatchRule rule)
     {
+        rule.CreatedBy = _actor.UserId;
+
         _logger.LogInformation("Creating batch rule {RuleCode} ({RuleName}), trigger={Trigger}",
             SanitizeForLog(rule.RuleCode), SanitizeForLog(rule.RuleName), rule.Trigger);
 

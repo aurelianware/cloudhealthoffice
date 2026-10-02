@@ -1,12 +1,12 @@
 using Microsoft.OpenApi.Models;
 using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
-using ArService.Middleware;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -29,6 +29,14 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddHttpContextAccessor();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "finance:read";
+    auth.DefaultWritePermission = "finance:write";
+});
 
 // Database Configuration — MongoDB
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
@@ -81,8 +89,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
-app.UseTenantMiddleware();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

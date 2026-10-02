@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ArService.Controllers;
 using ArService.Models;
 using ArService.Repositories;
+using ArService.Tests.Support;
 
 namespace ArService.Tests.Controllers;
 
@@ -15,7 +16,7 @@ public class CashPostingControllerTests
     {
         _cashPostingRepo = new Mock<ICashPostingRepository>();
         var logger = new Mock<ILogger<CashPostingController>>();
-        _controller = new CashPostingController(_cashPostingRepo.Object, logger.Object);
+        _controller = new CashPostingController(_cashPostingRepo.Object, new TestActor(), logger.Object);
     }
 
     private static CashPosting CreatePosting(
