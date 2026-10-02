@@ -167,6 +167,12 @@
   padding: 24px;
 }
 
+/* lead-capture.js hides the form on success with the hidden attribute; the
+ * display: grid above would otherwise keep it on screen. */
+.cho-leadform[hidden] {
+  display: none;
+}
+
 .cho-leadform__row {
   display: grid;
   grid-template-columns: 1fr 1fr;
