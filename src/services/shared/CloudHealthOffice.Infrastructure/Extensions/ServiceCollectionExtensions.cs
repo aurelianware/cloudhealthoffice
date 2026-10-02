@@ -84,7 +84,7 @@ public static class ServiceCollectionExtensions
         // Database registration
         services.AddChoDatabase(configuration);
 
-        // Store tenant middleware options for use in UseChoInfrastructure
+        // Tenant middleware options, read by UseChoAuthentication
         services.AddSingleton(options.TenantOptions);
 
         // Store the CORS policy name for UseChoInfrastructure
@@ -94,20 +94,13 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Configures the Cloud Health Office middleware pipeline: exception handling, tenant middleware,
-    /// CORS, health check endpoints, and Swagger (in dev).
+    /// Configures the Cloud Health Office middleware pipeline: exception handling, CORS,
+    /// authentication, tenant resolution from the token, authorization, health check
+    /// endpoints, and Swagger (in dev).
     /// <para>
-    /// <b>Important:</b> This method does NOT call <c>UseAuthentication()</c>. If your service uses
-    /// JWT/Azure AD authentication, you must register authentication middleware yourself before
-    /// calling this method so that <c>HttpContext.User</c> is populated for tenant claim extraction.
+    /// Requires <see cref="Security.ChoAuthenticationExtensions.AddChoAuthentication"/> to have
+    /// been called during service registration.
     /// </para>
-    /// <example>
-    /// <code>
-    /// app.UseAuthentication();           // your auth setup
-    /// app.UseChoInfrastructure(config);  // infrastructure pipeline
-    /// app.MapControllers();
-    /// </code>
-    /// </example>
     /// </summary>
     public static IApplicationBuilder UseChoInfrastructure(this IApplicationBuilder app, IConfiguration configuration)
     {
@@ -128,13 +121,17 @@ public static class ServiceCollectionExtensions
 
         app.UseHttpsRedirection();
 
-        // Tenant middleware
-        var tenantOptions = app.ApplicationServices.GetRequiredService<TenantMiddlewareOptions>();
-        app.UseMiddleware<TenantMiddleware>(tenantOptions);
-
         var corsPolicyName = app.ApplicationServices.GetRequiredService<CorsPolicyNameHolder>().PolicyName;
         app.UseCors(corsPolicyName);
-        app.UseAuthorization();
+
+        if (app.ApplicationServices.GetService<Security.ChoAuthOptions>() is null)
+        {
+            throw new InvalidOperationException(
+                "UseChoInfrastructure requires AddChoAuthentication. Every CHO service authenticates its callers.");
+        }
+
+        // Authentication, tenant from the token, then authorization.
+        Security.ChoAuthenticationExtensions.UseChoAuthentication(app);
 
         // Health check endpoints
         app.MapChoHealthChecks();
