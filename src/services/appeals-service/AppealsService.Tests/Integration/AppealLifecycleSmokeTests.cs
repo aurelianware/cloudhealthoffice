@@ -48,7 +48,9 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
 
     private HttpClient NewClient(string tenant = "tenant-a")
     {
-        var client = _factory.CreateClient();
+        // The handler turns X-Tenant-ID into a development-signed token for that
+        // tenant; the server takes the tenant from the token.
+        var client = _factory.CreateDefaultClient(new CloudHealthOffice.Infrastructure.Security.ChoDevelopmentTokenHandler());
         client.DefaultRequestHeaders.Add("X-Tenant-ID", tenant);
         return client;
     }
@@ -101,7 +103,7 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
         appeal.Status.Should().Be(AppealStatus.Draft);
 
         // 2. Add note + attachment in Draft
-        var noteBody = new AddNoteRequest { NoteText = "Initial provider notes.", CreatedBy = "prov-1", IsInternal = false };
+        var noteBody = new AddNoteRequest { NoteText = "Initial provider notes.", IsInternal = false };
         (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/notes", noteBody, JsonOptions))
             .EnsureSuccessStatusCode();
 
@@ -151,8 +153,7 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
                 DecisionType = AppealDecisionType.Approved,
                 ApprovedAmount = 2500.00m,
                 DecisionReason = "Medical necessity confirmed by clinical review.",
-                ReviewerNotes = "Reviewer: Dr. Smith.",
-                DecisionMaker = "reviewer-99"
+                ReviewerNotes = "Reviewer: Dr. Smith."
             }
         };
         var closed = await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/close", close, JsonOptions);
@@ -218,8 +219,8 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
     {
         _factory.Reset();
         var client = _factory.CreateClient();
-        // No X-Tenant-ID header — TenantMiddleware must 401 rather than fall
-        // back to a default.
+        // No token and no X-Tenant-ID header — the request must 401 rather
+        // than fall back to a default tenant.
         var response = await client.GetAsync("/api/appeals/some-id");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }

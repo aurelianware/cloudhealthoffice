@@ -8,6 +8,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
@@ -46,6 +47,15 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Claim appeals processing with 275 attachment support. "
                     + "State-machine lifecycle, append-only audit trail, field-level encryption."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come
+// from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "appeals:read";
+    auth.DefaultWritePermission = "appeals:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -195,8 +205,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 
