@@ -1048,3 +1048,204 @@ describe('Cloudflare Pages routing config', () => {
     expect(headers).toMatch(/Strict-Transport-Security: max-age=\d{7,}/);
   });
 });
+
+/**
+ * /services/qnxt-cms-0057-f-adapter — gated lead magnet for the QNXT adapter
+ * scoping questionnaire. Locked copy and constraints live in MESSAGE_SHEET.md
+ * ("QNXT CMS-0057-F adapter scoping"). The page must frame an adapter as
+ * per-plan scoping and build work, never as a finished product, and must not
+ * publish the full questionnaire.
+ */
+describe('QNXT CMS-0057-F adapter scoping page', () => {
+  const PAGE = 'services/qnxt-cms-0057-f-adapter.html';
+  const URL = 'https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter';
+  const adapter = read(PAGE);
+  const form = adapter.match(/<form[^>]*id="qnxtAdapterForm"[\s\S]*?<\/form>/)?.[0] ?? '';
+  const visibleText = decodeEntities(
+    adapter
+      .replace(/<script[\s\S]*?<\/script>/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+  );
+
+  describe('routing and discovery', () => {
+    it('ships at its clean URL with no _redirects rule', () => {
+      expect(fs.existsSync(path.join(SITE, PAGE))).toBe(true);
+      expect(redirects).not.toContain('qnxt-cms-0057-f-adapter');
+    });
+
+    it('routes the clean URL in staticwebapp.config.json', () => {
+      const routes = swaConfig.routes as Array<Record<string, unknown>>;
+      expect(routes).toContainEqual({
+        route: '/services/qnxt-cms-0057-f-adapter',
+        rewrite: '/services/qnxt-cms-0057-f-adapter.html'
+      });
+    });
+
+    it('is listed in the sitemap', () => {
+      expect(sitemap).toContain(`<loc>${URL}</loc>`);
+    });
+
+    it('is linked from the services index and the readiness and implementation entries', () => {
+      const offer = (id: string) =>
+        services.match(new RegExp(`<article class="svc-offer" id="${id}">[\\s\\S]*?</article>`))?.[0] ?? '';
+      expect(offer('offer-assessment')).toContain('href="/services/qnxt-cms-0057-f-adapter"');
+      expect(offer('offer-implementation')).toContain('href="/services/qnxt-cms-0057-f-adapter"');
+      const intro = services.slice(services.indexOf('id="offerings"'), services.indexOf('id="offer-assessment"'));
+      expect(intro).toContain('href="/services/qnxt-cms-0057-f-adapter"');
+    });
+  });
+
+  describe('metadata', () => {
+    it('has a descriptive title, canonical, description, and social cards', () => {
+      const title = adapter.match(/<title>([^<]+)<\/title>/)?.[1] ?? '';
+      // Lead with descriptive terms: "CloudHealth" collides with an unrelated product.
+      expect(title).toMatch(/^QNXT CMS-0057-F/);
+      expect(title).toMatch(/QNXT FHIR adapter/i);
+      expect(adapter).toContain(`<link rel="canonical" href="${URL}" />`);
+      expect(adapter).toMatch(/<meta name="description" content="[^"]{80,160}"/);
+      expect(adapter).toContain(`property="og:url" content="${URL}"`);
+      expect(adapter).toContain('property="og:title"');
+      expect(adapter).toContain('name="twitter:card" content="summary_large_image"');
+    });
+
+    it('parses its structured data and makes no Offer, Review, or rating claims', () => {
+      const blocks = jsonLdBlocks(adapter);
+      expect(blocks.length).toBeGreaterThan(0);
+      const raw = JSON.stringify(blocks);
+      expect(raw).toContain('"BreadcrumbList"');
+      for (const banned of ['"Offer"', '"Review"', '"AggregateRating"']) {
+        expect(raw).not.toContain(banned);
+      }
+    });
+  });
+
+  describe('content', () => {
+    it('carries the locked hero and the CMS-0057-F definition', () => {
+      expect(adapter).toContain('<h1>Scoping a QNXT-to-CMS-0057-F adapter.</h1>');
+      expect(visibleText).toContain(
+        'are due January 1, 2027, and most of the data behind them already lives in QNXT. The hard part is getting it out cleanly.'
+      );
+      expect(visibleText).toContain(
+        'CMS-0057-F is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some exchange plans'
+      );
+    });
+
+    it('describes the questionnaire, workshop, and fixed-scope SOW sequence with phase 2 write-back', () => {
+      const flow = adapter.match(/<ol class="ev-flow">[\s\S]*?<\/ol>/)?.[0] ?? '';
+      const steps = [...flow.matchAll(/<strong>([^<]+)<\/strong>/g)].map((m) => m[1]);
+      expect(steps).toEqual(['Questionnaire', '90-minute discovery workshop', 'Fixed-scope SOW']);
+      expect(adapter).toContain('Phase 2 &middot; Write-back');
+    });
+
+    it('previews all nine questionnaire sections, A to I, without publishing the full questionnaire', () => {
+      const sections = [...adapter.matchAll(/<li class="svc-qsection">([\s\S]*?)<\/li>\s*(?=<li class="svc-qsection">|<\/ol>)/g)];
+      expect(sections).toHaveLength(9);
+      const letters = [...adapter.matchAll(/class="svc-qsection__letter" aria-hidden="true">([A-I])</g)].map((m) => m[1]);
+      expect(letters.join('')).toBe('ABCDEFGHI');
+      for (const [section] of sections) {
+        const questions = (section.match(/<li>/g) || []).length;
+        expect(questions).toBeGreaterThanOrEqual(1);
+        expect(questions).toBeLessThanOrEqual(2);
+      }
+      // The full questionnaire is emailed, never linked as a document.
+      expect(adapter).not.toMatch(/href="[^"]*\.(?:pdf|docx?|xlsx?)"/i);
+    });
+
+    it('never implies a finished adapter, a live customer, or a compliance guarantee', () => {
+      expect(visibleText).not.toMatch(/\b(?:our|the) (?:production|packaged|off-the-shelf|turnkey) (?:QNXT )?adapter\b/i);
+      expect(visibleText).not.toMatch(/\b(?:proven|in production at|live at|deployed at|trusted by)\b/i);
+      expect(visibleText).not.toMatch(/guarantee[sd]? compliance|ensures? compliance|fully compliant/i);
+      expect(visibleText).not.toMatch(/\bcertified\b(?! or)/i);
+      // No customer or vendor logos: the only image is our own nav logo.
+      for (const [img] of adapter.matchAll(/<img[^>]*>/g)) {
+        expect(img).toContain('/graphics/logo-cloudhealthoffice-');
+      }
+      expect(visibleText).toContain('No finished or packaged QNXT adapter.');
+    });
+
+    it('keeps the credibility statement short and evidence-backed', () => {
+      const cred = adapter.match(/<p class="svc-cred">([\s\S]*?)<\/p>/)?.[1] ?? '';
+      expect(decodeEntities(cred.replace(/<[^>]+>/g, ' '))).toMatch(/25\+ years in payer core systems/);
+      expect(cred).toContain('href="/founder"');
+    });
+  });
+
+  describe('gated form', () => {
+    it('reuses the shared lead-capture path and Formspree endpoint placeholder', () => {
+      expect(form).toContain('data-lead-form');
+      expect(form).toContain('data-lead-interest="qnxt-adapter-questionnaire"');
+      expect(form).toContain('action="__FORMSPREE_LEADS_ENDPOINT__"');
+      expect(form).toContain('method="POST"');
+      expect(adapter).toContain('data-lead-thankyou data-for="qnxtAdapterForm"');
+    });
+
+    it('collects name, work email, plan, role, and lines of business, with QNXT version optional', () => {
+      for (const [id, name] of [
+        ['qa-first', 'firstName'],
+        ['qa-last', 'lastName'],
+        ['qa-email', 'email'],
+        ['qa-plan', 'company'],
+        ['qa-role', 'role'],
+        ['qa-version', 'qnxtVersion']
+      ]) {
+        expect(form).toContain(`for="${id}"`);
+        expect(form).toMatch(new RegExp(`id="${id}"[^>]*name="${name}"`));
+      }
+      for (const id of ['qa-first', 'qa-last', 'qa-email', 'qa-plan', 'qa-role']) {
+        expect(form).toMatch(new RegExp(`id="${id}"[^>]*required`));
+      }
+      expect(form).not.toMatch(/id="qa-version"[^>]*required/);
+      expect(form).toMatch(/<fieldset[^>]*>\s*<legend>Line\(s\) of business \*<\/legend>/);
+      expect((form.match(/type="checkbox" name="lineOfBusiness"/g) || []).length).toBeGreaterThanOrEqual(4);
+      expect(adapter).toContain("setCustomValidity(picked.length ? '' : 'Select at least one line of business.')");
+    });
+
+    it('offers both calls to action as named submit buttons', () => {
+      expect(form).toMatch(/<button type="submit" name="request" value="questionnaire"[^>]*>Get the full questionnaire<\/button>/);
+      expect(form).toMatch(/<button type="submit" name="request" value="scoping-call"[^>]*>Request a scoping call<\/button>/);
+      expect(leadCapture).toContain('e.submitter');
+      expect(leadCapture).toContain('submitParams.form_cta = cta');
+    });
+
+    it('confirms the questionnaire and a workshop time, and moves focus there', () => {
+      const thanks = adapter.match(/<div data-lead-thankyou[\s\S]*?<\/div>/)?.[0] ?? '';
+      expect(thanks).toContain('tabindex="-1"');
+      expect(thanks).toMatch(/email the full questionnaire/);
+      expect(thanks).toMatch(/propose a time for the 90-minute\s+discovery workshop/);
+      expect(leadCapture).toContain("thankyou.hasAttribute('tabindex')");
+    });
+
+    it('shows the sensitive-data warning and an accessible error region', () => {
+      expect(form).toMatch(/do not send PHI, member data, claim data, production credentials, security secrets/i);
+      expect(form).toContain('data-lead-error role="alert"');
+    });
+  });
+
+  describe('analytics and attribution', () => {
+    it('registers a named page-view event and tags the CTAs', () => {
+      expect(analytics).toContain("'/services/qnxt-cms-0057-f-adapter': 'qnxt_adapter_page_view'");
+      expect(adapter).toContain('data-ga-event="qnxt_adapter_cta_click"');
+    });
+
+    it('relies on the shared scripts for cross-site attribution rather than its own tracking', () => {
+      // build.mjs injects analytics-events.js and lead-capture.js; the latter
+      // copies getAttribution() into hidden fields on submit.
+      expect(leadCapture).toContain('window.choIdentity.getAttribution()');
+      expect(adapter).not.toMatch(/gtag\(|googletagmanager|segment\.com|mixpanel|hotjar|posthog/i);
+    });
+  });
+
+  describe('accessibility and layout', () => {
+    it('has the skip link, one h1, a main landmark, and the shared nav', () => {
+      expect(adapter).toContain('class="skip-to-main"');
+      expect(adapter).toContain('<main id="main-content">');
+      expect((adapter.match(/<h1[^>]*>/g) || []).length).toBe(1);
+      expect(mainNavOf(adapter)).toContain('href="/services"');
+      expect(adapter).toContain('id="mobileMenuToggle"');
+    });
+
+    it('lets the questionnaire grid collapse to one column on a phone', () => {
+      expect(servicesCss).toMatch(/\.ev \.svc-qsections \{[\s\S]*?minmax\(min\(\d+px, 100%\), 1fr\)/);
+    });
+  });
+});

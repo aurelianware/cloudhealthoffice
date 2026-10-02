@@ -170,6 +170,32 @@
   opacity: 0.5;
 }
 
+/* The breadcrumb is a <nav>, so sentinel.css's site-menu rules for `nav` and
+ * `nav a` (sticky black bar; full-width block links under 768px) would
+ * otherwise apply to it. Undo them so it stays one inline trail. */
+.ev nav.ev-breadcrumb {
+  position: static;
+  z-index: auto;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom: 0;
+}
+
+.ev nav.ev-breadcrumb a {
+  display: inline;
+  width: auto;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.ev nav.ev-breadcrumb a:hover {
+  background: none;
+  text-shadow: none;
+}
+
 /* ─── Hero ───────────────────────────────────────────────────────────────── */
 
 .ev-hero {

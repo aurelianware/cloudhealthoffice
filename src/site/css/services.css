@@ -1,6 +1,6 @@
 /* Cloud Health Office — Services & operating models
  *
- * Components for /services and /deploy. Loaded AFTER sentinel.css and
+ * Components for /services, its sub-pages, and /deploy. Loaded AFTER sentinel.css and
  * evidence-hub.css and scoped to `.ev` on <body>, so these pages inherit the
  * Evidence Hub reading treatment (documentation typography, cyan/green
  * Sentinel palette) and add only the structures those pages need:
@@ -554,6 +554,172 @@
   gap: 12px;
   justify-content: center;
   margin-top: 34px;
+}
+
+/* ─── Adapter scoping page (/services/qnxt-cms-0057-f-adapter) ─────────────
+ *   .svc-phases     phase 1 / phase 2 cards under the scoping steps
+ *   .svc-qsections  lettered questionnaire sections with sample questions
+ *   .svc-gate       gated lead form, layered on conversion.css .cho-leadform
+ */
+
+.svc-phases {
+  margin-top: 2rem;
+}
+
+/* .ev ol caps lists at 78ch with a left indent; this grid needs the full width. */
+.ev .svc-qsections {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  max-width: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 1rem;
+}
+
+.svc-qsection {
+  border: 1px solid var(--ev-border);
+  border-radius: 12px;
+  background: var(--ev-surface);
+  padding: 1.2rem 1.3rem;
+  margin: 0;
+}
+
+.svc-qsection h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.7rem;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.svc-qsection__letter {
+  flex: none;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  border: 1px solid var(--ev-border-bright);
+  color: var(--ev-cyan);
+  font-family: var(--ev-mono);
+  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.svc-qsection ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.svc-qsection li {
+  font-size: 0.9rem;
+  margin-bottom: 0.45rem;
+}
+
+.svc-qsection li:last-child {
+  margin-bottom: 0;
+}
+
+.svc-gate {
+  margin-top: 1.5rem;
+}
+
+.svc-gate__required,
+.svc-gate__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ev-text-muted);
+}
+
+.svc-gate__hint {
+  margin-top: 0.35rem;
+}
+
+.svc-gate__fieldset {
+  border: 1px solid var(--ev-border);
+  border-radius: 8px;
+  padding: 0.8rem 1rem 1rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.svc-gate__fieldset legend {
+  padding: 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(0, 255, 255, 0.8);
+}
+
+.svc-gate__checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 0.4rem 1rem;
+  margin-top: 0.6rem;
+}
+
+/* Overrides .cho-leadform label/input, which assume stacked text fields. */
+.cho-leadform .svc-gate__check {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--ev-text);
+  cursor: pointer;
+}
+
+.cho-leadform .svc-gate__check input {
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  margin: 0;
+  flex: none;
+  accent-color: var(--ev-cyan);
+}
+
+.svc-gate__warning {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(255, 204, 102, 0.35);
+  border-radius: 8px;
+  background: rgba(255, 204, 102, 0.06);
+  font-size: 0.82rem;
+  color: var(--ev-text);
+}
+
+.svc-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.svc-gate__actions .ev-btn {
+  flex: 1 1 200px;
+  justify-content: center;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.svc-gate__actions .ev-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* .cho-leadform drops the outline on focus; keyboard users need a visible ring. */
+.svc-gate input:focus-visible,
+.svc-gate select:focus-visible,
+.svc-gate button:focus-visible,
+.cho-leadform__thanks:focus-visible {
+  outline: 2px solid var(--ev-cyan);
+  outline-offset: 2px;
+}
+
+.svc-cred {
+  font-size: 1.02rem;
+  color: var(--ev-text);
 }
 
 @media (prefers-reduced-motion: reduce) {

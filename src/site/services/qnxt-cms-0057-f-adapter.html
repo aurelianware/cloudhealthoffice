@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QNXT CMS-0057-F Adapter Scoping — QNXT FHIR Adapter Questionnaire | Cloud Health Office</title>
+  <meta name="description" content="How we scope a QNXT FHIR adapter for CMS-0057-F: a nine-section questionnaire, a 90-minute discovery workshop, and a fixed-scope SOW, one plan at a time." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter" />
+  <meta property="og:title" content="Scoping a QNXT-to-CMS-0057-F adapter" />
+  <meta property="og:description" content="Most of the data behind the CMS-0057-F APIs already lives in QNXT. The hard part is getting it out cleanly. A nine-section QNXT scoping questionnaire, a discovery workshop, and a fixed-scope SOW." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter" />
+  <meta name="twitter:title" content="Scoping a QNXT-to-CMS-0057-F adapter" />
+  <meta name="twitter:description" content="A nine-section QNXT scoping questionnaire for the CMS-0057-F APIs, a 90-minute discovery workshop, and a fixed-scope SOW." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Service",
+      "name": "QNXT CMS-0057-F adapter scoping",
+      "url": "https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter",
+      "serviceType": "QNXT FHIR adapter scoping and implementation for CMS-0057-F",
+      "description": "Per-plan scoping of an adapter that extracts QNXT data for the CMS-0057-F Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs: questionnaire, discovery workshop, and fixed-scope statement of work.",
+      "provider": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc.",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "areaServed": {
+        "@type": "Country",
+        "name": "United States"
+      },
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "Health plans running QNXT, and their payer technology teams"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Services",
+          "item": "https://cloudhealthoffice.com/services"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "QNXT CMS-0057-F adapter",
+          "item": "https://cloudhealthoffice.com/services/qnxt-cms-0057-f-adapter"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <link rel="stylesheet" href="/css/services.css" />
+  <link rel="stylesheet" href="/css/conversion.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/services" aria-current="true">Services</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <!-- ===== 1. HERO ===== -->
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/services">Services</a><span>/</span><a href="/services/qnxt-cms-0057-f-adapter" aria-current="page">QNXT CMS-0057-F adapter</a></nav>
+        <span class="ev-eyebrow">Professional Services &middot; QNXT</span>
+        <h1>Scoping a QNXT-to-CMS-0057-F adapter.</h1>
+        <p class="ev-lede">
+          The four required APIs &mdash; Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization
+          &mdash; are due January 1, 2027, and most of the data behind them already lives in QNXT. The hard part is
+          getting it out cleanly.
+        </p>
+        <div class="ev-badges">
+          <span class="ev-badge ev-badge--cyan">Scoped per plan</span>
+          <span class="ev-badge">Read path first</span>
+          <span class="ev-badge ev-badge--green">Fixed-scope SOW</span>
+        </div>
+        <div class="ev-actions">
+          <a class="ev-btn" href="#get-questionnaire" data-ga-event="qnxt_adapter_cta_click">Get the scoping questionnaire &rarr;</a>
+          <a class="ev-btn ev-btn--ghost" href="#questionnaire">See what it covers</a>
+        </div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
+        </p>
+      </div>
+    </header>
+
+    <!-- ===== 2. HOW WE SCOPE ===== -->
+    <section class="ev-section" id="how-we-scope">
+      <div class="ev-container">
+        <span class="ev-eyebrow">How we scope each adapter</span>
+        <h2>No two QNXT installs are the same, so we scope one plan at a time.</h2>
+        <p class="ev-sub">
+          QNXT version, hosting, licensed modules, and years of local configuration all change where the data sits
+          and how safely it can be read. An adapter is scoping and build work for your environment, not a package
+          we install. We find out what your environment actually holds before anyone prices it.
+        </p>
+
+        <ol class="ev-flow">
+          <li>
+            <strong>Questionnaire</strong>
+            <p>Nine sections your QNXT, data, and compliance teams answer together. It tells us where each API's data lives and what has to be reconciled before it can be served.</p>
+          </li>
+          <li>
+            <strong>90-minute discovery workshop</strong>
+            <p>We walk through the answers with your team, settle the open questions, and agree on sources, extraction approach, and test data.</p>
+          </li>
+          <li>
+            <strong>Fixed-scope SOW</strong>
+            <p>A statement of work with defined deliverables, assumptions, responsibilities, and exclusions, written from what the workshop established.</p>
+          </li>
+        </ol>
+
+        <div class="ev-grid ev-grid--two svc-phases">
+          <div class="ev-card">
+            <span class="ev-card__tag">Phase 1 &middot; Read path</span>
+            <h3>Patient Access, Provider Access, Payer-to-Payer, and metrics</h3>
+            <p>Read QNXT member, claims, encounter, prior-authorization, and provider data and serve it through the read APIs. Prior-authorization metrics reporting is in this phase.</p>
+          </div>
+          <div class="ev-card">
+            <span class="ev-card__tag">Phase 2 &middot; Write-back</span>
+            <h3>Prior Authorization write-back</h3>
+            <p>Take prior-authorization requests arriving through the API back into QNXT. It depends on how authorizations enter QNXT today, so we scope it after the read path is understood.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 3. WHAT THE QUESTIONNAIRE COVERS ===== -->
+    <section class="ev-section ev-section--alt" id="questionnaire">
+      <div class="ev-container">
+        <span class="ev-eyebrow">What the questionnaire covers</span>
+        <h2>Nine sections, from environment to sign-off.</h2>
+        <p class="ev-sub">
+          A sample question or two from each section is below. The full questionnaire goes to your team when you
+          request it.
+        </p>
+
+        <ol class="svc-qsections">
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">A</span> Plan &amp; QNXT environment</h3>
+            <ul>
+              <li>Which lines of business run on this QNXT instance?</li>
+              <li>Which QNXT version are you on, and is it hosted on-premises, Cognizant-hosted, or delivered as BPaaS?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">B</span> Data access &amp; extraction</h3>
+            <ul>
+              <li>Is a read replica or change data capture (CDC) feed available, or would extraction run against the production database?</li>
+              <li>Is claims and encounter history available back to 2016 dates of service, and where does it live if it has been archived?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">C</span> Member &amp; coverage</h3>
+            <ul>
+              <li>How do QNXT member identifiers crosswalk to the identifiers other payers and providers will present?</li>
+              <li>How are merged or duplicate member records handled, and is the merge history kept?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">D</span> Claims &amp; encounters</h3>
+            <ul>
+              <li>How are adjustment and reversal chains linked, and can the current version of a claim be identified reliably?</li>
+              <li>Where are cost-sharing amounts held, so they can be excluded from Provider Access responses?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">E</span> Prior authorizations</h3>
+            <ul>
+              <li>Is each authorization's status history stored with timestamps, or only its current status?</li>
+              <li>Are specific denial reasons captured, and can drug authorizations, which are excluded, be separated out?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">F</span> Providers, network &amp; attribution</h3>
+            <ul>
+              <li>How is a provider's in-network status determined for a given date of service?</li>
+              <li>How are members attributed to providers, and where is that attribution kept?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">G</span> Clinical data, consent &amp; metrics</h3>
+            <ul>
+              <li>Where will member opt-in and opt-out choices be stored, and who maintains them?</li>
+              <li>How are prior-authorization metrics produced for reporting today?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">H</span> PAS write-back (phase 2)</h3>
+            <ul>
+              <li>What path does an inbound X12 278 request take into QNXT today?</li>
+              <li>Where does the coverage and documentation policy content that CRD and DTR would present live today?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">I</span> Security, testing &amp; sign-off</h3>
+            <ul>
+              <li>What does your vendor security review require before a new integration can read QNXT data?</li>
+              <li>Will reconciliation between QNXT and the API layer be accepted as proof of completeness at sign-off?</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===== 4. GATED CTA ===== -->
+    <section class="ev-section" id="get-questionnaire">
+      <div class="ev-container ev-narrow">
+        <span class="ev-eyebrow">Get the full questionnaire</span>
+        <h2>Request the questionnaire or a scoping call.</h2>
+        <p class="ev-sub">
+          Tell us who you are and which plan this is for. We will send the full questionnaire and propose a time
+          for the discovery workshop.
+        </p>
+
+        <form data-lead-form data-lead-interest="qnxt-adapter-questionnaire" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
+              id="qnxtAdapterForm" class="cho-leadform svc-gate" aria-label="Request the QNXT CMS-0057-F adapter questionnaire">
+          <input type="hidden" name="_subject" value="QNXT CMS-0057-F adapter questionnaire request" />
+          <input type="hidden" name="interest" value="qnxt-adapter-questionnaire" />
+          <input type="hidden" name="coreSystem" value="QNXT" />
+          <input type="hidden" name="linesOfBusiness" id="qa-lob-summary" value="" />
+
+          <p class="svc-gate__required">Fields marked * are required.</p>
+
+          <div class="cho-leadform__row">
+            <div><label for="qa-first">First name *</label><input id="qa-first" name="firstName" required autocomplete="given-name" /></div>
+            <div><label for="qa-last">Last name *</label><input id="qa-last" name="lastName" required autocomplete="family-name" /></div>
+          </div>
+          <div>
+            <label for="qa-email">Work email *</label>
+            <input id="qa-email" type="email" name="email" required autocomplete="email" placeholder="you@healthplan.org" aria-describedby="qa-email-hint" />
+            <p class="svc-gate__hint" id="qa-email-hint">Use your work address so we can send the questionnaire to your plan.</p>
+          </div>
+          <div class="cho-leadform__row">
+            <div><label for="qa-plan">Health plan name *</label><input id="qa-plan" name="company" required autocomplete="organization" /></div>
+            <div>
+              <label for="qa-role">Role *</label>
+              <select id="qa-role" name="role" required>
+                <option value="">Select…</option>
+                <option>CIO / CTO / IT leadership</option>
+                <option>Enterprise or solution architect</option>
+                <option>Interoperability or program lead</option>
+                <option>QNXT configuration or data team</option>
+                <option>Compliance</option>
+                <option>Operations</option>
+                <option>Consultant or advisor</option>
+                <option>Other</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset class="svc-gate__fieldset" aria-describedby="qa-lob-hint">
+            <legend>Line(s) of business *</legend>
+            <p class="svc-gate__hint" id="qa-lob-hint">Select every line of business that runs on this QNXT instance.</p>
+            <div class="svc-gate__checks">
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Medicare Advantage" /> Medicare Advantage</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Medicaid" /> Medicaid</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="CHIP" /> CHIP</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Exchange (QHP)" /> Exchange (QHP)</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Commercial" /> Commercial</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Other" /> Other</label>
+            </div>
+          </fieldset>
+
+          <div>
+            <label for="qa-version">QNXT version (optional)</label>
+            <input id="qa-version" name="qnxtVersion" autocomplete="off" aria-describedby="qa-version-hint" />
+            <p class="svc-gate__hint" id="qa-version-hint">If you know it. The questionnaire asks again.</p>
+          </div>
+
+          <p class="svc-gate__warning" id="qa-phi-warning">
+            Please do not send PHI, member data, claim data, production credentials, security secrets, or other
+            sensitive production information through this form.
+          </p>
+
+          <div data-lead-error role="alert" aria-live="polite" class="cho-leadform__error" hidden></div>
+          <div class="svc-gate__actions">
+            <button type="submit" name="request" value="questionnaire" class="ev-btn">Get the full questionnaire</button>
+            <button type="submit" name="request" value="scoping-call" class="ev-btn ev-btn--ghost">Request a scoping call</button>
+          </div>
+          <p class="cho-leadform__note">We reply within one business day. The questionnaire is sent by email, not published on this site.</p>
+        </form>
+
+        <div data-lead-thankyou data-for="qnxtAdapterForm" class="cho-leadform__thanks" tabindex="-1" hidden>
+          <h3>Thank you.</h3>
+          <p>
+            We will email the full questionnaire to the address you gave and propose a time for the 90-minute
+            discovery workshop. We reply within one business day.
+          </p>
+          <p style="margin-bottom:0;"><a href="/services#offer-assessment">Read about the CMS-0057-F readiness assessment &rarr;</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 5. CREDIBILITY + LIMITS ===== -->
+    <section class="ev-section ev-section--alt" id="who">
+      <div class="ev-container ev-narrow">
+        <span class="ev-eyebrow">Who scopes it</span>
+        <p class="svc-cred">
+          Scoped by an architect with 25+ years in payer core systems, nearly two decades of them on QNXT.
+          <a href="/founder">Read the founder page &rarr;</a>
+        </p>
+
+        <div class="ev-limits">
+          <h3>What we do not claim</h3>
+          <ul>
+            <li>No finished or packaged QNXT adapter. Each adapter is scoped and built for one plan's environment.</li>
+            <li>No named customers or production adapter deployments are claimed on this site.</li>
+            <li>No guarantee of regulatory compliance, and no legal advice.</li>
+            <li>No certification, partnership, endorsement, or authorized-implementer status with any named vendor.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  <script>
+    // Lines of business: at least one is required, and the selection is also
+    // sent as one comma-separated field so it reads cleanly in the lead inbox.
+    // Without JavaScript the checkboxes still submit on their own.
+    (function () {
+      var form = document.getElementById('qnxtAdapterForm');
+      if (!form) return;
+      var boxes = form.querySelectorAll('input[name="lineOfBusiness"]');
+      var summary = document.getElementById('qa-lob-summary');
+      function sync() {
+        var picked = [];
+        for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) picked.push(boxes[i].value);
+        summary.value = picked.join(', ');
+        boxes[0].setCustomValidity(picked.length ? '' : 'Select at least one line of business.');
+      }
+      for (var i = 0; i < boxes.length; i++) boxes[i].addEventListener('change', sync);
+      sync();
+    })();
+  </script>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/what-is">What is Cloud Health Office?</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/evidence">Evidence</a></li>
+            <li><a href="/deploy">Deployment &amp; operating models</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Services</h5>
+          <ul>
+            <li><a href="/services">Professional Services</a></li>
+            <li><a href="/services#offer-assessment">CMS-0057-F assessment</a></li>
+            <li><a href="/services#offer-implementation">Implementation services</a></li>
+            <li><a href="/services/qnxt-cms-0057-f-adapter">QNXT CMS-0057-F adapter</a></li>
+            <li><a href="/services#offer-core-admin">Core administration advisory</a></li>
+            <li><a href="/services#offer-sow-review">Vendor &amp; SOW review</a></li>
+            <li><a href="/services#offer-fractional">Fractional architect</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
