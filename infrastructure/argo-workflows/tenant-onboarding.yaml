@@ -7,7 +7,13 @@ metadata:
     workflow-type: tenant-onboarding
 spec:
   entrypoint: onboard-tenant
-  
+  # CHO workload identity: token-service registration wf-tenant-onboarding
+  # (any tenant; settings:manage), and the only caller tenant-service admits on
+  # POST /internal/v1/tenants/{id}/onboarding-complete. See
+  # cho-workload-identity.yaml and docs/security/argo-service-tokens.md.
+  serviceAccountName: wf-tenant-onboarding
+  onExit: cleanup-on-failure
+
   # Workflow arguments
   arguments:
     parameters:
@@ -45,7 +51,17 @@ spec:
     - name: stripe-credentials
       secret:
         secretName: stripe-api-keys
-  
+    - name: cho-workload-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 600
+              path: token
+    - name: cho-workload-lib
+      configMap:
+        name: cho-workload-lib
+
   templates:
     # Main orchestration workflow
     - name: onboard-tenant
@@ -134,14 +150,11 @@ spec:
             template: create-k8s-namespace
             when: "{{workflow.parameters.subscription-tier}} == 'enterprise'"
         
-        # Step 10: Activate tenant
+        # Step 10: Activate tenant (pending → active; the workflow's own
+        # tenant-service route, not the platform:tenants status change)
         - - name: activate-tenant
-            template: update-tenant-status
-            arguments:
-              parameters:
-                - name: status
-                  value: "active"
-    
+            template: complete-onboarding
+
     # Template: Validate tenant doesn't exist
     - name: validate-tenant-exists
       container:
@@ -150,21 +163,30 @@ spec:
         args:
           - |
             apk add --no-cache curl jq
-            
+            . /opt/cho/cho-workload.sh
+
             TENANT_ID="{{workflow.parameters.tenant-id}}"
             TENANT_SERVICE="http://tenant-service.cloudhealthoffice/api/v1/tenants"
-            
+
             echo "Validating tenant $TENANT_ID..."
-            
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$TENANT_SERVICE/$TENANT_ID")
-            
-            if [ "$HTTP_CODE" -eq 200 ]; then
+
+            cho_token "$TENANT_ID" || exit 1
+            HTTP_CODE=$(cho_curl "$TENANT_ID" GET "$TENANT_SERVICE/$TENANT_ID" -o /dev/null -w "%{http_code}")
+
+            if [ "$HTTP_CODE" = "200" ]; then
               echo "ERROR: Tenant $TENANT_ID already exists and is active"
               exit 0  # Continue anyway, update existing
             else
               echo "Tenant $TENANT_ID ready for provisioning"
             fi
-    
+        volumeMounts:
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
+
     # Template: Provision Cosmos DB container
     - name: provision-cosmos-container
       inputs:
@@ -452,16 +474,16 @@ spec:
         args:
           - |
             apk add --no-cache curl jq
-            
+            . /opt/cho/cho-workload.sh
+
             TENANT_ID="{{workflow.parameters.tenant-id}}"
             BENEFIT_PLAN_SERVICE="http://benefit-plan-service.cloudhealthoffice/api/v1/benefitplans"
-            
+
             echo "Seeding default benefit plans for $TENANT_ID..."
-            
-            # Create default PPO plan
-            curl -X POST "$BENEFIT_PLAN_SERVICE" \
+
+            # Create default PPO plan (settings:manage, CHO workload token)
+            cho_curl "$TENANT_ID" POST "$BENEFIT_PLAN_SERVICE" --fail \
               -H "Content-Type: application/json" \
-              -H "X-Tenant-ID: $TENANT_ID" \
               -d '{
                 "planName": "Default PPO Plan",
                 "planType": "PPO",
@@ -474,10 +496,17 @@ spec:
                 "copaySpecialist": 50,
                 "coinsuranceInNetwork": 0.8,
                 "coinsuranceOutOfNetwork": 0.6
-              }'
-            
+              }' || exit 1
+
             echo "Default benefit plans seeded"
-    
+        volumeMounts:
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
+
     # Template: Create API keys
     - name: create-api-keys
       container:
@@ -728,34 +757,42 @@ spec:
               tenant-id: {{workflow.parameters.tenant-id}}
               subscription-tier: enterprise
     
-    # Template: Update tenant status
-    - name: update-tenant-status
-      inputs:
-        parameters:
-          - name: status
+    # Template: Activate the tenant. A status change otherwise needs
+    # platform:tenants, which no workflow token carries; tenant-service admits
+    # only wf-tenant-onboarding here, only for the tenant its token names, and
+    # only pending → active (an active tenant is left alone, a suspended or
+    # terminated one is refused with 409). Audited by tenant-service.
+    - name: complete-onboarding
       container:
         image: alpine:3.18
         command: [sh, -c]
         args:
           - |
-            apk add --no-cache curl jq
-            
+            apk add --no-cache curl
+            . /opt/cho/cho-workload.sh
+
             TENANT_ID="{{workflow.parameters.tenant-id}}"
-            STATUS="{{inputs.parameters.status}}"
-            TENANT_SERVICE="http://tenant-service.cloudhealthoffice/api/v1/tenants"
-            
-            echo "Updating tenant $TENANT_ID status to $STATUS..."
-            
-            curl -X PUT "$TENANT_SERVICE/$TENANT_ID" \
-              -H "Content-Type: application/json" \
-              -d "{\"status\": \"$STATUS\"}"
-            
-            echo "Tenant status updated to $STATUS"
-  
-  # Cleanup on failure
-  onExit: cleanup-on-failure
-  
-  templates:
+
+            echo "Activating tenant $TENANT_ID..."
+            cho_token "$TENANT_ID" || exit 1
+            CODE=$(cho_curl "$TENANT_ID" POST \
+              "http://tenant-service.cloudhealthoffice/internal/v1/tenants/$TENANT_ID/onboarding-complete" \
+              -o /tmp/activate.json -w '%{http_code}')
+            cat /tmp/activate.json 2>/dev/null; echo
+            if [ "$CODE" != "200" ]; then
+              echo "Tenant activation refused (HTTP $CODE)"
+              exit 1
+            fi
+            echo "Tenant $TENANT_ID is active"
+        volumeMounts:
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
+
+    # Cleanup on failure (spec.onExit)
     - name: cleanup-on-failure
       container:
         image: alpine:3.18

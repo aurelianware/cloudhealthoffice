@@ -29,7 +29,9 @@ metadata:
     workflows.argoproj.io/version: ">= 3.0"
 spec:
   entrypoint: replay-278
-  serviceAccountName: argo-workflow-sa
+  # CHO workload identity: token-service registration wf-278-ingest
+  # (see cho-workload-identity.yaml and docs/security/argo-service-tokens.md).
+  serviceAccountName: wf-278-ingest
   
   # Workflow-level TTL
   ttlStrategy:
@@ -64,8 +66,15 @@ spec:
       - name: file-name
         value: ""
       # claims backend API endpoint
+      # In-cluster CHO endpoint that records the 278 outcome (called with a CHO
+      # workload token for tenant-id). No CHO service accepts this payload today,
+      # so it is empty by default and the call is skipped. Only in-cluster CHO
+      # service URLs are accepted; the token is never sent elsewhere.
       - name: claims-backend-api-endpoint
-        value: "https://backend.api.local/claims/process-278"
+        value: ""
+      # CHO tenant the transactions belong to.
+      - name: tenant-id
+        value: ""
       # Replay tracking
       - name: replay-id
         value: ""
@@ -79,10 +88,19 @@ spec:
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-    - name: backend-credentials
-      secret:
-        secretName: claims-backend-api-secret
+    - name: cho-workload-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 600
+              path: token
+    - name: cho-workload-lib
+      configMap:
+        name: cho-workload-lib
   
+  onExit: exit-handler
+
   templates:
     # Main orchestration template
     - name: replay-278
@@ -148,6 +166,8 @@ spec:
               parameters:
                 - name: api-endpoint
                   value: "{{workflow.parameters.claims-backend-api-endpoint}}"
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
                 - name: is-replay
                   value: "true"
           
@@ -399,6 +419,7 @@ spec:
       inputs:
         parameters:
           - name: api-endpoint
+          - name: tenant-id
           - name: is-replay
         artifacts:
           - name: metadata
@@ -443,14 +464,26 @@ spec:
             
             mkdir -p /data/output
             
-            # Call claims backend API
-            RESPONSE=$(curl -s -w "\n%{http_code}" \
-              -X POST "{{inputs.parameters.api-endpoint}}" \
+            # Call the CHO endpoint with a CHO workload token (wf-278-ingest) for the tenant.
+            API_ENDPOINT="{{inputs.parameters.api-endpoint}}"
+            TENANT_ID="{{inputs.parameters.tenant-id}}"
+            mkdir -p /data/output
+            if [ -z "$API_ENDPOINT" ]; then
+              echo "No CHO 278 endpoint configured; skipping the backend call"
+              echo '{"httpCode": 0, "skipped": true, "isReplay": true}' > /data/output/api-response.json
+              exit 0
+            fi
+            if [ -z "$TENANT_ID" ]; then
+              echo "tenant-id is required to call $API_ENDPOINT"
+              exit 1
+            fi
+            . /opt/cho/cho-workload.sh
+            cho_token "$TENANT_ID" || exit 1
+            RESPONSE=$(cho_curl "$TENANT_ID" POST "$API_ENDPOINT" -w "\n%{http_code}" \
               -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $CLAIMS_BACKEND_API_TOKEN" \
               -H "X-Replay: true" \
               -H "X-Workflow-Id: {{workflow.name}}" \
-              -d "$REQUEST_BODY")
+              -d "$REQUEST_BODY") || exit 1
             
             HTTP_CODE=$(echo "$RESPONSE" | tail -1)
             BODY=$(echo "$RESPONSE" | head -n -1)
@@ -464,15 +497,15 @@ spec:
             fi
             
             echo "claims backend API replay successful"
-        env:
-          - name: CLAIMS_BACKEND_API_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: claims-backend-api-secret
-                key: token
         volumeMounts:
           - name: work-volume
             mountPath: /data
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -564,23 +597,22 @@ spec:
             memory: "128Mi"
             cpu: "100m"
 
-  onExit: exit-handler
 
-  - name: exit-handler
-    steps:
-      - - name: log-success
-          template: log-template
-          when: "{{workflow.status}} == Succeeded"
-      - - name: handle-failure
-          template: error-handler
-          when: "{{workflow.status}} != Succeeded"
-          arguments:
-            parameters:
-              - name: error-message
-                value: "278 replay workflow failed"
+    - name: exit-handler
+      steps:
+        - - name: log-success
+            template: log-template
+            when: "{{workflow.status}} == Succeeded"
+        - - name: handle-failure
+            template: error-handler
+            when: "{{workflow.status}} != Succeeded"
+            arguments:
+              parameters:
+                - name: error-message
+                  value: "278 replay workflow failed"
 
-  - name: log-template
-    container:
-      image: busybox
-      command: ["echo"]
-      args: ["X12 278 replay workflow completed successfully"]
+    - name: log-template
+      container:
+        image: busybox
+        command: ["echo"]
+        args: ["X12 278 replay workflow completed successfully"]

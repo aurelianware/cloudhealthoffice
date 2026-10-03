@@ -6,7 +6,11 @@
 #       Key Vault "Key Vault Crypto User" role on the signing key (sign + get), federated
 #       to system:serviceaccount:cloudhealthoffice:token-service-sa
 #   <KEY_VAULT_NAME>, <KEY_VERSION>, <CHO_PLATFORM_ENTRA_TENANT_ID>
+#   <AKS_OIDC_ISSUER_URL>  the cluster's service-account issuer, exactly as in a
+#       projected token's iss (az aks show -g <rg> -n <cluster> --query oidcIssuerProfile.issuerUrl -o tsv)
+#   <TENANT_...>  the tenants each Argo workflow may act for (ConfigMap token-service-workloads)
 # and create the token-service-secrets Secret (internal service-token private key).
+# Argo workload tokens: docs/security/argo-service-tokens.md.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -30,6 +34,58 @@ data:
   TokenSigning__Audience: "cho-api"
   TokenService__PlatformTenantId: "<CHO_PLATFORM_ENTRA_TENANT_ID>"
   Services__TenantService: "http://tenant-service"
+  # Argo workflows: POST /v1/token/workload. Projected service-account tokens
+  # are validated against the cluster's OIDC issuer (discovery + JWKS). Issued
+  # tokens are signed with the TokenSigning key under the issuer cho-workload,
+  # which every CHO service trusts with AllowWorkloadIdentity.
+  WorkloadTokens__Enabled: "true"
+  WorkloadTokens__KubernetesIssuer: "<AKS_OIDC_ISSUER_URL>"
+  WorkloadTokens__Audience: "cho-token-service"
+  WorkloadTokens__Issuer: "cho-workload"
+  WorkloadTokens__TokenLifetime: "00:05:00"
+  WorkloadTokens__RegistrationsFile: "/etc/cho/workloads/registrations.json"
+---
+# Which Kubernetes service account may obtain which CHO workload token.
+# One entry per workflow (infrastructure/argo-workflows/cho-workload-identity.yaml).
+# Client ids start with wf-. Permissions are exact (no wildcards, no platform:*);
+# token-service refuses to start otherwise. A workload token carries exactly these
+# permissions, including those the called service needs for the calls it makes on
+# the caller's behalf (the caller's token is forwarded). To keep the tenant lists
+# private, serve this file from a Key Vault secret (CSI driver) instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: token-service-workloads
+  namespace: cloudhealthoffice
+data:
+  registrations.json: |
+    [
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-enrollment-import", "clientId": "wf-enrollment-import",
+        "allowedTenants": ["<TENANT_WITH_834_FEED>"],
+        "permissions": ["enrollment:process", "enrollment:read", "members:read", "members:write", "coverage:write", "benefits:read"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-837-ingest", "clientId": "wf-837-ingest",
+        "allowedTenants": ["<TENANT_WITH_837_FEED>"],
+        "permissions": ["claims:work"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-tenant-onboarding", "clientId": "wf-tenant-onboarding",
+        "allowedTenants": ["*"],
+        "permissions": ["settings:manage"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-277-rfai", "clientId": "wf-277-rfai",
+        "allowedTenants": ["<TENANT_WITH_RFAI>"],
+        "permissions": ["claims:read"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-278-ingest", "clientId": "wf-278-ingest",
+        "allowedTenants": ["<TENANT_WITH_278_INTAKE>"],
+        "permissions": ["authorizations:write"]
+      }
+    ]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -99,9 +155,15 @@ spec:
         volumeMounts:
         - name: tmp
           mountPath: /tmp
+        - name: workloads
+          mountPath: /etc/cho/workloads
+          readOnly: true
       volumes:
       - name: tmp
         emptyDir: {}
+      - name: workloads
+        configMap:
+          name: token-service-workloads
 ---
 apiVersion: v1
 kind: Service

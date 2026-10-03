@@ -120,11 +120,22 @@ public static class ChoAuthenticationExtensions
                 {
                     OnTokenValidated = ctx =>
                     {
-                        var iss = ctx.Principal?.FindFirst("iss")?.Value;
-                        if (iss != null && issuersByName.TryGetValue(iss, out var issuer) && issuer.AllowServiceRole
-                            && ctx.Principal!.Identity is ClaimsIdentity identity)
+                        if (ctx.Principal == null)
+                            return Task.CompletedTask;
+
+                        // The issuer markers are written here and nowhere else. A
+                        // token that carries one in its own payload (any issuer
+                        // can write any claim) has it removed first.
+                        ChoPrincipal.RemoveIssuerMarkers(ctx.Principal);
+
+                        var iss = ctx.Principal.FindFirst("iss")?.Value;
+                        if (iss != null && issuersByName.TryGetValue(iss, out var issuer)
+                            && ctx.Principal.Identity is ClaimsIdentity identity)
                         {
-                            identity.AddClaim(new Claim(ChoPrincipal.ServiceIssuerMarker, "true"));
+                            if (issuer.AllowServiceRole)
+                                identity.AddClaim(new Claim(ChoPrincipal.ServiceIssuerMarker, "true"));
+                            if (issuer.AllowWorkloadIdentity)
+                                identity.AddClaim(new Claim(ChoPrincipal.WorkloadIssuerMarker, "true"));
                         }
                         return Task.CompletedTask;
                     },

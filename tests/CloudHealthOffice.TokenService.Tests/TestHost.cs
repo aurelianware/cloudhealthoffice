@@ -225,8 +225,13 @@ public sealed class TokenServiceFactory : WebApplicationFactory<Program>
     /// <summary>The CHO token signing key (EC P-256 PEM), generated per factory.</summary>
     public string SigningKeyPem { get; } = ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem();
 
+    /// <summary>More host settings (for example the WorkloadTokens section).</summary>
+    public IReadOnlyDictionary<string, string?> ExtraSettings { get; init; } = new Dictionary<string, string?>();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        foreach (var (key, value) in ExtraSettings)
+            builder.UseSetting(key, value);
         builder.UseEnvironment("Testing");
         builder.UseSetting("TokenService:PlatformTenantId", Ids.PlatformDirectory);
         builder.UseSetting("TokenSigning:Issuer", "cho-token-service");

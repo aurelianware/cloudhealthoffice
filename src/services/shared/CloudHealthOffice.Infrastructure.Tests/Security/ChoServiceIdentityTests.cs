@@ -33,6 +33,14 @@ public class PipelineServiceIdentityController : ControllerBase
     [HttpGet("either")]
     [RequireServiceClient("token-service, claims-service")]
     public IActionResult Either() => Ok();
+
+    [HttpGet("workload")]
+    [RequireServiceClient("wf-tenant-onboarding")]
+    public IActionResult Workload() => Ok();
+
+    [HttpGet("enrollment")]
+    [RequirePermission("enrollment:process")]
+    public IActionResult Enrollment() => Ok();
 }
 
 /// <summary>
@@ -185,5 +193,126 @@ public sealed class ChoServiceIdentityTests : IAsyncLifetime
     public async Task NoToken_Returns401()
     {
         (await Get("/api/service-identity/identity", null)).Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    // ── issuer markers come from configuration only ─────────────────────
+
+    [Fact]
+    public async Task UserIssuer_WritingTheServiceIssuerMarkerItself_IsForbidden()
+    {
+        var forged = Forge(ChoDevelopmentAuth.UserIssuer, new Dictionary<string, object>
+        {
+            ["sub"] = "token-service", ["azp"] = "token-service", ["tenant_id"] = "cho-platform",
+            ["roles"] = new[] { ChoServiceRole.Name },
+            [ChoPrincipal.ServiceIssuerMarker] = "true",
+        });
+        (await Get("/api/service-identity/identity", forged)).Should().Be(HttpStatusCode.Forbidden);
+        (await Get("/api/service-identity/tenant", forged)).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // ── workload identities ─────────────────────────────────────────────
+
+    private static string Workload(string clientId, string tenant = "tenant-a", params string[] permissions)
+        => ChoDevelopmentAuth.WorkloadTokenIssuer()
+            .IssueWorkloadToken(clientId, tenant, permissions.Length > 0 ? permissions : ["enrollment:process"]);
+
+    [Fact]
+    public async Task WorkloadToken_HoldsExactlyItsPermissions()
+    {
+        var token = Workload("wf-enrollment-import");
+        (await Get("/api/service-identity/enrollment", token)).Should().Be(HttpStatusCode.OK);
+        (await Get("/api/service-identity/tenant", token)).Should().Be(HttpStatusCode.Forbidden);
+        (await Get("/api/service-identity/platform", token)).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task WorkloadToken_NeverSatisfiesAPlatformPermission_EvenIfListed()
+    {
+        var forged = Forge(ChoDevelopmentAuth.WorkloadIssuer, new Dictionary<string, object>
+        {
+            ["sub"] = "wf-x", ["azp"] = "wf-x", ["tenant_id"] = "tenant-a",
+            ["roles"] = new[] { ChoWorkloadRole.Name },
+            ["permissions"] = new[] { "platform:admin", "platform:tenants", "*:*" },
+        });
+        (await Get("/api/service-identity/platform", forged)).Should().Be(HttpStatusCode.Forbidden);
+        (await Get("/api/service-identity/platform-any", forged)).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task WorkloadToken_WithNoPermissions_GetsNothingFromItsRole()
+    {
+        var forged = Forge(ChoDevelopmentAuth.WorkloadIssuer, new Dictionary<string, object>
+        {
+            ["sub"] = "wf-x", ["azp"] = "wf-x", ["tenant_id"] = "tenant-a",
+            ["roles"] = new[] { ChoWorkloadRole.Name, ChoRolePermissions.TenantAdmin },
+        });
+        (await Get("/api/service-identity/tenant", forged)).Should().Be(HttpStatusCode.Forbidden);
+        (await Get("/api/service-identity/enrollment", forged)).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task NamedWorkloadClient_IsAllowed_OtherWorkloadsAreNot()
+    {
+        (await Get("/api/service-identity/workload", Workload("wf-tenant-onboarding"))).Should().Be(HttpStatusCode.OK);
+        (await Get("/api/service-identity/workload", Workload("wf-enrollment-import"))).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ServiceToken_NamingAWorkloadClient_IsForbidden()
+    {
+        (await Get("/api/service-identity/workload", Service("wf-tenant-onboarding"))).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task WorkloadToken_NamingAServiceClient_IsForbidden()
+    {
+        var forged = Forge(ChoDevelopmentAuth.WorkloadIssuer, new Dictionary<string, object>
+        {
+            ["sub"] = "token-service", ["azp"] = "token-service", ["tenant_id"] = "cho-platform",
+            ["roles"] = new[] { ChoWorkloadRole.Name, ChoServiceRole.Name },
+            ["permissions"] = new[] { "claims:adjust" },
+        });
+        (await Get("/api/service-identity/identity", forged)).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData(ChoDevelopmentAuth.UserIssuer)]
+    [InlineData(ChoDevelopmentAuth.ServiceIssuer)]
+    public async Task OtherIssuers_CannotMintAWorkloadIdentity(string issuer)
+    {
+        var forged = Forge(issuer, new Dictionary<string, object>
+        {
+            ["sub"] = "wf-tenant-onboarding", ["azp"] = "wf-tenant-onboarding", ["tenant_id"] = "tenant-a",
+            ["roles"] = new[] { ChoWorkloadRole.Name },
+            ["permissions"] = new[] { "enrollment:process" },
+            [ChoPrincipal.WorkloadIssuerMarker] = "true",
+        });
+        (await Get("/api/service-identity/workload", forged)).Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public void WorkloadTokenIssuer_RefusesBroadTokens()
+    {
+        var issuer = ChoDevelopmentAuth.WorkloadTokenIssuer();
+        ((Action)(() => issuer.IssueWorkloadToken("claims-service", "tenant-a", ["claims:read"]))).Should().Throw<ArgumentException>();
+        ((Action)(() => issuer.IssueWorkloadToken("wf-x", "tenant-a", []))).Should().Throw<ArgumentException>();
+        ((Action)(() => issuer.IssueWorkloadToken("wf-x", "tenant-a", ["platform:tenants"]))).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void UserToken_NeverCarriesTheWorkloadRole()
+    {
+        var token = ChoDevelopmentAuth.UserTokenIssuer().IssueUserToken("u", "tenant-a", [ChoWorkloadRole.Name, ChoServiceRole.Name, "ClaimsExaminer"]);
+        new JsonWebToken(token).Claims.Where(c => c.Type == "roles").Select(c => c.Value).Should().Equal("ClaimsExaminer");
+    }
+
+    [Fact]
+    public void IssuerAllowingBothServiceAndWorkloadIdentities_FailsValidation()
+    {
+        var options = new ChoAuthOptions
+        {
+            Issuers = { new ChoTrustedIssuer { Issuer = "x", SymmetricKey = ChoDevelopmentAuth.SymmetricKey, AllowServiceRole = true, AllowWorkloadIdentity = true } },
+        };
+        ((Action)(() => options.Validate(allowSymmetricKeys: true))).Should().Throw<InvalidOperationException>();
     }
 }

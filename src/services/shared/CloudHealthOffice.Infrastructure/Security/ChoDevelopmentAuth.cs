@@ -10,6 +10,9 @@ public static class ChoDevelopmentAuth
 {
     public const string UserIssuer = "cho-portal-dev";
     public const string ServiceIssuer = "cho-internal-dev";
+
+    /// <summary>Development counterpart of token-service's workload issuer (<c>cho-workload</c>).</summary>
+    public const string WorkloadIssuer = "cho-workload-dev";
     public const string Audience = "cho-api";
 
     /// <summary>Public, intentionally. Never configure it outside Development/Testing.</summary>
@@ -26,6 +29,9 @@ public static class ChoDevelopmentAuth
             ["ChoAuth:Issuers:1:Issuer"] = ServiceIssuer,
             ["ChoAuth:Issuers:1:SymmetricKey"] = SymmetricKey,
             ["ChoAuth:Issuers:1:AllowServiceRole"] = "true",
+            ["ChoAuth:Issuers:2:Issuer"] = WorkloadIssuer,
+            ["ChoAuth:Issuers:2:SymmetricKey"] = SymmetricKey,
+            ["ChoAuth:Issuers:2:AllowWorkloadIdentity"] = "true",
         };
 
         if (serviceClientId != null)
@@ -43,6 +49,9 @@ public static class ChoDevelopmentAuth
 
     public static ChoTokenIssuer ServiceTokenIssuer(TimeSpan? lifetime = null)
         => ChoTokenIssuer.FromKeys(ServiceIssuer, Audience, null, SymmetricKey, lifetime ?? TimeSpan.FromMinutes(5));
+
+    public static ChoTokenIssuer WorkloadTokenIssuer(TimeSpan? lifetime = null)
+        => ChoTokenIssuer.FromKeys(WorkloadIssuer, Audience, null, SymmetricKey, lifetime ?? TimeSpan.FromMinutes(5));
 
     /// <summary>A development user token with the given tenant and roles.</summary>
     public static string UserToken(string tenantId, params string[] roles)

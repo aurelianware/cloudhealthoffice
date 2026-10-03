@@ -25,7 +25,12 @@ public sealed class RequirePermissionAttribute : AuthorizeAttribute
 /// <summary>
 /// Restricts an endpoint to named service identities: a service token (the
 /// <c>cho.service</c> role from an issuer trusted to mint it) whose
-/// <c>sub</c> and <c>azp</c> both equal one of the client ids. User tokens,
+/// <c>sub</c> and <c>azp</c> both equal one of the client ids. A client id
+/// starting with <c>wf-</c> names a Kubernetes workload instead, and is
+/// matched only by a workload token (<c>cho.workload</c> from an issuer with
+/// <see cref="ChoTrustedIssuer.AllowWorkloadIdentity"/>, i.e. token-service's
+/// workload exchange), never by a service token: see
+/// <see cref="ChoPrincipal.ServiceClientId"/>. User tokens,
 /// whatever their permissions, and every other service are refused (403).
 /// The token's tenant plays no part, so a service can call it with a
 /// cross-tenant scope. Several client ids separated by commas mean "any of".

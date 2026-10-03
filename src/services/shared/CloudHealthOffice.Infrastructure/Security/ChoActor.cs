@@ -63,6 +63,26 @@ public static class ChoPrincipal
     /// <summary>Set by authentication when the issuer may mint service tokens.</summary>
     internal const string ServiceIssuerMarker = "cho_service_issuer";
 
+    /// <summary>Set by authentication when the issuer may mint workload identities.</summary>
+    internal const string WorkloadIssuerMarker = "cho_workload_issuer";
+
+    /// <summary>
+    /// Removes issuer markers that arrived inside a token. Authentication calls
+    /// this before it adds the markers its own issuer configuration allows.
+    /// </summary>
+    internal static void RemoveIssuerMarkers(ClaimsPrincipal principal)
+    {
+        foreach (var identity in principal.Identities)
+        {
+            foreach (var claim in identity.Claims
+                         .Where(c => c.Type is ServiceIssuerMarker or WorkloadIssuerMarker)
+                         .ToList())
+            {
+                identity.TryRemoveClaim(claim);
+            }
+        }
+    }
+
     public static IReadOnlyCollection<string> Roles(ClaimsPrincipal principal)
         => principal.FindAll(ChoClaimTypes.Role).Select(c => c.Value).ToArray();
 
@@ -75,27 +95,57 @@ public static class ChoPrincipal
            && principal.HasClaim(ServiceIssuerMarker, "true");
 
     /// <summary>
-    /// The client id of a service token: its <c>sub</c>, when <c>azp</c> names
-    /// the same client. Null for user tokens, for tokens from an issuer not
-    /// trusted to mint service identities, and for tokens whose <c>sub</c> and
-    /// <c>azp</c> disagree.
+    /// A workload identity (an Argo workflow, through token-service) requires
+    /// both the <c>cho.workload</c> role and an issuer trusted to mint it. It is
+    /// never a service: it may do exactly what its <c>permissions</c> list.
+    /// </summary>
+    public static bool IsWorkload(ClaimsPrincipal principal)
+        => principal.HasClaim(ChoClaimTypes.Role, ChoWorkloadRole.Name)
+           && principal.HasClaim(WorkloadIssuerMarker, "true")
+           && !IsService(principal);
+
+    /// <summary>
+    /// The client id of a service or workload token: its <c>sub</c>, when
+    /// <c>azp</c> names the same client. Null for user tokens, for tokens from
+    /// an issuer not trusted to mint the identity they claim, and for tokens
+    /// whose <c>sub</c> and <c>azp</c> disagree. Service and workload client
+    /// ids are kept apart by the <see cref="ChoWorkloadRole.ClientIdPrefix"/>:
+    /// a service token can never present a workload's client id, nor a workload
+    /// token a service's.
     /// </summary>
     public static string? ServiceClientId(ClaimsPrincipal principal)
     {
-        if (principal.Identity?.IsAuthenticated != true || !IsService(principal))
+        if (principal.Identity?.IsAuthenticated != true)
+            return null;
+
+        var service = IsService(principal);
+        var workload = !service && IsWorkload(principal);
+        if (!service && !workload)
             return null;
 
         var subject = principal.FindFirst(ChoClaimTypes.Subject)?.Value;
         var authorizedParty = principal.FindFirst(ChoClaimTypes.AuthorizedParty)?.Value;
-        return !string.IsNullOrEmpty(subject) && string.Equals(subject, authorizedParty, StringComparison.Ordinal)
-            ? subject
-            : null;
+        if (string.IsNullOrEmpty(subject) || !string.Equals(subject, authorizedParty, StringComparison.Ordinal))
+            return null;
+
+        return ChoWorkloadRole.IsWorkloadClientId(subject) == workload ? subject : null;
     }
 
     public static bool HasPermission(ClaimsPrincipal principal, string permission)
     {
         if (principal.Identity?.IsAuthenticated != true)
             return false;
+
+        // A workload holds exactly the permissions token-service listed for it,
+        // never a role's expansion, and never a platform permission (those are
+        // granted only by name to a user; the one platform step a workflow
+        // needs has its own [RequireServiceClient] route).
+        if (IsWorkload(principal))
+        {
+            return !ChoRolePermissions.IsReserved(permission)
+                   && ChoRolePermissions.Satisfies(
+                       principal.FindAll(ChoClaimTypes.Permission).Select(c => c.Value), permission);
+        }
 
         // Services act on behalf of the platform pipeline; user-level checks
         // were applied where the work entered the system. That covers tenant

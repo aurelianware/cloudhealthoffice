@@ -5,7 +5,10 @@
 #
 # Workflow Steps:
 #   1. consume-kafka - Listen to 'rfai-requests' topic (triggered by Argo Events)
-#   2. fetch-claim-data - Retrieve claim information from backend
+#   2. fetch-claim-data - Retrieve the claim from claims-service
+#      (GET /api/claims/number/{claimNumber}, claims:read) with a CHO workload
+#      token for wf-277-rfai. The tenant comes from the request's tenantId, or
+#      the tenant-id parameter.
 #   3. generate-277 - Build X12 277 RFAI response
 #   4. encode-x12 - Encode to EDI format
 #   5. sftp-upload - Send to Clearinghouse SFTP
@@ -30,7 +33,9 @@ metadata:
     workflows.argoproj.io/version: ">= 3.0"
 spec:
   entrypoint: generate-277-rfai
-  serviceAccountName: argo-workflow-sa
+  # CHO workload identity: token-service registration wf-277-rfai
+  # (see cho-workload-identity.yaml and docs/security/argo-service-tokens.md).
+  serviceAccountName: wf-277-rfai
   
   # Workflow-level TTL
   ttlStrategy:
@@ -66,6 +71,11 @@ spec:
         value: "/outbound/277"
       - name: kafka-topic-outbound
         value: "edi-277-outbound"
+      # CHO tenant of the claim. Empty: taken from the request's tenantId.
+      - name: tenant-id
+        value: ""
+      - name: claims-service-url
+        value: "http://claims-service.cloudhealthoffice"
   
   volumes:
     - name: work-volume
@@ -77,10 +87,19 @@ spec:
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-    - name: backend-credentials
-      secret:
-        secretName: claims-backend-api-secret
-  
+    - name: cho-workload-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 600
+              path: token
+    - name: cho-workload-lib
+      configMap:
+        name: cho-workload-lib
+
+  onExit: exit-handler
+
   templates:
     # Main orchestration template
     - name: generate-277-rfai
@@ -94,12 +113,14 @@ spec:
                 - name: rfai-payload
                   value: "{{workflow.parameters.rfai-request}}"
           
-          # Step 2: Fetch claim data from backend (if needed)
+          # Step 2: Fetch claim data from claims-service
           - name: fetch-claim-data
             dependencies: [parse-rfai-request]
             template: fetch-claim-template
             arguments:
               parameters:
+                - name: tenant-id
+                  value: "{{tasks.parse-rfai-request.outputs.parameters.tenant-id}}"
                 - name: claim-number
                   value: "{{tasks.parse-rfai-request.outputs.parameters.claim-number}}"
                 - name: member-id
@@ -183,6 +204,9 @@ spec:
           - name: rfai-reference
             valueFrom:
               path: /data/output/rfai-reference
+          - name: tenant-id
+            valueFrom:
+              path: /data/output/tenant-id
       container:
         image: python:3.11-slim
         command: ["python", "-c"]
@@ -206,7 +230,12 @@ spec:
             
             with open('/data/output/rfai-reference', 'w') as f:
                 f.write(payload.get('rfaiReference', ''))
-            
+
+            # The CHO tenant: the workflow parameter if set, else the request's.
+            # token-service only issues a token for wf-277-rfai's allowed tenants.
+            with open('/data/output/tenant-id', 'w') as f:
+                f.write('{{workflow.parameters.tenant-id}}' or payload.get('tenantId', ''))
+
             print(f"Parsed RFAI request for claim: {payload.get('claimNumber')}")
         volumeMounts:
           - name: work-volume
@@ -223,6 +252,7 @@ spec:
     - name: fetch-claim-template
       inputs:
         parameters:
+          - name: tenant-id
           - name: claim-number
           - name: member-id
       outputs:
@@ -234,12 +264,20 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            # Fetch claim info from claims backend API
-            RESPONSE=$(curl -s \
-              -H "Authorization: Bearer $CLAIMS_BACKEND_API_TOKEN" \
-              -H "Content-Type: application/json" \
-              "$CLAIMS_BACKEND_API_URL/claims/{{inputs.parameters.claim-number}}")
-            
+            # Fetch the claim from claims-service with a CHO workload token
+            # (wf-277-rfai, claims:read) for the claim's tenant.
+            . /opt/cho/cho-workload.sh
+            TENANT_ID="{{inputs.parameters.tenant-id}}"
+            CLAIM_NUMBER="{{inputs.parameters.claim-number}}"
+            if [ -z "$TENANT_ID" ]; then
+              echo "No tenant: set the tenant-id parameter or tenantId in the RFAI request"
+              exit 1
+            fi
+            cho_token "$TENANT_ID" || exit 1
+            RESPONSE=$(cho_curl "$TENANT_ID" GET \
+              "$CLAIMS_SERVICE_URL/api/claims/number/$(printf '%s' "$CLAIM_NUMBER" | sed 's/[^A-Za-z0-9._-]//g')" \
+              -H "Accept: application/json" --fail)
+
             # If API call fails or returns empty, create minimal claim info
             if [ -z "$RESPONSE" ] || [ "$RESPONSE" = "null" ]; then
               RESPONSE='{
@@ -257,19 +295,17 @@ spec:
             echo "$RESPONSE" > /data/output/claim-info.json
             echo "Fetched claim data for: {{inputs.parameters.claim-number}}"
         env:
-          - name: CLAIMS_BACKEND_API_URL
-            valueFrom:
-              configMapKeyRef:
-                name: backend-config
-                key: api-url
-          - name: CLAIMS_BACKEND_API_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: claims-backend-api-secret
-                key: token
+          - name: CLAIMS_SERVICE_URL
+            value: "{{workflow.parameters.claims-service-url}}"
         volumeMounts:
           - name: work-volume
             mountPath: /data
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -569,23 +605,22 @@ spec:
             memory: "128Mi"
             cpu: "100m"
 
-  onExit: exit-handler
 
-  - name: exit-handler
-    steps:
-      - - name: log-success
-          template: log-template
-          when: "{{workflow.status}} == Succeeded"
-      - - name: handle-failure
-          template: error-handler
-          when: "{{workflow.status}} != Succeeded"
-          arguments:
-            parameters:
-              - name: error-message
-                value: "277 RFAI workflow failed"
+    - name: exit-handler
+      steps:
+        - - name: log-success
+            template: log-template
+            when: "{{workflow.status}} == Succeeded"
+        - - name: handle-failure
+            template: error-handler
+            when: "{{workflow.status}} != Succeeded"
+            arguments:
+              parameters:
+                - name: error-message
+                  value: "277 RFAI workflow failed"
 
-  - name: log-template
-    container:
-      image: busybox
-      command: ["echo"]
-      args: ["X12 277 RFAI workflow completed successfully"]
+    - name: log-template
+      container:
+        image: busybox
+        command: ["echo"]
+        args: ["X12 277 RFAI workflow completed successfully"]

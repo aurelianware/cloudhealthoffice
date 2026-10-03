@@ -13,7 +13,13 @@
 #   4. publish-to-kafka - Publish to claims-adjudication topic
 #
 # Flow:
-#   SFTP /inbound/claims/*.edi → Parse → Claims Service → Kafka → Adjudication Workflow
+#   SFTP /inbound/claims/*.edi → Parse → Claims Service → Kafka
+#   claims-service adjudicates on submission (ClaimAdjudicationOrchestrator).
+#   The claims-adjudication Argo workflow that consumed the Kafka topic is
+#   retired (docs/security/argo-service-tokens.md); the message is still sent.
+#
+# Authentication: runs as service account wf-837-ingest; publish-claims.sh
+# exchanges its projected token at token-service for a CHO token (claims:work).
 #
 # Trigger:
 #   - Manual: argo submit -n cloudhealthoffice --from workflowtemplate/x12-837-ingest
@@ -35,7 +41,9 @@ metadata:
     workflows.argoproj.io/version: ">= 3.0"
 spec:
   entrypoint: ingest-837-claims
-  serviceAccountName: argo-workflow-sa
+  # CHO workload identity: token-service registration wf-837-ingest
+  # (see cho-workload-identity.yaml and docs/security/argo-service-tokens.md).
+  serviceAccountName: wf-837-ingest
   
   # Workflow-level TTL
   ttlStrategy:
@@ -88,7 +96,17 @@ spec:
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-  
+    - name: cho-workload-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 600
+              path: token
+    - name: cho-workload-lib
+      configMap:
+        name: cho-workload-lib
+
   templates:
     # Main entrypoint
     - name: ingest-837-claims
@@ -219,6 +237,13 @@ spec:
         volumeMounts:
           - name: work-volume
             mountPath: /work
+          # publish-claims.sh sources /opt/cho/cho-workload.sh for its CHO token.
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
       outputs:
         parameters:
           - name: claims-created

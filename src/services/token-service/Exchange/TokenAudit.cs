@@ -42,6 +42,28 @@ public sealed class TokenAudit
             "CHO token {Outcome}: tid={Tid} oid={Oid} tenant={Tenant} reason={Reason}",
             "refused", Clean(user?.Tid), Clean(user?.Oid), Clean(tenantId), Clean(reason));
 
+    /// <summary>A workload token issued to a Kubernetes service account (Argo workflow).</summary>
+    public void WorkloadIssued(Workload.KubernetesIdentity identity, string clientId, string tenantId, IReadOnlyCollection<string> permissions)
+        => _logger.LogInformation(
+            "CHO workload token {Outcome}: client={Client} sa={Namespace}/{ServiceAccount} pod={Pod} tenant={Tenant} permissions={Permissions}",
+            "issued", Clean(clientId), Clean(identity.Namespace), Clean(identity.ServiceAccount), Clean(identity.PodName),
+            Clean(tenantId), string.Join(",", permissions.Select(Clean)));
+
+    /// <summary>A refused workload exchange. The identity is null when the Kubernetes token itself was refused.</summary>
+    public void WorkloadRefused(Workload.KubernetesIdentity? identity, string? clientId, string? tenantId, string reason)
+        => _logger.LogWarning(
+            "CHO workload token {Outcome}: client={Client} sa={Namespace}/{ServiceAccount} pod={Pod} tenant={Tenant} reason={Reason}",
+            "refused", Clean(clientId), Clean(identity?.Namespace), Clean(identity?.ServiceAccount), Clean(identity?.PodName),
+            Clean(tenantId), Clean(reason));
+
+    public void WorkloadUnavailable(Workload.KubernetesIdentity? identity, string? tenantId, string reason)
+        => _logger.LogError(
+            "CHO workload token {Outcome}: sa={Namespace}/{ServiceAccount} pod={Pod} tenant={Tenant} reason={Reason}",
+            "refused", Clean(identity?.Namespace), Clean(identity?.ServiceAccount), Clean(identity?.PodName),
+            Clean(tenantId), Clean(reason));
+
     private static string Clean(string? value)
-        => string.IsNullOrEmpty(value) ? "-" : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        => string.IsNullOrEmpty(value) ? "-"
+            : value.Length > 200 ? value[..200].Replace("\r", string.Empty).Replace("\n", string.Empty) + "…"
+            : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

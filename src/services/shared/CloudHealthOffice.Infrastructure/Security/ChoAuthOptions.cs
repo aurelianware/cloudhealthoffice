@@ -74,6 +74,13 @@ public sealed class ChoAuthOptions
                 throw new InvalidOperationException(
                     $"{SectionName} issuer '{issuer.Issuer}' uses a symmetric key, which is permitted only on a Development host. " +
                     "Use an asymmetric key (PublicKeyPem) or an OIDC Authority.");
+
+            // Every service holds the service-token key, so an issuer that may
+            // mint service tokens must not also mint workload identities.
+            if (issuer.AllowServiceRole && issuer.AllowWorkloadIdentity)
+                throw new InvalidOperationException(
+                    $"{SectionName} issuer '{issuer.Issuer}' sets both AllowServiceRole and AllowWorkloadIdentity. " +
+                    "Workload tokens come from their own issuer (token-service's cho-workload).");
         }
 
         if (ServiceToken != null)
@@ -109,6 +116,15 @@ public sealed class ChoTrustedIssuer
     /// role. Only the internal service-token issuer should set this.
     /// </summary>
     public bool AllowServiceRole { get; set; }
+
+    /// <summary>
+    /// Whether tokens from this issuer that carry the <see cref="ChoWorkloadRole"/>
+    /// role identify a Kubernetes workload (for <see cref="RequireServiceClientAttribute"/>).
+    /// Only token-service's workload issuer (<c>cho-workload</c>), whose key only
+    /// token-service holds, should set this. It cannot be combined with
+    /// <see cref="AllowServiceRole"/>.
+    /// </summary>
+    public bool AllowWorkloadIdentity { get; set; }
 
     internal IEnumerable<SecurityKey> StaticKeys()
     {

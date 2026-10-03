@@ -47,7 +47,10 @@ public sealed class ChoTokenIssuer
         if (string.IsNullOrWhiteSpace(subject)) throw new ArgumentException("Subject is required.", nameof(subject));
         if (string.IsNullOrWhiteSpace(tenantId)) throw new ArgumentException("Tenant is required.", nameof(tenantId));
 
-        var roleList = roles.Where(r => !string.Equals(r, ChoServiceRole.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        var roleList = roles
+            .Where(r => !string.Equals(r, ChoServiceRole.Name, StringComparison.OrdinalIgnoreCase))
+            .Where(r => !string.Equals(r, ChoWorkloadRole.Name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
         var claims = new Dictionary<string, object>
         {
             [ChoClaimTypes.TenantId] = tenantId,
@@ -71,6 +74,31 @@ public sealed class ChoTokenIssuer
             [ChoClaimTypes.TenantId] = tenantId,
             [ChoClaimTypes.Role] = new[] { ChoServiceRole.Name },
             ["azp"] = clientId,
+        });
+    }
+
+    /// <summary>
+    /// A token for a Kubernetes workload (token-service's workload exchange):
+    /// <c>sub</c> = <c>azp</c> = <paramref name="clientId"/>, role
+    /// <c>cho.workload</c> (which grants nothing) and exactly
+    /// <paramref name="permissions"/>. Never a service token.
+    /// </summary>
+    public string IssueWorkloadToken(string clientId, string tenantId, IEnumerable<string> permissions)
+    {
+        if (!ChoWorkloadRole.IsWorkloadClientId(clientId))
+            throw new ArgumentException($"A workload client id starts with '{ChoWorkloadRole.ClientIdPrefix}'.", nameof(clientId));
+        if (string.IsNullOrWhiteSpace(tenantId)) throw new ArgumentException("Tenant is required.", nameof(tenantId));
+
+        var permissionList = permissions.ToArray();
+        if (permissionList.Length == 0 || permissionList.Any(ChoRolePermissions.IsReserved))
+            throw new ArgumentException("A workload token lists at least one permission and no platform permission.", nameof(permissions));
+
+        return Create(clientId, new Dictionary<string, object>
+        {
+            [ChoClaimTypes.TenantId] = tenantId,
+            [ChoClaimTypes.Role] = new[] { ChoWorkloadRole.Name },
+            [ChoClaimTypes.Permission] = permissionList,
+            [ChoClaimTypes.AuthorizedParty] = clientId,
         });
     }
 

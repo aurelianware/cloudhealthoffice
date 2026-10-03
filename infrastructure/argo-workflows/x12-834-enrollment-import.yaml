@@ -10,6 +10,9 @@ spec:
   failedJobsHistoryLimit: 3
   workflowSpec:
     entrypoint: enrollment-import-pipeline
+    # CHO workload identity: token-service registration wf-enrollment-import
+    # (see cho-workload-identity.yaml and docs/security/argo-service-tokens.md).
+    serviceAccountName: wf-enrollment-import
     arguments:
       parameters:
       - name: sftp-host
@@ -76,20 +79,26 @@ spec:
         args:
           - |
             apk add --no-cache curl jq
-            
+            # CHO workload token for the tenant (Authorization + X-Tenant-ID).
+            . /opt/cho/cho-workload.sh
+            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            mkdir -p /work/results
+
             for file in /work/parsed/*.json; do
               echo "Importing $(basename $file)..."
-              
-              curl -X POST http://enrollment-import-service.cloudhealthoffice/api/v1/enrollment/import \
+              # Obtain or refresh the token in this shell, so the $(...) below reuses it.
+              cho_token "$TENANT_ID" || exit 1
+
+              CODE=$(cho_curl "$TENANT_ID" POST http://enrollment-import-service.cloudhealthoffice/api/v1/enrollment/import \
                 -H "Content-Type: application/json" \
-                -H "X-Tenant-ID: {{workflow.parameters.tenant-id}}" \
                 --data-binary "@$file" \
-                -o /work/results/$(basename $file .json).result.json
-              
-              if [ $? -eq 0 ]; then
+                -o /work/results/$(basename $file .json).result.json \
+                -w '%{http_code}')
+
+              if [ "$CODE" = "200" ]; then
                 echo "✓ Imported $(basename $file)"
               else
-                echo "✗ Failed to import $(basename $file)"
+                echo "✗ Failed to import $(basename $file) (HTTP $CODE)"
               fi
             done
             
@@ -106,6 +115,12 @@ spec:
         volumeMounts:
         - name: workdir
           mountPath: /work
+        - name: cho-workload-token
+          mountPath: /var/run/secrets/cho
+          readOnly: true
+        - name: cho-workload-lib
+          mountPath: /opt/cho
+          readOnly: true
     
     - name: sftp-archive
       container:
@@ -134,3 +149,13 @@ spec:
     volumes:
     - name: workdir
       emptyDir: {}
+    - name: cho-workload-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: cho-token-service
+            expirationSeconds: 600
+            path: token
+    - name: cho-workload-lib
+      configMap:
+        name: cho-workload-lib

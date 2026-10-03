@@ -37,3 +37,27 @@ public static class ChoServiceRole
 {
     public const string Name = "cho.service";
 }
+
+/// <summary>
+/// Reserved role a workload token carries: a token token-service issues to a
+/// Kubernetes workload (an Argo workflow) for its registered client id. The
+/// role grants nothing by itself; the token's explicit <c>permissions</c> are
+/// all it may do. It identifies a workload only from an issuer configured with
+/// <see cref="ChoTrustedIssuer.AllowWorkloadIdentity"/>, so neither a user-token
+/// issuer nor the shared service-token issuer can mint one.
+/// </summary>
+public static class ChoWorkloadRole
+{
+    public const string Name = "cho.workload";
+
+    /// <summary>
+    /// Every workload client id starts with this prefix and no service client
+    /// id may. <see cref="ChoPrincipal.ServiceClientId"/> keeps the two apart: a
+    /// service token naming a <c>wf-</c> client, or a workload token naming
+    /// any other client, identifies no client at all.
+    /// </summary>
+    public const string ClientIdPrefix = "wf-";
+
+    public static bool IsWorkloadClientId(string? clientId)
+        => clientId != null && clientId.StartsWith(ClientIdPrefix, StringComparison.Ordinal);
+}

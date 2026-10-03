@@ -6,6 +6,7 @@ using CloudHealthOffice.TokenService.Directory;
 using CloudHealthOffice.TokenService.Entra;
 using CloudHealthOffice.TokenService.Exchange;
 using CloudHealthOffice.TokenService.Signing;
+using CloudHealthOffice.TokenService.Workload;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 
@@ -24,6 +25,12 @@ builder.Services.AddSingleton<ISigningMaterialSource>(sp =>
     TokenSigningSetup.Create(signingOptions, sp.GetRequiredService<IHostEnvironment>()));
 builder.Services.AddSingleton<TokenAudit>();
 builder.Services.AddScoped<TokenExchangeService>();
+
+// Kubernetes workloads (Argo workflows): POST /v1/token/workload.
+var workloadOptions = builder.Configuration.GetSection(WorkloadTokenOptions.SectionName).Get<WorkloadTokenOptions>()
+                      ?? new WorkloadTokenOptions();
+workloadOptions.Validate(signingOptions.Issuer, builder.Environment.IsDevelopment());
+builder.Services.AddWorkloadTokens(workloadOptions, builder.Environment);
 
 // Entra ID access tokens from the portal (on behalf of a signed-in user).
 builder.Services.AddEntraUserTokenValidation(builder.Configuration, serviceOptions);
@@ -84,6 +91,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapInvitationRedemption();
+app.MapWorkloadTokens();
 
 app.MapPost("/v1/token/exchange", async (HttpContext http, TokenExchangeService exchange, TokenAudit audit) =>
 {

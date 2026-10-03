@@ -40,6 +40,21 @@ public static class EntraAuthentication
 
             var events = jwt.Events ??= new JwtBearerEvents();
 
+            // The workload exchange presents a Kubernetes token, which that
+            // endpoint validates itself. It is not an Entra token, so Entra
+            // validation (and its refusal audit line) is skipped there.
+            var innerReceived = events.OnMessageReceived;
+            events.OnMessageReceived = async ctx =>
+            {
+                if (ctx.Request.Path.Equals(Workload.WorkloadTokenEndpoint.Path, StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.NoResult();
+                    return;
+                }
+                if (innerReceived != null)
+                    await innerReceived(ctx);
+            };
+
             var innerValidated = events.OnTokenValidated;
             events.OnTokenValidated = async ctx =>
             {

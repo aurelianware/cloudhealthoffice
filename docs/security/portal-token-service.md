@@ -505,6 +505,9 @@ Set the values through Key Vault references or environment variables
 
 - `cho-token-service` must **not** set `AllowServiceRole`. Even then, the shared
   layer ignores `cho.service` from a user issuer, and token-service never writes it.
+- token-service also issues Argo workflow tokens under the issuer `cho-workload`
+  (same key, `"AllowWorkloadIdentity": true`). See
+  `docs/security/argo-service-tokens.md`.
 - The PEM is the output of `az keyvault key download … -e PEM` above. It is the
   same key published at `GET /.well-known/jwks.json`.
 - Symmetric keys are refused outside Development and Testing, both here and in
