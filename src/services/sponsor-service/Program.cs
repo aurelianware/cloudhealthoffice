@@ -1,12 +1,12 @@
 using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
-using SponsorService.Middleware;
 using SponsorService.Repositories;
 using MongoDB.Driver;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -15,6 +15,17 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// it. Sponsors (employer groups) are enrollment data: reads need
+// enrollment:read, writes need enrollment:process. The compact member view
+// also admits members:read (see SponsorsController.GetMemberView).
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "enrollment:read";
+    auth.DefaultWritePermission = "enrollment:process";
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -100,9 +111,11 @@ if (app.Environment.IsDevelopment())
 
 // Middleware pipeline
 app.UseCors();
-app.UseTenantContext();  // Extract tenant from JWT or header
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 
 app.Run();
+
+public partial class Program { }

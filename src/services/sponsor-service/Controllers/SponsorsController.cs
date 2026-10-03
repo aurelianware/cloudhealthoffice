@@ -1,5 +1,5 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
-using SponsorService.Middleware;
 using SponsorService.Models;
 using SponsorService.Repositories;
 using System;
@@ -13,24 +13,29 @@ namespace SponsorService.Controllers;
 /// <summary>
 /// Sponsor management API - manages employer groups purchasing health coverage.
 /// Data populated by X12 834 Enrollment transactions.
+/// Reads need enrollment:read and writes enrollment:process (the defaults set in
+/// Program.cs); the tenant and the acting user come from the CHO token.
 /// </summary>
 [ApiController]
 [Route("api/v1/sponsors")]
 public class SponsorsController : ControllerBase
 {
-    // Tenant context from middleware
-    private string TenantId => HttpContext.GetTenantId();
-
     private readonly ISponsorRepository _sponsorRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<SponsorsController> _logger;
 
     public SponsorsController(
         ISponsorRepository sponsorRepository,
+        ICurrentActor actor,
         ILogger<SponsorsController> logger)
     {
         _sponsorRepository = sponsorRepository;
+        _actor = actor;
         _logger = logger;
     }
+
+    // The tenant from the validated CHO token (never a header, query or body).
+    private string TenantId => _actor.TenantId;
 
     /// <summary>
     /// List all sponsors for the current tenant
@@ -77,7 +82,12 @@ public class SponsorsController : ControllerBase
     /// tab's Sponsor sub-section. Returns sponsor name, type, primary contact,
     /// broker, and open-enrollment window.
     /// </summary>
+    /// <remarks>
+    /// Also open to members:read: the dialog is used by member services staff,
+    /// and this projection leaves out billing, tax id and member counts.
+    /// </remarks>
     [HttpGet("{groupNumber}/member-view")]
+    [RequirePermission("enrollment:read,members:read")]
     [ProducesResponseType(typeof(SponsorMemberView), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetMemberView([FromRoute] string groupNumber)
@@ -157,7 +167,7 @@ public class SponsorsController : ControllerBase
             BillingInfo = request.BillingInfo,
             Broker = request.Broker,
             OpenEnrollment = request.OpenEnrollment,
-            CreatedBy = User.Identity?.Name ?? "System"
+            CreatedBy = _actor.UserId
         };
 
         var created = await _sponsorRepository.CreateAsync(sponsor);
@@ -192,7 +202,7 @@ public class SponsorsController : ControllerBase
         if (request.Broker != null) sponsor.Broker = request.Broker;
         if (request.OpenEnrollment != null) sponsor.OpenEnrollment = request.OpenEnrollment;
 
-        sponsor.LastUpdatedBy = User.Identity?.Name ?? "System";
+        sponsor.LastUpdatedBy = _actor.UserId;
         var updated = await _sponsorRepository.UpdateAsync(sponsor);
         _logger.LogInformation("Updated sponsor {GroupNumber}", SanitizeForLog(updated.GroupNumber));
         return Ok(updated);
@@ -214,6 +224,7 @@ public class SponsorsController : ControllerBase
 
         sponsor.Status = SponsorStatus.Terminated;
         sponsor.TerminationDate = terminationDate ?? DateTime.UtcNow;
+        sponsor.LastUpdatedBy = _actor.UserId;
         await _sponsorRepository.UpdateAsync(sponsor);
         _logger.LogInformation("Terminated sponsor {GroupNumber} (effective {TerminationDate:O})",
             SanitizeForLog(groupNumber), sponsor.TerminationDate);
