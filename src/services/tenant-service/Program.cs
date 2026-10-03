@@ -7,13 +7,17 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
+using TenantService.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers()
+// Every {tenantId} route acts on the caller's own tenant only (platform:tenants
+// excepted, and audited): see Security/TenantAccess.cs.
+builder.Services.AddControllers(options => options.Filters.Add<RouteTenantFilter>())
     .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -39,6 +43,25 @@ if (string.IsNullOrEmpty(builder.Configuration["MongoDb:ConnectionString"])
 }
 
 builder.Services.AddChoDatabase(builder.Configuration);
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// that token. No defaults: every action names its permission (or
+// [AllowAnonymous] for the signed Stripe webhook), so a new endpoint is closed
+// until someone decides who may call it.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = null;
+    auth.DefaultWritePermission = null;
+});
+builder.Services.AddAuthorization(authz =>
+{
+    // Reads open to any authenticated user or service; RouteTenantFilter
+    // still confines them to the caller's own tenant.
+    authz.AddPolicy(TenantPermissions.MemberPolicy, policy => policy.RequireAuthenticatedUser());
+});
+builder.Services.AddScoped<TenantAuditLog>();
+builder.Services.AddSingleton<StripeWebhookVerifier>();
 
 // Repositories and services
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
@@ -84,10 +107,15 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var userRepo = scope.ServiceProvider.GetRequiredService<ITenantUserRepository>();
-        var seedTenantId = config["SeedAdmin:TenantId"] ?? "aurelianware";
+        // Both are required; there is no default tenant.
+        var seedTenantId = config["SeedAdmin:TenantId"];
         var seedEmail = config["SeedAdmin:Email"] ?? "";
 
-        if (!string.IsNullOrEmpty(seedEmail))
+        if (!string.IsNullOrEmpty(seedEmail) && string.IsNullOrEmpty(seedTenantId))
+        {
+            logger.LogWarning("SeedAdmin:Email is set without SeedAdmin:TenantId; no admin user seeded.");
+        }
+        else if (!string.IsNullOrEmpty(seedEmail) && seedTenantId != null)
         {
             var existing = await userRepo.GetByEmailAsync(seedTenantId, seedEmail);
             if (existing == null)
@@ -102,7 +130,9 @@ using (var scope = app.Services.CreateScope())
                     LastName = config["SeedAdmin:LastName"] ?? "",
                     Roles = new List<string> { "TenantAdmin" },
                     Department = "Administration",
-                    Status = "Active"
+                    Status = "Active",
+                    CreatedBy = "tenant-service:seed",
+                    UpdatedBy = "tenant-service:seed"
                 };
                 await userRepo.CreateAsync(adminUser);
                 logger.LogInformation("Seeded admin TenantUser {Email} for tenant {TenantId}", seedEmail, seedTenantId);
@@ -111,7 +141,7 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "Failed to seed admin TenantUser. User will get TenantAdmin fallback role in portal.");
+        logger.LogWarning(ex, "Failed to seed admin TenantUser.");
     }
 
     // Seed standard RBAC roles
@@ -138,6 +168,10 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
+
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
+
 app.MapControllers();
 
 // Health check endpoints

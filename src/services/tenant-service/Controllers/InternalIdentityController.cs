@@ -1,4 +1,6 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using TenantService.Security;
 using TenantService.Services;
 
 namespace TenantService.Controllers;
@@ -8,24 +10,30 @@ namespace TenantService.Controllers;
 /// a CHO token and must resolve the user's tenant membership itself.
 ///
 /// SECURITY: these endpoints reveal who belongs to which tenant and can link an
-/// Entra identity to a user. tenant-service has no authentication yet. When it
-/// is moved onto AddChoAuthentication, every action here MUST be restricted to
-/// the token-service service identity (a service token from the internal issuer
-/// with sub/azp = "token-service" and the cho.service role) and refused to every
-/// other caller, users included. The lookups are cross-tenant by nature, so that
-/// check must not depend on the token's tenant claim. Until then, keep
-/// tenant-service unreachable from outside the cluster.
+/// Entra identity to a user. Every action is restricted to the token-service
+/// service identity: a service token from an issuer trusted to mint service
+/// tokens, with <c>sub</c> = <c>azp</c> = <c>token-service</c>. User tokens
+/// (platform administrators included) and every other service get 403.
+///
+/// The lookups are cross-tenant by nature. token-service names
+/// <c>cho-platform</c> as the tenant for cross-tenant calls and the looked-up
+/// tenant for per-tenant calls, so the check is on the caller's identity, never
+/// on that tenant value: the route tenant check is skipped here, and only here.
 /// </summary>
 [ApiController]
 [Route("internal/v1/identity")]
+[RequireServiceClient(TokenServiceClientId)]
+[SkipRouteTenantCheck]
 public class InternalIdentityController : ControllerBase
 {
     private readonly IIdentityDirectory _directory;
 
+    /// <summary>The only identity allowed to call these endpoints.</summary>
+    public const string TokenServiceClientId = "token-service";
+
     public InternalIdentityController(IIdentityDirectory directory) => _directory = directory;
 
     /// <summary>TenantUsers linked to Entra object <paramref name="oid"/> in directory <paramref name="tid"/>.</summary>
-    // TODO(tenant-service auth): restrict to the token-service service identity.
     [HttpGet("memberships")]
     public async Task<ActionResult<IReadOnlyList<IdentityMembership>>> GetMemberships(
         [FromQuery] string tid, [FromQuery] string oid, CancellationToken ct)
@@ -36,13 +44,11 @@ public class InternalIdentityController : ControllerBase
     }
 
     /// <summary>All tenants, or those registered to Entra directory <paramref name="azureTenantId"/>.</summary>
-    // TODO(tenant-service auth): restrict to the token-service service identity.
     [HttpGet("tenants")]
     public async Task<ActionResult<IReadOnlyList<IdentityTenant>>> GetTenants(
         [FromQuery] string? azureTenantId, CancellationToken ct)
         => Ok(await _directory.GetTenantsAsync(azureTenantId, ct));
 
-    // TODO(tenant-service auth): restrict to the token-service service identity.
     [HttpGet("tenants/{tenantId}")]
     public async Task<ActionResult<IdentityTenant>> GetTenant(string tenantId, CancellationToken ct)
     {
@@ -54,7 +60,6 @@ public class InternalIdentityController : ControllerBase
     /// One user in one tenant by email. POST so the address travels in the body
     /// and stays out of URLs and access logs.
     /// </summary>
-    // TODO(tenant-service auth): restrict to the token-service service identity.
     [HttpPost("tenants/{tenantId}/users/find-by-email")]
     public async Task<ActionResult<IdentityUser>> FindByEmail(
         string tenantId, [FromBody] FindByEmailRequest request, CancellationToken ct)
@@ -69,7 +74,6 @@ public class InternalIdentityController : ControllerBase
     /// Records an Entra oid+tid on a user that has no link yet. Refuses (409) to
     /// replace an existing, different link.
     /// </summary>
-    // TODO(tenant-service auth): restrict to the token-service service identity.
     [HttpPost("tenants/{tenantId}/users/{userId}/entra-link")]
     public async Task<ActionResult<IdentityUser>> Link(
         string tenantId, string userId, [FromBody] EntraLinkRequest request, CancellationToken ct)

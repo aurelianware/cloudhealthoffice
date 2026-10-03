@@ -67,6 +67,14 @@ public class TenantUser
 
     [JsonPropertyName("lastLoginAt")]
     public DateTime? LastLoginAt { get; set; }
+
+    /// <summary>Token subject of the caller that created the user. Never read from a request body.</summary>
+    [JsonPropertyName("createdBy")]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>Token subject of the caller that last changed the user. Never read from a request body.</summary>
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
 }
 
 /// <summary>

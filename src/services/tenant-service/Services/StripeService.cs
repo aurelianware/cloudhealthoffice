@@ -14,7 +14,12 @@ public interface IStripeService
     Task UpdateSubscriptionAsync(string subscriptionId, string newTier);
     Task<Stripe.Invoice?> GetUpcomingInvoiceAsync(string customerId);
     Task<IEnumerable<Stripe.Invoice>> GetInvoicesAsync(string customerId, int limit = 12);
-    Task HandleWebhookAsync(string json, string stripeSignature);
+
+    /// <summary>
+    /// Applies a webhook event. The caller must have verified its signature
+    /// with <see cref="StripeWebhookVerifier"/> first.
+    /// </summary>
+    Task HandleEventAsync(Event stripeEvent);
 }
 
 public class StripeService : IStripeService
@@ -152,14 +157,10 @@ public class StripeService : IStripeService
         return invoices.Data;
     }
 
-    public async Task HandleWebhookAsync(string json, string stripeSignature)
+    public async Task HandleEventAsync(Event stripeEvent)
     {
-        var webhookSecret = _configuration["Stripe:WebhookSecret"];
-
         try
         {
-            var stripeEvent = EventUtility.ConstructEvent(json, stripeSignature, webhookSecret);
-            
             _logger.LogInformation("Processing Stripe webhook event: {EventType}", stripeEvent.Type);
 
             switch (stripeEvent.Type)

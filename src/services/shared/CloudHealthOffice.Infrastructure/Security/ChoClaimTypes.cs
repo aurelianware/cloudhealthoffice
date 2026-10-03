@@ -23,6 +23,9 @@ public static class ChoClaimTypes
 
     /// <summary>Flattened permission strings (e.g. claims:read). Multi-valued.</summary>
     public const string Permission = "permissions";
+
+    /// <summary>The client a service token was issued to (equals <c>sub</c> on service tokens).</summary>
+    public const string AuthorizedParty = "azp";
 }
 
 /// <summary>

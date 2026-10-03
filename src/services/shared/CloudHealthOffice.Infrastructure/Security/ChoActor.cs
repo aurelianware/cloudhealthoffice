@@ -74,15 +74,37 @@ public static class ChoPrincipal
         => principal.HasClaim(ChoClaimTypes.Role, ChoServiceRole.Name)
            && principal.HasClaim(ServiceIssuerMarker, "true");
 
+    /// <summary>
+    /// The client id of a service token: its <c>sub</c>, when <c>azp</c> names
+    /// the same client. Null for user tokens, for tokens from an issuer not
+    /// trusted to mint service identities, and for tokens whose <c>sub</c> and
+    /// <c>azp</c> disagree.
+    /// </summary>
+    public static string? ServiceClientId(ClaimsPrincipal principal)
+    {
+        if (principal.Identity?.IsAuthenticated != true || !IsService(principal))
+            return null;
+
+        var subject = principal.FindFirst(ChoClaimTypes.Subject)?.Value;
+        var authorizedParty = principal.FindFirst(ChoClaimTypes.AuthorizedParty)?.Value;
+        return !string.IsNullOrEmpty(subject) && string.Equals(subject, authorizedParty, StringComparison.Ordinal)
+            ? subject
+            : null;
+    }
+
     public static bool HasPermission(ClaimsPrincipal principal, string permission)
     {
         if (principal.Identity?.IsAuthenticated != true)
             return false;
 
         // Services act on behalf of the platform pipeline; user-level checks
-        // were applied where the work entered the system.
+        // were applied where the work entered the system. That covers tenant
+        // permissions only: platform:* permissions act across tenants and are
+        // granted only by name to a user, so a service token never satisfies
+        // them. A cross-service call that must be allowed names its caller with
+        // [RequireServiceClient] instead.
         if (IsService(principal))
-            return true;
+            return !ChoRolePermissions.IsReserved(permission);
 
         var explicitPermissions = principal.FindAll(ChoClaimTypes.Permission).Select(c => c.Value).ToList();
         var granted = explicitPermissions.Count > 0

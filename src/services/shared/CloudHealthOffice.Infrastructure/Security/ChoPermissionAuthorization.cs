@@ -22,6 +22,46 @@ public sealed class RequirePermissionAttribute : AuthorizeAttribute
     public string Permission { get; }
 }
 
+/// <summary>
+/// Restricts an endpoint to named service identities: a service token (the
+/// <c>cho.service</c> role from an issuer trusted to mint it) whose
+/// <c>sub</c> and <c>azp</c> both equal one of the client ids. User tokens,
+/// whatever their permissions, and every other service are refused (403).
+/// The token's tenant plays no part, so a service can call it with a
+/// cross-tenant scope. Several client ids separated by commas mean "any of".
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
+public sealed class RequireServiceClientAttribute : AuthorizeAttribute
+{
+    public const string PolicyPrefix = "svc:";
+
+    public RequireServiceClientAttribute(string clientId)
+    {
+        ClientId = clientId;
+        Policy = PolicyPrefix + clientId;
+    }
+
+    public string ClientId { get; }
+}
+
+public sealed class ServiceClientRequirement : IAuthorizationRequirement
+{
+    public ServiceClientRequirement(IReadOnlyList<string> anyOf) => AnyOf = anyOf;
+
+    public IReadOnlyList<string> AnyOf { get; }
+}
+
+public sealed class ServiceClientAuthorizationHandler : AuthorizationHandler<ServiceClientRequirement>
+{
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, ServiceClientRequirement requirement)
+    {
+        var client = ChoPrincipal.ServiceClientId(context.User);
+        if (client != null && requirement.AnyOf.Contains(client, StringComparer.Ordinal))
+            context.Succeed(requirement);
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class PermissionRequirement : IAuthorizationRequirement
 {
     public PermissionRequirement(IReadOnlyList<string> anyOf) => AnyOf = anyOf;
@@ -74,6 +114,16 @@ public sealed class PermissionPolicyProvider : IAuthorizationPolicyProvider
             return Task.FromResult<AuthorizationPolicy?>(new AuthorizationPolicyBuilder()
                 .RequireAuthenticatedUser()
                 .AddRequirements(new PermissionRequirement(permissions))
+                .Build());
+        }
+
+        if (policyName.StartsWith(RequireServiceClientAttribute.PolicyPrefix, StringComparison.Ordinal))
+        {
+            var clients = policyName[RequireServiceClientAttribute.PolicyPrefix.Length..]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return Task.FromResult<AuthorizationPolicy?>(new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .AddRequirements(new ServiceClientRequirement(clients))
                 .Build());
         }
 

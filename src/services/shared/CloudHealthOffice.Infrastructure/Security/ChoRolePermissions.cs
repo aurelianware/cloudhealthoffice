@@ -134,6 +134,14 @@ public static class ChoRolePermissions
     public static readonly IReadOnlySet<string> ReservedResources =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "platform" };
 
+    /// <summary>Whether <paramref name="permission"/> names a <see cref="ReservedResources">reserved resource</see>.</summary>
+    public static bool IsReserved(string permission)
+    {
+        var colon = permission.IndexOf(':');
+        var resource = colon < 0 ? permission : permission[..colon];
+        return ReservedResources.Contains(resource.Trim());
+    }
+
     /// <summary>
     /// Whether any granted permission satisfies <paramref name="required"/>.
     /// Supports wildcards on either side of the colon: <c>*:read</c>,

@@ -140,6 +140,7 @@ public static class ChoAuthenticationExtensions
 
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationHandler, ServiceClientAuthorizationHandler>();
         var passthrough = services.BuildTenantOptions().PassthroughPaths;
         services.AddAuthorization(authz =>
         {

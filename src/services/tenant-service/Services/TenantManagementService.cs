@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.OperatingMode;
 using TenantService.Models;
 
@@ -10,16 +11,22 @@ public class TenantManagementService : ITenantService
     private readonly ITenantRepository _repository;
     private readonly ILogger<TenantManagementService> _logger;
     private readonly ISftpProvisioningService _sftpProvisioning;
+    private readonly ICurrentActor _actor;
 
     public TenantManagementService(
         ITenantRepository repository, 
         ILogger<TenantManagementService> logger,
-        ISftpProvisioningService sftpProvisioning)
+        ISftpProvisioningService sftpProvisioning,
+        ICurrentActor actor)
     {
         _repository = repository;
         _logger = logger;
         _sftpProvisioning = sftpProvisioning;
+        _actor = actor;
     }
+
+    /// <summary>The acting user or service, from the validated token only.</summary>
+    private string Actor => _actor.UserId;
 
     public async Task<Tenant> CreateTenantAsync(CreateTenantRequest request)
     {
@@ -40,6 +47,8 @@ public class TenantManagementService : ITenantService
             SubscriptionTier = request.SubscriptionTier.ToLower(),
             Status = "pending", // Will be activated after setup complete
             ContactInfo = request.ContactInfo,
+            CreatedBy = Actor,
+            UpdatedBy = Actor,
             Configuration = new TenantConfiguration
             {
                 EnabledModules = request.EnabledModules ?? new List<string> { "claims", "eligibility" },
@@ -128,6 +137,7 @@ public class TenantManagementService : ITenantService
         if (request.Configuration != null)
             tenant.Configuration = request.Configuration;
 
+        tenant.UpdatedBy = Actor;
         return await _repository.UpdateAsync(tenant);
     }
 
@@ -141,6 +151,7 @@ public class TenantManagementService : ITenantService
 
         tenant.Status = "active";
         tenant.ActivatedAt = DateTime.UtcNow;
+        tenant.UpdatedBy = Actor;
         
         await _repository.UpdateAsync(tenant);
         _logger.LogInformation("Activated tenant {TenantId}", SanitizeForLog(tenantId));
@@ -155,6 +166,7 @@ public class TenantManagementService : ITenantService
         }
 
         tenant.Status = "suspended";
+        tenant.UpdatedBy = Actor;
         
         await _repository.UpdateAsync(tenant);
         _logger.LogWarning("Suspended tenant {TenantId}", SanitizeForLog(tenantId));
@@ -187,6 +199,7 @@ public class TenantManagementService : ITenantService
             ExpiresAt = request.ExpiresAt,
             Scopes = request.Scopes ?? new List<string>(),
             CreatedAt = DateTime.UtcNow,
+            CreatedBy = Actor,
             IsActive = true
         };
 
@@ -229,6 +242,9 @@ public class TenantManagementService : ITenantService
         if (apiKey != null)
         {
             apiKey.IsActive = false;
+            apiKey.RevokedBy = Actor;
+            apiKey.RevokedAt = DateTime.UtcNow;
+            tenant.UpdatedBy = Actor;
             await _repository.UpdateAsync(tenant);
             _logger.LogInformation("Revoked API key {KeyId} for tenant {TenantId}", SanitizeForLog(keyId), SanitizeForLog(tenantId));
         }
@@ -356,6 +372,8 @@ public class TenantManagementService : ITenantService
         }
 
         tenant.OperatingMode.UpdatedAt = DateTime.UtcNow;
+        tenant.OperatingMode.UpdatedBy = Actor;
+        tenant.UpdatedBy = Actor;
 
         await _repository.UpdateAsync(tenant);
 

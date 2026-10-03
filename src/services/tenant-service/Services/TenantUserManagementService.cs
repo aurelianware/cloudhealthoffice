@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using TenantService.Models;
 
 namespace TenantService.Services;
@@ -8,17 +9,20 @@ public class TenantUserManagementService : ITenantUserService
     private readonly ITenantRoleRepository _roleRepository;
     private readonly ITenantRepository _tenantRepository;
     private readonly ILogger<TenantUserManagementService> _logger;
+    private readonly ICurrentActor _actor;
 
     public TenantUserManagementService(
         ITenantUserRepository userRepository,
         ITenantRoleRepository roleRepository,
         ITenantRepository tenantRepository,
-        ILogger<TenantUserManagementService> logger)
+        ILogger<TenantUserManagementService> logger,
+        ICurrentActor actor)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _tenantRepository = tenantRepository;
         _logger = logger;
+        _actor = actor;
     }
 
     public async Task<TenantUser> CreateUserAsync(string tenantId, CreateTenantUserRequest request)
@@ -55,7 +59,10 @@ public class TenantUserManagementService : ITenantUserService
             Roles = request.Roles,
             Department = request.Department,
             SupervisorId = request.SupervisorId,
-            Status = "Active"
+            Status = "Active",
+            // The actor comes from the validated token, never from the request.
+            CreatedBy = _actor.UserId,
+            UpdatedBy = _actor.UserId
         };
 
         return await _userRepository.CreateAsync(user);
@@ -108,6 +115,7 @@ public class TenantUserManagementService : ITenantUserService
             user.Roles = request.Roles;
         }
 
+        user.UpdatedBy = _actor.UserId;
         return await _userRepository.UpdateAsync(user);
     }
 

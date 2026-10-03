@@ -55,6 +55,14 @@ public class Tenant
     [JsonPropertyName("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Token subject of the caller that created the tenant. Never read from a request body.</summary>
+    [JsonPropertyName("createdBy")]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>Token subject of the caller that last changed the tenant. Never read from a request body.</summary>
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
+
     [JsonPropertyName("activatedAt")]
     public DateTime? ActivatedAt { get; set; }
 
@@ -108,8 +116,13 @@ public class ApiKey
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// SHA-256 of the key; the key itself is never stored. Kept out of every
+    /// API response: only the prefix identifies a key to a reader.
+    /// </summary>
     [JsonPropertyName("keyHash")]
-    public string KeyHash { get; set; } = string.Empty; // SHA256 hash, never store plain text
+    [JsonIgnore]
+    public string KeyHash { get; set; } = string.Empty;
 
     [JsonPropertyName("keyPrefix")]
     public string KeyPrefix { get; set; } = string.Empty; // First 8 chars for identification
@@ -128,6 +141,17 @@ public class ApiKey
 
     [JsonPropertyName("scopes")]
     public List<string> Scopes { get; set; } = new(); // e.g., "claims:read", "claims:write"
+
+    /// <summary>Token subject of the caller that issued the key.</summary>
+    [JsonPropertyName("createdBy")]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>Token subject of the caller that revoked the key.</summary>
+    [JsonPropertyName("revokedBy")]
+    public string? RevokedBy { get; set; }
+
+    [JsonPropertyName("revokedAt")]
+    public DateTime? RevokedAt { get; set; }
 }
 
 public class TenantConfiguration

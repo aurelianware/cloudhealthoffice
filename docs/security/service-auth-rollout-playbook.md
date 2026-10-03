@@ -98,6 +98,12 @@ Platform permissions act across tenants and are granted only by name, so a
 cross-tenant action needs `[RequirePermission("platform:admin")]` (or another
 `platform:` permission), never a tenant permission.
 
+Service tokens satisfy every tenant permission but never a `platform:*`
+permission. An endpoint that one specific service must call (for example
+tenant-service's identity lookups for token-service) names that service with
+`[RequireServiceClient("<client-id>")]`, which admits only a service token whose
+`sub` and `azp` both equal the client id.
+
 | Service | Default read | Default write | Stricter actions |
 |---|---|---|---|
 | accumulator-service | accumulators:read | accumulators:write | |
@@ -127,5 +133,6 @@ cross-tenant action needs `[RequirePermission("platform:admin")]` (or another
 | rfai-service | rfai:read | rfai:write | |
 | risk-adjustment-service | risk-adjustment:read | risk-adjustment:write | |
 | sponsor-service | enrollment:read | enrollment:process | |
+| tenant-service | (none: every action is annotated) | (none) | `{tenantId}` routes must match the token tenant unless the caller holds platform:tenants (audited). Own tenant record, operating mode, usage, role catalogue: any authenticated caller (billing ids and API key records only with settings:manage). Users: users:manage. Tenant settings/configuration, API keys, billing: settings:manage. Operating-mode write: operating-mode:manage. Create/list/activate/suspend/delete tenants, status/tier changes, role catalogue writes: platform:tenants. `/internal/v1/identity/*`: `[RequireServiceClient("token-service")]`. Stripe webhook: anonymous, Stripe signature required |
 | trading-partner-service | trading-partners:read | settings:manage | |
 | CHO.TerminologyService | terminology:read | settings:manage | |

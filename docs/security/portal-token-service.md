@@ -192,17 +192,20 @@ serve it:
 `TenantUser` gained `azureAdTenantId`. The existing create/update user APIs
 accept it. Changing `azureAdObjectId` without sending it clears the stored tid.
 
-**tenant-service has no authentication yet.** These endpoints are marked in code
-and **must be restricted to the token-service service identity** when
-tenant-service moves to `AddChoAuthentication`. Until then, tenant-service must
-not be reachable from outside the cluster. token-service already sends a CHO
-service token (`sub`/`azp` = `token-service`, role `cho.service`) on every call:
+**Only the token-service service identity may call these endpoints.**
+tenant-service uses `AddChoAuthentication`, and the controller carries
+`[RequireServiceClient("token-service")]`: a service token from an issuer with
+`AllowServiceRole`, role `cho.service`, and `sub` = `azp` = `token-service`.
+User tokens (platform administrators included) and every other service get 403.
+token-service sends that service token on every call, naming:
 
 - the tenant being looked up, for per-tenant calls;
 - `cho-platform`, for cross-tenant lookups.
 
-tenant-service must authorize these endpoints on the caller's identity, not on
-that tenant value.
+tenant-service authorizes these endpoints on the caller's identity, never on
+that tenant value: they are the only routes exempt from tenant-service's route
+tenant check. tenant-service must trust the `cho-internal` service-token issuer
+(with `AllowServiceRole`) that token-service signs with.
 
 token-service attaches this token with its own handler, not the shared
 `ChoOutboundTokenHandler`. Inside a request, the shared handler forwards the
@@ -343,8 +346,9 @@ port 5030 in the `core` profile.
   role, but it is ignored outside `PlatformTenantId`.
 - *A tenant administrator* can set any TenantUser role, but `PlatformAdmin` is
   dropped.
-- *An attacker who reaches tenant-service* can read and link identities, because
-  tenant-service is still unauthenticated. Keep it cluster-internal and migrate it.
+- *An attacker who reaches tenant-service* needs the token-service service
+  identity to read or link identities. Any other caller, including other CHO
+  services and platform administrators, is refused.
 - *Key Vault or tenant-service outages* give 503. Nothing is issued on partial data.
 
 ## Gaps and follow-ups
@@ -359,7 +363,6 @@ port 5030 in the `core` profile.
     token-service, or tenant-service on token-service's word, records the
     token's oid+tid;
   - administrative revocation.
-- tenant-service authentication (see the endpoints above).
 - The portal's `UserContextService` email backfill, and its role and
   platform-admin decisions, should be removed once the portal uses these tokens.
 - The shared layer accepts one public key per issuer (see "Rotation").

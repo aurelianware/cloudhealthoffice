@@ -22,6 +22,14 @@ public class TenantRole
 
     [JsonPropertyName("isBuiltIn")]
     public bool IsBuiltIn { get; set; } = false;
+
+    /// <summary>Token subject of the caller that created the role. Never read from a request body.</summary>
+    [JsonPropertyName("createdBy")]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>Token subject of the caller that last changed the role. Never read from a request body.</summary>
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
 }
 
 /// <summary>
@@ -237,28 +245,10 @@ public static class StandardRoles
     }
 
     /// <summary>
-    /// Checks if a granted permission matches the required permission,
-    /// supporting wildcard patterns like "*:read" and "*:*".
+    /// Checks if a granted permission matches the required permission, with
+    /// the shared rules (wildcards such as "*:read" and "*:*" never reach
+    /// platform:* permissions).
     /// </summary>
     private static bool PermissionMatches(string granted, string required)
-    {
-        if (string.Equals(granted, "*:*", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (string.Equals(granted, required, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        var grantedParts = granted.Split(':');
-        var requiredParts = required.Split(':');
-
-        if (grantedParts.Length != 2 || requiredParts.Length != 2)
-            return false;
-
-        var resourceMatch = grantedParts[0] == "*" ||
-            string.Equals(grantedParts[0], requiredParts[0], StringComparison.OrdinalIgnoreCase);
-        var actionMatch = grantedParts[1] == "*" ||
-            string.Equals(grantedParts[1], requiredParts[1], StringComparison.OrdinalIgnoreCase);
-
-        return resourceMatch && actionMatch;
-    }
+        => CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.Matches(granted, required);
 }
