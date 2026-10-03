@@ -7,16 +7,28 @@ using TenantService.Services;
 
 namespace CloudHealthOffice.TenantService.Tests;
 
+/// <summary>One mongod for the whole class; each test gets its own database.</summary>
+public sealed class MongoFixture : IDisposable
+{
+    public IMongoRunner Runner { get; } =
+        MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
+
+    public void Dispose()
+    {
+        try { Runner.Dispose(); } catch { /* best effort */ }
+    }
+}
+
 /// <summary>
 /// The lookups the token service relies on to decide who may enter a tenant,
 /// run against a real mongod.
 /// </summary>
-public sealed class IdentityDirectoryTests : IAsyncLifetime
+public sealed class IdentityDirectoryTests : IClassFixture<MongoFixture>, IAsyncLifetime
 {
     private const string Tid = "11111111-1111-1111-1111-111111111111";
     private const string OtherTid = "22222222-2222-2222-2222-222222222222";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoFixture _mongo;
     private IMongoDatabase _database = null!;
     private IdentityDirectory _directory = null!;
 
@@ -27,19 +39,16 @@ public sealed class IdentityDirectoryTests : IAsyncLifetime
             new ConventionPack { new CamelCaseElementNameConvention() }, _ => true);
     }
 
+    public IdentityDirectoryTests(MongoFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        _database = new MongoClient(_runner.ConnectionString).GetDatabase($"identity_{Guid.NewGuid():N}");
+        _database = new MongoClient(_mongo.Runner.ConnectionString).GetDatabase($"identity_{Guid.NewGuid():N}");
         _directory = new IdentityDirectory(_database);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); } catch { /* best effort */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _database.Client.DropDatabaseAsync(_database.DatabaseNamespace.DatabaseName);
 
     private Task AddTenantRecord(object record)
         => _database.GetCollection<BsonDocument>("Tenants").InsertOneAsync(record.ToBsonDocument());
