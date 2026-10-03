@@ -11,9 +11,10 @@ namespace AuthorizationService.Models;
 public class Authorization
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Multi-tenant partition key (required for Cosmos DB isolation). Always set
+    /// server-side from the caller's token; a value in a request body is ignored,
+    /// so it is not a required request field.
     /// </summary>
-    [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>

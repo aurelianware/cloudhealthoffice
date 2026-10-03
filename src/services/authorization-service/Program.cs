@@ -2,11 +2,8 @@ using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
-using Microsoft.Identity.Web;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using AuthorizationService;
 using AuthorizationService.Consumers;
-using AuthorizationService.Middleware;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
 using MongoDB.Driver;
@@ -14,40 +11,22 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-// Azure AD Authentication (Multi-tenant organizational accounts)
-// Frontend passes bearer token, services validate independently
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(options =>
-    {
-        builder.Configuration.Bind("AzureAd", options);
-        options.TokenValidationParameters.ValidateIssuer = true;
-        options.TokenValidationParameters.ValidateAudience = true;
-        options.TokenValidationParameters.ValidateLifetime = true;
-    },
-    options => { builder.Configuration.Bind("AzureAd", options); });
-
-// Authorization policies (scope-based for single app registration)
-builder.Services.AddAuthorization(options =>
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come
+// from that token. Reads need authorizations:read, writes
+// authorizations:write; review decisions (approve/deny/pend, status
+// transitions) additionally need authorizations:decide on the action.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
-    options.AddPolicy("RequireAuthenticatedUser", policy =>
-        policy.RequireAuthenticatedUser());
-    
-    // Scope-based policies (from single app registration)
-    options.AddPolicy("RequireAuthorizationReadWrite", policy =>
-        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Authorization.ReadWrite"));
-    
-    options.AddPolicy("RequireAuthorizationRead", policy =>
-        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Authorization.Read", "Authorization.ReadWrite"));
-    
-    // Role-based policies (app roles from single app registration)
-    options.AddPolicy("PriorAuthManager", policy =>
-        policy.RequireRole("PriorAuthManager", "Administrator"));
+    auth.DefaultReadPermission = "authorizations:read";
+    auth.DefaultWritePermission = "authorizations:write";
 });
 
 // Add services to the container
@@ -67,7 +46,7 @@ builder.Services.AddSwaggerGen(c =>
     // Add JWT Bearer authentication to Swagger UI
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token from Azure AD.",
+        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your CHO access token.",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
@@ -155,7 +134,7 @@ builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackend,
 builder.Services.AddScoped<AuthorizationService.Backends.IAuthorizationBackendSelector,
     AuthorizationService.Backends.AuthorizationBackendSelector>();
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
 // Health checks (MongoDB or Cosmos DB)
@@ -239,12 +218,8 @@ app.UseHttpsRedirection();
 
 app.UseCors("AllowAll");
 
-// Authentication MUST come before authorization
-app.UseAuthentication();
-app.UseAuthorization();
-
-// Multi-tenant middleware (extract TenantId from validated JWT claims)
-app.UseTenantMiddleware();
+// Authentication, tenant from the token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();
