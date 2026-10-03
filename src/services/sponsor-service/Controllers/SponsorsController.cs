@@ -41,6 +41,8 @@ public class SponsorsController : ControllerBase
     /// List all sponsors for the current tenant
     /// </summary>
     [HttpGet]
+    // Finance bills sponsors (premium billing, reports): billing:read reads them too.
+    [RequirePermission("enrollment:read,billing:read")]
     [ProducesResponseType(typeof(SponsorListResponse), 200)]
     public async Task<IActionResult> GetSponsors(
         [FromQuery] SponsorStatus? status = null,
@@ -67,6 +69,8 @@ public class SponsorsController : ControllerBase
     /// Get sponsor details by group number
     /// </summary>
     [HttpGet("{groupNumber}")]
+    // Finance bills sponsors (premium billing, reports): billing:read reads them too.
+    [RequirePermission("enrollment:read,billing:read")]
     [ProducesResponseType(typeof(Sponsor), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetSponsor([FromRoute] string groupNumber)
@@ -237,6 +241,8 @@ public class SponsorsController : ControllerBase
     /// ingestion pipeline; premium total comes from BillingInfo.
     /// </summary>
     [HttpGet("{groupNumber}/coverage-summary")]
+    // Finance bills sponsors (premium billing, reports): billing:read reads them too.
+    [RequirePermission("enrollment:read,billing:read")]
     [ProducesResponseType(typeof(CoverageSummary), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetCoverageSummary([FromRoute] string groupNumber)

@@ -240,6 +240,28 @@ public class SponsorPipelineAuthTests : IClassFixture<SponsorPipelineAuthTests.F
     }
 
     [Fact]
+    public async Task Finance_ReadsSponsorsForBilling_ButCannotChangeThem()
+    {
+        // Finance holds billing:read, not enrollment:read.
+        var client = Client(Tenant, ChoRolePermissions.Finance);
+
+        var list = await client.GetAsync("/api/v1/sponsors");
+        var get = await client.GetAsync($"/api/v1/sponsors/{Group}");
+        var summary = await client.GetAsync($"/api/v1/sponsors/{Group}/coverage-summary");
+        var create = await client.PostAsJsonAsync("/api/v1/sponsors", NewSponsor);
+        var update = await client.PutAsJsonAsync($"/api/v1/sponsors/{Group}", Suspend);
+        var terminate = await client.DeleteAsync($"/api/v1/sponsors/{Group}");
+
+        get.StatusCode.Should().Be(HttpStatusCode.OK);
+        list.StatusCode.Should().NotBe(HttpStatusCode.Forbidden).And.NotBe(HttpStatusCode.Unauthorized);
+        summary.StatusCode.Should().NotBe(HttpStatusCode.Forbidden).And.NotBe(HttpStatusCode.Unauthorized);
+        create.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        update.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        terminate.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        NoWrites();
+    }
+
+    [Fact]
     public async Task ProviderRelations_CannotReadTheMemberView()
     {
         var response = await Client(Tenant, ChoRolePermissions.ProviderRelations)
