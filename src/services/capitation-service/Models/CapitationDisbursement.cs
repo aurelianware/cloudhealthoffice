@@ -241,7 +241,7 @@ public class InitiateDisbursementRequest
     public decimal? Amount { get; set; }
 
     /// <summary>
-    /// Who is initiating this disbursement
+    /// Ignored on the API: the initiator is always the authenticated caller (token subject).
     /// </summary>
     public string? InitiatedBy { get; set; }
 }
@@ -267,7 +267,7 @@ public class InitiateBatchDisbursementRequest
     public DisbursementMethod? Method { get; set; }
 
     /// <summary>
-    /// Who is initiating
+    /// Ignored on the API: the initiator is always the authenticated caller (token subject).
     /// </summary>
     public string? InitiatedBy { get; set; }
 }

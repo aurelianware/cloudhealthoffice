@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,6 +12,10 @@ namespace CloudHealthOffice.CapitationService.Tests;
 /// WebApplicationFactory for capitation-service smoke tests.
 /// Replaces all repository and external-service dependencies with NSubstitute mocks
 /// so tests run without Cosmos/Mongo/Stripe/external services.
+/// The CHO authentication pipeline is real: the host runs in Development, so it
+/// trusts the development issuers from appsettings.Development.json, and clients
+/// made with <see cref="CreateTenantClient"/> carry a development token for the
+/// tenant they name in X-Tenant-ID.
 /// </summary>
 public class CapitationApiFactory : WebApplicationFactory<Program>
 {
@@ -21,6 +26,14 @@ public class CapitationApiFactory : WebApplicationFactory<Program>
     public ICapitationRunService RunService { get; } = Substitute.For<ICapitationRunService>();
     public ICapitationDisbursementService DisbursementService { get; } = Substitute.For<ICapitationDisbursementService>();
     public ICapitationEraService EraService { get; } = Substitute.For<ICapitationEraService>();
+
+    /// <summary>A client whose X-Tenant-ID becomes a signed development token.</summary>
+    public HttpClient CreateTenantClient(string tenantId, string subject = "dev-user", params string[] roles)
+    {
+        var client = CreateDefaultClient(new ChoDevelopmentTokenHandler(subject, roles));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantId);
+        return client;
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

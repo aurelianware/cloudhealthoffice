@@ -33,8 +33,9 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
     public CapitationRunSmokeTests(CapitationApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Tenant-ID", "smoke-test-tenant");
+        // A signed development token for smoke-test-tenant (TenantAdmin); the
+        // service no longer accepts a bare X-Tenant-ID header.
+        _client = factory.CreateTenantClient("smoke-test-tenant");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -149,7 +150,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
             .Returns(completedRun);
         _factory.StatementRepository.GetByRunIdAsync("run-smoke-done")
             .Returns(new List<CapitationStatement> { statement });
-        _factory.RunService.ApproveStatementAsync("stmt-smoke-1")
+        _factory.RunService.ApproveStatementAsync("stmt-smoke-1", Arg.Any<string>())
             .Returns(approvedStatement);
 
         // Step 1: Create run

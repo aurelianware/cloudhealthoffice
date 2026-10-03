@@ -1,3 +1,4 @@
+using CapitationService.Tests.Support;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using CapitationService.Controllers;
@@ -15,7 +16,7 @@ public class CapitationContractsControllerTests
     {
         _contractRepo = new Mock<ICapitationContractRepository>();
         var logger = new Mock<ILogger<CapitationContractsController>>();
-        _controller = new CapitationContractsController(_contractRepo.Object, logger.Object);
+        _controller = new CapitationContractsController(_contractRepo.Object, new TestActor(), logger.Object);
     }
 
     private static CapitationContract CreateContract(

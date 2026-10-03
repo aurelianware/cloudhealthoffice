@@ -111,6 +111,11 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         if (bankAccount == null || !bankAccount.EftEnabled)
             throw new InvalidOperationException($"EFT not enabled for provider {statement.ProviderNPI}");
 
+        // An override may pay part of the approved amount, never more than it.
+        if (request.Amount is { } requested && (requested <= 0 || requested > statement.NetPayable))
+            throw new InvalidOperationException(
+                $"Disbursement amount must be greater than 0 and at most the approved net payable {statement.NetPayable:N2}");
+
         var amount = request.Amount ?? statement.NetPayable;
         var method = request.Method ?? MapPreferredMethod(bankAccount.PreferredDisbursementMethod);
 

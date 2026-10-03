@@ -1,3 +1,4 @@
+using CapitationService.Tests.Support;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using CapitationService.Controllers;
@@ -22,6 +23,7 @@ public class CapitationRunsControllerTests
         _controller = new CapitationRunsController(
             _runService.Object,
             _statementRepo.Object,
+            new TestActor(),
             logger.Object);
     }
 

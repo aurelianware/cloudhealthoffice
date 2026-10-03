@@ -1,3 +1,4 @@
+using CapitationService.Tests.Support;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ public class CapitationDisbursementsControllerTests
     {
         _disbursementService = new Mock<ICapitationDisbursementService>();
         var logger = new Mock<ILogger<CapitationDisbursementsController>>();
-        _controller = new CapitationDisbursementsController(_disbursementService.Object, logger.Object);
+        _controller = new CapitationDisbursementsController(_disbursementService.Object, new TestActor(), logger.Object);
     }
 
     private static CapitationDisbursement CreateDisbursement(

@@ -11,9 +11,9 @@ public interface ICapitationRunService
     Task<CapitationRun> GetRunAsync(string runId);
     Task<IEnumerable<CapitationRun>> GetRunsAsync(DateTime? from, DateTime? to, LineOfBusiness? lineOfBusiness = null);
     Task CancelRunAsync(string runId);
-    Task<CapitationStatement> ApproveStatementAsync(string statementId);
-    Task<CapitationStatement> VoidStatementAsync(string statementId, string reason);
-    Task<CapitationStatement> HoldStatementAsync(string statementId, string reason);
+    Task<CapitationStatement> ApproveStatementAsync(string statementId, string approvedBy);
+    Task<CapitationStatement> VoidStatementAsync(string statementId, string reason, string voidedBy);
+    Task<CapitationStatement> HoldStatementAsync(string statementId, string reason, string heldBy);
     Task<CapitationPeriodSummary> GetCapitationSummaryAsync(DateTime period);
 }
 
@@ -262,7 +262,7 @@ public class CapitationRunService : ICapitationRunService
         await _runRepository.UpdateAsync(run);
     }
 
-    public async Task<CapitationStatement> ApproveStatementAsync(string statementId)
+    public async Task<CapitationStatement> ApproveStatementAsync(string statementId, string approvedBy)
     {
         var statement = await _statementRepository.GetByIdAsync(statementId)
             ?? throw new InvalidOperationException($"Statement {statementId} not found");
@@ -271,12 +271,15 @@ public class CapitationRunService : ICapitationRunService
             throw new InvalidOperationException($"Can only approve statements in Generated or OnHold state, current: {statement.Status}");
 
         statement.Status = CapitationStatementStatus.Approved;
+        statement.ApprovedBy = approvedBy;
+        statement.ApprovedAt = DateTime.UtcNow;
+        Touch(statement, approvedBy);
         _logger.LogInformation("Approved capitation statement {StatementNumber}", statement.StatementNumber);
 
         return await _statementRepository.UpdateAsync(statement);
     }
 
-    public async Task<CapitationStatement> VoidStatementAsync(string statementId, string reason)
+    public async Task<CapitationStatement> VoidStatementAsync(string statementId, string reason, string voidedBy)
     {
         var statement = await _statementRepository.GetByIdAsync(statementId)
             ?? throw new InvalidOperationException($"Statement {statementId} not found");
@@ -285,6 +288,7 @@ public class CapitationRunService : ICapitationRunService
             throw new InvalidOperationException("Cannot void a paid statement");
 
         statement.Status = CapitationStatementStatus.Voided;
+        Touch(statement, voidedBy);
         statement.Adjustments.Add(new CapitationAdjustment
         {
             Type = CapitationAdjustmentType.Other,
@@ -299,7 +303,7 @@ public class CapitationRunService : ICapitationRunService
         return await _statementRepository.UpdateAsync(statement);
     }
 
-    public async Task<CapitationStatement> HoldStatementAsync(string statementId, string reason)
+    public async Task<CapitationStatement> HoldStatementAsync(string statementId, string reason, string heldBy)
     {
         var statement = await _statementRepository.GetByIdAsync(statementId)
             ?? throw new InvalidOperationException($"Statement {statementId} not found");
@@ -308,6 +312,7 @@ public class CapitationRunService : ICapitationRunService
             throw new InvalidOperationException($"Can only hold statements in Generated or Approved state, current: {statement.Status}");
 
         statement.Status = CapitationStatementStatus.OnHold;
+        Touch(statement, heldBy);
         statement.Adjustments.Add(new CapitationAdjustment
         {
             Type = CapitationAdjustmentType.Other,
@@ -570,6 +575,12 @@ public class CapitationRunService : ICapitationRunService
                 memberId, year);
             return 1.0m;
         }
+    }
+
+    private static void Touch(CapitationStatement statement, string actor)
+    {
+        statement.LastUpdatedBy = actor;
+        statement.LastUpdatedAt = DateTime.UtcNow;
     }
 
     private static string SanitizeForLog(string? value)

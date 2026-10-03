@@ -281,7 +281,8 @@ public class CreateCapitationRunRequest
     public CapitationRunCriteria Criteria { get; set; } = new();
 
     /// <summary>
-    /// Who is creating the run
+    /// Ignored: the creator is always the authenticated caller (token subject).
+    /// Kept so existing clients that still send it are not rejected.
     /// </summary>
     public string? CreatedBy { get; set; }
 

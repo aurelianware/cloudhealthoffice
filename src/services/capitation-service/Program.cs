@@ -9,6 +9,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -30,8 +31,16 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
+
+// CHO token authentication: tenant from the token, actor from the token, default deny.
+// Approving, voiding and releasing payments additionally need payments:approve.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "payments:read";
+    auth.DefaultWritePermission = "payments:run";
+});
 
 // Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
@@ -138,12 +147,10 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
-
 app.UseCors("AllowAll");
 
-app.UseAuthorization();
+// Authentication, tenant from the token only, then permission policies.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();

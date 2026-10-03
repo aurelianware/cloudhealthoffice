@@ -159,6 +159,17 @@ public class CapitationStatement
     public string? LastUpdatedBy { get; set; }
 
     /// <summary>
+    /// Who approved the statement for payment (token subject)
+    /// </summary>
+    [StringLength(200)]
+    public string? ApprovedBy { get; set; }
+
+    /// <summary>
+    /// When the statement was approved for payment
+    /// </summary>
+    public DateTime? ApprovedAt { get; set; }
+
+    /// <summary>
     /// Recalculate computed totals from line items and adjustments.
     /// Mirrors PremiumInvoice.RecalculateTotals() pattern.
     /// </summary>

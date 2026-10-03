@@ -157,6 +157,11 @@ public class StripeConnectService : IStripeConnectService
 
     public async Task<DisbursementWebhookResult> ProcessWebhookAsync(string json, string stripeSignature)
     {
+        // The webhook endpoint is reachable without a CHO token; the signature is
+        // its only authentication. An empty secret would make any body "valid".
+        if (string.IsNullOrEmpty(_webhookSecret))
+            throw new InvalidOperationException("Stripe webhook secret is not configured; webhook rejected");
+
         try
         {
             var stripeEvent = _stripeClient.ConstructWebhookEvent(json, stripeSignature, _webhookSecret);

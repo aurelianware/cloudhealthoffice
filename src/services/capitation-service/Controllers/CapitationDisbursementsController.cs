@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace CapitationService.Controllers;
 
@@ -10,13 +12,19 @@ namespace CapitationService.Controllers;
 public class CapitationDisbursementsController : ControllerBase
 {
     private readonly ICapitationDisbursementService _disbursementService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CapitationDisbursementsController> _logger;
+
+    /// <summary>Releasing or voiding money needs more than running capitation.</summary>
+    public const string ApprovePermission = "payments:approve";
 
     public CapitationDisbursementsController(
         ICapitationDisbursementService disbursementService,
+        ICurrentActor actor,
         ILogger<CapitationDisbursementsController> logger)
     {
         _disbursementService = disbursementService;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -24,10 +32,12 @@ public class CapitationDisbursementsController : ControllerBase
     /// Initiate a disbursement for a single capitation statement
     /// </summary>
     [HttpPost]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationDisbursement>> InitiateDisbursement([FromBody] InitiateDisbursementRequest request)
     {
+        request.InitiatedBy = _actor.UserId; // never the body's claim
         try
         {
             var disbursement = await _disbursementService.InitiateDisbursementAsync(request);
@@ -43,10 +53,12 @@ public class CapitationDisbursementsController : ControllerBase
     /// Initiate disbursements for a batch of statements (from capitation run or statement list)
     /// </summary>
     [HttpPost("batch")]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(BatchDisbursementResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BatchDisbursementResult>> InitiateBatchDisbursement([FromBody] InitiateBatchDisbursementRequest request)
     {
+        request.InitiatedBy = _actor.UserId; // never the body's claim
         try
         {
             var result = await _disbursementService.InitiateBatchDisbursementAsync(request);
@@ -62,6 +74,7 @@ public class CapitationDisbursementsController : ControllerBase
     /// Generate a NACHA credit file for all pending NACHA disbursements
     /// </summary>
     [HttpPost("nacha-file")]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(NachaCreditFileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<NachaCreditFileResult>> GenerateNachaCreditFile()
@@ -106,6 +119,7 @@ public class CapitationDisbursementsController : ControllerBase
     /// Cancel a pending disbursement
     /// </summary>
     [HttpDelete("{id}")]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationDisbursement>> CancelDisbursement(string id)
@@ -141,9 +155,13 @@ public class CapitationDisbursementsController : ControllerBase
     }
 
     /// <summary>
-    /// Stripe Connect webhook endpoint for transfer/payout events
+    /// Stripe Connect webhook endpoint for transfer/payout events.
+    /// Stripe cannot present a CHO token: the caller is authenticated by the
+    /// Stripe-Signature HMAC over the body, verified before anything is read.
+    /// No tenant is established for this call, so it never falls back to one.
     /// </summary>
     [HttpPost("stripe-webhook")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> StripeWebhook()
