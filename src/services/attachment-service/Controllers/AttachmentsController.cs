@@ -1,14 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
 using AttachmentService.Models;
 using AttachmentService.Repositories;
 using AttachmentService.Services;
 using CloudHealthOffice.DocumentStore;
+using CloudHealthOffice.Infrastructure.Security;
 using System.Security.Cryptography;
 
 namespace AttachmentService.Controllers;
 
-[Authorize]
+// Access: default CHO permissions (attachments:read for GET, attachments:write
+// otherwise), applied by AddChoAuthentication. The tenant is the token's tenant.
 [ApiController]
 [Route("api/[controller]")]
 public class AttachmentsController : ControllerBase
@@ -16,17 +17,20 @@ public class AttachmentsController : ControllerBase
     private readonly IAttachmentRepository _repository;
     private readonly IAcknowledgmentService _acknowledgmentService;
     private readonly IDocumentStore _documentStore;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<AttachmentsController> _logger;
 
     public AttachmentsController(
         IAttachmentRepository repository,
         IAcknowledgmentService acknowledgmentService,
         IDocumentStore documentStore,
+        ICurrentActor actor,
         ILogger<AttachmentsController> logger)
     {
         _repository = repository;
         _acknowledgmentService = acknowledgmentService;
         _documentStore = documentStore;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -40,9 +44,11 @@ public class AttachmentsController : ControllerBase
     {
         try
         {
+            // Tenant and submitter come from the validated token, never from the form.
             var attachment = new Attachment
             {
-                TenantId = request.TenantId,
+                TenantId = _actor.TenantId,
+                CreatedBy = _actor.UserId,
                 ClaimId = request.ClaimId,
                 AuthorizationId = request.AuthorizationId,
                 AppealId = request.AppealId,
@@ -122,7 +128,7 @@ public class AttachmentsController : ControllerBase
                 !string.IsNullOrWhiteSpace(created.AuthorizationId) ? "Authorization" : "Appeal",
                 SanitizeForLog(created.ClaimId ?? created.AuthorizationId ?? created.AppealId));
 
-            return CreatedAtAction(nameof(GetAttachment), new { id = created.Id, tenantId = created.TenantId }, created);
+            return CreatedAtAction(nameof(GetAttachment), new { id = created.Id }, created);
         }
         catch (Exception ex)
         {
@@ -135,12 +141,9 @@ public class AttachmentsController : ControllerBase
     /// Get attachment by ID
     /// </summary>
     [HttpGet("{id}")]
-    public async Task<ActionResult<Attachment>> GetAttachment(string id, [FromQuery] string tenantId)
+    public async Task<ActionResult<Attachment>> GetAttachment(string id)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest("tenantId query parameter is required");
-        }
+        var tenantId = _actor.TenantId;
 
         var attachment = await _repository.GetByIdAsync(id, tenantId);
         if (attachment == null)
@@ -155,12 +158,9 @@ public class AttachmentsController : ControllerBase
     /// Get all attachments for a claim
     /// </summary>
     [HttpGet("claim/{claimId}")]
-    public async Task<ActionResult<IEnumerable<Attachment>>> GetByClaimId(string claimId, [FromQuery] string tenantId)
+    public async Task<ActionResult<IEnumerable<Attachment>>> GetByClaimId(string claimId)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest("tenantId query parameter is required");
-        }
+        var tenantId = _actor.TenantId;
 
         var attachments = await _repository.GetByClaimIdAsync(claimId, tenantId);
         return Ok(attachments);
@@ -170,12 +170,9 @@ public class AttachmentsController : ControllerBase
     /// Get all attachments for an authorization
     /// </summary>
     [HttpGet("authorization/{authorizationId}")]
-    public async Task<ActionResult<IEnumerable<Attachment>>> GetByAuthorizationId(string authorizationId, [FromQuery] string tenantId)
+    public async Task<ActionResult<IEnumerable<Attachment>>> GetByAuthorizationId(string authorizationId)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest("tenantId query parameter is required");
-        }
+        var tenantId = _actor.TenantId;
 
         var attachments = await _repository.GetByAuthorizationIdAsync(authorizationId, tenantId);
         return Ok(attachments);
@@ -185,12 +182,9 @@ public class AttachmentsController : ControllerBase
     /// Get all attachments for an appeal
     /// </summary>
     [HttpGet("appeal/{appealId}")]
-    public async Task<ActionResult<IEnumerable<Attachment>>> GetByAppealId(string appealId, [FromQuery] string tenantId)
+    public async Task<ActionResult<IEnumerable<Attachment>>> GetByAppealId(string appealId)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest("tenantId query parameter is required");
-        }
+        var tenantId = _actor.TenantId;
 
         var attachments = await _repository.GetByAppealIdAsync(appealId, tenantId);
         return Ok(attachments);
@@ -200,12 +194,9 @@ public class AttachmentsController : ControllerBase
     /// Get attachment by RFAI reference (solicited attachments)
     /// </summary>
     [HttpGet("rfai/{rfaiReference}")]
-    public async Task<ActionResult<Attachment>> GetByRFAIReference(string rfaiReference, [FromQuery] string tenantId)
+    public async Task<ActionResult<Attachment>> GetByRFAIReference(string rfaiReference)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest("tenantId query parameter is required");
-        }
+        var tenantId = _actor.TenantId;
 
         var attachment = await _repository.GetByRFAIReferenceAsync(rfaiReference, tenantId);
         if (attachment == null)
@@ -220,12 +211,9 @@ public class AttachmentsController : ControllerBase
     /// Download attachment file from Blob Storage
     /// </summary>
     [HttpGet("{id}/download")]
-    public async Task<IActionResult> DownloadAttachment(string id, [FromQuery] string tenantId)
+    public async Task<IActionResult> DownloadAttachment(string id)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest("tenantId query parameter is required");
-        }
+        var tenantId = _actor.TenantId;
 
         var attachment = await _repository.GetByIdAsync(id, tenantId);
         if (attachment == null || string.IsNullOrWhiteSpace(attachment.BlobName))
@@ -250,14 +238,10 @@ public class AttachmentsController : ControllerBase
     /// </summary>
     [HttpPost("{id}/acknowledgment")]
     public async Task<ActionResult<AcknowledgmentResponse>> GenerateAcknowledgment(
-        string id, 
-        [FromQuery] string tenantId,
+        string id,
         [FromQuery] bool autoSend = false)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest("tenantId query parameter is required");
-        }
+        var tenantId = _actor.TenantId;
 
         var attachment = await _repository.GetByIdAsync(id, tenantId);
         if (attachment == null)
@@ -291,6 +275,7 @@ public class AttachmentsController : ControllerBase
             }
 
             attachment.AcknowledgmentType = ackType;
+            attachment.LastUpdatedBy = _actor.UserId;
             
             if (autoSend || tradingPartner?.AutoSendAcknowledgments == true)
             {
@@ -365,7 +350,7 @@ public class AcknowledgmentResponse
 /// </summary>
 public class AttachmentRequest
 {
-    public string TenantId { get; set; } = string.Empty;
+    // No TenantId or submitter: both come from the caller's token.
     public string? ClaimId { get; set; }
     public string? AuthorizationId { get; set; }
     public string? AppealId { get; set; }

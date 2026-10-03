@@ -8,6 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="AttachmentService.Tests/**" />
+    <Content Remove="AttachmentService.Tests/**" />
+    <None Remove="AttachmentService.Tests/**" />
+    <EmbeddedResource Remove="AttachmentService.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\..\engines\CloudHealthOffice.DocumentStore\CloudHealthOffice.DocumentStore.csproj" />
   </ItemGroup>
@@ -17,8 +24,6 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
-    <PackageReference Include="Microsoft.Identity.Web" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="System.Security.Cryptography.Xml" />
     <PackageReference Include="MongoDB.Driver" />
   </ItemGroup>
