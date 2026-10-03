@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Security;
 using CoverageService.Middleware;
 using CoverageService.Models;
 using CoverageService.Repositories;
@@ -24,18 +25,21 @@ public class CoverageController : ControllerBase
     private readonly ICoverageRepository _coverageRepository;
     private readonly IPcpAssignmentService? _pcpService;
     private readonly ICareTeamProjector? _careTeamProjector;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CoverageController> _logger;
 
-    // Tenant context from middleware
+    // Tenant from the validated token (shared TenantMiddleware via UseChoAuthentication).
     private string TenantId => HttpContext.GetTenantId();
 
     public CoverageController(
         ICoverageRepository coverageRepository,
+        ICurrentActor actor,
         ILogger<CoverageController> logger,
         IPcpAssignmentService? pcpService = null,
         ICareTeamProjector? careTeamProjector = null)
     {
         _coverageRepository = coverageRepository;
+        _actor = actor;
         _pcpService = pcpService;
         _careTeamProjector = careTeamProjector;
         _logger = logger;
@@ -235,7 +239,7 @@ public class CoverageController : ControllerBase
             MaintenanceReasonCode = request.MaintenanceReasonCode,
             CreatedDate = DateTime.UtcNow,
             LastUpdatedDate = DateTime.UtcNow,
-            CreatedBy = User.Identity?.Name ?? "System"
+            CreatedBy = _actor.UserId
         };
 
         var created = await _coverageRepository.CreateAsync(coverage);
@@ -270,7 +274,7 @@ public class CoverageController : ControllerBase
         if (request.OtherInsurance != null) coverage.OtherInsurance = request.OtherInsurance;
 
         coverage.LastUpdatedDate = DateTime.UtcNow;
-        coverage.LastUpdatedBy = User.Identity?.Name ?? "System";
+        coverage.LastUpdatedBy = _actor.UserId;
 
         var updated = await _coverageRepository.UpdateAsync(coverage);
         return Ok(updated);
@@ -297,7 +301,7 @@ public class CoverageController : ControllerBase
         coverage.TerminationDate = terminationDate ?? DateTime.UtcNow.Date;
         coverage.MaintenanceReasonCode = reasonCode;
         coverage.LastUpdatedDate = DateTime.UtcNow;
-        coverage.LastUpdatedBy = User.Identity?.Name ?? "System";
+        coverage.LastUpdatedBy = _actor.UserId;
 
         await _coverageRepository.UpdateAsync(coverage);
         return NoContent();
@@ -433,7 +437,7 @@ public class CoverageController : ControllerBase
             Reason = request.Reason,
             Source = ParseSource(request.AssignmentSource),
             MemberDateOfBirth = request.MemberDateOfBirth,
-            AssignedBy = User.Identity?.Name ?? "member-service"
+            AssignedBy = _actor.UserId
         };
 
         var result = await _pcpService.AssignAsync(TenantId, memberId, cmd, ct);
@@ -571,7 +575,7 @@ public class CoverageController : ControllerBase
             if (!string.IsNullOrEmpty(request.ReasonCode))
                 coverage.MaintenanceReasonCode = request.ReasonCode;
             coverage.LastUpdatedDate = DateTime.UtcNow;
-            coverage.LastUpdatedBy = User.Identity?.Name ?? "member-service";
+            coverage.LastUpdatedBy = _actor.UserId;
             await _coverageRepository.UpdateAsync(coverage);
         }
 
