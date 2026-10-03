@@ -506,4 +506,34 @@ public class EnrollmentImportServiceTests
         result.SuccessCount.Should().Be(1);
         events.AllEvents.Should().HaveCount(1);
     }
+
+    [Fact]
+    public async Task Import_RecordsImportingActor_OnEventsAndRun()
+    {
+        // The controller sets ActorId from the token subject; the event stream
+        // and the run summary both record who ran the import.
+        var (svc, events, _, _, _, _, importRuns) = Build();
+
+        var batch = new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-actor",
+            ActorId = "token-user",
+            Enrollments = new() { NewSubscriber("M-actor") }
+        };
+        await svc.ImportEnrollmentAsync(batch, "t1");
+
+        events.AllEvents.Should().ContainSingle().Which.ActorId.Should().Be("token-user");
+        importRuns.Verify(r => r.CreateAsync(It.Is<EnrollmentImportRun>(run =>
+            run.ActorId == "token-user")), Times.Once);
+    }
+
+    [Fact]
+    public void Enrollment834_ActorId_IsNeverBoundFromJson()
+    {
+        var batch = System.Text.Json.JsonSerializer.Deserialize<Enrollment834>(
+            """{"fileName":"x.834","actorId":"someone-else","ActorId":"someone-else"}""");
+
+        batch!.ActorId.Should().BeNull();
+    }
 }

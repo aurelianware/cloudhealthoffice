@@ -29,6 +29,13 @@ public class Enrollment834
     /// <summary>True when this batch came from a manual entry endpoint, not an 834 file.</summary>
     [JsonPropertyName("manualSource")]
     public bool ManualSource { get; set; }
+
+    /// <summary>
+    /// The user (token subject) running this import. Set by the controller from the
+    /// validated token; [JsonIgnore] so a request body can never supply it.
+    /// </summary>
+    [JsonIgnore]
+    public string? ActorId { get; set; }
 }
 
 public class MemberEnrollment

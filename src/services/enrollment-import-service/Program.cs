@@ -9,6 +9,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,6 +22,15 @@ builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// that token, never from X-Tenant-ID or the request body.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "enrollment:read";
+    auth.DefaultWritePermission = "enrollment:process";
+});
 
 // MongoDB
 builder.Services.AddChoDatabase(builder.Configuration);
@@ -38,6 +48,11 @@ builder.Services.AddSingleton<IPlanCodeGapReportService, PlanCodeGapReportServic
 
 builder.Services.AddHostedService<EnrollmentIndexInitializer>();
 
+// Downstream CHO clients. AddChoAuthentication puts ChoOutboundTokenHandler on
+// every IHttpClientFactory client: inside a request it forwards the caller's
+// token; with no caller it mints a service token for the X-Tenant-ID each
+// client sets on its requests. Never construct an HttpClient directly here.
+//
 // member-service / sponsor-service clients — enrollment-import-service used
 // to write Member/Sponsor documents directly into Mongo collections that
 // collide with the ones those now-split-out services actually own (see
@@ -125,7 +140,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
-app.UseAuthorization();
+
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();
 
