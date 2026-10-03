@@ -87,7 +87,10 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
 
     private HttpClient NewClient()
     {
-        var client = _factory.CreateClient();
+        // The handler turns X-Tenant-ID into a development-signed token for that
+        // tenant; the server takes the tenant from the token.
+        var client = _factory.CreateDefaultClient(
+            new CloudHealthOffice.Infrastructure.Security.ChoDevelopmentTokenHandler());
         client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-int");
         return client;
     }
@@ -101,7 +104,6 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
         var create = await client.PostAsJsonAsync("/api/v1/members/M1/consents", new CreateConsentRequest
         {
             ConsentType = ConsentType.GeneralAuthorization,
-            GrantedBy = "alice",
             Reason = "continuity of care"
         }, Json);
         create.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -128,6 +130,7 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
     [Fact]
     public async Task MissingTenantHeader_Returns401()
     {
+        // No token and no X-Tenant-ID header: 401, never a default tenant.
         var client = _factory.CreateClient();
         var r = await client.GetAsync("/api/v1/members/M1/consents");
         r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);

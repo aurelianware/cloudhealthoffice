@@ -5,6 +5,7 @@ using CloudHealthOffice.Consent.Contracts;
 using ConsentService.Models;
 using ConsentService.Repositories;
 using ConsentService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 // TODO(feature-5.18-followup): scope-based access enforcement / integration
@@ -18,6 +19,13 @@ namespace ConsentService.Controllers;
 /// HIPAA §164.508 authorization records. Consents are never deleted; the
 /// lifecycle is Draft -> Active -> Revoked / Expired, with an append-only
 /// audit trail on every transition.
+///
+/// Identity: the tenant and the acting user come from the validated CHO
+/// token only (<see cref="ICurrentActor"/>). The recorded grantor
+/// (<see cref="Consent.GrantedBy"/>), activator and revoker, the status and
+/// every lifecycle timestamp are set here, never from the request body.
+/// Reads need <c>consent:read</c>, writes <c>consent:write</c> (defaults set
+/// in Program.cs).
 /// </summary>
 [ApiController]
 [Route("api/v1/members/{memberId}/consents")]
@@ -29,15 +37,21 @@ public class ConsentsController : ControllerBase
     private readonly IConsentEventRepository _events;
     private readonly IConsentFieldEncryptor _encryptor;
     private readonly IConsentEventPublisher _publisher;
+    private readonly ICurrentActor _currentActor;
     private readonly ILogger<ConsentsController>? _logger;
+
+    /// <summary>The token subject. Every write records this as its actor.</summary>
+    private string Actor => _currentActor.UserId;
 
     public ConsentsController(
         IConsentRepository consents,
         IConsentEventRepository events,
         IConsentFieldEncryptor encryptor,
         IConsentEventPublisher publisher,
+        ICurrentActor currentActor,
         ILogger<ConsentsController>? logger = null)
     {
+        _currentActor = currentActor;
         _consents = consents;
         _events = events;
         _encryptor = encryptor;
@@ -55,7 +69,7 @@ public class ConsentsController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
 
         var consent = new Consent
         {
@@ -70,7 +84,9 @@ public class ConsentsController : ControllerBase
             Status = ConsentStatus.Draft,
             EffectiveAt = request.EffectiveAt,
             ExpiresAt = request.ExpiresAt,
-            GrantedBy = request.GrantedBy,
+            // The recorded grantor is the authenticated user who recorded the
+            // authorization, never a name the body supplies.
+            GrantedBy = actor,
             Reason = await _encryptor.EncryptAsync(request.Reason, ct),
             GrantedToName = await _encryptor.EncryptAsync(request.GrantedToName, ct),
             GrantedToContact = await _encryptor.EncryptAsync(request.GrantedToContact, ct),
@@ -204,7 +220,7 @@ public class ConsentsController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var from = consent.Status;
         consent.Status = ConsentStatus.Active;
         consent.ActivatedBy = actor;
@@ -244,6 +260,16 @@ public class ConsentsController : ControllerBase
         [FromBody] RevokeConsentRequest? request,
         CancellationToken ct)
     {
+        // "Expired" is recorded only by the system when a consent's period
+        // ends; a revocation cannot claim it, or a revoked authorization
+        // would read as having lapsed on its own.
+        if (request?.ReasonCode == ConsentRevocationReasonCode.Expired)
+        {
+            ModelState.AddModelError(nameof(RevokeConsentRequest.ReasonCode),
+                "Expired is recorded by the system when a consent lapses; it is not a revocation reason.");
+            return BadRequest(new ValidationProblemDetails(ModelState));
+        }
+
         var consent = await _consents.GetByIdAsync(TenantId, memberId, consentId);
         if (consent == null) return NotFound();
 
@@ -270,7 +296,7 @@ public class ConsentsController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var from = consent.Status;
         consent.Status = ConsentStatus.Revoked;
         consent.RevokedBy = actor;
@@ -436,9 +462,8 @@ public class CreateConsentRequest
     public DateTime? EffectiveAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
 
-    [Required]
-    [StringLength(200)]
-    public string GrantedBy { get; set; } = string.Empty;
+    // No GrantedBy: the recorded grantor is the token's user
+    // (ICurrentActor.UserId). A body "grantedBy" is ignored.
 
     [StringLength(4000)]
     public string? Reason { get; set; }

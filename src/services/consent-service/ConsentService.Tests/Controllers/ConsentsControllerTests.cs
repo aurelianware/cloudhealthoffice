@@ -5,6 +5,7 @@ using ConsentService.Models;
 using ConsentService.Repositories;
 using ConsentService.Services;
 using ConsentService.Tests.Fakes;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,13 +23,87 @@ public class ConsentsControllerTests
         var publisher = new RecordingConsentEventPublisher();
         var encryptor = new ReversibleConsentFieldEncryptor();
 
-        var controller = new ConsentsController(repo, repo, encryptor, publisher);
-        var http = new DefaultHttpContext();
-        http.Items["TenantId"] = tenantId;
-        http.User = new ClaimsPrincipal(new ClaimsIdentity(
-            new[] { new Claim(ClaimTypes.Name, user) }, "test"));
+        var http = NewHttpContext(tenantId, user);
+        var controller = new ConsentsController(repo, repo, encryptor, publisher, ActorFor(http));
         controller.ControllerContext = new ControllerContext { HttpContext = http };
         return (controller, repo, publisher, encryptor);
+    }
+
+    /// <summary>
+    /// The shape the shared authentication leaves behind: the tenant in
+    /// HttpContext.Items and the token subject as the "sub" claim.
+    /// </summary>
+    private static DefaultHttpContext NewHttpContext(string tenantId, string? subject)
+    {
+        var http = new DefaultHttpContext();
+        http.Items["TenantId"] = tenantId;
+        http.User = subject is null
+            ? new ClaimsPrincipal(new ClaimsIdentity())
+            : new ClaimsPrincipal(new ClaimsIdentity(
+                new[] { new Claim(ChoClaimTypes.Subject, subject) }, "test"));
+        return http;
+    }
+
+    private static ICurrentActor ActorFor(HttpContext http)
+        => new HttpContextCurrentActor(new HttpContextAccessor { HttpContext = http });
+
+    [Fact]
+    public async Task Create_RecordsGrantedByAndAuditActor_FromToken()
+    {
+        var (controller, repo, publisher, _) = BuildController(user: "token-user-7");
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization
+        }, CancellationToken.None);
+
+        var view = ((CreatedAtActionResult)result).Value.Should().BeOfType<Consent>().Subject;
+        view.GrantedBy.Should().Be("token-user-7");
+        (await repo.GetByIdAsync("tenant-a", "M1", view.Id))!.GrantedBy.Should().Be("token-user-7");
+        repo.SnapshotEvents().Should().ContainSingle()
+            .Which.ActorId.Should().Be("token-user-7");
+        publisher.Calls.Should().ContainSingle().Which.Actor.Should().Be("token-user-7");
+    }
+
+    [Fact]
+    public async Task ActivateAndRevoke_RecordTokenSubject_NotSystem()
+    {
+        var (controller, repo, publisher, _) = BuildController(user: "token-user-7");
+        var create = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization
+        }, CancellationToken.None);
+        var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
+
+        await controller.Activate("M1", id, null, CancellationToken.None);
+        var revoked = (Consent)((OkObjectResult)await controller.Revoke("M1", id, null, CancellationToken.None)).Value!;
+
+        revoked.ActivatedBy.Should().Be("token-user-7");
+        revoked.RevokedBy.Should().Be("token-user-7");
+        repo.SnapshotEvents().Should().HaveCount(3).And.OnlyContain(e => e.ActorId == "token-user-7");
+        publisher.Calls.Should().OnlyContain(c => c.Actor == "token-user-7");
+    }
+
+    [Fact]
+    public async Task Revoke_WithExpiredReasonCode_Returns400_AndDoesNotTransition()
+    {
+        var (controller, repo, publisher, _) = BuildController();
+        var create = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization
+        }, CancellationToken.None);
+        var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
+        await controller.Activate("M1", id, null, CancellationToken.None);
+        publisher.Calls.Clear();
+
+        var result = await controller.Revoke("M1", id,
+            new RevokeConsentRequest { ReasonCode = ConsentRevocationReasonCode.Expired },
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        (await repo.GetByIdAsync("tenant-a", "M1", id))!.Status.Should().Be(ConsentStatus.Active);
+        repo.SnapshotEvents().Should().NotContain(e => e.EventType == ConsentEventType.ConsentRevoked);
+        publisher.Calls.Should().BeEmpty();
     }
 
     [Fact]
@@ -39,7 +114,6 @@ public class ConsentsControllerTests
         var result = await controller.CreateConsent("M123", new CreateConsentRequest
         {
             ConsentType = ConsentType.GeneralAuthorization,
-            GrantedBy = "alice",
             Reason = "for continuity of care",
             GrantedToName = "Dr. Smith",
             Purpose = "follow-up appointment"
@@ -71,18 +145,16 @@ public class ConsentsControllerTests
         var (controllerA, repoA, _, _) = BuildController(tenantId: "tenant-a");
         var create = await controllerA.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization,
-            GrantedBy = "alice"
+            ConsentType = ConsentType.GeneralAuthorization
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
 
         // Same repo, different tenant context.
+        var http = NewHttpContext("tenant-b", subject: null);
         var controllerB = new ConsentsController(repoA, repoA,
             new ReversibleConsentFieldEncryptor(),
-            new RecordingConsentEventPublisher());
-        var http = new DefaultHttpContext();
-        http.Items["TenantId"] = "tenant-b";
-        http.User = new ClaimsPrincipal(new ClaimsIdentity());
+            new RecordingConsentEventPublisher(),
+            ActorFor(http));
         controllerB.ControllerContext = new ControllerContext { HttpContext = http };
 
         var result = await controllerB.GetConsent("M1", id, CancellationToken.None);
@@ -97,8 +169,7 @@ public class ConsentsControllerTests
         {
             await controller.CreateConsent("M1", new CreateConsentRequest
             {
-                ConsentType = ConsentType.GeneralAuthorization,
-                GrantedBy = $"alice-{i}"
+                ConsentType = ConsentType.GeneralAuthorization
             }, CancellationToken.None);
             await Task.Delay(5);
         }
@@ -115,7 +186,7 @@ public class ConsentsControllerTests
         var (controller, repo, publisher, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization, GrantedBy = "alice"
+            ConsentType = ConsentType.GeneralAuthorization
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
         publisher.Calls.Clear();
@@ -136,7 +207,7 @@ public class ConsentsControllerTests
         var (controller, repo, publisher, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization, GrantedBy = "alice"
+            ConsentType = ConsentType.GeneralAuthorization
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
 
@@ -167,7 +238,7 @@ public class ConsentsControllerTests
         var (controller, _, _, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization, GrantedBy = "alice"
+            ConsentType = ConsentType.GeneralAuthorization
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
 
@@ -182,7 +253,7 @@ public class ConsentsControllerTests
         var (controller, repo, _, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization, GrantedBy = "alice",
+            ConsentType = ConsentType.GeneralAuthorization,
             ExpiresAt = DateTime.UtcNow.AddHours(-1)
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
@@ -205,7 +276,7 @@ public class ConsentsControllerTests
         var (controller, _, _, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization, GrantedBy = "alice"
+            ConsentType = ConsentType.GeneralAuthorization
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
         await controller.Activate("M1", id, null, CancellationToken.None);
@@ -228,7 +299,7 @@ public class ConsentsControllerTests
         var (controller, repo, publisher, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization, GrantedBy = "alice",
+            ConsentType = ConsentType.GeneralAuthorization,
             ExpiresAt = DateTime.UtcNow.AddHours(-1)
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
@@ -283,11 +354,8 @@ public class ConsentsControllerTests
             .ThrowsAsync(new InvalidConsentTransitionException(
                 ConsentStatus.Active, ConsentStatus.Active));
 
-        var controller = new ConsentsController(repo.Object, events.Object, encryptor, publisher);
-        var http = new DefaultHttpContext();
-        http.Items["TenantId"] = "tenant-a";
-        http.User = new ClaimsPrincipal(new ClaimsIdentity(
-            new[] { new Claim(ClaimTypes.Name, "alice") }, "test"));
+        var http = NewHttpContext("tenant-a", "alice");
+        var controller = new ConsentsController(repo.Object, events.Object, encryptor, publisher, ActorFor(http));
         controller.ControllerContext = new ControllerContext { HttpContext = http };
 
         var result = await controller.Activate("M1", "c-1", request: null, CancellationToken.None);

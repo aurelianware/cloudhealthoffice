@@ -4,8 +4,8 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using ConsentService.HostedServices;
-using ConsentService.Middleware;
 using ConsentService.Repositories;
 using ConsentService.Services;
 using Microsoft.Azure.Cosmos;
@@ -29,6 +29,15 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Records, queries, and revokes HIPAA §164.508 authorization records with field-level encryption and an append-only audit trail."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user (who
+// recorded, activated or revoked a consent) come from that token only.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "consent:read";
+    auth.DefaultWritePermission = "consent:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -165,8 +174,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

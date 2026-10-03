@@ -75,7 +75,9 @@ public class Consent
     public DateTime? ExpiresAt { get; set; }
 
     /// <summary>
-    /// Name or identifier of the person granting the authorization.
+    /// Name or identifier of the person granting the authorization. Set by the
+    /// controller from the validated token's subject (the user who recorded
+    /// the grant); a request body cannot name it.
     /// TODO(feature-5.18-followup): when feature 5.8 Personal Representative
     /// delegation lands, this may become a structured reference rather than
     /// a free string. Keeping as <c>string(200)</c> until the delegation model
