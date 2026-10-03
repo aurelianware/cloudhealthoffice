@@ -38,7 +38,7 @@ public class HttpProviderVerificationClientTests
         using var cts = new CancellationTokenSource();
         cts.CancelAfter(TimeSpan.FromMilliseconds(100));
 
-        var act = () => client.VerifyBatchAsync(new[] { "1234567890" }, cts.Token);
+        var act = () => client.VerifyBatchAsync("tenant-a", new[] { "1234567890" }, cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
@@ -51,7 +51,7 @@ public class HttpProviderVerificationClientTests
         var client = BuildClient((_, _) =>
             throw new HttpRequestException("server unreachable"));
 
-        var result = await client.VerifyBatchAsync(new[] { "1234567890" });
+        var result = await client.VerifyBatchAsync("tenant-a", new[] { "1234567890" });
         result.Should().BeEmpty();
     }
 
@@ -63,7 +63,7 @@ public class HttpProviderVerificationClientTests
         var client = BuildClient((_, _) =>
             throw new TaskCanceledException("HttpClient timeout"));
 
-        var result = await client.VerifyBatchAsync(new[] { "1234567890" });
+        var result = await client.VerifyBatchAsync("tenant-a", new[] { "1234567890" });
         result.Should().BeEmpty();
     }
 
@@ -72,8 +72,48 @@ public class HttpProviderVerificationClientTests
     {
         var client = BuildClient((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
         var npis = Enumerable.Range(0, 101).Select(i => i.ToString("D10")).ToArray();
-        var act = () => client.VerifyBatchAsync(npis);
+        var act = () => client.VerifyBatchAsync("tenant-a", npis);
         await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task VerifyBatchAsync_names_the_tenant_in_X_Tenant_ID()
+    {
+        // ChoOutboundTokenHandler mints the worker's service token for this tenant.
+        HttpRequestMessage? sent = null;
+        var client = BuildClient((req, _) =>
+        {
+            sent = req;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"count":0,"results":[]}""", System.Text.Encoding.UTF8, "application/json"),
+            });
+        });
+
+        await client.VerifyBatchAsync("tenant-a", new[] { "1234567890" });
+
+        sent.Should().NotBeNull();
+        sent!.Headers.GetValues("X-Tenant-ID").Should().ContainSingle().Which.Should().Be("tenant-a");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task VerifyBatchAsync_logs_an_error_when_the_verification_service_refuses_the_call(HttpStatusCode refusal)
+    {
+        // A refusal is a credentials problem, not an outage: cached scores stay
+        // put, but it must be visible as an error.
+        var logger = new TestHelpers.ListLogger<HttpProviderVerificationClient>();
+        var http = new HttpClient(new DelegateHandler((_, _) => Task.FromResult(new HttpResponseMessage(refusal))))
+        {
+            BaseAddress = new Uri("http://provider-verification-service/"),
+        };
+        var client = new HttpProviderVerificationClient(http, logger);
+
+        var result = await client.VerifyBatchAsync("tenant-a", new[] { "1234567890" });
+
+        result.Should().BeEmpty();
+        logger.Entries.Should().Contain(e => e.Level == Microsoft.Extensions.Logging.LogLevel.Error);
     }
 
     [Fact]
@@ -86,7 +126,7 @@ public class HttpProviderVerificationClientTests
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
         });
 
-        var result = await client.VerifyBatchAsync(Array.Empty<string>());
+        var result = await client.VerifyBatchAsync("tenant-a", Array.Empty<string>());
         result.Should().BeEmpty();
         called.Should().BeFalse();
     }

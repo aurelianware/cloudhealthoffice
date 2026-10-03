@@ -113,7 +113,8 @@ public class ProviderVersioningService : IProviderVersioningService
         draft.TerminationReason = null;
         // Status mirrors VersionState — drafts are Pending in the legacy enum.
         draft.Status = ProviderStatus.Pending;
-        draft.CreatedBy = string.IsNullOrEmpty(draft.CreatedBy) ? actorId : draft.CreatedBy;
+        // Genesis draft: the creator is the acting user, never a caller-supplied value.
+        draft.CreatedBy = actorId;
         draft.CreatedDate = DateTime.UtcNow;
         draft.LastUpdatedDate = DateTime.UtcNow;
         draft.LastUpdatedBy = actorId;

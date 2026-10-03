@@ -77,6 +77,28 @@ public class ProviderRepositoryVersionChainTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateDraftAsync_writes_the_request_tenant_not_a_body_tenant_and_refuses_without_one()
+    {
+        // The request tenant comes from the token; a TenantId on the incoming
+        // Provider must never pick the tenant the row is written to.
+        var draft = Sample("p-forged");
+        draft.TenantId = "tenant-b";
+        draft.VersionState = ProviderVersionState.Draft;
+
+        await _repo.CreateDraftAsync(draft);
+
+        var stored = await _database.GetCollection<Provider>("Providers")
+            .Find(Builders<Provider>.Filter.Eq(p => p.Id, "p-forged")).SingleAsync();
+        stored.TenantId.Should().Be(Tenant);
+
+        // With no request tenant there is nothing to scope to: an error, not
+        // an empty-tenant query.
+        _ctx.Items.Remove("TenantId");
+        var read = () => _repo.GetByIdAsync("p-forged");
+        await read.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task UpdateAsync_against_active_throws()
     {
         var draft = Sample("p1");

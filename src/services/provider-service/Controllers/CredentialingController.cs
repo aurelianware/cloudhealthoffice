@@ -1,6 +1,8 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using ProviderService.Security;
 using ProviderService.Services;
 
 namespace ProviderService.Controllers;
@@ -10,12 +12,20 @@ namespace ProviderService.Controllers;
 /// append-only credentialing event chain rooted at
 /// <c>/api/v1/providers/{id}/credentialing/...</c>. Status is a projection
 /// of the chain — see <c>docs/architecture/credentialing-workflow.md</c>.
+///
+/// <para>
+/// Every action that appends to the chain needs providers:credential; the
+/// status/history reads take the default providers:read (claims-service
+/// reads status-as-of during adjudication). The actor is the token subject.
+/// </para>
 /// </summary>
 [ApiController]
 [Route("api/v1/providers/{id}/credentialing")]
 [Produces("application/json")]
 public sealed class CredentialingController : ControllerBase
 {
+    private const string CredentialPermission = "providers:credential";
+
     private readonly ICredentialingService _credentialing;
     private readonly ILogger<CredentialingController> _logger;
 
@@ -27,12 +37,12 @@ public sealed class CredentialingController : ControllerBase
         _logger = logger;
     }
 
-    private string TenantId =>
-        HttpContext.Items["TenantId"]?.ToString()
-            ?? throw new InvalidOperationException("TenantId not found in request context");
+    /// <summary>The tenant from the validated token; never a header, query or body value.</summary>
+    private string TenantId => this.TokenTenantId();
 
     /// <summary>Submit a new credentialing application (opens a chain).</summary>
     [HttpPost("applications")]
+    [RequirePermission(CredentialPermission)]
     [ProducesResponseType(typeof(CredentialingEvent), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -71,6 +81,7 @@ public sealed class CredentialingController : ControllerBase
 
     /// <summary>Withdraw the open credentialing application.</summary>
     [HttpPost("applications/{eventId}/withdraw")]
+    [RequirePermission(CredentialPermission)]
     [ProducesResponseType(typeof(CredentialingEvent), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -110,6 +121,7 @@ public sealed class CredentialingController : ControllerBase
 
     /// <summary>Record primary-source verification completion.</summary>
     [HttpPost("verifications")]
+    [RequirePermission(CredentialPermission)]
     [ProducesResponseType(typeof(CredentialingEvent), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -148,6 +160,7 @@ public sealed class CredentialingController : ControllerBase
 
     /// <summary>Schedule a committee review for the open application.</summary>
     [HttpPost("committee-reviews")]
+    [RequirePermission(CredentialPermission)]
     [ProducesResponseType(typeof(CredentialingEvent), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -186,6 +199,7 @@ public sealed class CredentialingController : ControllerBase
 
     /// <summary>Record a credentialing committee decision.</summary>
     [HttpPost("decisions")]
+    [RequirePermission(CredentialPermission)]
     [ProducesResponseType(typeof(CredentialingEvent), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -224,6 +238,7 @@ public sealed class CredentialingController : ControllerBase
 
     /// <summary>Trigger the re-credentialing cycle (opens a new chain linked to the predecessor approval).</summary>
     [HttpPost("recredential")]
+    [RequirePermission(CredentialPermission)]
     [ProducesResponseType(typeof(CredentialingEvent), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -340,14 +355,11 @@ public sealed class CredentialingController : ControllerBase
         return Ok(page);
     }
 
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "system";
-    }
+    /// <summary>
+    /// The acting user is the token subject. An <c>X-User-Id</c> header or a
+    /// body field never names the actor.
+    /// </summary>
+    private string ResolveActorId() => this.TokenActorId();
 
     private static string SanitizeForLog(string? value)
     {

@@ -1,7 +1,9 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Adapters;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using ProviderService.Security;
 using ProviderService.Services;
 
 namespace ProviderService.Controllers;
@@ -12,6 +14,15 @@ namespace ProviderService.Controllers;
 /// and <c>api/Providers</c> (legacy, preserved for existing consumers
 /// — claims-service, coverage-service, member-portal). The v1 attribute
 /// is listed first so URL generation prefers it.
+///
+/// <para>
+/// Tenant and actor come from the validated CHO token. Permissions: GET needs
+/// providers:read and writes need providers:write (defaults in Program.cs);
+/// the legacy credentialing PUT needs providers:credential, contracted rates
+/// need contracts:read, and the masked bank-account read accepts
+/// providers:read or payments:read (capitation-service disburses with a
+/// Finance user's token).
+/// </para>
 /// </summary>
 [ApiController]
 [Route("api/v1/providers")]
@@ -45,14 +56,8 @@ public class ProvidersController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Tenant id resolved by <see cref="ProviderService.Middleware.TenantMiddleware"/>.
-    /// Throws when the middleware did not set it (defensive — the middleware always
-    /// populates the value, defaulting to <c>"default-tenant"</c> in dev).
-    /// </summary>
-    private string TenantId =>
-        HttpContext.Items["TenantId"]?.ToString()
-            ?? throw new InvalidOperationException("TenantId not found in request context");
+    /// <summary>The tenant from the validated token; never a header, query or body value.</summary>
+    private string TenantId => this.TokenTenantId();
 
     /// <summary>
     /// Get provider by NPI
@@ -242,6 +247,7 @@ public class ProvidersController : ControllerBase
     /// Get contracted rates for provider (for claims adjudication)
     /// </summary>
     [HttpGet("{id}/rates")]
+    [RequirePermission("contracts:read")]
     [ProducesResponseType(typeof(ContractedRates), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ContractedRates>> GetContractedRates(
@@ -337,7 +343,9 @@ public class ProvidersController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var draft = await _versioning.CreateDraftAsync(provider, ResolveActorId());
+        var actor = ResolveActorId();
+        StampFromToken(provider, actor, existing: null);
+        var draft = await _versioning.CreateDraftAsync(provider, actor);
         return CreatedAtAction(nameof(GetVersion),
             new { id = draft.ProviderId, versionId = draft.VersionId }, draft);
     }
@@ -563,6 +571,7 @@ public class ProvidersController : ControllerBase
         _panelGatingValidator.Inspect("CreateProvider", TenantId, provider);
 
         var actor = ResolveActorId();
+        StampFromToken(provider, actor, existing: null);
         var draft = await _versioning.CreateDraftAsync(provider, actor);
         var activated = await _versioning.ActivateVersionAsync(draft.ProviderId, draft.VersionId, actor);
         return CreatedAtAction(nameof(GetById), new { id = activated.ProviderId }, activated);
@@ -609,6 +618,7 @@ public class ProvidersController : ControllerBase
             provider.PredecessorVersionId = target.PredecessorVersionId;
             provider.CreatedDate = target.CreatedDate;
             provider.LastUpdatedDate = DateTime.UtcNow;
+            StampFromToken(provider, actor, existing: target);
 
             // Soft validation (5.5): warn + count any participation that
             // arrives without panel-gating fields.
@@ -715,6 +725,7 @@ public class ProvidersController : ControllerBase
 
         provider.NetworkParticipations.Add(participation);
         provider.LastUpdatedDate = DateTime.UtcNow;
+        provider.LastUpdatedBy = actor;
 
         // Soft validation (5.5): inspect the appended participation
         // specifically — pre-existing participations on the row aren't
@@ -750,6 +761,7 @@ public class ProvidersController : ControllerBase
     /// non-Draft row).
     /// </summary>
     [HttpPut("{id}/credentialing")]
+    [RequirePermission("providers:credential")]
     [ProducesResponseType(typeof(Provider), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -854,6 +866,7 @@ public class ProvidersController : ControllerBase
     /// only during NACHA file generation.
     /// </summary>
     [HttpGet("npi/{npi}/bank-account")]
+    [RequirePermission("providers:read,payments:read")]
     [ProducesResponseType(typeof(ProviderBankAccount), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProviderBankAccount>> GetBankAccount(string npi)
@@ -927,6 +940,7 @@ public class ProvidersController : ControllerBase
 
         provider.BankAccount = bankAccount;
         provider.LastUpdatedDate = DateTime.UtcNow;
+        provider.LastUpdatedBy = ResolveActorId();
 
         try
         {
@@ -944,13 +958,24 @@ public class ProvidersController : ControllerBase
         return Ok(provider.BankAccount);
     }
 
-    private string ResolveActorId()
+    /// <summary>
+    /// The acting user is the token subject. An <c>X-User-Id</c> header or a
+    /// body field never names the actor.
+    /// </summary>
+    private string ResolveActorId() => this.TokenActorId();
+
+    /// <summary>
+    /// Tenant and audit fields on a body-bound <see cref="Provider"/> are
+    /// ignored: the tenant is the token's, the creator is kept from the stored
+    /// row (or is the token subject for a new provider), and the last updater
+    /// is the token subject.
+    /// </summary>
+    private void StampFromToken(Provider provider, string actor, Provider? existing)
     {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "system";
+        provider.TenantId = TenantId;
+        provider.CreatedBy = existing is null ? actor : existing.CreatedBy;
+        provider.LastUpdatedBy = actor;
+        provider.ActivatedBy = existing?.ActivatedBy;
     }
 
     private static string SanitizeForLog(string? value)

@@ -48,8 +48,8 @@ public class ProvidersControllerCredentialingTests
             credentialing: _credentialing,
             logger: NullLogger<ProvidersController>.Instance);
 
-        var ctx = new DefaultHttpContext();
-        ctx.Items["TenantId"] = TenantId;
+        // As UseChoAuthentication() leaves it: tenant and subject from the token.
+        var ctx = TestHelpers.TokenHttpContext.For(TenantId);
         _controller.ControllerContext = new ControllerContext { HttpContext = ctx };
     }
 

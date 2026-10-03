@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text.Json;
 
 namespace ProviderService.Adapters;
@@ -11,9 +12,21 @@ namespace ProviderService.Adapters;
 /// </summary>
 /// <remarks>
 /// Mirrors <c>BenefitPlanService.Adapters.BenefitPlanTenantConfigCache</c>:
-/// 5-minute TTL, thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>,
-/// and a graceful fallback to <c>"cho"</c> on any HTTP/JSON failure so a flaky
-/// tenant-service never breaks provider reads.
+/// 5-minute TTL, thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>.
+/// <para>
+/// tenant-service requires a CHO token. The request goes through an
+/// <see cref="IHttpClientFactory"/> client and names the tenant in
+/// <c>X-Tenant-ID</c>, so <c>ChoOutboundTokenHandler</c> forwards the
+/// caller's token or, with no caller, mints a service token for that tenant.
+/// </para>
+/// <para>
+/// A tenant with no <c>providerPlatform</c> block (or a 404) uses the
+/// <c>"cho"</c> adapter, and a transport failure falls back to it. A 401 or
+/// 403 is different: it means this service is not trusted by tenant-service,
+/// and routing a QNXT/Facets tenant to the CHO directory would silently serve
+/// the wrong data. It is logged as an error, never cached, and raised as
+/// <see cref="ProviderTenantConfigUnavailableException"/>.
+/// </para>
 /// </remarks>
 public class ProviderTenantConfigCache
 {
@@ -26,6 +39,7 @@ public class ProviderTenantConfigCache
 
     public const string DefaultPlatform = "cho";
     public const string HttpClientName = "ProviderDefault";
+    private const string TenantHeaderName = "X-Tenant-ID";
 
     public ProviderTenantConfigCache(
         IHttpClientFactory httpClientFactory,
@@ -40,7 +54,9 @@ public class ProviderTenantConfigCache
     /// <summary>
     /// Resolve <c>(platform, platformSettings)</c> for the given tenant, hitting
     /// tenant-service on cache miss. Defaults to <c>("cho", new())</c> when the
-    /// tenant has no <c>providerPlatform</c> config or the call fails.
+    /// tenant has no <c>providerPlatform</c> config or tenant-service cannot be
+    /// reached. Throws <see cref="ProviderTenantConfigUnavailableException"/>
+    /// when tenant-service answers 401/403.
     /// </summary>
     public async Task<(string Platform, Dictionary<string, string> Settings)> GetAsync(
         string tenantId, CancellationToken ct = default)
@@ -55,11 +71,23 @@ public class ProviderTenantConfigCache
             var tenantUrl = _configuration["Services:TenantService"]
                 ?? "http://tenant-service.cloudhealthoffice/api/v1";
             var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-            // Encode the tenantId path segment defensively — the value flows
-            // from JWT/header via TenantMiddleware, and a crafted id with '/'
-            // or '?' would otherwise alter the request path or query.
+            // Encode the tenantId path segment defensively so an id with '/'
+            // or '?' cannot alter the request path or query.
             var encodedTenantId = Uri.EscapeDataString(tenantId);
-            var response = await httpClient.GetAsync($"{tenantUrl}/tenants/{encodedTenantId}", ct);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{tenantUrl}/tenants/{encodedTenantId}");
+            // Names the tenant for ChoOutboundTokenHandler: with no inbound
+            // caller it mints a service token for this tenant.
+            request.Headers.Add(TenantHeaderName, tenantId);
+            using var response = await httpClient.SendAsync(request, ct);
+
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                _logger.LogError(
+                    "tenant-service refused the provider platform lookup for {TenantId} with {StatusCode}; " +
+                    "provider-service is not authenticated or not authorized there. Not falling back to the default platform.",
+                    SanitizeForLog(tenantId), (int)response.StatusCode);
+                throw new ProviderTenantConfigUnavailableException(tenantId, response.StatusCode);
+            }
 
             if (response.IsSuccessStatusCode)
             {
@@ -87,6 +115,14 @@ public class ProviderTenantConfigCache
                 }
             }
         }
+        catch (ProviderTenantConfigUnavailableException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
@@ -107,4 +143,22 @@ public class ProviderTenantConfigCache
         if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
+}
+
+/// <summary>
+/// tenant-service refused provider-service's platform lookup (401/403), so the
+/// tenant's provider platform is unknown. Never answered with the default.
+/// </summary>
+public sealed class ProviderTenantConfigUnavailableException : InvalidOperationException
+{
+    public ProviderTenantConfigUnavailableException(string tenantId, HttpStatusCode statusCode)
+        : base($"tenant-service refused the provider platform lookup ({(int)statusCode}).")
+    {
+        TenantId = tenantId;
+        StatusCode = statusCode;
+    }
+
+    public string TenantId { get; }
+
+    public HttpStatusCode StatusCode { get; }
 }

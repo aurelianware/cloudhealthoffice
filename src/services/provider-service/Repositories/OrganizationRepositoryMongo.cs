@@ -29,8 +29,12 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
 
     private string GetTenantId()
     {
+        // The tenant comes from the validated token (UseChoAuthentication). A
+        // missing tenant is an error, never an empty-tenant query or write.
         var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
-        return string.IsNullOrEmpty(tenantId) ? string.Empty : tenantId;
+        if (string.IsNullOrEmpty(tenantId))
+            throw new InvalidOperationException("TenantId not found in request context");
+        return tenantId;
     }
 
     private static FilterDefinition<Organization> ChainKeyFilter(string organizationId)
@@ -198,8 +202,8 @@ public class OrganizationRepositoryMongo : IOrganizationRepository
 
     public async Task<Organization> CreateDraftAsync(Organization draft)
     {
-        var tenantId = GetTenantId();
-        if (string.IsNullOrEmpty(draft.TenantId)) draft.TenantId = tenantId;
+        // Always the request tenant, never a body-supplied one.
+        draft.TenantId = GetTenantId();
         if (string.IsNullOrEmpty(draft.Id)) draft.Id = Guid.NewGuid().ToString();
         if (string.IsNullOrEmpty(draft.OrganizationId)) draft.OrganizationId = draft.Id;
         draft.VersionState = OrganizationVersionState.Draft;

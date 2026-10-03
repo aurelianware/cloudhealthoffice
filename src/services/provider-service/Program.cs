@@ -3,7 +3,6 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using ProviderService.Adapters;
 using ProviderService.HostedServices;
-using ProviderService.Middleware;
 using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
@@ -11,6 +10,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -29,6 +29,17 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Provider directory and network participation management for Cloud Health Office. " +
                      "Validates provider NPI, checks network status, retrieves contracted rates for claims adjudication."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// that token. Credentialing writes need providers:credential, network
+// endpoints networks:*, contracted rates contracts:read (annotated on the
+// controllers).
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "providers:read";
+    auth.DefaultWritePermission = "providers:write";
 });
 
 // Database Configuration
@@ -95,7 +106,12 @@ builder.Services.AddScoped<IMpipRateService, MpipRateService>();
 // Cache is singleton (TTL across requests); adapters and factory are scoped
 // because the CHO adapter wraps scoped repository services. Tenant-service
 // HTTP client uses a 5-second timeout so a flaky tenant-service can't stall
-// provider reads — the cache falls back to "cho" on any failure.
+// provider reads — the cache falls back to "cho" when tenant-service is
+// unreachable, but a 401/403 from it is an error, never the default.
+// AddChoAuthentication puts ChoOutboundTokenHandler on every factory client:
+// it forwards the caller's token, or mints a service token for the
+// X-Tenant-ID the request names (the cache and the verification client both
+// set it).
 builder.Services.AddHttpClient(ProviderTenantConfigCache.HttpClientName)
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
@@ -185,7 +201,7 @@ builder.Services.AddSingleton<IFhirPractitionerRoleProjector, FhirPractitionerRo
 // and mirrors the 5.7 / 5.8 projector pattern.
 builder.Services.AddSingleton<IFhirOrganizationProjector, FhirOrganizationProjector>();
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from the request)
 builder.Services.AddHttpContextAccessor();
 
 // Health checks (MongoDB or Cosmos DB)
@@ -228,12 +244,10 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
-
 app.UseCors("AllowAll");
 
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();
