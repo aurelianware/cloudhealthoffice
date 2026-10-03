@@ -48,21 +48,173 @@ public class ConsentsControllerTests
         => new HttpContextCurrentActor(new HttpContextAccessor { HttpContext = http });
 
     [Fact]
-    public async Task Create_RecordsGrantedByAndAuditActor_FromToken()
+    public async Task Create_RecordsRecordedByAndAuditActor_FromToken_GrantedByFromRequest()
     {
         var (controller, repo, publisher, _) = BuildController(user: "token-user-7");
 
         var result = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
 
         var view = ((CreatedAtActionResult)result).Value.Should().BeOfType<Consent>().Subject;
-        view.GrantedBy.Should().Be("token-user-7");
-        (await repo.GetByIdAsync("tenant-a", "M1", view.Id))!.GrantedBy.Should().Be("token-user-7");
+        view.RecordedBy.Should().Be("token-user-7");
+        view.GrantedBy.Should().Be("M1");
+        view.GrantorType.Should().Be(ConsentGrantorType.Member);
+        var stored = (await repo.GetByIdAsync("tenant-a", "M1", view.Id))!;
+        stored.RecordedBy.Should().Be("token-user-7");
+        stored.GrantedBy.Should().Be("M1");
+        stored.GrantorType.Should().Be(ConsentGrantorType.Member);
         repo.SnapshotEvents().Should().ContainSingle()
             .Which.ActorId.Should().Be("token-user-7");
         publisher.Calls.Should().ContainSingle().Which.Actor.Should().Be("token-user-7");
+    }
+
+    [Theory]
+    [InlineData("M2")]
+    [InlineData("token-user-7")]
+    [InlineData("m1")]
+    public async Task Create_MemberGrantor_NotMatchingMember_Returns400_AndWritesNothing(string grantedBy)
+    {
+        var (controller, repo, publisher, _) = BuildController(user: "token-user-7");
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = grantedBy
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.Value.Should().BeOfType<ValidationProblemDetails>()
+            .Which.Errors.Should().ContainKey(nameof(CreateConsentRequest.GrantedBy));
+        (await repo.ListByMemberAsync("tenant-a", "M1", activeOnly: false)).Should().BeEmpty();
+        repo.SnapshotEvents().Should().BeEmpty();
+        publisher.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_PersonalRepresentativeGrantor_IsAcceptedAsNamed()
+    {
+        var (controller, repo, _, _) = BuildController(user: "token-user-7");
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.PersonalRepresentative,
+            GrantedBy = "rep-guardian-9"
+        }, CancellationToken.None);
+
+        var view = result.Should().BeOfType<CreatedAtActionResult>().Subject.Value.Should().BeOfType<Consent>().Subject;
+        var stored = (await repo.GetByIdAsync("tenant-a", "M1", view.Id))!;
+        stored.GrantorType.Should().Be(ConsentGrantorType.PersonalRepresentative);
+        stored.GrantedBy.Should().Be("rep-guardian-9");
+        stored.RecordedBy.Should().Be("token-user-7");
+    }
+
+    [Fact]
+    public async Task Create_WithoutGrantorType_Returns400_AndWritesNothing()
+    {
+        var (controller, repo, publisher, _) = BuildController();
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantedBy = "M1"
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.Value.Should().BeOfType<ValidationProblemDetails>()
+            .Which.Errors.Should().ContainKey(nameof(CreateConsentRequest.GrantorType));
+        repo.SnapshotEvents().Should().BeEmpty();
+        publisher.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_WithUndefinedGrantorType_Returns400()
+    {
+        var (controller, repo, _, _) = BuildController();
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = (ConsentGrantorType)42,
+            GrantedBy = "M1"
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        repo.SnapshotEvents().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_WithoutGrantedBy_Returns400()
+    {
+        var (controller, repo, _, _) = BuildController();
+
+        var result = await controller.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.PersonalRepresentative
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.Value.Should().BeOfType<ValidationProblemDetails>()
+            .Which.Errors.Should().ContainKey(nameof(CreateConsentRequest.GrantedBy));
+        repo.SnapshotEvents().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Activate_And_Revoke_DoNotChangeGrantorOrRecorder()
+    {
+        var (creator, repo, publisher, encryptor) = BuildController(user: "recorder-1");
+        var create = await creator.CreateConsent("M1", new CreateConsentRequest
+        {
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
+        }, CancellationToken.None);
+        var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
+
+        var http = NewHttpContext("tenant-a", "other-staff-2");
+        var other = new ConsentsController(repo, repo, encryptor, publisher, ActorFor(http))
+        {
+            ControllerContext = new ControllerContext { HttpContext = http }
+        };
+        await other.Activate("M1", id, null, CancellationToken.None);
+        var revoked = (Consent)((OkObjectResult)await other.Revoke("M1", id, null, CancellationToken.None)).Value!;
+
+        revoked.GrantedBy.Should().Be("M1");
+        revoked.GrantorType.Should().Be(ConsentGrantorType.Member);
+        revoked.RecordedBy.Should().Be("recorder-1");
+        revoked.ActivatedBy.Should().Be("other-staff-2");
+        revoked.RevokedBy.Should().Be("other-staff-2");
+    }
+
+    [Fact]
+    public async Task Get_RecordPredatingGrantorSplit_ReadsWithNullGrantorTypeAndRecordedBy()
+    {
+        var (controller, repo, _, _) = BuildController();
+        var legacy = new Consent
+        {
+            TenantId = "tenant-a",
+            MemberId = "M1",
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantedBy = "legacy-value",
+            CreatedAt = DateTime.UtcNow
+        };
+        await repo.CreateAsync(legacy, new ConsentEvent
+        {
+            TenantId = "tenant-a", ConsentId = legacy.Id, MemberId = "M1",
+            EventType = ConsentEventType.ConsentCreated, ToStatus = ConsentStatus.Draft, ActorId = "legacy-actor"
+        });
+
+        var view = (Consent)((OkObjectResult)await controller.GetConsent("M1", legacy.Id, CancellationToken.None)).Value!;
+
+        view.GrantedBy.Should().Be("legacy-value");
+        view.GrantorType.Should().BeNull("an old record's consenting party is unknown and is not inferred");
+        view.RecordedBy.Should().BeNull();
     }
 
     [Fact]
@@ -71,7 +223,9 @@ public class ConsentsControllerTests
         var (controller, repo, publisher, _) = BuildController(user: "token-user-7");
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
 
@@ -90,7 +244,9 @@ public class ConsentsControllerTests
         var (controller, repo, publisher, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
         await controller.Activate("M1", id, null, CancellationToken.None);
@@ -114,6 +270,8 @@ public class ConsentsControllerTests
         var result = await controller.CreateConsent("M123", new CreateConsentRequest
         {
             ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M123",
             Reason = "for continuity of care",
             GrantedToName = "Dr. Smith",
             Purpose = "follow-up appointment"
@@ -145,7 +303,9 @@ public class ConsentsControllerTests
         var (controllerA, repoA, _, _) = BuildController(tenantId: "tenant-a");
         var create = await controllerA.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
 
@@ -169,7 +329,9 @@ public class ConsentsControllerTests
         {
             await controller.CreateConsent("M1", new CreateConsentRequest
             {
-                ConsentType = ConsentType.GeneralAuthorization
+                ConsentType = ConsentType.GeneralAuthorization,
+                GrantorType = ConsentGrantorType.Member,
+                GrantedBy = "M1"
             }, CancellationToken.None);
             await Task.Delay(5);
         }
@@ -186,7 +348,9 @@ public class ConsentsControllerTests
         var (controller, repo, publisher, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
         publisher.Calls.Clear();
@@ -207,7 +371,9 @@ public class ConsentsControllerTests
         var (controller, repo, publisher, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
 
@@ -238,7 +404,9 @@ public class ConsentsControllerTests
         var (controller, _, _, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
 
@@ -254,6 +422,8 @@ public class ConsentsControllerTests
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
             ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1",
             ExpiresAt = DateTime.UtcNow.AddHours(-1)
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
@@ -276,7 +446,9 @@ public class ConsentsControllerTests
         var (controller, _, _, _) = BuildController();
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
-            ConsentType = ConsentType.GeneralAuthorization
+            ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1"
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;
         await controller.Activate("M1", id, null, CancellationToken.None);
@@ -300,6 +472,8 @@ public class ConsentsControllerTests
         var create = await controller.CreateConsent("M1", new CreateConsentRequest
         {
             ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1",
             ExpiresAt = DateTime.UtcNow.AddHours(-1)
         }, CancellationToken.None);
         var id = ((Consent)((CreatedAtActionResult)create).Value!).Id;

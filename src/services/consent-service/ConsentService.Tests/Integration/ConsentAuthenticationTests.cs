@@ -50,13 +50,21 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         return JsonSerializer.Deserialize<Consent>(body, Json)!;
     }
 
+    /// <summary>A valid create body: the member M1 consenting for themself.</summary>
+    private static JsonObject MemberGrant() => new()
+    {
+        ["consentType"] = "GeneralAuthorization",
+        ["grantorType"] = "Member",
+        ["grantedBy"] = "M1",
+    };
+
     private IEnumerable<ConsentEvent> EventsFor(string tenant)
         => _factory.Repo.SnapshotEvents().Where(e => e.TenantId == tenant);
 
     // ── Actor from token ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Create_BodyGrantorStatusAndTimestamps_AreIgnored()
+    public async Task Create_BodyRecorderStatusAndTimestamps_AreIgnored_GrantorIsTakenFromRequest()
     {
         var tenant = NewTenant();
         var client = NewClient(tenant);
@@ -65,7 +73,9 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         var created = await ReadConsentAsync(await client.PostAsJsonAsync("/api/v1/members/M1/consents", new JsonObject
         {
             ["consentType"] = "GeneralAuthorization",
-            ["grantedBy"] = "attacker",
+            ["grantorType"] = "Member",
+            ["grantedBy"] = "M1",
+            ["recordedBy"] = "attacker",
             ["status"] = "Active",
             ["createdAt"] = forged.ToString("o"),
             ["activatedBy"] = "attacker",
@@ -75,7 +85,10 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         }));
 
         var stored = (await _factory.Repo.GetByIdAsync(tenant, "M1", created.Id))!;
-        stored.GrantedBy.Should().Be(TokenUser);
+        stored.RecordedBy.Should().Be(TokenUser);
+        stored.GrantedBy.Should().Be("M1");
+        stored.GrantorType.Should().Be(ConsentGrantorType.Member);
+        created.RecordedBy.Should().Be(TokenUser);
         stored.Status.Should().Be(ConsentStatus.Draft);
         stored.TenantId.Should().Be(tenant);
         stored.CreatedAt.Should().BeAfter(forged.AddYears(1));
@@ -86,13 +99,71 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         _factory.Publisher.Calls.Should().Contain(c => c.ConsentId == created.Id && c.Actor == TokenUser);
     }
 
+    // ── Consenting party vs recording user ──────────────────────────────
+
+    [Fact]
+    public async Task Create_MemberGrantorNotTheMember_Returns400_AndDoesNotWrite()
+    {
+        var tenant = NewTenant();
+        var client = NewClient(tenant);
+
+        var response = await client.PostAsJsonAsync("/api/v1/members/M1/consents", new JsonObject
+        {
+            ["consentType"] = "GeneralAuthorization",
+            ["grantorType"] = "Member",
+            ["grantedBy"] = "M2",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await _factory.Repo.ListByMemberAsync(tenant, "M1", activeOnly: false)).Should().BeEmpty();
+        EventsFor(tenant).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_PersonalRepresentativeGrantor_IsRecordedWithTokenUserAsRecorder()
+    {
+        var tenant = NewTenant();
+        var client = NewClient(tenant);
+
+        var created = await ReadConsentAsync(await client.PostAsJsonAsync("/api/v1/members/M1/consents", new JsonObject
+        {
+            ["consentType"] = "GeneralAuthorization",
+            ["grantorType"] = "PersonalRepresentative",
+            ["grantedBy"] = "rep-guardian-9",
+            ["recordedBy"] = "rep-guardian-9",
+        }));
+
+        var stored = (await _factory.Repo.GetByIdAsync(tenant, "M1", created.Id))!;
+        stored.GrantorType.Should().Be(ConsentGrantorType.PersonalRepresentative);
+        stored.GrantedBy.Should().Be("rep-guardian-9");
+        stored.RecordedBy.Should().Be(TokenUser);
+    }
+
+    [Theory]
+    [InlineData(null, "M1")]
+    [InlineData("Member", null)]
+    [InlineData("Somebody", "M1")]
+    public async Task Create_MissingOrUnknownGrantor_Returns400(string? grantorType, string? grantedBy)
+    {
+        var tenant = NewTenant();
+        var client = NewClient(tenant);
+        var body = new JsonObject { ["consentType"] = "GeneralAuthorization" };
+        if (grantorType is not null) body["grantorType"] = grantorType;
+        if (grantedBy is not null) body["grantedBy"] = grantedBy;
+
+        var response = await client.PostAsJsonAsync("/api/v1/members/M1/consents", body);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        EventsFor(tenant).Should().BeEmpty();
+    }
+
     [Fact]
     public async Task ActivateAndRevoke_RecordTokenActor_IgnoringBodyActor()
     {
         var tenant = NewTenant();
         var client = NewClient(tenant);
         var created = await ReadConsentAsync(await client.PostAsJsonAsync("/api/v1/members/M1/consents",
-            new JsonObject { ["consentType"] = "GeneralAuthorization" }));
+            MemberGrant()));
 
         (await client.PostAsJsonAsync($"/api/v1/members/M1/consents/{created.Id}/activate",
             new JsonObject { ["activatedBy"] = "attacker" })).EnsureSuccessStatusCode();
@@ -113,7 +184,7 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         var tenant = NewTenant();
         var client = NewClient(tenant);
         var created = await ReadConsentAsync(await client.PostAsJsonAsync("/api/v1/members/M1/consents",
-            new JsonObject { ["consentType"] = "GeneralAuthorization" }));
+            MemberGrant()));
         (await client.PostAsync($"/api/v1/members/M1/consents/{created.Id}/activate", null)).EnsureSuccessStatusCode();
 
         var response = await client.PostAsJsonAsync($"/api/v1/members/M1/consents/{created.Id}/revoke",
@@ -143,7 +214,7 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         (await client.GetAsync("/api/v1/members/M1/consents")).StatusCode
             .Should().Be(HttpStatusCode.Unauthorized, "a header naming a tenant is not authentication");
         (await client.PostAsJsonAsync("/api/v1/members/M1/consents",
-            new JsonObject { ["consentType"] = "GeneralAuthorization" })).StatusCode
+            MemberGrant())).StatusCode
             .Should().Be(HttpStatusCode.Unauthorized);
         EventsFor(tenant).Should().BeEmpty();
     }
@@ -158,7 +229,7 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         client.DefaultRequestHeaders.Add("X-Tenant-ID", victim);
 
         var response = await client.PostAsJsonAsync("/api/v1/members/M1/consents",
-            new JsonObject { ["consentType"] = "GeneralAuthorization" });
+            MemberGrant());
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         EventsFor(victim).Should().BeEmpty();
@@ -174,7 +245,7 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
             "Bearer", ChoDevelopmentAuth.UserToken(tenant, ChoRolePermissions.TenantAdmin));
 
         var created = await ReadConsentAsync(await client.PostAsJsonAsync("/api/v1/members/M1/consents",
-            new JsonObject { ["consentType"] = "GeneralAuthorization" }));
+            MemberGrant()));
 
         created.TenantId.Should().Be(tenant);
         (await _factory.Repo.GetByIdAsync(tenant, "M1", created.Id)).Should().NotBeNull();
@@ -198,12 +269,12 @@ public class ConsentAuthenticationTests : IClassFixture<ConsentLifecycleSmokeTes
         var tenant = NewTenant();
         var writer = NewClient(tenant, ChoRolePermissions.MemberServices); // consent:read + consent:write
         var created = await ReadConsentAsync(await writer.PostAsJsonAsync("/api/v1/members/M1/consents",
-            new JsonObject { ["consentType"] = "GeneralAuthorization" }));
+            MemberGrant()));
 
         var reader = NewClient(tenant, ChoRolePermissions.UMCoordinator); // consent:read only
         (await reader.GetAsync("/api/v1/members/M1/consents")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await reader.PostAsJsonAsync("/api/v1/members/M1/consents",
-            new JsonObject { ["consentType"] = "GeneralAuthorization" })).StatusCode
+            MemberGrant())).StatusCode
             .Should().Be(HttpStatusCode.Forbidden, "recording a consent requires consent:write");
         (await reader.PostAsync($"/api/v1/members/M1/consents/{created.Id}/activate", null)).StatusCode
             .Should().Be(HttpStatusCode.Forbidden);

@@ -104,6 +104,8 @@ public class ConsentLifecycleSmokeTests : IClassFixture<ConsentLifecycleSmokeTes
         var create = await client.PostAsJsonAsync("/api/v1/members/M1/consents", new CreateConsentRequest
         {
             ConsentType = ConsentType.GeneralAuthorization,
+            GrantorType = ConsentGrantorType.Member,
+            GrantedBy = "M1",
             Reason = "continuity of care"
         }, Json);
         create.StatusCode.Should().Be(HttpStatusCode.Created);

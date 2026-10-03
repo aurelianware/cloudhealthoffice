@@ -21,9 +21,12 @@ namespace ConsentService.Controllers;
 /// audit trail on every transition.
 ///
 /// Identity: the tenant and the acting user come from the validated CHO
-/// token only (<see cref="ICurrentActor"/>). The recorded grantor
-/// (<see cref="Consent.GrantedBy"/>), activator and revoker, the status and
+/// token only (<see cref="ICurrentActor"/>). The recording user
+/// (<see cref="Consent.RecordedBy"/>), activator and revoker, the status and
 /// every lifecycle timestamp are set here, never from the request body.
+/// The consenting party (<see cref="Consent.GrantedBy"/> and
+/// <see cref="Consent.GrantorType"/>) is the member or their personal
+/// representative, so it is named in the request and validated here.
 /// Reads need <c>consent:read</c>, writes <c>consent:write</c> (defaults set
 /// in Program.cs).
 /// </summary>
@@ -69,6 +72,15 @@ public class ConsentsController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
+        // Enforced here as well as by model validation, so a direct caller of
+        // the action cannot skip it.
+        var grantorError = ValidateGrantor(memberId, request);
+        if (grantorError is not null)
+        {
+            ModelState.AddModelError(grantorError.Value.Field, grantorError.Value.Message);
+            return BadRequest(new ValidationProblemDetails(ModelState));
+        }
+
         var actor = Actor;
 
         var consent = new Consent
@@ -84,9 +96,11 @@ public class ConsentsController : ControllerBase
             Status = ConsentStatus.Draft,
             EffectiveAt = request.EffectiveAt,
             ExpiresAt = request.ExpiresAt,
-            // The recorded grantor is the authenticated user who recorded the
-            // authorization, never a name the body supplies.
-            GrantedBy = actor,
+            // Who consented (validated above) and who recorded it (the token
+            // subject, never a body value) are kept apart.
+            GrantedBy = request.GrantedBy!,
+            GrantorType = request.GrantorType,
+            RecordedBy = actor,
             Reason = await _encryptor.EncryptAsync(request.Reason, ct),
             GrantedToName = await _encryptor.EncryptAsync(request.GrantedToName, ct),
             GrantedToContact = await _encryptor.EncryptAsync(request.GrantedToContact, ct),
@@ -362,6 +376,37 @@ public class ConsentsController : ControllerBase
         return consent;
     }
 
+    /// <summary>
+    /// Checks the consenting party named in the request. A member grantor must
+    /// be the member whose consent this is. A personal representative is
+    /// accepted as named.
+    /// </summary>
+    private static (string Field, string Message)? ValidateGrantor(string memberId, CreateConsentRequest request)
+    {
+        if (request.GrantorType is null || !Enum.IsDefined(request.GrantorType.Value))
+            return (nameof(CreateConsentRequest.GrantorType),
+                "GrantorType is required: Member or PersonalRepresentative.");
+
+        if (string.IsNullOrWhiteSpace(request.GrantedBy))
+            return (nameof(CreateConsentRequest.GrantedBy),
+                "GrantedBy is required: the member or personal representative who gave the consent.");
+
+        switch (request.GrantorType.Value)
+        {
+            case ConsentGrantorType.Member:
+                if (!string.Equals(request.GrantedBy, memberId, StringComparison.Ordinal))
+                    return (nameof(CreateConsentRequest.GrantedBy),
+                        "When GrantorType is Member, GrantedBy must be the member id of this consent.");
+                break;
+
+            case ConsentGrantorType.PersonalRepresentative:
+                // TODO(feature-5.8): verify GrantedBy against personal-representative-service.
+                break;
+        }
+
+        return null;
+    }
+
     private static ConsentEvent BuildEvent(
         Consent consent,
         ConsentEventType type,
@@ -416,6 +461,8 @@ public class ConsentsController : ControllerBase
             EffectiveAt = consent.EffectiveAt,
             ExpiresAt = consent.ExpiresAt,
             GrantedBy = consent.GrantedBy,
+            GrantorType = consent.GrantorType,
+            RecordedBy = consent.RecordedBy,
             Reason = await _encryptor.DecryptAsync(consent.Reason, ct),
             GrantedToName = await _encryptor.DecryptAsync(consent.GrantedToName, ct),
             GrantedToContact = await _encryptor.DecryptAsync(consent.GrantedToContact, ct),
@@ -462,8 +509,24 @@ public class CreateConsentRequest
     public DateTime? EffectiveAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
 
-    // No GrantedBy: the recorded grantor is the token's user
-    // (ICurrentActor.UserId). A body "grantedBy" is ignored.
+    /// <summary>
+    /// Who gave the consent: the member themself or their personal
+    /// representative. Required.
+    /// </summary>
+    [Required]
+    [EnumDataType(typeof(ConsentGrantorType))]
+    public ConsentGrantorType? GrantorType { get; set; }
+
+    /// <summary>
+    /// Identifier of the consenting party. When <see cref="GrantorType"/> is
+    /// <c>Member</c> it must equal the member id in the route (400 otherwise).
+    /// </summary>
+    [Required]
+    [StringLength(200)]
+    public string? GrantedBy { get; set; }
+
+    // No RecordedBy: the recording user is the token subject
+    // (ICurrentActor.UserId). A body "recordedBy" is ignored.
 
     [StringLength(4000)]
     public string? Reason { get; set; }
