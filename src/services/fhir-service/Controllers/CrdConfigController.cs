@@ -9,6 +9,12 @@ namespace FhirService.Controllers;
 /// <summary>
 /// Internal API for managing CRD code classifications per tenant.
 /// Updates are visible immediately to all CRD evaluations.
+///
+/// CHO callers only (see the [FhirAccess(smart: false, ...)] on each action):
+/// this is payer configuration, not a FHIR interaction, so no SMART scope
+/// could grant it and every SMART token is refused with 403. It sits outside
+/// /fhir/r4, so the SMART scope middleware never sees it; the refusal is the
+/// authorization policy's.
 /// </summary>
 [Route("api/v1/crd")]
 [Produces("application/json")]

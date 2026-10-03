@@ -127,7 +127,11 @@ public class DtrController : FhirControllerBase
     public async Task<IActionResult> GetQuestionnaireResponse(string id, CancellationToken ct)
     {
         var qr = await _dtrService.GetResponseAsync(id, TenantId, ct);
-        return qr is null ? FhirNotFound("QuestionnaireResponse", id) : Ok(qr);
+        // QuestionnaireResponses hold clinical answers: a patient-bound token
+        // reads only its own patient's, and another patient's is "not found".
+        return qr is null || IsOutsidePatientContext(qr.Subject?.Reference)
+            ? FhirNotFound("QuestionnaireResponse", id)
+            : Ok(qr);
     }
 
     /// <summary>GET /fhir/r4/QuestionnaireResponse — search</summary>
@@ -139,6 +143,10 @@ public class DtrController : FhirControllerBase
     {
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
+
+        // A patient-bound token searches its own patient's responses only. The
+        // middleware has already refused a patient/subject naming someone else.
+        if (SmartPatientId is { } bound) search.Patient = bound;
 
         var (items, total) = await _dtrService.SearchResponsesAsync(search, TenantId, ct);
 
@@ -176,6 +184,22 @@ public class DtrController : FhirControllerBase
         // Validate subject
         if (response.Subject == null || string.IsNullOrEmpty(response.Subject.Reference))
             return FhirBadRequest("QuestionnaireResponse.subject (patient reference) is required");
+
+        if (IsOutsidePatientContext(response.Subject.Reference))
+        {
+            return StatusCode(403, new OperationOutcome
+            {
+                Issue =
+                [
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Forbidden,
+                        Diagnostics = "A patient-context token cannot submit a QuestionnaireResponse for another patient.",
+                    },
+                ],
+            });
+        }
 
         var submitted = await _dtrService.SubmitResponseAsync(response, TenantId, ct);
 

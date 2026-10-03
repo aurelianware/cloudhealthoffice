@@ -145,9 +145,11 @@ public class SmartScopeEnforcementMiddleware
         }
 
         // ── 2. Patient binding enforcement ───────────────────────────────────
+        var bindsToPatient = BindsToPatient(scopes, context.Request);
+
         // A patient-scoped token with no `patient` claim is bound to nobody,
         // and treating it as unbound would let it read every member's record.
-        if (string.IsNullOrEmpty(patientClaim) && IsPatientScopedToken(scopes))
+        if (string.IsNullOrEmpty(patientClaim) && bindsToPatient)
         {
             _logger.LogWarning("Patient-scoped token without a patient claim refused — resource: {Resource}", resourceType);
             await WriteFhirError(context, 403,
@@ -157,7 +159,7 @@ public class SmartScopeEnforcementMiddleware
             return;
         }
 
-        if (!string.IsNullOrEmpty(patientClaim) && IsPatientScopedToken(scopes))
+        if (!string.IsNullOrEmpty(patientClaim) && bindsToPatient)
         {
             var normalizedPatient = StripPrefix("Patient/", patientClaim);
 
@@ -408,6 +410,37 @@ public class SmartScopeEnforcementMiddleware
     /// A token is patient-scoped when it carries patient/* or patient/{T}.read
     /// but NOT user/* or system/* (those are broader grants).
     /// </summary>
+    /// <summary>
+    /// Whether the patient binding applies to this request.
+    ///
+    /// <list type="bullet">
+    ///   <item>No <c>patient/</c> scope: never (user/system tokens, governed by
+    ///   Provider Access attribution + consent where member data is read).</item>
+    ///   <item>Only patient-context grants (the original rule,
+    ///   <see cref="IsPatientScopedToken"/>): always.</item>
+    ///   <item>A token that ALSO holds a broad <c>user/*.read</c> or
+    ///   <c>system/*.read</c> grant (an EHR launch with patient context): bound
+    ///   on every request EXCEPT a Provider Access read that
+    ///   ProviderAccessAuthorizationFilter governs (a GET of a member-scoped
+    ///   resource, not an operation). Those stay unbound, as before, because the
+    ///   filter itself requires that the calling provider is attributed to the
+    ///   member named in the request AND that the member has an active
+    ///   ProviderAccess consent; a read with no member named is refused. Before,
+    ///   such a token was unbound everywhere, so resources outside that filter
+    ///   (QuestionnaireResponse, operations, writes) had no member check at all.</item>
+    /// </list>
+    /// This only ever adds binding relative to the original rule; it never
+    /// removes it from a request that was bound before.
+    /// </summary>
+    internal static bool BindsToPatient(HashSet<string> scopes, HttpRequest request)
+    {
+        if (!scopes.Any(s => s.StartsWith("patient/", StringComparison.Ordinal)))
+            return false;
+
+        return IsPatientScopedToken(scopes)
+               || !FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter.Governs(request, scopes);
+    }
+
     private static bool IsPatientScopedToken(HashSet<string> scopes)
     {
         if (scopes.Contains("user/*.read") || scopes.Contains("system/*.read"))

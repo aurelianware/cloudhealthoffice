@@ -77,6 +77,16 @@ public sealed class SmartTrustOptions
     public bool RequireHttpsMetadata { get; set; } = true;
 
     /// <summary>
+    /// Legacy Demo field: the tenants the bundled smart-auth-service may
+    /// authenticate. smart-auth-service has no reliable notion of a user's tenant
+    /// (its development login accepts any user, and launch registration takes the
+    /// tenant from an unauthenticated header), so its tokens carry no tenant claim.
+    /// Confining the Demo issuer to ONE tenant here makes that tenant the token's
+    /// tenant by configuration (see SmartTenant); without it, its tokens get 401.
+    /// </summary>
+    public List<string> Tenants { get; set; } = [];
+
+    /// <summary>
     /// The issuer registry as the rest of the system sees it: the explicit
     /// entries, or in Demo mode the legacy fields folded into one.
     /// </summary>
@@ -93,6 +103,7 @@ public sealed class SmartTrustOptions
                     Issuer = Issuer!,
                     Audiences = string.IsNullOrWhiteSpace(Audience) ? ["fhir-api"] : [Audience!],
                     RequireHttpsMetadata = RequireHttpsMetadata,
+                    Tenants = [.. Tenants],
                 }
             ];
         }
