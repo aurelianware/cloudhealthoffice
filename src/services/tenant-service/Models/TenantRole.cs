@@ -102,7 +102,7 @@ public static class StandardRoles
         {
             "members:read", "members:search", "accumulators:read",
             "eligibility:check", "claims:read", "coverage:read",
-            "authorizations:read"
+            "authorizations:read", "providers:read"
         }
     };
 
@@ -115,7 +115,7 @@ public static class StandardRoles
         {
             "members:read", "members:write",
             "enrollment:read", "enrollment:process",
-            "coverage:read", "coverage:write", "benefits:read"
+            "coverage:read", "coverage:write", "benefits:read", "providers:read"
         }
     };
 

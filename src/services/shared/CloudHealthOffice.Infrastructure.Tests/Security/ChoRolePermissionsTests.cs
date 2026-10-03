@@ -86,6 +86,10 @@ public class ChoRolePermissionsTests
     [InlineData(ChoRolePermissions.ClaimsExaminer, "encounters:read", false)]
     [InlineData(ChoRolePermissions.EnrollmentSpecialist, "benefits:read", true)]
     [InlineData(ChoRolePermissions.EnrollmentSpecialist, "benefits:write", false)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist, "providers:read", true)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist, "providers:write", false)]
+    [InlineData(ChoRolePermissions.MemberServices, "providers:read", true)]
+    [InlineData(ChoRolePermissions.MemberServices, "providers:write", false)]
     public void Encounter_and_enrollment_grants(string role, string permission, bool expected)
     {
         var granted = ChoRolePermissions.Expand([role]);

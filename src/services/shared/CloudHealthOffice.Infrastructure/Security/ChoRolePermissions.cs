@@ -46,15 +46,17 @@ public static class ChoRolePermissions
                 "members:read", "members:search", "accumulators:read",
                 "eligibility:check", "claims:read", "coverage:read",
                 "authorizations:read", "reference-data:read",
-                "attachments:read", "benefits:read", "consent:read", "consent:write"
+                "attachments:read", "benefits:read", "consent:read", "consent:write",
+                "providers:read"
             ],
             [EnrollmentSpecialist] =
             [
                 "members:read", "members:write",
                 "enrollment:read", "enrollment:process",
                 "coverage:read", "coverage:write", "reference-data:read",
-                // Imports resolve plan codes in benefit-plan-service.
-                "benefits:read"
+                // Imports resolve plan codes in benefit-plan-service and
+                // providers by NPI in provider-service.
+                "benefits:read", "providers:read"
             ],
             [UMCoordinator] =
             [
