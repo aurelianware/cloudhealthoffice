@@ -390,15 +390,20 @@ public class UserContextService : IUserContextService
     /// </summary>
     private static bool PermissionMatches(HashSet<string> grantedPermissions, string required)
     {
-        if (grantedPermissions.Contains("*:*"))
-            return true;
-
         if (grantedPermissions.Contains(required))
             return true;
 
         var requiredParts = required.Split(':');
         if (requiredParts.Length != 2)
             return false;
+
+        // platform:* permissions act across tenants; only an explicit grant
+        // reaches them, never a tenant role's *:* or *:read.
+        if (string.Equals(requiredParts[0], "platform", StringComparison.OrdinalIgnoreCase))
+            return grantedPermissions.Contains("platform:*");
+
+        if (grantedPermissions.Contains("*:*"))
+            return true;
 
         // Check wildcard patterns like *:read
         if (grantedPermissions.Contains($"*:{requiredParts[1]}"))

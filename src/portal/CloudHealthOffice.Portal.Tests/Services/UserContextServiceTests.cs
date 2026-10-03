@@ -635,6 +635,33 @@ public class UserContextServiceTests
         sut.HasPermission("anything:whatever").Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("platform:admin")]
+    [InlineData("platform:tenants")]
+    [InlineData("platform:inquiries")]
+    public async Task PermissionMatches_TenantAdminWildcard_DoesNotGrantPlatformPermissions(string permission)
+    {
+        var sut = await CreateServiceWithRole("TenantAdmin"); // has *:*
+        sut.HasPermission(permission).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PermissionMatches_ReadWildcard_DoesNotGrantPlatformPermissions()
+    {
+        var sut = await CreateServiceWithRole("ComplianceOfficer"); // has *:read
+        sut.HasPermission("platform:read").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("platform:admin")]
+    [InlineData("platform:tenants")]
+    [InlineData("platform:inquiries")]
+    public async Task PermissionMatches_PlatformAdmin_HasPlatformPermissions(string permission)
+    {
+        var sut = await CreateServiceWithRole("PlatformAdmin");
+        sut.HasPermission(permission).Should().BeTrue();
+    }
+
     [Fact]
     public async Task PermissionMatches_WildcardStarColonAction_GrantsMatchingAction()
     {

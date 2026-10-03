@@ -115,9 +115,18 @@ public static class ChoRolePermissions
     }
 
     /// <summary>
+    /// Resources a resource wildcard (<c>*:read</c>, <c>*:*</c>) never reaches.
+    /// <c>platform:*</c> permissions act across tenants, so a tenant role's
+    /// wildcard must not grant them; they are granted only by name.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ReservedResources =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "platform" };
+
+    /// <summary>
     /// Whether any granted permission satisfies <paramref name="required"/>.
     /// Supports wildcards on either side of the colon: <c>*:read</c>,
-    /// <c>claims:*</c> and <c>*:*</c>.
+    /// <c>claims:*</c> and <c>*:*</c>. A resource wildcard does not match a
+    /// <see cref="ReservedResources">reserved resource</see>.
     /// </summary>
     public static bool Satisfies(IEnumerable<string> granted, string required)
     {
@@ -131,8 +140,7 @@ public static class ChoRolePermissions
 
     public static bool Matches(string granted, string required)
     {
-        if (string.Equals(granted, "*:*", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(granted, required, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(granted, required, StringComparison.OrdinalIgnoreCase))
             return true;
 
         var g = granted.Split(':');
@@ -140,7 +148,9 @@ public static class ChoRolePermissions
         if (g.Length != 2 || r.Length != 2)
             return false;
 
-        var resourceMatch = g[0] == "*" || string.Equals(g[0], r[0], StringComparison.OrdinalIgnoreCase);
+        var resourceMatch = g[0] == "*"
+            ? !ReservedResources.Contains(r[0])
+            : string.Equals(g[0], r[0], StringComparison.OrdinalIgnoreCase);
         var actionMatch = g[1] == "*" || string.Equals(g[1], r[1], StringComparison.OrdinalIgnoreCase);
         return resourceMatch && actionMatch;
     }
