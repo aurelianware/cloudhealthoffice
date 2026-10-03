@@ -1,4 +1,5 @@
-using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
+using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 
@@ -16,32 +17,36 @@ public interface IPremiumBillingService
     Task<PremiumInvoice> MarkInvoiceSentAsync(string invoiceId);
     Task<IEnumerable<PremiumInvoice>> GetOverdueInvoicesAsync();
     Task<AgingReport> GetAgingReportAsync();
-    Task<int> ProcessDelinquenciesAsync();
+    Task<DelinquencyRunResult> ProcessDelinquenciesAsync();
 }
 
 public class PremiumBillingService : IPremiumBillingService
 {
     private readonly IBillingRunRepository _billingRunRepository;
     private readonly IPremiumInvoiceRepository _invoiceRepository;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ISponsorServiceClient _sponsorClient;
+    private readonly ICoverageServiceClient _coverageClient;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<PremiumBillingService> _logger;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
 
     public PremiumBillingService(
         IBillingRunRepository billingRunRepository,
         IPremiumInvoiceRepository invoiceRepository,
-        IHttpClientFactory httpClientFactory,
+        ISponsorServiceClient sponsorClient,
+        ICoverageServiceClient coverageClient,
+        ICurrentActor actor,
         ILogger<PremiumBillingService> logger)
     {
         _billingRunRepository = billingRunRepository;
         _invoiceRepository = invoiceRepository;
-        _httpClientFactory = httpClientFactory;
+        _sponsorClient = sponsorClient;
+        _coverageClient = coverageClient;
+        _actor = actor;
         _logger = logger;
     }
+
+    /// <summary>The acting user (or service) from the token; never from a body.</summary>
+    private string ActorId => _actor.UserId;
 
     public async Task<BillingRun> CreateBillingRunAsync(CreateBillingRunRequest request, string? createdBy)
     {
@@ -55,6 +60,9 @@ public class PremiumBillingService : IPremiumBillingService
             Description = request.Description,
             Criteria = request.Criteria,
             CreatedBy = createdBy,
+            // A scheduler creating the run carries a service token: record that
+            // the creator is a service identity rather than a person.
+            CreatedByIsService = _actor.IsAuthenticated && _actor.IsService,
             Status = BillingRunStatus.Pending
         };
 
@@ -71,12 +79,14 @@ public class PremiumBillingService : IPremiumBillingService
 
         billingRun.Status = BillingRunStatus.Running;
         billingRun.ExecutionStartedAt = DateTime.UtcNow;
+        billingRun.ExecutedBy = ActorId;
+        billingRun.ExecutedByIsService = _actor.IsService;
         await _billingRunRepository.UpdateAsync(billingRun);
 
         try
         {
             // Fetch active sponsors
-            var sponsors = await FetchActiveSponsorsAsync(billingRun.Criteria);
+            var sponsors = await FetchActiveSponsorsAsync(billingRun.TenantId, billingRun.Criteria);
             _logger.LogInformation("Found {Count} active sponsors for billing run {BillingRunNumber}",
                 sponsors.Count, billingRun.BillingRunNumber);
 
@@ -89,7 +99,7 @@ public class PremiumBillingService : IPremiumBillingService
                 try
                 {
                     var invoice = await GenerateInvoiceForSponsorAsync(
-                        sponsor, billingRun.BillingPeriod, billingRun.Id);
+                        sponsor, billingRun.TenantId, billingRun.BillingPeriod, billingRun.Id, billingRun.ExecutedBy);
 
                     billingRun.InvoiceIds.Add(invoice.Id);
                     totalPremium += invoice.SubtotalPremium;
@@ -147,6 +157,7 @@ public class PremiumBillingService : IPremiumBillingService
             throw new InvalidOperationException($"Can only cancel billing runs in Pending state, current: {billingRun.Status}");
 
         billingRun.Status = BillingRunStatus.Cancelled;
+        billingRun.CancelledBy = ActorId;
         await _billingRunRepository.UpdateAsync(billingRun);
     }
 
@@ -164,11 +175,13 @@ public class PremiumBillingService : IPremiumBillingService
             PaymentDate = request.PaymentDate,
             PaymentMethod = request.PaymentMethod,
             ReferenceNumber = request.ReferenceNumber,
-            ReceivedDate = DateTime.UtcNow
+            ReceivedDate = DateTime.UtcNow,
+            RecordedBy = ActorId
         };
 
         invoice.Payments.Add(payment);
         invoice.RecalculateTotals();
+        invoice.LastUpdatedBy = ActorId;
 
         // Update status based on balance
         if (invoice.BalanceDue <= 0)
@@ -191,6 +204,7 @@ public class PremiumBillingService : IPremiumBillingService
             throw new InvalidOperationException("Cannot void a fully paid invoice");
 
         invoice.Status = InvoiceStatus.Voided;
+        invoice.LastUpdatedBy = ActorId;
         invoice.Adjustments.Add(new InvoiceAdjustment
         {
             Type = AdjustmentType.Other,
@@ -213,6 +227,7 @@ public class PremiumBillingService : IPremiumBillingService
             throw new InvalidOperationException($"Can only mark Generated invoices as Sent, current: {invoice.Status}");
 
         invoice.Status = InvoiceStatus.Sent;
+        invoice.LastUpdatedBy = ActorId;
         return await _invoiceRepository.UpdateAsync(invoice);
     }
 
@@ -260,11 +275,14 @@ public class PremiumBillingService : IPremiumBillingService
         return report;
     }
 
-    public async Task<int> ProcessDelinquenciesAsync()
+    public async Task<DelinquencyRunResult> ProcessDelinquenciesAsync()
     {
         var overdueInvoices = (await _invoiceRepository.GetOverdueAsync()).ToList();
         var now = DateTime.UtcNow;
-        int delinquentCount = 0;
+        var result = new DelinquencyRunResult();
+        var actor = ActorId;
+        // One suspension call per sponsor per run, however many of its invoices are delinquent.
+        var outcomes = new Dictionary<string, SponsorSuspensionOutcome>(StringComparer.Ordinal);
 
         foreach (var invoice in overdueInvoices)
         {
@@ -273,26 +291,40 @@ public class PremiumBillingService : IPremiumBillingService
                 && invoice.Status != InvoiceStatus.Delinquent)
             {
                 invoice.Status = InvoiceStatus.Delinquent;
-                await _invoiceRepository.UpdateAsync(invoice);
-                delinquentCount++;
+                invoice.LastUpdatedBy = actor;
+                result.DelinquentCount++;
 
                 _logger.LogWarning(
                     "Invoice {InvoiceNumber} for group {GroupNumber} marked delinquent. Balance: ${BalanceDue:N2}",
                     invoice.InvoiceNumber, invoice.GroupNumber, invoice.BalanceDue);
 
-                // Attempt to suspend sponsor via sponsor-service
-                await TrySuspendSponsorAsync(invoice.GroupNumber);
+                await SuspendSponsorAsync(invoice, actor, outcomes, result);
+                await _invoiceRepository.UpdateAsync(invoice);
+            }
+            else if (invoice.Status == InvoiceStatus.Delinquent
+                     && invoice.SponsorSuspension?.State == SponsorSuspensionState.Failed)
+            {
+                // A suspension that failed on an earlier run is retried until it succeeds.
+                result.SuspensionRetries++;
+                await SuspendSponsorAsync(invoice, actor, outcomes, result);
+                await _invoiceRepository.UpdateAsync(invoice);
             }
             else if (invoice.Status == InvoiceStatus.Sent || invoice.Status == InvoiceStatus.PartiallyPaid)
             {
                 // Mark as overdue if past due date but within grace period
                 invoice.Status = InvoiceStatus.Overdue;
+                invoice.LastUpdatedBy = actor;
                 await _invoiceRepository.UpdateAsync(invoice);
             }
         }
 
-        _logger.LogInformation("Delinquency processing complete: {Count} invoices marked delinquent", delinquentCount);
-        return delinquentCount;
+        if (result.SuspensionFailures.Count > 0)
+            _logger.LogError(
+                "Delinquency processing: {Failed} sponsor suspension(s) failed and are recorded on their invoices for retry",
+                result.SuspensionFailures.Count);
+
+        _logger.LogInformation("Delinquency processing complete: {Count} invoices marked delinquent", result.DelinquentCount);
+        return result;
     }
 
     // --- Private helper methods ---
@@ -305,14 +337,16 @@ public class PremiumBillingService : IPremiumBillingService
     }
 
     private async Task<PremiumInvoice> GenerateInvoiceForSponsorAsync(
-        SponsorDto sponsor, DateTime billingPeriod, string billingRunId)
+        SponsorDto sponsor, string tenantId, DateTime billingPeriod, string billingRunId, string? executedBy)
     {
         var periodStart = billingPeriod;
         var periodEnd = periodStart.AddMonths(1).AddDays(-1);
         var daysInMonth = DateTime.DaysInMonth(periodStart.Year, periodStart.Month);
 
         // Fetch active coverage records for this sponsor
-        var coverages = await FetchCoveragesByGroupAsync(sponsor.GroupNumber);
+        // A coverage-service failure fails this sponsor's invoice (recorded as a
+        // run warning); it never produces a $0 invoice.
+        var coverages = await _coverageClient.GetActiveCoveragesByGroupAsync(tenantId, sponsor.GroupNumber);
 
         var invoice = new PremiumInvoice
         {
@@ -323,7 +357,7 @@ public class PremiumBillingService : IPremiumBillingService
             BillingPeriodStart = periodStart,
             BillingPeriodEnd = periodEnd,
             GracePeriodDays = sponsor.GracePeriodDays,
-            CreatedBy = "billing-run"
+            CreatedBy = executedBy
         };
 
         foreach (var coverage in coverages)
@@ -382,115 +416,101 @@ public class PremiumBillingService : IPremiumBillingService
         return await _invoiceRepository.CreateAsync(invoice);
     }
 
-    private async Task<List<SponsorDto>> FetchActiveSponsorsAsync(BillingRunCriteria criteria)
+    private async Task<List<SponsorDto>> FetchActiveSponsorsAsync(string tenantId, BillingRunCriteria criteria)
     {
+        List<SponsorDto> sponsors;
         try
         {
-            var client = _httpClientFactory.CreateClient("SponsorService");
-            var response = await client.GetAsync("/api/v1/sponsors?status=Active");
-            response.EnsureSuccessStatusCode();
-
-            var sponsors = await response.Content.ReadFromJsonAsync<List<SponsorDto>>(JsonOptions) ?? new();
-
-            // Apply criteria filters
-            if (criteria.GroupNumbers.Count > 0)
-                sponsors = sponsors.Where(s => criteria.GroupNumbers.Contains(s.GroupNumber)).ToList();
-
-            if (criteria.LineOfBusiness.HasValue)
-                sponsors = sponsors.Where(s => s.LineOfBusiness == (int)criteria.LineOfBusiness.Value).ToList();
-
-            return sponsors;
+            sponsors = await _sponsorClient.GetActiveSponsorsAsync(tenantId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to fetch sponsors from sponsor-service");
-            throw new InvalidOperationException("Failed to fetch active sponsors", ex);
+            throw new InvalidOperationException($"Failed to fetch active sponsors: {ex.Message}", ex);
         }
+
+        // Apply criteria filters
+        if (criteria.GroupNumbers.Count > 0)
+            sponsors = sponsors.Where(s => criteria.GroupNumbers.Contains(s.GroupNumber)).ToList();
+
+        if (criteria.LineOfBusiness.HasValue)
+            sponsors = sponsors.Where(s => s.LineOfBusiness == criteria.LineOfBusiness.Value).ToList();
+
+        return sponsors;
     }
 
-    private async Task<List<CoverageDto>> FetchCoveragesByGroupAsync(string groupNumber)
+    /// <summary>
+    /// Asks sponsor-service to suspend the invoice's sponsor and records the
+    /// outcome on the invoice. A failure (including 401/403) is logged as an
+    /// error, recorded, added to the run result and retried on the next run.
+    /// </summary>
+    private async Task SuspendSponsorAsync(
+        PremiumInvoice invoice, string actor,
+        Dictionary<string, SponsorSuspensionOutcome> outcomes, DelinquencyRunResult result)
     {
-        try
+        if (!outcomes.TryGetValue(invoice.GroupNumber, out var outcome))
         {
-            var client = _httpClientFactory.CreateClient("CoverageService");
-            var response = await client.GetAsync($"/api/v1/coverages?groupNumber={groupNumber}&status=Active");
-            response.EnsureSuccessStatusCode();
+            outcome = await _sponsorClient.SuspendSponsorAsync(invoice.TenantId, invoice.GroupNumber);
+            outcomes[invoice.GroupNumber] = outcome;
+            if (outcome.Success)
+                result.SponsorsSuspended++;
+        }
 
-            return await response.Content.ReadFromJsonAsync<List<CoverageDto>>(JsonOptions) ?? new();
-        }
-        catch (Exception ex)
+        var record = invoice.SponsorSuspension ?? new SponsorSuspensionRecord();
+        record.Attempts++;
+        record.LastAttemptAt = DateTime.UtcNow;
+        record.LastAttemptBy = actor;
+        record.LastStatusCode = outcome.StatusCode;
+        invoice.SponsorSuspension = record;
+
+        if (outcome.Success)
         {
-            _logger.LogWarning(ex, "Failed to fetch coverages for group {GroupNumber}", groupNumber);
-            return new List<CoverageDto>();
+            record.State = SponsorSuspensionState.Suspended;
+            record.LastError = null;
+            record.SuspendedAt = DateTime.UtcNow;
+            _logger.LogWarning("Suspended sponsor {GroupNumber} due to premium delinquency (invoice {InvoiceNumber})",
+                SanitizeForLog(invoice.GroupNumber), SanitizeForLog(invoice.InvoiceNumber));
+            return;
         }
+
+        record.State = SponsorSuspensionState.Failed;
+        record.LastError = outcome.Error is { Length: > 1000 } e ? e[..1000] : outcome.Error;
+        result.SuspensionFailures.Add(new SponsorSuspensionFailure
+        {
+            InvoiceId = invoice.Id,
+            InvoiceNumber = invoice.InvoiceNumber,
+            GroupNumber = invoice.GroupNumber,
+            StatusCode = outcome.StatusCode,
+            Error = record.LastError
+        });
+        _logger.LogError(
+            "Failed to suspend sponsor {GroupNumber} for delinquent invoice {InvoiceNumber} (attempt {Attempt}, status {StatusCode}): {Error}",
+            SanitizeForLog(invoice.GroupNumber), SanitizeForLog(invoice.InvoiceNumber), record.Attempts,
+            outcome.StatusCode, SanitizeForLog(outcome.Error));
     }
-
-    private async Task TrySuspendSponsorAsync(string groupNumber)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("SponsorService");
-            var response = await client.PutAsJsonAsync(
-                $"/api/v1/sponsors/{groupNumber}",
-                new { Status = "Suspended" });
-
-            if (response.IsSuccessStatusCode)
-                _logger.LogWarning("Suspended sponsor {GroupNumber} due to premium delinquency", groupNumber);
-            else
-                _logger.LogWarning("Failed to suspend sponsor {GroupNumber}: {StatusCode}", groupNumber, response.StatusCode);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error suspending sponsor {GroupNumber}", groupNumber);
-        }
-    }
 }
 
-/// <summary>
-/// DTO for sponsor data fetched from sponsor-service
-/// </summary>
-public class SponsorDto
+/// <summary>What a delinquency run did.</summary>
+public class DelinquencyRunResult
 {
+    /// <summary>Invoices newly marked delinquent by this run.</summary>
+    public int DelinquentCount { get; set; }
+
+    /// <summary>Sponsors sponsor-service confirmed as suspended in this run.</summary>
+    public int SponsorsSuspended { get; set; }
+
+    /// <summary>Earlier failed suspensions retried in this run.</summary>
+    public int SuspensionRetries { get; set; }
+
+    /// <summary>Suspensions that failed in this run; each is recorded on its invoice and retried next run.</summary>
+    public List<SponsorSuspensionFailure> SuspensionFailures { get; set; } = new();
+}
+
+public class SponsorSuspensionFailure
+{
+    public string InvoiceId { get; set; } = string.Empty;
+    public string InvoiceNumber { get; set; } = string.Empty;
     public string GroupNumber { get; set; } = string.Empty;
-    public string EmployerName { get; set; } = string.Empty;
-    public int LineOfBusiness { get; set; }
-    public int BillingDay { get; set; } = 1;
-    public int GracePeriodDays { get; set; } = 30;
-    public string? PaymentMethod { get; set; }
-    public SponsorBankAccountDto? BankAccount { get; set; }
-}
-
-/// <summary>
-/// Bank account info from sponsor-service for EFT/ACH drafts
-/// </summary>
-public class SponsorBankAccountDto
-{
-    public bool EftEnabled { get; set; }
-    public string? PreferredEftMethod { get; set; }
-    public string? RoutingNumber { get; set; }
-    public string? AccountNumber { get; set; }
-    public string? AccountType { get; set; }
-    public string? AccountHolderName { get; set; }
-    public string? StripeCustomerId { get; set; }
-    public string? StripePaymentMethodId { get; set; }
-    public string? RoutingNumberLast4 { get; set; }
-    public string? AccountNumberLast4 { get; set; }
-}
-
-/// <summary>
-/// DTO for coverage data fetched from coverage-service
-/// </summary>
-public class CoverageDto
-{
-    public string CoverageId { get; set; } = string.Empty;
-    public string MemberId { get; set; } = string.Empty;
-    public string? MemberName { get; set; }
-    public string GroupNumber { get; set; } = string.Empty;
-    public string? PlanId { get; set; }
-    public string? CoverageLevel { get; set; }
-    public string? InsuranceLineCode { get; set; }
-    public DateTime EffectiveDate { get; set; }
-    public DateTime? TerminationDate { get; set; }
-    public decimal? MonthlyPremium { get; set; }
-    public decimal? EmployerContribution { get; set; }
+    public int? StatusCode { get; set; }
+    public string? Error { get; set; }
 }

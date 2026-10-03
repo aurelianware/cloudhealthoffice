@@ -137,6 +137,12 @@ public class EftDraft
     public string? InitiatedBy { get; set; }
 
     /// <summary>
+    /// Who last changed the draft (settle, return, cancel): token subject, or
+    /// "stripe-webhook" for changes driven by Stripe events.
+    /// </summary>
+    public string? LastUpdatedBy { get; set; }
+
+    /// <summary>
     /// Last updated timestamp
     /// </summary>
     public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
@@ -289,8 +295,9 @@ public class InitiateEftDraftRequest
     public decimal? Amount { get; set; }
 
     /// <summary>
-    /// Who is initiating this draft
+    /// Who is initiating this draft. Ignored from the body: set from the token.
     /// </summary>
+    [JsonIgnore]
     public string? InitiatedBy { get; set; }
 }
 
@@ -315,8 +322,9 @@ public class InitiateBatchEftRequest
     public EftMethod? Method { get; set; }
 
     /// <summary>
-    /// Who is initiating
+    /// Who is initiating. Ignored from the body: set from the token.
     /// </summary>
+    [JsonIgnore]
     public string? InitiatedBy { get; set; }
 }
 
@@ -354,6 +362,21 @@ public class NachaFileResult
     public int EntryCount { get; set; }
     public decimal TotalAmount { get; set; }
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Pending drafts left out of the file because something needs fixing first.</summary>
+    public List<EftAttentionItem> NeedsAttention { get; set; } = new();
+}
+
+/// <summary>
+/// An invoice or draft that could not be drafted for a reason someone has to
+/// fix (as opposed to a normal skip such as a paid invoice).
+/// </summary>
+public class EftAttentionItem
+{
+    public string? InvoiceId { get; set; }
+    public string? DraftId { get; set; }
+    public string GroupNumber { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -369,4 +392,7 @@ public class BatchEftResult
     public List<string> DraftIds { get; set; } = new();
     public List<string> ErrorMessages { get; set; } = new();
     public NachaFileResult? NachaFile { get; set; }
+
+    /// <summary>Invoices that were not drafted for a reason someone has to fix (also counted in Errors).</summary>
+    public List<EftAttentionItem> NeedsAttention { get; set; } = new();
 }

@@ -1,4 +1,5 @@
-using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
+using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 
@@ -63,14 +64,15 @@ public class EftDraftService : IEftDraftService
     private readonly IBillingRunRepository _billingRunRepository;
     private readonly INachaFileService _nachaFileService;
     private readonly IStripeAchService _stripeAchService;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ISponsorBankAccountSource _bankAccounts;
+    private readonly ICurrentActor _actor;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
     private readonly ILogger<EftDraftService> _logger;
+    private readonly DebitSeparationOfDuties _separationOfDuties;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
+    /// <summary>Recorded as the actor for changes driven by (signature-verified) Stripe events.</summary>
+    public const string StripeWebhookActor = "stripe-webhook";
 
     public EftDraftService(
         IEftDraftRepository draftRepository,
@@ -78,7 +80,9 @@ public class EftDraftService : IEftDraftService
         IBillingRunRepository billingRunRepository,
         INachaFileService nachaFileService,
         IStripeAchService stripeAchService,
-        IHttpClientFactory httpClientFactory,
+        ISponsorBankAccountSource bankAccounts,
+        ICurrentActor actor,
+        IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
         ILogger<EftDraftService> logger)
     {
@@ -87,10 +91,16 @@ public class EftDraftService : IEftDraftService
         _billingRunRepository = billingRunRepository;
         _nachaFileService = nachaFileService;
         _stripeAchService = stripeAchService;
-        _httpClientFactory = httpClientFactory;
+        _bankAccounts = bankAccounts;
+        _actor = actor;
+        _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
         _logger = logger;
+        _separationOfDuties = new DebitSeparationOfDuties(billingRunRepository, actor, logger);
     }
+
+    /// <summary>The acting user from the token; never from a request body.</summary>
+    private string ActorId => _actor.UserId;
 
     public async Task<EftDraft> InitiateDraftAsync(InitiateEftDraftRequest request)
     {
@@ -103,10 +113,22 @@ public class EftDraftService : IEftDraftService
         if (invoice.BalanceDue <= 0)
             throw new InvalidOperationException("Invoice has no balance due");
 
+        // The initiator comes from the token (any body value is ignored), and may
+        // not be the user who prepared the invoice (maker-checker).
+        request.InitiatedBy = ActorId;
+        await _separationOfDuties.EnsureMayReleaseAsync(new[] { invoice });
+
         // Fetch sponsor bank account info
-        var bankAccount = await FetchSponsorBankAccountAsync(invoice.GroupNumber);
-        if (bankAccount == null || !bankAccount.EftEnabled)
+        var lookup = await _bankAccounts.GetAsync(invoice.TenantId, invoice.GroupNumber);
+        if (lookup.Status == SponsorBankAccountLookupStatus.Unavailable)
+        {
+            _logger.LogError("EFT draft for invoice {InvoiceNumber} (group {GroupNumber}) needs attention: {Reason}",
+                invoice.InvoiceNumber, invoice.GroupNumber, lookup.Reason);
+            throw new InvalidOperationException($"Sponsor {invoice.GroupNumber}: {lookup.Reason}");
+        }
+        if (lookup.Status == SponsorBankAccountLookupStatus.NotEnrolled || lookup.Account == null)
             throw new InvalidOperationException($"EFT not enabled for sponsor {invoice.GroupNumber}");
+        var bankAccount = lookup.Account;
 
         var amount = request.Amount ?? invoice.BalanceDue;
         var method = request.Method ?? bankAccount.PreferredMethod ?? EftMethod.Nacha;
@@ -181,6 +203,14 @@ public class EftDraftService : IEftDraftService
         // Deduplicate before counting
         var uniqueInvoiceIds = invoiceIds.Distinct().ToList();
         result.TotalInvoices = uniqueInvoiceIds.Count;
+        request.InitiatedBy = ActorId;
+
+        // Maker-checker over the whole batch before any money moves: one invoice
+        // the actor prepared refuses the batch.
+        var invoices = new Dictionary<string, PremiumInvoice?>(StringComparer.Ordinal);
+        foreach (var invoiceId in uniqueInvoiceIds)
+            invoices[invoiceId] = await _invoiceRepository.GetByIdAsync(invoiceId);
+        await _separationOfDuties.EnsureMayReleaseAsync(invoices.Values.OfType<PremiumInvoice>());
 
         // Separate NACHA entries (built as batch) from Stripe (initiated individually)
         var nachaEntries = new List<NachaEntryDetail>();
@@ -190,7 +220,7 @@ public class EftDraftService : IEftDraftService
         {
             try
             {
-                var invoice = await _invoiceRepository.GetByIdAsync(invoiceId);
+                var invoice = invoices[invoiceId];
                 if (invoice == null || invoice.BalanceDue <= 0 ||
                     invoice.Status == InvoiceStatus.Paid || invoice.Status == InvoiceStatus.Voided)
                 {
@@ -198,12 +228,29 @@ public class EftDraftService : IEftDraftService
                     continue;
                 }
 
-                var bankAccount = await FetchSponsorBankAccountAsync(invoice.GroupNumber);
-                if (bankAccount == null || !bankAccount.EftEnabled)
+                var lookup = await _bankAccounts.GetAsync(invoice.TenantId, invoice.GroupNumber);
+                if (lookup.Status == SponsorBankAccountLookupStatus.Unavailable)
+                {
+                    // Not knowing the bank details is not the same as "not enrolled":
+                    // the item needs attention, it is not a normal skip.
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Invoice {invoiceId}: {lookup.Reason}");
+                    result.NeedsAttention.Add(new EftAttentionItem
+                    {
+                        InvoiceId = invoice.Id,
+                        GroupNumber = invoice.GroupNumber,
+                        Reason = lookup.Reason ?? "Sponsor bank details unavailable"
+                    });
+                    _logger.LogError("EFT draft for invoice {InvoiceNumber} (group {GroupNumber}) needs attention: {Reason}",
+                        invoice.InvoiceNumber, invoice.GroupNumber, lookup.Reason);
+                    continue;
+                }
+                if (lookup.Status == SponsorBankAccountLookupStatus.NotEnrolled || lookup.Account == null)
                 {
                     result.Skipped++;
                     continue;
                 }
+                var bankAccount = lookup.Account;
 
                 var method = request.Method ?? bankAccount.PreferredMethod ?? EftMethod.Nacha;
 
@@ -282,6 +329,18 @@ public class EftDraftService : IEftDraftService
             }
         }
 
+        // Mark the billing run so the items needing attention are visible on it.
+        if (result.NeedsAttention.Count > 0 && !string.IsNullOrEmpty(request.BillingRunId))
+        {
+            var run = await _billingRunRepository.GetByIdAsync(request.BillingRunId);
+            if (run != null)
+            {
+                foreach (var item in result.NeedsAttention)
+                    run.Warnings.Add($"EFT needs attention for invoice {item.InvoiceId} (group {item.GroupNumber}): {item.Reason}");
+                await _billingRunRepository.UpdateAsync(run);
+            }
+        }
+
         _logger.LogInformation(
             "Batch EFT: {Initiated}/{Total} drafts initiated, {Skipped} skipped, {Errors} errors, ${Amount:N2} total",
             result.DraftsInitiated, result.TotalInvoices, result.Skipped, result.Errors, result.TotalAmount);
@@ -298,18 +357,31 @@ public class EftDraftService : IEftDraftService
         if (pendingDrafts.Count == 0)
             throw new InvalidOperationException("No pending NACHA drafts to process");
 
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: releasing sponsor debits needs a user with payments:approve, not a service token");
+
         var entries = new List<NachaEntryDetail>();
         var includedDrafts = new List<EftDraft>();
-        var skippedDraftIds = new HashSet<string>();
+        var needsAttention = new List<EftAttentionItem>();
 
         foreach (var draft in pendingDrafts)
         {
-            var bankAccount = await FetchSponsorBankAccountAsync(draft.GroupNumber);
-            if (bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
+            var lookup = await _bankAccounts.GetAsync(draft.TenantId, draft.GroupNumber);
+            var bankAccount = lookup.Account;
+            if (lookup.Status != SponsorBankAccountLookupStatus.Found
+                || bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
             {
-                _logger.LogWarning("Skipping draft {DraftId}: missing bank account for group {GroupNumber}",
-                    draft.Id, draft.GroupNumber);
-                skippedDraftIds.Add(draft.Id);
+                var reason = lookup.Status switch
+                {
+                    SponsorBankAccountLookupStatus.Unavailable => lookup.Reason ?? "Sponsor bank details unavailable",
+                    SponsorBankAccountLookupStatus.NotEnrolled => "Sponsor is no longer enrolled in auto-debit",
+                    _ => "Sponsor bank account is missing routing or account number"
+                };
+                // Left Pending (so it is picked up once fixed) and reported, never silently dropped.
+                _logger.LogError("Draft {DraftId} for group {GroupNumber} left out of the NACHA file and needs attention: {Reason}",
+                    draft.Id, draft.GroupNumber, reason);
+                needsAttention.Add(new EftAttentionItem { DraftId = draft.Id, InvoiceId = draft.InvoiceId, GroupNumber = draft.GroupNumber, Reason = reason });
                 continue;
             }
 
@@ -327,10 +399,13 @@ public class EftDraftService : IEftDraftService
         }
 
         if (entries.Count == 0)
-            throw new InvalidOperationException("No drafts with valid bank accounts to include in NACHA file");
+            throw new InvalidOperationException(
+                "No drafts with valid bank accounts to include in NACHA file; needs attention: " +
+                string.Join("; ", needsAttention.Select(a => $"draft {a.DraftId} (group {a.GroupNumber}): {a.Reason}")));
 
         var nachaOptions = BuildNachaOptionsFromConfig();
         var result = _nachaFileService.GenerateNachaFile(entries, nachaOptions);
+        result.NeedsAttention.AddRange(needsAttention);
 
         // Only mark drafts that were actually included in the file as submitted
         for (int i = 0; i < includedDrafts.Count; i++)
@@ -347,7 +422,10 @@ public class EftDraftService : IEftDraftService
         return result;
     }
 
-    public async Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request)
+    public Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request)
+        => ProcessAchReturnAsync(request, ActorId);
+
+    private async Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request, string actor)
     {
         var draft = await _draftRepository.GetByIdAsync(request.DraftId)
             ?? throw new InvalidOperationException($"Draft {request.DraftId} not found");
@@ -359,6 +437,7 @@ public class EftDraftService : IEftDraftService
         draft.ReturnCode = request.ReturnCode;
         draft.ReturnReason = request.ReturnReason ?? MapReturnCodeToReason(request.ReturnCode);
         draft.ReturnedAt = DateTime.UtcNow;
+        draft.LastUpdatedBy = actor;
 
         await _draftRepository.UpdateAsync(draft);
 
@@ -384,6 +463,7 @@ public class EftDraftService : IEftDraftService
             }
 
             invoice.RecalculateTotals();
+            invoice.LastUpdatedBy = actor;
 
             // Update invoice status
             if (invoice.BalanceDue > 0 && invoice.TotalPaid > 0)
@@ -408,7 +488,9 @@ public class EftDraftService : IEftDraftService
         return draft;
     }
 
-    public async Task<EftDraft> SettleDraftAsync(string draftId)
+    public Task<EftDraft> SettleDraftAsync(string draftId) => SettleDraftAsync(draftId, ActorId);
+
+    private async Task<EftDraft> SettleDraftAsync(string draftId, string actor)
     {
         var draft = await _draftRepository.GetByIdAsync(draftId)
             ?? throw new InvalidOperationException($"Draft {draftId} not found");
@@ -418,6 +500,7 @@ public class EftDraftService : IEftDraftService
 
         draft.Status = EftDraftStatus.Settled;
         draft.SettledAt = DateTime.UtcNow;
+        draft.LastUpdatedBy = actor;
         await _draftRepository.UpdateAsync(draft);
 
         // Record payment on the invoice
@@ -430,11 +513,13 @@ public class EftDraftService : IEftDraftService
                 PaymentDate = DateTime.UtcNow,
                 PaymentMethod = draft.Method == EftMethod.StripeAch ? "StripeACH" : "ACH",
                 ReferenceNumber = draft.TraceNumber ?? draft.StripePaymentIntentId,
-                ReceivedDate = DateTime.UtcNow
+                ReceivedDate = DateTime.UtcNow,
+                RecordedBy = actor
             };
 
             invoice.Payments.Add(payment);
             invoice.RecalculateTotals();
+            invoice.LastUpdatedBy = actor;
 
             if (invoice.BalanceDue <= 0)
                 invoice.Status = InvoiceStatus.Paid;
@@ -457,6 +542,22 @@ public class EftDraftService : IEftDraftService
         if (!webhookResult.Handled || string.IsNullOrEmpty(webhookResult.PaymentIntentId))
             return;
 
+        // The webhook is anonymous (authenticated by the Stripe signature just
+        // verified), so the tenant comes from the signed event: the tenant_id we
+        // wrote into the PaymentIntent metadata. No tenant, no processing.
+        if (string.IsNullOrEmpty(webhookResult.TenantId))
+        {
+            _logger.LogError(
+                "Stripe event for PaymentIntent {PaymentIntentId} carries no tenant_id metadata; not processed and needs attention",
+                webhookResult.PaymentIntentId);
+            return;
+        }
+        var http = _httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("Stripe webhook processed outside a request");
+        if (http.Items["TenantId"] is string existing && !string.Equals(existing, webhookResult.TenantId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Stripe event tenant does not match the request tenant");
+        http.Items["TenantId"] = webhookResult.TenantId;
+
         // Find the draft by Stripe PaymentIntent ID
         var drafts = await _draftRepository.GetByStripePaymentIntentIdAsync(webhookResult.PaymentIntentId);
         var draft = drafts.FirstOrDefault();
@@ -470,7 +571,7 @@ public class EftDraftService : IEftDraftService
         switch (webhookResult.EventType)
         {
             case "payment_succeeded":
-                await SettleDraftAsync(draft.Id);
+                await SettleDraftAsync(draft.Id, StripeWebhookActor);
                 break;
 
             case "payment_failed":
@@ -479,11 +580,12 @@ public class EftDraftService : IEftDraftService
                     DraftId = draft.Id,
                     ReturnCode = webhookResult.FailureCode ?? "STRIPE_FAIL",
                     ReturnReason = webhookResult.FailureMessage
-                });
+                }, StripeWebhookActor);
                 break;
 
             case "payment_cancelled":
                 draft.Status = EftDraftStatus.Cancelled;
+                draft.LastUpdatedBy = StripeWebhookActor;
                 await _draftRepository.UpdateAsync(draft);
                 break;
         }
@@ -514,28 +616,11 @@ public class EftDraftService : IEftDraftService
         }
 
         draft.Status = EftDraftStatus.Cancelled;
+        draft.LastUpdatedBy = ActorId;
         return await _draftRepository.UpdateAsync(draft);
     }
 
     // --- Private helpers ---
-
-    private async Task<SponsorBankAccount?> FetchSponsorBankAccountAsync(string groupNumber)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("SponsorService");
-            var response = await client.GetAsync($"/api/v1/sponsors/{groupNumber}/bank-account");
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            return await response.Content.ReadFromJsonAsync<SponsorBankAccount>(JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch bank account for group {GroupNumber}", groupNumber);
-            return null;
-        }
-    }
 
     private static void ValidateBankAccountForMethod(SponsorBankAccount bankAccount, EftMethod method, string groupNumber)
     {

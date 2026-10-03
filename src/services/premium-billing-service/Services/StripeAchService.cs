@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using PremiumBillingService.Models;
 using Stripe;
 
@@ -42,13 +43,21 @@ public interface IStripeAchService
 
 public class StripeAchService : IStripeAchService
 {
+    /// <summary>
+    /// PaymentIntent metadata key carrying the CHO tenant. The Stripe webhook is
+    /// anonymous; this signed value is how an event finds its tenant.
+    /// </summary>
+    public const string TenantMetadataKey = "tenant_id";
+
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<StripeAchService> _logger;
     private readonly string _webhookSecret;
 
-    public StripeAchService(IConfiguration configuration, ILogger<StripeAchService> logger)
+    public StripeAchService(IConfiguration configuration, ICurrentActor actor, ILogger<StripeAchService> logger)
     {
         _configuration = configuration;
+        _actor = actor;
         _logger = logger;
 
         StripeConfiguration.ApiKey = configuration["Stripe:SecretKey"];
@@ -76,7 +85,9 @@ public class StripeAchService : IStripeAchService
             {
                 { "invoice_number", invoiceNumber },
                 { "group_number", groupNumber },
-                { "type", "premium_draft" }
+                { "type", "premium_draft" },
+                // Tenant of the authenticated caller creating the draft.
+                { TenantMetadataKey, _actor.TenantId }
             },
             Description = $"Premium billing draft for {invoiceNumber}",
             StatementDescriptor = "PREMIUM BILLING"
@@ -208,6 +219,7 @@ public class StripeAchService : IStripeAchService
             EventType = "payment_succeeded",
             PaymentIntentId = paymentIntent.Id,
             InvoiceNumber = invoiceNumber,
+            TenantId = paymentIntent.Metadata.GetValueOrDefault(TenantMetadataKey),
             Amount = paymentIntent.Amount / 100m,
             Status = "settled"
         });
@@ -233,6 +245,7 @@ public class StripeAchService : IStripeAchService
             EventType = "payment_failed",
             PaymentIntentId = paymentIntent.Id,
             InvoiceNumber = invoiceNumber,
+            TenantId = paymentIntent.Metadata.GetValueOrDefault(TenantMetadataKey),
             Amount = paymentIntent.Amount / 100m,
             Status = "failed",
             FailureCode = failureCode,
@@ -258,6 +271,7 @@ public class StripeAchService : IStripeAchService
             EventType = "payment_cancelled",
             PaymentIntentId = paymentIntent.Id,
             InvoiceNumber = invoiceNumber,
+            TenantId = paymentIntent.Metadata.GetValueOrDefault(TenantMetadataKey),
             Status = "cancelled"
         };
     }
@@ -298,6 +312,9 @@ public class EftWebhookResult
     public string? EventType { get; set; }
     public string? PaymentIntentId { get; set; }
     public string? InvoiceNumber { get; set; }
+
+    /// <summary>The CHO tenant from the signed PaymentIntent metadata.</summary>
+    public string? TenantId { get; set; }
     public decimal Amount { get; set; }
     public string? Status { get; set; }
     public string? FailureCode { get; set; }

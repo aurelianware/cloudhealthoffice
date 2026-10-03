@@ -30,7 +30,9 @@ public class EftDraftRepository : IEftDraftRepository
     }
 
     private string GetTenantId() =>
-        _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString() ?? "default";
+        _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString() is { Length: > 0 } tenantId
+            ? tenantId
+            : throw new InvalidOperationException("TenantId not found in request context");
 
     public async Task<EftDraft> CreateAsync(EftDraft draft)
     {

@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
@@ -15,7 +18,9 @@ public class EftDraftServiceTests
     private readonly Mock<IBillingRunRepository> _billingRunRepo;
     private readonly Mock<INachaFileService> _nachaService;
     private readonly Mock<IStripeAchService> _stripeService;
-    private readonly Mock<IHttpClientFactory> _httpClientFactory;
+    private readonly Mock<ISponsorBankAccountSource> _bankAccounts;
+    private readonly Mock<ICurrentActor> _actor;
+    private readonly HttpContextAccessor _httpContextAccessor;
     private readonly EftDraftService _service;
 
     public EftDraftServiceTests()
@@ -25,7 +30,11 @@ public class EftDraftServiceTests
         _billingRunRepo = new Mock<IBillingRunRepository>();
         _nachaService = new Mock<INachaFileService>();
         _stripeService = new Mock<IStripeAchService>();
-        _httpClientFactory = new Mock<IHttpClientFactory>();
+        _bankAccounts = new Mock<ISponsorBankAccountSource>();
+        _actor = new Mock<ICurrentActor>();
+        _actor.SetupGet(a => a.UserId).Returns("approver-1");
+        _actor.SetupGet(a => a.IsAuthenticated).Returns(true);
+        _httpContextAccessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
 
         var configData = new Dictionary<string, string?>
         {
@@ -49,7 +58,9 @@ public class EftDraftServiceTests
             _billingRunRepo.Object,
             _nachaService.Object,
             _stripeService.Object,
-            _httpClientFactory.Object,
+            _bankAccounts.Object,
+            _actor.Object,
+            _httpContextAccessor,
             configuration,
             logger.Object);
     }
@@ -69,11 +80,11 @@ public class EftDraftServiceTests
         DueDate = DateTime.UtcNow.AddDays(30)
     };
 
+    /// <summary>The bank-account source answering as a system of record would (found / not enrolled).</summary>
     private void SetupSponsorBankAccountResponse(SponsorBankAccount? bankAccount)
     {
-        var handler = new MockHttpMessageHandler(bankAccount);
-        var client = new HttpClient(handler) { BaseAddress = new Uri("http://sponsor-service") };
-        _httpClientFactory.Setup(f => f.CreateClient("SponsorService")).Returns(client);
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bankAccount == null ? SponsorBankAccountLookup.NotEnrolled() : SponsorBankAccountLookup.Found(bankAccount));
     }
 
     #region InitiateDraftAsync
@@ -414,24 +425,20 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.GetByStatusAsync(EftDraftStatus.Pending)).ReturnsAsync(drafts);
 
         // GRP001 has valid bank, GRP002 has no routing number
-        var handler = new MockHttpMessageHandler(request =>
-        {
-            if (request.RequestUri!.PathAndQuery.Contains("GRP001"))
-                return new SponsorBankAccount
-                {
-                    EftEnabled = true,
-                    RoutingNumber = "091000019",
-                    AccountNumber = "123456789"
-                };
-            return new SponsorBankAccount
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), "GRP001", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SponsorBankAccountLookup.Found(new SponsorBankAccount
+            {
+                EftEnabled = true,
+                RoutingNumber = "091000019",
+                AccountNumber = "123456789"
+            }));
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), "GRP002", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SponsorBankAccountLookup.Found(new SponsorBankAccount
             {
                 EftEnabled = true,
                 RoutingNumber = null,
                 AccountNumber = null
-            };
-        });
-        var client = new HttpClient(handler) { BaseAddress = new Uri("http://sponsor-service") };
-        _httpClientFactory.Setup(f => f.CreateClient("SponsorService")).Returns(client);
+            }));
 
         _nachaService.Setup(s => s.GenerateNachaFile(
                 It.Is<List<NachaEntryDetail>>(e => e.Count == 1),
@@ -683,7 +690,8 @@ public class EftDraftServiceTests
             {
                 Handled = true,
                 EventType = "payment_succeeded",
-                PaymentIntentId = "pi_123"
+                PaymentIntentId = "pi_123",
+                TenantId = "tenant-1"
             });
 
         await _service.ProcessStripeWebhookAsync("{}", "sig_test");
@@ -704,36 +712,4 @@ public class EftDraftServiceTests
     }
 
     #endregion
-}
-
-/// <summary>
-/// Mock HTTP handler for simulating sponsor-service responses
-/// </summary>
-internal class MockHttpMessageHandler : HttpMessageHandler
-{
-    private readonly Func<HttpRequestMessage, SponsorBankAccount?> _responseFactory;
-
-    public MockHttpMessageHandler(SponsorBankAccount? fixedResponse)
-        : this(_ => fixedResponse) { }
-
-    public MockHttpMessageHandler(Func<HttpRequestMessage, SponsorBankAccount?> responseFactory)
-    {
-        _responseFactory = responseFactory;
-    }
-
-    protected override Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        var bankAccount = _responseFactory(request);
-        if (bankAccount == null)
-        {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
-        }
-
-        var json = JsonSerializer.Serialize(bankAccount);
-        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
-        });
-    }
 }

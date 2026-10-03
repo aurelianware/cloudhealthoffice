@@ -152,7 +152,7 @@ once in `ChoRolePermissions.cs` and mirrored in tenant-service's
 | idcard-service | members:read | members:write | |
 | member-document-service | members:read | members:write | |
 | personal-representative-service | members:read | members:write | |
-| premium-billing-service | billing:read | billing:run | |
+| premium-billing-service | billing:read | billing:run | ledger changes (record payment, void invoice, settle/return/cancel EFT draft) and process-delinquencies (suspends sponsors): finance:write. Releasing sponsor debits (POST eft/drafts, eft/drafts/batch, eft/nacha/generate, eft/nacha/generate-and-download): payments:approve, user tokens only, and maker-checker: the user who created or executed the invoice's billing run gets 403 "Separation of duties" (no tenant override). Draft reads: billing:read or payments:read. Member premium summary: billing:read or members:read. Stripe webhook: anonymous, Stripe signature required, tenant from the signed PaymentIntent metadata |
 | provider-contracts-service | contracts:read | contracts:write | |
 | provider-service | providers:read | providers:write | credentialing decisions: providers:credential. Bank accounts are under dual control: a change (bank-account PUT/POST, or an account in a provider create/update body) is only proposed (providers:write) and stays pending until a different user approves it (`POST npi/{npi}/bank-account-changes/{id}/approve` or `/reject`: payments:approve, user tokens only; the proposer gets 403 "Separation of duties"; no tenant override). The masked read capitation uses returns the approved account only; the pending change is readable masked with payments:approve or providers:read |
 | provider-verification-service | providers:read | providers:credential | |

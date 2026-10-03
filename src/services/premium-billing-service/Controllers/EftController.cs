@@ -1,9 +1,20 @@
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
 using PremiumBillingService.Services;
 
 namespace PremiumBillingService.Controllers;
 
+/// <summary>
+/// EFT/ACH auto-debit of sponsors. Releasing a debit (initiating drafts, which
+/// for Stripe and batches submits them at once, and generating NACHA debit
+/// files) needs payments:approve from a user who did not prepare the invoice
+/// (maker-checker, see DebitSeparationOfDuties). Settlement, returns and
+/// cancellation change the ledger and need finance:write. Reads need
+/// billing:read or payments:read. The Stripe webhook is anonymous and
+/// authenticated by its Stripe signature.
+/// </summary>
 [ApiController]
 [Route("api/v1/eft")]
 [Produces("application/json")]
@@ -22,6 +33,7 @@ public class EftController : ControllerBase
     /// Initiate an EFT/ACH draft for a single invoice
     /// </summary>
     [HttpPost("drafts")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EftDraft>> InitiateDraft([FromBody] InitiateEftDraftRequest request)
@@ -30,6 +42,10 @@ public class EftController : ControllerBase
         {
             var draft = await _eftDraftService.InitiateDraftAsync(request);
             return CreatedAtAction(nameof(GetDraftById), new { id = draft.Id }, draft);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -41,6 +57,7 @@ public class EftController : ControllerBase
     /// Initiate EFT drafts for a batch of invoices (from billing run or invoice list)
     /// </summary>
     [HttpPost("drafts/batch")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(BatchEftResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BatchEftResult>> InitiateBatchDraft([FromBody] InitiateBatchEftRequest request)
@@ -49,6 +66,10 @@ public class EftController : ControllerBase
         {
             var result = await _eftDraftService.InitiateBatchDraftAsync(request);
             return Ok(result);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -60,6 +81,7 @@ public class EftController : ControllerBase
     /// Generate a NACHA file for all pending NACHA drafts
     /// </summary>
     [HttpPost("nacha/generate")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(NachaFileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<NachaFileResult>> GenerateNachaFile()
@@ -68,6 +90,10 @@ public class EftController : ControllerBase
         {
             var result = await _eftDraftService.GenerateNachaFileForPendingDraftsAsync();
             return Ok(result);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -81,6 +107,7 @@ public class EftController : ControllerBase
     /// Use POST /nacha/generate if you only need the file metadata.
     /// </summary>
     [HttpPost("nacha/generate-and-download")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> GenerateAndDownloadNachaFile()
@@ -90,6 +117,10 @@ public class EftController : ControllerBase
             var result = await _eftDraftService.GenerateNachaFileForPendingDraftsAsync();
             var bytes = System.Text.Encoding.ASCII.GetBytes(result.FileContent);
             return File(bytes, "text/plain", result.FileName);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -101,6 +132,7 @@ public class EftController : ControllerBase
     /// Get EFT draft by ID
     /// </summary>
     [HttpGet("drafts/{id}")]
+    [RequirePermission("billing:read,payments:read")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<EftDraft>> GetDraftById(string id)
@@ -115,6 +147,7 @@ public class EftController : ControllerBase
     /// Get all EFT drafts for an invoice
     /// </summary>
     [HttpGet("drafts/invoice/{invoiceId}")]
+    [RequirePermission("billing:read,payments:read")]
     [ProducesResponseType(typeof(IEnumerable<EftDraft>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<EftDraft>>> GetDraftsByInvoice(string invoiceId)
     {
@@ -126,6 +159,7 @@ public class EftController : ControllerBase
     /// Mark a draft as settled (for NACHA drafts confirmed by bank)
     /// </summary>
     [HttpPost("drafts/{id}/settle")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EftDraft>> SettleDraft(string id)
@@ -145,6 +179,7 @@ public class EftController : ControllerBase
     /// Process an ACH return (bank rejection)
     /// </summary>
     [HttpPost("drafts/returns")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EftDraft>> ProcessAchReturn([FromBody] ProcessAchReturnRequest request)
@@ -164,6 +199,7 @@ public class EftController : ControllerBase
     /// Cancel a pending EFT draft
     /// </summary>
     [HttpPost("drafts/{id}/cancel")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EftDraft>> CancelDraft(string id)
@@ -183,6 +219,10 @@ public class EftController : ControllerBase
     /// Stripe webhook endpoint for ACH payment events
     /// </summary>
     [HttpPost("webhooks/stripe")]
+    // Called by Stripe, which has no CHO token: authenticated by the
+    // Stripe-Signature check in the service; the tenant comes from the signed
+    // event's PaymentIntent metadata. Returns no tenant data.
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> StripeWebhook()
@@ -204,4 +244,7 @@ public class EftController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    private ObjectResult SeparationOfDuties(SeparationOfDutiesException ex)
+        => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
 }
