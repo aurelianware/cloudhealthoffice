@@ -4,7 +4,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
-using MemberDocumentService.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using MemberDocumentService.Repositories;
 using MemberDocumentService.Services;
 using Microsoft.Azure.Cosmos;
@@ -17,6 +17,17 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers().AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the uploader come from that
+// token. Member documents (ID cards, letters, EOBs, uploads) are PHI: reads and
+// downloads need members:read, uploads, finalize and legal hold need
+// members:write. This service makes no outbound CHO calls.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "members:read";
+    auth.DefaultWritePermission = "members:write";
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -38,6 +49,8 @@ builder.Services.AddSingleton(sp =>
 
 builder.Services.AddScoped<IMemberDocumentBlobService, MemberDocumentBlobService>();
 builder.Services.AddSingleton<IRetentionPolicyService, RetentionPolicyService>();
+builder.Services.AddSingleton(sp => MemberDocumentUploadPolicy.FromConfiguration(
+    sp.GetRequiredService<IConfiguration>()));
 
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
@@ -107,9 +120,11 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 
 app.Run();
+
+public partial class Program { }

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using MemberDocumentService.Models;
 using MemberDocumentService.Repositories;
 using MemberDocumentService.Services;
@@ -16,13 +17,16 @@ public class MemberDocumentsControllerTests
 
     private MemberDocumentsController CreateController(string tenantId = "test-tenant")
     {
+        var context = new DefaultHttpContext();
+        context.Items["TenantId"] = tenantId;
+
         var controller = new MemberDocumentsController(
             _repositoryMock.Object,
             _blobServiceMock.Object,
-            _retentionPolicyService);
+            _retentionPolicyService,
+            new HttpContextCurrentActor(new HttpContextAccessor { HttpContext = context }),
+            MemberDocumentUploadPolicy.Default);
 
-        var context = new DefaultHttpContext();
-        context.Items["TenantId"] = tenantId;
         controller.ControllerContext = new ControllerContext { HttpContext = context };
         return controller;
     }

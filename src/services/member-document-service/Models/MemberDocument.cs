@@ -70,6 +70,14 @@ public class MemberDocument
     public string? StateCode { get; set; }
 
     public DateTime? CoverageTerminationDate { get; set; }
+
+    /// <summary>
+    /// Set while a pre-signed upload has not been finalized: the staging blob
+    /// the SAS URL writes to. The document's content cannot be downloaded until
+    /// finalize has validated the staging blob and copied it to <see cref="BlobPath"/>.
+    /// </summary>
+    [StringLength(500)]
+    public string? PendingUploadBlobPath { get; set; }
 }
 
 public enum MemberDocumentSource
@@ -94,6 +102,7 @@ public sealed class CreateMemberDocumentRequest
     public string? RetentionPolicyId { get; set; }
     public List<string>? RelatedMemberIds { get; set; }
     public List<string>? LinkedResources { get; set; }
+    // UploadedBy is ignored: the uploader is the token subject.
     public string? UploadedBy { get; set; }
     public bool LegalHold { get; set; }
     public string? StateCode { get; set; }
@@ -113,6 +122,7 @@ public sealed class PresignedUploadRequest
 
     public string ContentType { get; set; } = "application/octet-stream";
     public string? Subcategory { get; set; }
+    // UploadedBy is ignored: the uploader is the token subject.
     public string? UploadedBy { get; set; }
     public string? RetentionPolicyId { get; set; }
     public string? StateCode { get; set; }
