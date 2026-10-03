@@ -18,7 +18,7 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <!-- The identity lookups are Mongo queries; they are tested against a real mongod. -->
-    <PackageReference Include="EphemeralMongo7" />
+    <PackageReference Include="EphemeralMongo" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\tenant-service\TenantService.csproj" />
@@ -27,5 +27,9 @@
     <Using Include="Xunit" />
     <Using Include="FluentAssertions" />
     <Using Include="Moq" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

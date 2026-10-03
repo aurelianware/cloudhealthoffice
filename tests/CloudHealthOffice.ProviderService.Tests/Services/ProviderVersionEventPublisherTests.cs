@@ -1,4 +1,4 @@
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
@@ -12,32 +12,28 @@ namespace CloudHealthOffice.ProviderService.Tests.Services;
 /// and monotonic <see cref="ProviderVersionEvent.Version"/> per
 /// <c>(TenantId, ProviderId)</c>.
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class ProviderVersionEventPublisherTests : IAsyncLifetime
 {
     private const string Tenant = "tenant-a";
     private const string ProviderId = "provider-001";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private MongoProviderVersionEventPublisher _publisher = null!;
 
+    public ProviderVersionEventPublisherTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase("provider_event_test");
+        _database = _mongo.CreateDatabase("provider_event_test");
         var config = new ConfigurationBuilder().Build();
         _publisher = new MongoProviderVersionEventPublisher(
             _database, config, NullLogger<MongoProviderVersionEventPublisher>.Instance);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* EphemeralMongo / MongoDB.Driver 3.x mismatch on disposal */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     private static Provider SampleVersion(string versionId, int n = 1) => new()
     {

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Conventions;
@@ -17,16 +18,17 @@ public sealed class MutableTimeProvider : TimeProvider
 /// <summary>
 /// Invitations against a real mongod: what is stored, and the conditional
 /// writes that make redemption, revoke and resend safe against each other.
-/// One mongod for the class (MongoFixture); each test gets its own database.
+/// One mongod shared across the collection (MongoRunnerFixture); each test gets its own database.
 /// </summary>
-public sealed class InvitationStoreTests : IClassFixture<MongoFixture>, IAsyncLifetime
+[Collection(MongoRunnerFixture.CollectionName)]
+public sealed class InvitationStoreTests : IAsyncLifetime
 {
     private const string Tenant = "acme";
     private const string GuestTid = "33333333-3333-3333-3333-333333333333";
     private const string OtherTid = "44444444-4444-4444-4444-444444444444";
     private const string Email = "Pat.Guest@Partner.example";
 
-    private readonly MongoFixture _mongo;
+    private readonly MongoRunnerFixture _mongo;
     private readonly MutableTimeProvider _clock = new();
     private IMongoDatabase _database = null!;
     private MongoInvitationStore _store = null!;
@@ -37,16 +39,16 @@ public sealed class InvitationStoreTests : IClassFixture<MongoFixture>, IAsyncLi
             new ConventionPack { new CamelCaseElementNameConvention() }, _ => true);
     }
 
-    public InvitationStoreTests(MongoFixture mongo) => _mongo = mongo;
+    public InvitationStoreTests(MongoRunnerFixture mongo) => _mongo = mongo;
 
     public Task InitializeAsync()
     {
-        _database = new MongoClient(_mongo.Runner.ConnectionString).GetDatabase($"invitations_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("invitations");
         _store = new MongoInvitationStore(_database, NullLogger<MongoInvitationStore>.Instance, _clock);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync() => _database.Client.DropDatabaseAsync(_database.DatabaseNamespace.DatabaseName);
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     private IMongoCollection<TenantUser> Users => _database.GetCollection<TenantUser>("TenantUsers");
     private IMongoCollection<Invitation> Invitations => _database.GetCollection<Invitation>(MongoInvitationStore.CollectionName);

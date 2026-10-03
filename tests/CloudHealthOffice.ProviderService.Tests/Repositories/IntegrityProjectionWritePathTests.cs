@@ -1,4 +1,4 @@
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
@@ -14,19 +14,20 @@ namespace CloudHealthOffice.ProviderService.Tests.Repositories;
 /// that <see cref="ProviderRepositoryMongo.UpdateAsync"/> enforces.
 /// Identity-field writes against the same Active row must STILL throw.
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class IntegrityProjectionWritePathTests : IAsyncLifetime
 {
     private const string Tenant = "tenant-a";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private ProviderRepositoryMongo _repo = null!;
 
+    public IntegrityProjectionWritePathTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"projection_writepath_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("projection_writepath");
         var ctx = new DefaultHttpContext();
         ctx.Items["TenantId"] = Tenant;
         var accessor = new HttpContextAccessor { HttpContext = ctx };
@@ -34,12 +35,7 @@ public class IntegrityProjectionWritePathTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* see MpipRateServiceTests note */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     private async Task<Provider> SeedActiveAsync(string providerId, string npi)
     {

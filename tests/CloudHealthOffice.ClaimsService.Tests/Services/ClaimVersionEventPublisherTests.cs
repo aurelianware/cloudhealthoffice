@@ -1,6 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Services;
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,32 +15,28 @@ namespace CloudHealthOffice.ClaimsService.Tests.Services;
 /// <c>(TenantId, ClaimVersionId)</c>, partition-key shape, and cross-tenant
 /// isolation. Mirrors <c>ProviderVersionEventPublisherTests</c>.
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class ClaimVersionEventPublisherTests : IAsyncLifetime
 {
     private const string Tenant = "tenant-claims";
     private const string ClaimVersionId = "chain-001";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private MongoClaimVersionEventPublisher _publisher = null!;
 
+    public ClaimVersionEventPublisherTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"claim_event_test_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("claim_event_test");
         var config = new ConfigurationBuilder().Build();
         _publisher = new MongoClaimVersionEventPublisher(
             _database, config, NullLogger<MongoClaimVersionEventPublisher>.Instance);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* EphemeralMongo / MongoDB.Driver 3.x mismatch on disposal */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     private static Claim Sample(string versionId, int n = 1, ClaimVersionState state = ClaimVersionState.Submitted) => new()
     {
