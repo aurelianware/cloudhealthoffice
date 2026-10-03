@@ -7,7 +7,7 @@ namespace CapitationService.Services;
 public interface ICapitationRunService
 {
     Task<CapitationRun> CreateRunAsync(CreateCapitationRunRequest request, string? createdBy);
-    Task<CapitationRun> ExecuteRunAsync(string runId);
+    Task<CapitationRun> ExecuteRunAsync(string runId, string? executedBy = null);
     Task<CapitationRun> GetRunAsync(string runId);
     Task<IEnumerable<CapitationRun>> GetRunsAsync(DateTime? from, DateTime? to, LineOfBusiness? lineOfBusiness = null);
     Task CancelRunAsync(string runId);
@@ -23,6 +23,7 @@ public class CapitationRunService : ICapitationRunService
     private readonly ICapitationContractRepository _contractRepository;
     private readonly ICapitationStatementRepository _statementRepository;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IPaymentSeparationOfDuties _separationOfDuties;
     private readonly ILogger<CapitationRunService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -35,8 +36,10 @@ public class CapitationRunService : ICapitationRunService
         ICapitationContractRepository contractRepository,
         ICapitationStatementRepository statementRepository,
         IHttpClientFactory httpClientFactory,
+        IPaymentSeparationOfDuties separationOfDuties,
         ILogger<CapitationRunService> logger)
     {
+        _separationOfDuties = separationOfDuties;
         _runRepository = runRepository;
         _contractRepository = contractRepository;
         _statementRepository = statementRepository;
@@ -132,7 +135,7 @@ public class CapitationRunService : ICapitationRunService
         }
     }
 
-    public async Task<CapitationRun> ExecuteRunAsync(string runId)
+    public async Task<CapitationRun> ExecuteRunAsync(string runId, string? executedBy = null)
     {
         var run = await _runRepository.GetByIdAsync(runId)
             ?? throw new InvalidOperationException($"Capitation run {runId} not found");
@@ -142,6 +145,7 @@ public class CapitationRunService : ICapitationRunService
 
         // 1. Mark as running
         run.Status = CapitationRunStatus.Running;
+        run.ExecutedBy = executedBy;
         run.ExecutionStartedAt = DateTime.UtcNow;
         await _runRepository.UpdateAsync(run);
 
@@ -192,7 +196,7 @@ public class CapitationRunService : ICapitationRunService
                 try
                 {
                     var statement = await GenerateStatementForContractAsync(
-                        contract, periodStart, periodEnd, daysInMonth, run.Id);
+                        contract, periodStart, periodEnd, daysInMonth, run, executedBy);
 
                     run.StatementIds.Add(statement.Id);
                     totalGross += statement.GrossCapitation;
@@ -269,6 +273,9 @@ public class CapitationRunService : ICapitationRunService
 
         if (statement.Status != CapitationStatementStatus.Generated && statement.Status != CapitationStatementStatus.OnHold)
             throw new InvalidOperationException($"Can only approve statements in Generated or OnHold state, current: {statement.Status}");
+
+        // Maker-checker: whoever prepared the statement cannot approve it.
+        await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, approvedBy, PaymentAction.Approve);
 
         statement.Status = CapitationStatementStatus.Approved;
         statement.ApprovedBy = approvedBy;
@@ -373,7 +380,8 @@ public class CapitationRunService : ICapitationRunService
     // --- Private helper methods ---
 
     private async Task<CapitationStatement> GenerateStatementForContractAsync(
-        CapitationContract contract, DateTime periodStart, DateTime periodEnd, int daysInMonth, string runId)
+        CapitationContract contract, DateTime periodStart, DateTime periodEnd, int daysInMonth,
+        CapitationRun run, string? executedBy)
     {
         // Fetch members assigned to this PCP from coverage-service
         var coverages = await FetchCoveragesByPcpAsync(contract.ProviderNPI);
@@ -385,14 +393,16 @@ public class CapitationRunService : ICapitationRunService
         var statement = new CapitationStatement
         {
             StatementNumber = $"CAPSTMT-{contract.ProviderNPI}-{periodStart:yyyy-MM}",
-            CapitationRunId = runId,
+            CapitationRunId = run.Id,
             ContractId = contract.Id,
             ContractNumber = contract.ContractNumber,
             ProviderNPI = contract.ProviderNPI,
             ProviderName = contract.ProviderName,
             CapitationPeriodStart = periodStart,
             CapitationPeriodEnd = periodEnd,
-            CreatedBy = "capitation-run"
+            // The statement's makers: who executed the run and who created it.
+            CreatedBy = string.IsNullOrWhiteSpace(executedBy) ? CapitationStatement.SystemCreator : executedBy,
+            RunCreatedBy = run.CreatedBy
         };
 
         foreach (var coverage in coverages)

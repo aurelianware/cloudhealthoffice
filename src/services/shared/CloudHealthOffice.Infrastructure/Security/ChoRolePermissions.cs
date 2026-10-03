@@ -15,6 +15,7 @@ public static class ChoRolePermissions
     public const string UMCoordinator = "UMCoordinator";
     public const string ProviderRelations = "ProviderRelations";
     public const string Finance = "Finance";
+    public const string FinanceApprover = "FinanceApprover";
     public const string ComplianceOfficer = "ComplianceOfficer";
     public const string ComplianceViewer = "ComplianceViewer";
     public const string TenantAdmin = "TenantAdmin";
@@ -69,13 +70,20 @@ public static class ChoRolePermissions
                 "networks:read", "networks:write",
                 "terminology:read", "reference-data:read"
             ],
+            // Finance prepares payments; it does not approve or release them.
             [Finance] =
             [
-                "payments:read", "payments:run", "payments:approve",
+                "payments:read", "payments:run",
                 "billing:read", "billing:run",
                 "finance:read", "finance:write",
                 "reports:financial", "claims:read", "contracts:read",
                 "trading-partners:read", "risk-adjustment:read"
+            ],
+            // The checker: approves and releases payments someone else prepared.
+            [FinanceApprover] =
+            [
+                "payments:read", "payments:approve",
+                "finance:read", "reports:financial"
             ],
             [ComplianceOfficer] =
             [

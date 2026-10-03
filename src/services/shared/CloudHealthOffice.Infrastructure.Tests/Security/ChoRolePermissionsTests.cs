@@ -50,4 +50,31 @@ public class ChoRolePermissionsTests
         Assert.True(ChoRolePermissions.Satisfies(granted, "claims:void"));
         Assert.True(ChoRolePermissions.Satisfies(granted, "payments:approve"));
     }
+
+    [Fact]
+    public void Finance_prepares_payments_but_cannot_approve_them()
+    {
+        var granted = ChoRolePermissions.Expand([ChoRolePermissions.Finance]);
+
+        Assert.False(ChoRolePermissions.Satisfies(granted, "payments:approve"));
+        foreach (var kept in new[]
+                 {
+                     "payments:read", "payments:run", "billing:read", "billing:run",
+                     "finance:read", "finance:write", "reports:financial"
+                 })
+            Assert.True(ChoRolePermissions.Satisfies(granted, kept), kept);
+    }
+
+    [Fact]
+    public void FinanceApprover_approves_payments_but_cannot_run_them()
+    {
+        Assert.Contains(ChoRolePermissions.FinanceApprover, ChoRolePermissions.BuiltInRoles);
+        var granted = ChoRolePermissions.Expand([ChoRolePermissions.FinanceApprover]);
+
+        Assert.Equal(
+            new[] { "finance:read", "payments:approve", "payments:read", "reports:financial" },
+            granted.OrderBy(p => p, StringComparer.Ordinal));
+        Assert.False(ChoRolePermissions.Satisfies(granted, "payments:run"));
+        Assert.False(ChoRolePermissions.Satisfies(granted, "billing:run"));
+    }
 }

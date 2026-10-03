@@ -117,6 +117,21 @@ public class CapitationStatementsControllerTests
     }
 
     [Fact]
+    public async Task ApproveStatement_ByItsMaker_Returns403Problem()
+    {
+        _runService.Setup(s => s.ApproveStatementAsync("stmt-1", TestActor.DefaultUserId))
+            .ThrowsAsync(new SeparationOfDutiesException("Separation of duties: you prepared capitation statement X"));
+
+        var result = await _controller.ApproveStatement("stmt-1");
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(403);
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be("Separation of duties");
+        details.Detail.Should().Contain("you prepared capitation statement X");
+    }
+
+    [Fact]
     public async Task ApproveStatement_InvalidState_ReturnsBadRequest()
     {
         _runService.Setup(s => s.ApproveStatementAsync("stmt-1", TestActor.DefaultUserId))

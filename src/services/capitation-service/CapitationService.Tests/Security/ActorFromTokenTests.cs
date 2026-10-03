@@ -187,7 +187,7 @@ public class ActorFromTokenTests
         statements.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>())).ReturnsAsync((CapitationStatement s) => s);
         var service = new CapitationRunService(Mock.Of<ICapitationRunRepository>(),
             Mock.Of<ICapitationContractRepository>(), statements.Object, Mock.Of<IHttpClientFactory>(),
-            Mock.Of<ILogger<CapitationRunService>>());
+            TestSeparationOfDuties.Create(), Mock.Of<ILogger<CapitationRunService>>());
 
         var result = decision switch
         {
@@ -229,7 +229,8 @@ public class DisbursementIntegrityTests
         var service = new CapitationDisbursementService(disbursements.Object, statements.Object,
             Mock.Of<ICapitationRunRepository>(), Mock.Of<INachaCreditFileService>(),
             Mock.Of<IStripeConnectService>(), factory.Object,
-            new ConfigurationBuilder().Build(), Mock.Of<ILogger<CapitationDisbursementService>>());
+            new ConfigurationBuilder().Build(), TestSeparationOfDuties.Create(),
+            Mock.Of<ILogger<CapitationDisbursementService>>());
         return (service, disbursements);
     }
 

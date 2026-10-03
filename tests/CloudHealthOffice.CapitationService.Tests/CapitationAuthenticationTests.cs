@@ -27,7 +27,7 @@ public class CapitationAuthenticationTests : IClassFixture<CapitationApiFactory>
             .Returns(new List<CapitationRun>());
         _factory.RunService.CreateRunAsync(Arg.Any<CreateCapitationRunRequest>(), Arg.Any<string?>())
             .Returns(new CapitationRun { Id = "run-1" });
-        _factory.RunService.ExecuteRunAsync(Arg.Any<string>()).Returns(new CapitationRun { Id = "run-1" });
+        _factory.RunService.ExecuteRunAsync(Arg.Any<string>(), Arg.Any<string?>()).Returns(new CapitationRun { Id = "run-1" });
         _factory.RunService.ApproveStatementAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(new CapitationStatement());
         _factory.RunService.VoidStatementAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(new CapitationStatement());
         _factory.RunService.HoldStatementAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(new CapitationStatement());
@@ -35,7 +35,7 @@ public class CapitationAuthenticationTests : IClassFixture<CapitationApiFactory>
             .Returns(new CapitationDisbursement { Id = "d-1" });
         _factory.DisbursementService.InitiateBatchDisbursementAsync(Arg.Any<InitiateBatchDisbursementRequest>())
             .Returns(new BatchDisbursementResult());
-        _factory.DisbursementService.GenerateNachaCreditFileAsync().Returns(new NachaCreditFileResult());
+        _factory.DisbursementService.GenerateNachaCreditFileAsync(Arg.Any<string>()).Returns(new NachaCreditFileResult());
         _factory.DisbursementService.CancelDisbursementAsync(Arg.Any<string>()).Returns(new CapitationDisbursement());
     }
 
@@ -191,19 +191,40 @@ public class CapitationAuthenticationTests : IClassFixture<CapitationApiFactory>
 
     [Theory]
     [MemberData(nameof(ApproveOnlyEndpoints))]
-    public async Task FinanceRole_CanApproveVoidAndReleasePayments(string method, string path)
+    public async Task FinanceApproverRole_CanApproveVoidAndReleasePayments(string method, string path)
     {
-        var client = _factory.CreateTenantClient(Tenant, "finance-user", ChoRolePermissions.Finance);
+        var client = _factory.CreateTenantClient(Tenant, "finance-approver", ChoRolePermissions.FinanceApprover);
 
         var response = await client.SendAsync(Request(method, path));
 
         Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}");
     }
 
+    /// <summary>Finance prepares payments; approving and releasing moved to FinanceApprover.</summary>
+    [Theory]
+    [MemberData(nameof(ApproveOnlyEndpoints))]
+    public async Task FinanceRole_CannotApproveVoidOrReleasePayments(string method, string path)
+    {
+        var client = _factory.CreateTenantClient(Tenant, "finance-user", ChoRolePermissions.Finance);
+
+        var response = await client.SendAsync(Request(method, path));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task FinanceRole_CanStillCreateAndExecuteRuns()
+    {
+        var client = _factory.CreateTenantClient(Tenant, "finance-user", ChoRolePermissions.Finance);
+
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/v1/capitation/runs", RunBody)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/v1/capitation/runs/run-1/execute", null)).StatusCode);
+    }
+
     [Fact]
     public async Task ApproveStatement_RecordsTokenSubject()
     {
-        var client = _factory.CreateTenantClient(Tenant, "approver-9", ChoRolePermissions.Finance);
+        var client = _factory.CreateTenantClient(Tenant, "approver-9", ChoRolePermissions.FinanceApprover);
 
         var response = await client.PutAsync("/api/v1/capitation/statements/s-approve/approve", null);
 
@@ -214,7 +235,7 @@ public class CapitationAuthenticationTests : IClassFixture<CapitationApiFactory>
     [Fact]
     public async Task InitiateDisbursement_RecordsTokenSubject_NotBodyInitiatedBy()
     {
-        var client = _factory.CreateTenantClient(Tenant, "releaser-3", ChoRolePermissions.Finance);
+        var client = _factory.CreateTenantClient(Tenant, "releaser-3", ChoRolePermissions.FinanceApprover);
 
         var response = await client.PostAsJsonAsync("/api/v1/capitation/disbursements",
             new { statementId = "s-release", initiatedBy = "someone-else" });

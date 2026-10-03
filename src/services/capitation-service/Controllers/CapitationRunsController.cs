@@ -64,7 +64,8 @@ public class CapitationRunsController : ControllerBase
 
         try
         {
-            var run = await _runService.ExecuteRunAsync(id);
+            // The executor is one of the statements' makers (separation of duties).
+            var run = await _runService.ExecuteRunAsync(id, _actor.UserId);
             return Ok(run);
         }
         catch (InvalidOperationException ex)

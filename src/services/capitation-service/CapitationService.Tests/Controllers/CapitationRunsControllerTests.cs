@@ -80,7 +80,7 @@ public class CapitationRunsControllerTests
             TotalStatements = 5,
             TotalMemberMonths = 250
         };
-        _runService.Setup(s => s.ExecuteRunAsync("run-1")).ReturnsAsync(run);
+        _runService.Setup(s => s.ExecuteRunAsync("run-1", TestActor.DefaultUserId)).ReturnsAsync(run);
 
         var result = await _controller.ExecuteRun("run-1");
 
@@ -92,7 +92,7 @@ public class CapitationRunsControllerTests
     [Fact]
     public async Task ExecuteRun_InvalidState_ReturnsBadRequest()
     {
-        _runService.Setup(s => s.ExecuteRunAsync("run-1"))
+        _runService.Setup(s => s.ExecuteRunAsync("run-1", TestActor.DefaultUserId))
             .ThrowsAsync(new InvalidOperationException("Run is in Running state"));
 
         var result = await _controller.ExecuteRun("run-1");

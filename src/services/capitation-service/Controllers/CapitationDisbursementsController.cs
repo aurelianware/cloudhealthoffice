@@ -34,6 +34,7 @@ public class CapitationDisbursementsController : ControllerBase
     [HttpPost]
     [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationDisbursement>> InitiateDisbursement([FromBody] InitiateDisbursementRequest request)
     {
@@ -42,6 +43,10 @@ public class CapitationDisbursementsController : ControllerBase
         {
             var disbursement = await _disbursementService.InitiateDisbursementAsync(request);
             return CreatedAtAction(nameof(GetDisbursementById), new { id = disbursement.Id }, disbursement);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -55,6 +60,7 @@ public class CapitationDisbursementsController : ControllerBase
     [HttpPost("batch")]
     [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(BatchDisbursementResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BatchDisbursementResult>> InitiateBatchDisbursement([FromBody] InitiateBatchDisbursementRequest request)
     {
@@ -63,6 +69,10 @@ public class CapitationDisbursementsController : ControllerBase
         {
             var result = await _disbursementService.InitiateBatchDisbursementAsync(request);
             return Ok(result);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -76,13 +86,18 @@ public class CapitationDisbursementsController : ControllerBase
     [HttpPost("nacha-file")]
     [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(NachaCreditFileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<NachaCreditFileResult>> GenerateNachaCreditFile()
     {
         try
         {
-            var result = await _disbursementService.GenerateNachaCreditFileAsync();
+            var result = await _disbursementService.GenerateNachaCreditFileAsync(_actor.UserId);
             return Ok(result);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
         }
         catch (InvalidOperationException ex)
         {

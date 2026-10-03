@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
+using CapitationService.Tests.Support;
 
 namespace CapitationService.Tests.Services;
 
@@ -33,6 +34,7 @@ public class CapitationRunServiceTests
             _contractRepo.Object,
             _statementRepo.Object,
             _httpClientFactory.Object,
+            TestSeparationOfDuties.Create(runs: _runRepo.Object),
             logger.Object);
     }
 
@@ -125,6 +127,30 @@ public class CapitationRunServiceTests
     }
 
     #region ExecuteRunAsync
+
+    [Fact]
+    public async Task ExecuteRunAsync_RecordsExecutorAndRunCreatorAsTheStatementsMakers()
+    {
+        var run = CreatePendingRun();
+        run.CreatedBy = "run-creator";
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+        var created = new List<CapitationStatement>();
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(created.Add)
+            .ReturnsAsync((CapitationStatement s) => s);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(It.IsAny<LineOfBusiness?>(), It.IsAny<ContractType?>()))
+            .ReturnsAsync(new List<CapitationContract> { CreateContract() });
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { CreateCoverage() });
+        SetupRiskScoreServiceResponse();
+
+        var result = await _service.ExecuteRunAsync("run-1", "run-executor");
+
+        result.ExecutedBy.Should().Be("run-executor");
+        created.Should().ContainSingle();
+        created[0].CreatedBy.Should().Be("run-executor");
+        created[0].RunCreatedBy.Should().Be("run-creator");
+    }
 
     [Fact]
     public async Task ExecuteRunAsync_WithActiveContracts_GeneratesStatements()

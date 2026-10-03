@@ -41,6 +41,7 @@ public class UserContext
         "UMCoordinator" => "UM Coordinator",
         "ProviderRelations" => "Provider Relations",
         "Finance" => "Finance",
+        "FinanceApprover" => "Finance Approver",
         "ComplianceOfficer" => "Compliance Officer",
         "ComplianceViewer" => "Compliance Viewer",
         "TenantAdmin" => "Tenant Admin",
@@ -362,9 +363,14 @@ public class UserContextService : IUserContextService
         },
         "Finance" => new()
         {
-            "payments:read", "payments:run", "payments:approve",
+            "payments:read", "payments:run",
             "billing:read", "billing:run",
             "reports:financial", "claims:read"
+        },
+        "FinanceApprover" => new()
+        {
+            "payments:read", "payments:approve",
+            "finance:read", "reports:financial"
         },
         "ComplianceOfficer" => new()
         {

@@ -78,6 +78,10 @@ else
 }
 
 // Services
+// Maker-checker on approving and releasing payments. On for every tenant unless the
+// tenant's configuration.paymentControls.enforceSeparationOfDuties is false in tenant-service.
+builder.Services.AddSingleton<ITenantPaymentControls, TenantPaymentControls>();
+builder.Services.AddScoped<IPaymentSeparationOfDuties, PaymentSeparationOfDuties>();
 builder.Services.AddScoped<ICapitationRunService, CapitationRunService>();
 builder.Services.AddSingleton<INachaCreditFileService, NachaCreditFileService>();
 builder.Services.AddSingleton<IStripeTransferClient, StripeTransferClient>();
@@ -106,6 +110,13 @@ builder.Services.AddHttpClient("RiskAdjustmentService", client =>
     client.BaseAddress = new Uri(riskServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+
+builder.Services.AddHttpClient(TenantPaymentControls.HttpClientName, client =>
+{
+    var tenantServiceUrl = builder.Configuration["TenantService:BaseUrl"] ?? "http://tenant-service";
+    client.BaseAddress = new Uri(tenantServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(10);
+}).AddChoServiceAuthentication();
 
 // Health checks (MongoDB or Cosmos DB)
 builder.Services.AddChoHealthChecks(options =>

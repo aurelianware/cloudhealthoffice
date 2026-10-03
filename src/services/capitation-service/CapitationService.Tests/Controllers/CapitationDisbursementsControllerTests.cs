@@ -101,7 +101,7 @@ public class CapitationDisbursementsControllerTests
             EntryCount = 5,
             TotalAmount = 25000m
         };
-        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync()).ReturnsAsync(nachaResult);
+        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync(TestActor.DefaultUserId)).ReturnsAsync(nachaResult);
 
         var result = await _controller.GenerateNachaCreditFile();
 
@@ -113,7 +113,7 @@ public class CapitationDisbursementsControllerTests
     [Fact]
     public async Task GenerateNachaCreditFile_NoPending_ReturnsBadRequest()
     {
-        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync())
+        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync(TestActor.DefaultUserId))
             .ThrowsAsync(new InvalidOperationException("No pending NACHA disbursements"));
 
         var result = await _controller.GenerateNachaCreditFile();

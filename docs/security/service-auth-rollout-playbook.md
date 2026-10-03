@@ -101,7 +101,7 @@ cross-tenant action needs `[RequirePermission("platform:admin")]` (or another
 | attachment-service | attachments:read | attachments:write | |
 | authorization-service | authorizations:read | authorizations:write | approve/deny/status decisions: authorizations:decide |
 | benefit-plan-service | benefits:read | settings:manage | /adjudicate and /calculate-benefits (they write accumulators): claims:work; read-only calculations (/estimate, /resolve-rates, NCCI checks and similar): claims:work,benefits:read |
-| capitation-service | payments:read | payments:run | release/approve/void of payments: payments:approve |
+| capitation-service | payments:read | payments:run | release/approve/void of payments: payments:approve (built-in FinanceApprover; Finance only prepares). Maker-checker: the user who created or executed the run cannot approve or release its statements (403) unless the tenant sets `configuration.paymentControls.enforceSeparationOfDuties: false` in tenant-service, which is logged per use |
 | claims-service | claims:read | claims:work | void (POST {id}/void, DELETE {id}, status → Voided): claims:void; adjustments: claims:adjust; work-queue override: claims:override-approve; work-queue assign: workqueue:assign; Cosmos partition migration: platform:admin |
 | claims-examiner-service | claims:read | claims:work | |
 | consent-service | consent:read | consent:write | |

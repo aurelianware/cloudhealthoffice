@@ -141,13 +141,25 @@ public static class StandardRoles
     public static readonly TenantRole Finance = new()
     {
         RoleName = "Finance",
-        Description = "Process payments, manage premium billing, financial reporting",
+        Description = "Prepare payment runs, manage premium billing, financial reporting (cannot approve or release payments)",
         IsBuiltIn = true,
         Permissions = new List<string>
         {
-            "payments:read", "payments:run", "payments:approve",
+            "payments:read", "payments:run",
             "billing:read", "billing:run",
             "reports:financial", "claims:read"
+        }
+    };
+
+    public static readonly TenantRole FinanceApprover = new()
+    {
+        RoleName = "FinanceApprover",
+        Description = "Approve and release payments prepared by another user",
+        IsBuiltIn = true,
+        Permissions = new List<string>
+        {
+            "payments:read", "payments:approve",
+            "finance:read", "reports:financial"
         }
     };
 
@@ -197,6 +209,7 @@ public static class StandardRoles
         UMCoordinator,
         ProviderRelations,
         Finance,
+        FinanceApprover,
         ComplianceOfficer,
         ComplianceViewer,
         TenantAdmin

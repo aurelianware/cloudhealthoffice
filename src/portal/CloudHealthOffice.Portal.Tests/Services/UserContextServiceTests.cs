@@ -784,6 +784,31 @@ public class UserContextServiceTests
     }
 
     [Fact]
+    public async Task ExpandPermissions_Finance_CanRunButNotApprovePayments()
+    {
+        var sut = await CreateServiceWithRole("Finance");
+
+        sut.HasPermission("payments:read").Should().BeTrue();
+        sut.HasPermission("payments:run").Should().BeTrue();
+        sut.HasPermission("billing:run").Should().BeTrue();
+        sut.HasPermission("reports:financial").Should().BeTrue();
+        sut.HasPermission("payments:approve").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExpandPermissions_FinanceApprover_CanApproveButNotRunPayments()
+    {
+        var sut = await CreateServiceWithRole("FinanceApprover");
+
+        sut.HasPermission("payments:read").Should().BeTrue();
+        sut.HasPermission("payments:approve").Should().BeTrue();
+        sut.HasPermission("finance:read").Should().BeTrue();
+        sut.HasPermission("reports:financial").Should().BeTrue();
+        sut.HasPermission("payments:run").Should().BeFalse();
+        sut.HasPermission("billing:run").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ExpandPermissions_UnknownRole_GetsEmptyPermissions()
     {
         var sut = await CreateServiceWithRole("NonExistentRole");
@@ -845,6 +870,7 @@ public class UserContextServiceTests
     [InlineData("UMCoordinator", "UM Coordinator")]
     [InlineData("ProviderRelations", "Provider Relations")]
     [InlineData("Finance", "Finance")]
+    [InlineData("FinanceApprover", "Finance Approver")]
     [InlineData("ComplianceOfficer", "Compliance Officer")]
     [InlineData("ComplianceViewer", "Compliance Viewer")]
     [InlineData("TenantAdmin", "Tenant Admin")]

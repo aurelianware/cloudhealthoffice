@@ -92,12 +92,17 @@ public class CapitationStatementsController : ControllerBase
     [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(CapitationStatement), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CapitationStatement>> ApproveStatement(string id)
     {
         try
         {
             var statement = await _runService.ApproveStatementAsync(id, _actor.UserId);
             return Ok(statement);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
         }
         catch (InvalidOperationException ex)
         {

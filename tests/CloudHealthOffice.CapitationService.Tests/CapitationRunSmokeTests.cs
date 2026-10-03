@@ -146,7 +146,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
 
         _factory.RunService.CreateRunAsync(Arg.Any<CreateCapitationRunRequest>(), Arg.Any<string?>())
             .Returns(pendingRun);
-        _factory.RunService.ExecuteRunAsync("run-smoke-1")
+        _factory.RunService.ExecuteRunAsync("run-smoke-1", Arg.Any<string?>())
             .Returns(completedRun);
         _factory.StatementRepository.GetByRunIdAsync("run-smoke-done")
             .Returns(new List<CapitationStatement> { statement });
@@ -376,7 +376,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
     [Fact]
     public async Task ExecuteRun_InvalidState_Returns400()
     {
-        _factory.RunService.ExecuteRunAsync("run-already-done")
+        _factory.RunService.ExecuteRunAsync("run-already-done", Arg.Any<string?>())
             .Returns<CapitationRun>(x => throw new InvalidOperationException("Run is in Completed state, expected Pending"));
 
         var response = await _client.PostAsync("/api/v1/capitation/runs/run-already-done/execute", null);

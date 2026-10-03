@@ -116,6 +116,13 @@ public class CapitationRun
     public string? CreatedBy { get; set; }
 
     /// <summary>
+    /// User who executed the run (token subject). With <see cref="CreatedBy"/>,
+    /// one of the run's makers: neither may approve or release its statements.
+    /// </summary>
+    [StringLength(200)]
+    public string? ExecutedBy { get; set; }
+
+    /// <summary>
     /// Execution started timestamp
     /// </summary>
     public DateTime? ExecutionStartedAt { get; set; }

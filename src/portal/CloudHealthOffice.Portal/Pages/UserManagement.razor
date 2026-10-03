@@ -137,7 +137,7 @@
     {
         "TenantAdmin", "ClaimsExaminer", "ClaimsSupervisor", "MemberServices",
         "EnrollmentSpecialist", "UMCoordinator", "ProviderRelations",
-        "Finance", "ComplianceOfficer"
+        "Finance", "FinanceApprover", "ComplianceOfficer"
     };
 
     private IEnumerable<UserListItem> FilteredUsers => _users.Where(u =>
@@ -287,6 +287,7 @@
         "EnrollmentSpecialist" => "Enrollment Specialist",
         "UMCoordinator" => "UM Coordinator",
         "ProviderRelations" => "Provider Relations",
+        "FinanceApprover" => "Finance Approver",
         "ComplianceOfficer" => "Compliance Officer",
         "TenantAdmin" => "Tenant Admin",
         _ => role

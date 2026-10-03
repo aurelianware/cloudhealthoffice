@@ -158,6 +158,24 @@ public class TenantConfiguration
 
     [JsonPropertyName("customSettings")]
     public Dictionary<string, string> CustomSettings { get; set; } = new();
+
+    [JsonPropertyName("paymentControls")]
+    public PaymentControlsConfig PaymentControls { get; set; } = new();
+}
+
+/// <summary>
+/// Payment approval controls, read by capitation-service.
+/// </summary>
+public class PaymentControlsConfig
+{
+    /// <summary>
+    /// Maker-checker: a user who prepared a payment (created or executed its
+    /// capitation run) cannot approve or release it. On by default; set to
+    /// false only for very small tenants without a second approver. Every
+    /// same-user approval or release this allows is logged as an audit warning.
+    /// </summary>
+    [JsonPropertyName("enforceSeparationOfDuties")]
+    public bool EnforceSeparationOfDuties { get; set; } = true;
 }
 
 public class ClearinghouseConfig

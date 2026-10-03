@@ -147,10 +147,26 @@ public class CapitationStatement
     public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Created by user/system
+    /// Created by: the user who executed the capitation run that generated this
+    /// statement (token subject), or <see cref="SystemCreator"/> on records
+    /// generated before the executor was recorded.
     /// </summary>
     [StringLength(200)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// The user who created the capitation run that generated this statement.
+    /// With <see cref="CreatedBy"/>, the statement's makers: neither may approve
+    /// it or release its payment (separation of duties).
+    /// </summary>
+    [StringLength(200)]
+    public string? RunCreatedBy { get; set; }
+
+    /// <summary>
+    /// The placeholder <see cref="CreatedBy"/> written before statements recorded
+    /// a user. It names no person and is never treated as a maker.
+    /// </summary>
+    public const string SystemCreator = "capitation-run";
 
     /// <summary>
     /// Last updated by user/system

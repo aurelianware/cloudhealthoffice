@@ -24,9 +24,10 @@ public interface ICapitationDisbursementService
     Task<BatchDisbursementResult> InitiateBatchDisbursementAsync(InitiateBatchDisbursementRequest request);
 
     /// <summary>
-    /// Generate a NACHA credit file for all pending NACHA disbursements
+    /// Generate a NACHA credit file for all pending NACHA disbursements.
+    /// <paramref name="releasedBy"/> is the user releasing the file (token subject).
     /// </summary>
-    Task<NachaCreditFileResult> GenerateNachaCreditFileAsync();
+    Task<NachaCreditFileResult> GenerateNachaCreditFileAsync(string releasedBy);
 
     /// <summary>
     /// Process an ACH return (bank rejection of credit)
@@ -68,6 +69,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
     private readonly IStripeConnectService _stripeConnectService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly IPaymentSeparationOfDuties _separationOfDuties;
     private readonly ILogger<CapitationDisbursementService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -83,8 +85,10 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         IStripeConnectService stripeConnectService,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
+        IPaymentSeparationOfDuties separationOfDuties,
         ILogger<CapitationDisbursementService> logger)
     {
+        _separationOfDuties = separationOfDuties;
         _disbursementRepository = disbursementRepository;
         _statementRepository = statementRepository;
         _runRepository = runRepository;
@@ -105,6 +109,9 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
         if (statement.NetPayable <= 0)
             throw new InvalidOperationException("Statement has no net payable amount");
+
+        // Maker-checker: whoever prepared the statement cannot release its payment.
+        await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, request.InitiatedBy, PaymentAction.Release);
 
         // Fetch provider bank account info
         var bankAccount = await FetchProviderBankAccountAsync(statement.ProviderNPI);
@@ -200,6 +207,15 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         var uniqueStatementIds = statementIds.Distinct().ToList();
         result.TotalStatements = uniqueStatementIds.Count;
 
+        // Maker-checker before any money moves: if the releasing user prepared any
+        // statement this batch would pay, the whole batch is refused.
+        foreach (var statementId in uniqueStatementIds)
+        {
+            var candidate = await _statementRepository.GetByIdAsync(statementId);
+            if (candidate is { Status: CapitationStatementStatus.Approved } && candidate.NetPayable > 0)
+                await _separationOfDuties.EnsureActorIsNotMakerAsync(candidate, request.InitiatedBy, PaymentAction.Release);
+        }
+
         var nachaEntries = new List<NachaCreditEntryDetail>();
         var nachaDisbursements = new List<CapitationDisbursement>();
 
@@ -290,7 +306,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     result.TotalAmount += disbursement.Amount;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not SeparationOfDutiesException)
             {
                 result.Errors++;
                 result.ErrorMessages.Add($"Statement {statementId}: {ex.Message}");
@@ -325,7 +341,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         return result;
     }
 
-    public async Task<NachaCreditFileResult> GenerateNachaCreditFileAsync()
+    public async Task<NachaCreditFileResult> GenerateNachaCreditFileAsync(string releasedBy)
     {
         var pendingDisbursements = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.Pending))
             .Where(d => d.Method == DisbursementMethod.NachaCredit)
@@ -333,6 +349,17 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
         if (pendingDisbursements.Count == 0)
             throw new InvalidOperationException("No pending NACHA credit disbursements to process");
+
+        // Generating the file is what sends the money. Maker-checker before any of it:
+        // if the releasing user prepared any statement in the file, no file is generated.
+        foreach (var statementId in pendingDisbursements.Select(d => d.StatementId).Distinct())
+        {
+            var statement = await _statementRepository.GetByIdAsync(statementId);
+            if (statement != null)
+                await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, releasedBy, PaymentAction.Release);
+            else
+                _logger.LogWarning("Separation of duties not checked for statement {StatementId}: statement not found", statementId);
+        }
 
         var entries = new List<NachaCreditEntryDetail>();
         var includedDisbursements = new List<CapitationDisbursement>();

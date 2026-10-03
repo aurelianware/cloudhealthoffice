@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
+using CapitationService.Tests.Support;
 
 namespace CapitationService.Tests.Services;
 
@@ -51,6 +52,7 @@ public class CapitationDisbursementServiceTests
             _stripeService.Object,
             _httpClientFactory.Object,
             configuration,
+            TestSeparationOfDuties.Create(runs: _runRepo.Object),
             logger.Object);
     }
 
@@ -373,7 +375,7 @@ public class CapitationDisbursementServiceTests
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending))
             .ReturnsAsync(Enumerable.Empty<CapitationDisbursement>());
 
-        var act = () => _service.GenerateNachaCreditFileAsync();
+        var act = () => _service.GenerateNachaCreditFileAsync("releaser-1");
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("No pending NACHA*");
@@ -416,7 +418,7 @@ public class CapitationDisbursementServiceTests
             })
             .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST", EntryCount = 2, TotalAmount = 13000 });
 
-        var result = await _service.GenerateNachaCreditFileAsync();
+        var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
         result.FileReference.Should().Be("NACHA-CR-TEST");
         result.EntryCount.Should().Be(2);
@@ -454,7 +456,7 @@ public class CapitationDisbursementServiceTests
                 It.IsAny<NachaCreditFileOptions>()))
             .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
 
-        await _service.GenerateNachaCreditFileAsync();
+        await _service.GenerateNachaCreditFileAsync("releaser-1");
 
         // Only d1 should be updated (d2 skipped due to missing bank)
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
@@ -485,7 +487,7 @@ public class CapitationDisbursementServiceTests
                 It.IsAny<NachaCreditFileOptions>()))
             .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
 
-        await _service.GenerateNachaCreditFileAsync();
+        await _service.GenerateNachaCreditFileAsync("releaser-1");
 
         _nachaService.Verify(s => s.GenerateNachaCreditFile(
             It.Is<List<NachaCreditEntryDetail>>(e => e.Count == 1),
