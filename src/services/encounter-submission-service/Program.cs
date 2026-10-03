@@ -7,6 +7,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -28,6 +29,14 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "encounters:read";
+    auth.DefaultWritePermission = "encounters:write";
+});
+
 // Database Configuration (MongoDB required — EncounterSubmissionServiceImpl depends on IMongoDatabase)
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"]
     ?? throw new InvalidOperationException(
@@ -43,11 +52,12 @@ builder.Services.AddScoped<MongoDB.Driver.IMongoDatabase>(sp =>
     return client.GetDatabase(databaseName);
 });
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (the Kafka consumer sets a per-message context)
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddSingleton(new TenantMiddlewareOptions());
 
-// Inter-service HTTP clients (named client pattern)
+// Inter-service HTTP clients (named client pattern). AddChoAuthentication puts
+// ChoOutboundTokenHandler on every factory client: it forwards the caller's token,
+// or mints a service token for the X-Tenant-ID the request names.
 builder.Services.AddHttpClient("ClaimsService", client =>
 {
     client.BaseAddress = new Uri(
@@ -116,12 +126,10 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
-
 app.UseCors("AllowAll");
 
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();
