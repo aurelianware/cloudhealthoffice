@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,6 @@ namespace FhirService.Controllers;
 /// Updates are visible immediately to all CRD evaluations.
 /// </summary>
 [Route("api/v1/crd")]
-[Authorize]
 [Produces("application/json")]
 public class CrdConfigController : FhirControllerBase
 {
@@ -27,6 +27,7 @@ public class CrdConfigController : FhirControllerBase
 
     /// <summary>GET /api/v1/crd/code-classification — get current classification for caller's tenant</summary>
     [HttpGet("code-classification")]
+    [FhirAccess(smart: false, cho: "authorizations:read")]
     public IActionResult GetClassification()
     {
         var classification = _crdService.GetClassificationOrNull(TenantId)
@@ -37,6 +38,7 @@ public class CrdConfigController : FhirControllerBase
 
     /// <summary>PUT /api/v1/crd/code-classification — update classification for caller's tenant</summary>
     [HttpPut("code-classification")]
+    [FhirAccess(smart: false, cho: "settings:manage")]
     public IActionResult SetClassification([FromBody] CrdCodeClassification classification)
     {
         _crdService.SetClassification(TenantId, classification);

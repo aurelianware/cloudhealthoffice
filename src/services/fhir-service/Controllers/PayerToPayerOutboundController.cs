@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer.Outbound;
 using Hl7.Fhir.Model;
@@ -26,6 +27,7 @@ namespace FhirService.Controllers;
 /// the same JWT/SMART enforcement as the rest of the FHIR surface.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "members:write")]
 public sealed class PayerToPayerOutboundController : FhirControllerBase
 {
     private readonly IPayerToPayerOutboundService _outbound;

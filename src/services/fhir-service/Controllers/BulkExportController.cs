@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,8 @@ namespace FhirService.Controllers;
 /// Implements the async polling pattern per the Bulk Data IG.
 /// </summary>
 [Route("fhir/r4")]
-[Authorize]
+// No CHO permission covers an export of every member's data; SMART backend services only.
+[FhirAccess(smart: true, cho: null)]
 [Produces("application/json")]
 public class BulkExportController : FhirControllerBase
 {

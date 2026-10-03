@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,6 +23,7 @@ namespace FhirService.Controllers;
 /// </para>
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "benefits:read")]
 public class InsurancePlanController : FhirControllerBase
 {
     /// <summary>

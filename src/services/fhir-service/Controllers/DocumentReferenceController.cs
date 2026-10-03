@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
 using Hl7.Fhir.Model;
@@ -14,6 +15,7 @@ namespace FhirService.Controllers;
 /// extensions carrying transmission + control-number metadata.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "appeals:read")]
 public sealed class DocumentReferenceController : FhirControllerBase
 {
     private readonly IFhirAppealAdapter _appeals;
@@ -39,6 +41,7 @@ public sealed class DocumentReferenceController : FhirControllerBase
         var result = await _appeals.GetAttachmentByIdAsync(id, TenantId, ct);
         if (result is null) return FhirNotFound("DocumentReference", id);
         var (appeal, attachment) = result.Value;
+        if (IsOutsidePatientContext(appeal.MemberId)) return FhirNotFound("DocumentReference", id);
         var docRef = _mapper.ToAppealDocumentReference(attachment, appeal.Id, appeal.MemberId);
         return Ok(docRef);
     }
@@ -58,7 +61,7 @@ public sealed class DocumentReferenceController : FhirControllerBase
             if (!string.IsNullOrEmpty(appealId))
             {
                 var appeal = await _appeals.GetAppealAsync(appealId, TenantId, ct);
-                var docs = appeal is null
+                var docs = appeal is null || IsOutsidePatientContext(appeal.MemberId)
                     ? Array.Empty<DocumentReference>()
                     : _mapper.ToAppealDocumentReferences(appeal).ToArray();
                 var narrow = _bundleBuilder.Build(

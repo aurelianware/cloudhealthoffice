@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FhirService.Services.Identity;
 using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
@@ -62,7 +63,9 @@ public class SmartScopeEnforcementMiddleware
     /// Search parameters that name the member a request is about. A patient-scoped
     /// token's binding is enforced against every one of them.
     /// </summary>
-    private static readonly string[] MemberBindingParameters = ["patient", "subject"];
+    /// <c>beneficiary</c> is Coverage's member parameter; it was not checked, so
+    /// a patient token could ask for <c>Coverage?beneficiary=</c> anyone.
+    private static readonly string[] MemberBindingParameters = ["patient", "subject", "beneficiary"];
 
     private readonly RequestDelegate _next;
     private readonly ILogger<SmartScopeEnforcementMiddleware> _logger;
@@ -94,6 +97,16 @@ public class SmartScopeEnforcementMiddleware
             return;
         }
 
+        // A CHO caller (portal, CHO services) holds no SMART scopes and no
+        // patient binding; [FhirAccess] already required its CHO permission.
+        // Only a principal the CHO scheme positively marked skips this: any
+        // other principal, however it got here, is held to SMART rules.
+        if (FhirCallerSchemes.IsCho(context.User))
+        {
+            await _next(context);
+            return;
+        }
+
         var scopes = ParseScopes(context.User);
 
         // What this request actually IS: which resource's scope governs it,
@@ -110,7 +123,10 @@ public class SmartScopeEnforcementMiddleware
         }
 
         var resourceType = interaction.Resource;
-        var patientClaim = context.User.FindFirst("patient")?.Value;
+        // The issuer's mapped patient claim when it has one (CallerIdentityResolver
+        // falls back to `patient`), else the conventional `patient` claim.
+        var patientClaim = (context.Items[AuthenticatedCaller.HttpContextItemKey] as AuthenticatedCaller)?.PatientId
+                           ?? context.User.FindFirst("patient")?.Value;
 
         // ── 1. Scope check ────────────────────────────────────────────────────
         if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts))
@@ -129,6 +145,18 @@ public class SmartScopeEnforcementMiddleware
         }
 
         // ── 2. Patient binding enforcement ───────────────────────────────────
+        // A patient-scoped token with no `patient` claim is bound to nobody,
+        // and treating it as unbound would let it read every member's record.
+        if (string.IsNullOrEmpty(patientClaim) && IsPatientScopedToken(scopes))
+        {
+            _logger.LogWarning("Patient-scoped token without a patient claim refused — resource: {Resource}", resourceType);
+            await WriteFhirError(context, 403,
+                OperationOutcome.IssueSeverity.Error,
+                OperationOutcome.IssueType.Forbidden,
+                "A patient-scoped token must carry a patient context.");
+            return;
+        }
+
         if (!string.IsNullOrEmpty(patientClaim) && IsPatientScopedToken(scopes))
         {
             var normalizedPatient = StripPrefix("Patient/", patientClaim);
@@ -248,7 +276,9 @@ public class SmartScopeEnforcementMiddleware
 
             // Bulk export ASKS for data. POST is the Bulk Data IG's kick-off
             // shape, not evidence of a write.
-            ["$export"] = ("$export", ReadAccess, AllContexts),
+            // A bulk export covers every member in its scope, so a patient-context
+            // token (bound to ONE member) may never start one; backend contexts only.
+            ["$export"] = ("$export", ReadAccess, BackendContexts),
         };
 
     /// <summary>
@@ -318,7 +348,8 @@ public class SmartScopeEnforcementMiddleware
 
         // /fhir/r4/{Resource}/{id}/$operation
         if (segments.Length >= 5 && segments[4].StartsWith('$'))
-            return new FhirInteraction(resource, segments[3], OperationAccess(resource, segments[4], methodAccess), AllContexts);
+            return new FhirInteraction(resource, segments[3], OperationAccess(resource, segments[4], methodAccess),
+                string.Equals(segments[4], "$export", StringComparison.OrdinalIgnoreCase) ? BackendContexts : AllContexts);
 
         // Plain REST: /fhir/r4/{Resource}[/{id}]
         var id = segments.Length >= 4 ? segments[3] : null;

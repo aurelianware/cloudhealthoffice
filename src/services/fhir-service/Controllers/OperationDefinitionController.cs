@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using FhirService.Services;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +12,7 @@ namespace FhirService.Controllers;
 /// authenticating.
 /// </summary>
 [Route("fhir/r4")]
+[AllowAnonymous]
 public class OperationDefinitionController : FhirControllerBase
 {
     private readonly IChoFhirArtifactRegistry _registry;

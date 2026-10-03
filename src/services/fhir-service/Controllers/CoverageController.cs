@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
@@ -10,6 +11,7 @@ namespace FhirService.Controllers;
 /// Supports search parameters: _id, patient, beneficiary, status, type.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "coverage:read")]
 public class CoverageController : FhirControllerBase
 {
     private readonly IFhirDataAdapter _adapter;
@@ -28,7 +30,9 @@ public class CoverageController : FhirControllerBase
     public async Task<IActionResult> Read(string id, CancellationToken ct)
     {
         var coverage = await _adapter.GetCoverageAsync(id, TenantId, ct);
-        return coverage is null ? FhirNotFound("Coverage", id) : Ok(coverage);
+        return coverage is null || IsOutsidePatientContext(coverage.Beneficiary?.Reference)
+            ? FhirNotFound("Coverage", id)
+            : Ok(coverage);
     }
 
     /// <summary>GET /fhir/r4/Coverage — search Coverage resources</summary>
@@ -38,6 +42,10 @@ public class CoverageController : FhirControllerBase
     {
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
+
+        // A patient-bound token sees its own coverage only. The middleware has
+        // already refused an explicit patient/beneficiary naming someone else.
+        if (SmartPatientId is { } bound) search.Patient = bound;
 
         var (items, total) = await _adapter.SearchCoverageAsync(search, TenantId, ct);
 

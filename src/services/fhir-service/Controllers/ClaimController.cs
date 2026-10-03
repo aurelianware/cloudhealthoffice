@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
@@ -10,6 +11,7 @@ namespace FhirService.Controllers;
 /// Supports search parameters: _id, patient, created, status, use.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "claims:read")]
 public class ClaimController : FhirControllerBase
 {
     private readonly IFhirDataAdapter _adapter;
@@ -28,7 +30,9 @@ public class ClaimController : FhirControllerBase
     public async Task<IActionResult> Read(string id, CancellationToken ct)
     {
         var claim = await _adapter.GetClaimAsync(id, TenantId, ct);
-        return claim is null ? FhirNotFound("Claim", id) : Ok(claim);
+        return claim is null || IsOutsidePatientContext(claim.Patient?.Reference)
+            ? FhirNotFound("Claim", id)
+            : Ok(claim);
     }
 
     /// <summary>GET /fhir/r4/Claim — search Claims</summary>
@@ -38,6 +42,8 @@ public class ClaimController : FhirControllerBase
     {
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
+
+        if (SmartPatientId is { } bound) search.Patient = bound;
 
         var (items, total) = await _adapter.SearchClaimsAsync(search, TenantId, ct);
 

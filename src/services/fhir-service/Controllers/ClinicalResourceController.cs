@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
 using FhirService.Services.Clinical;
@@ -37,6 +38,8 @@ namespace FhirService.Controllers;
 /// <see cref="ClinicalResourceService"/>.
 /// </summary>
 [Route("fhir/r4")]
+// USCDI clinical data is member PHI. CHO has no clinical permission, so members:read.
+[FhirAccess(smart: true, cho: "members:read")]
 public class ClinicalResourceController : FhirControllerBase
 {
     /// <summary>

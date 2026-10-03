@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
@@ -11,7 +12,6 @@ namespace FhirService.Controllers;
 /// FHIR R4 Questionnaire/QuestionnaireResponse CRUD and $questionnaire-package operation.
 /// </summary>
 [Route("fhir/r4")]
-[Authorize]
 public class DtrController : FhirControllerBase
 {
     private readonly IDtrService _dtrService;
@@ -32,6 +32,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>GET /fhir/r4/Questionnaire/{id}</summary>
     [HttpGet("Questionnaire/{id}")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(Questionnaire), 200)]
     [ProducesResponseType(typeof(OperationOutcome), 404)]
     public async Task<IActionResult> GetQuestionnaire(string id, CancellationToken ct)
@@ -42,6 +43,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>GET /fhir/r4/Questionnaire — search</summary>
     [HttpGet("Questionnaire")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(Bundle), 200)]
     public async Task<IActionResult> SearchQuestionnaires(
         [FromQuery] QuestionnaireSearchParams search, CancellationToken ct)
@@ -60,6 +62,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>POST /fhir/r4/Questionnaire — create</summary>
     [HttpPost("Questionnaire")]
+    [FhirAccess(smart: true, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 201)]
@@ -87,6 +90,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>PUT /fhir/r4/Questionnaire/{id} — update</summary>
     [HttpPut("Questionnaire/{id}")]
+    [FhirAccess(smart: true, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 200)]
@@ -117,6 +121,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>GET /fhir/r4/QuestionnaireResponse/{id}</summary>
     [HttpGet("QuestionnaireResponse/{id}")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(QuestionnaireResponse), 200)]
     [ProducesResponseType(typeof(OperationOutcome), 404)]
     public async Task<IActionResult> GetQuestionnaireResponse(string id, CancellationToken ct)
@@ -127,6 +132,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>GET /fhir/r4/QuestionnaireResponse — search</summary>
     [HttpGet("QuestionnaireResponse")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(Bundle), 200)]
     public async Task<IActionResult> SearchQuestionnaireResponses(
         [FromQuery] QuestionnaireResponseSearchParams search, CancellationToken ct)
@@ -145,6 +151,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>POST /fhir/r4/QuestionnaireResponse — submit completed response</summary>
     [HttpPost("QuestionnaireResponse")]
+    [FhirAccess(smart: true, cho: "authorizations:write")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(QuestionnaireResponse), 201)]
@@ -183,6 +190,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>POST /fhir/r4/Questionnaire/$questionnaire-package</summary>
     [HttpPost("Questionnaire/$questionnaire-package")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Bundle), 200)]

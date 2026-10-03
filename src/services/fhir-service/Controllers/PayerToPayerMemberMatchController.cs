@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer;
 using Microsoft.AspNetCore.Mvc;
@@ -26,6 +27,7 @@ namespace FhirService.Controllers;
 /// or probe which identities exist.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: null)]
 public sealed class PayerToPayerMemberMatchController : FhirControllerBase
 {
     private readonly IPayerToPayerMemberMatchService _matcher;

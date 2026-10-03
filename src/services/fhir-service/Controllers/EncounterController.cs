@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
@@ -10,6 +11,7 @@ namespace FhirService.Controllers;
 /// Supports search parameters: _id, patient, date, status, type.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "encounters:read")]
 public class EncounterController : FhirControllerBase
 {
     private readonly IFhirDataAdapter _adapter;
@@ -28,7 +30,9 @@ public class EncounterController : FhirControllerBase
     public async Task<IActionResult> Read(string id, CancellationToken ct)
     {
         var encounter = await _adapter.GetEncounterAsync(id, TenantId, ct);
-        return encounter is null ? FhirNotFound("Encounter", id) : Ok(encounter);
+        return encounter is null || IsOutsidePatientContext(encounter.Subject?.Reference)
+            ? FhirNotFound("Encounter", id)
+            : Ok(encounter);
     }
 
     /// <summary>GET /fhir/r4/Encounter — search Encounters</summary>
@@ -38,6 +42,8 @@ public class EncounterController : FhirControllerBase
     {
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
+
+        if (SmartPatientId is { } bound) search.Patient = bound;
 
         var (items, total) = await _adapter.SearchEncountersAsync(search, TenantId, ct);
 

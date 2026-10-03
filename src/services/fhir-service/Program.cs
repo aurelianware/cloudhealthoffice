@@ -8,6 +8,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.PriorAuthRuleEngine.Configuration;
 using Microsoft.Azure.Cosmos;
@@ -25,6 +26,40 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 // production deployment cannot silently fall back to it.
 // See docs/architecture/smart-oauth-trust.md.
 builder.Services.AddSmartTrust(builder.Configuration, builder.Environment);
+
+// ── CHO authentication (internal callers) ─────────────────────────────────────
+// fhir-service serves two kinds of caller, each under its own scheme:
+//   * SMART ("Smart"): external FHIR clients. Scopes + patient binding decide.
+//   * CHO ("Bearer", AddChoAuthentication): the portal and CHO services. The
+//     tenant comes from the token and CHO permissions decide.
+// The FhirCaller selector routes each token to exactly one of them by issuer;
+// every endpoint states which callers it serves with [FhirAccess]. No default
+// permissions: an unannotated action is denied.
+//
+// Outbound: SmartCallerOutboundHandler is registered BEFORE AddChoAuthentication
+// so it is the outer handler on every factory client. For a SMART caller it
+// sends fhir-service's own service token for the caller's tenant to CHO
+// services and never the SMART token; CHO callers' tokens are forwarded by the
+// shared ChoOutboundTokenHandler.
+builder.Services.AddTransient<SmartCallerOutboundHandler>();
+builder.Services.ConfigureHttpClientDefaults(client =>
+    client.AddHttpMessageHandler<SmartCallerOutboundHandler>());
+
+// Conformance discovery is read before a client has a tenant binding, so these
+// paths skip tenant resolution like the probes do. They serve no tenant data.
+builder.Services.AddSingleton(new CloudHealthOffice.Infrastructure.Middleware.TenantMiddlewareOptions
+{
+    PassthroughPaths =
+    [
+        "/health", "/ready", "/live", "/metrics",
+        "/fhir/r4/metadata", "/fhir/r4/.well-known", "/fhir/r4/adapter-status",
+        "/fhir/r4/StructureDefinition", "/fhir/r4/OperationDefinition",
+        "/fhir/r4/CodeSystem", "/fhir/r4/ValueSet",
+    ],
+});
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddFhirCallerSchemes(builder.Configuration);
+builder.Services.AddFhirAccessPolicies();
 
 // ── Shared infrastructure ─────────────────────────────────────────────────────
 // ICacheProvider (via AddChoCaching) backs the tenant-config and rule-set
@@ -565,10 +600,17 @@ app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingM
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 app.UseMiddleware<AdapterLabelMiddleware>();
+// Authentication (CHO or SMART), tenant from the token, then [FhirAccess].
+// The first UseAuthentication + FhirTenantRefusalMiddleware only give tenant
+// refusals the FHIR OperationOutcome shape; authentication results are cached
+// per request, and the shared TenantMiddleware inside UseChoAuthentication
+// still enforces the same rule.
 app.UseAuthentication();
+app.UseMiddleware<FhirTenantRefusalMiddleware>();
+app.UseChoAuthentication();
+// SMART only: the issuer may serve the tenant, then scopes + patient binding.
+app.UseMiddleware<SmartIssuerTenantMiddleware>();
 app.UseMiddleware<SmartScopeEnforcementMiddleware>();
-app.UseMiddleware<TenantMiddleware>();
-app.UseAuthorization();
 app.MapControllers();
 app.MapChoHealthChecks();
 app.Run();
