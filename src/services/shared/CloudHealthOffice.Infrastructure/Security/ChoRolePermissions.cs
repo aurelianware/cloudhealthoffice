@@ -47,7 +47,9 @@ public static class ChoRolePermissions
                 "eligibility:check", "claims:read", "coverage:read",
                 "authorizations:read", "reference-data:read",
                 "attachments:read", "benefits:read", "consent:read", "consent:write",
-                "providers:read"
+                "providers:read",
+                // Members ask for a Payer-to-Payer transfer through member services.
+                "payer-to-payer:initiate"
             ],
             [EnrollmentSpecialist] =
             [
@@ -56,7 +58,10 @@ public static class ChoRolePermissions
                 "coverage:read", "coverage:write", "reference-data:read",
                 // Imports resolve plan codes in benefit-plan-service and
                 // providers by NPI in provider-service.
-                "benefits:read", "providers:read"
+                "benefits:read", "providers:read",
+                // Coverage transitions are enrollment work; a member's request
+                // for a Payer-to-Payer transfer can also arrive here.
+                "payer-to-payer:initiate"
             ],
             [UMCoordinator] =
             [
@@ -66,7 +71,10 @@ public static class ChoRolePermissions
                 "correspondence:read", "correspondence:write",
                 "members:read", "claims:read",
                 "terminology:read", "reference-data:read",
-                "attachments:read", "attachments:write", "benefits:read", "consent:read"
+                "attachments:read", "attachments:write", "benefits:read", "consent:read",
+                // USCDI clinical data (Condition, Observation, MedicationRequest...)
+                // for clinical review. Not granted to MemberServices.
+                "clinical:read"
             ],
             [ProviderRelations] =
             [

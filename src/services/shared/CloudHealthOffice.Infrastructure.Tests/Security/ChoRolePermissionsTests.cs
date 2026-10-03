@@ -96,4 +96,48 @@ public class ChoRolePermissionsTests
 
         Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
     }
+
+    [Theory]
+    // clinical:read: USCDI clinical FHIR resources.
+    [InlineData(ChoRolePermissions.UMCoordinator, "clinical:read", true)]
+    [InlineData(ChoRolePermissions.TenantAdmin, "clinical:read", true)]        // *:*
+    [InlineData(ChoRolePermissions.PlatformAdmin, "clinical:read", true)]      // *:*
+    [InlineData(ChoRolePermissions.ComplianceOfficer, "clinical:read", true)]  // *:read
+    [InlineData(ChoRolePermissions.MemberServices, "clinical:read", false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "clinical:read", false)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, "clinical:read", false)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist, "clinical:read", false)]
+    [InlineData(ChoRolePermissions.ProviderRelations, "clinical:read", false)]
+    [InlineData(ChoRolePermissions.Finance, "clinical:read", false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "clinical:read", false)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, "clinical:read", false)]
+    // payer-to-payer:initiate: fhir-service PayerToPayer/$initiate.
+    [InlineData(ChoRolePermissions.MemberServices, "payer-to-payer:initiate", true)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist, "payer-to-payer:initiate", true)]
+    [InlineData(ChoRolePermissions.TenantAdmin, "payer-to-payer:initiate", true)]
+    [InlineData(ChoRolePermissions.PlatformAdmin, "payer-to-payer:initiate", true)]
+    [InlineData(ChoRolePermissions.ComplianceOfficer, "payer-to-payer:initiate", false)] // *:read is not an action
+    [InlineData(ChoRolePermissions.UMCoordinator, "payer-to-payer:initiate", false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "payer-to-payer:initiate", false)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, "payer-to-payer:initiate", false)]
+    [InlineData(ChoRolePermissions.ProviderRelations, "payer-to-payer:initiate", false)]
+    [InlineData(ChoRolePermissions.Finance, "payer-to-payer:initiate", false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "payer-to-payer:initiate", false)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, "payer-to-payer:initiate", false)]
+    public void Clinical_and_payer_to_payer_grants(string role, string permission, bool expected)
+    {
+        var granted = ChoRolePermissions.Expand([role]);
+
+        Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
+    }
+
+    [Fact]
+    public void No_role_holds_a_bulk_export_permission_by_name()
+    {
+        // Bulk export is deliberately SMART/system-only until a `bulk-export`
+        // permission is approved; nothing grants one by name.
+        foreach (var role in ChoRolePermissions.BuiltInRoles)
+            Assert.DoesNotContain(ChoRolePermissions.ForRole(role),
+                p => p.StartsWith("bulk-export", StringComparison.OrdinalIgnoreCase));
+    }
 }

@@ -66,8 +66,8 @@ public sealed class ClaimResponseController : FhirControllerBase
 
         var query = new AppealSearchQuery
         {
-            MemberId = StripPrefix("Patient/", search.Patient)
-                       ?? StripPrefix("Patient/", SmartPatientId),
+            MemberId = StripPrefix("Patient/", AuthorizedMemberId)
+                       ?? StripPrefix("Patient/", search.Patient),
             ClaimId = StripPrefix("Claim/", search.Request),
             Page = search.Page,
             PageSize = search.Count

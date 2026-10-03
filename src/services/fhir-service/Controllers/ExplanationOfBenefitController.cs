@@ -65,7 +65,7 @@ public class ExplanationOfBenefitController : FhirControllerBase
             ct,
             // claims-service answers for the tenant, not for a patient: a
             // patient-bound token may only see an EOB whose patient is its own.
-            SmartPatientId is null ? null : body => !IsOutsidePatientContext(EobPatientReference(body)));
+            AuthorizedMemberId is null ? null : body => !IsOutsidePatientContext(EobPatientReference(body)));
 
     /// <summary>The EOB's <c>patient.reference</c>; null when absent or unreadable.</summary>
     internal static string? EobPatientReference(string body)
@@ -114,9 +114,11 @@ public class ExplanationOfBenefitController : FhirControllerBase
         // explicit patient param and surfaces the bound patient id via
         // SmartPatientId. Auto-inject when the caller didn't provide one
         // so patient-app callers don't need to know their own member id.
-        var effectivePatient = !string.IsNullOrEmpty(explicitPatient)
-            ? explicitPatient
-            : SmartPatientId;
+        // A request confined to one member (patient binding, or the member
+        // Provider Access just authorized) is pinned to that member, whatever
+        // else the query says.
+        var effectivePatient = AuthorizedMemberId
+            ?? (string.IsNullOrEmpty(explicitPatient) ? null : explicitPatient);
 
         if (string.IsNullOrEmpty(effectivePatient) && string.IsNullOrEmpty(explicitId))
         {

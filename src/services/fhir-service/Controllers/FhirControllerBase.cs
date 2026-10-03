@@ -66,15 +66,26 @@ public abstract class FhirControllerBase : ControllerBase
         => HttpContext.Items["SmartPatientId"] as string;
 
     /// <summary>
-    /// True when a patient-bound SMART caller asks for a resource that belongs
-    /// to someone else (or to no identifiable member). Reads answer 404 then,
-    /// so a patient token cannot even learn that another member's resource
-    /// exists. Always false for CHO callers and for user/system SMART tokens,
-    /// which have no patient binding.
+    /// The one member this request may read, when it is confined to one:
+    /// the patient a patient-scoped SMART token is bound to, or the member a
+    /// provider/backend SMART token was just authorized for by
+    /// ProviderAccessAuthorizationFilter (attribution + active ProviderAccess
+    /// consent). Null for CHO callers, whose permission governs them, and for
+    /// requests the filter does not govern.
+    /// </summary>
+    protected string? AuthorizedMemberId
+        => SmartPatientId
+           ?? HttpContext.Items[FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter.AuthorizedMemberItemKey] as string;
+
+    /// <summary>
+    /// True when a request confined to one member (<see cref="AuthorizedMemberId"/>)
+    /// asks for a resource that belongs to someone else (or to no identifiable
+    /// member). Reads answer 404 then, so the caller cannot even learn that
+    /// another member's resource exists. Always false for CHO callers.
     /// </summary>
     protected bool IsOutsidePatientContext(string? memberReference)
     {
-        var bound = SmartPatientId;
+        var bound = AuthorizedMemberId;
         if (bound is null) return false;
         if (string.IsNullOrEmpty(memberReference)) return true;
 

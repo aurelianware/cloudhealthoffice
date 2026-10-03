@@ -117,6 +117,19 @@ tenant-service's identity lookups for token-service) names that service with
 `[RequireServiceClient("<client-id>")]`, which admits only a service token whose
 `sub` and `azp` both equal the client id.
 
+Two permissions exist for fhir-service only. The built-in roles are defined
+once in `ChoRolePermissions.cs` and mirrored in tenant-service's
+`StandardRoles` (`Models/TenantRole.cs`):
+
+- `clinical:read` (USCDI clinical FHIR resources): UMCoordinator;
+  TenantAdmin and PlatformAdmin through `*:*`; ComplianceOfficer through
+  `*:read`. MemberServices does not get it, and `members:read` does not
+  satisfy it.
+- `payer-to-payer:initiate` (fhir-service `PayerToPayer/$initiate`):
+  MemberServices and EnrollmentSpecialist, through whom members ask for a
+  transfer; TenantAdmin and PlatformAdmin through `*:*`. `*:read` does not
+  satisfy it.
+
 | Service | Default read | Default write | Stricter actions |
 |---|---|---|---|
 | accumulator-service | accumulators:read | accumulators:write | |
@@ -135,6 +148,7 @@ tenant-service's identity lookups for token-service) names that service with
 | encounter-submission-service | encounters:read | encounters:write | |
 | enrollment-import-service | enrollment:read | enrollment:process | |
 | ffs-service | payments:read | payments:run | |
+| fhir-service | (none: every action states its callers with `[FhirAccess(smart, cho)]`; unannotated is denied) | (none) | SMART tokens are governed by scopes, patient binding and Provider Access, never by a CHO permission. CHO permissions per endpoint: Patient members:read; Coverage coverage:read; Claim/EOB claims:read; Encounter encounters:read; USCDI clinical resources (Condition, Observation, MedicationRequest, MedicationDispense, AllergyIntolerance, Procedure, Immunization, DiagnosticReport, CarePlan, CareTeam, Goal, Device): clinical:read; PayerToPayer/$initiate: payer-to-payer:initiate; Task rfai:read or appeals:read; Communication/DocumentReference/ClaimResponse appeals:read; Questionnaire and QuestionnaireResponse reads authorizations:read. Bulk export ($export, Group/$export, status) is SMART/system only, with no CHO permission and no staff access, until a `bulk-export` permission is approved. Payer-to-Payer $member-match and $member-data-export are SMART only |
 | idcard-service | members:read | members:write | |
 | member-document-service | members:read | members:write | |
 | personal-representative-service | members:read | members:write | |

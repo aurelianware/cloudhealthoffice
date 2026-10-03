@@ -324,6 +324,42 @@ public class ClinicalResourceControllerTests : IClassFixture<FhirTestWebAppFacto
         condition.Meta.Profile.Should().BeEmpty();
     }
 
+    // ── CHO (staff) callers: clinical:read, not members:read ───────────────────
+
+    private static string Staff(string role)
+        => CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.UserToken(Tenant, role);
+
+    [Theory]
+    [InlineData(CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.UMCoordinator)]     // clinical:read
+    [InlineData(CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.ComplianceOfficer)] // *:read
+    [InlineData(CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.TenantAdmin)]       // *:*
+    public async Task ChoToken_WithClinicalRead_CanReadCondition(string role)
+    {
+        var search = await GetAsync($"/fhir/r4/Condition?patient=Patient/{Member}", Staff(role));
+        search.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bundle = await ParseAsync<Bundle>(search);
+        bundle.Entry.Select(e => e.Resource).OfType<Condition>().Should().NotBeEmpty()
+            .And.OnlyContain(c => c.Subject.Reference == $"Patient/{Member}");
+
+        var id = IdFor("Condition", "CND-1", Member);
+        (await GetAsync($"/fhir/r4/Condition/{id}?patient=Patient/{Member}", Staff(role)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Theory]
+    [InlineData(CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.MemberServices)]       // members:read only
+    [InlineData(CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.ClaimsExaminer)]       // members:read only
+    [InlineData(CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.EnrollmentSpecialist)] // members:read/write
+    public async Task ChoToken_WithMembersReadButNotClinicalRead_Is403(string role)
+    {
+        var id = IdFor("Condition", "CND-1", Member);
+
+        (await GetAsync($"/fhir/r4/Condition?patient=Patient/{Member}", Staff(role)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await GetAsync($"/fhir/r4/Condition/{id}?patient=Patient/{Member}", Staff(role)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     // ── Test data ──────────────────────────────────────────────────────────────
 
     /// <summary>

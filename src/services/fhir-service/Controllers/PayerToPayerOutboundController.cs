@@ -27,7 +27,11 @@ namespace FhirService.Controllers;
 /// the same JWT/SMART enforcement as the rest of the FHIR surface.
 /// </summary>
 [Route("fhir/r4")]
-[FhirAccess(smart: true, cho: "members:write")]
+// Starting an exchange is its own CHO permission, payer-to-payer:initiate
+// (MemberServices and EnrollmentSpecialist, through whom members ask for a
+// transfer), not members:write: it discloses nothing locally but makes CHO
+// request a member's record from another payer.
+[FhirAccess(smart: true, cho: "payer-to-payer:initiate")]
 public sealed class PayerToPayerOutboundController : FhirControllerBase
 {
     private readonly IPayerToPayerOutboundService _outbound;

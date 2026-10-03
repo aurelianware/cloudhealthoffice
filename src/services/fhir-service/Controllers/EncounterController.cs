@@ -43,7 +43,7 @@ public class EncounterController : FhirControllerBase
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
 
-        if (SmartPatientId is { } bound) search.Patient = bound;
+        if (AuthorizedMemberId is { } bound) search.Patient = bound;
 
         var (items, total) = await _adapter.SearchEncountersAsync(search, TenantId, ct);
 

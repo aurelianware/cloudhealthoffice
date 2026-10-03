@@ -63,8 +63,22 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
                 "Communication",
                 "DocumentReference",
                 "ClaimResponse",
+                // DTR answers about one member (subject = Patient). It was
+                // missing here, so a user/ or system/ token with no patient/
+                // scope read any member's responses in the tenant.
+                "QuestionnaireResponse",
             }.Concat(ClinicalResourceInventory.ResourceTypes),
             StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <c>HttpContext.Items</c> key under which an ALLOWED Provider Access
+    /// decision records the member it authorized (bare id, no
+    /// <c>Patient/</c> prefix). Controllers pin the read to it
+    /// (<c>FhirControllerBase.AuthorizedMemberId</c>): authorization for one
+    /// member must never return another member's resource, whether by id or
+    /// through a search parameter the controller does not read.
+    /// </summary>
+    public const string AuthorizedMemberItemKey = "ProviderAccessMemberId";
 
     /// <summary>
     /// Query parameters that name the member a request is about, across the
@@ -140,6 +154,7 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
             return;
         }
 
+        http.Items[AuthorizedMemberItemKey] = memberId;
         await next();
     }
 

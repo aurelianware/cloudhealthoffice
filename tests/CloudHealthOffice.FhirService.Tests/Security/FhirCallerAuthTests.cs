@@ -310,6 +310,83 @@ public class FhirCallerAuthTests : IClassFixture<FhirTestWebAppFactory>
         appeals.Submitted.Should().BeEmpty();
     }
 
+    // ── Payer-to-Payer $initiate: payer-to-payer:initiate ─────────────────────
+
+    private async Task<(HttpResponseMessage Response, RecordingOutboundService Outbound)> InitiateAsync(string token)
+    {
+        var outbound = new RecordingOutboundService();
+        var host = _factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
+        {
+            s.RemoveAll<global::FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundService>();
+            s.AddSingleton<global::FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundService>(outbound);
+        }));
+        var body = new StringContent("{\"memberId\":\"pat-001\",\"targetPayerId\":\"PRIOR-PLAN\"}",
+            Encoding.UTF8, "application/json");
+        var response = await SendAsync(host, HttpMethod.Post, "/fhir/r4/PayerToPayer/$initiate", token, content: body);
+        return (response, outbound);
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.MemberServices)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist)]
+    [InlineData(ChoRolePermissions.TenantAdmin)]
+    public async Task PayerToPayerInitiate_RoleWithInitiatePermission_IsServed(string role)
+    {
+        var (response, outbound) = await InitiateAsync(ChoUser(Tenant, role));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        outbound.Requests.Should().ContainSingle().Which.TenantId.Should().Be(Tenant);
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.ClaimsExaminer)]
+    [InlineData(ChoRolePermissions.UMCoordinator)]
+    [InlineData(ChoRolePermissions.ComplianceOfficer)] // *:read is not an action
+    public async Task PayerToPayerInitiate_RoleWithoutInitiatePermission_Is403(string role)
+    {
+        var (response, outbound) = await InitiateAsync(ChoUser(Tenant, role));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        outbound.Requests.Should().BeEmpty();
+    }
+
+    // ── Bulk export: SMART/system only, no staff access ───────────────────────
+
+    [Fact]
+    public async Task BulkExport_RefusesEveryChoToken_EvenTenantAdmin()
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/fhir/r4/$export") { Content = new StringContent(string.Empty) };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ChoUser(Tenant, ChoRolePermissions.TenantAdmin));
+        request.Headers.Add("Prefer", "respond-async");
+
+        (await client.SendAsync(request)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    internal sealed class RecordingOutboundService
+        : global::FhirService.Services.PayerToPayer.Outbound.IPayerToPayerOutboundService
+    {
+        public List<global::FhirService.Models.PayerToPayer.PayerToPayerOutboundRequest> Requests { get; } = [];
+
+        public Task<global::FhirService.Models.PayerToPayer.PayerToPayerOutboundResult> InitiateAsync(
+            global::FhirService.Models.PayerToPayer.PayerToPayerOutboundRequest request,
+            CancellationToken ct = default)
+        {
+            lock (Requests) Requests.Add(request);
+            return Task.FromResult(new global::FhirService.Models.PayerToPayer.PayerToPayerOutboundResult
+            {
+                Exchange = new global::FhirService.Models.PayerToPayer.PayerToPayerOutboundExchange
+                {
+                    ExchangeId = "exch-1",
+                    TenantId = request.TenantId,
+                    MemberId = request.MemberId,
+                    TargetPayerId = request.TargetPayerId,
+                    Status = global::FhirService.Models.PayerToPayer.PayerToPayerOutboundStatus.Completed,
+                },
+            });
+        }
+    }
+
     // ── Helpers (resources, tokens, fakes) ────────────────────────────────────
 
     private static string? MemberOf(Resource resource) => (resource switch

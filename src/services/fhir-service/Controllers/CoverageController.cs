@@ -45,7 +45,7 @@ public class CoverageController : FhirControllerBase
 
         // A patient-bound token sees its own coverage only. The middleware has
         // already refused an explicit patient/beneficiary naming someone else.
-        if (SmartPatientId is { } bound) search.Patient = bound;
+        if (AuthorizedMemberId is { } bound) search.Patient = bound;
 
         var (items, total) = await _adapter.SearchCoverageAsync(search, TenantId, ct);
 

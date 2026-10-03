@@ -102,7 +102,8 @@ public static class StandardRoles
         {
             "members:read", "members:search", "accumulators:read",
             "eligibility:check", "claims:read", "coverage:read",
-            "authorizations:read", "providers:read"
+            "authorizations:read", "providers:read",
+            "payer-to-payer:initiate"
         }
     };
 
@@ -115,7 +116,8 @@ public static class StandardRoles
         {
             "members:read", "members:write",
             "enrollment:read", "enrollment:process",
-            "coverage:read", "coverage:write", "benefits:read", "providers:read"
+            "coverage:read", "coverage:write", "benefits:read", "providers:read",
+            "payer-to-payer:initiate"
         }
     };
 
@@ -130,7 +132,8 @@ public static class StandardRoles
             "appeals:read", "appeals:write",
             "rfai:read", "rfai:write",
             "correspondence:read", "correspondence:write",
-            "members:read", "claims:read"
+            "members:read", "claims:read",
+            "clinical:read"
         }
     };
 

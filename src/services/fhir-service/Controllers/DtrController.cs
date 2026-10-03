@@ -128,7 +128,8 @@ public class DtrController : FhirControllerBase
     {
         var qr = await _dtrService.GetResponseAsync(id, TenantId, ct);
         // QuestionnaireResponses hold clinical answers: a patient-bound token
-        // reads only its own patient's, and another patient's is "not found".
+        // reads only its own patient's, a user/system token only the member
+        // Provider Access authorized it for; anyone else's is "not found".
         return qr is null || IsOutsidePatientContext(qr.Subject?.Reference)
             ? FhirNotFound("QuestionnaireResponse", id)
             : Ok(qr);
@@ -144,9 +145,11 @@ public class DtrController : FhirControllerBase
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
 
-        // A patient-bound token searches its own patient's responses only. The
-        // middleware has already refused a patient/subject naming someone else.
-        if (SmartPatientId is { } bound) search.Patient = bound;
+        // Confined to one member: a patient-bound token's own patient (the
+        // middleware has already refused a patient/subject naming someone else),
+        // or the member Provider Access authorized a user/system token for (a
+        // search naming no member never gets here).
+        if (AuthorizedMemberId is { } bound) search.Patient = bound;
 
         var (items, total) = await _dtrService.SearchResponsesAsync(search, TenantId, ct);
 

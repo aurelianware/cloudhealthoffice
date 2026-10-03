@@ -57,8 +57,8 @@ public sealed class CommunicationController : FhirControllerBase
 
         var query = new AppealSearchQuery
         {
-            MemberId = StripPrefix("Patient/", search.Patient)
-                       ?? StripPrefix("Patient/", SmartPatientId),
+            MemberId = StripPrefix("Patient/", AuthorizedMemberId)
+                       ?? StripPrefix("Patient/", search.Patient),
             ClaimId = null,
             Page = search.Page,
             // Fix 6: use larger page to fetch more appeals for projection-level pagination

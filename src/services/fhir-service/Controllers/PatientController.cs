@@ -44,7 +44,7 @@ public class PatientController : FhirControllerBase
 
         // A patient-bound token searches its own record only, whatever else
         // the query says (name, birthdate, identifier...).
-        if (SmartPatientId is { } bound)
+        if (AuthorizedMemberId is { } bound)
         {
             if (!string.IsNullOrEmpty(search.Id) && !string.Equals(search.Id, bound, StringComparison.Ordinal))
             {

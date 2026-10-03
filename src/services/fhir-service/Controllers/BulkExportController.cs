@@ -11,7 +11,11 @@ namespace FhirService.Controllers;
 /// Implements the async polling pattern per the Bulk Data IG.
 /// </summary>
 [Route("fhir/r4")]
-// No CHO permission covers an export of every member's data; SMART backend services only.
+// DELIBERATELY SMART/system-only. A bulk export covers every member in its
+// scope, and no CHO permission has been approved for that: staff (CHO) tokens,
+// TenantAdmin included, are refused here. Do not map this to members:read,
+// clinical:read or any existing permission; it stays cho: null until a
+// dedicated `bulk-export` permission is approved.
 [FhirAccess(smart: true, cho: null)]
 [Produces("application/json")]
 public class BulkExportController : FhirControllerBase

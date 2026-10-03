@@ -92,8 +92,8 @@ public sealed class TaskController : FhirControllerBase
 
         var query = new AppealSearchQuery
         {
-            MemberId = StripPrefix("Patient/", search.Patient)
-                       ?? StripPrefix("Patient/", SmartPatientId),
+            MemberId = StripPrefix("Patient/", AuthorizedMemberId)
+                       ?? StripPrefix("Patient/", search.Patient),
             Status = MapTaskStatusToAppealStatus(search.Status),
             ClaimId = StripPrefix("Claim/", search.Focus),
             AssignedReviewerId = StripPrefix("Practitioner/", search.Owner),

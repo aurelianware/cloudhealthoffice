@@ -55,7 +55,8 @@ public class SmartScopeEnforcementMiddleware
             "Task",
             "Communication",
             "DocumentReference",
-            "ClaimResponse"
+            "ClaimResponse",
+            "QuestionnaireResponse"
         }.Concat(ClinicalResourceInventory.ResourceTypes),
         StringComparer.OrdinalIgnoreCase);
 
@@ -426,8 +427,8 @@ public class SmartScopeEnforcementMiddleware
     ///   filter itself requires that the calling provider is attributed to the
     ///   member named in the request AND that the member has an active
     ///   ProviderAccess consent; a read with no member named is refused. Before,
-    ///   such a token was unbound everywhere, so resources outside that filter
-    ///   (QuestionnaireResponse, operations, writes) had no member check at all.</item>
+    ///   such a token was unbound everywhere, so requests outside that filter
+    ///   (operations, writes) had no member check at all.</item>
     /// </list>
     /// This only ever adds binding relative to the original rule; it never
     /// removes it from a request that was bound before.

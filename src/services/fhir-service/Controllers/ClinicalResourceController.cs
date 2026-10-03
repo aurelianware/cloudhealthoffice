@@ -38,8 +38,11 @@ namespace FhirService.Controllers;
 /// <see cref="ClinicalResourceService"/>.
 /// </summary>
 [Route("fhir/r4")]
-// USCDI clinical data is member PHI. CHO has no clinical permission, so members:read.
-[FhirAccess(smart: true, cho: "members:read")]
+// USCDI clinical data is member PHI with its own CHO permission, clinical:read
+// (UMCoordinator; TenantAdmin/PlatformAdmin via *:*, ComplianceOfficer via
+// *:read). members:read is not enough: member services see demographics and
+// coverage, not diagnoses and medications. SMART callers are unchanged.
+[FhirAccess(smart: true, cho: "clinical:read")]
 public class ClinicalResourceController : FhirControllerBase
 {
     /// <summary>
