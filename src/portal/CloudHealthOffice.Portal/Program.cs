@@ -21,6 +21,8 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
+// Invitation links carry a secret in the path (/invite/{code}): keep request URLs out of logs.
+builder.Logging.KeepInvitationCodesOutOfLogs();
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
@@ -312,6 +314,7 @@ builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
 builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
+builder.Services.AddScoped<ITenantInvitationService, TenantInvitationService>();
 builder.Services.AddScoped<IOperatingModeService, OperatingModeService>();
 builder.Services.AddSingleton<IEmailNotificationService, SmtpEmailNotificationService>();
 builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();

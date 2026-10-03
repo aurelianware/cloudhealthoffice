@@ -77,6 +77,10 @@ public class UsersController : ControllerBase
         {
             return NotFound(new { error = ex.Message });
         }
+        catch (UserChangedConcurrentlyException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -140,6 +144,10 @@ public class UsersController : ControllerBase
         {
             return NotFound(new { error = ex.Message });
         }
+        catch (UserChangedConcurrentlyException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -147,7 +155,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Partial update of user details (e.g. backfill Azure AD OID).
+    /// Partial update of user details. The Entra link is not settable here.
     /// </summary>
     [HttpPatch("{userId}")]
     [ProducesResponseType(typeof(TenantUser), StatusCodes.Status200OK)]
@@ -166,9 +174,38 @@ public class UsersController : ControllerBase
         {
             return NotFound(new { error = ex.Message });
         }
+        catch (UserChangedConcurrentlyException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Clears the user's Entra link (for example, when an employee leaves or a
+    /// guest's account must be replaced). Audited. The user keeps its status;
+    /// disable it as well to keep the person out, because someone from the
+    /// tenant's own directory is linked again by email on their next sign-in.
+    /// </summary>
+    [HttpPost("{userId}/unlink")]
+    [ProducesResponseType(typeof(TenantUser), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TenantUser>> UnlinkUser(string tenantId, string userId, [FromServices] TenantAuditLog audit)
+    {
+        try
+        {
+            var (user, previousOid, previousTid) = await _userService.UnlinkUserAsync(tenantId, userId);
+            audit.Record(
+                $"unlink user {userId} (was oid {(previousOid.Length > 0 ? previousOid : "-")} tid {(previousTid.Length > 0 ? previousTid : "-")})",
+                tenantId);
+            return Ok(user);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
         }
     }
 

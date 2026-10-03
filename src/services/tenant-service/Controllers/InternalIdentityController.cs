@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using TenantService.Models;
 using TenantService.Security;
 using TenantService.Services;
 
@@ -27,11 +28,50 @@ namespace TenantService.Controllers;
 public class InternalIdentityController : ControllerBase
 {
     private readonly IIdentityDirectory _directory;
+    private readonly IInvitationStore _invitations;
 
     /// <summary>The only identity allowed to call these endpoints.</summary>
     public const string TokenServiceClientId = "token-service";
 
-    public InternalIdentityController(IIdentityDirectory directory) => _directory = directory;
+    public InternalIdentityController(IIdentityDirectory directory, IInvitationStore invitations)
+    {
+        _directory = directory;
+        _invitations = invitations;
+    }
+
+    /// <summary>
+    /// Redeems an invitation for the Entra identity token-service validated:
+    /// links <c>tid</c>+<c>oid</c> to the invited user and activates it, in one
+    /// conditional write (see <see cref="IInvitationStore"/>). The signed-in
+    /// <c>email</c> must be the invited address. Answers 200 <c>{ tenantId, userId }</c>,
+    /// or <c>{ error }</c>: 404 not_found, 410 expired / revoked, 409
+    /// already_redeemed / identity_in_use, 403 email_mismatch (with the invited
+    /// address masked). A wrong code reveals nothing about any invitation.
+    /// </summary>
+    [HttpPost("invitations/redeem")]
+    public async Task<IActionResult> RedeemInvitation([FromBody] RedeemInvitationRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Tid) || string.IsNullOrWhiteSpace(request.Oid))
+            return BadRequest(new { error = "invalid_request" });
+        if (!InvitationCodes.IsWellFormed(request.Code))
+            return NotFound(new { error = "not_found" });
+
+        var result = await _invitations.RedeemAsync(
+            InvitationCodes.Hash(request.Code), request.Tid.Trim(), request.Oid.Trim(), request.Email ?? string.Empty, ct);
+
+        return result.Error switch
+        {
+            InvitationError.None => Ok(new { tenantId = result.TenantId, userId = result.UserId }),
+            InvitationError.NotFound => NotFound(new { error = "not_found" }),
+            InvitationError.Expired => StatusCode(StatusCodes.Status410Gone, new { error = "expired" }),
+            InvitationError.Revoked => StatusCode(StatusCodes.Status410Gone, new { error = "revoked" }),
+            InvitationError.AlreadyRedeemed => Conflict(new { error = "already_redeemed" }),
+            InvitationError.IdentityInUse => Conflict(new { error = "identity_in_use" }),
+            InvitationError.EmailMismatch => StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "email_mismatch", invitedEmail = result.MaskedEmail }),
+            _ => Conflict(new { error = "conflict" }),
+        };
+    }
 
     /// <summary>TenantUsers linked to Entra object <paramref name="oid"/> in directory <paramref name="tid"/>.</summary>
     [HttpGet("memberships")]

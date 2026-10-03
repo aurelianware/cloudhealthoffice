@@ -247,8 +247,14 @@ public sealed class TokenExchangeService
         return OwnDirectory(tenant, user);
     }
 
+    /// <summary>
+    /// Only an Active user is linked by email. An Invited user is linked only by
+    /// redeeming its invitation (the code proves the invitation reached this
+    /// person); Disabled and Locked users are not linked at all.
+    /// </summary>
     private static bool IsLinkableByEmail(DirectoryUser candidate, EntraUser user)
-        => string.IsNullOrEmpty(candidate.AzureAdObjectId)
+        => candidate.IsActive
+           && string.IsNullOrEmpty(candidate.AzureAdObjectId)
            && !string.IsNullOrEmpty(candidate.Email)
            && string.Equals(candidate.Email.Trim(), user.Username!.Trim(), StringComparison.OrdinalIgnoreCase);
 

@@ -57,7 +57,29 @@ public class TenantUser
     public string? SupervisorId { get; set; } // For work queue escalation
 
     [JsonPropertyName("status")]
-    public string Status { get; set; } = "Active"; // Active, Disabled, Locked
+    public string Status { get; set; } = TenantUserStatus.Active; // Active, Disabled, Locked, Invited
+
+    /// <summary>
+    /// The invitation this user was created or re-invited by. Kept after
+    /// redemption, for traceability. Never serialized.
+    /// </summary>
+    [JsonIgnore]
+    public string? InvitationId { get; set; }
+
+    /// <summary>
+    /// SHA-256 of the invitation code that may still activate this user. Present
+    /// only while the user is <see cref="TenantUserStatus.Invited"/> with a live
+    /// invitation. Redemption is one conditional update on this document that
+    /// requires this field, so revoking or resending (which clear or replace it
+    /// here first) either wins or loses against a redemption, atomically.
+    /// Never serialized.
+    /// </summary>
+    [JsonIgnore]
+    public string? InvitationCodeHash { get; set; }
+
+    /// <summary>When the live invitation code stops working. Never serialized.</summary>
+    [JsonIgnore]
+    public DateTime? InvitationExpiresAt { get; set; }
 
     [JsonPropertyName("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -77,6 +99,23 @@ public class TenantUser
     public string? UpdatedBy { get; set; }
 }
 
+/// <summary>TenantUser.Status values.</summary>
+public static class TenantUserStatus
+{
+    public const string Active = "Active";
+    public const string Disabled = "Disabled";
+    public const string Locked = "Locked";
+
+    /// <summary>
+    /// Created by an invitation and not yet redeemed. Not linked to any Entra
+    /// identity. token-service issues no token for it and never links it by email.
+    /// </summary>
+    public const string Invited = "Invited";
+
+    public static bool Is(string? status, string expected)
+        => string.Equals(status?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>
 /// DTO for creating a new tenant user
 /// </summary>
@@ -86,10 +125,10 @@ public class CreateTenantUserRequest
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
 
-    public string AzureAdObjectId { get; set; } = string.Empty;
-
-    /// <summary>Entra directory (tid) of <see cref="AzureAdObjectId"/>. Set both together.</summary>
-    public string AzureAdTenantId { get; set; } = string.Empty;
+    // No azureAdObjectId / azureAdTenantId: an administrator cannot assert an
+    // Entra identity, and nothing could verify one. Only token-service links
+    // identities (first sign-in from the tenant's own directory, or invitation
+    // redemption). Unknown body properties are ignored.
 
     [Required]
     public string DisplayName { get; set; } = string.Empty;
@@ -113,13 +152,9 @@ public class UpdateTenantUserRequest
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? Email { get; set; }
-    public string? AzureAdObjectId { get; set; }
 
-    /// <summary>
-    /// Entra directory (tid) of the object id. Changing <see cref="AzureAdObjectId"/>
-    /// without also sending this clears the recorded directory.
-    /// </summary>
-    public string? AzureAdTenantId { get; set; }
+    // No azureAdObjectId / azureAdTenantId (see CreateTenantUserRequest). An
+    // administrator removes a link with POST .../users/{id}/unlink.
     public List<string>? Roles { get; set; }
     public string? Department { get; set; }
     public string? SupervisorId { get; set; }

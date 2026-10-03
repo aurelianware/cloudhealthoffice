@@ -40,6 +40,13 @@ public interface IChoTokenProvider
     /// calling the exchange when the token service did not list that tenant.
     /// </summary>
     Task<ChoTokenResult> SwitchTenantAsync(string tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Redeem an invitation code for the signed-in user at the token service
+    /// (with the same Entra token as the exchange). On success the returned CHO
+    /// token's tenant becomes the current tenant. The code is never logged.
+    /// </summary>
+    Task<ChoInvitationResult> RedeemInvitationAsync(string code, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Sends the user to Entra again (re-sign-in or incremental consent).</summary>
@@ -340,6 +347,131 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         {
             _gate.Release();
         }
+    }
+
+    public async Task<ChoInvitationResult> RedeemInvitationAsync(string code, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return ChoInvitationResult.Failure(ChoInvitationStatus.NotFound);
+
+        var user = await GetUserAsync();
+        if (user == null)
+            return ChoInvitationResult.Failure(ChoInvitationStatus.NotAuthenticated);
+
+        if (IsLocalDemo(user))
+        {
+            // LocalDemo has no Entra identity to link.
+            _logger.LogWarning("Invitation redemption is not available in LocalDemo mode");
+            return ChoInvitationResult.Failure(ChoInvitationStatus.Unavailable);
+        }
+
+        var baseUrl = TokenServiceBaseUrl();
+        if (baseUrl == null)
+            return ChoInvitationResult.Failure(ChoInvitationStatus.Unavailable);
+
+        var entraToken = await AcquireEntraTokenAsync(user);
+        if (entraToken.Token == null)
+            return ChoInvitationResult.Failure(entraToken.Failure == ChoTokenStatus.ConsentRequired
+                ? ChoInvitationStatus.ConsentRequired
+                : ChoInvitationStatus.Unavailable);
+
+        ChoTokenExchangeResponse? token;
+        try
+        {
+            // The code travels in the body only; it is not logged here or by the token service.
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/invitations/redeem")
+            {
+                Content = JsonContent.Create(new RedeemRequest { Code = code.Trim() }),
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", entraToken.Token);
+
+            using var response = await TokenServiceClient().SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await ReadInvitationErrorAsync(response, cancellationToken);
+                var status = (int)response.StatusCode switch
+                {
+                    401 => ChoInvitationStatus.InvalidToken,
+                    429 => ChoInvitationStatus.RateLimited,
+                    _ => error?.Error switch
+                    {
+                        "not_found" or "invalid_request" => ChoInvitationStatus.NotFound,
+                        "expired" => ChoInvitationStatus.Expired,
+                        "revoked" => ChoInvitationStatus.Revoked,
+                        "already_redeemed" => ChoInvitationStatus.AlreadyRedeemed,
+                        "email_mismatch" => ChoInvitationStatus.EmailMismatch,
+                        "identity_in_use" => ChoInvitationStatus.IdentityInUse,
+                        "no_access" => ChoInvitationStatus.NoAccess,
+                        _ => ChoInvitationStatus.Unavailable,
+                    },
+                };
+                _logger.LogWarning("Invitation redemption refused: {Status} ({HttpStatus})", status, (int)response.StatusCode);
+                return ChoInvitationResult.Failure(status,
+                    status == ChoInvitationStatus.EmailMismatch ? error?.InvitedEmail : null);
+            }
+
+            token = await response.Content.ReadFromJsonAsync<ChoTokenExchangeResponse>(cancellationToken: cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException or NotSupportedException
+                                       || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            _logger.LogWarning("Token service could not be reached to redeem an invitation ({Error})", ex.GetType().Name);
+            return ChoInvitationResult.Failure(ChoInvitationStatus.Unavailable);
+        }
+
+        if (token == null || string.IsNullOrEmpty(token.AccessToken) || string.IsNullOrEmpty(token.TenantId))
+        {
+            _logger.LogError("Token service returned a redemption response without a token or tenant");
+            return ChoInvitationResult.Failure(ChoInvitationStatus.Unavailable);
+        }
+
+        // The invited tenant becomes the current one, here and (through the
+        // preference) in the next circuit after the page reloads.
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var userKey = UserCacheKey(user);
+            if (userKey != null)
+            {
+                var lifetime = TimeSpan.FromSeconds(token.ExpiresIn) - RefreshMargin;
+                if (lifetime > TimeSpan.Zero)
+                {
+                    var key = TokenCacheKey(userKey, token.TenantId);
+                    _cache.Set(key, token, _time.GetUtcNow().Add(lifetime));
+                    lock (_issuedKeys) _issuedKeys.Add(key);
+                }
+            }
+
+            _selectedTenantId = token.TenantId;
+            _preferenceLoaded = true;
+            _lastFailure = null;
+            _tenants = null; // the user's tenant list has changed
+            await SaveTenantPreferenceAsync(userKey, token.TenantId, cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        _logger.LogInformation("Invitation redeemed; now acting in tenant {TenantId}", token.TenantId);
+        return ChoInvitationResult.Success(token);
+    }
+
+    private static async Task<ChoInvitationErrorResponse?> ReadInvitationErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<ChoInvitationErrorResponse>(cancellationToken: cancellationToken);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private sealed class RedeemRequest
+    {
+        [JsonPropertyName("code")] public string Code { get; set; } = string.Empty;
     }
 
     // ------------------------------------------------------------------

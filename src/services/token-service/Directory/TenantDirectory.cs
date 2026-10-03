@@ -20,6 +20,32 @@ public interface ITenantDirectory
 
     /// <summary>Records oid+tid on an unlinked user. Null when the user is gone or already linked elsewhere.</summary>
     Task<DirectoryUser?> LinkAsync(string tenantId, string userId, string oid, string tid, CancellationToken ct);
+
+    /// <summary>
+    /// Redeems an invitation code for this Entra identity, signed in as
+    /// <paramref name="email"/>. A refusal is an answer (<see cref="InvitationRedemption.Error"/>),
+    /// not an outage.
+    /// </summary>
+    Task<InvitationRedemption> RedeemInvitationAsync(string code, string tid, string oid, string email, CancellationToken ct);
+}
+
+/// <summary>tenant-service's answer to a redemption.</summary>
+public sealed class InvitationRedemption
+{
+    /// <summary>The refusals tenant-service can answer with.</summary>
+    public static readonly IReadOnlySet<string> KnownErrors = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "not_found", "expired", "revoked", "already_redeemed", "email_mismatch", "identity_in_use", "conflict",
+    };
+
+    [JsonPropertyName("tenantId")] public string? TenantId { get; set; }
+    [JsonPropertyName("userId")] public string? UserId { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
+
+    /// <summary>For email_mismatch: the invited address, masked (p***@acme.com).</summary>
+    [JsonPropertyName("invitedEmail")] public string? InvitedEmail { get; set; }
+
+    public bool Succeeded => Error == null && !string.IsNullOrEmpty(TenantId);
 }
 
 public sealed class TenantDirectoryUnavailableException(string message, Exception? inner = null)
@@ -96,6 +122,53 @@ public sealed class HttpTenantDirectory : ITenantDirectory
             $"{Base}/tenants/{Uri.EscapeDataString(tenantId)}/users/{Uri.EscapeDataString(userId)}/entra-link",
             tenantId, new { azureAdObjectId = oid, azureAdTenantId = tid }, ct,
             notFoundIsNull: true, conflictIsNull: true);
+
+    public async Task<InvitationRedemption> RedeemInvitationAsync(string code, string tid, string oid, string email, CancellationToken ct)
+    {
+        const string path = Base + "/invitations/redeem";
+        try
+        {
+            // The code travels in the body only, never in a URL.
+            using var request = new HttpRequestMessage(HttpMethod.Post, path)
+            {
+                Content = JsonContent.Create(new { code, tid, oid, email }),
+            };
+            request.Options.Set(TenantServiceTokenHandler.TenantScopeKey, TenantServiceTokenHandler.CrossTenantScope);
+
+            using var response = await _factory.CreateClient(ClientName).SendAsync(request, ct);
+            var status = (int)response.StatusCode;
+            if (response.IsSuccessStatusCode || status is 403 or 404 or 409 or 410)
+            {
+                InvitationRedemption? answer = null;
+                try
+                {
+                    answer = await response.Content.ReadFromJsonAsync<InvitationRedemption>(cancellationToken: ct);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // handled below
+                }
+
+                if (response.IsSuccessStatusCode && answer is { Succeeded: true })
+                    return answer;
+                if (!response.IsSuccessStatusCode && answer?.Error != null && InvitationRedemption.KnownErrors.Contains(answer.Error))
+                    return answer;
+            }
+            // Anything else (including a 403 from tenant-service's own authorization) is an outage.
+            throw new TenantDirectoryUnavailableException($"tenant-service answered {status} for POST {path}.");
+        }
+        catch (TenantDirectoryUnavailableException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or NotSupportedException
+                                       or InvalidOperationException)
+        {
+            if (ex is TaskCanceledException && ct.IsCancellationRequested)
+                throw;
+            throw new TenantDirectoryUnavailableException("tenant-service is unreachable.", ex);
+        }
+    }
 
     private async Task<T?> SendAsync<T>(
         HttpMethod method, string path, string tenantScope, object? body, CancellationToken ct,

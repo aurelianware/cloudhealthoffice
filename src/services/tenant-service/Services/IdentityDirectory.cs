@@ -27,9 +27,10 @@ public interface IIdentityDirectory
     Task<IdentityUser?> FindUserByEmailAsync(string tenantId, string email, CancellationToken ct);
 
     /// <summary>
-    /// Records <paramref name="oid"/>/<paramref name="tid"/> on a user that has no
-    /// link yet (or has this oid without a recorded directory). Never overwrites a
-    /// different link: returns <see cref="LinkOutcome.Conflict"/> instead.
+    /// Records <paramref name="oid"/>/<paramref name="tid"/> on an Active user that
+    /// has no link yet (or on a user with this oid and no recorded directory).
+    /// Never overwrites a different link and never links an Invited, Disabled or
+    /// Locked user: returns <see cref="LinkOutcome.Conflict"/> instead.
     /// </summary>
     Task<(LinkOutcome Outcome, IdentityUser? User)> LinkEntraIdentityAsync(
         string tenantId, string userId, string oid, string tid, CancellationToken ct);
@@ -198,11 +199,16 @@ public sealed class IdentityDirectory : IIdentityDirectory
         var f = Builders<TenantUser>.Filter;
         // Conditional on the current state, so two concurrent first logins (or an
         // admin edit racing a login) can never replace one link with another.
+        // A first link is made only for an Active user: an Invited user is
+        // linked solely by redeeming its invitation, and a Disabled or Locked
+        // one not at all.
         var filter = f.And(
             f.Eq(u => u.Id, userId),
             f.Eq(u => u.TenantId, tenantId),
             f.Or(
-                f.In(u => u.AzureAdObjectId, new[] { string.Empty, null }),
+                f.And(
+                    f.In(u => u.AzureAdObjectId, new[] { string.Empty, null }),
+                    f.Regex(u => u.Status, new BsonRegularExpression("^\\s*active\\s*$", "i"))),
                 f.And(
                     f.Eq(u => u.AzureAdObjectId, oid),
                     f.In(u => u.AzureAdTenantId, new[] { string.Empty, null, tid }))));

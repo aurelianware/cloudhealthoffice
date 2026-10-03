@@ -8,6 +8,8 @@
 @inject IConfiguration Configuration
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ITenantInvitationService Invitations
+@inject NavigationManager Navigation
 
 <PageTitle>User Management - Cloud Health Office</PageTitle>
 
@@ -23,12 +25,26 @@
                 Manage users, roles, and access for your organization
             </MudText>
         </div>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.PersonAdd"
-                   OnClick="ShowAddUserDialog">
-            Add User
-        </MudButton>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ForwardToInbox"
+                       OnClick="ShowInviteDialog" data-testid="invite-user">
+                Invite User
+            </MudButton>
+            <MudTooltip Text="For people who sign in with your organization's own Microsoft Entra directory. They are linked on their first sign-in. Invite everyone else.">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           OnClick="ShowAddUserDialog" data-testid="add-directory-user">
+                    Add User From Your Directory
+                </MudButton>
+            </MudTooltip>
+        </MudStack>
     </MudStack>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        "Add user" is only for people in your organization's own Microsoft Entra directory, who are linked
+        when they first sign in. To bring in someone from another organization, use "Invite user": they
+        accept a one-time link while signed in as the invited address.
+    </MudText>
 
     @if (_serviceError != null)
     {
@@ -102,7 +118,11 @@
                         <MudTd DataLabel="Actions">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                            OnClick="@(() => ShowEditUserDialog(context))" />
-                            @if (context.Status == "Active")
+                            @if (context.Status == "Invited")
+                            {
+                                @* Activated only by redeeming the invitation; manage it below. *@
+                            }
+                            else if (context.Status == "Active")
                             {
                                 <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Warning"
                                                OnClick="@(() => DisableUser(context))" />
@@ -112,6 +132,13 @@
                                 <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
                                                OnClick="@(() => EnableUser(context))" />
                             }
+                            @if (!string.IsNullOrEmpty(context.AzureAdObjectId))
+                            {
+                                <MudTooltip Text="Unlink sign-in account">
+                                    <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => UnlinkUser(context))" />
+                                </MudTooltip>
+                            }
                         </MudTd>
                     </RowTemplate>
                     <PagerContent>
@@ -120,12 +147,62 @@
                 </MudTable>
             </MudCardContent>
         </MudCard>
+
+        <MudCard Elevation="0" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Invitations</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (_invitations.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No invitations yet.</MudText>
+                }
+                else
+                {
+                    <MudTable Items="@_invitations" Dense="true" Hover="true" Elevation="0" data-testid="invitations">
+                        <HeaderContent>
+                            <MudTh>Email</MudTh>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Roles</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>Expires</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Email">@context.Email</MudTd>
+                            <MudTd DataLabel="Name">@context.DisplayName</MudTd>
+                            <MudTd DataLabel="Roles">@string.Join(", ", context.Roles.Select(FormatRoleName))</MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudChip Size="Size.Small" Color="@GetInvitationStatusColor(context.Status)">@context.Status</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Expires">@context.ExpiresAt.ToLocalTime().ToString("MMM dd, yyyy HH:mm")</MudTd>
+                            <MudTd DataLabel="Actions">
+                                @if (context.Status is "Pending" or "Expired")
+                                {
+                                    <MudTooltip Text="Issue a new link (the old one stops working)">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small"
+                                                       OnClick="@(() => ResendInvitation(context))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="Revoke">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                                       OnClick="@(() => RevokeInvitation(context))" />
+                                    </MudTooltip>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudCardContent>
+        </MudCard>
     }
 </MudContainer>
 </PermissionGate>
 
 @code {
     private List<UserListItem> _users = new();
+    private List<InvitationItem> _invitations = new();
     private bool _loading = true;
     private bool _error;
     private string _searchTerm = string.Empty;
@@ -197,7 +274,126 @@
             Console.Error.WriteLine($"Error loading users: {ex.Message}");
         }
 
+        await LoadInvitationsAsync();
         _loading = false;
+    }
+
+    private async Task LoadInvitationsAsync()
+    {
+        if (string.IsNullOrEmpty(_tenantId))
+            return;
+        try
+        {
+            _invitations = (await Invitations.ListAsync(_tenantId)).ToList();
+        }
+        catch (HttpRequestException)
+        {
+            _invitations = new();
+        }
+    }
+
+    private string InvitationLink(string code) => Navigation.BaseUri.TrimEnd('/') + "/invite/" + code;
+
+    private async Task ShowInvitationLink(IssuedInvitation issued)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Link", InvitationLink(issued.Code) },
+            { "Email", issued.Invitation.Email },
+            { "ExpiresAt", issued.Invitation.ExpiresAt },
+        };
+        var dialog = await DialogService.ShowAsync<InvitationLinkDialog>("Invitation link", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, DisableBackdropClick = true });
+        await dialog.Result;
+    }
+
+    private async Task ShowInviteDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            { "TenantId", _tenantId },
+            { "AvailableRoles", _availableRoles }
+        };
+
+        var dialog = await DialogService.ShowAsync<InviteUserDialog>("Invite User", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled && result.Data is IssuedInvitation issued)
+        {
+            await LoadUsersAsync();
+            await ShowInvitationLink(issued);
+        }
+    }
+
+    private async Task ResendInvitation(InvitationItem invitation)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Resend invitation",
+            $"Issue a new link for {invitation.Email}? The current link stops working.",
+            yesText: "Issue new link", cancelText: "Cancel");
+        if (confirmed != true || string.IsNullOrEmpty(_tenantId))
+            return;
+
+        try
+        {
+            var result = await Invitations.ResendAsync(_tenantId, invitation.Id);
+            if (!result.Succeeded)
+            {
+                Snackbar.Add(result.Error ?? "The invitation could not be resent.", Severity.Error);
+                return;
+            }
+            await LoadInvitationsAsync();
+            await ShowInvitationLink(result.Value!);
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("The invitation could not be resent.", Severity.Error);
+        }
+    }
+
+    private async Task RevokeInvitation(InvitationItem invitation)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Revoke invitation",
+            $"Revoke the invitation for {invitation.Email}? The link stops working. The invited user stays in the list until you delete it.",
+            yesText: "Revoke", cancelText: "Cancel");
+        if (confirmed != true || string.IsNullOrEmpty(_tenantId))
+            return;
+
+        try
+        {
+            var result = await Invitations.RevokeAsync(_tenantId, invitation.Id);
+            Snackbar.Add(result.Succeeded ? "Invitation revoked" : result.Error ?? "The invitation could not be revoked.",
+                result.Succeeded ? Severity.Success : Severity.Error);
+            await LoadInvitationsAsync();
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("The invitation could not be revoked.", Severity.Error);
+        }
+    }
+
+    private async Task UnlinkUser(UserListItem user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Unlink sign-in account",
+            $"Unlink {user.DisplayName}'s sign-in account? They can no longer sign in with it. Disable the user as well to keep them out: people in your own directory are linked again when they next sign in.",
+            yesText: "Unlink", cancelText: "Cancel");
+        if (confirmed != true || string.IsNullOrEmpty(_tenantId))
+            return;
+
+        try
+        {
+            var result = await Invitations.UnlinkUserAsync(_tenantId, user.Id);
+            Snackbar.Add(result.Succeeded ? $"{user.DisplayName} has been unlinked" : result.Error ?? "The user could not be unlinked.",
+                result.Succeeded ? Severity.Success : Severity.Error);
+            await LoadUsersAsync();
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("The user could not be unlinked.", Severity.Error);
+        }
     }
 
     private async Task ShowAddUserDialog()
@@ -298,6 +494,16 @@
         "Active" => Color.Success,
         "Disabled" => Color.Warning,
         "Locked" => Color.Error,
+        "Invited" => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetInvitationStatusColor(string status) => status switch
+    {
+        "Pending" => Color.Info,
+        "Redeemed" => Color.Success,
+        "Expired" => Color.Warning,
+        "Revoked" => Color.Default,
         _ => Color.Default
     };
 
@@ -312,5 +518,8 @@
         public string Department { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public DateTime? LastLoginAt { get; set; }
+
+        /// <summary>Set when the user is linked to a sign-in account (display only; never sent back).</summary>
+        public string? AzureAdObjectId { get; set; }
     }
 }

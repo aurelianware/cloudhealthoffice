@@ -37,6 +37,9 @@ public sealed class TokenServiceOptions
     /// <summary>Lifetime of an issued CHO token.</summary>
     public TimeSpan TokenLifetime { get; set; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>Invitation redemption attempts allowed per Entra identity (tid+oid) per minute.</summary>
+    public int InvitationRedeemPermitsPerMinute { get; set; } = 10;
+
     internal static readonly string[] DefaultIssuerTemplates =
     [
         "https://login.microsoftonline.com/{tid}/v2.0",
@@ -57,5 +60,7 @@ public sealed class TokenServiceOptions
                 $"{SectionName}:IssuerTemplates entries must contain {{tid}} so the issuer is bound to the token's directory.");
         if (TokenLifetime <= TimeSpan.Zero || TokenLifetime > TimeSpan.FromHours(1))
             throw new InvalidOperationException($"{SectionName}:TokenLifetime must be between 0 and 1 hour.");
+        if (InvitationRedeemPermitsPerMinute is < 1 or > 1000)
+            throw new InvalidOperationException($"{SectionName}:InvitationRedeemPermitsPerMinute must be between 1 and 1000.");
     }
 }

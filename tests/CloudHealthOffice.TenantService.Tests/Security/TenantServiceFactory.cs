@@ -29,6 +29,7 @@ public class TenantServiceFactory : WebApplicationFactory<TenantsController>
     public Mock<IIdentityDirectory> Directory { get; } = new();
     public Mock<IStripeService> Stripe { get; } = new();
     public Mock<ISftpProvisioningService> Sftp { get; } = new();
+    public Mock<IInvitationStore> Invitations { get; } = new();
     public CapturingLoggerProvider Logs { get; } = new();
 
     /// <summary>Stripe:WebhookSecret for this host; null leaves appsettings.json's value.</summary>
@@ -49,6 +50,8 @@ public class TenantServiceFactory : WebApplicationFactory<TenantsController>
             services.RemoveAll<IIdentityDirectory>();
             services.RemoveAll<IStripeService>();
             services.RemoveAll<ISftpProvisioningService>();
+            services.RemoveAll<IInvitationStore>();
+            services.AddSingleton(_ => Invitations.Object);
             services.AddSingleton(_ => Tenants.Object);
             services.AddSingleton(_ => Users.Object);
             services.AddSingleton(_ => Roles.Object);
@@ -69,6 +72,7 @@ public class TenantServiceFactory : WebApplicationFactory<TenantsController>
         Directory.Reset();
         Stripe.Reset();
         Sftp.Reset();
+        Invitations.Reset();
         Logs.Clear();
 
         Tenants.Setup(r => r.GetByTenantIdAsync(It.IsAny<string>()))

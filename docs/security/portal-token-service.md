@@ -70,6 +70,23 @@ user may enter:
 
 Platform admins get every active tenant.
 
+### `POST /v1/invitations/redeem`
+
+Request: `Authorization: Bearer <Entra access token>`, validated exactly as for
+the exchange (same issuer, audience and `Cho.Token` scope, delegated only), and
+JSON body `{ "code": "<invitation code>" }`. See "Invitations" below.
+
+| Status | Body | When |
+|---|---|---|
+| 200 | Same as `/v1/token/exchange` | Redeemed. The CHO token is for the invited tenant. `Cache-Control: no-store`. A repeat by the identity that already redeemed the code also gets 200. |
+| 400 | `{ "error": "not_found" }`, `"expired"`, `"revoked"` or `"invalid_request"` | Unknown or malformed code, expired, revoked, or no code in the body |
+| 403 | `{ "error": "email_mismatch", "invitedEmail": "p***@acme.com" }` | The signed-in username is not the invited address. The address is masked |
+| 403 | `{ "error": "no_access" }` | Redeemed, but the normal exchange then refused (for example, the tenant is suspended) |
+| 409 | `{ "error": "already_redeemed" }` or `"identity_in_use"` | Redeemed by someone else, or this identity is already another user in the tenant |
+| 401 | `{ "error": "invalid_token" }` | As for the exchange (app-only tokens, wrong scope or audience, ...) |
+| 429 | `{ "error": "rate_limited" }` | More than `TokenService:InvitationRedeemPermitsPerMinute` (10) attempts by this tid+oid in a minute |
+| 503 | `{ "error": "unavailable" }` | tenant-service or signing unavailable |
+
 ### Other endpoints
 
 - `/health`, `/health/live`, `/health/ready`: anonymous.
@@ -116,12 +133,15 @@ All of these use only the validated Entra token and tenant-service data.
      (the customer's own directory vouches for the address);
    - the TenantUser has no `azureAdObjectId`;
    - its email equals the token's `preferred_username` (else `upn`, else `email`),
-     compared case-insensitively.
+     compared case-insensitively;
+   - its status is `Active`. An `Invited` user (see "Invitations") is linked only
+     by redeeming its invitation, and `Disabled` or `Locked` users are not linked.
+     tenant-service's `entra-link` endpoint enforces the same rule.
 
    The service then records oid+tid on the TenantUser through a conditional
    update that never replaces an existing link.
-   - **Guests from other directories are never linked by email.** Their link must
-     already exist (see "Gaps" below).
+   - **Guests from other directories are never linked by email.** They come in
+     through an invitation (see "Invitations").
    - **This replaces the portal's current behaviour.** Today `UserContextService`
      looks users up by email in the tenant and backfills the OID onto the matching
      TenantUser for *anyone* who signs in with that address, from any directory.
@@ -189,8 +209,14 @@ serve it:
 | `POST /internal/v1/identity/tenants/{tenantId}/users/find-by-email` | One user by email (in the body, kept out of URLs and logs) |
 | `POST /internal/v1/identity/tenants/{tenantId}/users/{userId}/entra-link` | Records oid+tid on an unlinked user. 409 if already linked to something else |
 
-`TenantUser` gained `azureAdTenantId`. The existing create/update user APIs
-accept it. Changing `azureAdObjectId` without sending it clears the stored tid.
+| `POST /internal/v1/identity/invitations/redeem` | Redeems an invitation code for `{ code, tid, oid, email }` (see "Invitations") |
+
+`TenantUser` gained `azureAdTenantId`. **Only token-service writes a link**,
+through `entra-link` and invitation redemption. The create and update user APIs
+ignore `azureAdObjectId` and `azureAdTenantId` in the body, and their writes
+never touch those fields. An administrator removes a link with
+`POST /api/v1/tenants/{t}/users/{id}/unlink` (`users:manage`). The unlink is
+written to `CloudHealthOffice.TenantService.Audit` with the removed oid and tid.
 
 **Only the token-service service identity may call these endpoints.**
 tenant-service uses `AddChoAuthentication`, and the controller carries
@@ -211,6 +237,215 @@ token-service attaches this token with its own handler, not the shared
 `ChoOutboundTokenHandler`. Inside a request, the shared handler forwards the
 caller's bearer token, and here that is the user's Entra token, which must not
 travel further.
+
+## Invitations
+
+Tenant administrators bring in people from other Entra directories (guests) by
+invitation. Email linking never links a guest (rule 2), and administrators can
+no longer type in an oid and tid, so an invitation is the only way a guest gets
+a link.
+
+### Data
+
+tenant-service keeps invitations in the `Invitations` collection:
+
+- `id`, `tenantId`, `userId`;
+- `email`, and `emailNormalized` (trimmed, lower case);
+- `displayName`, `firstName`, `lastName`, `department`, `roles`;
+- `codeHash`;
+- `status`: `Pending`, `Redeemed` or `Revoked`. `Expired` is a Pending
+  invitation past `expiresAt`. It is computed, not stored;
+- `createdBy` (token subject), `createdAt`, `expiresAt` (`Invitations:Lifetime`,
+  default 7 days);
+- `resentAt`, `resentBy`, `sendCount`;
+- `redeemedAt`, `redeemedBy { tid, oid }`, `revokedBy`, `revokedAt`.
+
+The code is 32 random bytes, base64url (43 characters). It is returned once, in
+the response to create or resend. Only its SHA-256 (`codeHash`) is stored, and
+no endpoint returns `codeHash`.
+
+Creating an invitation also creates the TenantUser it will activate. That user
+has:
+
+- status **`Invited`** and no link;
+- the invitation's roles and names;
+- three fields that are never serialized: `invitationId`, `invitationCodeHash`
+  and `invitationExpiresAt`.
+
+If an unlinked user with the address already exists and is `Invited` (with no
+live code), `Disabled` or `Locked`, it is reused instead. token-service never
+issues a token for an `Invited` user (`IsActive` requires `Active`), never links
+one by email, and does not list its tenant.
+
+### Administration
+
+These routes need `users:manage`, and the route tenant must be the token tenant.
+
+| Endpoint | |
+|---|---|
+| `POST /api/v1/tenants/{t}/invitations` | Body `{ email, displayName?, firstName?, lastName?, department?, roles }`. 201 `{ invitation, code, redemptionUrl }` with `Cache-Control: no-store`. See the refusals below |
+| `GET /api/v1/tenants/{t}/invitations` | The tenant's invitations, newest first. Never codes or hashes |
+| `POST /api/v1/tenants/{t}/invitations/{id}/revoke` | The code stops working at once. The Invited user stays, unable to sign in, until it is re-invited or deleted. 409 if already redeemed |
+| `POST /api/v1/tenants/{t}/invitations/{id}/resend` | A new code and a new expiry. The old code stops working at once. 200 `{ invitation, code, redemptionUrl }`. 409 if redeemed or revoked |
+
+Create refuses with:
+
+- 409 `user_exists` when the address belongs to an Active or linked user (or to
+  several users) in the tenant;
+- 409 `invitation_pending` when the address already has a live invitation
+  (resend that one instead);
+- 403 for `PlatformAdmin` or `cho.service`, whoever asks. token-service drops
+  both from TenantUser roles anyway;
+- 400 for unknown roles.
+
+`redemptionUrl` is `{Invitations:PortalBaseUrl}/invite/{code}`. The portal shows
+a link on its own origin. Create, revoke and resend are written to the
+`CloudHealthOffice.TenantService.Audit` log with the invitation id, user id and
+roles, but no code or address.
+
+An administrator cannot:
+
+- activate an `Invited` user by hand (`PUT`/`PATCH` with a status gives 400);
+- change an `Invited` user's email, because the invitation is bound to it;
+- set any user's link.
+
+**Email delivery.** CHO has no email service that tenant-service can use:
+
+- the portal's `SmtpEmailNotificationService` lives inside the portal and sends
+  only sales-inquiry notifications;
+- there is no notification service, SendGrid, ACS or `IEmailSender`.
+
+So nothing is emailed. The portal shows the link once, with a copy button and a
+note that the administrator must send it.
+
+### Redemption
+
+1. The invited person opens `https://<portal>/invite/{code}`. The page requires
+   sign-in, and Entra sign-in returns to the same URL, so the code survives it.
+2. The portal acquires the user's `Cho.Token` Entra token, exactly as for the
+   exchange, and calls token-service `POST /v1/invitations/redeem { code }`.
+3. token-service validates the Entra token and applies the per-identity rate
+   limit.
+4. token-service calls tenant-service `POST /internal/v1/identity/invitations/redeem`
+   over its service token, with the code and the token's `tid`, `oid` and
+   username (`preferred_username`, else `upn`, else `email`).
+5. tenant-service redeems (see "Atomicity") and answers `{ tenantId, userId }`
+   or an error.
+6. token-service runs the normal exchange for that tenant, which re-checks the
+   user, its status and the tenant, and returns the CHO token.
+7. The portal caches the token as the current tenant, saves the tenant
+   preference and reloads `/`.
+
+tenant-service's internal answers are:
+
+- 200 `{ tenantId, userId }`;
+- 404 `not_found`;
+- 410 `expired` or `revoked`;
+- 409 `already_redeemed` or `identity_in_use`;
+- 403 `email_mismatch`, with `invitedEmail` masked.
+
+token-service maps them to the public statuses above. Any other answer,
+including a 403 from tenant-service's own authorization, counts as an outage
+(503).
+
+**The signed-in username must equal the invited address** (trimmed,
+case-insensitive), so a forwarded link is useless to anyone signed in as someone
+else. The error names the invited address masked (`p***@acme.com`: first
+character and domain), so the person can switch accounts. The portal shows a
+sign-out link.
+
+### Atomicity
+
+Redemption must do three things: link oid+tid, set `Active`, and close the
+invitation. It must also lose cleanly against a concurrent redemption, revoke or
+resend.
+
+tenant-service does this **without a multi-document transaction**. Transactions
+need a replica set (member-service's family relationships, for example, require
+one). tenant-service also runs on Cosmos DB for MongoDB
+(`CosmosDb:ConnectionString`), where transactions are limited. Instead:
+
+- **The TenantUser decides.** While a user is `Invited` with a live code, it
+  carries `invitationId`, `invitationCodeHash` and `invitationExpiresAt`.
+  Redemption is **one conditional update** of that user. It matches only if the
+  user has this `_id` and tenant, is `Invited` and unlinked, and carries this
+  `invitationId`, this code hash, an unexpired code and this email. The same
+  write sets oid, tid and `Active` and removes the code hash. Two concurrent
+  redemptions cannot both match.
+- **Revoke and resend change the user first.** Revoke removes the code hash and
+  resend replaces it. Each is conditional on the user still being `Invited`,
+  unlinked and on this invitation. So each of them and a redemption serialize on
+  that one document. Whichever lands first wins; the other matches nothing and
+  reports `already_redeemed` or `revoked`.
+- **The Invitation document is the record.** It is updated second (`Pending` →
+  `Redeemed` or `Revoked`, conditional on `Pending`). If that write is lost, the
+  user is already in its final state, and any later redeem, revoke or resend sees
+  the user and completes the record. No order of failures can leave a user
+  linked through a revoked or superseded code, or an invitation marked redeemed
+  without a linked user.
+- **Identity in use.** Before linking, redemption refuses (`identity_in_use`)
+  if this tid+oid is already linked to another user in the tenant. Two
+  concurrent redemptions of two invitations by one identity could both pass that
+  check, so after linking it counts again and undoes its own link if there are
+  two.
+- **Admin edits cannot undo a redemption.** User updates are field updates that
+  never write the link or invitation fields. They are refused (409) if the stored
+  user crossed the `Invited` boundary since it was read.
+
+### Threat model (invitations)
+
+- **Code theft** (from the administrator's channel, browser history, or someone
+  looking over a shoulder). A stolen code is limited:
+  - it works only for a user signed in as the invited address;
+  - it works once, for 7 days, and only until it is revoked or resent.
+
+  A stolen code combined with control of an Entra directory that can mint a
+  token for the invited address does get in, because any directory can claim
+  any `preferred_username`. That is the residual risk the owner accepted. The
+  code is 256 bits and travels to the services only in request bodies. It is
+  never logged and is stored only as a hash, so someone who reads the database
+  or the logs cannot redeem it. Revoke or resend if a link may have leaked.
+- **Forwarded links** are refused with `email_mismatch` unless the recipient
+  can sign in as the invited address. The masked address tells the invitee
+  which account to use without revealing it in full.
+- **Replay.** A redeemed code answers `already_redeemed` to every other
+  identity. The same identity gets its token again, which grants nothing new,
+  because the exchange still requires an Active, linked user. Revoked, expired
+  and superseded codes are refused.
+- **Enumeration.** Codes are 256-bit random, so guessing is infeasible. A wrong
+  code answers `not_found` and reveals nothing about any invitation. Attempts
+  are limited to 10 per minute per Entra identity, and every attempt is
+  audited.
+- **Tenant administrators** can invite anyone into their own tenant with tenant
+  roles (never `PlatformAdmin` or `cho.service`), and can unlink and disable
+  users. They can no longer assert an Entra identity for a user.
+- **Logging.**
+  - token-service audits every attempt on `CloudHealthOffice.TokenService.Audit`
+    (outcome, `tid`, `oid`, tenant, reason), without codes or emails.
+  - The portal holds the framework categories that log request URLs at Warning,
+    so `/invite/{code}` is not written to its logs. They are
+    `Microsoft.AspNetCore.Hosting.Diagnostics`, the Blazor navigation manager,
+    the OIDC handler and Microsoft.Identity.Web's account controller.
+  - The page sets a `no-referrer` referrer policy, so the path is not sent to
+    the font and CSS hosts it loads from.
+  - The portal sends no request paths to telemetry. It has no Application
+    Insights or OpenTelemetry, and the unused Plausible component covers only
+    public marketing pages.
+
+### Existing links
+
+Links that administrators set through `azureAdObjectId`/`azureAdTenantId` on the
+user APIs before this change look the same as token-service links, so they are
+still honoured. To review them:
+
+1. List the tenant's users (`GET /api/v1/tenants/{t}/users` returns
+   `azureAdTenantId`) and find links whose directory is not the tenant's own.
+2. Unlink and disable any that cannot be vouched for.
+3. If the person still needs access, invite them. An unlinked Disabled user is
+   reused by the invitation; an unlinked Active user must be disabled first
+   (`user_exists`).
+
+Legacy oid-only links remain limited to the tenant's own directory (rule 1).
 
 ## Signing and key rotation
 
@@ -303,6 +538,8 @@ and calls `POST /v1/token/exchange`.
 | `TokenService:RequiredScope` | `Cho.Token` |
 | `TokenService:PlatformTenantId` | CHO's own Entra directory id (**required for platform admins**) |
 | `TokenService:TokenLifetime` | `00:05:00` (maximum 1 hour) |
+| `TokenService:InvitationRedeemPermitsPerMinute` | `10` redemption attempts per Entra identity per minute |
+| tenant-service `Invitations:Lifetime` / `Invitations:PortalBaseUrl` | `7.00:00:00` (1 hour to 30 days) / `https://portal.cloudhealthoffice.com` (for `redemptionUrl`) |
 | `TokenSigning:KeyVaultKeyId` | Versioned key id (**required in Production**) |
 | `TokenSigning:Issuer` / `Audience` | `cho-token-service` / `cho-api` |
 | `ChoAuth:ServiceToken:PrivateKeyPem` | The `cho-internal` service-token key, from Key Vault (secret `token-service-secrets`) |
@@ -346,6 +583,9 @@ port 5030 in the `core` profile.
   role, but it is ignored outside `PlatformTenantId`.
 - *A tenant administrator* can set any TenantUser role, but `PlatformAdmin` is
   dropped.
+- *A tenant administrator* cannot assert an Entra identity for a user. Only
+  token-service links one: by email from the tenant's own directory, or by
+  invitation redemption.
 - *An attacker who reaches tenant-service* needs the token-service service
   identity to read or link identities. Any other caller, including other CHO
   services and platform administrators, is refused.
@@ -353,16 +593,10 @@ port 5030 in the `core` profile.
 
 ## Gaps and follow-ups
 
-- **Guest invite/link flow.** tenant-service has no invite or link flow. An
-  administrator can create a TenantUser with `azureAdObjectId` (and now
-  `azureAdTenantId`) through `POST/PATCH /api/v1/tenants/{id}/users`. That
-  requires knowing the guest's oid and home tid, and nothing verifies them.
-  What's missing:
-  - an invitation record (tenant, email, roles, expiry, single-use code);
-  - redemption by the invited user, who presents an Entra token, so that
-    token-service, or tenant-service on token-service's word, records the
-    token's oid+tid;
-  - administrative revocation.
+- **Invitation email.** Invitations are not emailed, because no email service is
+  available to tenant-service. Administrators send the link themselves.
+- **Admin-set links made before invitations** are still honoured. See
+  "Invitations → Existing links".
 - The portal's `UserContextService` email backfill, and its role and
   platform-admin decisions, should be removed once the portal uses these tokens.
 - The shared layer accepts one public key per issuer (see "Rotation").

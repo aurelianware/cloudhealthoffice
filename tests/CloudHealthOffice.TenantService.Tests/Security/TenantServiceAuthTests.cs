@@ -64,6 +64,12 @@ public class TenantServiceAuthTests : IClassFixture<TenantServiceFactory>
     [InlineData("POST", "/api/v1/roles")]
     [InlineData("GET", "/internal/v1/identity/memberships?tid=t&oid=o")]
     [InlineData("POST", "/internal/v1/identity/tenants/tenant-a/users/user-1/entra-link")]
+    [InlineData("POST", "/internal/v1/identity/invitations/redeem")]
+    [InlineData("GET", "/api/v1/tenants/tenant-a/invitations")]
+    [InlineData("POST", "/api/v1/tenants/tenant-a/invitations")]
+    [InlineData("POST", "/api/v1/tenants/tenant-a/invitations/inv-1/revoke")]
+    [InlineData("POST", "/api/v1/tenants/tenant-a/invitations/inv-1/resend")]
+    [InlineData("POST", "/api/v1/tenants/tenant-a/users/user-1/unlink")]
     public async Task NoToken_Returns401(string method, string path)
     {
         var request = new HttpRequestMessage(new HttpMethod(method), path);

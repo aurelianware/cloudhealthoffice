@@ -73,6 +73,13 @@ builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
 // Identity lookups for token-service (Controllers/InternalIdentityController.cs).
 builder.Services.AddScoped<IIdentityDirectory, IdentityDirectory>();
+// Invitations (Controllers/InvitationsController.cs; redemption via the internal identity controller).
+var invitationOptions = builder.Configuration.GetSection(InvitationOptions.SectionName).Get<InvitationOptions>()
+                        ?? new InvitationOptions();
+invitationOptions.Validate();
+builder.Services.AddSingleton(invitationOptions);
+builder.Services.AddScoped<IInvitationStore, MongoInvitationStore>();
+builder.Services.AddScoped<InvitationService>();
 
 // Health checks
 builder.Services.AddChoHealthChecks(options =>

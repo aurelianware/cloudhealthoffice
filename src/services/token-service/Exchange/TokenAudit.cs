@@ -28,6 +28,15 @@ public sealed class TokenAudit
             "CHO identity {Outcome}: sub={Subject} tid={Tid} oid={Oid} tenant={Tenant}",
             "linked", Clean(subject), Clean(user.Tid), Clean(user.Oid), Clean(tenantId));
 
+    /// <summary>
+    /// One line per invitation redemption attempt, whatever its outcome. The code
+    /// and the email addresses involved are never logged.
+    /// </summary>
+    public void InvitationRedemption(EntraUser? user, string outcome, string? tenantId, string? subject, string reason)
+        => _logger.Log(outcome == "redeemed" ? LogLevel.Information : LogLevel.Warning,
+            "CHO invitation {Outcome}: sub={Subject} tid={Tid} oid={Oid} tenant={Tenant} reason={Reason}",
+            outcome, Clean(subject), Clean(user?.Tid), Clean(user?.Oid), Clean(tenantId), Clean(reason));
+
     public void Unavailable(EntraUser? user, string? tenantId, string reason)
         => _logger.LogError(
             "CHO token {Outcome}: tid={Tid} oid={Oid} tenant={Tenant} reason={Reason}",

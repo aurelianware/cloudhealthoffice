@@ -177,6 +177,26 @@ public sealed class IdentityDirectoryTests : IClassFixture<MongoFixture>, IAsync
         linked!.AzureAdTenantId.Should().Be(Tid);
     }
 
+    [Theory]
+    [InlineData("Invited")]
+    [InlineData("Disabled")]
+    [InlineData("Locked")]
+    public async Task Link_UnlinkedUserThatIsNotActive_IsAConflictAndUnchanged(string status)
+    {
+        // An Invited user is linked only by redeeming its invitation, never by
+        // a first sign-in with a matching address.
+        var user = await AddUser("t1", "pat@acme.com");
+        await _database.GetCollection<TenantUser>("TenantUsers").UpdateOneAsync(
+            u => u.Id == user.Id, Builders<TenantUser>.Update.Set(u => u.Status, status));
+
+        var (outcome, _) = await _directory.LinkEntraIdentityAsync("t1", user.Id, "oid-1", Tid, default);
+        var stored = await _directory.FindUserByEmailAsync("t1", "pat@acme.com", default);
+
+        outcome.Should().Be(LinkOutcome.Conflict);
+        stored!.AzureAdObjectId.Should().BeEmpty();
+        stored.Status.Should().Be(status);
+    }
+
     [Fact]
     public async Task Link_UserInAnotherTenant_IsNotFound()
     {

@@ -67,6 +67,9 @@ builder.Services.AddSingleton<ITenantDirectory, HttpTenantDirectory>();
 
 builder.Services.AddChoHealthChecks();
 
+// Invitation redemption attempts are limited per Entra identity.
+builder.Services.AddInvitationRedemptionRateLimit(serviceOptions);
+
 var app = builder.Build();
 
 if (string.IsNullOrWhiteSpace(app.Configuration["Services:TenantService"]))
@@ -77,6 +80,10 @@ app.MapChoHealthChecks();
 
 app.UseAuthentication();
 app.UseAuthorization();
+// After authorization: only validated Entra users reach the limiter, partitioned by tid+oid.
+app.UseRateLimiter();
+
+app.MapInvitationRedemption();
 
 app.MapPost("/v1/token/exchange", async (HttpContext http, TokenExchangeService exchange, TokenAudit audit) =>
 {

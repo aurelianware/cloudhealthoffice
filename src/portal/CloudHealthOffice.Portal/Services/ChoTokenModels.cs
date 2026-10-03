@@ -85,6 +85,57 @@ public sealed class ChoTokenResult
         => new(status, null, tenants);
 }
 
+internal sealed class ChoInvitationErrorResponse
+{
+    [JsonPropertyName("error")] public string? Error { get; set; }
+
+    /// <summary>For email_mismatch: the invited address, masked by the services (p***@acme.com).</summary>
+    [JsonPropertyName("invitedEmail")] public string? InvitedEmail { get; set; }
+}
+
+public enum ChoInvitationStatus
+{
+    Success,
+    NotAuthenticated,
+    /// <summary>Unknown or malformed code.</summary>
+    NotFound,
+    Expired,
+    Revoked,
+    AlreadyRedeemed,
+    /// <summary>Signed in with an account other than the invited address.</summary>
+    EmailMismatch,
+    /// <summary>The signed-in identity is already another user in that tenant.</summary>
+    IdentityInUse,
+    /// <summary>Redeemed, but no token could be issued for the tenant (for example, it is suspended).</summary>
+    NoAccess,
+    RateLimited,
+    InvalidToken,
+    ConsentRequired,
+    Unavailable,
+}
+
+/// <summary>The outcome of redeeming an invitation. Only success carries a token.</summary>
+public sealed class ChoInvitationResult
+{
+    private ChoInvitationResult(ChoInvitationStatus status, ChoTokenExchangeResponse? token, string? invitedEmail)
+    {
+        Status = status;
+        Token = token;
+        InvitedEmail = invitedEmail;
+    }
+
+    public ChoInvitationStatus Status { get; }
+    public ChoTokenExchangeResponse? Token { get; }
+
+    /// <summary>For <see cref="ChoInvitationStatus.EmailMismatch"/>: the masked invited address.</summary>
+    public string? InvitedEmail { get; }
+
+    public bool Succeeded => Status == ChoInvitationStatus.Success && Token != null;
+
+    public static ChoInvitationResult Success(ChoTokenExchangeResponse token) => new(ChoInvitationStatus.Success, token, null);
+    public static ChoInvitationResult Failure(ChoInvitationStatus status, string? invitedEmail = null) => new(status, null, invitedEmail);
+}
+
 /// <summary>
 /// Thrown by <see cref="ChoBearerTokenHandler"/> instead of sending a request to a
 /// CHO service when no CHO token could be obtained. It derives from

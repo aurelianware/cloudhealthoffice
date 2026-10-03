@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -95,6 +96,13 @@ public sealed class FakeTenantService : HttpMessageHandler
     public List<string?> AuthorizationHeaders { get; } = new();
     public bool Down { get; set; }
 
+    /// <summary>Bodies of internal redemption calls.</summary>
+    public List<JsonNode> Redemptions { get; } = new();
+
+    /// <summary>tenant-service's answer to a redemption; by default every code is unknown.</summary>
+    public Func<JsonNode, HttpResponseMessage> Redeem { get; set; } =
+        _ => new HttpResponseMessage(HttpStatusCode.NotFound) { Content = JsonContent.Create(new { error = "not_found" }) };
+
     public DirectoryTenant AddTenant(string tenantId, string? azureTenantId, bool active = true)
     {
         var t = new DirectoryTenant
@@ -142,6 +150,13 @@ public sealed class FakeTenantService : HttpMessageHandler
         if (!path.StartsWith(b, StringComparison.Ordinal))
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         var parts = path[b.Length..].Split('/').Select(Uri.UnescapeDataString).ToArray();
+
+        if (request.Method == HttpMethod.Post && parts is ["invitations", "redeem"])
+        {
+            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+            Redemptions.Add(body);
+            return Redeem(body);
+        }
 
         if (request.Method == HttpMethod.Get && parts is ["memberships"])
         {
@@ -201,6 +216,12 @@ public sealed class TokenServiceFactory : WebApplicationFactory<Program>
 {
     public FakeTenantService TenantService { get; } = new();
 
+    /// <summary>Every log line the host writes.</summary>
+    public CapturedLogs Logs { get; } = new();
+
+    /// <summary>TokenService:InvitationRedeemPermitsPerMinute for this host.</summary>
+    public int RedeemPermitsPerMinute { get; init; } = 10;
+
     /// <summary>The CHO token signing key (EC P-256 PEM), generated per factory.</summary>
     public string SigningKeyPem { get; } = ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem();
 
@@ -214,6 +235,12 @@ public sealed class TokenServiceFactory : WebApplicationFactory<Program>
         builder.UseSetting("ChoAuth:ServiceToken:ClientId", "token-service");
         builder.UseSetting("ChoAuth:ServiceToken:SymmetricKey", Infrastructure.Security.ChoDevelopmentAuth.SymmetricKey);
         builder.UseSetting("Services:TenantService", "http://tenant-service");
+        builder.UseSetting("TokenService:InvitationRedeemPermitsPerMinute", RedeemPermitsPerMinute.ToString());
+        builder.ConfigureLogging(logging =>
+        {
+            logging.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace);
+            logging.AddProvider(Logs);
+        });
 
         builder.ConfigureTestServices(services =>
         {
@@ -238,6 +265,30 @@ public sealed class TokenServiceFactory : WebApplicationFactory<Program>
         if (entraToken != null)
             client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", entraToken);
         return client;
+    }
+}
+
+public sealed class CapturedLogs : Microsoft.Extensions.Logging.ILoggerProvider
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(string Category, string Message)> _entries = new();
+
+    public IReadOnlyList<(string Category, string Message)> Entries => _entries.ToArray();
+
+    public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new Logger(categoryName, _entries);
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class Logger(string category, System.Collections.Concurrent.ConcurrentQueue<(string, string)> entries)
+        : Microsoft.Extensions.Logging.ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => entries.Enqueue((category, formatter(state, exception) + " " + exception));
     }
 }
 
