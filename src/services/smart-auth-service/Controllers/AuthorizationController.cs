@@ -36,18 +36,15 @@ namespace SmartAuthService.Controllers;
 [ApiController]
 public class AuthorizationController : ControllerBase
 {
-    private readonly ILaunchContextStore _launchContextStore;
     private readonly SmartTokenContextResolver _resolver;
     private readonly SmartAuthAudit _audit;
     private readonly ILogger<AuthorizationController> _logger;
 
     public AuthorizationController(
-        ILaunchContextStore launchContextStore,
         SmartTokenContextResolver resolver,
         SmartAuthAudit audit,
         ILogger<AuthorizationController> logger)
     {
-        _launchContextStore = launchContextStore;
         _resolver = resolver;
         _audit = audit;
         _logger = logger;
@@ -85,23 +82,13 @@ public class AuthorizationController : ControllerBase
         if (identity is null)
             return Refuse(null, request.ClientId, "session_has_no_identity");
 
-        // ── Resolve EHR launch context (if present) ───────────────────────────
-        LaunchContext? launch = null;
+        // The EHR launch (if any) is consumed by the resolver, atomically and
+        // only for the provider's tenant and this client, after every other check.
         var launchToken = request.GetParameter("launch")?.ToString();
-        if (!string.IsNullOrEmpty(launchToken))
-        {
-            // Consume single-use launch token
-            launch = await _launchContextStore.ConsumeAsync(launchToken, ct);
-            if (launch == null)
-            {
-                _logger.LogWarning("EHR launch token not found or expired: {Token}", SanitizeForLog(launchToken));
-                return Refuse(identity.Value.ToString(), request.ClientId, "launch_unknown_or_expired");
-            }
-        }
 
         var scopes = request.GetScopes();
         var resolution = await _resolver.ResolveInteractiveAsync(
-            identity.Value, request.ClientId ?? string.Empty, scopes, launch, ct);
+            identity.Value, request.ClientId ?? string.Empty, scopes, launchToken, ct);
         if (resolution.Context is not { } context)
             return Refuse(identity.Value.ToString(), request.ClientId, resolution.Refusal!);
 

@@ -3,9 +3,9 @@ using SmartAuthService.Models;
 namespace SmartAuthService.Services;
 
 /// <summary>
-/// Ephemeral store for EHR launch contexts.
-/// Sprint 2: in-memory (LaunchContextStore).
-/// Sprint 3: replace with Redis or MongoDB-backed implementation for multi-pod deployments.
+/// EHR launch contexts: registered by an authenticated CHO caller of one
+/// tenant, consumed once by the authorization endpoint for a provider user of
+/// that tenant using that client.
 /// </summary>
 public interface ILaunchContextStore
 {
@@ -18,14 +18,12 @@ public interface ILaunchContextStore
         string tenantId, string registeredBy, RegisterLaunchRequest request, CancellationToken ct = default);
 
     /// <summary>
-    /// Retrieve and remove a launch context by its token (single-use).
-    /// Returns null if the token is unknown or expired.
+    /// Atomically retrieve and remove the launch context, provided it is
+    /// unexpired AND was registered in <paramref name="tenantId"/> for
+    /// <paramref name="clientId"/>. Null otherwise. A launch presented for the
+    /// wrong tenant or client is left untouched, so it can neither be used
+    /// there nor be burned by someone who merely knows the token.
     /// </summary>
-    Task<LaunchContext?> ConsumeAsync(string launchToken, CancellationToken ct = default);
-
-    /// <summary>
-    /// Peek at a launch context without consuming it (used for display during consent).
-    /// Returns null if expired.
-    /// </summary>
-    Task<LaunchContext?> PeekAsync(string launchToken, CancellationToken ct = default);
+    Task<LaunchContext?> ConsumeAsync(
+        string launchToken, string tenantId, string clientId, CancellationToken ct = default);
 }

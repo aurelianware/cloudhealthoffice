@@ -52,15 +52,25 @@ public sealed class SmartTokenContextResolver
     public const string NpiClaim = "npi";
 
     private readonly ISmartIdentityStore _store;
+    private readonly ILaunchContextStore _launches;
 
-    public SmartTokenContextResolver(ISmartIdentityStore store) => _store = store;
+    public SmartTokenContextResolver(ISmartIdentityStore store, ILaunchContextStore launches)
+    {
+        _store = store;
+        _launches = launches;
+    }
 
-    /// <summary>Authorization endpoint: a signed-in person using an app.</summary>
+    /// <summary>
+    /// Authorization endpoint: a signed-in person using an app.
+    /// <paramref name="launchToken"/> is the request's <c>launch</c> parameter;
+    /// it is consumed only once every other check has passed, and only for the
+    /// provider's tenant and this client.
+    /// </summary>
     public async Task<SmartContextResolution> ResolveInteractiveAsync(
         SmartIdentity identity,
         string clientId,
         IReadOnlyCollection<string> scopes,
-        LaunchContext? launch,
+        string? launchToken,
         CancellationToken ct = default)
     {
         var client = await _store.FindClientAsync(clientId, ct);
@@ -70,7 +80,8 @@ public sealed class SmartTokenContextResolver
         if (scopes.Any(s => s.StartsWith("system/", StringComparison.Ordinal)))
             return SmartContextResolution.Refuse("system_scope_requires_client_credentials");
 
-        var providerShaped = launch != null
+        var hasLaunch = !string.IsNullOrEmpty(launchToken);
+        var providerShaped = hasLaunch
             || scopes.Contains(SmartScopes.Launch)
             || scopes.Any(s => s.StartsWith("user/", StringComparison.Ordinal));
         var patientShaped = scopes.Contains(SmartScopes.LaunchPatient)
@@ -82,6 +93,20 @@ public sealed class SmartTokenContextResolver
             var provider = await _store.FindActiveProviderLinkAsync(identity, ct);
             if (provider == null)
                 return SmartContextResolution.Refuse("no_provider_mapping");
+            if (client.Kind != SmartClientKind.ProviderApp)
+                return SmartContextResolution.Refuse("client_is_not_a_provider_app");
+            if (!string.Equals(client.TenantId, provider.TenantId, StringComparison.Ordinal))
+                return SmartContextResolution.Refuse("client_registered_to_another_tenant");
+
+            LaunchContext? launch = null;
+            if (hasLaunch)
+            {
+                // Atomic, single use, and only a launch of THIS tenant for THIS
+                // client: another tenant's launch is neither usable nor burned.
+                launch = await _launches.ConsumeAsync(launchToken!, provider.TenantId, client.ClientId, ct);
+                if (launch == null)
+                    return SmartContextResolution.Refuse("launch_unknown_used_expired_or_other_tenant");
+            }
 
             var result = ProviderContext(provider, identity, client, launch, patientShaped);
             if (result.Context == null) return result;

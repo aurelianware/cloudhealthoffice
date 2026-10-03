@@ -7,6 +7,10 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   SmartAuth__FhirBaseUrl: "https://api.cloudhealthoffice.com/fhir/r4"
+  # Required; HTTPS outside Development. The token `iss`, discovery and JWKS
+  # metadata use exactly this value (never the request Host / X-Forwarded-*).
+  # It must equal fhir-service SmartAuth:Issuer (or its TrustedIssuers entry)
+  # and the Ingress host below.
   SmartAuth__Issuer: "https://auth.cloudhealthoffice.com"
   SmartAuth__AccessTokenLifetimeMinutes: "60"
   SmartAuth__RefreshTokenLifetimeDays: "7"

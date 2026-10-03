@@ -85,6 +85,19 @@ issued refresh tokens.
   the provider's binding.
 - A launch never sets a member's patient. A member who presents a `launch` is
   refused.
+- Launches are stored in MongoDB (`smart_launch_contexts`), alongside the
+  bindings, so any pod can consume a launch that another pod registered. The
+  launch token itself is never stored, only its SHA-256.
+- A launch expires after `SmartAuth:LaunchContextTtlMinutes` (default 5). The
+  expiry is checked on every use, and a TTL index on `expiresAt` deletes
+  expired documents.
+- A launch can be used once. It is consumed by a single `findOneAndDelete`
+  filtered on the token hash, the provider's tenant, the client and
+  `expiresAt > now`. However many attempts run at once, only one succeeds.
+- A launch presented for another tenant or client is refused and left in place.
+  It cannot be used there, and someone who only knows the token cannot burn it.
+  The launch is consumed only after every other check has passed (provider
+  binding, client kind and tenant).
 
 The local `Middleware/TenantMiddleware.cs` was deleted. It read `X-Tenant-ID`
 and `X-Dev-Tenant-ID`. Tenant resolution is now the shared CHO
@@ -220,9 +233,29 @@ No fhir-service code or configuration was changed. With tokens carrying
   optionally `Tenants` (the tenants it serves), and optionally
   `Claims.ProviderNpiClaim: "npi"` so that fhir-service treats the provider's
   NPI as verified.
-- smart-auth-service does not call `SetIssuer`. Its `iss` is the request's base
-  URL, so the trusted issuer entry must match the public URL that
-  smart-auth-service is served at.
+- smart-auth-service's issuer is fixed by configuration (see "Issuer" below).
+  The trusted issuer entry must be that same value.
+
+## Issuer
+
+`SmartAuth:Issuer` is required. Startup fails if it is missing, is not an
+absolute http(s) URI, or carries a query, fragment or user info. Outside
+Development it must also be HTTPS. smart-auth-service calls `SetIssuer` with
+this value. It also rebases OpenIddict's base URI onto the same value
+(`SmartIssuer.BaseUriHandler`). The token `iss`, the discovery document and
+every endpoint URL in it, including `jwks_uri`, therefore name the configured
+issuer. A spoofed `Host` or `X-Forwarded-*` header changes none of them.
+
+The value must be the same everywhere:
+
+| Where | Value |
+|---|---|
+| smart-auth-service `appsettings.json` and k8s `SmartAuth__Issuer` | `https://auth.cloudhealthoffice.com` (the Ingress host) |
+| fhir-service `appsettings.json` `SmartAuth:Issuer` (Demo mode) or `TrustedIssuers[].Issuer` (ExternalIssuer mode) | `https://auth.cloudhealthoffice.com` |
+| `docker-compose.yml` (both services) | `http://smart-auth-service:8080` |
+
+`SmartIssuerTests` checks that the smart-auth and fhir-service appsettings
+values agree.
 
 ## Not done
 
@@ -233,8 +266,6 @@ No fhir-service code or configuration was changed. With tokens carrying
   to a non-existent record in their own tenant.
 - **No patient picker for providers.** Patient context comes only from an EHR
   launch.
-- **The launch context store is still in memory**, so it holds for a single pod
-  only. That was already the case.
 - **No `patient` in the token response body.** SMART's token-response
   `patient` parameter is not emitted. The claim is in the access token.
 - **Existing OpenIddict applications outside Development have no tenant

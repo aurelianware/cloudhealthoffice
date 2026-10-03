@@ -348,6 +348,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=SmartAuthDB
+      # Must equal fhir-service's SmartAuth__Issuer above: tokens, discovery
+      # and JWKS metadata all name this issuer, whatever Host a request uses.
+      - SmartAuth__Issuer=http://smart-auth-service:8080
     depends_on:
       mongo:
         condition: service_healthy

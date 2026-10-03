@@ -36,6 +36,8 @@ else
 var accessTokenLifetime = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("SmartAuth:AccessTokenLifetimeMinutes", 60));
 
+var smartIssuer = SmartIssuer.Resolve(builder.Configuration, builder.Environment);
+
 var refreshTokenLifetime = TimeSpan.FromDays(
     builder.Configuration.GetValue<int>("SmartAuth:RefreshTokenLifetimeDays", 7));
 
@@ -57,6 +59,12 @@ builder.Services.AddOpenIddict()
     })
     .AddServer(options =>
     {
+        // ── Issuer ───────────────────────────────────────────────────────────
+        // Fixed from configuration: token `iss`, discovery and JWKS metadata
+        // never depend on the request's Host or X-Forwarded headers.
+        options.SetIssuer(smartIssuer);
+        options.AddEventHandler(SmartIssuer.BaseUriHandler(smartIssuer));
+
         // ── Endpoints ────────────────────────────────────────────────────────
         options
             .SetAuthorizationEndpointUris("/connect/authorize")
@@ -152,17 +160,18 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()));
 
 // ── Application services ──────────────────────────────────────────────────────
-builder.Services.AddSingleton<LaunchContextStore>();
-builder.Services.AddSingleton<ILaunchContextStore>(sp => sp.GetRequiredService<LaunchContextStore>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<LaunchContextStore>());
 builder.Services.AddHttpContextAccessor();
 
-// User/client → tenant bindings. MongoDB only: they are the authority for
-// every token's tenant and must survive restarts and be shared across pods.
-builder.Services.AddSingleton<ISmartIdentityStore>(sp =>
-    new MongoSmartIdentityStore(sp.GetService<IMongoDatabase>()
-        ?? throw new InvalidOperationException(
-            "MongoDb:ConnectionString is required: SMART identity bindings are stored in MongoDB.")));
+// User/client → tenant bindings and EHR launch contexts. MongoDB only: they
+// are the authority for every token's tenant and patient, and must survive
+// restarts and be shared across pods (a launch registered through one pod is
+// consumed through another, exactly once).
+static IMongoDatabase RequireMongo(IServiceProvider sp) => sp.GetService<IMongoDatabase>()
+    ?? throw new InvalidOperationException(
+        "MongoDb:ConnectionString is required: SMART identity bindings and launch contexts are stored in MongoDB.");
+builder.Services.AddSingleton<ISmartIdentityStore>(sp => new MongoSmartIdentityStore(RequireMongo(sp)));
+builder.Services.AddSingleton<ILaunchContextStore>(sp =>
+    new MongoLaunchContextStore(RequireMongo(sp), sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddScoped<SmartTokenContextResolver>();
 builder.Services.AddSingleton<SmartAuthAudit>();
 
