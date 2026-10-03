@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using AccumulatorService.Models;
 using AccumulatorService.Repositories;
 using AccumulatorService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -24,7 +25,9 @@ public class AccumulatorsControllerTests : IClassFixture<AccumulatorsControllerT
     public AccumulatorsControllerTests(Factory f)
     {
         _factory = f;
-        _client = f.CreateClient();
+        // The handler turns X-Tenant-ID into a development-signed token for that
+        // tenant; the server takes the tenant from the token.
+        _client = f.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
     }
 
@@ -48,11 +51,55 @@ public class AccumulatorsControllerTests : IClassFixture<AccumulatorsControllerT
     }
 
     [Fact]
-    public async Task MissingTenant_Returns400()
+    public async Task MissingToken_Returns401()
     {
         using var naked = _factory.CreateClient();
         var resp = await naked.GetAsync("/api/v1/accumulators/m-1");
-        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task TenantHeaderOrQueryWithoutToken_IsNotTrusted()
+    {
+        using var naked = _factory.CreateClient();
+        naked.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
+        var byHeader = await naked.GetAsync("/api/v1/accumulators/m-1");
+        Assert.Equal(HttpStatusCode.Unauthorized, byHeader.StatusCode);
+
+        using var naked2 = _factory.CreateClient();
+        var byQuery = await naked2.GetAsync("/api/v1/accumulators/m-1?tenantId=test-tenant");
+        Assert.Equal(HttpStatusCode.Unauthorized, byQuery.StatusCode);
+    }
+
+    [Fact]
+    public async Task TenantHeaderDisagreeingWithToken_Returns403()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+            "Bearer", ChoDevelopmentAuth.UserToken("test-tenant", ChoRolePermissions.TenantAdmin));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "other-tenant");
+        var resp = await client.GetAsync("/api/v1/accumulators/m-1");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReadOnlyRole_CanRead_ButCannotAdjust()
+    {
+        // MemberServices holds accumulators:read but not accumulators:write.
+        using var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler("member-services-user", ChoRolePermissions.MemberServices));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
+
+        var read = await client.GetAsync("/api/v1/accumulators/m-ro");
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+
+        var adjust = await client.PostAsJsonAsync("/api/v1/accumulators/m-ro/adjust", new AccumulatorAdjustmentRequest
+        {
+            PlanYearStart = new DateTime(2026, 1, 1),
+            PlanYearEnd = new DateTime(2026, 12, 31),
+            Reason = "Should be refused",
+            DeductibleDelta = 10m
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, adjust.StatusCode);
     }
 
     [Fact]
@@ -76,12 +123,41 @@ public class AccumulatorsControllerTests : IClassFixture<AccumulatorsControllerT
         {
             PlanYearStart = new DateTime(2026, 1, 1),
             PlanYearEnd = new DateTime(2026, 12, 31),
-            ActorId = "op-1",
             Reason = "", // invalid
             DeductibleDelta = -10m
         };
         var resp = await _client.PostAsJsonAsync("/api/v1/accumulators/m-1/adjust", req);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Adjust_ActorComesFromToken_NotFromRequestBody()
+    {
+        // The body still names an actor (old clients, or a forger); the server
+        // must record the authenticated token subject instead.
+        using var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler("ops-user-7"));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
+        var body = new
+        {
+            planYearStart = new DateTime(2026, 1, 1),
+            planYearEnd = new DateTime(2026, 12, 31),
+            actorId = "attacker",
+            reason = "Out-of-system payment posted manually",
+            deductibleDelta = 50m,
+            adjustmentId = "adj-actor-from-token"
+        };
+
+        var resp = await client.PostAsJsonAsync("/api/v1/accumulators/m-actor/adjust", body);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var repo = (InMemoryAccumulatorRepository)_factory.Services.GetRequiredService<IAccumulatorRepository>();
+        var audit = repo.Events.Single(e => e.MemberId == "m-actor");
+        Assert.Equal("ops-user-7", audit.ActorId);
+        Assert.Equal("test-tenant", audit.TenantId);
+
+        var pub = (RecordingPublisher)_factory.Services.GetRequiredService<IAccumulatorEventPublisher>();
+        var adjusted = pub.Adjusted.Single(e => e.MemberId == "m-actor");
+        Assert.Equal("ops-user-7", adjusted.ActorId);
     }
 
     public class Factory : WebApplicationFactory<Program>

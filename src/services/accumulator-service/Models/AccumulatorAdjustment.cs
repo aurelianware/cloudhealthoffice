@@ -6,7 +6,8 @@ namespace AccumulatorService.Models;
 /// Request body for POST /api/v1/accumulators/{memberId}/adjust. Manual overrides
 /// by an authorized operator (e.g., to reflect an out-of-system payment or correct
 /// a miskeyed claim). Every adjustment produces an AccumulatorEvent with EventType
-/// = ManualAdjustment and an AccumulatorAdjustedEvent on the bus.
+/// = ManualAdjustment and an AccumulatorAdjustedEvent on the bus. The operator is
+/// the authenticated caller (token subject); the body does not name the actor.
 /// </summary>
 public class AccumulatorAdjustmentRequest
 {
@@ -15,11 +16,6 @@ public class AccumulatorAdjustmentRequest
 
     [Required]
     public DateTime PlanYearEnd { get; set; }
-
-    /// <summary>Operator performing the adjustment. Required for audit.</summary>
-    [Required]
-    [StringLength(200)]
-    public string ActorId { get; set; } = string.Empty;
 
     /// <summary>Free-text justification. Required for audit.</summary>
     [Required]
