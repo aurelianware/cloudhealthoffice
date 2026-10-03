@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Components.Authorization;
 
 namespace CloudHealthOffice.Portal.Services;
@@ -53,8 +54,7 @@ public class UserContext
 public class UserContextService : IUserContextService
 {
     private readonly AuthenticationStateProvider _authenticationStateProvider;
-    private readonly ITenantContextService _tenantContextService;
-    private readonly HttpClient _httpClient;
+    private readonly IChoTokenProvider _tokenProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<UserContextService> _logger;
     private readonly IHostEnvironment? _environment;
@@ -63,20 +63,24 @@ public class UserContextService : IUserContextService
 
     public UserContextService(
         AuthenticationStateProvider authenticationStateProvider,
-        ITenantContextService tenantContextService,
-        HttpClient httpClient,
+        IChoTokenProvider tokenProvider,
         IConfiguration configuration,
         ILogger<UserContextService> logger,
         IHostEnvironment? environment = null)
     {
         _environment = environment;
         _authenticationStateProvider = authenticationStateProvider;
-        _tenantContextService = tenantContextService;
-        _httpClient = httpClient;
+        _tokenProvider = tokenProvider;
         _configuration = configuration;
         _logger = logger;
     }
 
+    /// <summary>
+    /// The signed-in user's CHO identity, tenant, roles and permissions, exactly as
+    /// the CHO token service issued them in the token exchange. The portal does not
+    /// look the user up or decide roles itself. If the exchange fails for any reason
+    /// (no access, token service unavailable, consent required) the user has no roles.
+    /// </summary>
     public async Task<UserContext?> GetCurrentUserAsync()
     {
         if (_loaded) return _cachedContext;
@@ -100,147 +104,69 @@ public class UserContextService : IUserContextService
             return null;
         }
 
-        if (IsLocalDemoUser(principal))
-        {
-            var localDemoDisplayName = principal.FindFirst("name")?.Value
-                              ?? principal.FindFirst(ClaimTypes.Name)?.Value
-                              ?? email;
-            var roles = new List<string>
-            {
-                "TenantAdmin",
-                "ClaimsSupervisor",
-                "MemberServices",
-                "ProviderRelations",
-                "Finance"
-            };
-
-            _cachedContext = new UserContext
-            {
-                UserId = "local-demo-admin",
-                Email = email,
-                DisplayName = localDemoDisplayName,
-                FirstName = localDemoDisplayName.Split(' ').FirstOrDefault() ?? localDemoDisplayName,
-                LastName = localDemoDisplayName.Split(' ').Skip(1).FirstOrDefault() ?? "",
-                TenantId = _configuration["Authentication:LocalDemo:TenantId"] ?? "demo",
-                Roles = roles,
-                Department = "Local Evaluation",
-                Permissions = ExpandPermissions(roles)
-            };
-
-            _loaded = true;
-            return _cachedContext;
-        }
-
-        var tenantContext = await _tenantContextService.GetCurrentTenantContextAsync();
-        if (tenantContext == null)
-        {
-            // Tenant context unavailable (e.g. tid claim missing or MongoDB unreachable).
-            _logger.LogWarning("Tenant context unavailable for {RedactedEmail}", RedactEmail(email));
-
-            var azureTenantId = principal.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
-                                ?? principal.FindFirst("tid")?.Value
-                                ?? "unknown";
-
-            _cachedContext = FallbackContext(principal, email, azureTenantId);
-            _loaded = true;
-            return _cachedContext;
-        }
-
-        var objectId = principal.FindFirst("oid")?.Value
-                       ?? principal.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
-
+        ChoTokenResult result;
         try
         {
-            var baseUrl = _configuration["Services:TenantService"];
-            if (string.IsNullOrEmpty(baseUrl))
-            {
-                _logger.LogWarning("Services:TenantService configuration is missing");
-                throw new InvalidOperationException("TenantService base URL is not configured.");
-            }
-
-            TenantUserDto? user = null;
-
-            // Try OID lookup first (fastest, single-document query)
-            if (!string.IsNullOrEmpty(objectId))
-            {
-                var oidResponse = await _httpClient.GetAsync(
-                    $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users/by-oid/{Uri.EscapeDataString(objectId)}");
-                if (oidResponse.IsSuccessStatusCode)
-                {
-                    user = await oidResponse.Content.ReadFromJsonAsync<TenantUserDto>();
-                }
-            }
-
-            // Fall back to email lookup if OID not found or not available
-            if (user == null)
-            {
-                var emailResponse = await _httpClient.GetAsync(
-                    $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users");
-                if (emailResponse.IsSuccessStatusCode)
-                {
-                    var users = await emailResponse.Content.ReadFromJsonAsync<List<TenantUserDto>>();
-                    user = users?.FirstOrDefault(u =>
-                        string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase));
-
-                    // Backfill OID if we found the user by email but they had no OID
-                    if (user != null && !string.IsNullOrEmpty(objectId) && string.IsNullOrEmpty(user.AzureAdObjectId))
-                    {
-                        _logger.LogInformation("Backfilling Azure AD OID for user {RedactedEmail}", RedactEmail(email));
-                        try
-                        {
-                            await _httpClient.PatchAsJsonAsync(
-                                $"{baseUrl}/v1/tenants/{tenantContext.TenantId}/users/{user.Id}",
-                                new { azureAdObjectId = objectId });
-                        }
-                        catch { /* best-effort backfill */ }
-                    }
-                }
-            }
-
-            if (user != null && string.Equals(user.Status, "Active", StringComparison.OrdinalIgnoreCase))
-            {
-                // A user with no roles has no permissions; never promote them.
-                var roles = user.Roles ?? new List<string>();
-
-                _cachedContext = new UserContext
-                {
-                    UserId = user.Id,
-                    Email = user.Email,
-                    DisplayName = user.DisplayName,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    TenantId = user.TenantId,
-                    Roles = roles,
-                    Department = user.Department,
-                    Permissions = ExpandPermissions(roles)
-                };
-
-                _logger.LogDebug("User context loaded for {RedactedEmail} with roles: {Roles}",
-                    RedactEmail(email), string.Join(", ", _cachedContext.Roles));
-
-                _loaded = true;
-                return _cachedContext;
-            }
-
-            _logger.LogWarning("No active TenantUser found for {RedactedEmail} in tenant {TenantId}",
-                RedactEmail(email), tenantContext.TenantId);
+            result = await _tokenProvider.GetTokenAsync();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to fetch user context from tenant-service");
+            _logger.LogWarning(ex, "CHO token exchange failed for {RedactedEmail}", RedactEmail(email));
+            result = ChoTokenResult.Failure(ChoTokenStatus.Unavailable);
         }
 
-        _cachedContext = FallbackContext(principal, email, tenantContext.TenantId);
+        if (result.Succeeded)
+        {
+            _cachedContext = FromExchange(result.Token!, principal, email);
+            _logger.LogDebug("User context loaded for {RedactedEmail} with roles: {Roles}",
+                RedactEmail(email), string.Join(", ", _cachedContext.Roles));
+        }
+        else
+        {
+            _logger.LogWarning("No CHO token for {RedactedEmail} ({Status}); the user has no roles",
+                RedactEmail(email), result.Status);
+            _cachedContext = FallbackContext(principal, email, string.Empty);
+        }
+
         _loaded = true;
         return _cachedContext;
     }
 
+    private static UserContext FromExchange(ChoTokenExchangeResponse token, ClaimsPrincipal principal, string email)
+    {
+        var user = token.User ?? new ChoTokenUser();
+        var displayName = FirstNonEmpty(user.DisplayName,
+                              principal.FindFirst("name")?.Value,
+                              principal.FindFirst(ClaimTypes.Name)?.Value)
+                          ?? email;
+        var roles = token.Roles?.Where(r => !string.IsNullOrWhiteSpace(r)).ToList() ?? new List<string>();
+        var permissions = new HashSet<string>(
+            token.Permissions?.Where(p => !string.IsNullOrWhiteSpace(p)) ?? Enumerable.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
+
+        return new UserContext
+        {
+            UserId = user.Id ?? string.Empty,
+            Email = FirstNonEmpty(user.Email) ?? email,
+            DisplayName = displayName,
+            FirstName = FirstNonEmpty(user.FirstName) ?? displayName.Split(' ').FirstOrDefault() ?? displayName,
+            LastName = FirstNonEmpty(user.LastName) ?? displayName.Split(' ').Skip(1).FirstOrDefault() ?? "",
+            TenantId = token.TenantId,
+            Roles = roles,
+            Department = user.Department ?? string.Empty,
+            Permissions = permissions
+        };
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
     /// <summary>
-    /// The context for a signed-in user whose CHO user record could not be
-    /// loaded (unknown, inactive, or tenant-service unavailable). It grants no
-    /// roles. Only a Development host with
-    /// <c>Authentication:AllowTenantAdminFallback</c> set gets TenantAdmin,
-    /// for bootstrapping a local environment.
+    /// The context for a signed-in user who has no CHO token (no access, token
+    /// service unavailable, consent pending). It grants no roles. Only a
+    /// Development host with <c>Authentication:AllowTenantAdminFallback</c> set
+    /// gets TenantAdmin, for bootstrapping a local environment; backend services
+    /// still refuse such a user, since no CHO token exists.
     /// </summary>
     private UserContext FallbackContext(ClaimsPrincipal principal, string email, string tenantId)
     {
@@ -251,7 +177,7 @@ public class UserContextService : IUserContextService
         var grantAdmin = _environment?.IsDevelopment() == true
                          && string.Equals(_configuration["Authentication:AllowTenantAdminFallback"], "true",
                              StringComparison.OrdinalIgnoreCase);
-        var roles = grantAdmin ? new List<string> { "TenantAdmin" } : new List<string>();
+        var roles = grantAdmin ? new List<string> { ChoRolePermissions.TenantAdmin } : new List<string>();
 
         if (grantAdmin)
             _logger.LogWarning("Granting development TenantAdmin fallback to {RedactedEmail}", RedactEmail(email));
@@ -266,7 +192,7 @@ public class UserContextService : IUserContextService
             TenantId = tenantId,
             Roles = roles,
             Department = grantAdmin ? "Administration" : string.Empty,
-            Permissions = ExpandPermissions(roles)
+            Permissions = ChoRolePermissions.Expand(roles)
         };
     }
 
@@ -276,13 +202,6 @@ public class UserContextService : IUserContextService
         if (atIndex <= 1) return "***@" + (atIndex >= 0 ? email[(atIndex + 1)..] : "***");
         return email[0] + "***" + email[(atIndex - 1)..];
     }
-
-    private bool IsLocalDemoUser(ClaimsPrincipal principal)
-        => string.Equals(
-                _configuration["Authentication:Mode"],
-                "LocalDemo",
-                StringComparison.OrdinalIgnoreCase)
-            && principal.HasClaim("cho_local_demo", "true");
 
     public bool HasPermission(string permission)
     {
@@ -301,98 +220,6 @@ public class UserContextService : IUserContextService
         if (_cachedContext == null) return false;
         return roles.Any(r => _cachedContext.Roles.Contains(r, StringComparer.OrdinalIgnoreCase));
     }
-
-    /// <summary>
-    /// Expand role names into the flat set of permissions based on standard role definitions.
-    /// </summary>
-    private static HashSet<string> ExpandPermissions(List<string> roles)
-    {
-        var permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var role in roles)
-        {
-            var perms = GetPermissionsForRole(role);
-            foreach (var p in perms)
-                permissions.Add(p);
-        }
-
-        return permissions;
-    }
-
-    private static List<string> GetPermissionsForRole(string roleName) => roleName switch
-    {
-        "ClaimsExaminer" => new()
-        {
-            "claims:read", "claims:work", "claims:override-request",
-            "workqueue:read", "workqueue:work",
-            "members:read", "accumulators:read", "providers:read"
-        },
-        "ClaimsSupervisor" => new()
-        {
-            "claims:read", "claims:work", "claims:override-request",
-            "workqueue:read", "workqueue:work",
-            "members:read", "accumulators:read", "providers:read",
-            "claims:override-approve", "workqueue:assign", "workqueue:reassign",
-            "reports:claims", "claims:void", "claims:adjust"
-        },
-        "MemberServices" => new()
-        {
-            "members:read", "members:search", "accumulators:read",
-            "eligibility:check", "claims:read", "coverage:read",
-            "authorizations:read"
-        },
-        "EnrollmentSpecialist" => new()
-        {
-            "members:read", "members:write",
-            "enrollment:read", "enrollment:process",
-            "coverage:read", "coverage:write"
-        },
-        "UMCoordinator" => new()
-        {
-            "authorizations:read", "authorizations:write", "authorizations:decide",
-            "appeals:read", "appeals:write",
-            "rfai:read", "rfai:write",
-            "correspondence:read", "correspondence:write",
-            "members:read", "claims:read"
-        },
-        "ProviderRelations" => new()
-        {
-            "providers:read", "providers:write", "providers:credential",
-            "contracts:read", "contracts:write",
-            "networks:read", "networks:write"
-        },
-        "Finance" => new()
-        {
-            "payments:read", "payments:run",
-            "billing:read", "billing:run",
-            "reports:financial", "claims:read"
-        },
-        "FinanceApprover" => new()
-        {
-            "payments:read", "payments:approve",
-            "finance:read", "reports:financial"
-        },
-        "ComplianceOfficer" => new()
-        {
-            "*:read", "audit:read", "compliance:read", "reports:compliance"
-        },
-        "ComplianceViewer" => new()
-        {
-            "compliance:read", "authorizations:read", "audit:read"
-        },
-        "TenantAdmin" => new()
-        {
-            "*:*", "users:manage", "roles:manage",
-            "settings:manage", "operating-mode:manage"
-        },
-        "PlatformAdmin" => new()
-        {
-            "*:*", "users:manage", "roles:manage",
-            "settings:manage", "operating-mode:manage",
-            "platform:admin", "platform:tenants", "platform:inquiries"
-        },
-        _ => new()
-    };
 
     /// <summary>
     /// Check if a set of granted permissions (including wildcards) matches the required permission.
@@ -424,21 +251,4 @@ public class UserContextService : IUserContextService
 
         return false;
     }
-}
-
-/// <summary>
-/// DTO matching the TenantUser model returned by tenant-service
-/// </summary>
-internal class TenantUserDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string TenantId { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public string FirstName { get; set; } = string.Empty;
-    public string LastName { get; set; } = string.Empty;
-    public string AzureAdObjectId { get; set; } = string.Empty;
-    public List<string> Roles { get; set; } = new();
-    public string Department { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
 }

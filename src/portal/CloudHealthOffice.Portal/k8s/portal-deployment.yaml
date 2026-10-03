@@ -14,6 +14,8 @@ data:
   Services__BenefitPlanService: "http://benefit-plan-service.cloudhealthoffice/api"
   Services__PaymentService: "http://payment-service.cloudhealthoffice/api"
   Services__TenantService: "http://tenant-service.cloudhealthoffice/api"
+  Services__TokenService: "http://token-service.cloudhealthoffice"
+  TokenService__Scope: "api://cfada1ac-f251-48ea-9330-39212aa4c862/Cho.Token"
   Services__BillingService: "http://billing-service.cloudhealthoffice/api"
   Services__RfaiService: "http://rfai-service.cloudhealthoffice/api"
   Services__PricingApi: "http://pricing-api.cloudhealthoffice"
@@ -115,6 +117,16 @@ spec:
             configMapKeyRef:
               name: portal-config
               key: Services__TenantService
+        - name: Services__TokenService
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: Services__TokenService
+        - name: TokenService__Scope
+          valueFrom:
+            configMapKeyRef:
+              name: portal-config
+              key: TokenService__Scope
         - name: Services__BillingService
           valueFrom:
             configMapKeyRef:

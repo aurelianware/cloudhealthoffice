@@ -192,8 +192,9 @@
 
     protected override void OnInitialized()
     {
-        // Extract the API client ID from DownstreamApi scopes (the resource the portal calls)
-        var scopes = Configuration["DownstreamApi:Scopes"] ?? "";
+        // Extract the API client ID from the scope the portal requests for the CHO
+        // token service (falling back to the older DownstreamApi scopes).
+        var scopes = Configuration["TokenService:Scope"] ?? Configuration["DownstreamApi:Scopes"] ?? "";
         var scopeMatch = System.Text.RegularExpressions.Regex.Match(scopes, @"api://([0-9a-f\-]{36})/");
         if (scopeMatch.Success)
         {

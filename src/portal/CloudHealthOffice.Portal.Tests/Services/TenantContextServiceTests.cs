@@ -1,856 +1,394 @@
+using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Identity.Web;
 using CloudHealthOffice.Portal.Services;
+using static CloudHealthOffice.Portal.Tests.Services.ChoTokenTestSupport;
 
 namespace CloudHealthOffice.Portal.Tests.Services;
 
 public class TenantContextServiceTests
 {
-    private readonly Mock<AuthenticationStateProvider> _authStateProvider;
-    private readonly Mock<ITenantService> _tenantService;
-    private readonly Mock<ILogger<TenantContextService>> _logger;
-    private readonly IConfiguration _configuration;
-    private readonly TenantContextService _sut;
+    private readonly Mock<AuthenticationStateProvider> _authStateProvider = new();
+    private readonly Mock<IChoTokenProvider> _tokenProvider = new();
+    private readonly Mock<ITenantService> _tenantService = new();
+    private readonly Mock<ILogger<TenantContextService>> _logger = new();
+    private IConfiguration _configuration = new ConfigurationBuilder().Build();
 
-    public TenantContextServiceTests()
+    private TenantContextService CreateService()
+        => new(_authStateProvider.Object, _tokenProvider.Object, _tenantService.Object, _logger.Object, _configuration);
+
+    private void SignIn(params Claim[] claims)
     {
-        _authStateProvider = new Mock<AuthenticationStateProvider>();
-        _tenantService = new Mock<ITenantService>();
-        _logger = new Mock<ILogger<TenantContextService>>();
-        _configuration = new ConfigurationBuilder().Build();
-        _sut = new TenantContextService(_authStateProvider.Object, _tenantService.Object, _logger.Object, _configuration);
+        var identity = claims.Length > 0 ? new ClaimsIdentity(claims, "TestAuth") : new ClaimsIdentity();
+        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
+            .ReturnsAsync(new AuthenticationState(new ClaimsPrincipal(identity)));
     }
+
+    private static Claim[] EntraClaims(string tid = "azure-home", string email = "user@example.com")
+        => new[] { new Claim("tid", tid), new Claim("oid", "oid-1"), new Claim(ClaimTypes.Email, email) };
+
+    private static ChoTokenExchangeResponse Token(
+        string tenantId = "cho-tenant-456", string? tenantName = "ACME Health Plan",
+        string? email = "admin@acme.com", params string[] permissions)
+        => new()
+        {
+            AccessToken = "cho-token", ExpiresIn = 3600, TenantId = tenantId, TenantName = tenantName,
+            Roles = new List<string> { "ClaimsExaminer" },
+            Permissions = permissions.Length > 0 ? permissions.ToList() : new List<string> { "claims:read" },
+            User = new ChoTokenUser { Id = "usr-1", Email = email }
+        };
+
+    private void Exchange(ChoTokenExchangeResponse token)
+        => _tokenProvider.Setup(x => x.GetTokenAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Success(token));
+
+    private void ExchangeFails(ChoTokenStatus status)
+        => _tokenProvider.Setup(x => x.GetTokenAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Failure(status));
+
+    private void ListTenants(params ChoTenantInfo[] tenants)
+        => _tokenProvider.Setup(x => x.GetTenantsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(tenants);
+
+    private static ChoTenantInfo Tenant(string tenantId, string name, string azureTenantId)
+        => new() { TenantId = tenantId, TenantName = name, AzureTenantId = azureTenantId };
+
+    // ── Resolution ──
 
     [Fact]
     public async Task GetCurrentTenantContextAsync_WhenUserNotAuthenticated_ReturnsNull()
     {
-        // Arrange
-        var identity = new ClaimsIdentity(); // Not authenticated
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
+        SignIn();
 
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
+        var result = await CreateService().GetCurrentTenantContextAsync();
 
-        // Assert
         result.Should().BeNull();
-        _tenantService.Verify(x => x.GetSubscriptionByAzureTenantIdAsync(It.IsAny<string>()), Times.Never);
+        _tokenProvider.Verify(x => x.GetTokenAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
-    public async Task GetCurrentTenantContextAsync_WhenTenantIdClaimMissing_ReturnsNull()
+    [Theory]
+    [InlineData(ChoTokenStatus.NoAccess)]
+    [InlineData(ChoTokenStatus.Unavailable)]
+    [InlineData(ChoTokenStatus.TenantRequired)]
+    [InlineData(ChoTokenStatus.InvalidToken)]
+    [InlineData(ChoTokenStatus.ConsentRequired)]
+    public async Task GetCurrentTenantContextAsync_WithoutACHOToken_HasNoTenant(ChoTokenStatus status)
     {
-        // Arrange
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.Email, "user@example.com"),
-            new Claim("name", "Test User")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
-        result.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task GetCurrentTenantContextAsync_WhenTenantIdIsCommon_ReturnsNull()
-    {
-        // Arrange
-        var claims = new[]
-        {
-            new Claim("tid", "common"),
-            new Claim(ClaimTypes.Email, "user@example.com")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
-        result.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task GetCurrentTenantContextAsync_WhenSubscriptionNotFound_ReturnsFallbackContext()
-    {
-        // Arrange
-        var azureTenantId = "azure-tenant-123";
-        var claims = new[]
-        {
-            new Claim("tid", azureTenantId),
-            new Claim(ClaimTypes.Email, "user@example.com")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId))
+        // Replaces the removed "no subscription found → use the Azure tid as the tenant" fallback.
+        SignIn(EntraClaims("azure-tenant-123"));
+        ExchangeFails(status);
+        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(It.IsAny<string>()))
             .ReturnsAsync((TenantSubscription?)null);
 
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
+        var sut = CreateService();
+        var result = await sut.GetCurrentTenantContextAsync();
 
-        // Assert — falls back to using Azure AD tenant ID directly
-        result.Should().NotBeNull();
-        result!.TenantId.Should().Be(azureTenantId);
-        result.AzureTenantId.Should().Be(azureTenantId);
-        result.SubscriptionStatus.Should().Be("Active");
-        result.IsDemo.Should().BeFalse();
-        _tenantService.Verify(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId), Times.Once);
+        result.Should().BeNull();
+        (await sut.GetTenantIdAsync()).Should().BeNull();
+        sut.TenantId.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetCurrentTenantContextAsync_WhenValidSubscription_ReturnsTenantContext()
+    public async Task GetCurrentTenantContextAsync_TakesTheTenantFromTheToken()
     {
-        // Arrange
-        var azureTenantId = "azure-tenant-123";
-        var choTenantId = "cho-tenant-456";
-        var tenantName = "ACME Health Plan";
-        var claims = new[]
-        {
-            new Claim("tid", azureTenantId),
-            new Claim(ClaimTypes.Email, "admin@acme.com"),
-            new Claim("name", "Admin User")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        
-        var subscription = new TenantSubscription
-        {
-            TenantId = choTenantId,
-            OrganizationName = tenantName,
-            AzureTenantId = azureTenantId,
-            SubscriptionStatus = "Active",
-            Tier = "professional",
-            CreatedAt = DateTime.UtcNow.AddMonths(-6)
-        };
+        SignIn(EntraClaims("azure-tenant-123"));
+        Exchange(Token(tenantId: "cho-tenant-456", tenantName: "ACME Health Plan"));
+        ListTenants(Tenant("cho-tenant-456", "ACME Health Plan", "azure-tenant-123"));
 
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId))
-            .ReturnsAsync(subscription);
+        var result = await CreateService().GetCurrentTenantContextAsync();
 
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
         result.Should().NotBeNull();
-        result!.TenantId.Should().Be(choTenantId);
-        result.TenantName.Should().Be(tenantName);
-        result.AzureTenantId.Should().Be(azureTenantId);
+        result!.TenantId.Should().Be("cho-tenant-456");
+        result.TenantName.Should().Be("ACME Health Plan");
+        result.AzureTenantId.Should().Be("azure-tenant-123");
         result.UserEmail.Should().Be("admin@acme.com");
     }
 
     [Fact]
-    public async Task GetCurrentTenantContextAsync_WhenSubscriptionIsDemo_SetsIsDemoFlag()
+    public async Task GetCurrentTenantContextAsync_ShowsSubscriptionDetailsForTheTokensTenant()
     {
-        // Arrange
-        var azureTenantId = "azure-tenant-demo";
-        var claims = new[]
-        {
-            new Claim("tid", azureTenantId),
-            new Claim(ClaimTypes.Email, "demo@example.com")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        
-        var subscription = new TenantSubscription
-        {
-            TenantId = "demo-tenant",
-            OrganizationName = "Demo Payer",
-            AzureTenantId = azureTenantId,
-            SubscriptionStatus = "Active",
-            Tier = "starter",
-            IsDemo = true,
-            CreatedAt = DateTime.UtcNow
-        };
+        SignIn(EntraClaims("azure-tenant-demo"));
+        Exchange(Token(tenantId: "demo-tenant", tenantName: "Demo Payer"));
+        ListTenants(Tenant("demo-tenant", "Demo Payer", "azure-tenant-demo"));
+        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-tenant-demo"))
+            .ReturnsAsync(new TenantSubscription
+            {
+                TenantId = "demo-tenant", AzureTenantId = "azure-tenant-demo", OrganizationName = "Demo Payer",
+                SubscriptionStatus = "Active", Tier = "starter", IsDemo = true
+            });
 
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId))
-            .ReturnsAsync(subscription);
+        var sut = CreateService();
+        var result = await sut.GetCurrentTenantContextAsync();
 
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
-        result.Should().NotBeNull();
         result!.IsDemo.Should().BeTrue();
+        result.SubscriptionTier.Should().Be("starter");
+        result.SubscriptionStatus.Should().Be("Active");
+        sut.IsDemo.Should().BeTrue();
     }
 
     [Fact]
-    public async Task GetCurrentTenantContextAsync_CachesResult_DoesNotCallServiceTwice()
+    public async Task GetCurrentTenantContextAsync_IgnoresASubscriptionOfAnotherTenant()
     {
-        // Arrange
-        var azureTenantId = "azure-tenant-123";
-        var claims = new[]
-        {
-            new Claim("tid", azureTenantId),
-            new Claim(ClaimTypes.Email, "user@example.com")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        
-        var subscription = new TenantSubscription
-        {
-            TenantId = "cho-tenant-456",
-            OrganizationName = "Test Tenant",
-            AzureTenantId = azureTenantId,
-            SubscriptionStatus = "Active", Tier = "starter", IsDemo = false
-        };
+        SignIn(EntraClaims("azure-home"));
+        Exchange(Token(tenantId: "cho-tenant-456"));
+        ListTenants(Tenant("cho-tenant-456", "ACME", "azure-home"));
+        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-home"))
+            .ReturnsAsync(new TenantSubscription { TenantId = "some-other-tenant", IsDemo = true, Tier = "enterprise" });
 
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId))
-            .ReturnsAsync(subscription);
+        var result = await CreateService().GetCurrentTenantContextAsync();
 
-        // Act
-        var result1 = await _sut.GetCurrentTenantContextAsync();
-        var result2 = await _sut.GetCurrentTenantContextAsync();
+        result!.TenantId.Should().Be("cho-tenant-456");
+        result.IsDemo.Should().BeFalse();
+        result.SubscriptionTier.Should().BeEmpty();
+    }
 
-        // Assert
-        result1.Should().NotBeNull();
-        result2.Should().NotBeNull();
-        result1.Should().Be(result2); // Same instance
-        _tenantService.Verify(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId), Times.Once);
+    [Fact]
+    public async Task GetCurrentTenantContextAsync_WhenSubscriptionLookupFails_StillResolvesTheTenant()
+    {
+        SignIn(EntraClaims("azure-home"));
+        Exchange(Token(tenantId: "cho-tenant-456"));
+        ListTenants(Tenant("cho-tenant-456", "ACME", "azure-home"));
+        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(It.IsAny<string>()))
+            .ThrowsAsync(new TimeoutException("mongo down"));
+
+        var result = await CreateService().GetCurrentTenantContextAsync();
+
+        result!.TenantId.Should().Be("cho-tenant-456");
+    }
+
+    [Fact]
+    public async Task GetCurrentTenantContextAsync_CachesResult_DoesNotExchangeTwice()
+    {
+        SignIn(EntraClaims());
+        Exchange(Token());
+        ListTenants();
+        var sut = CreateService();
+
+        var result1 = await sut.GetCurrentTenantContextAsync();
+        var result2 = await sut.GetCurrentTenantContextAsync();
+
+        result1.Should().BeSameAs(result2);
+        _tokenProvider.Verify(x => x.GetTokenAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task GetTenantIdAsync_ReturnsCurrentTenantId()
     {
-        // Arrange
-        var azureTenantId = "azure-tenant-123";
-        var choTenantId = "cho-tenant-456";
-        var claims = new[]
-        {
-            new Claim("tid", azureTenantId),
-            new Claim(ClaimTypes.Email, "user@example.com")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        var subscription = new TenantSubscription
-        {
-            TenantId = choTenantId,
-            OrganizationName = "Test Tenant",
-            AzureTenantId = azureTenantId,
-            SubscriptionStatus = "Active",
-            Tier = "professional",
-            IsDemo = false
-        };
+        SignIn(EntraClaims());
+        Exchange(Token(tenantId: "cho-tenant-456"));
+        ListTenants();
 
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId))
-            .ReturnsAsync(subscription);
-
-        // Act
-        var result = await _sut.GetTenantIdAsync();
-
-        // Assert
-        result.Should().Be(choTenantId);
+        (await CreateService().GetTenantIdAsync()).Should().Be("cho-tenant-456");
     }
 
     [Fact]
     public void TenantId_Property_ReturnsNull_WhenNotInitialized()
-    {
-        // Act
-        var result = _sut.TenantId;
-
-        // Assert
-        result.Should().BeNull();
-    }
+        => CreateService().TenantId.Should().BeNull();
 
     [Fact]
     public void IsDemo_Property_ReturnsFalse_WhenNotInitialized()
-    {
-        // Act
-        var result = _sut.IsDemo;
-
-        // Assert
-        result.Should().BeFalse();
-    }
-
-    [Theory]
-    [InlineData("http://schemas.microsoft.com/identity/claims/tenantid")]
-    [InlineData("tid")]
-    public async Task GetCurrentTenantContextAsync_SupportsDifferentTenantIdClaims(string claimType)
-    {
-        // Arrange
-        var azureTenantId = "azure-tenant-123";
-        var claims = new[]
-        {
-            new Claim(claimType, azureTenantId),
-            new Claim(ClaimTypes.Email, "user@example.com")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        
-        var subscription = new TenantSubscription
-        {
-            TenantId = "cho-tenant-456",
-            OrganizationName = "Test Tenant",
-            AzureTenantId = azureTenantId,
-            SubscriptionStatus = "Active", Tier = "starter", IsDemo = false
-        };
-
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId))
-            .ReturnsAsync(subscription);
-
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
-        result.Should().NotBeNull();
-        result!.TenantId.Should().Be("cho-tenant-456");
-    }
+        => CreateService().IsDemo.Should().BeFalse();
 
     [Theory]
     [InlineData(ClaimTypes.Email, "user@example.com")]
     [InlineData("preferred_username", "user@example.com")]
     [InlineData("upn", "user@example.com")]
-    public async Task GetCurrentTenantContextAsync_SupportsDifferentEmailClaims(string claimType, string email)
+    public async Task GetCurrentTenantContextAsync_WhenResponseHasNoEmail_UsesTheEmailClaim(string claimType, string email)
     {
-        // Arrange
-        var azureTenantId = "azure-tenant-123";
-        var claims = new[]
-        {
-            new Claim("tid", azureTenantId),
-            new Claim(claimType, email)
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
+        SignIn(new Claim("tid", "azure-tenant-123"), new Claim(claimType, email));
+        Exchange(Token(email: null));
+        ListTenants();
 
-        var subscription = new TenantSubscription
-        {
-            TenantId = "cho-tenant-456",
-            OrganizationName = "Test Tenant",
-            AzureTenantId = azureTenantId,
-            SubscriptionStatus = "Active",
-            Tier = "starter",
-            IsDemo = false
-        };
+        var result = await CreateService().GetCurrentTenantContextAsync();
 
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(azureTenantId))
-            .ReturnsAsync(subscription);
-
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
-        result.Should().NotBeNull();
         result!.UserEmail.Should().Be(email);
     }
 
-    // ---------------------------------------------------------------
-    // Guest user resolution (email-based tenant lookup)
-    // ---------------------------------------------------------------
+    // ── Available tenants come from the token service ──
 
     [Fact]
-    public async Task GetCurrentTenantContextAsync_GuestUser_SingleTenant_AutoResolves()
+    public async Task GetAvailableTenantsAsync_ListsTheTokenServiceTenants()
     {
-        // Arrange — home tenant has no subscription, but email matches one tenant
-        var homeTenantId = "guest-home-tenant";
-        var hostTenantId = "host-azure-tenant";
-        var authState = CreateAuthState(homeTenantId, "guest@partner.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
+        SignIn(EntraClaims());
+        ListTenants(Tenant("t-1", "Alpha", "az-1"), Tenant("t-2", "Beta", "az-2"));
+        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("az-2"))
+            .ReturnsAsync(new TenantSubscription { TenantId = "t-2", Tier = "professional", IsDemo = true });
 
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync((TenantSubscription?)null);
+        var tenants = await CreateService().GetAvailableTenantsAsync();
 
-        var hostSubscription = MakeSubscription("cho-host-1", "Host Health Plan", hostTenantId);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("guest@partner.com"))
-            .ReturnsAsync(new List<TenantSubscription> { hostSubscription });
-
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
-        result.Should().NotBeNull();
-        result!.TenantId.Should().Be("cho-host-1");
-        result.TenantName.Should().Be("Host Health Plan");
-        result.AzureTenantId.Should().Be(hostTenantId);
+        tenants.Select(t => (t.TenantId, t.OrganizationName, t.AzureTenantId))
+            .Should().Equal(("t-1", "Alpha", "az-1"), ("t-2", "Beta", "az-2"));
+        tenants[1].Tier.Should().Be("professional");
+        tenants[1].IsDemo.Should().BeTrue();
+        // No email-based tenant matching in the portal any more.
+        _tenantService.Verify(x => x.GetTenantsForUserAsync(It.IsAny<string>()), Times.Never);
+        _tenantService.Verify(x => x.IsMemberOfTenantAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task GetCurrentTenantContextAsync_GuestUser_MultipleTenants_DefaultsToFirst()
+    public async Task GetAvailableTenantsAsync_WhenTokenServiceUnavailable_ReturnsEmptyList()
     {
-        // Arrange
-        var homeTenantId = "guest-home-tenant";
-        var authState = CreateAuthState(homeTenantId, "consultant@firm.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
+        SignIn(EntraClaims());
+        _tokenProvider.Setup(x => x.GetTenantsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<ChoTenantInfo>?)null);
 
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync((TenantSubscription?)null);
+        (await CreateService().GetAvailableTenantsAsync()).Should().BeEmpty();
+    }
 
-        var tenant1 = MakeSubscription("cho-1", "Alpha Health", "azure-alpha");
-        var tenant2 = MakeSubscription("cho-2", "Beta Health", "azure-beta");
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("consultant@firm.com"))
-            .ReturnsAsync(new List<TenantSubscription> { tenant1, tenant2 });
+    // ── Switching ──
 
-        // Act
-        var result = await _sut.GetCurrentTenantContextAsync();
+    [Fact]
+    public async Task SwitchTenantAsync_ListedTenant_ReExchangesAndUpdatesContext()
+    {
+        SignIn(EntraClaims("azure-home"));
+        Exchange(Token(tenantId: "t-home", tenantName: "Home"));
+        ListTenants(Tenant("t-home", "Home", "azure-home"), Tenant("t-2", "Beta", "az-2"));
+        _tokenProvider.Setup(x => x.SwitchTenantAsync("t-2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Success(Token(tenantId: "t-2", tenantName: "Beta")));
+        var sut = CreateService();
+        await sut.GetCurrentTenantContextAsync();
 
-        // Assert — defaults to first
-        result.Should().NotBeNull();
-        result!.TenantId.Should().Be("cho-1");
-        result.TenantName.Should().Be("Alpha Health");
+        var success = await sut.SwitchTenantAsync("t-2");
+
+        success.Should().BeTrue();
+        var context = await sut.GetCurrentTenantContextAsync();
+        context!.TenantId.Should().Be("t-2");
+        context.TenantName.Should().Be("Beta");
+        context.AzureTenantId.Should().Be("az-2");
+        context.UserEmail.Should().Be("admin@acme.com");
+        sut.IsImpersonating.Should().BeFalse("a member switching between their tenants is not impersonating");
     }
 
     [Fact]
-    public async Task GetCurrentTenantContextAsync_GuestUser_MultipleTenants_CachesAvailableList()
+    public async Task SwitchTenantAsync_WhenRefused_KeepsTheCurrentContext()
     {
-        // Arrange
-        var homeTenantId = "guest-home-tenant";
-        var authState = CreateAuthState(homeTenantId, "consultant@firm.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
+        SignIn(EntraClaims());
+        Exchange(Token(tenantId: "t-home"));
+        ListTenants(Tenant("t-home", "Home", "azure-home"));
+        _tokenProvider.Setup(x => x.SwitchTenantAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Failure(ChoTokenStatus.NoAccess));
+        var sut = CreateService();
+        await sut.GetCurrentTenantContextAsync();
 
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync((TenantSubscription?)null);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-alpha"))
-            .ReturnsAsync((TenantSubscription?)null); // home tenant lookup in GetAvailableTenantsAsync
+        var success = await sut.SwitchTenantAsync("t-other");
 
-        var tenant1 = MakeSubscription("cho-1", "Alpha Health", "azure-alpha");
-        var tenant2 = MakeSubscription("cho-2", "Beta Health", "azure-beta");
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("consultant@firm.com"))
-            .ReturnsAsync(new List<TenantSubscription> { tenant1, tenant2 });
-
-        // Act — resolve context first, then get available tenants
-        await _sut.GetCurrentTenantContextAsync();
-        var available = await _sut.GetAvailableTenantsAsync();
-
-        // Assert — cached from initial resolution, no extra GetTenantsForUserAsync call
-        available.Should().HaveCount(2);
-        available[0].OrganizationName.Should().Be("Alpha Health");
-        available[1].OrganizationName.Should().Be("Beta Health");
-    }
-
-    // ---------------------------------------------------------------
-    // GetAvailableTenantsAsync
-    // ---------------------------------------------------------------
-
-    [Fact]
-    public async Task GetAvailableTenantsAsync_IncludesHomeTenantWhenNotInEmailList()
-    {
-        // Arrange — user's home tenant matches a subscription, and email
-        // associates them with a different tenant too
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-
-        var otherSub = MakeSubscription("cho-other", "Other Health", "azure-other");
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("user@home.com"))
-            .ReturnsAsync(new List<TenantSubscription> { otherSub });
-
-        // Act
-        await _sut.GetCurrentTenantContextAsync();
-        var available = await _sut.GetAvailableTenantsAsync();
-
-        // Assert — home tenant should be prepended
-        available.Should().HaveCount(2);
-        available[0].TenantId.Should().Be("cho-home");
-        available[1].TenantId.Should().Be("cho-other");
+        success.Should().BeFalse();
+        (await sut.GetTenantIdAsync()).Should().Be("t-home");
     }
 
     [Fact]
-    public async Task GetAvailableTenantsAsync_DoesNotDuplicateHomeTenantWhenAlreadyInList()
+    public async Task SwitchTenantAsync_PlatformAdminRoleClaim_DoesNotBypassTheTokenService()
     {
-        // Arrange
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
+        // Removed: IsInRole("PlatformAdmin") used to allow switching to any subscription.
+        SignIn(EntraClaims().Append(new Claim(ClaimTypes.Role, "PlatformAdmin"))
+            .Append(new Claim("permissions", "platform:admin")).ToArray());
+        Exchange(Token(tenantId: "t-home"));
+        ListTenants(Tenant("t-home", "Home", "azure-home"));
+        _tokenProvider.Setup(x => x.SwitchTenantAsync("t-elsewhere", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Failure(ChoTokenStatus.NoAccess));
+        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(It.IsAny<string>()))
+            .ReturnsAsync(new TenantSubscription { TenantId = "t-elsewhere", AzureTenantId = "az-elsewhere" });
+        var sut = CreateService();
 
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
+        var success = await sut.SwitchTenantAsync("t-elsewhere");
 
-        // Email lookup also returns the home tenant
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("user@home.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub });
-
-        // Act
-        await _sut.GetCurrentTenantContextAsync();
-        var available = await _sut.GetAvailableTenantsAsync();
-
-        // Assert — no duplicates
-        available.Should().HaveCount(1);
-        available[0].TenantId.Should().Be("cho-home");
+        success.Should().BeFalse();
+        sut.IsImpersonating.Should().BeFalse();
     }
 
     [Fact]
-    public async Task GetAvailableTenantsAsync_UsesHomeTenantId_NotSwitchedTenantId()
+    public async Task SwitchTenantAsync_PlatformAdminIntoAnotherOrganisation_IsShownAsImpersonating()
     {
-        // Arrange — This tests the home tenant ID drift fix.
-        // After SwitchTenantAsync, _cachedContext.AzureTenantId changes,
-        // but GetAvailableTenantsAsync should still use the original home tenant ID.
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
+        SignIn(EntraClaims("azure-home"));
+        Exchange(Token(tenantId: "t-home", permissions: new[] { "platform:admin", "*:*" }));
+        ListTenants(Tenant("t-home", "Home", "azure-home"), Tenant("t-client", "Client", "azure-client"));
+        _tokenProvider.Setup(x => x.SwitchTenantAsync("t-client", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Success(Token(tenantId: "t-client", permissions: new[] { "platform:admin", "*:*" })));
+        var sut = CreateService();
+        await sut.GetCurrentTenantContextAsync();
+        sut.IsImpersonating.Should().BeFalse();
 
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        var otherSub = MakeSubscription("cho-other", "Other Health", "azure-other");
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-other"))
-            .ReturnsAsync(otherSub);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("user@home.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub, otherSub });
+        (await sut.SwitchTenantAsync("t-client")).Should().BeTrue();
+        sut.IsImpersonating.Should().BeTrue();
 
-        // Resolve initial context
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Switch to another tenant — this changes _cachedContext.AzureTenantId
-        await _sut.SwitchTenantAsync("azure-other");
-
-        // Clear cached available tenants to force re-resolution
-        // (in real usage, the cache would already be populated, but this
-        // tests that re-resolution uses _homeTenantId not currentContext.AzureTenantId)
-
-        // Act — GetAvailableTenantsAsync should still look up the *home* tenant
-        var available = await _sut.GetAvailableTenantsAsync();
-
-        // Assert — home tenant lookup should use original home tenant ID
-        _tenantService.Verify(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId), Times.AtLeastOnce);
+        _tokenProvider.Setup(x => x.SwitchTenantAsync("t-home", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Success(Token(tenantId: "t-home", permissions: new[] { "platform:admin", "*:*" })));
+        (await sut.SwitchTenantAsync("t-home")).Should().BeTrue();
+        sut.IsImpersonating.Should().BeFalse();
     }
-
-    [Fact]
-    public async Task GetAvailableTenantsAsync_WhenNoEmail_ReturnsEmptyList()
-    {
-        // Arrange — authenticated but no email claim
-        var claims = new[]
-        {
-            new Claim("tid", "azure-tenant-123"),
-            new Claim("name", "No Email User")
-        };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(principal);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-tenant-123"))
-            .ReturnsAsync((TenantSubscription?)null);
-
-        // Act
-        await _sut.GetCurrentTenantContextAsync();
-        var available = await _sut.GetAvailableTenantsAsync();
-
-        // Assert — fallback context has no email, so no tenants
-        available.Should().BeEmpty();
-    }
-
-    // ---------------------------------------------------------------
-    // SwitchTenantAsync — authorized tenant switch (not impersonation)
-    // ---------------------------------------------------------------
-
-    [Fact]
-    public async Task SwitchTenantAsync_AuthorizedTenant_UpdatesContext()
-    {
-        // Arrange — user has access to two tenants
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        var otherSub = MakeSubscription("cho-other", "Other Health", "azure-other");
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("user@home.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub, otherSub });
-
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Act
-        var result = await _sut.SwitchTenantAsync("azure-other");
-
-        // Assert
-        result.Should().BeTrue();
-        _sut.TenantId.Should().Be("cho-other");
-        _sut.TenantName.Should().Be("Other Health");
-    }
-
-    [Fact]
-    public async Task SwitchTenantAsync_AuthorizedTenant_DoesNotSetImpersonating()
-    {
-        // Arrange — user has access to two tenants, switches to non-home tenant
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        var otherSub = MakeSubscription("cho-other", "Other Health", "azure-other");
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("user@home.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub, otherSub });
-
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Act — switch to a tenant the user is authorized for but is NOT their home tenant
-        var result = await _sut.SwitchTenantAsync("azure-other");
-
-        // Assert — this is NOT impersonation
-        result.Should().BeTrue();
-        _sut.IsImpersonating.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task SwitchTenantAsync_BackToHomeTenant_ClearsImpersonation()
-    {
-        // Arrange — platform admin impersonates, then switches back
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "admin@platform.com",
-            platformAdmin: true);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        var foreignSub = MakeSubscription("cho-foreign", "Foreign Corp", "azure-foreign");
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-foreign"))
-            .ReturnsAsync(foreignSub);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("admin@platform.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub });
-
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Impersonate a foreign tenant
-        await _sut.SwitchTenantAsync("azure-foreign");
-        _sut.IsImpersonating.Should().BeTrue();
-
-        // Act — switch back to home tenant (which is in authorized list)
-        var result = await _sut.SwitchTenantAsync(homeTenantId);
-
-        // Assert
-        result.Should().BeTrue();
-        _sut.IsImpersonating.Should().BeFalse();
-    }
-
-    // ---------------------------------------------------------------
-    // SwitchTenantAsync — platform admin impersonation
-    // ---------------------------------------------------------------
-
-    [Fact]
-    public async Task SwitchTenantAsync_PlatformAdmin_CanImpersonateAnyTenant()
-    {
-        // Arrange
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "admin@platform.com",
-            platformAdmin: true);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        var foreignSub = MakeSubscription("cho-foreign", "Foreign Corp", "azure-foreign");
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-foreign"))
-            .ReturnsAsync(foreignSub);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("admin@platform.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub });
-
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Act — switch to a tenant NOT in the available list
-        var result = await _sut.SwitchTenantAsync("azure-foreign");
-
-        // Assert
-        result.Should().BeTrue();
-        _sut.TenantId.Should().Be("cho-foreign");
-        _sut.TenantName.Should().Be("Foreign Corp");
-        _sut.IsImpersonating.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task SwitchTenantAsync_PlatformAdmin_NonExistentTenant_ReturnsFalse()
-    {
-        // Arrange
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "admin@platform.com",
-            platformAdmin: true);
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-nonexistent"))
-            .ReturnsAsync((TenantSubscription?)null);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("admin@platform.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub });
-
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Act
-        var result = await _sut.SwitchTenantAsync("azure-nonexistent");
-
-        // Assert
-        result.Should().BeFalse();
-    }
-
-    // ---------------------------------------------------------------
-    // SwitchTenantAsync — unauthorized user
-    // ---------------------------------------------------------------
-
-    [Fact]
-    public async Task SwitchTenantAsync_UnauthorizedUser_Denied()
-    {
-        // Arrange — regular user with no platform admin role
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("user@home.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub });
-
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Act — try to switch to a tenant the user doesn't have access to
-        var result = await _sut.SwitchTenantAsync("azure-unauthorized");
-
-        // Assert
-        result.Should().BeFalse();
-        _sut.TenantId.Should().Be("cho-home"); // context unchanged
-        _sut.IsImpersonating.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task SwitchTenantAsync_PreservesUserEmail()
-    {
-        // Arrange
-        var homeTenantId = "azure-home";
-        var authState = CreateAuthState(homeTenantId, "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", homeTenantId);
-        var otherSub = MakeSubscription("cho-other", "Other Health", "azure-other");
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync(homeTenantId))
-            .ReturnsAsync(homeSub);
-        _tenantService.Setup(x => x.GetTenantsForUserAsync("user@home.com"))
-            .ReturnsAsync(new List<TenantSubscription> { homeSub, otherSub });
-
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Act
-        await _sut.SwitchTenantAsync("azure-other");
-
-        // Assert — email should carry over from previous context
-        var context = await _sut.GetCurrentTenantContextAsync();
-        context!.UserEmail.Should().Be("user@home.com");
-    }
-
-    // ---------------------------------------------------------------
-    // IsImpersonating property
-    // ---------------------------------------------------------------
 
     [Fact]
     public void IsImpersonating_ReturnsFalse_WhenNotInitialized()
-    {
-        _sut.IsImpersonating.Should().BeFalse();
-    }
+        => CreateService().IsImpersonating.Should().BeFalse();
 
     [Fact]
-    public async Task IsImpersonating_ReturnsFalse_AfterNormalResolution()
+    public async Task SwitchTenantAsync_WithTheRealProvider_RefusesUnlistedTenantsAndReExchangesListedOnes()
     {
-        // Arrange
-        var authState = CreateAuthState("azure-home", "user@home.com");
-        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
-            .ReturnsAsync(authState);
-
-        var homeSub = MakeSubscription("cho-home", "Home Health", "azure-home");
-        _tenantService.Setup(x => x.GetSubscriptionByAzureTenantIdAsync("azure-home"))
-            .ReturnsAsync(homeSub);
-
-        // Act
-        await _sut.GetCurrentTenantContextAsync();
-
-        // Assert
-        _sut.IsImpersonating.Should().BeFalse();
-    }
-
-    // ---------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------
-
-    private static AuthenticationState CreateAuthState(
-        string azureTenantId,
-        string email,
-        bool platformAdmin = false)
-    {
-        var claims = new List<Claim>
+        var exchanged = new List<string?>();
+        var tokenService = new FakeHandler(request => request.RequestUri!.AbsolutePath switch
         {
-            new("tid", azureTenantId),
-            new(ClaimTypes.Email, email),
-            new("name", "Test User")
-        };
-
-        if (platformAdmin)
+            "/v1/token/tenants" => Json(HttpStatusCode.OK,
+                """[{"tenantId":"tenant-1","tenantName":"Acme","azureTenantId":"entra-tid-1"},{"tenantId":"tenant-2","tenantName":"Beta","azureTenantId":"entra-tid-2"}]"""),
+            "/v1/token/exchange" => Respond(RequestedTenant(request)),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        HttpResponseMessage Respond(string? tenant)
         {
-            claims.Add(new Claim("permissions", "platform:admin"));
+            exchanged.Add(tenant);
+            return Json(HttpStatusCode.OK, ExchangeJson(tenantId: tenant ?? "tenant-1", tenantName: tenant ?? "Acme"));
         }
 
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
-        return new AuthenticationState(principal);
+        var tokenAcquisition = new Mock<ITokenAcquisition>();
+        tokenAcquisition
+            .Setup(t => t.GetAccessTokenForUserAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<ClaimsPrincipal?>(), It.IsAny<TokenAcquisitionOptions?>()))
+            .ReturnsAsync("entra-token");
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Services:TokenService"] = TokenServiceUrl,
+            ["TokenService:Scope"] = Scope,
+        }).Build();
+        var auth = new StaticAuthenticationStateProvider(EntraUser());
+        var provider = new ChoTokenProvider(auth, new SingleHandlerHttpClientFactory(tokenService),
+            new MemoryCache(new MemoryCacheOptions()), configuration, new TestHostEnvironment("Production"),
+            NullLogger<ChoTokenProvider>.Instance, tokenAcquisition.Object);
+        var sut = new TenantContextService(auth, provider, _tenantService.Object,
+            NullLogger<TenantContextService>.Instance, configuration);
+
+        (await sut.GetTenantIdAsync()).Should().Be("tenant-1");
+        (await sut.SwitchTenantAsync("tenant-9")).Should().BeFalse();
+        (await sut.SwitchTenantAsync("tenant-2")).Should().BeTrue();
+
+        (await sut.GetTenantIdAsync()).Should().Be("tenant-2");
+        exchanged.Should().Equal(null, "tenant-2");
     }
 
-    private static TenantSubscription MakeSubscription(
-        string tenantId,
-        string orgName,
-        string azureTenantId,
-        bool isDemo = false)
+    // ── LocalDemo ──
+
+    [Fact]
+    public async Task LocalDemo_ShowsTheDemoTenant()
     {
-        return new TenantSubscription
+        _configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            TenantId = tenantId,
-            OrganizationName = orgName,
-            AzureTenantId = azureTenantId,
-            SubscriptionStatus = "Active",
-            Tier = "professional",
-            IsDemo = isDemo,
-            CreatedAt = DateTime.UtcNow.AddMonths(-3)
-        };
+            ["Authentication:Mode"] = "LocalDemo",
+            ["Authentication:LocalDemo:TenantName"] = "Local Demo Tenant",
+            ["Authentication:LocalDemo:AzureTenantId"] = "local-demo",
+        }).Build();
+        _authStateProvider.Setup(x => x.GetAuthenticationStateAsync())
+            .ReturnsAsync(new AuthenticationState(LocalDemoUser()));
+        Exchange(Token(tenantId: "demo", tenantName: "Local Demo Tenant"));
+
+        var result = await CreateService().GetCurrentTenantContextAsync();
+
+        result!.TenantId.Should().Be("demo");
+        result.TenantName.Should().Be("Local Demo Tenant");
+        result.AzureTenantId.Should().Be("local-demo");
+        result.IsDemo.Should().BeTrue();
+        result.SubscriptionTier.Should().Be("local-demo");
     }
 }

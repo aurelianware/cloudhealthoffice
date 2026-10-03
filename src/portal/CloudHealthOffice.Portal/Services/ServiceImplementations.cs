@@ -935,18 +935,16 @@ public class AuthorizationService : IAuthorizationService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthorizationService> _logger;
-    private readonly ITokenAcquisition? _tokenAcquisition;
 
+    // The CHO token for these calls is attached by ChoBearerTokenHandler.
     public AuthorizationService(
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<AuthorizationService> logger,
-        ITokenAcquisition? tokenAcquisition = null)
+        ILogger<AuthorizationService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
-        _tokenAcquisition = tokenAcquisition;
     }
 
     public async Task<List<AuthorizationSummary>> GetAuthorizationsAsync(string? memberId = null)
@@ -954,7 +952,6 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
-            await SetBearerTokenAsync();
             var url = string.IsNullOrEmpty(memberId)
                 ? $"{baseUrl}/authorizations/search"
                 : $"{baseUrl}/authorizations/search?memberId={memberId}";
@@ -973,7 +970,6 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
-            await SetBearerTokenAsync();
             return await _httpClient.GetFromJsonAsync<AuthorizationDetails>($"{baseUrl}/authorizations/{authorizationId}");
         }
         catch (HttpRequestException ex)
@@ -988,7 +984,6 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
-            await SetBearerTokenAsync();
             var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/authorizations", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<SubmitAuthorizationResponse>();
@@ -1000,25 +995,6 @@ public class AuthorizationService : IAuthorizationService
             throw new ServiceUnavailableException("Authorization Service", ex);
         }
     }
-
-    private async Task SetBearerTokenAsync()
-    {
-        if (_tokenAcquisition is null || IsLocalDemoAuth())
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = null;
-            return;
-        }
-
-        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Authorization.ReadWrite" };
-        var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-    }
-
-    private bool IsLocalDemoAuth()
-        => string.Equals(
-            _configuration["Authentication:Mode"],
-            "LocalDemo",
-            StringComparison.OrdinalIgnoreCase);
 
     private class SubmitAuthorizationResponse
     {
@@ -1874,18 +1850,16 @@ public class AttachmentService : IAttachmentService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AttachmentService> _logger;
-    private readonly ITokenAcquisition? _tokenAcquisition;
 
+    // The CHO token for these calls is attached by ChoBearerTokenHandler.
     public AttachmentService(
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<AttachmentService> logger,
-        ITokenAcquisition? tokenAcquisition = null)
+        ILogger<AttachmentService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
-        _tokenAcquisition = tokenAcquisition;
     }
 
     public async Task<List<AttachmentInfo>> GetAttachmentsAsync(string authorizationId)
@@ -1893,7 +1867,6 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
-            await SetBearerTokenAsync();
             var attachments = await _httpClient.GetFromJsonAsync<List<AttachmentInfo>>($"{baseUrl}/attachments/authorization/{authorizationId}");
             return attachments ?? new List<AttachmentInfo>();
         }
@@ -1909,7 +1882,6 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
-            await SetBearerTokenAsync();
             using var content = new MultipartFormDataContent();
             var streamContent = new StreamContent(fileStream);
             streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
@@ -1934,7 +1906,6 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
-            await SetBearerTokenAsync();
             var response = await _httpClient.GetAsync($"{baseUrl}/attachments/{authorizationId}/{attachmentId}");
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStreamAsync();
@@ -1960,25 +1931,6 @@ public class AttachmentService : IAttachmentService
             throw new ServiceUnavailableException("Attachment Service", ex);
         }
     }
-
-    private async Task SetBearerTokenAsync()
-    {
-        if (_tokenAcquisition is null || IsLocalDemoAuth())
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = null;
-            return;
-        }
-
-        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Attachments.ReadWrite" };
-        var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-    }
-
-    private bool IsLocalDemoAuth()
-        => string.Equals(
-            _configuration["Authentication:Mode"],
-            "LocalDemo",
-            StringComparison.OrdinalIgnoreCase);
 
     private class UploadAttachmentResponse
     {

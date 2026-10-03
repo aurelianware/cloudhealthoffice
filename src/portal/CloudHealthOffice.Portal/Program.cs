@@ -191,12 +191,28 @@ builder.Services.AddScoped<CircuitHandler, DiagnosticCircuitHandler>();
 
 builder.Services.AddMudServices();
 
-// Add HttpClient for service calls with tenant context
-builder.Services.AddScoped<TenantHttpMessageHandler>();
+// CHO tokens: the signed-in user's Entra token is exchanged at the CHO token
+// service for a CHO token, which is sent to CHO backend services only.
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ChoServiceHosts>();
+builder.Services.AddScoped<IChoReauthenticationHandler, MicrosoftIdentityReauthenticationHandler>();
+builder.Services.AddScoped<IChoTokenProvider>(sp => new ChoTokenProvider(
+    sp.GetRequiredService<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider>(),
+    sp.GetRequiredService<IHttpClientFactory>(),
+    sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+    sp.GetRequiredService<IConfiguration>(),
+    sp.GetRequiredService<IHostEnvironment>(),
+    sp.GetRequiredService<ILogger<ChoTokenProvider>>(),
+    sp.GetService<ITokenAcquisition>(),
+    sp.GetService<IChoReauthenticationHandler>(),
+    sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
+
+// The token service gets the user's Entra token, never a CHO token.
+builder.Services.AddHttpClient(ChoTokenProvider.TokenServiceClientName)
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
 builder.Services.AddHttpClient("default")
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
-    .AddHttpMessageHandler<TenantHttpMessageHandler>()
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
         PooledConnectionLifetime = TimeSpan.FromMinutes(10),
@@ -204,8 +220,23 @@ builder.Services.AddHttpClient("default")
         MaxConnectionsPerServer = 50
     });
 
+// The HttpClient every portal service and page uses. ChoBearerTokenHandler is
+// wrapped around the pooled "default" pipeline here, in the circuit's own scope,
+// instead of via AddHttpMessageHandler: IHttpClientFactory creates pipeline
+// handlers in a separate DI scope where the circuit's user is not available.
+// It adds the CHO token and X-Tenant-ID only for hosts configured under
+// Services:* (not the token service, Argo or Prometheus); other hosts get nothing.
 builder.Services.AddScoped(sp =>
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("default"));
+{
+    var handler = new ChoBearerTokenHandler(
+        sp.GetRequiredService<IChoTokenProvider>(),
+        sp.GetRequiredService<ChoServiceHosts>(),
+        sp.GetRequiredService<ILogger<ChoBearerTokenHandler>>())
+    {
+        InnerHandler = sp.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler("default"),
+    };
+    return new HttpClient(handler, disposeHandler: true);
+});
 
 // MongoDB client (singleton) — uses camelCase BSON convention to match stored field names
 var camelCasePack = new ConventionPack { new CamelCaseElementNameConvention() };
