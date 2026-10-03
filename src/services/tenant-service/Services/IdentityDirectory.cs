@@ -112,10 +112,7 @@ public sealed class IdentityDirectory : IIdentityDirectory
         var users = await _users.Find(filter).Limit(200).ToListAsync(ct);
 
         var tenantIds = users.Select(u => u.TenantId).Distinct().ToList();
-        var tenants = (await _tenants.Find(Builders<BsonDocument>.Filter.In("tenantId", tenantIds)).ToListAsync(ct))
-            .Select(ToTenant)
-            .GroupBy(t => t.TenantId)
-            .ToDictionary(g => g.Key, g => g.First());
+        var tenants = (await LoadTenantsAsync(tenantIds, ct)).ToDictionary(t => t.TenantId);
 
         return users.Select(u => new IdentityMembership
         {
@@ -126,25 +123,73 @@ public sealed class IdentityDirectory : IIdentityDirectory
 
     public async Task<IdentityTenant?> GetTenantAsync(string tenantId, CancellationToken ct)
     {
-        var doc = await _tenants.Find(Builders<BsonDocument>.Filter.Eq("tenantId", tenantId)).FirstOrDefaultAsync(ct);
-        return doc == null ? null : ToTenant(doc);
+        return (await LoadTenantsAsync(new[] { tenantId }, ct)).FirstOrDefault();
     }
 
     public async Task<IReadOnlyList<IdentityTenant>> GetTenantsAsync(string? azureTenantId, CancellationToken ct)
     {
-        var filter = string.IsNullOrEmpty(azureTenantId)
-            ? Builders<BsonDocument>.Filter.Empty
-            : Builders<BsonDocument>.Filter.Eq("azureTenantId", azureTenantId);
-        var docs = await _tenants.Find(filter).Limit(5000).ToListAsync(ct);
-        return docs.Select(ToTenant).Where(t => !string.IsNullOrEmpty(t.TenantId)).ToList();
+        if (string.IsNullOrEmpty(azureTenantId))
+        {
+            var all = await _tenants.Find(Builders<BsonDocument>.Filter.Empty).Limit(5000).ToListAsync(ct);
+            return CombineByTenant(all);
+        }
+
+        // Match on any record of the tenant, then judge it on all of its records.
+        var matching = await _tenants.Find(Builders<BsonDocument>.Filter.Eq("azureTenantId", azureTenantId))
+            .Limit(5000).ToListAsync(ct);
+        var ids = matching.Select(d => Str(d, "tenantId")).OfType<string>().Distinct().ToList();
+        return (await LoadTenantsAsync(ids, ct))
+            .Where(t => string.Equals(t.AzureTenantId, azureTenantId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<IdentityTenant>> LoadTenantsAsync(IReadOnlyCollection<string> tenantIds, CancellationToken ct)
+    {
+        if (tenantIds.Count == 0)
+            return Array.Empty<IdentityTenant>();
+        var docs = await _tenants.Find(Builders<BsonDocument>.Filter.In("tenantId", tenantIds)).ToListAsync(ct);
+        return CombineByTenant(docs);
+    }
+
+    private static IReadOnlyList<IdentityTenant> CombineByTenant(IEnumerable<BsonDocument> docs)
+        => docs.GroupBy(d => Str(d, "tenantId"))
+            .Where(g => g.Key != null)
+            .Select(g => Combine(g.ToList()))
+            .ToList();
+
+    /// <summary>
+    /// One tenant can have several records in the Tenants collection
+    /// (tenant-service's Tenant and the portal's TenantSubscription). The
+    /// tenant is active only if every record says so, and it has a directory
+    /// only if its records agree on one. Taking the first record would let a
+    /// suspended Tenant hide behind an Active subscription.
+    /// </summary>
+    public static IdentityTenant Combine(IReadOnlyList<BsonDocument> records)
+    {
+        var parts = records.Select(ToTenant).ToList();
+        var directories = parts.Select(p => p.AzureTenantId)
+            .Where(a => !string.IsNullOrEmpty(a))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var conflict = directories.Count > 1;
+
+        return new IdentityTenant
+        {
+            TenantId = parts[0].TenantId,
+            TenantName = parts.Select(p => p.TenantName).FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty,
+            AzureTenantId = conflict ? string.Empty : directories.SingleOrDefault() ?? string.Empty,
+            Status = conflict ? "conflict" : string.Join(",", parts.Select(p => p.Status).Where(x => x.Length > 0).Distinct()),
+            IsActive = !conflict && parts.All(p => p.IsActive),
+        };
     }
 
     public async Task<IdentityUser?> FindUserByEmailAsync(string tenantId, string email, CancellationToken ct)
     {
         var normalized = email.Trim().ToLowerInvariant();
-        var user = await _users.Find(u => u.TenantId == tenantId && u.EmailNormalized == normalized)
-            .FirstOrDefaultAsync(ct);
-        return user == null ? null : IdentityUser.From(user);
+        // Two records with one address: refuse rather than pick one to link.
+        var users = await _users.Find(u => u.TenantId == tenantId && u.EmailNormalized == normalized)
+            .Limit(2).ToListAsync(ct);
+        return users.Count == 1 ? IdentityUser.From(users[0]) : null;
     }
 
     public async Task<(LinkOutcome Outcome, IdentityUser? User)> LinkEntraIdentityAsync(
