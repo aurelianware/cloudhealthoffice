@@ -79,6 +79,28 @@ public class ClaimIntelligenceApiTests : IClassFixture<EligibilityApiFactory>
     }
 
     [Fact]
+    public async Task Get_ClaimsExaminer_CanRead()
+    {
+        await SubmitAsync("CLM-INTEL-EXAM");
+        using var examiner = _factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("examiner-1", ChoRolePermissions.ClaimsExaminer));
+        examiner.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
+        var response = await examiner.GetAsync("/api/claims/CLM-INTEL-EXAM/intelligence");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_RoleWithoutClaimsRead_IsForbidden()
+    {
+        await SubmitAsync("CLM-INTEL-ENROLL");
+        using var enrollment = _factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("enroll-1", ChoRolePermissions.EnrollmentSpecialist));
+        enrollment.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
+        var response = await enrollment.GetAsync("/api/claims/CLM-INTEL-ENROLL/intelligence");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Get_UnknownClaim_IsNotFound()
     {
         var response = await _client.GetAsync("/api/claims/CLM-DOES-NOT-EXIST/intelligence");

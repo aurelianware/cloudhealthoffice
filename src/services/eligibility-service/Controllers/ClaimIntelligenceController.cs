@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EligibilityService.Controllers;
@@ -23,6 +24,8 @@ public sealed class ClaimIntelligenceController : ControllerBase
     }
 
     [HttpGet("{claimId}/intelligence")]
+    // Claim lifecycle and payment data: a claims permission, not eligibility:check.
+    [RequirePermission("claims:read")]
     [ProducesResponseType(typeof(ClaimIntelligenceView), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
