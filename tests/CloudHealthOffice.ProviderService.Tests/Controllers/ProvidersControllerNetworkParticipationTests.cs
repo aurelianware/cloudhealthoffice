@@ -53,6 +53,9 @@ public class ProvidersControllerNetworkParticipationTests
             integrityProjection: null!,
             panelGatingValidator: _panelGatingValidator,
             credentialing: null!,
+            bankAccountChanges: new ProviderBankAccountChangeService(
+                new Fakes.InMemoryProviderBankAccountRepository(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ProviderBankAccountChangeService>.Instance),
             logger: NullLogger<ProvidersController>.Instance);
 
         // As UseChoAuthentication() leaves it: tenant and subject from the token.

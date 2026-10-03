@@ -46,6 +46,9 @@ public class ProvidersControllerCredentialingTests
             integrityProjection: null!,
             panelGatingValidator: null!,
             credentialing: _credentialing,
+            bankAccountChanges: new ProviderBankAccountChangeService(
+                new Fakes.InMemoryProviderBankAccountRepository(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ProviderBankAccountChangeService>.Instance),
             logger: NullLogger<ProvidersController>.Instance);
 
         // As UseChoAuthentication() leaves it: tenant and subject from the token.

@@ -58,6 +58,7 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventPublisher, MongoCredentialingEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventRepository, MongoCredentialingEventRepository>();
+    builder.Services.AddScoped<IProviderBankAccountRepository, MongoProviderBankAccountRepository>();
     builder.Services.AddHostedService<ProviderQueryIndexInitializer>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
     builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
@@ -94,10 +95,15 @@ else
     builder.Services.AddScoped<INetworkParticipationEventPublisher, NoopNetworkParticipationEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventPublisher, NoopCredentialingEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventRepository, CosmosCredentialingEventRepository>();
+    // Needs a "ProviderBankAccounts" container (partition key /tenantId).
+    builder.Services.AddScoped<IProviderBankAccountRepository, CosmosProviderBankAccountRepository>();
 }
 
 // Provider versioning service (5.1 — provider identity & versioning)
 builder.Services.AddScoped<IProviderVersioningService, ProviderVersioningService>();
+// Bank-account dual control: a change is pending until a second user with
+// payments:approve approves it; payments read only the approved account.
+builder.Services.AddScoped<IProviderBankAccountChangeService, ProviderBankAccountChangeService>();
 
 // MPIP rate service (FL SMMC 3.0 physician incentive program)
 builder.Services.AddScoped<IMpipRateService, MpipRateService>();

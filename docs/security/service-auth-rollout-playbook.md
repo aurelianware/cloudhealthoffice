@@ -127,7 +127,7 @@ tenant-service's identity lookups for token-service) names that service with
 | personal-representative-service | members:read | members:write | |
 | premium-billing-service | billing:read | billing:run | |
 | provider-contracts-service | contracts:read | contracts:write | |
-| provider-service | providers:read | providers:write | credentialing decisions: providers:credential |
+| provider-service | providers:read | providers:write | credentialing decisions: providers:credential. Bank accounts are under dual control: a change (bank-account PUT/POST, or an account in a provider create/update body) is only proposed (providers:write) and stays pending until a different user approves it (`POST npi/{npi}/bank-account-changes/{id}/approve` or `/reject`: payments:approve, user tokens only; the proposer gets 403 "Separation of duties"; no tenant override). The masked read capitation uses returns the approved account only; the pending change is readable masked with payments:approve or providers:read |
 | provider-verification-service | providers:read | providers:credential | |
 | reference-data-service | reference-data:read | settings:manage | |
 | rfai-service | rfai:read | rfai:write | |

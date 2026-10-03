@@ -19,9 +19,14 @@ namespace ProviderService.Controllers;
 /// Tenant and actor come from the validated CHO token. Permissions: GET needs
 /// providers:read and writes need providers:write (defaults in Program.cs);
 /// the legacy credentialing PUT needs providers:credential, contracted rates
-/// need contracts:read, and the masked bank-account read accepts
-/// providers:read or payments:read (capitation-service disburses with a
-/// Finance user's token).
+/// need contracts:read. Bank-account endpoints live in
+/// <see cref="ProviderBankAccountController"/>.
+/// </para>
+///
+/// <para>
+/// A bank account in a create or update body is never written to the
+/// provider: it becomes a pending change that a second user with
+/// payments:approve must approve (<see cref="IProviderBankAccountChangeService"/>).
 /// </para>
 /// </summary>
 [ApiController]
@@ -36,6 +41,7 @@ public class ProvidersController : ControllerBase
     private readonly IProviderIntegrityProjectionService _integrityProjection;
     private readonly IPanelGatingValidator _panelGatingValidator;
     private readonly ICredentialingService _credentialing;
+    private readonly IProviderBankAccountChangeService _bankAccountChanges;
     private readonly ILogger<ProvidersController> _logger;
 
     public ProvidersController(
@@ -45,6 +51,7 @@ public class ProvidersController : ControllerBase
         IProviderIntegrityProjectionService integrityProjection,
         IPanelGatingValidator panelGatingValidator,
         ICredentialingService credentialing,
+        IProviderBankAccountChangeService bankAccountChanges,
         ILogger<ProvidersController> logger)
     {
         _providerRepository = providerRepository;
@@ -53,6 +60,7 @@ public class ProvidersController : ControllerBase
         _integrityProjection = integrityProjection;
         _panelGatingValidator = panelGatingValidator;
         _credentialing = credentialing;
+        _bankAccountChanges = bankAccountChanges;
         _logger = logger;
     }
 
@@ -345,7 +353,9 @@ public class ProvidersController : ControllerBase
 
         var actor = ResolveActorId();
         StampFromToken(provider, actor, existing: null);
+        var bankAccount = TakeBankAccount(provider);
         var draft = await _versioning.CreateDraftAsync(provider, actor);
+        await ProposeFirstAccountAsync(draft, bankAccount, actor, "POST drafts");
         return CreatedAtAction(nameof(GetVersion),
             new { id = draft.ProviderId, versionId = draft.VersionId }, draft);
     }
@@ -572,8 +582,12 @@ public class ProvidersController : ControllerBase
 
         var actor = ResolveActorId();
         StampFromToken(provider, actor, existing: null);
+        var bankAccount = TakeBankAccount(provider);
         var draft = await _versioning.CreateDraftAsync(provider, actor);
         var activated = await _versioning.ActivateVersionAsync(draft.ProviderId, draft.VersionId, actor);
+        // The first account is pending like any other: payments cannot use it
+        // until a second user with payments:approve approves it.
+        await ProposeFirstAccountAsync(activated, bankAccount, actor, "POST providers");
         return CreatedAtAction(nameof(GetById), new { id = activated.ProviderId }, activated);
     }
 
@@ -599,6 +613,14 @@ public class ProvidersController : ControllerBase
             return NotFound($"Provider {id} not found");
         }
 
+        // A body bank account is not written to the provider. When it differs
+        // from what the provider shows (an echo of the GET body is not a
+        // change), it becomes a pending change for a second user to approve.
+        var bodyBankAccount = TakeBankAccount(provider);
+        var proposeBankAccount = bodyBankAccount != null
+            && !BankAccountMasking.SameAccount(bodyBankAccount, existing.BankAccount)
+            && await _bankAccountChanges.DiffersFromCurrentAsync(existing, bodyBankAccount);
+
         try
         {
             var actor = ResolveActorId();
@@ -619,6 +641,7 @@ public class ProvidersController : ControllerBase
             provider.CreatedDate = target.CreatedDate;
             provider.LastUpdatedDate = DateTime.UtcNow;
             StampFromToken(provider, actor, existing: target);
+            provider.BankAccount = target.BankAccount;
 
             // Soft validation (5.5): warn + count any participation that
             // arrives without panel-gating fields.
@@ -628,6 +651,11 @@ public class ProvidersController : ControllerBase
             if (needsActivation)
             {
                 updated = await _versioning.ActivateVersionAsync(updated.ProviderId, updated.VersionId, actor);
+            }
+
+            if (proposeBankAccount)
+            {
+                await _bankAccountChanges.ProposeAsync(existing, bodyBankAccount!, actor, "PUT providers/{id}");
             }
 
             return Ok(updated);
@@ -859,106 +887,6 @@ public class ProvidersController : ControllerBase
     }
 
     /// <summary>
-    /// Get provider bank account / EFT disbursement info by NPI.
-    /// Returns only masked display fields (last-4 digits) — full account numbers
-    /// are never exposed via this endpoint. Used by capitation-service for
-    /// disbursement method selection; full credentials are fetched server-side
-    /// only during NACHA file generation.
-    /// </summary>
-    [HttpGet("npi/{npi}/bank-account")]
-    [RequirePermission("providers:read,payments:read")]
-    [ProducesResponseType(typeof(ProviderBankAccount), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ProviderBankAccount>> GetBankAccount(string npi)
-    {
-        _logger.LogInformation("Fetching bank account for provider NPI: {NPI}", SanitizeForLog(npi));
-
-        var provider = await _providerRepository.GetByNPIAsync(npi);
-        if (provider == null)
-        {
-            return NotFound($"Provider with NPI {npi} not found");
-        }
-
-        if (provider.BankAccount == null)
-        {
-            return NotFound($"No bank account on file for provider NPI {npi}");
-        }
-
-        // Return masked copy — strip full account/routing/tax numbers
-        var masked = new ProviderBankAccount
-        {
-            EftEnabled = provider.BankAccount.EftEnabled,
-            PreferredDisbursementMethod = provider.BankAccount.PreferredDisbursementMethod,
-            AccountType = provider.BankAccount.AccountType,
-            AccountHolderName = provider.BankAccount.AccountHolderName,
-            StripeConnectedAccountId = provider.BankAccount.StripeConnectedAccountId,
-            RoutingNumberLast4 = provider.BankAccount.RoutingNumberLast4,
-            AccountNumberLast4 = provider.BankAccount.AccountNumberLast4,
-            W9OnFile = provider.BankAccount.W9OnFile,
-            TaxIdType = provider.BankAccount.TaxIdType,
-            // RoutingNumber, AccountNumber, TaxId intentionally omitted
-        };
-
-        return Ok(masked);
-    }
-
-    /// <summary>
-    /// Upsert provider bank account / EFT disbursement info by NPI.
-    /// Updates only the BankAccount sub-document on the existing Provider record.
-    /// </summary>
-    [HttpPut("npi/{npi}/bank-account")]
-    [ProducesResponseType(typeof(ProviderBankAccount), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<ProviderBankAccount>> UpsertBankAccount(
-        string npi,
-        [FromBody] ProviderBankAccount bankAccount)
-    {
-        _logger.LogInformation("Upserting bank account for provider NPI: {NPI}", SanitizeForLog(npi));
-
-        var provider = await _providerRepository.GetByNPIAsync(npi);
-        if (provider == null)
-        {
-            return NotFound($"Provider with NPI {npi} not found");
-        }
-
-        // Derive last-4 display fields from full values when provided
-        if (!string.IsNullOrEmpty(bankAccount.RoutingNumber))
-        {
-            bankAccount.RoutingNumberLast4 = bankAccount.RoutingNumber.Length >= 4
-                ? bankAccount.RoutingNumber[^4..]
-                : bankAccount.RoutingNumber;
-        }
-
-        if (!string.IsNullOrEmpty(bankAccount.AccountNumber))
-        {
-            bankAccount.AccountNumberLast4 = bankAccount.AccountNumber.Length >= 4
-                ? bankAccount.AccountNumber[^4..]
-                : bankAccount.AccountNumber;
-        }
-
-        provider.BankAccount = bankAccount;
-        provider.LastUpdatedDate = DateTime.UtcNow;
-        provider.LastUpdatedBy = ResolveActorId();
-
-        try
-        {
-            await _providerRepository.UpdateAsync(provider);
-        }
-        catch (ProviderVersionStateException ex)
-        {
-            return Conflict(new { message = ex.Message, providerId = ex.ProviderId, versionId = ex.VersionId, versionState = ex.CurrentState.ToString() });
-        }
-
-        _logger.LogInformation(
-            "Bank account updated for provider NPI: {NPI}, method={Method}, eftEnabled={EftEnabled}",
-            SanitizeForLog(npi), bankAccount.PreferredDisbursementMethod, bankAccount.EftEnabled);
-
-        return Ok(provider.BankAccount);
-    }
-
-    /// <summary>
     /// The acting user is the token subject. An <c>X-User-Id</c> header or a
     /// body field never names the actor.
     /// </summary>
@@ -976,6 +904,24 @@ public class ProvidersController : ControllerBase
         provider.CreatedBy = existing is null ? actor : existing.CreatedBy;
         provider.LastUpdatedBy = actor;
         provider.ActivatedBy = existing?.ActivatedBy;
+    }
+
+    /// <summary>Removes the bank account from a body-bound provider and returns it.</summary>
+    private static ProviderBankAccount? TakeBankAccount(Provider provider)
+    {
+        var account = provider.BankAccount;
+        provider.BankAccount = null;
+        return account;
+    }
+
+    /// <summary>A new provider's first account is proposed, never applied.</summary>
+    private async Task ProposeFirstAccountAsync(Provider created, ProviderBankAccount? account, string actor, string source)
+    {
+        if (account == null) return;
+        await _bankAccountChanges.ProposeAsync(created, account, actor, source);
+        _logger.LogInformation(
+            "Provider {ProviderId} created; its bank account is pending approval by a user with payments:approve",
+            SanitizeForLog(created.ProviderId));
     }
 
     private static string SanitizeForLog(string? value)
