@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -32,7 +33,8 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         _repo = factory.ClaimRepository;
         _versionPublisher = factory.VersionEventPublisher;
         _versionReader = factory.VersionEventReader;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("examiner-1", ChoRolePermissions.TenantAdmin));
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
         _repo.ClearReceivedCalls();
         _versionPublisher.ClearReceivedCalls();
@@ -174,7 +176,8 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
                 disposition = "Approved",
                 reason = "Documentation supports modifier 59",
                 aiExaminerAgreement = "Overridden",
-                examinerUserId = "examiner-1",
+                // Ignored: the examiner is the token subject ("examiner-1").
+                examinerUserId = "spoofed-examiner",
             });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

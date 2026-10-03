@@ -19,6 +19,33 @@ public class ClaimTenantConfigCacheTests
             NullLogger<ClaimTenantConfigCache>.Instance);
     }
 
+    /// <summary>
+    /// The adjudication subscription resolves the adapter with no HttpContext.
+    /// The shared outbound token handler can only mint a service token for a
+    /// tenant the request names, so the lookup must carry X-Tenant-ID or
+    /// tenant-service rejects it and the claim silently routes to "cho".
+    /// </summary>
+    [Fact]
+    public async Task GetAsync_names_the_tenant_on_the_outbound_request()
+    {
+        string? tenantHeader = null;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            tenantHeader = request.Headers.TryGetValues("X-Tenant-ID", out var values)
+                ? values.SingleOrDefault()
+                : null;
+            return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new System.Net.Http.StringContent("{}"),
+            };
+        });
+        var cache = Build(handler);
+
+        await cache.GetAsync("tenant-from-message");
+
+        tenantHeader.Should().Be("tenant-from-message");
+    }
+
     [Fact]
     public async Task GetAsync_returns_default_when_configuration_block_absent()
     {

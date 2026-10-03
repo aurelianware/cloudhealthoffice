@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -17,7 +18,7 @@ public class ClaimsControllerInboundRemittanceTests : IClassFixture<ClaimsApiFac
     public ClaimsControllerInboundRemittanceTests(ClaimsApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
         factory.FinalizationService.ClearReceivedCalls();
     }

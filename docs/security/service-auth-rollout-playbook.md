@@ -97,6 +97,7 @@ worked example.
 | authorization-service | authorizations:read | authorizations:write | approve/deny/status decisions: authorizations:decide |
 | benefit-plan-service | benefits:read | settings:manage | /adjudicate and /estimate style calculations: claims:work,benefits:read |
 | capitation-service | payments:read | payments:run | release/approve/void of payments: payments:approve |
+| claims-service | claims:read | claims:work | void (POST {id}/void, DELETE {id}, status → Voided): claims:void; adjustments: claims:adjust; work-queue override: claims:override-approve; work-queue assign: workqueue:assign; Cosmos partition migration: platform:admin |
 | claims-examiner-service | claims:read | claims:work | |
 | consent-service | consent:read | consent:write | |
 | coverage-service | coverage:read | coverage:write | |

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -32,7 +33,7 @@ public class ClaimsV1ControllerSubmissionTests : IClassFixture<ClaimsApiFactory>
     {
         _factory = factory;
         _service = factory.SubmissionService;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
         _service.ClearSubstitute();
@@ -117,11 +118,14 @@ public class ClaimsV1ControllerSubmissionTests : IClassFixture<ClaimsApiFactory>
     }
 
     [Fact]
-    public async Task Submit_ForwardsActorIdFromXUserIdHeader()
+    public async Task Submit_ForwardsActorIdFromToken_IgnoringXUserIdHeader()
     {
-        var client = _factory.CreateClient();
+        // The actor used to come from X-User-Id when the request had no sub
+        // claim. It is now the token subject; the header is ignored.
+        var client = _factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("examiner-7", ChoRolePermissions.ClaimsExaminer));
         client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
-        client.DefaultRequestHeaders.Add("X-User-Id", "examiner-7");
+        client.DefaultRequestHeaders.Add("X-User-Id", "someone-else");
 
         _service
             .SubmitAsync(Arg.Any<AdapterClaim>(), "test-tenant",
@@ -142,7 +146,7 @@ public class ClaimsV1ControllerSubmissionTests : IClassFixture<ClaimsApiFactory>
     [Fact]
     public async Task Submit_ForwardsCorrelationIdFromHeader()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
         client.DefaultRequestHeaders.Add("X-Correlation-Id", "trace-abc-123");
 

@@ -61,7 +61,16 @@ public class ClaimTenantConfigCache
             // from JWT/header via TenantMiddleware, and a crafted id with '/'
             // or '?' would otherwise alter the request path or query.
             var encodedTenantId = Uri.EscapeDataString(tenantId);
-            var response = await httpClient.GetAsync($"{tenantUrl}/tenants/{encodedTenantId}", ct);
+            // Name the tenant on the outbound request. Inside a request the
+            // shared token handler forwards the caller's token; from the
+            // adjudication subscription (no HttpContext) it mints a service
+            // token for this tenant, which it can only do when the tenant is
+            // named here. Without it tenant-service rejects the call and the
+            // claim silently routes to the default platform.
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, $"{tenantUrl}/tenants/{encodedTenantId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await httpClient.SendAsync(request, ct);
 
             if (response.IsSuccessStatusCode)
             {

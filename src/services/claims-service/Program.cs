@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using ClaimsService.Adapters;
 using ClaimsService.EDI.Florida;
 using ClaimsService.Fhir;
@@ -28,6 +29,16 @@ builder.Services.AddChoInfrastructure(builder.Configuration, options =>
     options.ServiceName = "Claims Service";
     options.ServiceDescription = "Healthcare claims processing for Cloud Health Office. " +
                                  "Handles 837 claim submission, 835 remittance, 277 status updates, and adjudication results.";
+});
+
+// CHO token authentication: tenant from the token, actor from the token,
+// default deny. Reads need claims:read, writes claims:work; void, adjust,
+// override approval, work-queue assignment and the cross-tenant Cosmos
+// migration are annotated with stricter permissions on their actions.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "claims:read";
+    auth.DefaultWritePermission = "claims:work";
 });
 
 // Repository — Cosmos or Mongo based on config (database client registered by shared lib)
@@ -426,7 +437,8 @@ var app = builder.Build();
 
 app.UseChoObservability();
 
-// Shared middleware pipeline: exception handling, Swagger (dev), tenant middleware, CORS, health checks
+// Shared middleware pipeline: exception handling, Swagger (dev), CORS, then
+// UseChoAuthentication (authentication, tenant from the token, authorization), health checks
 app.UseChoInfrastructure(builder.Configuration);
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();

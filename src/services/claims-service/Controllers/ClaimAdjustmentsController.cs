@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaimsService.Controllers;
@@ -25,13 +26,16 @@ public class ClaimAdjustmentsController : ControllerBase
 {
     private readonly IClaimAdjustmentService _adjustmentService;
     private readonly IClaimAdjustmentRepository _adjustmentRepository;
+    private readonly ICurrentActor _actor;
 
     public ClaimAdjustmentsController(
         IClaimAdjustmentService adjustmentService,
-        IClaimAdjustmentRepository adjustmentRepository)
+        IClaimAdjustmentRepository adjustmentRepository,
+        ICurrentActor actor)
     {
         _adjustmentService = adjustmentService;
         _adjustmentRepository = adjustmentRepository;
+        _actor = actor;
     }
 
     /// <summary>
@@ -41,6 +45,7 @@ public class ClaimAdjustmentsController : ControllerBase
     /// different body returns 409 Conflict.
     /// </summary>
     [HttpPost("api/v1/claims/{predecessorClaimId}/adjustments")]
+    [RequirePermission(ClaimsPermissions.Adjust)]
     [ProducesResponseType(typeof(ClaimAdjustmentResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ClaimAdjustmentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -216,17 +221,8 @@ public class ClaimAdjustmentsController : ControllerBase
         return tenantId;
     }
 
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) &&
-            !string.IsNullOrEmpty(header.ToString()))
-        {
-            return header.ToString();
-        }
-        return "system";
-    }
+    /// <summary>The acting user or service, from the validated token only.</summary>
+    private string ResolveActorId() => _actor.UserId;
 
     private string? ResolveCorrelationId()
     {
