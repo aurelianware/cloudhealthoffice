@@ -11,6 +11,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Azure.Cosmos;
@@ -20,10 +21,20 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers(options =>
+builder.Services.AddControllers().AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every CHO caller presents a CHO token; the tenant and the acting user come
+// from that token. ID cards carry PHI, so reads need members:read and order /
+// revoke need members:write. AddChoAuthentication also puts
+// ChoOutboundTokenHandler on every IHttpClientFactory client: calls to other
+// CHO services forward the caller's token, or carry a service token minted for
+// the X-Tenant-ID they name when there is no caller.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
-    options.Filters.Add<TenantActionFilter>();
-}).AddCloudHealthOfficeJsonOptions();
+    auth.DefaultReadPermission = "members:read";
+    auth.DefaultWritePermission = "members:write";
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -83,7 +94,13 @@ else
     Console.WriteLine("idcard-service: using in-memory storage (dev only)");
 }
 
+// Upstream CHO calls. Every request names its tenant in X-Tenant-ID so the
+// outbound handler can mint a service token when there is no caller.
+builder.Services.AddSingleton<UpstreamAuthorization>();
 builder.Services.AddHttpClient("IdCardDefault")
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddHttpClient(IdCardAdapterFactory.HttpClientName)
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(10));
 
@@ -144,16 +161,19 @@ builder.Services.AddHostedService<QnxtMirrorReconciliationJob>();
 
 builder.Services.AddScoped<IIdCardOrchestrator, IdCardOrchestrator>();
 
-// Provider JWT for the /scan endpoint. Production requires ProviderJwt:Authority —
-// the permissive dev scheme is *only* wired when we're running in the
-// Development environment. In every other environment, missing Authority
-// is a startup failure so a misconfiguration can't silently disable auth.
+// Provider JWT for the /scan endpoint: an external-caller scheme kept alongside
+// CHO authentication. It is registered under its own scheme name (never the
+// default "Bearer", which is the CHO scheme) and only the "ProviderJwt" policy
+// uses it. Production requires ProviderJwt:Authority — the permissive dev
+// scheme is *only* wired when we're running in the Development environment. In
+// every other environment, missing Authority is a startup failure so a
+// misconfiguration can't silently disable auth.
 var jwtAuthority = builder.Configuration["ProviderJwt:Authority"];
 var jwtAudience = builder.Configuration["ProviderJwt:Audience"];
 if (!string.IsNullOrEmpty(jwtAuthority))
 {
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(options =>
+    builder.Services.AddAuthentication()
+        .AddJwtBearer(IdCardAuth.ProviderJwtScheme, options =>
         {
             options.Authority = jwtAuthority;
             options.Audience = jwtAudience;
@@ -161,18 +181,19 @@ if (!string.IsNullOrEmpty(jwtAuthority))
         });
     builder.Services.AddAuthorization(options =>
     {
-        options.AddPolicy("ProviderJwt", p => p.RequireAuthenticatedUser());
+        options.AddPolicy(IdCardAuth.ProviderJwtPolicy, p =>
+            p.RequireAuthenticatedUser().AddAuthenticationSchemes(IdCardAuth.ProviderJwtScheme));
     });
 }
 else if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddAuthentication("ProviderJwt-Dev")
+    builder.Services.AddAuthentication()
         .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, DevProviderAuthHandler>(
-            "ProviderJwt-Dev", _ => { });
+            IdCardAuth.ProviderJwtDevScheme, _ => { });
     builder.Services.AddAuthorization(options =>
     {
-        options.AddPolicy("ProviderJwt", p =>
-            p.RequireAuthenticatedUser().AddAuthenticationSchemes("ProviderJwt-Dev"));
+        options.AddPolicy(IdCardAuth.ProviderJwtPolicy, p =>
+            p.RequireAuthenticatedUser().AddAuthenticationSchemes(IdCardAuth.ProviderJwtDevScheme));
     });
 }
 else
@@ -264,9 +285,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
-app.UseIdCardTenantMiddleware();
-app.UseAuthentication();
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 app.UseRateLimiter();
 app.MapControllers();
 app.MapChoHealthChecks();

@@ -6,11 +6,13 @@ namespace IdCardService.Services;
 
 public interface IIdCardOrchestrator
 {
-    Task<IdCardOrder> CreateOrderAsync(string tenantId, CreateIdCardOrderRequest request, CancellationToken ct = default);
+    /// <param name="requestedBy">The acting user from the caller's token.</param>
+    Task<IdCardOrder> CreateOrderAsync(string tenantId, string requestedBy, CreateIdCardOrderRequest request, CancellationToken ct = default);
     Task<IdCardOrder?> GetOrderAsync(string tenantId, string orderId, CancellationToken ct = default);
     Task<List<IdCardRecord>> ListForMemberAsync(string tenantId, string memberId, CancellationToken ct = default);
     Task<IdCardRecord?> GetByCardIdAsync(string tenantId, string cardId, CancellationToken ct = default);
-    Task<IdCardRecord?> RevokeAsync(string tenantId, string cardId, RevokeIdCardRequest request, CancellationToken ct = default);
+    /// <param name="revokedBy">The acting user from the caller's token.</param>
+    Task<IdCardRecord?> RevokeAsync(string tenantId, string cardId, string revokedBy, RevokeIdCardRequest request, CancellationToken ct = default);
     Task<IdCardRecord?> RecordScanAsync(string tenantId, string cardId, CancellationToken ct = default);
 }
 
@@ -33,8 +35,11 @@ public class IdCardOrchestrator : IIdCardOrchestrator
         _logger = logger;
     }
 
-    public async Task<IdCardOrder> CreateOrderAsync(string tenantId, CreateIdCardOrderRequest request, CancellationToken ct = default)
+    public async Task<IdCardOrder> CreateOrderAsync(string tenantId, string requestedBy, CreateIdCardOrderRequest request, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(tenantId)) throw new ArgumentException("Tenant is required.", nameof(tenantId));
+        if (string.IsNullOrWhiteSpace(requestedBy)) throw new ArgumentException("Actor is required.", nameof(requestedBy));
+
         if (request.Channel != IdCardDeliveryChannel.Digital)
         {
             var rejected = new IdCardOrder
@@ -43,7 +48,7 @@ public class IdCardOrchestrator : IIdCardOrchestrator
                 MemberId = request.MemberId,
                 Channel = request.Channel,
                 LanguageCode = request.LanguageCode,
-                RequestedBy = request.RequestedBy ?? "system",
+                RequestedBy = requestedBy,
                 Status = IdCardOrderStatus.Failed,
                 FailureCode = "CHANNEL_NOT_SUPPORTED",
                 FailureReason = $"Delivery channel {request.Channel} is Phase 2 (digital-only in Phase 1)",
@@ -53,7 +58,31 @@ public class IdCardOrchestrator : IIdCardOrchestrator
             return rejected;
         }
 
-        var (adapter, settings) = await _adapters.GetAdapterWithSettingsAsync(tenantId, ct);
+        IIdCardAdapter adapter;
+        Dictionary<string, string> settings;
+        try
+        {
+            (adapter, settings) = await _adapters.GetAdapterWithSettingsAsync(tenantId, ct);
+        }
+        catch (TenantPlatformUnavailableException ex)
+        {
+            // The factory has logged the refusal. The order fails visibly rather
+            // than being issued on a platform the tenant may not use.
+            var failed = new IdCardOrder
+            {
+                TenantId = tenantId,
+                MemberId = request.MemberId,
+                Channel = request.Channel,
+                LanguageCode = request.LanguageCode,
+                RequestedBy = requestedBy,
+                Status = IdCardOrderStatus.Failed,
+                FailureCode = "TENANT_CONFIG_UNAVAILABLE",
+                FailureReason = ex.Message,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await _orders.UpsertAsync(failed, ct);
+            return failed;
+        }
 
         var order = new IdCardOrder
         {
@@ -61,7 +90,7 @@ public class IdCardOrchestrator : IIdCardOrchestrator
             MemberId = request.MemberId,
             Channel = request.Channel,
             LanguageCode = request.LanguageCode,
-            RequestedBy = request.RequestedBy ?? "system",
+            RequestedBy = requestedBy,
             Platform = adapter.Platform,
             Status = IdCardOrderStatus.Rendering
         };
@@ -76,7 +105,7 @@ public class IdCardOrchestrator : IIdCardOrchestrator
                 MemberId = request.MemberId,
                 Channel = request.Channel,
                 LanguageCode = request.LanguageCode,
-                RequestedBy = request.RequestedBy,
+                RequestedBy = requestedBy,
                 PlatformSettings = settings
             }, ct);
 
@@ -131,16 +160,17 @@ public class IdCardOrchestrator : IIdCardOrchestrator
     public Task<IdCardRecord?> GetByCardIdAsync(string tenantId, string cardId, CancellationToken ct = default) =>
         _records.FindByCardIdAsync(tenantId, cardId, ct);
 
-    public async Task<IdCardRecord?> RevokeAsync(string tenantId, string cardId, RevokeIdCardRequest request, CancellationToken ct = default)
+    public async Task<IdCardRecord?> RevokeAsync(string tenantId, string cardId, string revokedBy, RevokeIdCardRequest request, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(revokedBy)) throw new ArgumentException("Actor is required.", nameof(revokedBy));
+
         var record = await _records.FindByCardIdAsync(tenantId, cardId, ct);
         if (record == null) return null;
 
         record.RevokedAt = DateTime.UtcNow;
         record.RevocationReason = request.Reason;
         record.RevocationNotes = request.Notes;
-        // RevokedBy is intentionally left to the actor identity wiring
-        // in a subsequent PR (reads from the authenticated principal).
+        record.RevokedBy = revokedBy;
         await _records.UpsertAsync(record, ct);
         return record;
     }

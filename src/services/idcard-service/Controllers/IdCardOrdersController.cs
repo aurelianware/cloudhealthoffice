@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using IdCardService.Models;
 using IdCardService.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -16,8 +17,13 @@ public class IdCardOrdersController : TenantAwareControllerBase
         _logger = logger;
     }
 
-    /// <summary>Order (issue) an ID card for a member.</summary>
+    /// <summary>
+    /// Order (issue) an ID card for a member. Generating a card renders PHI and
+    /// stores it in member-document-service, so it is a write. The requester is
+    /// the token subject.
+    /// </summary>
     [HttpPost("orders")]
+    [RequirePermission("members:write")]
     public async Task<ActionResult<IdCardOrderResponse>> Create(
         [FromBody] CreateIdCardOrderRequest request, CancellationToken ct)
     {
@@ -26,7 +32,7 @@ public class IdCardOrdersController : TenantAwareControllerBase
             return BadRequest(new { error = "memberId is required" });
         }
 
-        var order = await _orchestrator.CreateOrderAsync(TenantId, request, ct);
+        var order = await _orchestrator.CreateOrderAsync(TenantId, ActorId, request, ct);
         var response = ToResponse(order);
 
         // 202 for the async order semantic — Phase 1 completes synchronously
@@ -36,6 +42,7 @@ public class IdCardOrdersController : TenantAwareControllerBase
 
     /// <summary>Get the status of an order.</summary>
     [HttpGet("{orderId}")]
+    [RequirePermission("members:read")]
     public async Task<ActionResult<IdCardOrderResponse>> Get(string orderId, CancellationToken ct)
     {
         var order = await _orchestrator.GetOrderAsync(TenantId, orderId, ct);
@@ -45,15 +52,17 @@ public class IdCardOrdersController : TenantAwareControllerBase
 
     /// <summary>Revoke an issued ID card.</summary>
     [HttpPost("{cardId}/revoke")]
+    [RequirePermission("members:write")]
     public async Task<IActionResult> Revoke(string cardId, [FromBody] RevokeIdCardRequest request, CancellationToken ct)
     {
-        var record = await _orchestrator.RevokeAsync(TenantId, cardId, request, ct);
+        var record = await _orchestrator.RevokeAsync(TenantId, cardId, ActorId, request, ct);
         if (record == null) return NotFound();
         return Ok(new
         {
             cardId = record.CardId,
             revokedAt = record.RevokedAt,
-            reason = record.RevocationReason?.ToString()
+            reason = record.RevocationReason?.ToString(),
+            revokedBy = record.RevokedBy
         });
     }
 

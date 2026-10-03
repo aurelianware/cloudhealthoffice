@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using IdCardService.Models;
 using IdCardService.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -14,7 +15,9 @@ public class MemberIdCardsController : TenantAwareControllerBase
         _orchestrator = orchestrator;
     }
 
+    /// <summary>A member's card history (PHI): members:read.</summary>
     [HttpGet]
+    [RequirePermission("members:read")]
     public async Task<ActionResult<List<IdCardHistoryEntry>>> List(string memberId, CancellationToken ct)
     {
         var records = await _orchestrator.ListForMemberAsync(TenantId, memberId, ct);
