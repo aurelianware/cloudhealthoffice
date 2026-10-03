@@ -10,10 +10,12 @@ namespace SmartAuthService.Services;
 public interface ILaunchContextStore
 {
     /// <summary>
-    /// Register a new launch context and return the opaque launch token.
+    /// Register a new launch context for <paramref name="tenantId"/> (the
+    /// registering caller's token tenant) and return the opaque launch token.
     /// The token expires after SmartAuth:LaunchContextTtlMinutes (default 5 min).
     /// </summary>
-    Task<string> RegisterAsync(RegisterLaunchRequest request, CancellationToken ct = default);
+    Task<string> RegisterAsync(
+        string tenantId, string registeredBy, RegisterLaunchRequest request, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve and remove a launch context by its token (single-use).

@@ -21,6 +21,17 @@ namespace CloudHealthOffice.SmartAuth.Tests;
 /// underscore = section separator) BEFORE the factory creates the host ensures
 /// WebApplicationBuilder picks it up during its own CreateBuilder() call.
 /// </summary>
+/// <summary>
+/// Every class that drives smart-auth-service shares ONE fixture: one mongod
+/// and one host. Separate class fixtures would each set the process-wide
+/// MongoDb__ConnectionString variable and race each other's hosts.
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class SmartAuthCollection : ICollectionFixture<SmartAuthTestFixture>
+{
+    public const string Name = "SmartAuthService";
+}
+
 public sealed class SmartAuthTestFixture : IDisposable
 {
     private const string MongoDbConnectionStringEnvVar = "MongoDb__ConnectionString";

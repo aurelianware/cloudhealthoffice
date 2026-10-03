@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
 using OpenIddict.Abstractions;
-using SmartAuthService.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using SmartAuthService.Services;
 using SmartAuthService.Workers;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -80,7 +80,7 @@ builder.Services.AddOpenIddict()
 
         // ── SMART R4 scopes ──────────────────────────────────────────────────
         options.RegisterScopes(
-            Scopes.OpenId, Scopes.Profile, Scopes.Email,
+            Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess,
             "fhirUser",
             "launch",
             "launch/patient",
@@ -126,9 +126,18 @@ builder.Services.AddOpenIddict()
         options.UseAspNetCore();
     });
 
+// ── CHO tokens for the admin API and launch registration ─────────────────────
+// The default scheme is the CHO bearer scheme: the admin endpoints
+// (/api/admin/smart/*) and POST /launch take their tenant and actor from a CHO
+// token, never from a header. No default permissions: an unannotated action
+// is denied. The SMART OAuth endpoints are [AllowAnonymous] and authenticate
+// explicitly (sign-in cookie, OpenIddict), exactly as before.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment);
+
 // ── Cookie auth for the consent/login UI ─────────────────────────────────────
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+// Not the default scheme: only the SMART sign-in flow uses it, by name.
+builder.Services.AddAuthentication()
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
     {
         options.LoginPath = "/account/login";
         options.LogoutPath = "/account/logout";
@@ -137,13 +146,25 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SameSite = SameSiteMode.Lax;
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    options.AddPolicy(SmartAuthService.Controllers.SmartAccessTokenPolicy.Name, policy => policy
+        .AddAuthenticationSchemes(OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
+        .RequireAuthenticatedUser()));
 
 // ── Application services ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<LaunchContextStore>();
 builder.Services.AddSingleton<ILaunchContextStore>(sp => sp.GetRequiredService<LaunchContextStore>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<LaunchContextStore>());
 builder.Services.AddHttpContextAccessor();
+
+// User/client → tenant bindings. MongoDB only: they are the authority for
+// every token's tenant and must survive restarts and be shared across pods.
+builder.Services.AddSingleton<ISmartIdentityStore>(sp =>
+    new MongoSmartIdentityStore(sp.GetService<IMongoDatabase>()
+        ?? throw new InvalidOperationException(
+            "MongoDb:ConnectionString is required: SMART identity bindings are stored in MongoDB.")));
+builder.Services.AddScoped<SmartTokenContextResolver>();
+builder.Services.AddSingleton<SmartAuthAudit>();
 
 // ── Hosted seed worker ────────────────────────────────────────────────────────
 builder.Services.AddHostedService<OpenIddictSeedWorker>();
@@ -179,9 +200,8 @@ app.UseCors("AllowAll");
 // Health checks before auth so they're accessible without a token
 app.MapChoHealthChecks();
 
-app.UseAuthentication();
-app.UseAuthorization();
-app.UseMiddleware<TenantMiddleware>();
+// Authentication, tenant from the CHO token (never a header), authorization.
+app.UseChoAuthentication();
 app.MapControllers();
 
 app.Run();

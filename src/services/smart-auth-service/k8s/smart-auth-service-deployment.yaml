@@ -12,6 +12,14 @@ data:
   SmartAuth__RefreshTokenLifetimeDays: "7"
   SmartAuth__LaunchContextTtlMinutes: "5"
   SmartAuth__DevMode: "false"
+  SmartAuth__EnrolmentCodeTtlHours: "72"
+  # The admin API (/api/admin/smart/*) and POST /launch take CHO tokens, so the
+  # service refuses to start without ChoAuth trust. Supply it from Key Vault /
+  # the secret below, as for every CHO service (docs/security/portal-token-service.md):
+  #   ChoAuth__Audience=cho-api
+  #   ChoAuth__Issuers__0__Issuer=cho-token-service
+  #   ChoAuth__Issuers__0__PublicKeyPem=<token-service public key>
+  # See docs/security/smart-auth-tenancy.md.
 
 ---
 apiVersion: v1

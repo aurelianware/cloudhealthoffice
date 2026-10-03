@@ -19,7 +19,8 @@ public class LaunchContextStore : ILaunchContextStore, IHostedService, IDisposab
         _config = config;
     }
 
-    public Task<string> RegisterAsync(RegisterLaunchRequest request, CancellationToken ct = default)
+    public Task<string> RegisterAsync(
+        string tenantId, string registeredBy, RegisterLaunchRequest request, CancellationToken ct = default)
     {
         var ttl = TimeSpan.FromMinutes(
             _config.GetValue<int>("SmartAuth:LaunchContextTtlMinutes", 5));
@@ -28,9 +29,10 @@ public class LaunchContextStore : ILaunchContextStore, IHostedService, IDisposab
         var context = new LaunchContext
         {
             LaunchToken = token,
+            TenantId = tenantId,
+            RegisteredBy = registeredBy,
             PatientId = request.PatientId,
             EncounterId = request.EncounterId,
-            PractitionerId = request.PractitionerId,
             ClientId = request.ClientId,
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.Add(ttl)

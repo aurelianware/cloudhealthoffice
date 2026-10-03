@@ -25,7 +25,8 @@ namespace CloudHealthOffice.SmartAuth.Tests;
 ///   2. GET /connect/authorize?launch=... → resolves context → issues code
 ///   3. POST /connect/token → token with patient + encounter claims
 /// </summary>
-public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
+[Collection(SmartAuthCollection.Name)]
+public class SmartLaunchFlowTests
 {
     private readonly SmartAuthTestFixture _fixture;
 
@@ -127,7 +128,10 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
     [Fact]
     public async Task Launch_Register_Returns200WithLaunchToken()
     {
+        // Registration needs a CHO token (members:read); its tenant is the launch's.
         var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.UserToken("demo-tenant", "MemberServices"));
         var body = JsonSerializer.Serialize(new RegisterLaunchRequest
         {
             PatientId = "pat-001",
@@ -153,6 +157,8 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
     public async Task Launch_NoPatientOrEncounter_Returns400()
     {
         var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.UserToken("demo-tenant", "MemberServices"));
         var body = JsonSerializer.Serialize(new RegisterLaunchRequest
         {
             ClientId = "cho-ehr-app"
@@ -172,7 +178,7 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
         using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
 
-        var token = await store.RegisterAsync(new RegisterLaunchRequest
+        var token = await store.RegisterAsync("demo-tenant", "test-actor", new RegisterLaunchRequest
         {
             PatientId = "pat-002",
             EncounterId = "enc-001",
@@ -193,7 +199,7 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
         using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
 
-        var token = await store.RegisterAsync(new RegisterLaunchRequest
+        var token = await store.RegisterAsync("demo-tenant", "test-actor", new RegisterLaunchRequest
         {
             PatientId = "pat-003",
             ClientId = "test-app"
@@ -212,7 +218,7 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
         using var scope = _fixture.Factory.Services.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
 
-        var token = await store.RegisterAsync(new RegisterLaunchRequest
+        var token = await store.RegisterAsync("demo-tenant", "test-actor", new RegisterLaunchRequest
         {
             PatientId = "pat-001",
             ClientId = "test-app"
