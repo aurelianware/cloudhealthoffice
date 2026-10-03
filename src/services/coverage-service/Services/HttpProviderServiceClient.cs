@@ -30,13 +30,17 @@ public sealed class HttpProviderServiceClient : IProviderServiceClient
         _options = options.Value;
     }
 
-    public async Task<ProviderDto?> GetByNpiAsync(string npi, CancellationToken ct = default)
+    public async Task<ProviderDto?> GetByNpiAsync(string tenantId, string npi, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_options.BaseUrl)) return null;
 
         try
         {
-            var resp = await _http.GetAsync($"/api/Providers/npi/{Uri.EscapeDataString(npi)}", ct);
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"/api/Providers/npi/{Uri.EscapeDataString(npi)}");
+            // Names the tenant for ChoOutboundTokenHandler: with no inbound
+            // caller it mints a service token for this tenant.
+            req.Headers.Add("X-Tenant-ID", tenantId);
+            using var resp = await _http.SendAsync(req, ct);
             if (resp.StatusCode == HttpStatusCode.NotFound) return null;
             resp.EnsureSuccessStatusCode();
             return await resp.Content.ReadFromJsonAsync<ProviderDto>(cancellationToken: ct);

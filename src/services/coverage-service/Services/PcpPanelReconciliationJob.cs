@@ -46,7 +46,7 @@ public sealed class PcpPanelReconciliationJob
         var report = new List<PanelOverageReport>();
         foreach (var npi in npisToCheck)
         {
-            var provider = await _providers.GetByNpiAsync(npi, ct);
+            var provider = await _providers.GetByNpiAsync(tenantId, npi, ct);
             if (provider == null) continue;
 
             var count = await _assignments.CountOpenByNpiAsync(tenantId, npi);

@@ -87,8 +87,14 @@ public class HttpTerminologyCrosswalkClient : ITerminologyCrosswalkClient
                 TenantId = tenantId
             }).ToList();
 
-            var response = await _httpClient.PostAsJsonAsync(
-                "fhir/ConceptMap/$batch-translate", translateRequests, ct);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "fhir/ConceptMap/$batch-translate")
+            {
+                Content = JsonContent.Create(translateRequests),
+            };
+            // Names the tenant for ChoOutboundTokenHandler, so a call with no
+            // inbound caller carries a service token for this tenant.
+            httpRequest.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await _httpClient.SendAsync(httpRequest, ct);
 
             if (!response.IsSuccessStatusCode)
             {

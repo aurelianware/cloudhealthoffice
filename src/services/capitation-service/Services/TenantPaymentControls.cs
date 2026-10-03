@@ -47,7 +47,11 @@ public sealed class TenantPaymentControls : ITenantPaymentControls
         try
         {
             var client = _httpClientFactory.CreateClient(HttpClientName);
-            using var response = await client.GetAsync($"api/v1/tenants/{Uri.EscapeDataString(tenantId)}", ct);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/tenants/{Uri.EscapeDataString(tenantId)}");
+            // Names the tenant for ChoOutboundTokenHandler, so a lookup with no
+            // inbound caller carries a service token for it.
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await client.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(

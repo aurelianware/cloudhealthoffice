@@ -154,6 +154,22 @@ public class IdCardUpstreamAuthTests : IClassFixture<IdCardUpstreamAuthTests.Fac
         Assert.Equal(2, _factory.Upstream.To("tenant-service").Count());
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task TenantServiceWithoutAnAnswer_UsesChoForThatCallOnly(HttpStatusCode status)
+    {
+        // Shared rule (TenantPlatformLookup): no answer is not cached.
+        _factory.Upstream.TenantServiceStatus = status;
+        using var scope = _factory.Services.CreateScope();
+        var adapters = scope.ServiceProvider.GetRequiredService<IdCardAdapterFactory>();
+
+        Assert.Equal("cho", (await adapters.GetAdapterAsync("tenant-no-answer")).Platform);
+        Assert.Equal("cho", (await adapters.GetAdapterAsync("tenant-no-answer")).Platform);
+
+        Assert.Equal(2, _factory.Upstream.To("tenant-service").Count());
+    }
+
     [Fact]
     public async Task Order_WhenTenantServiceRefuses_FailsInsteadOfIssuingOnDefaultPlatform()
     {

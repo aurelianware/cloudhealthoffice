@@ -1,22 +1,28 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Tenancy;
 using IdCardService.Services;
 
 namespace IdCardService.Adapters;
 
 /// <summary>
 /// Resolves the correct <see cref="IIdCardAdapter"/> at runtime based on
-/// tenant configuration. Mirrors the pattern used by
-/// <c>EligibilityAdapterFactory</c>. Defaults to "cho" when tenant-service
-/// answers and the tenant configures no platform. A refusal from tenant-service
-/// (401/403) is never read as "no configuration": it throws
-/// <see cref="TenantPlatformUnavailableException"/> and nothing is cached.
+/// tenant configuration, following <see cref="TenantPlatformLookup"/> (the rule
+/// shared with claims, benefit-plan, provider and eligibility). Defaults to
+/// "cho" when tenant-service answers and the tenant configures no platform
+/// (cached). A refusal from tenant-service (401/403) is never read as "no
+/// configuration": it throws <see cref="TenantPlatformUnavailableException"/>
+/// and nothing is cached. A 404, 5xx or unreachable tenant-service uses "cho"
+/// for that order only, uncached.
 /// </summary>
 public class IdCardAdapterFactory
 {
     /// <summary>Named IHttpClientFactory client for tenant-service.</summary>
     public const string HttpClientName = "TenantService";
+
+    /// <summary>The tenant configuration block this factory reads.</summary>
+    public const string PlatformKey = "idCardPlatform";
 
     private readonly IEnumerable<IIdCardAdapter> _adapters;
     private readonly UpstreamAuthorization _upstream;
@@ -78,98 +84,50 @@ public class IdCardAdapterFactory
             return (cached.Platform, cached.Settings);
         }
 
-        HttpResponseMessage response;
-        try
+        // Two shapes are accepted for the platform selector: the canonical
+        // `configuration.idCardPlatform` block (platform + platformSettings),
+        // and the pass-through `configuration.customSettings.idCardPlatform`
+        // string. X-Tenant-ID (set by the lookup, and again by Prepare) lets the
+        // outbound handler mint a service token for this tenant when there is
+        // no caller to forward.
+        var result = await TenantPlatformLookup.FetchAsync(
+            _httpClientFactory.CreateClient(HttpClientName),
+            _configuration["Services:TenantService"],
+            tenantId,
+            PlatformKey,
+            _logger,
+            ct,
+            alternateParser: ReadCustomSettingsPlatform,
+            prepare: request => _upstream.Prepare(request, tenantId));
+
+        if (result.Outcome == TenantPlatformOutcome.Refused)
         {
-            var tenantUrl = _configuration["Services:TenantService"]
-                ?? "http://tenant-service.cloudhealthoffice/api/v1";
-            using var request = new HttpRequestMessage(HttpMethod.Get,
-                $"{tenantUrl}/tenants/{Uri.EscapeDataString(tenantId)}");
-            // X-Tenant-ID lets the outbound handler mint a service token for this
-            // tenant when there is no caller to forward (tenant-service requires a
-            // CHO token and takes the tenant only from it).
-            _upstream.Prepare(request, tenantId);
-            response = await _httpClientFactory.CreateClient(HttpClientName).SendAsync(request, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-        {
-            // tenant-service unreachable: use the default for this call only, so the
-            // next order asks again instead of reusing a guess for five minutes.
-            _logger.LogWarning(ex, "Failed to fetch tenant id-card config for {TenantId}; using default 'cho' (not cached)",
-                Sanitize(tenantId));
-            return ("cho", new Dictionary<string, string>());
-        }
-
-        using (response)
-        {
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-            {
-                // A refusal means this service cannot read the tenant's
-                // configuration. Issuing on the default platform would quietly
-                // bypass a QNXT or vendor tenant's setup, so the order fails.
-                _logger.LogError(
-                    "tenant-service refused the id-card platform lookup for {TenantId} with {Status}; " +
-                    "the platform cannot be determined and no default is used",
-                    Sanitize(tenantId), (int)response.StatusCode);
-                throw new TenantPlatformUnavailableException(tenantId, response.StatusCode);
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning(
-                    "tenant-service responded {Status} for tenant {TenantId}; using default 'cho' (not cached)",
-                    (int)response.StatusCode, Sanitize(tenantId));
-                return ("cho", new Dictionary<string, string>());
-            }
-
-            var json = await response.Content.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            // Two shapes are accepted for the platform selector — the
-            // canonical `configuration.idCardPlatform.*` block (added
-            // when QNXT or vendor onboarding requires it) and the
-            // pass-through `configuration.customSettings.idCardPlatform`
-            // key supported by the current tenant-service schema. When
-            // neither is present we default to "cho" below.
-            if (root.TryGetProperty("configuration", out var config) && config.ValueKind == JsonValueKind.Object)
-            {
-                if (config.TryGetProperty("idCardPlatform", out var idcConfig) &&
-                    idcConfig.ValueKind == JsonValueKind.Object &&
-                    idcConfig.TryGetProperty("platform", out var platformProp))
-                {
-                    var platform = platformProp.GetString() ?? "cho";
-                    var settings = new Dictionary<string, string>();
-
-                    if (idcConfig.TryGetProperty("platformSettings", out var settingsProp) &&
-                        settingsProp.ValueKind == JsonValueKind.Object)
-                    {
-                        foreach (var prop in settingsProp.EnumerateObject())
-                        {
-                            settings[prop.Name] = prop.Value.GetString() ?? string.Empty;
-                        }
-                    }
-
-                    _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
-                    return (platform, settings);
-                }
-
-                if (config.TryGetProperty("customSettings", out var customSettings) &&
-                    customSettings.ValueKind == JsonValueKind.Object &&
-                    customSettings.TryGetProperty("idCardPlatform", out var customPlatform))
-                {
-                    var platform = customPlatform.GetString() ?? "cho";
-                    var settings = new Dictionary<string, string>();
-                    _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
-                    return (platform, settings);
-                }
-            }
+            // A refusal means this service cannot read the tenant's
+            // configuration. Issuing on the default platform would quietly
+            // bypass a QNXT or vendor tenant's setup, so the order fails.
+            throw new TenantPlatformUnavailableException(tenantId, result.StatusCode!.Value);
         }
 
-        // tenant-service answered and the tenant configures no platform: "cho".
-        var defaults = new Dictionary<string, string>();
-        _cache[tenantId] = ("cho", defaults, DateTime.UtcNow.Add(CacheDuration));
-        return ("cho", defaults);
+        // Only an answer tenant-service gave is cached; 404, 5xx or an
+        // unreachable tenant-service use "cho" for this order only.
+        if (result.IsCacheable)
+            _cache[tenantId] = (result.Platform, result.Settings, DateTime.UtcNow.Add(CacheDuration));
+
+        return (result.Platform, result.Settings);
+    }
+
+    private static (string Platform, Dictionary<string, string> Settings)? ReadCustomSettingsPlatform(JsonElement config)
+    {
+        if (config.TryGetProperty("customSettings", out var customSettings) &&
+            customSettings.ValueKind == JsonValueKind.Object &&
+            customSettings.TryGetProperty("idCardPlatform", out var customPlatform) &&
+            customPlatform.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(customPlatform.GetString()))
+        {
+            return (customPlatform.GetString()!, new Dictionary<string, string>());
+        }
+
+        return null;
     }
 
     private static string Sanitize(string? value) =>

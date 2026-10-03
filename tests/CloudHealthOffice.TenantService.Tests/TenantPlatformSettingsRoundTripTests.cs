@@ -1,0 +1,165 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.TenantService.Tests.Security;
+using CloudHealthOffice.Testing.Mongo;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Conventions;
+using MongoDB.Driver;
+using TenantService.Models;
+using TenantService.Services;
+
+namespace CloudHealthOffice.TenantService.Tests;
+
+/// <summary>
+/// The <c>*Platform</c> blocks services read from <c>GET /tenants/{id}</c>
+/// (provider-service reads <c>providerPlatform</c>, claims-service
+/// <c>claimsPlatform</c>, idcard-service <c>idCardPlatform</c>) must survive a
+/// settings write, storage in MongoDB and a read with the service's own token.
+/// Before these properties existed the blocks were dropped on deserialization,
+/// so those services always resolved the default platform.
+/// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
+public sealed class TenantPlatformSettingsRoundTripTests : IAsyncLifetime
+{
+    private readonly MongoRunnerFixture _mongo;
+    private IMongoDatabase _database = null!;
+    private MongoBackedTenantServiceFactory _factory = null!;
+
+    static TenantPlatformSettingsRoundTripTests()
+    {
+        // The same convention tenant-service registers at startup.
+        ConventionRegistry.Register("CamelCase",
+            new ConventionPack { new CamelCaseElementNameConvention() }, _ => true);
+    }
+
+    public TenantPlatformSettingsRoundTripTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
+    public async Task InitializeAsync()
+    {
+        _database = _mongo.CreateDatabase("tenant_platforms");
+        _factory = new MongoBackedTenantServiceFactory(_database);
+        _factory.ResetMocks();
+        await new TenantRepository(_database, NullLogger<TenantRepository>.Instance)
+            .CreateAsync(TenantServiceFactory.NewTenant(TenantServiceFactory.TenantA));
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _factory.DisposeAsync();
+        await _mongo.DropDatabaseAsync(_database);
+    }
+
+    private static object SettingsBody() => new
+    {
+        configuration = new
+        {
+            providerPlatform = new
+            {
+                platform = "qnxt",
+                apiEndpoint = "https://qnxt.example/provider",
+                platformSettings = new Dictionary<string, string> { ["qnxt:planCode"] = "FL-01" },
+            },
+            claimsPlatform = new { platform = "facets", platformSettings = new Dictionary<string, string> { ["facets:region"] = "south" } },
+            idCardPlatform = new { platform = "vendor" },
+            benefitPlanPlatform = new { platform = "healthedge" },
+            eligibilityPlatform = new { platform = "availity" },
+        },
+    };
+
+    [Fact]
+    public async Task ProviderPlatform_SetBySettingsManager_IsStoredAndReturnedToProviderService()
+    {
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+
+        var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", SettingsBody());
+        put.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Stored in MongoDB under the camelCase names services read.
+        var stored = await _database.GetCollection<BsonDocument>("Tenants")
+            .Find(new BsonDocument("tenantId", TenantServiceFactory.TenantA)).SingleAsync();
+        var storedConfig = stored["configuration"].AsBsonDocument;
+        storedConfig["providerPlatform"]["platform"].AsString.Should().Be("qnxt");
+        storedConfig["providerPlatform"]["platformSettings"]["qnxt:planCode"].AsString.Should().Be("FL-01");
+        storedConfig["claimsPlatform"]["platform"].AsString.Should().Be("facets");
+        storedConfig["idCardPlatform"]["platform"].AsString.Should().Be("vendor");
+
+        // Read back the way provider-service reads it: a service token for the tenant.
+        var asProviderService = _factory.ServiceClient("provider-service", TenantServiceFactory.TenantA);
+        var get = await asProviderService.GetAsync("/api/v1/tenants/tenant-a");
+        get.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var doc = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
+        var config = doc.RootElement.GetProperty("configuration");
+        var provider = config.GetProperty("providerPlatform");
+        provider.GetProperty("platform").GetString().Should().Be("qnxt");
+        provider.GetProperty("apiEndpoint").GetString().Should().Be("https://qnxt.example/provider");
+        provider.GetProperty("platformSettings").GetProperty("qnxt:planCode").GetString().Should().Be("FL-01");
+        config.GetProperty("claimsPlatform").GetProperty("platform").GetString().Should().Be("facets");
+        config.GetProperty("claimsPlatform").GetProperty("platformSettings").GetProperty("facets:region").GetString().Should().Be("south");
+        config.GetProperty("idCardPlatform").GetProperty("platform").GetString().Should().Be("vendor");
+        config.GetProperty("benefitPlanPlatform").GetProperty("platform").GetString().Should().Be("healthedge");
+        config.GetProperty("eligibilityPlatform").GetProperty("platform").GetString().Should().Be("availity");
+    }
+
+    [Fact]
+    public async Task ProviderPlatform_CannotBeSetWithoutSettingsManage()
+    {
+        var examiner = _factory.UserClient(TenantServiceFactory.TenantA, "examiner-1", ChoRolePermissions.ClaimsExaminer);
+
+        var put = await examiner.PutAsJsonAsync("/api/v1/tenants/tenant-a", SettingsBody());
+
+        put.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var stored = await _database.GetCollection<BsonDocument>("Tenants")
+            .Find(new BsonDocument("tenantId", TenantServiceFactory.TenantA)).SingleAsync();
+        var written = stored["configuration"].AsBsonDocument.TryGetValue("providerPlatform", out var block)
+                      && !block.IsBsonNull;
+        written.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PlatformBlocks_OnCreate_AreKept()
+    {
+        var platformAdmin = _factory.UserClient(TenantServiceFactory.TenantA, "ops-1", ChoRolePermissions.PlatformAdmin);
+
+        var create = await platformAdmin.PostAsJsonAsync("/api/v1/tenants", new
+        {
+            tenantName = "New Plan",
+            organizationName = "New Plan Org",
+            subscriptionTier = "starter",
+            contactInfo = new { email = "admin@new.example" },
+            providerPlatform = new { platform = "facets" },
+            claimsPlatform = new { platform = "qnxt" },
+        });
+
+        create.StatusCode.Should().Be(HttpStatusCode.Created);
+        using var doc = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
+        var config = doc.RootElement.GetProperty("configuration");
+        config.GetProperty("providerPlatform").GetProperty("platform").GetString().Should().Be("facets");
+        config.GetProperty("claimsPlatform").GetProperty("platform").GetString().Should().Be("qnxt");
+    }
+
+    /// <summary>The real pipeline over a real <see cref="TenantRepository"/> in MongoDB.</summary>
+    private sealed class MongoBackedTenantServiceFactory : TenantServiceFactory
+    {
+        private readonly IMongoDatabase _database;
+
+        public MongoBackedTenantServiceFactory(IMongoDatabase database) => _database = database;
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ITenantRepository>();
+                services.AddSingleton<ITenantRepository>(sp =>
+                    new TenantRepository(_database, NullLogger<TenantRepository>.Instance));
+            });
+        }
+    }
+}

@@ -180,6 +180,18 @@ public class TenantConfiguration
     [JsonPropertyName("benefitPlanPlatform")]
     public BenefitPlanConfig? BenefitPlanPlatform { get; set; }
 
+    /// <summary>Provider-directory platform, read by provider-service.</summary>
+    [JsonPropertyName("providerPlatform")]
+    public ProviderPlatformConfig? ProviderPlatform { get; set; }
+
+    /// <summary>Claims platform, read by claims-service.</summary>
+    [JsonPropertyName("claimsPlatform")]
+    public ClaimsPlatformConfig? ClaimsPlatform { get; set; }
+
+    /// <summary>ID card platform, read by idcard-service.</summary>
+    [JsonPropertyName("idCardPlatform")]
+    public IdCardPlatformConfig? IdCardPlatform { get; set; }
+
     [JsonPropertyName("customSettings")]
     public Dictionary<string, string> CustomSettings { get; set; } = new();
 
@@ -271,6 +283,82 @@ public class BenefitPlanConfig
     public Dictionary<string, string> PlatformSettings { get; set; } = new();
 }
 
+/// <summary>
+/// Configuration for tenant's provider-directory platform. Controls which
+/// adapter provider-service uses at runtime when reading providers and
+/// networks. Mirrors <see cref="BenefitPlanConfig"/>.
+/// </summary>
+public class ProviderPlatformConfig
+{
+    [JsonPropertyName("platform")]
+    public string Platform { get; set; } = "cho"; // cho, qnxt, facets, healthedge
+
+    [JsonPropertyName("apiEndpoint")]
+    public string? ApiEndpoint { get; set; }
+
+    [JsonPropertyName("keyVaultSecretName")]
+    public string? KeyVaultSecretName { get; set; }
+
+    [JsonPropertyName("timeoutMs")]
+    public int TimeoutMs { get; set; } = 5000;
+
+    [JsonPropertyName("retryCount")]
+    public int RetryCount { get; set; } = 2;
+
+    [JsonPropertyName("platformSettings")]
+    public Dictionary<string, string> PlatformSettings { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for tenant's claims platform. Controls which adapter
+/// claims-service uses at runtime. Mirrors <see cref="BenefitPlanConfig"/>.
+/// </summary>
+public class ClaimsPlatformConfig
+{
+    [JsonPropertyName("platform")]
+    public string Platform { get; set; } = "cho"; // cho, qnxt, facets
+
+    [JsonPropertyName("apiEndpoint")]
+    public string? ApiEndpoint { get; set; }
+
+    [JsonPropertyName("keyVaultSecretName")]
+    public string? KeyVaultSecretName { get; set; }
+
+    [JsonPropertyName("timeoutMs")]
+    public int TimeoutMs { get; set; } = 5000;
+
+    [JsonPropertyName("retryCount")]
+    public int RetryCount { get; set; } = 2;
+
+    [JsonPropertyName("platformSettings")]
+    public Dictionary<string, string> PlatformSettings { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for tenant's ID card platform. Controls which adapter
+/// idcard-service uses at runtime. Mirrors <see cref="BenefitPlanConfig"/>.
+/// </summary>
+public class IdCardPlatformConfig
+{
+    [JsonPropertyName("platform")]
+    public string Platform { get; set; } = "cho"; // cho, qnxt, vendor
+
+    [JsonPropertyName("apiEndpoint")]
+    public string? ApiEndpoint { get; set; }
+
+    [JsonPropertyName("keyVaultSecretName")]
+    public string? KeyVaultSecretName { get; set; }
+
+    [JsonPropertyName("timeoutMs")]
+    public int TimeoutMs { get; set; } = 5000;
+
+    [JsonPropertyName("retryCount")]
+    public int RetryCount { get; set; } = 2;
+
+    [JsonPropertyName("platformSettings")]
+    public Dictionary<string, string> PlatformSettings { get; set; } = new();
+}
+
 public class BillingInfo
 {
     [JsonPropertyName("stripeCustomerId")]
@@ -345,6 +433,12 @@ public class CreateTenantRequest
     public EligibilityConfig? EligibilityPlatform { get; set; }
 
     public BenefitPlanConfig? BenefitPlanPlatform { get; set; }
+
+    public ProviderPlatformConfig? ProviderPlatform { get; set; }
+
+    public ClaimsPlatformConfig? ClaimsPlatform { get; set; }
+
+    public IdCardPlatformConfig? IdCardPlatform { get; set; }
 }
 
 /// <summary>

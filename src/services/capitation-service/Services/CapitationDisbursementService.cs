@@ -114,7 +114,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, request.InitiatedBy, PaymentAction.Release);
 
         // Fetch provider bank account info
-        var bankAccount = await FetchProviderBankAccountAsync(statement.ProviderNPI);
+        var bankAccount = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
         if (bankAccount == null || !bankAccount.EftEnabled)
             throw new InvalidOperationException($"EFT not enabled for provider {statement.ProviderNPI}");
 
@@ -231,7 +231,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     continue;
                 }
 
-                var bankAccount = await FetchProviderBankAccountAsync(statement.ProviderNPI);
+                var bankAccount = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
                 if (bankAccount == null || !bankAccount.EftEnabled)
                 {
                     result.Skipped++;
@@ -366,7 +366,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
         foreach (var disbursement in pendingDisbursements)
         {
-            var bankAccount = await FetchProviderBankAccountAsync(disbursement.ProviderNPI);
+            var bankAccount = await FetchProviderBankAccountAsync(disbursement.TenantId, disbursement.ProviderNPI);
             if (bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
             {
                 _logger.LogWarning("Skipping disbursement {DisbursementId}: missing bank account for provider {NPI}",
@@ -568,12 +568,18 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     // --- Private helpers ---
 
-    private async Task<ProviderBankAccountDto?> FetchProviderBankAccountAsync(string providerNpi)
+    private async Task<ProviderBankAccountDto?> FetchProviderBankAccountAsync(string tenantId, string providerNpi)
     {
         try
         {
             var client = _httpClientFactory.CreateClient("ProviderService");
-            var response = await client.GetAsync($"/api/providers/npi/{providerNpi}/bank-account");
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/providers/npi/{Uri.EscapeDataString(providerNpi)}/bank-account");
+            // Names the statement's tenant for ChoOutboundTokenHandler: a
+            // disbursement with no inbound caller still carries a service token
+            // for it (provider-service requires one).
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await client.SendAsync(request);
             if (!response.IsSuccessStatusCode)
                 return null;
 

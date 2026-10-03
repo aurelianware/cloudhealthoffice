@@ -152,7 +152,9 @@ builder.Services.AddHttpContextAccessor();
 // Tenant-driven routing: each tenant can be configured to read benefit plans
 // from CHO (default) or one of QNXT / Facets / HealthEdge once those adapters
 // are implemented. The factory consults tenant-service config (cached 5 min by
-// BenefitPlanTenantConfigCache) and falls back to "cho" on any failure.
+// BenefitPlanTenantConfigCache). A 401/403 from tenant-service fails the
+// request; 404, 5xx or an unreachable tenant-service use "cho" for that call
+// only (see TenantPlatformLookup).
 //
 // All adapters and the factory are scoped because ChoBenefitPlanAdapter wraps
 // scoped business services (IBenefitPlanService / IBenefitViewService). The

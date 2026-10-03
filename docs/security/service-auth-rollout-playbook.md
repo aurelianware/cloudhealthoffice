@@ -69,6 +69,19 @@ worked example.
    only when they return no tenant data, and report each one you add.
 7. **HTTP clients.** Change `new HttpClient()` used for CHO-to-CHO calls to
    `IHttpClientFactory` clients, so the token handler applies.
+   - Every outbound call to another CHO service names its tenant in
+     `X-Tenant-ID`, including calls that today only run inside a request. A
+     call from a consumer, hosted service or job without it goes out with no
+     token and gets 401. Thread the tenant from the record or message into the
+     client method. Test it with no inbound caller (see the
+     `BackgroundCallsCarryServiceTokenTests` classes): the request must carry
+     a service token whose `tenant_id` is that tenant.
+   - Reading a tenant's `configuration.<x>Platform` from tenant-service goes
+     through `CloudHealthOffice.Infrastructure.Tenancy.TenantPlatformLookup`.
+     The rule is the same in every service: an answer (a platform, or none,
+     meaning `cho`) is cached; 401/403 is logged as an error, never cached, and
+     fails the operation; 404, 5xx, transport failures and unreadable bodies
+     use `cho` for that call only and are not cached.
 8. **Configuration.** Run
    `python3 scripts/security/add-dev-auth.py src/services/<svc>/appsettings.Development.json <svc-client-id>`.
    It adds development-only trust and a service token setting.

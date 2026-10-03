@@ -52,7 +52,12 @@ public class TenantManagementService : ITenantService
             Configuration = new TenantConfiguration
             {
                 EnabledModules = request.EnabledModules ?? new List<string> { "claims", "eligibility" },
-                Clearinghouse = request.Clearinghouse
+                Clearinghouse = request.Clearinghouse,
+                EligibilityPlatform = request.EligibilityPlatform,
+                BenefitPlanPlatform = request.BenefitPlanPlatform,
+                ProviderPlatform = request.ProviderPlatform,
+                ClaimsPlatform = request.ClaimsPlatform,
+                IdCardPlatform = request.IdCardPlatform,
             }
         };
 

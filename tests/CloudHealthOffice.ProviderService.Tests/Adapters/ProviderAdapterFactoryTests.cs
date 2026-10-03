@@ -166,6 +166,57 @@ public class ProviderAdapterFactoryTests
         adapter.Platform.Should().Be("qnxt");
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task Tenant_service_without_an_answer_uses_cho_for_that_call_only(HttpStatusCode status)
+    {
+        // Shared rule (TenantPlatformLookup): 404, 5xx or an unreachable
+        // tenant-service is not an answer. "cho" serves this call, but the guess
+        // is not cached, so a QNXT tenant is routed correctly as soon as
+        // tenant-service answers instead of after the five-minute TTL.
+        var responses = new Queue<HttpResponseMessage>(new[]
+        {
+            new HttpResponseMessage(status),
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"configuration":{"providerPlatform":{"platform":"qnxt"}}}""",
+                    Encoding.UTF8, "application/json"),
+            },
+        });
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() => responses.Dequeue());
+        var factory = BuildFactory(handler, NullLogger<ProviderTenantConfigCache>.Instance);
+
+        (await factory.GetAdapterAsync("tenant-flaky")).Platform.Should().Be("cho");
+        (await factory.GetAdapterAsync("tenant-flaky")).Platform.Should().Be("qnxt");
+    }
+
+    [Fact]
+    public async Task Tenant_service_unreachable_is_not_cached()
+    {
+        var calls = 0;
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .Returns(() => ++calls == 1
+                ? throw new HttpRequestException("connection refused")
+                : Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"configuration":{"providerPlatform":{"platform":"facets"}}}""",
+                        Encoding.UTF8, "application/json"),
+                }));
+        var factory = BuildFactory(handler, NullLogger<ProviderTenantConfigCache>.Instance);
+
+        (await factory.GetAdapterAsync("tenant-down")).Platform.Should().Be("cho");
+        (await factory.GetAdapterAsync("tenant-down")).Platform.Should().Be("facets");
+    }
+
     // -----------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------

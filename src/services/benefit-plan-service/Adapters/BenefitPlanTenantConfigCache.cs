@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
+using System.Net;
+using CloudHealthOffice.Infrastructure.Tenancy;
 
 namespace BenefitPlanService.Adapters;
 
@@ -10,10 +11,21 @@ namespace BenefitPlanService.Adapters;
 /// be scoped — but the cache must outlive a single request).
 /// </summary>
 /// <remarks>
-/// Mirrors the inline cache in <c>EligibilityAdapterFactory</c>: 5-minute TTL,
-/// thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>, and a
-/// graceful fallback to <c>"cho"</c> on any HTTP/JSON failure so a flaky
-/// tenant-service never breaks plan reads.
+/// 5-minute TTL, thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>.
+/// The lookup follows <see cref="TenantPlatformLookup"/>, the rule shared with
+/// claims, provider, eligibility and id-card:
+/// <list type="bullet">
+///   <item>tenant-service answers and names a platform, or names none
+///   (default <c>"cho"</c>): cached.</item>
+///   <item>401/403: logged as an error, not cached, and raised as
+///   <see cref="BenefitPlanTenantConfigUnavailableException"/>, so a QNXT or
+///   Facets tenant's plans are never silently read from CHO.</item>
+///   <item>404, 5xx, transport failure or unreadable body: <c>"cho"</c> for this
+///   call only, not cached.</item>
+/// </list>
+/// The request goes through an <see cref="IHttpClientFactory"/> client and
+/// names the tenant in <c>X-Tenant-ID</c>, so the shared outbound handler can
+/// mint a service token for that tenant when there is no caller.
 /// </remarks>
 public class BenefitPlanTenantConfigCache
 {
@@ -24,8 +36,9 @@ public class BenefitPlanTenantConfigCache
     private readonly ConcurrentDictionary<string, (string Platform, Dictionary<string, string> Settings, DateTime ExpiresAt)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
-    public const string DefaultPlatform = "cho";
+    public const string DefaultPlatform = TenantPlatformLookup.DefaultPlatform;
     public const string HttpClientName = "BenefitPlanDefault";
+    public const string PlatformKey = "benefitPlanPlatform";
 
     public BenefitPlanTenantConfigCache(
         IHttpClientFactory httpClientFactory,
@@ -39,8 +52,9 @@ public class BenefitPlanTenantConfigCache
 
     /// <summary>
     /// Resolve <c>(platform, platformSettings)</c> for the given tenant, hitting
-    /// tenant-service on cache miss. Defaults to <c>("cho", new())</c> when the
-    /// tenant has no <c>benefitPlanPlatform</c> config or the call fails.
+    /// tenant-service on cache miss. Throws
+    /// <see cref="BenefitPlanTenantConfigUnavailableException"/> when
+    /// tenant-service refuses the lookup (401/403).
     /// </summary>
     public async Task<(string Platform, Dictionary<string, string> Settings)> GetAsync(
         string tenantId, CancellationToken ct = default)
@@ -50,57 +64,37 @@ public class BenefitPlanTenantConfigCache
             return (cached.Platform, cached.Settings);
         }
 
-        try
-        {
-            var tenantUrl = _configuration["Services:TenantService"]
-                ?? "http://tenant-service.cloudhealthoffice/api/v1";
-            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-            var response = await httpClient.GetAsync($"{tenantUrl}/tenants/{tenantId}", ct);
+        var result = await TenantPlatformLookup.FetchAsync(
+            _httpClientFactory.CreateClient(HttpClientName), _configuration["Services:TenantService"],
+            tenantId, PlatformKey, _logger, ct);
 
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync(ct);
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
+        if (result.Outcome == TenantPlatformOutcome.Refused)
+            throw new BenefitPlanTenantConfigUnavailableException(tenantId, result.StatusCode!.Value);
 
-                if (root.TryGetProperty("configuration", out var config) &&
-                    config.TryGetProperty("benefitPlanPlatform", out var planConfig) &&
-                    planConfig.TryGetProperty("platform", out var platformProp))
-                {
-                    var platform = platformProp.GetString() ?? DefaultPlatform;
-                    var settings = new Dictionary<string, string>();
+        if (result.IsCacheable)
+            _cache[tenantId] = (result.Platform, result.Settings, DateTime.UtcNow.Add(CacheDuration));
 
-                    if (planConfig.TryGetProperty("platformSettings", out var settingsProp))
-                    {
-                        foreach (var prop in settingsProp.EnumerateObject())
-                        {
-                            settings[prop.Name] = prop.Value.GetString() ?? string.Empty;
-                        }
-                    }
-
-                    _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
-                    return (platform, settings);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to fetch benefit-plan tenant config for {TenantId}, using default adapter",
-                SanitizeForLog(tenantId));
-        }
-
-        var defaultSettings = new Dictionary<string, string>();
-        _cache[tenantId] = (DefaultPlatform, defaultSettings, DateTime.UtcNow.Add(CacheDuration));
-        return (DefaultPlatform, defaultSettings);
+        return (result.Platform, result.Settings);
     }
 
     /// <summary>Test seam — drops all cached entries.</summary>
     public void Clear() => _cache.Clear();
+}
 
-    private static string SanitizeForLog(string? value)
+/// <summary>
+/// tenant-service refused benefit-plan-service's platform lookup (401/403), so
+/// the tenant's plan platform is unknown. Never answered with the default.
+/// </summary>
+public sealed class BenefitPlanTenantConfigUnavailableException : InvalidOperationException
+{
+    public BenefitPlanTenantConfigUnavailableException(string tenantId, HttpStatusCode statusCode)
+        : base($"tenant-service refused the benefit-plan platform lookup ({(int)statusCode}).")
     {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        TenantId = tenantId;
+        StatusCode = statusCode;
     }
+
+    public string TenantId { get; }
+
+    public HttpStatusCode StatusCode { get; }
 }

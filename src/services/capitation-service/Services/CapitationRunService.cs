@@ -384,7 +384,7 @@ public class CapitationRunService : ICapitationRunService
         CapitationRun run, string? executedBy)
     {
         // Fetch members assigned to this PCP from coverage-service
-        var coverages = await FetchCoveragesByPcpAsync(contract.ProviderNPI);
+        var coverages = await FetchCoveragesByPcpAsync(run.TenantId, contract.ProviderNPI);
 
         // Filter to plan IDs covered by this contract (if contract specifies plans)
         if (contract.PlanIds.Count > 0)
@@ -421,7 +421,7 @@ public class CapitationRunService : ICapitationRunService
 
             // Fetch risk score (or use contract default)
             var riskScore = contract.RiskAdjusted
-                ? await FetchRiskScoreAsync(coverage.MemberId, periodStart.Year)
+                ? await FetchRiskScoreAsync(run.TenantId, coverage.MemberId, periodStart.Year)
                 : contract.DefaultRiskScore;
 
             if (riskScore <= 0)
@@ -549,12 +549,17 @@ public class CapitationRunService : ICapitationRunService
         return tiers.FirstOrDefault(t => age >= t.AgeFrom && age <= t.AgeTo);
     }
 
-    private async Task<List<CapitationCoverageDto>> FetchCoveragesByPcpAsync(string providerNpi)
+    private async Task<List<CapitationCoverageDto>> FetchCoveragesByPcpAsync(string tenantId, string providerNpi)
     {
         try
         {
             var client = _httpClientFactory.CreateClient("CoverageService");
-            var response = await client.GetAsync($"/api/v1/coverage/by-pcp/{providerNpi}?status=Active");
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/v1/coverage/by-pcp/{Uri.EscapeDataString(providerNpi)}?status=Active");
+            // Names the run's tenant for ChoOutboundTokenHandler: a run with no
+            // inbound caller still carries a service token for it.
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await client.SendAsync(request);
             response.EnsureSuccessStatusCode();
 
             return await response.Content.ReadFromJsonAsync<List<CapitationCoverageDto>>(JsonOptions) ?? new();
@@ -566,12 +571,15 @@ public class CapitationRunService : ICapitationRunService
         }
     }
 
-    private async Task<decimal> FetchRiskScoreAsync(string memberId, int year)
+    private async Task<decimal> FetchRiskScoreAsync(string tenantId, string memberId, int year)
     {
         try
         {
             var client = _httpClientFactory.CreateClient("RiskAdjustmentService");
-            var response = await client.GetAsync($"/api/risk-adjustment/members/{memberId}/scores/{year}");
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/risk-adjustment/members/{Uri.EscapeDataString(memberId)}/scores/{year}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await client.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
                 return 1.0m;

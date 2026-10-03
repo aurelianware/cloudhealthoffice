@@ -118,10 +118,11 @@ public class ClaimTenantConfigCacheTests
     }
 
     [Fact]
-    public async Task GetAsync_caches_default_after_failure()
+    public async Task GetAsync_does_not_cache_the_default_after_failure()
     {
-        // Failure responses are cached with the default — repeated calls during
-        // the TTL window do NOT hammer tenant-service. Mirrors Provider/BP.
+        // A failed lookup (5xx, 404, unreachable) uses "cho" for that call only.
+        // Caching the guess would route a QNXT/Facets tenant's claims to CHO for
+        // the whole TTL. Same rule as benefit-plan, provider, eligibility, id-card.
         var handler = FakeHttpMessageHandler.Status(System.Net.HttpStatusCode.InternalServerError);
         var cache = Build(handler);
 
@@ -130,11 +131,51 @@ public class ClaimTenantConfigCacheTests
 
         first.Platform.Should().Be("cho");
         second.Platform.Should().Be("cho");
+        handler.RequestCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetAsync_does_not_cache_the_default_after_404()
+    {
+        var handler = FakeHttpMessageHandler.Status(System.Net.HttpStatusCode.NotFound);
+        var cache = Build(handler);
+
+        (await cache.GetAsync("t-8")).Platform.Should().Be("cho");
+        (await cache.GetAsync("t-8")).Platform.Should().Be("cho");
+
+        handler.RequestCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetAsync_caches_an_answer_without_a_platform()
+    {
+        var handler = FakeHttpMessageHandler.Json("""{"configuration": {}}""");
+        var cache = Build(handler);
+
+        await cache.GetAsync("t-9");
+        await cache.GetAsync("t-9");
+
         handler.RequestCount.Should().Be(1);
 
         cache.Clear();
-        var afterReset = await cache.GetAsync("t-7");
-        afterReset.Platform.Should().Be("cho");
+        await cache.GetAsync("t-9");
+        handler.RequestCount.Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.Unauthorized)]
+    [InlineData(System.Net.HttpStatusCode.Forbidden)]
+    public async Task GetAsync_refusal_fails_and_is_not_cached_as_the_default(System.Net.HttpStatusCode refusal)
+    {
+        // A refusal means claims-service is not trusted by tenant-service. The
+        // claim must not silently route to the default platform.
+        var handler = FakeHttpMessageHandler.Status(refusal);
+        var cache = Build(handler);
+
+        var first = await Assert.ThrowsAsync<ClaimTenantConfigUnavailableException>(() => cache.GetAsync("t-10"));
+        first.StatusCode.Should().Be(refusal);
+        await Assert.ThrowsAsync<ClaimTenantConfigUnavailableException>(() => cache.GetAsync("t-10"));
+
         handler.RequestCount.Should().Be(2);
     }
 

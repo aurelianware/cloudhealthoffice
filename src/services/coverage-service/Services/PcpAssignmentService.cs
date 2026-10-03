@@ -115,7 +115,7 @@ public sealed class PcpAssignmentService : IPcpAssignmentService
         // Order matters; first failure wins. Do NOT reorder without a portal+API
         // changelog entry — error codes are an integration contract.
 
-        var provider = await _providers.GetByNpiAsync(cmd.ProviderNpi, ct);
+        var provider = await _providers.GetByNpiAsync(tenantId, cmd.ProviderNpi, ct);
         if (provider == null)
         {
             return Fail(PcpValidationCodes.ProviderNotFound, "providerNpi",

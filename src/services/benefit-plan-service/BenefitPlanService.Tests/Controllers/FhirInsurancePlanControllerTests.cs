@@ -288,7 +288,7 @@ public sealed class FhirInsurancePlanControllerTests
     private sealed class StubOrganizationLookup : IOrganizationLookupClient
     {
         public Task<OrganizationLookupResult?> GetOrganizationAsync(
-            string networkId, CancellationToken ct = default)
+            string tenantId, string networkId, CancellationToken ct = default)
             => Task.FromResult<OrganizationLookupResult?>(
                 new OrganizationLookupResult
                 {

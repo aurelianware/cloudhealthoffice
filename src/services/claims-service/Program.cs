@@ -190,7 +190,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ClaimEventPublishe
 // singleton (TTL across requests); adapters and factory are scoped because
 // the CHO adapter wraps the scoped IClaimRepository. Tenant-service HTTP
 // client uses a 5-second timeout so a flaky tenant-service can't stall claim
-// reads — the cache falls back to "cho" on any failure.
+// reads. A 401/403 from tenant-service fails the operation; 404, 5xx or an
+// unreachable tenant-service use "cho" for that call only (TenantPlatformLookup).
 builder.Services.AddHttpClient(ClaimTenantConfigCache.HttpClientName)
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));

@@ -231,7 +231,7 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
                 continue;
             }
 
-            var organization = await _organizationLookup.GetOrganizationAsync(mapping.NetworkId, ct);
+            var organization = await _organizationLookup.GetOrganizationAsync(tenantId, mapping.NetworkId, ct);
             if (organization is null)
             {
                 RecordOutcome(tenantId, "unresolved", mapping, result, detail: "Organization not resolvable in provider-service.");
