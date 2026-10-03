@@ -4,6 +4,7 @@ using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using MongoDB.Driver;
 
 namespace BenefitPlanService.Controllers;
@@ -17,15 +18,18 @@ public class BenefitPlansController : ControllerBase
 {
     private readonly IBenefitPlanService _service;
     private readonly BenefitPlanAdapterFactory _adapterFactory;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<BenefitPlansController> _logger;
 
     public BenefitPlansController(
         IBenefitPlanService service,
         BenefitPlanAdapterFactory adapterFactory,
+        ICurrentActor actor,
         ILogger<BenefitPlansController> logger)
     {
         _service = service;
         _adapterFactory = adapterFactory;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -102,7 +106,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            var created = await _service.CreatePlanAsync(plan, TenantId);
+            var created = await _service.CreatePlanAsync(plan, TenantId, ResolveActorId());
             return CreatedAtAction(nameof(GetPlan), new { id = created.Id }, created);
         }
         catch (PlanLimitValidationException ex)
@@ -139,7 +143,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            var updated = await _service.UpdatePlanAsync(plan, TenantId);
+            var updated = await _service.UpdatePlanAsync(plan, TenantId, ResolveActorId());
             if (updated == null)
             {
                 return NotFound(new { message = $"Benefit plan '{id}' not found" });
@@ -553,14 +557,12 @@ public class BenefitPlansController : ControllerBase
         }
     }
 
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "system";
-    }
+    /// <summary>
+    /// The acting user is the validated token's subject. An <c>X-User-Id</c>
+    /// header or a body <c>createdBy</c>/<c>publishedBy</c> is never trusted,
+    /// and there is no "system" fallback.
+    /// </summary>
+    private string ResolveActorId() => _actor.UserId;
 
     private static object PlanLimitValidationPayload(PlanLimitValidationException ex) => new
     {

@@ -22,6 +22,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.OperatingMode;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.ProviderEnrollmentService.Gates;
@@ -403,6 +404,17 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// ── Authentication ────────────────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from it.
+// Plan configuration writes are an administrative act (settings:manage); the
+// pure calculation endpoints (estimate, rate/NCCI/scrub checks) are annotated
+// on the controller with claims:work,benefits:read.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "benefits:read";
+    auth.DefaultWritePermission = "settings:manage";
+});
+
 var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"]
     ?? "http://claims-service";
 builder.Services.AddChoHealthChecks(options =>
@@ -433,9 +445,11 @@ if (!estimateOnly)
     app.UseHttpsRedirection();
     app.UseCors("AllowAll");
 }
+// External estimate-only deployments additionally require the shared X-Api-Key
+// (EstimateApiSecurityMiddleware); it runs before, and in addition to, CHO
+// token authentication.
 app.UseMiddleware<EstimateApiSecurityMiddleware>();
-app.UseMiddleware<TenantMiddleware>();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 app.Run();

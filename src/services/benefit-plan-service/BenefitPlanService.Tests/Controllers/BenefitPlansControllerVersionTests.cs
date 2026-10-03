@@ -39,7 +39,7 @@ public class BenefitPlansControllerVersionTests
         var factory = new BenefitPlanAdapterFactory(
             new[] { primary }, cache, NullLogger<BenefitPlanAdapterFactory>.Instance);
 
-        var controller = new BenefitPlansController(service, factory, NullLogger<BenefitPlansController>.Instance)
+        var controller = new BenefitPlansController(service, factory, new FakeCurrentActor("token-user"), NullLogger<BenefitPlansController>.Instance)
         {
             ControllerContext = new ControllerContext
             {
@@ -115,6 +115,24 @@ public class BenefitPlansControllerVersionTests
 
         var result = await controller.Publish(draft.PlanId, draft.VersionId);
         result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task Writes_record_the_token_subject_not_an_X_User_Id_header_or_body_createdBy()
+    {
+        var (controller, _, repo) = Build();
+        controller.ControllerContext.HttpContext.Request.Headers["X-User-Id"] = "forged-header-user";
+        var body = SamplePlan();
+        body.CreatedBy = "forged-body-user";
+
+        var created = await controller.CreateDraft(body);
+        var draft = (BenefitPlan)created.Result.Should().BeOfType<CreatedAtActionResult>().Subject.Value!;
+        var published = await controller.Publish(draft.PlanId, draft.VersionId);
+        published.Result.Should().BeOfType<OkObjectResult>();
+
+        var stored = repo.Docs.Single(d => d.VersionId == draft.VersionId);
+        stored.CreatedBy.Should().Be("token-user");
+        stored.PublishedBy.Should().Be("token-user");
     }
 
     [Fact]

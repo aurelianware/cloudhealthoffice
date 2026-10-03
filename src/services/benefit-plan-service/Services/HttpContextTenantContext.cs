@@ -5,7 +5,7 @@ namespace BenefitPlanService.Services;
 /// <summary>
 /// Supplies the current tenant ID to the benefit engine by reading
 /// from <c>HttpContext.Items["TenantId"]</c>, which is populated by
-/// <see cref="BenefitPlanService.Middleware.TenantMiddleware"/>.
+/// the shared <c>TenantMiddleware</c> from the validated token (see <c>UseChoAuthentication</c>).
 /// </summary>
 public class HttpContextTenantContext : IBenefitEngineTenantContext
 {
@@ -19,5 +19,5 @@ public class HttpContextTenantContext : IBenefitEngineTenantContext
     public string TenantId =>
         _httpContextAccessor.HttpContext?.Items["TenantId"] as string
         ?? throw new InvalidOperationException(
-               "TenantId not found in HttpContext. Ensure TenantMiddleware runs before the benefit engine.");
+               "TenantId not found in HttpContext. Ensure UseChoAuthentication runs before the benefit engine.");
 }

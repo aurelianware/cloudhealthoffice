@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BenefitPlanService.Controllers;
@@ -16,15 +17,19 @@ namespace BenefitPlanService.Controllers;
 public class PlanCodeMappingsController : ControllerBase
 {
     private readonly IEnrollment834PlanCodeMappingRepository _repository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<PlanCodeMappingsController> _logger;
 
+    /// <summary>Tenant from the validated token (set by the shared TenantMiddleware).</summary>
     private string? TenantId => HttpContext.GetTenantId();
 
     public PlanCodeMappingsController(
         IEnrollment834PlanCodeMappingRepository repository,
+        ICurrentActor actor,
         ILogger<PlanCodeMappingsController> logger)
     {
         _repository = repository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -41,7 +46,7 @@ public class PlanCodeMappingsController : ControllerBase
     {
         if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { Message = "X-Tenant-ID header is required" });
+            return BadRequest(new { Message = "Tenant context is required" });
         }
 
         if (string.IsNullOrWhiteSpace(groupNumber) || string.IsNullOrWhiteSpace(insuranceLineCode)
@@ -73,7 +78,7 @@ public class PlanCodeMappingsController : ControllerBase
     {
         if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { Message = "X-Tenant-ID header is required" });
+            return BadRequest(new { Message = "Tenant context is required" });
         }
 
         var mappings = await _repository.ListAsync(TenantId!, groupNumber, ct);
@@ -89,7 +94,7 @@ public class PlanCodeMappingsController : ControllerBase
     {
         if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { Message = "X-Tenant-ID header is required" });
+            return BadRequest(new { Message = "Tenant context is required" });
         }
 
         if (!ModelState.IsValid)
@@ -104,7 +109,7 @@ public class PlanCodeMappingsController : ControllerBase
             InsuranceLineCode = request.InsuranceLineCode,
             ExternalPlanCode = request.ExternalPlanCode,
             PlanId = request.PlanId,
-            CreatedBy = User.Identity?.Name ?? "System"
+            CreatedBy = _actor.UserId
         };
 
         Enrollment834PlanCodeMapping created;
@@ -139,7 +144,7 @@ public class PlanCodeMappingsController : ControllerBase
     {
         if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { Message = "X-Tenant-ID header is required" });
+            return BadRequest(new { Message = "Tenant context is required" });
         }
 
         if (requests is null || requests.Count == 0)
@@ -174,7 +179,7 @@ public class PlanCodeMappingsController : ControllerBase
                     InsuranceLineCode = request.InsuranceLineCode,
                     ExternalPlanCode = request.ExternalPlanCode,
                     PlanId = request.PlanId,
-                    CreatedBy = User.Identity?.Name ?? "System"
+                    CreatedBy = _actor.UserId
                 }, ct);
                 result.Created.Add(PlanCodeMappingResponse.From(created));
             }
@@ -205,7 +210,7 @@ public class PlanCodeMappingsController : ControllerBase
     {
         if (string.IsNullOrEmpty(TenantId))
         {
-            return BadRequest(new { Message = "X-Tenant-ID header is required" });
+            return BadRequest(new { Message = "Tenant context is required" });
         }
 
         var deleted = await _repository.DeleteAsync(TenantId!, id, ct);
