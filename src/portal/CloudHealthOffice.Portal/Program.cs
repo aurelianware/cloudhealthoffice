@@ -195,23 +195,9 @@ builder.Services.AddMudServices();
 
 // CHO tokens: the signed-in user's Entra token is exchanged at the CHO token
 // service for a CHO token, which is sent to CHO backend services only.
-builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<ChoServiceHosts>();
-builder.Services.AddScoped<IChoReauthenticationHandler, MicrosoftIdentityReauthenticationHandler>();
-builder.Services.AddScoped<IChoTokenProvider>(sp => new ChoTokenProvider(
-    sp.GetRequiredService<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider>(),
-    sp.GetRequiredService<IHttpClientFactory>(),
-    sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
-    sp.GetRequiredService<IConfiguration>(),
-    sp.GetRequiredService<IHostEnvironment>(),
-    sp.GetRequiredService<ILogger<ChoTokenProvider>>(),
-    sp.GetService<ITokenAcquisition>(),
-    sp.GetService<IChoReauthenticationHandler>(),
-    sp.GetService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
-
-// The token service gets the user's Entra token, never a CHO token.
-builder.Services.AddHttpClient(ChoTokenProvider.TokenServiceClientName)
-    .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+// The provider takes the user from the Blazor circuit, or from the request in a
+// plain HTTP endpoint (the member document download). See ChoTokenServiceRegistration.
+builder.Services.AddChoUserTokens();
 
 builder.Services.AddHttpClient("default")
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
@@ -221,24 +207,6 @@ builder.Services.AddHttpClient("default")
         PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
         MaxConnectionsPerServer = 50
     });
-
-// The HttpClient every portal service and page uses. ChoBearerTokenHandler is
-// wrapped around the pooled "default" pipeline here, in the circuit's own scope,
-// instead of via AddHttpMessageHandler: IHttpClientFactory creates pipeline
-// handlers in a separate DI scope where the circuit's user is not available.
-// It adds the CHO token and X-Tenant-ID only for hosts configured under
-// Services:* (not the token service, Argo or Prometheus); other hosts get nothing.
-builder.Services.AddScoped(sp =>
-{
-    var handler = new ChoBearerTokenHandler(
-        sp.GetRequiredService<IChoTokenProvider>(),
-        sp.GetRequiredService<ChoServiceHosts>(),
-        sp.GetRequiredService<ILogger<ChoBearerTokenHandler>>())
-    {
-        InnerHandler = sp.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler("default"),
-    };
-    return new HttpClient(handler, disposeHandler: true);
-});
 
 // MongoDB client (singleton) — uses camelCase BSON convention to match stored field names
 var camelCasePack = new ConventionPack { new CamelCaseElementNameConvention() };
@@ -508,6 +476,10 @@ static string NormalizeLocalDemoRedirect(string? redirectUri, HttpRequest reques
 // Health endpoint - anonymous access for Kubernetes probes
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithMetadata(new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute());
+
+// Member document downloads: the browser's link for a document. Signed-in users
+// only; the document is fetched with the user's CHO token (GET, no side effects).
+app.MapMemberDocumentDownload();
 
 app.MapControllers();
 app.MapRazorPages();

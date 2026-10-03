@@ -4476,9 +4476,6 @@ public class IdCardService : IIdCardService
     private string IdCardBaseUrl =>
         _configuration["Services:IdCardService"] ?? "http://idcard-service.cloudhealthoffice/api/v1";
 
-    private string MemberDocumentBaseUrl =>
-        _configuration["Services:MemberDocumentService"] ?? "http://member-document-service.cloudhealthoffice";
-
     public async Task<IdCardOrderView> OrderAsync(string memberId, string? languageCode = null, string? requestedBy = null)
     {
         try
@@ -4530,8 +4527,13 @@ public class IdCardService : IIdCardService
         }
     }
 
+    /// <summary>
+    /// A link the browser can follow: the portal's own download endpoint, which
+    /// fetches the document with the signed-in user's CHO token. The browser can
+    /// neither reach member-document-service nor hold a CHO token.
+    /// </summary>
     public string BuildDocumentDownloadUrl(string documentId) =>
-        $"{MemberDocumentBaseUrl}/api/v1/member-documents/{Uri.EscapeDataString(documentId)}/content";
+        CloudHealthOffice.Portal.Infrastructure.MemberDocumentDownloadEndpoint.PathFor(documentId);
 
     public async Task RevokeAsync(string cardId, string reason, string? notes = null)
     {

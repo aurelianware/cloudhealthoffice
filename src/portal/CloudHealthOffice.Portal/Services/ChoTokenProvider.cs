@@ -17,6 +17,9 @@ namespace CloudHealthOffice.Portal.Services;
 /// Supplies the CHO access token the portal sends to CHO backend services for
 /// the signed-in user, by exchanging the user's Entra token at the CHO token
 /// service. Scoped: one instance per Blazor circuit (or per HTTP request).
+/// Inside a circuit the user comes from the circuit's AuthenticationStateProvider;
+/// in a plain HTTP request (an endpoint such as the member document download),
+/// where nothing sets that state, it comes from the request's authenticated user.
 /// </summary>
 public interface IChoTokenProvider
 {
@@ -129,6 +132,7 @@ public sealed class ChoTokenProvider : IChoTokenProvider
     private readonly IChoReauthenticationHandler? _reauthentication;
     private readonly IDistributedCache? _tenantPreferences;
     private readonly TimeProvider _time;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private static readonly TimeSpan FailureRetryDelay = TimeSpan.FromSeconds(10);
@@ -149,7 +153,8 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         ITokenAcquisition? tokenAcquisition = null,
         IChoReauthenticationHandler? reauthentication = null,
         IDistributedCache? tenantPreferences = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
         _authenticationStateProvider = authenticationStateProvider;
         _httpClientFactory = httpClientFactory;
@@ -161,6 +166,7 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         _reauthentication = reauthentication;
         _tenantPreferences = tenantPreferences;
         _time = time ?? TimeProvider.System;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public string? CurrentTenantId => _selectedTenantId;
@@ -676,8 +682,21 @@ public sealed class ChoTokenProvider : IChoTokenProvider
 
     private async Task<ClaimsPrincipal?> GetUserAsync()
     {
-        var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
-        return state.User.Identity?.IsAuthenticated == true ? state.User : null;
+        ClaimsPrincipal user;
+        try
+        {
+            user = (await _authenticationStateProvider.GetAuthenticationStateAsync()).User;
+        }
+        catch (InvalidOperationException) when (_httpContextAccessor?.HttpContext is not null)
+        {
+            // Outside a Blazor circuit (a minimal-API request) nothing sets the
+            // authentication state, and ServerAuthenticationStateProvider throws.
+            // The request's own authenticated user is then the user. Inside a
+            // circuit the state is always set, so the circuit's user always wins.
+            user = _httpContextAccessor.HttpContext!.User;
+        }
+
+        return user?.Identity?.IsAuthenticated == true ? user : null;
     }
 
     /// <summary>
