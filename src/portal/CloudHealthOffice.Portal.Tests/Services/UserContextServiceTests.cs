@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using CloudHealthOffice.Portal.Services;
 
@@ -26,11 +27,15 @@ public class UserContextServiceTests
 
     private UserContextService CreateService(
         HttpClient? httpClient = null,
-        string? tenantServiceUrl = "http://localhost:9000")
+        string? tenantServiceUrl = "http://localhost:9000",
+        string? environmentName = null,
+        bool allowTenantAdminFallback = false)
     {
         var configEntries = new Dictionary<string, string?>();
         if (tenantServiceUrl != null)
             configEntries["Services:TenantService"] = tenantServiceUrl;
+        if (allowTenantAdminFallback)
+            configEntries["Authentication:AllowTenantAdminFallback"] = "true";
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(configEntries)
@@ -43,7 +48,17 @@ public class UserContextServiceTests
             _tenantContextService.Object,
             httpClient,
             configuration,
-            _logger.Object);
+            _logger.Object,
+            environmentName == null ? null : new TestHostEnvironment(environmentName));
+    }
+
+    private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "CloudHealthOffice.Portal.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 
     private void SetupAuthState(params Claim[] claims)
@@ -115,7 +130,7 @@ public class UserContextServiceTests
     }
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenTenantContextIsNull_ReturnsTenantAdminFallback()
+    public async Task GetCurrentUserAsync_WhenTenantContextIsNull_GrantsNoRoles()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "admin@acme.com"),
@@ -128,8 +143,39 @@ public class UserContextServiceTests
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
-        result.Permissions.Should().Contain("*:*");
+        result.Roles.Should().BeEmpty();
+        result.Permissions.Should().BeEmpty();
+        sut.HasPermission("claims:read").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetCurrentUserAsync_FallbackOnDevelopmentWithFlag_GrantsTenantAdmin()
+    {
+        SetupAuthState(
+            new Claim(ClaimTypes.Email, "admin@acme.com"),
+            new Claim("name", "Admin User"));
+        SetupTenantContext(null);
+        var sut = CreateService(environmentName: Environments.Development, allowTenantAdminFallback: true);
+
+        var result = await sut.GetCurrentUserAsync();
+
+        result!.Roles.Should().Equal("TenantAdmin");
+    }
+
+    [Theory]
+    [InlineData("Production", true)]
+    [InlineData("Development", false)]
+    public async Task GetCurrentUserAsync_FallbackWithoutDevelopmentAndFlag_GrantsNoRoles(string environment, bool flag)
+    {
+        SetupAuthState(
+            new Claim(ClaimTypes.Email, "admin@acme.com"),
+            new Claim("name", "Admin User"));
+        SetupTenantContext(null);
+        var sut = CreateService(environmentName: environment, allowTenantAdminFallback: flag);
+
+        var result = await sut.GetCurrentUserAsync();
+
+        result!.Roles.Should().BeEmpty();
     }
 
     // ── Fallback DisplayName extraction ──
@@ -225,7 +271,7 @@ public class UserContextServiceTests
     // ── TenantService URL not configured ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenTenantServiceUrlNotConfigured_FallsBackToTenantAdmin()
+    public async Task GetCurrentUserAsync_WhenTenantServiceUrlNotConfigured_GrantsNoRoles()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "admin@acme.com"),
@@ -237,7 +283,7 @@ public class UserContextServiceTests
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
+        result.Roles.Should().BeEmpty();
     }
 
     // ── OID lookup succeeds ──
@@ -324,10 +370,10 @@ public class UserContextServiceTests
         result.Roles.Should().Contain("MemberServices");
     }
 
-    // ── Empty roles defaults to TenantAdmin ──
+    // ── Empty roles grant nothing ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenEmailLookupFindsUserWithEmptyRoles_DefaultsToTenantAdmin()
+    public async Task GetCurrentUserAsync_WhenEmailLookupFindsUserWithEmptyRoles_GrantsNoRoles()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "noroles@acme.com"),
@@ -346,13 +392,15 @@ public class UserContextServiceTests
         var result = await sut.GetCurrentUserAsync();
 
         result.Should().NotBeNull();
-        result!.Roles.Should().Contain("TenantAdmin");
+        result!.UserId.Should().Be("usr-empty");
+        result.Roles.Should().BeEmpty();
+        result.Permissions.Should().BeEmpty();
     }
 
-    // ── Inactive user falls back to TenantAdmin ──
+    // ── Inactive user gets no roles ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenUserStatusIsNotActive_FallsBackToTenantAdmin()
+    public async Task GetCurrentUserAsync_WhenUserStatusIsNotActive_GrantsNoRoles()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "inactive@acme.com"),
@@ -372,7 +420,7 @@ public class UserContextServiceTests
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
+        result.Roles.Should().BeEmpty();
     }
 
     // ── OID backfill ──
@@ -454,7 +502,7 @@ public class UserContextServiceTests
     // ── HTTP exception falls back ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenHttpExceptionOccurs_FallsBackToTenantAdmin()
+    public async Task GetCurrentUserAsync_WhenHttpExceptionOccurs_GrantsNoRoles()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "admin@acme.com"),
@@ -470,7 +518,7 @@ public class UserContextServiceTests
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
+        result.Roles.Should().BeEmpty();
     }
 
     // ── Caching ──
@@ -548,26 +596,14 @@ public class UserContextServiceTests
     [Fact]
     public async Task HasPermission_ExactMatch_WorksCaseInsensitive()
     {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(null); // fallback grants TenantAdmin which has *:*
-        var sut = CreateService();
-        await sut.GetCurrentUserAsync();
-
-        // TenantAdmin has "*:*" which matches everything
+        var sut = await CreateServiceWithRole("ClaimsExaminer"); // has claims:read
         sut.HasPermission("Claims:Read").Should().BeTrue();
     }
 
     [Fact]
     public async Task HasRole_ExactMatch_WorksCaseInsensitive()
     {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(null);
-        var sut = CreateService();
-        await sut.GetCurrentUserAsync();
+        var sut = await CreateServiceWithRole("TenantAdmin");
 
         sut.HasRole("tenantadmin").Should().BeTrue();
         sut.HasRole("TenantAdmin").Should().BeTrue();
@@ -576,12 +612,7 @@ public class UserContextServiceTests
     [Fact]
     public async Task HasAnyRole_ReturnsTrueIfAnyRoleMatches()
     {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(null);
-        var sut = CreateService();
-        await sut.GetCurrentUserAsync();
+        var sut = await CreateServiceWithRole("TenantAdmin");
 
         sut.HasAnyRole("Finance", "TenantAdmin", "Unknown").Should().BeTrue();
     }

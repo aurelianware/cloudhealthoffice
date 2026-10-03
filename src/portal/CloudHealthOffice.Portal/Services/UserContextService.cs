@@ -56,6 +56,7 @@ public class UserContextService : IUserContextService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<UserContextService> _logger;
+    private readonly IHostEnvironment? _environment;
     private UserContext? _cachedContext;
     private bool _loaded;
 
@@ -64,8 +65,10 @@ public class UserContextService : IUserContextService
         ITenantContextService tenantContextService,
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<UserContextService> logger)
+        ILogger<UserContextService> logger,
+        IHostEnvironment? environment = null)
     {
+        _environment = environment;
         _authenticationStateProvider = authenticationStateProvider;
         _tenantContextService = tenantContextService;
         _httpClient = httpClient;
@@ -131,30 +134,13 @@ public class UserContextService : IUserContextService
         if (tenantContext == null)
         {
             // Tenant context unavailable (e.g. tid claim missing or MongoDB unreachable).
-            // Grant TenantAdmin fallback so the portal remains functional for bootstrapping.
-            _logger.LogWarning("Tenant context unavailable for {RedactedEmail}, using TenantAdmin fallback", RedactEmail(email));
-
-            var fallbackName = principal.FindFirst("name")?.Value
-                               ?? principal.FindFirst(ClaimTypes.Name)?.Value
-                               ?? email;
+            _logger.LogWarning("Tenant context unavailable for {RedactedEmail}", RedactEmail(email));
 
             var azureTenantId = principal.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
                                 ?? principal.FindFirst("tid")?.Value
                                 ?? "unknown";
 
-            _cachedContext = new UserContext
-            {
-                UserId = "fallback",
-                Email = email,
-                DisplayName = fallbackName,
-                FirstName = fallbackName.Split(' ').FirstOrDefault() ?? fallbackName,
-                LastName = fallbackName.Split(' ').Skip(1).FirstOrDefault() ?? "",
-                TenantId = azureTenantId,
-                Roles = new List<string> { "TenantAdmin" },
-                Department = "Administration",
-                Permissions = ExpandPermissions(new List<string> { "TenantAdmin" })
-            };
-
+            _cachedContext = FallbackContext(principal, email, azureTenantId);
             _loaded = true;
             return _cachedContext;
         }
@@ -167,7 +153,7 @@ public class UserContextService : IUserContextService
             var baseUrl = _configuration["Services:TenantService"];
             if (string.IsNullOrEmpty(baseUrl))
             {
-                _logger.LogWarning("Services:TenantService configuration is missing, using TenantAdmin fallback");
+                _logger.LogWarning("Services:TenantService configuration is missing");
                 throw new InvalidOperationException("TenantService base URL is not configured.");
             }
 
@@ -212,9 +198,8 @@ public class UserContextService : IUserContextService
 
             if (user != null && string.Equals(user.Status, "Active", StringComparison.OrdinalIgnoreCase))
             {
-                var roles = user.Roles is { Count: > 0 }
-                    ? user.Roles
-                    : new List<string> { "TenantAdmin" };
+                // A user with no roles has no permissions; never promote them.
+                var roles = user.Roles ?? new List<string>();
 
                 _cachedContext = new UserContext
                 {
@@ -236,34 +221,52 @@ public class UserContextService : IUserContextService
                 return _cachedContext;
             }
 
-            _logger.LogDebug("No active TenantUser found for {RedactedEmail} in tenant {TenantId}, using fallback",
+            _logger.LogWarning("No active TenantUser found for {RedactedEmail} in tenant {TenantId}",
                 RedactEmail(email), tenantContext.TenantId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch user context from tenant-service, using TenantAdmin fallback");
+            _logger.LogWarning(ex, "Failed to fetch user context from tenant-service");
         }
 
-        // Fallback: grant TenantAdmin so the portal doesn't break during development
+        _cachedContext = FallbackContext(principal, email, tenantContext.TenantId);
+        _loaded = true;
+        return _cachedContext;
+    }
+
+    /// <summary>
+    /// The context for a signed-in user whose CHO user record could not be
+    /// loaded (unknown, inactive, or tenant-service unavailable). It grants no
+    /// roles. Only a Development host with
+    /// <c>Authentication:AllowTenantAdminFallback</c> set gets TenantAdmin,
+    /// for bootstrapping a local environment.
+    /// </summary>
+    private UserContext FallbackContext(ClaimsPrincipal principal, string email, string tenantId)
+    {
         var displayName = principal.FindFirst("name")?.Value
                           ?? principal.FindFirst(ClaimTypes.Name)?.Value
                           ?? email;
 
-        _cachedContext = new UserContext
+        var grantAdmin = _environment?.IsDevelopment() == true
+                         && string.Equals(_configuration["Authentication:AllowTenantAdminFallback"], "true",
+                             StringComparison.OrdinalIgnoreCase);
+        var roles = grantAdmin ? new List<string> { "TenantAdmin" } : new List<string>();
+
+        if (grantAdmin)
+            _logger.LogWarning("Granting development TenantAdmin fallback to {RedactedEmail}", RedactEmail(email));
+
+        return new UserContext
         {
             UserId = "fallback",
             Email = email,
             DisplayName = displayName,
             FirstName = displayName.Split(' ').FirstOrDefault() ?? displayName,
             LastName = displayName.Split(' ').Skip(1).FirstOrDefault() ?? "",
-            TenantId = tenantContext.TenantId,
-            Roles = new List<string> { "TenantAdmin" },
-            Department = "Administration",
-            Permissions = ExpandPermissions(new List<string> { "TenantAdmin" })
+            TenantId = tenantId,
+            Roles = roles,
+            Department = grantAdmin ? "Administration" : string.Empty,
+            Permissions = ExpandPermissions(roles)
         };
-
-        _loaded = true;
-        return _cachedContext;
     }
 
     private static string RedactEmail(string email)
