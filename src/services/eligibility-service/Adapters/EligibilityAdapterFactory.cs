@@ -87,8 +87,11 @@ public class EligibilityAdapterFactory
             var tenantUrl = _configuration["Services:TenantService"]
                 ?? "http://tenant-service.cloudhealthoffice/api/v1";
             var httpClient = _httpClientFactory.CreateClient("EligibilityDefault");
-            var response = await httpClient.GetAsync(
-                $"{tenantUrl}/tenants/{tenantId}", ct);
+            // Naming the tenant lets the outbound token handler mint a service
+            // token when there is no caller (the batch eligibility worker).
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{tenantUrl}/tenants/{tenantId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await httpClient.SendAsync(request, ct);
 
             if (response.IsSuccessStatusCode)
             {

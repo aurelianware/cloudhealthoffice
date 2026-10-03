@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EligibilityService.Controllers;
@@ -8,7 +9,7 @@ namespace EligibilityService.Controllers;
 /// <summary>
 /// Development-only 276/277 claim status inquiry against an existing claim
 /// transmission. Disabled outside Development. Tenant is taken from
-/// X-Tenant-ID / the original transmission — never from an unauthenticated
+/// the caller's token / the original transmission — never from an unauthenticated
 /// production route.
 /// </summary>
 [ApiController]
@@ -106,9 +107,8 @@ public sealed class GatewayClaimStatusDemoController : ControllerBase
             return (null, NotFound(new { error = "Transmission not found." }));
         }
 
-        var contextTenant = HttpContext.Items["TenantId"]?.ToString();
-        if (!string.IsNullOrWhiteSpace(contextTenant) &&
-            !string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
+        var contextTenant = HttpContext.GetTenantId();
+        if (!string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
         {
             return (null, BadRequest(new { error = "Tenant does not match the claim transmission." }));
         }

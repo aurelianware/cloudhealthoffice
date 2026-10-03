@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -12,7 +13,7 @@ public class GatewayClaimStatusDemoTests : IClassFixture<EligibilityApiFactory>
     public GatewayClaimStatusDemoTests(EligibilityApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
     }
 
@@ -79,7 +80,7 @@ public class GatewayClaimStatusDemoTests : IClassFixture<EligibilityApiFactory>
         var transmissionId = submitDoc.RootElement.GetProperty("result").GetProperty("transmissionId").GetString();
         Assert.False(string.IsNullOrWhiteSpace(transmissionId));
 
-        using var other = _factory.CreateClient();
+        using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
         var history = await other.GetAsync($"/api/dev/gateway/claims/{transmissionId}/status");
         Assert.Equal(HttpStatusCode.BadRequest, history.StatusCode);

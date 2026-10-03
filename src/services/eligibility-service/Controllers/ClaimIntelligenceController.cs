@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EligibilityService.Controllers;
@@ -27,11 +28,7 @@ public sealed class ClaimIntelligenceController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(string claimId, CancellationToken ct)
     {
-        var tenantId = HttpContext.Items["TenantId"]?.ToString();
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest(new { error = "Tenant is required." });
-        }
+        var tenantId = HttpContext.GetTenantId();
 
         if (string.IsNullOrWhiteSpace(claimId))
         {

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -14,7 +15,7 @@ public class GatewayRemittanceDemoTests : IClassFixture<EligibilityApiFactory>
     public GatewayRemittanceDemoTests(EligibilityApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
     }
 
@@ -155,7 +156,7 @@ public class GatewayRemittanceDemoTests : IClassFixture<EligibilityApiFactory>
         using var historyDoc = JsonDocument.Parse(await history.Content.ReadAsStringAsync());
         var receiptId = historyDoc.RootElement[0].GetProperty("receiptId").GetString();
 
-        using var other = _factory.CreateClient();
+        using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
         var post = await other.PostAsJsonAsync($"/api/dev/gateway/remittance/{receiptId}/post", new { });
         Assert.Equal(HttpStatusCode.BadRequest, post.StatusCode);
@@ -184,7 +185,7 @@ public class GatewayRemittanceDemoTests : IClassFixture<EligibilityApiFactory>
         using var submitDoc = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
         var transmissionId = submitDoc.RootElement.GetProperty("result").GetProperty("transmissionId").GetString();
 
-        using var other = _factory.CreateClient();
+        using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
         var history = await other.GetAsync($"/api/dev/gateway/claims/{transmissionId}/remittance");
         Assert.Equal(HttpStatusCode.BadRequest, history.StatusCode);

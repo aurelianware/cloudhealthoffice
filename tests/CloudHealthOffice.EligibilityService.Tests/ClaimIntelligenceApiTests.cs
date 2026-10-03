@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -13,7 +14,7 @@ public class ClaimIntelligenceApiTests : IClassFixture<EligibilityApiFactory>
     public ClaimIntelligenceApiTests(EligibilityApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
     }
 
@@ -62,18 +63,19 @@ public class ClaimIntelligenceApiTests : IClassFixture<EligibilityApiFactory>
     public async Task Get_OtherTenantHeader_IsNotFound()
     {
         await SubmitAsync("CLM-INTEL-ISO");
-        using var other = _factory.CreateClient();
+        using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
         var response = await other.GetAsync("/api/claims/CLM-INTEL-ISO/intelligence");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
-    public async Task Get_MissingTenant_IsBadRequest()
+    public async Task Get_MissingTenant_IsUnauthorized()
     {
+        // No token means no tenant: the request is refused before the controller runs.
         using var anonymous = _factory.CreateClient();
         var response = await anonymous.GetAsync("/api/claims/CLM-INTEL-ISO/intelligence");
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

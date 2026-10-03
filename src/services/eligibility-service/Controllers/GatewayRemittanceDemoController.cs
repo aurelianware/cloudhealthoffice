@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EligibilityService.Controllers;
@@ -43,7 +44,7 @@ public sealed class GatewayRemittanceDemoController : ControllerBase
             return NotFound();
         }
 
-        var contextTenant = HttpContext.Items["TenantId"]?.ToString();
+        var contextTenant = HttpContext.GetTenantId();
         if (!string.IsNullOrWhiteSpace(body.TransmissionId))
         {
             var transmission = await _transmissions.GetByIdAsync(body.TransmissionId, ct);
@@ -52,8 +53,7 @@ public sealed class GatewayRemittanceDemoController : ControllerBase
                 return NotFound(new { error = "Transmission not found." });
             }
 
-            if (!string.IsNullOrWhiteSpace(contextTenant) &&
-                !string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
+            if (!string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
             {
                 return BadRequest(new { error = "Tenant does not match the claim transmission." });
             }
@@ -87,9 +87,8 @@ public sealed class GatewayRemittanceDemoController : ControllerBase
             return NotFound(new { error = "Transmission not found." });
         }
 
-        var contextTenant = HttpContext.Items["TenantId"]?.ToString();
-        if (!string.IsNullOrWhiteSpace(contextTenant) &&
-            !string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
+        var contextTenant = HttpContext.GetTenantId();
+        if (!string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
         {
             return BadRequest(new { error = "Tenant does not match the claim transmission." });
         }
@@ -106,11 +105,7 @@ public sealed class GatewayRemittanceDemoController : ControllerBase
             return NotFound();
         }
 
-        var tenantId = HttpContext.Items["TenantId"]?.ToString();
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest(new { error = "Tenant is required." });
-        }
+        var tenantId = HttpContext.GetTenantId();
 
         var result = await _poster.PostAsync(
             new RemittancePostRequest { ReceiptId = receiptId, TenantId = tenantId },

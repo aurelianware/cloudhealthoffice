@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -18,7 +19,7 @@ public class EligibilityControllerTests : IClassFixture<EligibilityApiFactory>
     public EligibilityControllerTests(EligibilityApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
     }
 
@@ -197,16 +198,13 @@ public class EligibilityControllerTests : IClassFixture<EligibilityApiFactory>
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task MissingTenantHeader_ReturnsBadRequestOrUnauthorized()
+    public async Task MissingTenantHeader_ReturnsUnauthorized()
     {
         using var noTenantClient = _factory.CreateClient();
-        // Don't add X-Tenant-ID header
+        // No token and no X-Tenant-ID header
 
         var response = await noTenantClient.GetAsync("/api/eligibility/check?subscriberId=SUB-001");
 
-        Assert.True(
-            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized
-                or HttpStatusCode.OK, // Some services tolerate missing tenant for non-data endpoints
-            $"Expected 400/401 for missing tenant but got {response.StatusCode}");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }
