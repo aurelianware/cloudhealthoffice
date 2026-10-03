@@ -15,9 +15,9 @@ namespace EncounterService.Models;
 public class Encounter
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Always set by the repository from the token tenant; a value in a request body is ignored.
     /// </summary>
-    [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
@@ -267,13 +267,13 @@ public class Encounter
     public string? Notes { get; set; }
 
     /// <summary>
-    /// Audit: Created by user/system
+    /// Audit: Created by user/system. Set from the token subject; a value in a request body is ignored.
     /// </summary>
     [StringLength(200)]
     public string? CreatedBy { get; set; }
 
     /// <summary>
-    /// Audit: Last updated by user/system
+    /// Audit: Last updated by user/system. Set from the token subject; a value in a request body is ignored.
     /// </summary>
     [StringLength(200)]
     public string? LastUpdatedBy { get; set; }

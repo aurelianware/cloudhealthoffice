@@ -3,13 +3,13 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
 using EncounterService;
-using EncounterService.Middleware;
 using EncounterService.Repositories;
 using EncounterService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -30,6 +30,14 @@ builder.Services.AddSwaggerGen(c =>
                      "payer acknowledgment tracking, and correction/resubmission workflows."
     });
     c.UseInlineDefinitionsForEnums();
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "encounters:read";
+    auth.DefaultWritePermission = "encounters:write";
 });
 
 // Database Configuration
@@ -73,7 +81,7 @@ else
 // 837 EDI generator
 builder.Services.AddScoped<IEncounter837Service, Encounter837Service>();
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
 // Health checks (MongoDB or Cosmos DB)
@@ -116,12 +124,10 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware
-app.UseTenantMiddleware();
-
 app.UseCors("AllowAll");
 
-app.UseAuthorization();
+// Authentication, then tenant from the token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
-using EncounterService.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using EncounterService.Models;
 using EncounterService.Repositories;
 using EncounterService.Services;
@@ -15,17 +15,24 @@ public class EncountersController : ControllerBase
     private readonly IEncounterRepository _encounterRepository;
     private readonly IEncounter837Service _edi837Service;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<EncountersController> _logger;
+
+    // The tenant comes from the validated token (shared TenantMiddleware via
+    // UseChoAuthentication); the repositories read it from HttpContext.Items.
+    // The acting user is the token subject (ICurrentActor.UserId).
 
     public EncountersController(
         IEncounterRepository encounterRepository,
         IEncounter837Service edi837Service,
         IConfiguration configuration,
+        ICurrentActor actor,
         ILogger<EncountersController> logger)
     {
         _encounterRepository = encounterRepository;
         _edi837Service = edi837Service;
         _configuration = configuration;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -55,6 +62,9 @@ public class EncountersController : ControllerBase
         encounter.Status = EncounterStatus.Pending;
         encounter.CreatedDate = DateTime.UtcNow;
         encounter.LastUpdatedDate = DateTime.UtcNow;
+        // Body-supplied createdBy / lastUpdatedBy are ignored: the actor is the token subject.
+        encounter.CreatedBy = _actor.UserId;
+        encounter.LastUpdatedBy = _actor.UserId;
 
         if (string.IsNullOrEmpty(encounter.EncounterControlNumber))
             encounter.EncounterControlNumber = GenerateControlNumber();
@@ -149,6 +159,7 @@ public class EncountersController : ControllerBase
 
         encounter.Status = statusUpdate.Status;
         encounter.LastUpdatedDate = DateTime.UtcNow;
+        encounter.LastUpdatedBy = _actor.UserId;
 
         if (!string.IsNullOrEmpty(statusUpdate.Edi999Status))
             encounter.Edi999Status = statusUpdate.Edi999Status;
@@ -231,6 +242,7 @@ public class EncountersController : ControllerBase
             encounter.BatchId = batchId;
             encounter.Status = EncounterStatus.Queued;
             encounter.LastUpdatedDate = DateTime.UtcNow;
+            encounter.LastUpdatedBy = _actor.UserId;
             await _encounterRepository.UpdateAsync(encounter);
             encounterIds.Add(encounter.Id);
         }
@@ -272,6 +284,7 @@ public class EncountersController : ControllerBase
             encounter.Status = EncounterStatus.Submitted;
             encounter.SubmittedDate = DateTime.UtcNow;
             encounter.LastUpdatedDate = DateTime.UtcNow;
+            encounter.LastUpdatedBy = _actor.UserId;
             await _encounterRepository.UpdateAsync(encounter);
         }
 
@@ -392,6 +405,8 @@ public class EncountersController : ControllerBase
             Status = EncounterStatus.Pending,
             CreatedDate = DateTime.UtcNow,
             LastUpdatedDate = DateTime.UtcNow,
+            CreatedBy = _actor.UserId,
+            LastUpdatedBy = _actor.UserId,
             Notes = $"Void for correction. Original: {original.EncounterControlNumber}. Reason: {request.CorrectionReason}"
         };
 
@@ -406,12 +421,16 @@ public class EncountersController : ControllerBase
         replacement.Status = EncounterStatus.Pending;
         replacement.CreatedDate = DateTime.UtcNow;
         replacement.LastUpdatedDate = DateTime.UtcNow;
+        // Body-supplied createdBy / lastUpdatedBy are ignored: the actor is the token subject.
+        replacement.CreatedBy = _actor.UserId;
+        replacement.LastUpdatedBy = _actor.UserId;
         replacement.TotalChargeAmount = replacement.ServiceLines.Sum(l => l.ChargeAmount * l.Units);
         replacement.Notes = $"Correction for: {original.EncounterControlNumber}. Reason: {request.CorrectionReason}";
 
         // 3. Mark original as CorrectionSubmitted
         original.Status = EncounterStatus.CorrectionSubmitted;
         original.LastUpdatedDate = DateTime.UtcNow;
+        original.LastUpdatedBy = _actor.UserId;
         original.Notes = string.IsNullOrEmpty(original.Notes)
             ? $"Correction submitted: {request.CorrectionReason}"
             : $"{original.Notes}\n{DateTime.UtcNow:yyyy-MM-dd HH:mm}: Correction submitted: {request.CorrectionReason}";
@@ -481,6 +500,8 @@ public class EncountersController : ControllerBase
             Status = EncounterStatus.Pending,
             CreatedDate = DateTime.UtcNow,
             LastUpdatedDate = DateTime.UtcNow,
+            CreatedBy = _actor.UserId,
+            LastUpdatedBy = _actor.UserId,
             Notes = $"Resubmission of rejected encounter: {original.EncounterControlNumber}"
         };
 
@@ -508,6 +529,7 @@ public class EncountersController : ControllerBase
 
         encounter.Status = EncounterStatus.Voided;
         encounter.LastUpdatedDate = DateTime.UtcNow;
+        encounter.LastUpdatedBy = _actor.UserId;
         await _encounterRepository.UpdateAsync(encounter);
 
         return NoContent();
