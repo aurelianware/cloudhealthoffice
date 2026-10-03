@@ -250,8 +250,8 @@ public class ProviderPipelineAuthTests : IClassFixture<ProviderPipelineAuthTests
     [Fact]
     public async Task RoleWithoutProvidersPermission_IsForbidden()
     {
-        // MemberServices holds no providers permission.
-        var response = await Client(Tenant, "ms-1", ChoRolePermissions.MemberServices).GetAsync(ProviderPath);
+        // UMCoordinator holds no providers permission.
+        var response = await Client(Tenant, "um-1", ChoRolePermissions.UMCoordinator).GetAsync(ProviderPath);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         _factory.Providers.VerifyNoOtherCalls();

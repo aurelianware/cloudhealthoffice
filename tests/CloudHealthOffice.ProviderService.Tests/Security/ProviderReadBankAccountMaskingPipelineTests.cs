@@ -119,17 +119,11 @@ public class ProviderReadBankAccountMaskingPipelineTests : IClassFixture<Provide
         },
     };
 
-    /// <summary>
-    /// MemberServices with providers:read (the grant made on
-    /// fix/security-authn-tenant-isolation, e8e8446), as explicit permissions.
-    /// </summary>
+    /// <summary>MemberServices, which holds providers:read.</summary>
     private HttpClient MemberServices()
     {
-        var permissions = ChoRolePermissions.ForRole(ChoRolePermissions.MemberServices).Append("providers:read").ToArray();
-        var client = _factory.CreateDefaultClient();
-        var token = ChoDevelopmentAuth.UserTokenIssuer().IssueUserToken(
-            "user-member-services", Tenant, [ChoRolePermissions.MemberServices], permissions);
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var client = _factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("user-member-services", ChoRolePermissions.MemberServices));
         client.DefaultRequestHeaders.Add("X-Tenant-ID", Tenant);
         return client;
     }

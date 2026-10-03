@@ -225,7 +225,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
             body.Should().NotContain(NewAccount).And.NotContain(NewRouting).And.NotContain("12-3456789");
         }
 
-        var unrelated = await Client("user-ms", ChoRolePermissions.MemberServices).GetAsync(ChangesPath + "/pending");
+        var unrelated = await Client("user-um", ChoRolePermissions.UMCoordinator).GetAsync(ChangesPath + "/pending");
         unrelated.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
