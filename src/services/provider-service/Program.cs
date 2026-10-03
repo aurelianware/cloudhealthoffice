@@ -18,7 +18,10 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
-    .AddCloudHealthOfficeJsonOptions();
+    .AddCloudHealthOfficeJsonOptions()
+    // Responses never carry full bank-account, routing or tax numbers.
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
+        new ProviderService.Security.MaskedProviderBankAccountJsonConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

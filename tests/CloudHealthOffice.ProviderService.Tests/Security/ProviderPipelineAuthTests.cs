@@ -66,6 +66,9 @@ public class ProviderPipelineAuthTests : IClassFixture<ProviderPipelineAuthTests
                 services.AddSingleton(_ => Organizations.Object);
                 services.RemoveAll<INetworkRosterService>();
                 services.AddSingleton(_ => Roster.Object);
+                // Provider reads look up the active bank account; keep it off Mongo.
+                services.RemoveAll<IProviderBankAccountRepository>();
+                services.AddSingleton<IProviderBankAccountRepository>(new Fakes.InMemoryProviderBankAccountRepository());
 
                 services.AddHttpClient(ProviderTenantConfigCache.HttpClientName)
                     .ConfigurePrimaryHttpMessageHandler(() => TenantServiceOutbound);

@@ -122,10 +122,21 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
     {
         var record = await _repository.GetAsync(provider.TenantId, provider.ProviderId, ct);
         var active = record != null ? record.Active : provider.BankAccount;
+        var pending = record?.Pending?.Proposed;
+
+        // Reads return the account masked, so a client that PUTs back what it
+        // read sends a masked copy: no full numbers, the same last 4. That is
+        // an echo, not a change.
+        if (BankAccountMasking.IsMaskedOnly(account))
+        {
+            return !BankAccountMasking.SameMaskedView(account, active)
+                && !BankAccountMasking.SameMaskedView(account, pending);
+        }
+
         var candidate = Clone(account);
         BankAccountMasking.DeriveLast4(candidate);
         if (BankAccountMasking.SameAccount(active, candidate)) return false;
-        if (record?.Pending?.Proposed is { } pending && BankAccountMasking.SameAccount(pending, candidate)) return false;
+        if (pending != null && BankAccountMasking.SameAccount(pending, candidate)) return false;
         return true;
     }
 
@@ -141,6 +152,12 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
 
         var details = Clone(proposed);
         BankAccountMasking.DeriveLast4(details);
+        if (BankAccountMasking.IsMaskedOnly(details))
+        {
+            // No numbers supplied: client-sent last-4 values describe nothing.
+            details.RoutingNumberLast4 = null;
+            details.AccountNumberLast4 = null;
+        }
 
         var change = new PendingBankAccountChange
         {

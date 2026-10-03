@@ -285,6 +285,8 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
         var paid = await PaymentsReadAsync();
         paid!.AccountNumberLast4.Should().Be("7777");
         paid.RoutingNumberLast4.Should().Be("0089");
+        _factory.BankAccounts.Records.Single().Active!.AccountNumber
+            .Should().Be(NewAccount, "request bodies keep their full numbers; only responses are masked");
 
         var history = await (await ProviderRelations().GetAsync(ChangesPath)).Content.ReadAsStringAsync();
         history.Should().Contain(change.Id).And.Contain("3333");

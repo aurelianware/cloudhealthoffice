@@ -237,6 +237,23 @@ public static class BankAccountMasking
             && a.W9OnFile == b.W9OnFile;
     }
 
+    /// <summary>No full routing, account or tax number: what a masked read returns.</summary>
+    public static bool IsMaskedOnly(ProviderBankAccount account)
+        => string.IsNullOrEmpty(account.RoutingNumber)
+           && string.IsNullOrEmpty(account.AccountNumber)
+           && string.IsNullOrEmpty(account.TaxId);
+
+    /// <summary>Whether two accounts look the same once masked (last 4 and the non-secret fields).</summary>
+    public static bool SameMaskedView(ProviderBankAccount? a, ProviderBankAccount? b)
+    {
+        var ma = Mask(a);
+        var mb = Mask(b);
+        if (ma == null || mb == null) return ma == null && mb == null;
+        return SameAccount(ma, mb)
+            && string.Equals(ma.RoutingNumberLast4 ?? string.Empty, mb.RoutingNumberLast4 ?? string.Empty, StringComparison.Ordinal)
+            && string.Equals(ma.AccountNumberLast4 ?? string.Empty, mb.AccountNumberLast4 ?? string.Empty, StringComparison.Ordinal);
+    }
+
     private static string? Last4(string? value)
         => string.IsNullOrEmpty(value) ? null : value.Length >= 4 ? value[^4..] : value;
 }

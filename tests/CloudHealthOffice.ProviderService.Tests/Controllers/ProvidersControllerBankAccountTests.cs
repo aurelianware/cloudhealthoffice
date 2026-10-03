@@ -101,6 +101,19 @@ public class ProvidersControllerBankAccountTests
     }
 
     [Fact]
+    public async Task Update_echoing_the_masked_account_a_read_returned_creates_no_change()
+    {
+        // GET responses mask the account; a client that PUTs the GET body back
+        // (mcc-platform-validator does) sends the masked copy.
+        var head = await Head();
+
+        await _controller.UpdateProvider(ProviderId, Body(head, BankAccountMasking.Mask(head.BankAccount)));
+
+        _bankAccounts.Records.Should().BeEmpty();
+        (await Head()).BankAccount!.AccountNumber.Should().Be(OldAccount);
+    }
+
+    [Fact]
     public async Task Update_without_an_account_keeps_the_account()
     {
         var head = await Head();

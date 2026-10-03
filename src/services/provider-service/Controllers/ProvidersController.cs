@@ -90,7 +90,7 @@ public class ProvidersController : ControllerBase
             return NotFound($"Provider with NPI {npi} not found");
         }
 
-        return Ok(response.Provider.ToProvider());
+        return Ok(await WithActiveBankAccountAsync(response.Provider.ToProvider()));
     }
 
     /// <summary>
@@ -546,7 +546,7 @@ public class ProvidersController : ControllerBase
             return NotFound($"Provider {id} not found");
         }
 
-        return Ok(response.Provider.ToProvider());
+        return Ok(await WithActiveBankAccountAsync(response.Provider.ToProvider()));
     }
 
     /// <summary>
@@ -904,6 +904,33 @@ public class ProvidersController : ControllerBase
         provider.CreatedBy = existing is null ? actor : existing.CreatedBy;
         provider.LastUpdatedBy = actor;
         provider.ActivatedBy = existing?.ActivatedBy;
+    }
+
+    /// <summary>
+    /// Shows the provider's active (approved) bank account from its
+    /// bank-account record instead of the copy on the provider row, which
+    /// goes stale once a change is approved. Masked here and again by the
+    /// response serializer (<see cref="MaskedProviderBankAccountJsonConverter"/>).
+    /// If the record cannot be read, the masked row copy is shown.
+    /// </summary>
+    private async Task<Provider> WithActiveBankAccountAsync(Provider provider)
+    {
+        if (!string.IsNullOrEmpty(provider.ProviderId))
+        {
+            if (string.IsNullOrEmpty(provider.TenantId)) provider.TenantId = TenantId;
+            try
+            {
+                provider.BankAccount = await _bankAccountChanges.GetActiveAccountAsync(provider);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Could not read the bank-account record of provider {ProviderId}; showing the provider row's account, masked",
+                    SanitizeForLog(provider.ProviderId));
+            }
+        }
+        provider.BankAccount = BankAccountMasking.Mask(provider.BankAccount);
+        return provider;
     }
 
     /// <summary>Removes the bank account from a body-bound provider and returns it.</summary>
