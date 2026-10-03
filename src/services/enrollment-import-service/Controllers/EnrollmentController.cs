@@ -107,6 +107,8 @@ public class EnrollmentController : ControllerBase
     /// partner's test file while filling in the gaps before go-live.
     /// </summary>
     [HttpPost("plan-code-gap-report")]
+    // Read-only: resolves plan codes and writes nothing.
+    [RequirePermission("enrollment:read")]
     public async Task<ActionResult<PlanCodeGapReport>> PlanCodeGapReport(
         [FromBody] Enrollment834 enrollment,
         CancellationToken ct)
@@ -119,6 +121,7 @@ public class EnrollmentController : ControllerBase
 
     /// <summary>Same as <see cref="PlanCodeGapReport"/>, but for a raw X12 834 file upload.</summary>
     [HttpPost("plan-code-gap-report/raw834")]
+    [RequirePermission("enrollment:read")]
     [RequestSizeLimit(20_000_000)]
     public async Task<ActionResult<PlanCodeGapReport>> PlanCodeGapReportRaw834(
         [FromForm] IFormFile file,

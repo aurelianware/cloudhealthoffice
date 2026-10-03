@@ -38,7 +38,8 @@ public static class ChoRolePermissions
             [
                 .. ExaminerPermissions,
                 "claims:override-approve", "workqueue:assign", "workqueue:reassign",
-                "reports:claims", "claims:void", "claims:adjust", "trading-partners:read"
+                "reports:claims", "claims:void", "claims:adjust", "trading-partners:read",
+                "encounters:read", "encounters:write"
             ],
             [MemberServices] =
             [
@@ -51,7 +52,9 @@ public static class ChoRolePermissions
             [
                 "members:read", "members:write",
                 "enrollment:read", "enrollment:process",
-                "coverage:read", "coverage:write", "reference-data:read"
+                "coverage:read", "coverage:write", "reference-data:read",
+                // Imports resolve plan codes in benefit-plan-service.
+                "benefits:read"
             ],
             [UMCoordinator] =
             [
@@ -77,7 +80,8 @@ public static class ChoRolePermissions
                 "billing:read", "billing:run",
                 "finance:read", "finance:write",
                 "reports:financial", "claims:read", "contracts:read",
-                "trading-partners:read", "risk-adjustment:read"
+                "trading-partners:read", "risk-adjustment:read",
+                "encounters:read"
             ],
             // The checker: approves and releases payments someone else prepared.
             [FinanceApprover] =

@@ -36,11 +36,16 @@ public class HttpBenefitPlanServiceClient : IBenefitPlanServiceClient
 
         if (!response.IsSuccessStatusCode)
         {
+            // Only 404 means "no mapping". A refusal (401/403) or an outage is
+            // not a plan-code gap, so it fails the lookup instead of being
+            // counted as an unresolved code.
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             _logger.LogWarning(
                 "benefit-plan-service rejected plan-code resolve for group {GroupNumber} code {ExternalCode}: {Status} {Body}",
                 SanitizeForLog(groupNumber), SanitizeForLog(externalPlanCode), response.StatusCode, SanitizeForLog(body));
-            return null;
+            throw new HttpRequestException(
+                $"benefit-plan-service plan-code resolve failed with {(int)response.StatusCode}.",
+                null, response.StatusCode);
         }
 
         var result = await response.Content.ReadFromJsonAsync<PlanCodeMappingResponseDto>(cancellationToken: ct)

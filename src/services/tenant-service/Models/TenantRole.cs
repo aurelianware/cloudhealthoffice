@@ -80,7 +80,8 @@ public static class StandardRoles
             "members:read", "accumulators:read", "providers:read",
             // Supervisor-specific permissions
             "claims:override-approve", "workqueue:assign", "workqueue:reassign",
-            "reports:claims", "claims:void", "claims:adjust"
+            "reports:claims", "claims:void", "claims:adjust",
+            "encounters:read", "encounters:write"
         }
     };
 
@@ -106,7 +107,7 @@ public static class StandardRoles
         {
             "members:read", "members:write",
             "enrollment:read", "enrollment:process",
-            "coverage:read", "coverage:write"
+            "coverage:read", "coverage:write", "benefits:read"
         }
     };
 
@@ -147,7 +148,7 @@ public static class StandardRoles
         {
             "payments:read", "payments:run",
             "billing:read", "billing:run",
-            "reports:financial", "claims:read"
+            "reports:financial", "claims:read", "encounters:read"
         }
     };
 

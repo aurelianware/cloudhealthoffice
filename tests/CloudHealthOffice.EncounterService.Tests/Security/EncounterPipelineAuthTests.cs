@@ -169,8 +169,8 @@ public class EncounterPipelineAuthTests : IClassFixture<EncounterPipelineAuthTes
     [Fact]
     public async Task RoleWithoutEncountersRead_IsForbidden()
     {
-        // Finance holds neither encounters:read nor a *:read wildcard.
-        var client = Client("tenant-1", "dev-user", ChoRolePermissions.Finance);
+        // ClaimsExaminer holds neither encounters:read nor a *:read wildcard.
+        var client = Client("tenant-1", "dev-user", ChoRolePermissions.ClaimsExaminer);
 
         var response = await client.GetAsync(ByIdPath);
 
@@ -178,11 +178,13 @@ public class EncounterPipelineAuthTests : IClassFixture<EncounterPipelineAuthTes
         _factory.Encounters.Verify(r => r.GetByIdAsync(It.IsAny<string>()), Times.Never);
     }
 
-    [Fact]
-    public async Task ReadOnlyRole_CanRead()
+    [Theory]
+    [InlineData(ChoRolePermissions.ComplianceOfficer)] // *:read
+    [InlineData(ChoRolePermissions.Finance)]           // encounters:read
+    [InlineData(ChoRolePermissions.ClaimsSupervisor)]  // encounters:read + write
+    public async Task RolesWithEncountersRead_CanRead(string role)
     {
-        // ComplianceOfficer holds *:read.
-        var client = Client("tenant-1", "auditor", ChoRolePermissions.ComplianceOfficer);
+        var client = Client("tenant-1", "auditor", role);
 
         var response = await client.GetAsync(ByIdPath);
 
@@ -195,11 +197,14 @@ public class EncounterPipelineAuthTests : IClassFixture<EncounterPipelineAuthTes
     [InlineData("POST", "/api/Encounters/batch/BATCH-1/submit")]
     public async Task ReadOnlyRole_CannotWrite(string method, string path)
     {
-        var client = Client("tenant-1", "auditor", ChoRolePermissions.ComplianceOfficer);
+        foreach (var role in new[] { ChoRolePermissions.ComplianceOfficer, ChoRolePermissions.Finance })
+        {
+            var client = Client("tenant-1", "auditor", role);
 
-        var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path));
+            var response = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), path));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden, role);
+        }
         _factory.Encounters.Verify(r => r.UpdateAsync(It.IsAny<Encounter>()), Times.Never);
         _factory.Encounters.Verify(r => r.CreateAsync(It.IsAny<Encounter>()), Times.Never);
     }

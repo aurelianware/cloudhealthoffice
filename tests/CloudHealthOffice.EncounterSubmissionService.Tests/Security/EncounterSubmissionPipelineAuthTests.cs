@@ -170,8 +170,8 @@ public class EncounterSubmissionPipelineAuthTests : IClassFixture<EncounterSubmi
     [Fact]
     public async Task RoleWithoutEncountersRead_IsForbidden()
     {
-        // Finance holds no encounters permission.
-        var response = await Client(Tenant, ChoRolePermissions.Finance).GetAsync($"/api/encounters/{Tenant}/summary");
+        // ClaimsExaminer holds no encounters permission.
+        var response = await Client(Tenant, ChoRolePermissions.ClaimsExaminer).GetAsync($"/api/encounters/{Tenant}/summary");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         _factory.Service.VerifyNoOtherCalls();
@@ -187,10 +187,12 @@ public class EncounterSubmissionPipelineAuthTests : IClassFixture<EncounterSubmi
         _factory.Service.Verify(s => s.GetStatusSummaryAsync(Tenant), Times.Once);
     }
 
-    [Fact]
-    public async Task ReadOnlyRole_CannotAcknowledgeOrRetry()
+    [Theory]
+    [InlineData(ChoRolePermissions.ComplianceOfficer)]
+    [InlineData(ChoRolePermissions.Finance)] // encounters:read only
+    public async Task ReadOnlyRole_CannotAcknowledgeOrRetry(string role)
     {
-        var client = Client(Tenant, ChoRolePermissions.ComplianceOfficer);
+        var client = Client(Tenant, role);
 
         var ack = await client.PostAsJsonAsync($"/api/encounters/{Tenant}/acknowledge", Ack);
         var retry = await client.PostAsync($"/api/encounters/{Tenant}/retry/sub-1", null);
@@ -198,6 +200,16 @@ public class EncounterSubmissionPipelineAuthTests : IClassFixture<EncounterSubmi
         ack.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         retry.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         _factory.Service.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.Finance)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor)]
+    public async Task RolesWithEncountersRead_CanReadSummary(string role)
+    {
+        var response = await Client(Tenant, role).GetAsync($"/api/encounters/{Tenant}/summary");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]

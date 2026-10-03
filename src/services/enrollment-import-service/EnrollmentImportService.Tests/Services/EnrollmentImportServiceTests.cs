@@ -410,6 +410,32 @@ public class EnrollmentImportServiceTests
     }
 
     [Fact]
+    public async Task Import_PlanCodeLookupRefused_FailsTheSubscriberInsteadOfCountingAGap()
+    {
+        var (svc, _, coverageClient, _, _, benefitPlanClient, _) = Build();
+        benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("refused", null, System.Net.HttpStatusCode.Forbidden));
+
+        var enrollment = NewSubscriber("M-refused");
+        enrollment.GroupNumber = "GRP0001";
+        enrollment.Coverage.Add(new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "PPO2026" });
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-refused",
+            Enrollments = new() { enrollment }
+        }, "t1");
+
+        result.FailedCount.Should().Be(1);
+        result.Errors.Should().ContainSingle(e => e.Contains("M-refused"));
+        result.CoverageMappingsUnresolved.Should().Be(0);
+        coverageClient.Verify(c => c.CreateAsync(
+            It.IsAny<string>(), It.IsAny<CreateCoverageRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Import_CoverageWithUnmappedPlanCode_SkipsCoverageInsteadOfDefaulting()
     {
         // This is the regression guard for the original bug: an unresolved

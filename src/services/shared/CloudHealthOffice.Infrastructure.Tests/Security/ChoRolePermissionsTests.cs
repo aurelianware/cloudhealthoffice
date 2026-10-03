@@ -77,4 +77,19 @@ public class ChoRolePermissionsTests
         Assert.False(ChoRolePermissions.Satisfies(granted, "payments:run"));
         Assert.False(ChoRolePermissions.Satisfies(granted, "billing:run"));
     }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, "encounters:read", true)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, "encounters:write", true)]
+    [InlineData(ChoRolePermissions.Finance, "encounters:read", true)]
+    [InlineData(ChoRolePermissions.Finance, "encounters:write", false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "encounters:read", false)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist, "benefits:read", true)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist, "benefits:write", false)]
+    public void Encounter_and_enrollment_grants(string role, string permission, bool expected)
+    {
+        var granted = ChoRolePermissions.Expand([role]);
+
+        Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
+    }
 }

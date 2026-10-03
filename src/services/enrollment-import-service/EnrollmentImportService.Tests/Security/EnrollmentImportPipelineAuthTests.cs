@@ -28,6 +28,7 @@ public class EnrollmentImportPipelineAuthTests : IClassFixture<EnrollmentImportP
         public Mock<IEnrollmentImportRunRepository> Runs { get; } = new();
         public Mock<IEnrollmentTransactionRepository> Transactions { get; } = new();
         public Mock<IEnrollmentEventRepository> Events { get; } = new();
+        public Mock<IPlanCodeGapReportService> GapReport { get; } = new();
         public CapturingHandler CoverageOutbound { get; } = new();
         public CapturingHandler MemberOutbound { get; } = new();
 
@@ -47,6 +48,8 @@ public class EnrollmentImportPipelineAuthTests : IClassFixture<EnrollmentImportP
                 services.AddSingleton(_ => Transactions.Object);
                 services.RemoveAll<IEnrollmentEventRepository>();
                 services.AddSingleton(_ => Events.Object);
+                services.RemoveAll<IPlanCodeGapReportService>();
+                services.AddSingleton(_ => GapReport.Object);
 
                 var initializer = services.Single(d => d.ImplementationType == typeof(EnrollmentIndexInitializer));
                 services.Remove(initializer);
@@ -256,6 +259,28 @@ public class EnrollmentImportPipelineAuthTests : IClassFixture<EnrollmentImportP
         import.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         manual.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         VerifyNothingRan();
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.ComplianceOfficer)] // *:read only
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist)]
+    public async Task PlanCodeGapReport_NeedsOnlyEnrollmentRead(string role)
+    {
+        _factory.GapReport.Setup(g => g.BuildReportAsync(It.IsAny<Enrollment834>(), Tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlanCodeGapReport());
+
+        var response = await Client(Tenant, role).PostAsJsonAsync("/api/v1/enrollment/plan-code-gap-report", Batch());
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task PlanCodeGapReport_RoleWithoutEnrollmentRead_IsForbidden()
+    {
+        var response = await Client(Tenant, ChoRolePermissions.Finance)
+            .PostAsJsonAsync("/api/v1/enrollment/plan-code-gap-report", Batch());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
