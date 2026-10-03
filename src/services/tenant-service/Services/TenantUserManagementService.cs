@@ -48,6 +48,7 @@ public class TenantUserManagementService : ITenantUserService
             TenantId = tenantId,
             Email = request.Email,
             AzureAdObjectId = request.AzureAdObjectId,
+            AzureAdTenantId = string.IsNullOrEmpty(request.AzureAdObjectId) ? string.Empty : request.AzureAdTenantId,
             DisplayName = request.DisplayName,
             FirstName = request.FirstName,
             LastName = request.LastName,
@@ -77,7 +78,19 @@ public class TenantUserManagementService : ITenantUserService
                 throw new InvalidOperationException($"User with email {request.Email} already exists in tenant {tenantId}");
             user.Email = request.Email;
         }
-        if (request.AzureAdObjectId != null) user.AzureAdObjectId = request.AzureAdObjectId;
+        if (request.AzureAdObjectId != null
+            && !string.Equals(request.AzureAdObjectId, user.AzureAdObjectId, StringComparison.Ordinal))
+        {
+            // A new object id never inherits the previous one's directory.
+            user.AzureAdObjectId = request.AzureAdObjectId;
+            user.AzureAdTenantId = string.IsNullOrEmpty(request.AzureAdObjectId)
+                ? string.Empty
+                : request.AzureAdTenantId ?? string.Empty;
+        }
+        else if (request.AzureAdTenantId != null && !string.IsNullOrEmpty(user.AzureAdObjectId))
+        {
+            user.AzureAdTenantId = request.AzureAdTenantId;
+        }
         if (request.Department != null) user.Department = request.Department;
         if (request.SupervisorId != null) user.SupervisorId = request.SupervisorId;
 

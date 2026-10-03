@@ -1,0 +1,121 @@
+# token-service: exchanges a portal user's Entra ID access token for a short-lived
+# CHO user token. See docs/security/portal-token-service.md.
+#
+# Before deploying, replace the placeholders:
+#   <TOKEN_SERVICE_MANAGED_IDENTITY_CLIENT_ID>  user-assigned managed identity with the
+#       Key Vault "Key Vault Crypto User" role on the signing key (sign + get), federated
+#       to system:serviceaccount:cloudhealthoffice:token-service-sa
+#   <KEY_VAULT_NAME>, <KEY_VERSION>, <CHO_PLATFORM_ENTRA_TENANT_ID>
+# and create the token-service-secrets Secret (internal service-token private key).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: token-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<TOKEN_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: token-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  # Use a versioned key id. Services trust exactly this key's public half, so a new
+  # version must be rolled out as described in docs/security/portal-token-service.md
+  # ("Key rotation"). Do not enable Key Vault auto-rotation on this key.
+  TokenSigning__KeyVaultKeyId: "https://<KEY_VAULT_NAME>.vault.azure.net/keys/cho-token-signing/<KEY_VERSION>"
+  TokenSigning__Issuer: "cho-token-service"
+  TokenSigning__Audience: "cho-api"
+  TokenService__PlatformTenantId: "<CHO_PLATFORM_ENTRA_TENANT_ID>"
+  Services__TenantService: "http://tenant-service"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: token-service
+  namespace: cloudhealthoffice
+  labels:
+    app: token-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: token-service
+  template:
+    metadata:
+      labels:
+        app: token-service
+        tier: backend
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: token-service-sa
+      containers:
+      - name: token-service
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-token-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: token-service-config
+        env:
+        # Private key for the cho-internal service token sent to tenant-service.
+        - name: ChoAuth__ServiceToken__PrivateKeyPem
+          valueFrom:
+            secretKeyRef:
+              name: token-service-secrets
+              key: serviceTokenPrivateKeyPem
+              optional: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: token-service
+  namespace: cloudhealthoffice
+  labels:
+    app: token-service
+spec:
+  type: ClusterIP
+  selector:
+    app: token-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

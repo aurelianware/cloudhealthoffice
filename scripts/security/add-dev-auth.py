@@ -9,7 +9,7 @@ if os.path.exists(path):
         if txt:
             data = json.loads(txt, object_pairs_hook=collections.OrderedDict)
 data["ChoAuth"] = collections.OrderedDict([
-    ("_comment", "Development-only trust. Symmetric keys are refused on any host other than Development/Testing. Deployed environments configure asymmetric keys from Key Vault (see docs/security/service-authentication.md)."),
+    ("_comment", "Development-only trust. Symmetric keys are refused on any host other than Development/Testing. Deployed environments configure asymmetric keys from Key Vault (see docs/security/portal-token-service.md)."),
     ("Audience", "cho-api"),
     ("Issuers", [
         {"Issuer": "cho-portal-dev", "SymmetricKey": KEY},

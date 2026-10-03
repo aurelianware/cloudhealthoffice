@@ -48,6 +48,8 @@ builder.Services.AddScoped<ITenantService, TenantManagementService>();
 builder.Services.AddScoped<ITenantUserService, TenantUserManagementService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
+// Identity lookups for token-service (Controllers/InternalIdentityController.cs).
+builder.Services.AddScoped<IIdentityDirectory, IdentityDirectory>();
 
 // Health checks
 builder.Services.AddChoHealthChecks(options =>

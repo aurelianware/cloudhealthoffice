@@ -72,6 +72,11 @@ worked example.
 8. **Configuration.** Run
    `python3 scripts/security/add-dev-auth.py src/services/<svc>/appsettings.Development.json <svc-client-id>`.
    It adds development-only trust and a service token setting.
+   For deployed environments, see `docs/security/portal-token-service.md`
+   ("How services trust the issuer"). It covers trusting `cho-token-service`
+   for user tokens and `cho-internal` for service tokens. Comments written by
+   earlier runs of the script point at `docs/security/service-authentication.md`,
+   which was never written. Read them as pointing at that document.
 9. **Tests.**
    - Integration tests that use `WebApplicationFactory` must run in the
      `Development` or `Testing` environment. Create clients with
