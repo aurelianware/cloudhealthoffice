@@ -70,10 +70,22 @@ X-API-Key: cho_pk_a1b2c3d4e5f6...
 ```
 
 Request access at [cloudhealthoffice.com/pricing-api](https://cloudhealthoffice.com/pricing-api).
-The key is bound to its own credential tenant (`pricing-api-key:<fingerprint>`),
+The key is bound to its own credential tenant (`pricing-api-key:<key id>`),
 never a CHO tenant; an `X-Tenant-ID` header that names another tenant is
 refused (403). A key holds no CHO permission: it can reprice (metered against
 its monthly quota) and read every fee schedule, nothing else.
+
+**Key storage.** The service stores a key's SHA-256 and its first 12
+characters (`keyPrefix`), never the key. The key is in the create (or signup)
+response only; it cannot be shown again. Admin actions address a key by its
+`keyId` (`pk_…`): `DELETE /api/v1/admin/api-keys/{keyId}`. Usage records carry
+the key id. Keys stored in plaintext by earlier versions are hashed at startup
+(idempotent; logged as `AUDIT pricing api-key migration`).
+
+**Rate limiting.** `RateLimiting:PermitLimit` requests per
+`RateLimiting:WindowSeconds` per caller, after authentication: an API-key
+customer by key id, a CHO caller by tenant and subject, anyone else (anonymous,
+or an unknown key) by client address. Over the limit: 429.
 
 **CHO callers: CHO bearer token** (`AddChoAuthentication`). The tenant and the
 actor come from the token.

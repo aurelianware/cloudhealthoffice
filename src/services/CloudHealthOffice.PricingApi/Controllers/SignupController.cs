@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
@@ -45,20 +44,13 @@ public class SignupController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
             return BadRequest(new { error = "A valid email address is required." });
 
-        var apiKey = "cho_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-
-        var record = new ApiKeyRecord
-        {
-            ApiKey = apiKey,
-            TenantName = request.OrganizationName.Trim(),
-            ContactEmail = request.Email.Trim().ToLowerInvariant(),
-            Tier = PricingTier.Free,
-            MonthlyLimit = 1_000,
-            CurrentMonthUsage = 0,
-            CreatedAt = DateTimeOffset.UtcNow,
-            IsActive = true,
-            CreatedBy = _actor.UserId
-        };
+        // Only the hash and prefix are stored; the key is in this response only.
+        var (apiKey, record) = ApiKeyHashing.Issue(
+            request.OrganizationName.Trim(),
+            request.Email.Trim().ToLowerInvariant(),
+            PricingTier.Free,
+            1_000,
+            _actor.UserId);
 
         await _apiKeyRepo.CreateAsync(record);
 
@@ -68,6 +60,7 @@ public class SignupController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, new SignupResponse
         {
             ApiKey = apiKey,
+            KeyId = record.KeyId,
             Tier = "Free",
             MonthlyLimit = 1_000,
             Message = "Your API key has been created. Include it in the X-API-Key header with every request."
@@ -89,6 +82,7 @@ public record SignupRequest
 public record SignupResponse
 {
     public string ApiKey { get; init; } = string.Empty;
+    public string KeyId { get; init; } = string.Empty;
     public string Tier { get; init; } = string.Empty;
     public int MonthlyLimit { get; init; }
     public string Message { get; init; } = string.Empty;

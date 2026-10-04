@@ -135,10 +135,10 @@ public class RepricingController : ControllerBase
             HttpContext.Items.TryGetValue(PricingApiKeyAuthenticationHandler.ApiKeyRecordItem, out var keyObj) &&
             keyObj is ApiKeyRecord apiKey)
         {
-            await _apiKeyRepo.IncrementUsageAsync(apiKey.ApiKey, lineCount);
+            await _apiKeyRepo.IncrementUsageAsync(apiKey.KeyId, lineCount);
             await _usageRepo.RecordUsageAsync(new UsageRecord
             {
-                ApiKey = apiKey.ApiKey,
+                KeyId = apiKey.KeyId,
                 Endpoint = endpoint,
                 LineCount = lineCount,
                 Timestamp = DateTimeOffset.UtcNow,

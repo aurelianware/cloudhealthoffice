@@ -16,7 +16,7 @@ namespace CloudHealthOffice.PricingApi.Security;
 /// own, never the CHO "Bearer" scheme.
 ///
 /// The principal it produces is bound to the credential: its subject and its
-/// <c>tenant_id</c> are both <c>pricing-api-key:&lt;hash of the key&gt;</c>, a
+/// <c>tenant_id</c> are both <c>pricing-api-key:&lt;key id&gt;</c>, a
 /// namespace no CHO tenant uses. The shared tenant middleware therefore takes
 /// the tenant from the credential exactly as it does from a CHO token (a
 /// disagreeing <c>X-Tenant-ID</c> is refused with 403), and a customer can never
@@ -66,16 +66,20 @@ public sealed class PricingApiKeyAuthenticationHandler : AuthenticationHandler<A
             return AuthenticateResult.Fail("Invalid API key.");
         }
 
-        var record = await _apiKeys.GetByKeyAsync(supplied);
-        // The stored key must match exactly (the lookup may be collation-insensitive).
-        if (record is null || !record.IsActive || !string.Equals(record.ApiKey, supplied, StringComparison.Ordinal))
+        // Only the hash is stored; the lookup is by hash.
+        var suppliedHash = ApiKeyHashing.Hash(supplied);
+        var record = await _apiKeys.GetByHashAsync(suppliedHash);
+        // The stored hash must match exactly (the lookup may be collation-insensitive).
+        if (record is null || !record.IsActive || string.IsNullOrEmpty(record.KeyId) ||
+            !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(record.KeyHash ?? string.Empty), Encoding.ASCII.GetBytes(suppliedHash)))
         {
             // Never log any part of the supplied key.
             Logger.LogWarning("Pricing API request rejected: unknown or deactivated API key");
             return AuthenticateResult.Fail("Invalid API key.");
         }
 
-        var credentialId = CredentialPrefix + KeyFingerprint(supplied);
+        // The key id: stable per key, public, and reveals nothing of the key.
+        var credentialId = CredentialPrefix + record.KeyId;
         var identity = new ClaimsIdentity(
             [
                 new Claim(ChoClaimTypes.Subject, credentialId),
@@ -91,8 +95,4 @@ public sealed class PricingApiKeyAuthenticationHandler : AuthenticationHandler<A
 
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
     }
-
-    /// <summary>First 16 hex characters of SHA-256(key): stable per key, reveals nothing of it.</summary>
-    internal static string KeyFingerprint(string apiKey)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apiKey)))[..16].ToLowerInvariant();
 }

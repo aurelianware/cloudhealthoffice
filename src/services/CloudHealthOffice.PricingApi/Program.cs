@@ -10,6 +10,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication;
 using MongoDB.Driver;
 using Serilog;
 
@@ -155,31 +156,37 @@ try
     });
 
     // ── Rate Limiting ──
+    // Partitioned by the authenticated caller, never by a raw header: an
+    // API-key customer by its key id, a CHO caller by tenant and subject, and
+    // everyone else (anonymous, or presenting an unknown key) by client
+    // address. A made-up key therefore gets no bucket of its own.
+    // The pipeline authenticates before the limiter runs (see below).
+    builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
     builder.Services.AddRateLimiter(options =>
     {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                context.Request.Headers["X-API-Key"].ToString() ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        {
+            var rateLimit = context.RequestServices
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<RateLimitOptions>>().Value;
+            return RateLimitPartition.GetFixedWindowLimiter(
+                PricingApiAuth.RateLimitPartition(context),
                 _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 100,
-                    Window = TimeSpan.FromMinutes(1),
+                    PermitLimit = rateLimit.PermitLimit,
+                    Window = TimeSpan.FromSeconds(rateLimit.WindowSeconds),
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 10
-                }));
-    });
-
-    // ── CORS (allow Swagger UI and partner integrations) ──
-    builder.Services.AddCors(options =>
-    {
-        options.AddPolicy("Default", policy =>
-        {
-            policy.AllowAnyOrigin()  // Tighten in production
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining");
+                    QueueLimit = rateLimit.QueueLimit
+                });
         });
     });
+
+    // ── CORS ──
+    // A public API that partner web apps may call from a browser: an
+    // allowlist (Cors:AllowedOrigins, default the portal origin), no
+    // credentials, closed when unconfigured outside Development.
+    builder.Services.AddChoBrowserCors(builder.Configuration, builder.Environment, policy =>
+        policy.WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining"));
 
     // ── Health Checks ──
     builder.Services.AddHealthChecks();
@@ -192,7 +199,7 @@ try
 
     // ── Middleware Pipeline ──
     app.UseSerilogRequestLogging();
-    app.UseCors("Default");
+    app.UseChoBrowserCors();
 
     if (app.Environment.IsDevelopment())
     {
@@ -204,6 +211,16 @@ try
         });
     }
 
+    // Authenticate first so the limiter partitions by the verified caller.
+    // The result is cached for the request, so the authentication in
+    // UseChoAuthentication does not look the key up again.
+    app.Use(async (context, next) =>
+    {
+        var result = await context.AuthenticateAsync();
+        if (result.Succeeded && result.Principal is not null)
+            context.User = result.Principal;
+        await next();
+    });
     app.UseRateLimiter();
     app.UseChoAuthentication();
     app.MapControllers();
@@ -212,6 +229,9 @@ try
     // ── Seed demo data on startup (only if database is empty) ──
     using (var scope = app.Services.CreateScope())
     {
+        // Keys stored in plaintext before hashing are hashed here (idempotent).
+        await scope.ServiceProvider.GetRequiredService<IApiKeyRepository>().InitializeAsync();
+
         var loader = scope.ServiceProvider.GetRequiredService<IFeeScheduleLoaderService>();
         if (!await loader.AnySchedulesExistAsync())
         {

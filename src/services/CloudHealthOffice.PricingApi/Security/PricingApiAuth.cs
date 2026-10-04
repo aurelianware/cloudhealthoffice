@@ -88,6 +88,30 @@ public static class PricingApiAuth
     public static bool IsPublicCmsSchedule(FeeScheduleType type) =>
         type is FeeScheduleType.MedicareRbrvs or FeeScheduleType.MedicareOpps or FeeScheduleType.MedicareDrg;
 
+    /// <summary>
+    /// The rate-limit bucket for a request, from the authenticated caller only:
+    /// an API-key customer by its key id, a CHO caller by tenant and subject,
+    /// anyone else (anonymous, or an unknown or deactivated key) by client
+    /// address. Headers are never read here, so a made-up key cannot open a
+    /// fresh bucket.
+    /// </summary>
+    public static string RateLimitPartition(HttpContext context)
+    {
+        var user = context.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var subject = user.FindFirst(ChoClaimTypes.Subject)?.Value;
+            if (IsApiKeyCustomer(user) && !string.IsNullOrEmpty(subject))
+                return "key:" + subject;
+
+            var tenant = user.FindFirst(ChoClaimTypes.TenantId)?.Value;
+            if (!string.IsNullOrEmpty(subject))
+                return $"cho:{tenant}:{subject}";
+        }
+
+        return "ip:" + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+    }
+
     public static int MonthlyLimit(PricingTier tier) => tier switch
     {
         PricingTier.Free => 1_000,

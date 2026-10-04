@@ -3736,7 +3736,7 @@ public class PricingApiService : IPricingApiService
             var request = CreateAdminRequest(HttpMethod.Get, $"{BaseUrl}/api/v1/admin/api-keys");
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            var keys = await response.Content.ReadFromJsonAsync<List<PricingApiKey>>();
+            var keys = await ReadDataAsync<List<PricingApiKey>>(response);
             return keys ?? new();
         }
         catch (HttpRequestException ex)
@@ -3754,8 +3754,15 @@ public class PricingApiService : IPricingApiService
             request.Content = JsonContent.Create(new { tenantName, contactEmail, tier });
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            var key = await response.Content.ReadFromJsonAsync<PricingApiKey>();
-            return key ?? new();
+            // The create response is { apiKey, key: { keyId, keyPrefix, ... } }:
+            // the key is shown this once and never again.
+            var created = await ReadDataAsync<PricingApiKeyCreated>(response);
+            if (created?.Key is { } key)
+            {
+                key.ApiKey = created.ApiKey;
+                return key;
+            }
+            return new PricingApiKey { ApiKey = created?.ApiKey ?? "" };
         }
         catch (HttpRequestException ex)
         {
@@ -3764,11 +3771,29 @@ public class PricingApiService : IPricingApiService
         }
     }
 
-    public async Task DeactivateApiKeyAsync(string apiKey)
+    private sealed class PricingApiKeyCreated
+    {
+        public string ApiKey { get; set; } = "";
+        public PricingApiKey? Key { get; set; }
+    }
+
+    /// <summary>Reads the Pricing API's <c>{ success, data }</c> envelope (or a bare body).</summary>
+    private static async Task<T?> ReadDataAsync<T>(HttpResponseMessage response)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var element = doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("data", out var data)
+            ? data
+            : doc.RootElement;
+        return element.Deserialize<T>(options);
+    }
+
+    public async Task DeactivateApiKeyAsync(string keyId)
     {
         try
         {
-            var request = CreateAdminRequest(HttpMethod.Delete, $"{BaseUrl}/api/v1/admin/api-keys/{Uri.EscapeDataString(apiKey)}");
+            var request = CreateAdminRequest(HttpMethod.Delete, $"{BaseUrl}/api/v1/admin/api-keys/{Uri.EscapeDataString(keyId)}");
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
         }

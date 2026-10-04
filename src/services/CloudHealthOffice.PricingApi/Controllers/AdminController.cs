@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
@@ -42,10 +41,11 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new API key for a tenant.
+    /// Create a new API key for a tenant. The key is in this response only:
+    /// the service stores its SHA-256 and prefix, never the key.
     /// </summary>
     [HttpPost("api-keys")]
-    [ProducesResponseType(typeof(ApiResponse<ApiKeyRecord>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<ApiKeyCreated>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -62,72 +62,62 @@ public class AdminController : ControllerBase
 
         var monthlyLimit = PricingApiAuth.MonthlyLimit(request.Tier);
 
-        var apiKey = "cho_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-
-        var record = new ApiKeyRecord
-        {
-            ApiKey = apiKey,
-            TenantName = request.TenantName,
-            ContactEmail = request.ContactEmail,
-            Tier = request.Tier,
-            MonthlyLimit = monthlyLimit,
-            CurrentMonthUsage = 0,
-            CreatedAt = DateTimeOffset.UtcNow,
-            IsActive = true,
-            CreatedBy = _actor.UserId
-        };
+        var (apiKey, record) = ApiKeyHashing.Issue(
+            request.TenantName, request.ContactEmail, request.Tier, monthlyLimit, _actor.UserId);
 
         var created = await _apiKeyRepo.CreateAsync(record);
 
-        _logger.LogInformation("AUDIT pricing api-key created for customer {Customer} (tier={Tier}) by {Actor}",
-            SanitizeForLog(request.TenantName), request.Tier, _actor.UserId);
+        _logger.LogInformation("AUDIT pricing api-key {KeyId} ({KeyPrefix}) created for customer {Customer} (tier={Tier}) by {Actor}",
+            created.KeyId, created.KeyPrefix, SanitizeForLog(request.TenantName), request.Tier, _actor.UserId);
 
-        return StatusCode(StatusCodes.Status201Created, new ApiResponse<ApiKeyRecord> { Data = created });
+        return StatusCode(StatusCodes.Status201Created, new ApiResponse<ApiKeyCreated>
+        {
+            Data = new ApiKeyCreated { ApiKey = apiKey, Key = ApiKeyView.From(created) }
+        });
     }
 
     /// <summary>
-    /// List all API keys. Keys are redacted to show only the first 8 characters.
+    /// List all API keys: key id, prefix and metadata. Neither the key nor its
+    /// hash is ever returned (the service no longer has the key).
     /// </summary>
     [HttpGet("api-keys")]
-    [ProducesResponseType(typeof(ApiResponse<List<ApiKeyRecord>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<List<ApiKeyView>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListApiKeys()
     {
         var keys = await _apiKeyRepo.ListAsync();
-
-        // Redact keys — show only first 8 chars
-        var redacted = keys.Select(k => k with { ApiKey = k.ApiKey[..Math.Min(8, k.ApiKey.Length)] + "..." }).ToList();
-
-        return Ok(new ApiResponse<List<ApiKeyRecord>> { Data = redacted });
+        return Ok(new ApiResponse<List<ApiKeyView>> { Data = keys.Select(ApiKeyView.From).ToList() });
     }
 
     /// <summary>
-    /// Deactivate an API key (sets IsActive to false).
+    /// Deactivate an API key (sets IsActive to false), addressed by its key id
+    /// (<c>pk_…</c> from the create or list response). The key itself is never
+    /// accepted in a URL: URLs end up in access logs and proxies.
     /// </summary>
-    [HttpDelete("api-keys/{apiKey}")]
+    [HttpDelete("api-keys/{keyId}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> DeactivateApiKey([FromRoute] string apiKey)
+    public async Task<IActionResult> DeactivateApiKey([FromRoute] string keyId)
     {
-        var existing = await _apiKeyRepo.GetByKeyAsync(apiKey);
+        var existing = await _apiKeyRepo.GetByIdAsync(keyId);
         if (existing is null)
         {
             return NotFound(new ApiResponse<object>
             {
                 Success = false,
-                Error = new ApiError { Code = "NOT_FOUND", Message = $"API key not found." }
+                Error = new ApiError { Code = "NOT_FOUND", Message = "API key not found. Address a key by its key id." }
             });
         }
 
-        await _apiKeyRepo.DeactivateAsync(apiKey, _actor.UserId, DateTimeOffset.UtcNow);
+        await _apiKeyRepo.DeactivateAsync(existing.KeyId, _actor.UserId, DateTimeOffset.UtcNow);
 
-        _logger.LogInformation("AUDIT pricing api-key deactivated for customer {Customer} by {Actor}",
-            SanitizeForLog(existing.TenantName), _actor.UserId);
+        _logger.LogInformation("AUDIT pricing api-key {KeyId} ({KeyPrefix}) deactivated for customer {Customer} by {Actor}",
+            existing.KeyId, existing.KeyPrefix, SanitizeForLog(existing.TenantName), _actor.UserId);
 
-        return Ok(new ApiResponse<object> { Data = new { message = "API key deactivated.", tenantName = existing.TenantName } });
+        return Ok(new ApiResponse<object> { Data = new { message = "API key deactivated.", keyId = existing.KeyId, tenantName = existing.TenantName } });
     }
 
     /// <summary>
@@ -182,11 +172,11 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to import RBRVS {Year}", year);
+            _logger.LogError(ex, "Failed to import RBRVS {Year} (trace id {TraceId})", year, HttpContext.TraceIdentifier);
             return BadRequest(new ApiResponse<object>
             {
                 Success = false,
-                Error = new ApiError { Code = "IMPORT_FAILED", Message = $"Failed to import RBRVS CSV: {ex.Message}" }
+                Error = new ApiError { Code = "IMPORT_FAILED", Message = ImportFailedMessage("RBRVS") }
             });
         }
         finally
@@ -228,11 +218,11 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to import OPPS {Year}", year);
+            _logger.LogError(ex, "Failed to import OPPS {Year} (trace id {TraceId})", year, HttpContext.TraceIdentifier);
             return BadRequest(new ApiResponse<object>
             {
                 Success = false,
-                Error = new ApiError { Code = "IMPORT_FAILED", Message = $"Failed to import OPPS CSV: {ex.Message}" }
+                Error = new ApiError { Code = "IMPORT_FAILED", Message = ImportFailedMessage("OPPS") }
             });
         }
         finally
@@ -274,11 +264,11 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to import DRG {Year}", year);
+            _logger.LogError(ex, "Failed to import DRG {Year} (trace id {TraceId})", year, HttpContext.TraceIdentifier);
             return BadRequest(new ApiResponse<object>
             {
                 Success = false,
-                Error = new ApiError { Code = "IMPORT_FAILED", Message = $"Failed to import DRG CSV: {ex.Message}" }
+                Error = new ApiError { Code = "IMPORT_FAILED", Message = ImportFailedMessage("DRG") }
             });
         }
         finally
@@ -335,6 +325,14 @@ public class AdminController : ControllerBase
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
+    /// <summary>
+    /// What the caller sees of a failed import. The exception (which can name
+    /// temp paths, connection details or driver internals) is only logged,
+    /// under the request's trace id.
+    /// </summary>
+    private string ImportFailedMessage(string kind) =>
+        $"Failed to import {kind} CSV. Check that the file is the CMS layout; details are in the service log (trace id {HttpContext.TraceIdentifier}).";
 }
 
 /// <summary>

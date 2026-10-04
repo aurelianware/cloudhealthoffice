@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.PricingApi.Security;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -41,7 +42,8 @@ public class PricingApiAuthTests : IDisposable
                 .ReturnsAsync([new FeeScheduleEntry { FeeScheduleId = s.Id, ProcedureCode = "99213", NonFacilityRate = 92.50m }]);
         }
 
-        _factory.ApiKeyRepository.Setup(r => r.GetByKeyAsync(ValidKey)).ReturnsAsync(Key(ValidKey));
+        _factory.ApiKeyRepository.Setup(r => r.GetByHashAsync(ApiKeyHashing.Hash(ValidKey))).ReturnsAsync(Key(ValidKey));
+        _factory.ApiKeyRepository.Setup(r => r.GetByIdAsync(KeyIdOf(ValidKey))).ReturnsAsync(Key(ValidKey));
         _factory.ApiKeyRepository.Setup(r => r.CreateAsync(It.IsAny<ApiKeyRecord>()))
             .ReturnsAsync((ApiKeyRecord r) => r);
     }
@@ -98,8 +100,8 @@ public class PricingApiAuthTests : IDisposable
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Headers.GetValues("X-RateLimit-Limit").Should().Equal("1000");
-        _factory.ApiKeyRepository.Verify(r => r.IncrementUsageAsync(ValidKey, 1), Times.Once);
-        _factory.UsageRepository.Verify(r => r.RecordUsageAsync(It.Is<UsageRecord>(u => u.ApiKey == ValidKey)), Times.Once);
+        _factory.ApiKeyRepository.Verify(r => r.IncrementUsageAsync(KeyIdOf(ValidKey), 1), Times.Once);
+        _factory.UsageRepository.Verify(r => r.RecordUsageAsync(It.Is<UsageRecord>(u => u.KeyId == KeyIdOf(ValidKey))), Times.Once);
     }
 
     [Theory]
@@ -115,7 +117,7 @@ public class PricingApiAuthTests : IDisposable
     public async Task Reprice_WithDeactivatedApiKey_Is401()
     {
         const string key = "cho_deactivated000000000000000000";
-        _factory.ApiKeyRepository.Setup(r => r.GetByKeyAsync(key)).ReturnsAsync(Key(key) with { IsActive = false });
+        _factory.ApiKeyRepository.Setup(r => r.GetByHashAsync(ApiKeyHashing.Hash(key))).ReturnsAsync(Key(key) with { IsActive = false });
 
         var response = await WithApiKey(key).PostAsJsonAsync("/api/v1/reprice", RepriceBody());
 
@@ -126,7 +128,7 @@ public class PricingApiAuthTests : IDisposable
     public async Task Reprice_ApiKeyOverMonthlyQuota_Is429AndNothingIsPriced()
     {
         const string key = "cho_exhausted00000000000000000000";
-        _factory.ApiKeyRepository.Setup(r => r.GetByKeyAsync(key)).ReturnsAsync(Key(key) with { CurrentMonthUsage = 1_000 });
+        _factory.ApiKeyRepository.Setup(r => r.GetByHashAsync(ApiKeyHashing.Hash(key))).ReturnsAsync(Key(key) with { CurrentMonthUsage = 1_000 });
 
         var response = await WithApiKey(key).PostAsJsonAsync("/api/v1/reprice", RepriceBody());
 
@@ -266,7 +268,7 @@ public class PricingApiAuthTests : IDisposable
     {
         { "POST", "/api/v1/admin/api-keys" },
         { "GET", "/api/v1/admin/api-keys" },
-        { "DELETE", "/api/v1/admin/api-keys/" + ValidKey },
+        { "DELETE", "/api/v1/admin/api-keys/" + KeyIdOf(ValidKey) },
         { "POST", "/api/v1/admin/api-keys/reset-usage" },
         { "POST", "/api/v1/admin/fee-schedules/upload/rbrvs" },
         { "POST", "/api/v1/admin/fee-schedules/upload/opps" },
@@ -334,10 +336,10 @@ public class PricingApiAuthTests : IDisposable
     [Fact]
     public async Task Admin_DeactivateApiKey_PlatformAdmin_RecordsActorFromToken()
     {
-        var response = await Cho(ChoRolePermissions.PlatformAdmin).DeleteAsync("/api/v1/admin/api-keys/" + ValidKey);
+        var response = await Cho(ChoRolePermissions.PlatformAdmin).DeleteAsync("/api/v1/admin/api-keys/" + KeyIdOf(ValidKey));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        _factory.ApiKeyRepository.Verify(r => r.DeactivateAsync(ValidKey, "user-1", It.IsAny<DateTimeOffset>()), Times.Once);
+        _factory.ApiKeyRepository.Verify(r => r.DeactivateAsync(KeyIdOf(ValidKey), "user-1", It.IsAny<DateTimeOffset>()), Times.Once);
     }
 
     [Fact]
@@ -407,9 +409,14 @@ public class PricingApiAuthTests : IDisposable
         LastUpdated = DateTimeOffset.UtcNow
     };
 
+    /// <summary>A stable key id per key, as the repository would hold it.</summary>
+    private static string KeyIdOf(string key) => "pk_" + ApiKeyHashing.Hash(key)[..32];
+
     private static ApiKeyRecord Key(string key) => new()
     {
-        ApiKey = key,
+        KeyId = KeyIdOf(key),
+        KeyHash = ApiKeyHashing.Hash(key),
+        KeyPrefix = ApiKeyHashing.Prefix(key),
         TenantName = "Acme Health",
         Tier = PricingTier.Free,
         MonthlyLimit = 1_000,
