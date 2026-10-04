@@ -11,8 +11,13 @@ the full numbers as possible.
 | Propose a change | providers:write | billing:run or enrollment:process |
 | Approve or reject | payments:approve, user token, not the proposer | payments:approve, user token, not the proposer |
 | Masked reads | providers:read, payments:read (pending: payments:approve) | billing:read, payments:read, enrollment:read (review reads: also payments:approve) |
-| Full numbers | capitation-service's service token only | premium-billing-service's service token only |
+| Full numbers | capitation-service's service token only; NACHA files go to the bank directly | premium-billing-service's service token only; NACHA files go to the bank directly |
 | Encrypted at rest | yes (records and the provider-row copy) | yes |
+
+No person ever holds a file of full account numbers. premium-billing-service
+and capitation-service send NACHA files to the tenant's bank themselves (see
+[NACHA files go to the bank directly](#nacha-files-go-to-the-bank-directly));
+the approver who releases the payment gets a masked summary and a receipt.
 
 ## Dual control
 
@@ -119,6 +124,105 @@ approval.
   silent skip. "EFT not enabled" on the masked read stays a normal skip. The
   masked read still decides the method (Stripe, check, NACHA); Stripe and
   check payments never read the numbers.
+
+## NACHA files go to the bank directly
+
+`CloudHealthOffice.NachaTransmission` (`src/services/shared/`, kept out of
+Infrastructure so SSH.NET does not reach every service) sends each NACHA file
+from the service to the tenant's bank by SFTP. premium-billing-service (debits:
+`POST eft/nacha/generate`, the NACHA part of `POST eft/drafts/batch`) and
+capitation-service (credits: `POST disbursements/nacha-file`, the NACHA part of
+`POST disbursements/batch`) use it after the existing checks (payments:approve,
+user token, maker-checker).
+
+- **What the approver gets:** counts, debit and credit totals, one line per
+  entry (sponsor group or provider NPI, name, last 4, amount, trace number),
+  the transmission status (`Transmitted`, `AwaitingRetrieval`, `NotSent`) and,
+  when delivered, a receipt: tenant, remote file name, destination (host and
+  directory), byte size, SHA-256 of the file, entry count, total debits and
+  credits (read from the entry records of the bytes sent), transmitted at and
+  by, run id and batch id (the file reference). No response has a
+  `fileContent`, a full routing number or a full account number;
+  `eft/nacha/generate-and-download` is removed and the portal has no download.
+- **State:** drafts and disbursements become `Submitted` only after the bank's
+  server accepted the file. When it cannot be sent they become
+  `AwaitingRetrieval`. When it could not even be held (below), they stay
+  `Pending` with the reason, for the next release.
+- **Per-tenant settings:** tenant-service
+  `configuration.paymentControls.nachaTransmission`:
+
+  ```json
+  {
+    "enabled": true,
+    "host": "sftp.bank.example",
+    "port": 22,
+    "username": "cho-plan",
+    "privateKeySecretRef": "nacha--{tenantId}--sftp-key",
+    "passwordSecretRef": "nacha--{tenantId}--sftp-passphrase",
+    "hostKeyFingerprint": "SHA256:<base64>",
+    "remoteDirectory": "/inbound/ach"
+  }
+  ```
+
+  Only Key Vault secret names are stored, and they must start with
+  `nacha--{tenantId}--` (like trading-partner's `tp--{tenant}--` rule). A
+  literal credential in the body (`password`, `privateKey`, anything unknown),
+  another tenant's prefix, or `enabled` without host, username, remote
+  directory, a credential name and a SHA-256 `hostKeyFingerprint` is 400.
+  Settings writes need settings:manage. The sending services read the names
+  with their own service token; any other reader without settings:manage sees
+  `privateKeyConfigured` / `passwordConfigured` instead. `passwordSecretRef`
+  is the private key's passphrase when a key is set, otherwise the SFTP password.
+- **Credentials:** read from Key Vault with the service's managed identity
+  (`DefaultAzureCredential`, `SecretClient`) at send time:
+  `NachaTransmission:KeyVaultUri` (default `SecretProvider:AzureKeyVaultUri`),
+  optionally `NachaTransmission:ManagedIdentityClientId`. The identity needs
+  secret `get` on the `nacha--*` secrets. Secrets are never logged and never
+  put in an error message.
+- **Host key pinning:** strict. Without a valid `SHA256:` fingerprint nothing
+  connects (and no secret is read); a server presenting another key is refused.
+  Get the pin from the bank, or `ssh-keyscan -p 22 host | ssh-keygen -lf - -E sha256`,
+  verified out of band.
+- **Atomic upload:** the file is written as `.{name}.{guid}.part` in the
+  remote directory, then renamed to its final name; a partial upload is
+  deleted; an existing file of the same name is never overwritten.
+- **Development:** `NachaTransmission:Mode=LocalFolder` writes to a local
+  folder (`NachaTransmission:LocalFolder`, default
+  `{temp}/cho-nacha-outbox/{service}/{tenant}`) the same way. Startup fails
+  with that mode outside Development and Testing.
+
+### When a file cannot be sent
+
+Transmission not configured, disabled, or failing: the file is encrypted with
+`IFieldProtector` (each service's own `FieldProtection:KeyRing`, the same
+settings sponsor-service and provider-service use, with purpose
+`premium-billing-service` / `capitation-service`) and held in Mongo
+(`NachaHeldFiles`, TTL index on `expiresAt`, 7 days; reads refuse it after
+expiry). Without a key ring or a store (Cosmos native SDK deployments: TODO),
+nothing is held and the payments stay `Pending`.
+
+| Endpoint (premium-billing `api/v1/eft/...`, capitation `api/v1/capitation/disbursements/...`) | Who |
+|---|---|
+| `GET nacha/held` (what waits, why, expiry; never the file) | premium: billing:read, payments:read or payments:approve; capitation: payments:read or payments:approve |
+| `POST nacha/held/{fileReference}/retry` (sends the held file again) | payments:approve, user token, not the user who released it (403 "Separation of duties") |
+| `POST nacha/held/{fileReference}/retrieve` body `{ "reason": "..." }` (returns the file as `text/plain`, `Cache-Control: no-store`) | platform:admin, user token, not the user who released it; reason required (400) |
+
+- Every retrieval returns the file once, is recorded on the held file
+  (who, when, reason) and logged (event 4905, with the reason). The first
+  retrieval marks the payments `Submitted` (the platform admin delivers the
+  file by hand); after it, retry is refused (409) so nothing is sent twice.
+- FinanceApprover, TenantAdmin and every service are refused (platform:admin
+  is never granted by a wildcard or a service token).
+- A successful retry marks the payments `Submitted` and drops the held copy.
+  Two retries at once cannot both send (the held file is claimed first).
+- A held file that expired (410) or is gone (404) puts its payments back to
+  `Pending` on the retry attempt, for the next release.
+- The held file's SHA-256 is checked before it is used; a mismatch is refused.
+- Audit events: 4901 delivered, 4902 held, 4903 not sent, 4904 retried, 4905
+  retrieved, 4906 refused. None carries a number or the file.
+
+Also fixed: the premium debit file wrote the debit total in the credit field
+of the batch and file control records; it is now in the debit field.
 
 ## Masking
 

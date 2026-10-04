@@ -20,6 +20,7 @@ public class EftDraftServiceTests
     private readonly Mock<IStripeAchService> _stripeService;
     private readonly Mock<ISponsorBankAccountSource> _bankAccounts;
     private readonly Mock<ICurrentActor> _actor;
+    private readonly RecordingNachaDispatcher _dispatcher = new();
     private readonly HttpContextAccessor _httpContextAccessor;
     private readonly EftDraftService _service;
 
@@ -34,6 +35,7 @@ public class EftDraftServiceTests
         _actor = new Mock<ICurrentActor>();
         _actor.SetupGet(a => a.UserId).Returns("approver-1");
         _actor.SetupGet(a => a.IsAuthenticated).Returns(true);
+        _actor.SetupGet(a => a.TenantId).Returns("tenant-1");
         _httpContextAccessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
 
         var configData = new Dictionary<string, string?>
@@ -59,6 +61,7 @@ public class EftDraftServiceTests
             _nachaService.Object,
             _stripeService.Object,
             _bankAccounts.Object,
+            _dispatcher,
             _actor.Object,
             _httpContextAccessor,
             configuration,
@@ -292,7 +295,7 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
             .ReturnsAsync((EftDraft d) => d);
         _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         var result = await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -321,7 +324,7 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
             .ReturnsAsync((EftDraft d) => d);
         _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         var result = await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -356,7 +359,7 @@ public class EftDraftServiceTests
                 foreach (var e in entries)
                     e.TraceNumber = "0910000100001";
             })
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -387,7 +390,7 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
             .ReturnsAsync((EftDraft d) => d);
         _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         var result = await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -412,6 +415,34 @@ public class EftDraftServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("No pending NACHA drafts*");
+    }
+
+    [Theory]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.Transmitted, EftDraftStatus.Submitted)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.AwaitingRetrieval, EftDraftStatus.AwaitingRetrieval)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.NotSent, EftDraftStatus.Pending)]
+    public async Task GenerateNachaFile_DraftsAreSubmittedOnlyWhenTheBankHasTheFile(
+        CloudHealthOffice.NachaTransmission.NachaTransmissionStatus outcome, EftDraftStatus expected)
+    {
+        var draft = new EftDraft { Id = "d1", GroupNumber = "GRP001", Method = EftMethod.Nacha, Amount = 100, AccountNumberLast4 = "6789" };
+        _draftRepo.Setup(r => r.GetByStatusAsync(EftDraftStatus.Pending)).ReturnsAsync(new List<EftDraft> { draft });
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), "GRP001", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SponsorBankAccountLookup.Found(new SponsorBankAccount
+            {
+                EftEnabled = true, RoutingNumber = "091000019", AccountNumber = "123456789", AccountNumberLast4 = "6789"
+            }));
+        _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST", FileContent = "6270910000191234567890..." });
+        _dispatcher.Status = outcome;
+
+        var result = await _service.GenerateNachaFileForPendingDraftsAsync();
+
+        draft.Status.Should().Be(expected);
+        if (expected != EftDraftStatus.Submitted) draft.SubmittedAt.Should().BeNull();
+        result.TransmissionStatus.Should().Be(outcome.ToString());
+        result.Entries.Should().ContainSingle(e => e.DraftId == "d1" && e.AccountNumberLast4 == "6789" && e.Amount == 100);
+        _dispatcher.Sent.Should().ContainSingle().Which.TransmittedBy.Should().Be("approver-1");
+        typeof(NachaFileResult).GetProperty("FileContent").Should().BeNull("the API type has no file content");
     }
 
     [Fact]
@@ -443,7 +474,7 @@ public class EftDraftServiceTests
         _nachaService.Setup(s => s.GenerateNachaFile(
                 It.Is<List<NachaEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         await _service.GenerateNachaFileForPendingDraftsAsync();
 
@@ -495,7 +526,7 @@ public class EftDraftServiceTests
         _nachaService.Setup(s => s.GenerateNachaFile(
                 It.Is<List<NachaEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         await _service.GenerateNachaFileForPendingDraftsAsync();
 

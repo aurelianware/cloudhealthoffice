@@ -165,19 +165,25 @@ public class SponsorBankAccountEndToEndTests : IClassFixture<SponsorBankAccountE
     }
 
     [Fact]
-    public async Task ApprovedAccount_Batch_BuildsTheNachaFileWithTheFullNumbers()
+    public async Task ApprovedAccount_Batch_BuildsTheNachaFile_ButNeverReturnsIt()
     {
         ApprovedAccount();
 
         var response = await As(Approver, ChoRolePermissions.FinanceApprover)
             .PostAsJsonAsync("/api/v1/eft/drafts/batch", new { billingRunId = "run-1" });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        using var json = JsonDocument.Parse(body);
         json.RootElement.GetProperty("draftsInitiated").GetInt32().Should().Be(1);
         json.RootElement.GetProperty("needsAttention").GetArrayLength().Should().Be(0);
-        var file = json.RootElement.GetProperty("nachaFile").GetProperty("fileContent").GetString();
-        file.Should().Contain(Account).And.Contain(Routing[..8]);
+        // The file goes to the bank (here none is configured, so it is held for
+        // retrieval); the approver gets the masked summary only.
+        var file = json.RootElement.GetProperty("nachaFile");
+        file.TryGetProperty("fileContent", out _).Should().BeFalse();
+        file.GetProperty("entryCount").GetInt32().Should().Be(1);
+        file.GetProperty("entries")[0].GetProperty("accountNumberLast4").GetString().Should().Be("6789");
+        body.Should().NotContain(Account).And.NotContain(Routing[..8]);
         ReadOnlyByPremiumBillingServiceToken();
         NoNumbersLogged();
     }

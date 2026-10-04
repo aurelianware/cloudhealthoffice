@@ -3,14 +3,15 @@
 @using CloudHealthOffice.Portal.Services
 @inject IPremiumBillingService BillingService
 @inject IUserContextService UserContextService
-@inject IJSRuntime JS
 
 <PageTitle>Premium Auto-Debit — Cloud Health Office</PageTitle>
 
 @* Sponsor auto-debit (EFT/ACH). Draft reads: billing:read or payments:read.
    Releasing debits (drafts, batches, NACHA files): payments:approve
    (FinanceApprover), and never by the user who created or executed the
-   invoice's billing run (403 "Separation of duties"). *@
+   invoice's billing run (403 "Separation of duties"). NACHA files go from
+   premium-billing-service straight to the bank: this page shows the masked
+   summary and the receipt, and never receives the file. *@
 <PermissionGate Permission="billing:read,payments:read" RoleName="Finance or FinanceApprover">
 <PremiumBillingNav Active="eft" />
 <BillingError Error="_error" OnClose="() => _error = null" />
@@ -94,8 +95,8 @@
             </div>
             <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="ReleaseInvoice" Disabled="_busy"
                        data-testid="eft-release-invoice">Release one invoice</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Description"
-                       OnClick="GenerateNacha" Disabled="_busy" data-testid="eft-generate-nacha">Generate NACHA file</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="GenerateNacha" Disabled="_busy" data-testid="eft-generate-nacha">Send NACHA file to the bank</MudButton>
         </div>
     </MudPaper>
 }
@@ -113,18 +114,10 @@
 }
 @if (_nacha != null)
 {
-    <MudAlert Severity="Severity.Info" Class="mb-3" data-testid="eft-nacha-result">
-        @if (_nacha.EntryCount > 0)
-        {
-            <span>NACHA file <strong>@_nacha.FileName</strong> generated with @_nacha.EntryCount entr@(_nacha.EntryCount == 1 ? "y" : "ies")
-                for @_nacha.TotalAmount.ToString("C2") and downloaded. Send it to the bank; the drafts are now Submitted.</span>
-        }
-        else
-        {
-            <span>No pending NACHA drafts were ready for a file.</span>
-        }
-    </MudAlert>
+    <NachaFileSummary Result="_nacha" TestId="eft-nacha-result" PartyHeader="Sponsor" />
 }
+<NachaAwaitingRetrieval Items="_held" TestId="eft-awaiting-retrieval" CanApprove="_canRelease" UserId="@_userId"
+                        Busy="_busy" OnRetry="RetryNacha" />
 @if (_released != null)
 {
     <MudAlert Severity="Severity.Success" Class="mb-3" data-testid="eft-single-result">
@@ -226,6 +219,7 @@
     private List<EftAttentionItem> _attention = new();
     private BatchEftResult? _batch;
     private NachaFileResult? _nacha;
+    private List<NachaHeldFile> _held = new();
     private EftDraft? _released;
 
     private bool _loading;
@@ -253,6 +247,8 @@
         _canReadRuns = UserContextService.HasPermission("billing:read");
         _canRelease = UserContextService.HasPermission("payments:approve");
         if (!_canReadRuns && !UserContextService.HasPermission("payments:read")) return;
+
+        await LoadHeld();
 
         if (_canReadRuns)
         {
@@ -323,8 +319,9 @@
             _attention = _batch.NeedsAttention.ToList();
             if (_batch.NachaFile != null)
             {
-                await Deliver(_batch.NachaFile);
+                _nacha = _batch.NachaFile;
                 _attention.AddRange(_batch.NachaFile.NeedsAttention);
+                await LoadHeld();
             }
             await LoadDrafts(run.InvoiceIds);
         });
@@ -352,26 +349,31 @@
 
     private Task GenerateNacha() => Act(async () =>
     {
-        var result = await BillingService.GenerateNachaFileAsync();
-        _attention = result.NeedsAttention.ToList();
-        await Deliver(result);
+        _nacha = await BillingService.GenerateNachaFileAsync();
+        _attention = _nacha.NeedsAttention.ToList();
+        await LoadHeld();
         if (_run != null) await LoadDrafts(_run.InvoiceIds);
     });
 
-    /// <summary>
-    /// A NACHA file holds full routing and account numbers (the bank needs
-    /// them). It goes to the browser as a download only, is never rendered,
-    /// and is dropped from memory right after.
-    /// </summary>
-    private async Task Deliver(NachaFileResult file)
+    /// <summary>A second approver re-sends a file that did not reach the bank.</summary>
+    private Task RetryNacha(string fileReference) => Act(async () =>
     {
-        if (file.EntryCount > 0 && !string.IsNullOrEmpty(file.FileContent))
+        _nacha = await BillingService.RetryNachaTransmissionAsync(fileReference);
+        await LoadHeld();
+        if (_run != null) await LoadDrafts(_run.InvoiceIds);
+    });
+
+    private async Task LoadHeld()
+    {
+        try
         {
-            var base64 = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes(file.FileContent));
-            await JS.InvokeVoidAsync("downloadBase64File", file.FileName, "text/plain", base64);
+            _held = await BillingService.GetHeldNachaFilesAsync();
         }
-        file.FileContent = string.Empty;
-        _nacha = file;
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            // The list is a convenience; the release itself reports its own outcome.
+            _held = new();
+        }
     }
 
     private async Task Act(Func<Task> action)
@@ -401,6 +403,7 @@
         "Settled" => Color.Success,
         "Submitted" or "Processing" => Color.Info,
         "Pending" => Color.Default,
+        "AwaitingRetrieval" => Color.Warning,
         "Returned" or "Failed" => Color.Error,
         "Cancelled" => Color.Dark,
         _ => Color.Default

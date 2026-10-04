@@ -13,7 +13,7 @@ public interface INachaFileService
     /// <summary>
     /// Generate a NACHA file for a batch of EFT drafts
     /// </summary>
-    NachaFileResult GenerateNachaFile(List<NachaEntryDetail> entries, NachaFileOptions options);
+    GeneratedNachaFile GenerateNachaFile(List<NachaEntryDetail> entries, NachaFileOptions options);
 }
 
 public class NachaFileService : INachaFileService
@@ -27,7 +27,7 @@ public class NachaFileService : INachaFileService
         _logger = logger;
     }
 
-    public NachaFileResult GenerateNachaFile(List<NachaEntryDetail> entries, NachaFileOptions options)
+    public GeneratedNachaFile GenerateNachaFile(List<NachaEntryDetail> entries, NachaFileOptions options)
     {
         if (entries.Count == 0)
             throw new InvalidOperationException("No entries to include in NACHA file");
@@ -93,7 +93,7 @@ public class NachaFileService : INachaFileService
             "Generated NACHA file {FileName}: {EntryCount} entries, ${TotalAmount:N2} total",
             fileName, entries.Count, totalDebitAmount);
 
-        return new NachaFileResult
+        return new GeneratedNachaFile
         {
             FileReference = $"NACHA-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}",
             FileName = fileName,
@@ -183,8 +183,8 @@ public class NachaFileService : INachaFileService
             "225",                                                        // Service Class Code (225 = debits only)
             entryCount.ToString("000000"),                                // Entry/Addenda Count
             (entryHash % 10000000000).ToString("0000000000"),             // Entry Hash
-            FormatAmount(0, 12),                                          // Total Debit Amount in Batch (credits)
-            FormatAmount(totalDebitAmount, 12),                           // Total Credit Amount in Batch (debits from receiver perspective)
+            FormatAmount(totalDebitAmount, 12),                           // Total Debit Entry Dollar Amount in Batch
+            FormatAmount(0, 12),                                          // Total Credit Entry Dollar Amount in Batch
             FormatField(options.CompanyId, 10),                           // Company Identification
             new string(' ', 19),                                          // Message Authentication Code
             new string(' ', 6),                                           // Reserved
@@ -205,8 +205,8 @@ public class NachaFileService : INachaFileService
             blockCount.ToString("000000"),                                // Block Count
             entryCount.ToString("00000000"),                              // Entry/Addenda Count
             (entryHash % 10000000000).ToString("0000000000"),             // Entry Hash
-            FormatAmount(0, 12),                                          // Total Debit Amount in File
-            FormatAmount(totalDebitAmount, 12),                           // Total Credit Amount in File
+            FormatAmount(totalDebitAmount, 12),                           // Total Debit Entry Dollar Amount in File
+            FormatAmount(0, 12),                                          // Total Credit Entry Dollar Amount in File
             new string(' ', 39)                                           // Reserved
         );
     }

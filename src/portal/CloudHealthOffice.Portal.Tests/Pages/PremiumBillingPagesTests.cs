@@ -414,24 +414,64 @@ public class PremiumBillingEftPageTests : BillingPageTestBase
     }
 
     [Fact]
-    public void Approver_GeneratesNacha_DownloadsIt_ButNeverShowsTheNumbers()
+    public void Approver_SendsNacha_SeesTheMaskedSummaryAndReceipt_AndNothingIsDownloaded()
     {
         SignIn("approver-1", "billing:read", "payments:approve");
         Api.On("POST", "/api/v1/eft/nacha/generate", HttpStatusCode.OK, BillingApiShapes.NachaResult);
-        var download = JSInterop.SetupVoid("downloadBase64File", _ => true);
-        download.SetVoidResult();
         var cut = RenderWithRun();
 
         Click(cut, "eft-generate-nacha");
 
         cut.WaitForAssertion(() => Has(cut, "eft-nacha-result").Should().BeTrue());
         Api.CallsTo("POST", "/api/v1/eft/nacha/generate").Should().ContainSingle();
-        var invocation = download.Invocations.Single();
-        invocation.Arguments[0].Should().Be("NACHA-20260216.txt");
-        cut.Find("[data-testid=eft-nacha-result]").TextContent.Should().Contain("1 entry");
+        var result = cut.Find("[data-testid=eft-nacha-result]").TextContent;
+        result.Should().Contain("NACHA-20260216").And.Contain("1 entry").And.Contain("Sent to the bank");
+        cut.Find("[data-testid=eft-nacha-result-receipt]").TextContent.Should()
+            .Contain("sftp://sftp.bank.example:22/inbound").And.Contain("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
+        cut.Find("[data-testid=eft-nacha-result-entries]").TextContent.Should().Contain("G1").And.Contain("••••6789").And.Contain("450.00");
         cut.Find("[data-testid=eft-needs-attention]").TextContent.Should().Contain("G4");
+        // No file and no download: the service sent it to the bank.
+        JSInterop.Invocations.Should().NotContain(i => i.Identifier == "downloadBase64File");
+        cut.Markup.Should().NotContain("download", "there is no download link or action");
         cut.Markup.Should().NotContain(BillingApiShapes.FullAccountNumber);
         cut.Markup.Should().NotContain(BillingApiShapes.FullRoutingNumber);
+    }
+
+    [Fact]
+    public void BankUnreachable_ShowsAwaitingRetrieval_WithTheNote_AndASecondApproverCanRetry()
+    {
+        SignIn("approver-2", "billing:read", "payments:approve");
+        Api.On("POST", "/api/v1/eft/nacha/generate", HttpStatusCode.OK, BillingApiShapes.NachaAwaitingRetrieval);
+        Api.On("GET", "/api/v1/eft/nacha/held", HttpStatusCode.OK, BillingApiShapes.HeldFiles);
+        Api.On("POST", "/api/v1/eft/nacha/held/NACHA-HELD0001/retry", HttpStatusCode.OK, BillingApiShapes.NachaResult);
+        var cut = RenderWithRun();
+
+        Click(cut, "eft-generate-nacha");
+
+        cut.WaitForAssertion(() => Has(cut, "eft-nacha-result-error").Should().BeTrue());
+        cut.Find("[data-testid=eft-nacha-result]").TextContent.Should().Contain("Awaiting retrieval");
+        cut.Find("[data-testid=eft-nacha-result-error]").TextContent.Should().Contain("platform admin must retrieve it");
+        var awaiting = cut.Find("[data-testid=eft-awaiting-retrieval]").TextContent;
+        awaiting.Should().Contain("NACHA-HELD0001").And.Contain("approver-1");
+        cut.Find("[data-testid=eft-awaiting-retrieval-note]").TextContent.Should().Contain("A platform admin must retrieve the file");
+
+        Click(cut, "eft-awaiting-retrieval-retry-NACHA-HELD0001");
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=eft-nacha-result]").TextContent.Should().Contain("Sent to the bank"));
+        Api.CallsTo("POST", "/api/v1/eft/nacha/held/NACHA-HELD0001/retry").Should().ContainSingle();
+        cut.Markup.Should().NotContain(BillingApiShapes.FullAccountNumber);
+    }
+
+    [Fact]
+    public void TheReleaser_IsNotOfferedTheRetry()
+    {
+        SignIn("approver-1", "billing:read", "payments:approve");
+        Api.On("GET", "/api/v1/eft/nacha/held", HttpStatusCode.OK, BillingApiShapes.HeldFiles);
+
+        var cut = RenderComponent<PremiumBillingEft>();
+
+        cut.WaitForAssertion(() => Has(cut, "eft-awaiting-retrieval").Should().BeTrue());
+        Has(cut, "eft-awaiting-retrieval-retry-NACHA-HELD0001").Should().BeFalse();
     }
 }
 

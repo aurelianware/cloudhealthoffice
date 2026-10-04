@@ -207,7 +207,14 @@ public enum EftDraftStatus
     /// <summary>
     /// Cancelled before settlement
     /// </summary>
-    Cancelled
+    Cancelled,
+
+    /// <summary>
+    /// In a NACHA file that could not be sent to the bank (transmission not
+    /// configured or failed). The file is held encrypted for 7 days: a
+    /// platform admin must retrieve it or another approver retry it.
+    /// </summary>
+    AwaitingRetrieval
 }
 
 /// <summary>
@@ -352,9 +359,10 @@ public class ProcessAchReturnRequest
 }
 
 /// <summary>
-/// Result of a NACHA file generation
+/// A generated NACHA debit file. Holds full routing and account numbers: it
+/// never leaves the service except to the bank (INachaDispatcher). Not an API type.
 /// </summary>
-public class NachaFileResult
+public class GeneratedNachaFile
 {
     public string FileReference { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
@@ -362,9 +370,52 @@ public class NachaFileResult
     public int EntryCount { get; set; }
     public decimal TotalAmount { get; set; }
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// What an approver gets back for a NACHA file: a masked summary and the
+/// transmission receipt. Never the file, never a full routing or account number.
+/// </summary>
+public class NachaFileResult
+{
+    public string FileReference { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalCreditAmount { get; set; }
+    public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Transmitted, AwaitingRetrieval or NotSent.</summary>
+    public string TransmissionStatus { get; set; } = string.Empty;
+
+    /// <summary>Why the file was not delivered (AwaitingRetrieval, NotSent).</summary>
+    public string? TransmissionError { get; set; }
+
+    /// <summary>When a held file is deleted (AwaitingRetrieval).</summary>
+    public DateTime? HeldUntil { get; set; }
+
+    /// <summary>Set when the bank received the file.</summary>
+    public CloudHealthOffice.NachaTransmission.NachaTransmissionReceipt? Receipt { get; set; }
+
+    /// <summary>One line per debit: sponsor, last 4 and amount.</summary>
+    public List<NachaEntrySummary> Entries { get; set; } = new();
 
     /// <summary>Pending drafts left out of the file because something needs fixing first.</summary>
     public List<EftAttentionItem> NeedsAttention { get; set; } = new();
+}
+
+/// <summary>One debit in a NACHA file, masked.</summary>
+public class NachaEntrySummary
+{
+    public string DraftId { get; set; } = string.Empty;
+    public string InvoiceId { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public string? AccountHolderName { get; set; }
+    public string? RoutingNumberLast4 { get; set; }
+    public string? AccountNumberLast4 { get; set; }
+    public decimal Amount { get; set; }
+    public string? TraceNumber { get; set; }
 }
 
 /// <summary>

@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.NachaTransmission;
 using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
@@ -22,9 +23,25 @@ public interface IEftDraftService
     Task<BatchEftResult> InitiateBatchDraftAsync(InitiateBatchEftRequest request);
 
     /// <summary>
-    /// Generate a NACHA file for all pending NACHA drafts
+    /// Generate a NACHA file for all pending NACHA drafts and send it to the
+    /// bank. Returns the masked summary and receipt, never the file.
     /// </summary>
     Task<NachaFileResult> GenerateNachaFileForPendingDraftsAsync();
+
+    /// <summary>NACHA files of this tenant that were not delivered (no content).</summary>
+    Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync();
+
+    /// <summary>
+    /// Re-sends a held NACHA file. The acting user must hold payments:approve
+    /// (controller) and must not be the user who released it.
+    /// </summary>
+    Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference);
+
+    /// <summary>
+    /// A held NACHA file for a platform admin (controller: platform:admin),
+    /// never the releasing user. Audited with the reason.
+    /// </summary>
+    Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string fileReference, string reason);
 
     /// <summary>
     /// Process an ACH return (bank rejection)
@@ -65,6 +82,7 @@ public class EftDraftService : IEftDraftService
     private readonly INachaFileService _nachaFileService;
     private readonly IStripeAchService _stripeAchService;
     private readonly ISponsorBankAccountSource _bankAccounts;
+    private readonly INachaDispatcher _dispatcher;
     private readonly ICurrentActor _actor;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
@@ -81,6 +99,7 @@ public class EftDraftService : IEftDraftService
         INachaFileService nachaFileService,
         IStripeAchService stripeAchService,
         ISponsorBankAccountSource bankAccounts,
+        INachaDispatcher dispatcher,
         ICurrentActor actor,
         IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
@@ -92,6 +111,7 @@ public class EftDraftService : IEftDraftService
         _nachaFileService = nachaFileService;
         _stripeAchService = stripeAchService;
         _bankAccounts = bankAccounts;
+        _dispatcher = dispatcher;
         _actor = actor;
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
@@ -309,24 +329,12 @@ public class EftDraftService : IEftDraftService
             }
         }
 
-        // Generate NACHA file if there are NACHA entries
+        // Build the NACHA file and send it straight to the bank. The drafts are
+        // Submitted only once the bank has it; otherwise they await retrieval
+        // (file held encrypted) or stay Pending (nothing held).
         if (nachaEntries.Count > 0)
         {
-            var nachaOptions = BuildNachaOptionsFromConfig();
-            var nachaResult = _nachaFileService.GenerateNachaFile(nachaEntries, nachaOptions);
-            result.NachaFile = nachaResult;
-
-            // Update NACHA drafts with file reference, trace numbers, and mark as submitted
-            for (int i = 0; i < nachaDrafts.Count; i++)
-            {
-                var draft = nachaDrafts[i];
-                draft.NachaFileReference = nachaResult.FileReference;
-                draft.Status = EftDraftStatus.Submitted;
-                draft.SubmittedAt = DateTime.UtcNow;
-                draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-                draft.TraceNumber = nachaEntries[i].TraceNumber;
-                await _draftRepository.UpdateAsync(draft);
-            }
+            result.NachaFile = await SendNachaFileAsync(nachaEntries, nachaDrafts, request.BillingRunId);
         }
 
         // Mark the billing run so the items needing attention are visible on it.
@@ -385,6 +393,9 @@ public class EftDraftService : IEftDraftService
                 continue;
             }
 
+            // The masked summary shows the last 4 of the account actually debited.
+            draft.RoutingNumberLast4 = bankAccount.RoutingNumberLast4 ?? Last4(bankAccount.RoutingNumber);
+            draft.AccountNumberLast4 = bankAccount.AccountNumberLast4 ?? Last4(bankAccount.AccountNumber);
             entries.Add(new NachaEntryDetail
             {
                 RoutingNumber = bankAccount.RoutingNumber,
@@ -403,24 +414,199 @@ public class EftDraftService : IEftDraftService
                 "No drafts with valid bank accounts to include in NACHA file; needs attention: " +
                 string.Join("; ", needsAttention.Select(a => $"draft {a.DraftId} (group {a.GroupNumber}): {a.Reason}")));
 
-        var nachaOptions = BuildNachaOptionsFromConfig();
-        var result = _nachaFileService.GenerateNachaFile(entries, nachaOptions);
+        // Only drafts actually in the file change state, and only to what the
+        // transmission outcome says.
+        var result = await SendNachaFileAsync(entries, includedDrafts, runId: null);
         result.NeedsAttention.AddRange(needsAttention);
+        return result;
+    }
 
-        // Only mark drafts that were actually included in the file as submitted
-        for (int i = 0; i < includedDrafts.Count; i++)
+    /// <summary>
+    /// Generates the file, hands it to the dispatcher (bank SFTP, or held
+    /// encrypted for retrieval), updates the drafts to match what happened, and
+    /// returns the masked summary. The file content never leaves this method.
+    /// </summary>
+    private async Task<NachaFileResult> SendNachaFileAsync(List<NachaEntryDetail> entries, List<EftDraft> drafts, string? runId)
+    {
+        var file = _nachaFileService.GenerateNachaFile(entries, BuildNachaOptionsFromConfig());
+        NachaDispatchOutcome outcome;
+        NachaFileFacts facts;
+        try
         {
-            var draft = includedDrafts[i];
-            draft.NachaFileReference = result.FileReference;
-            draft.Status = EftDraftStatus.Submitted;
-            draft.SubmittedAt = DateTime.UtcNow;
-            draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-            draft.TraceNumber = entries[i].TraceNumber;
+            facts = NachaFileFacts.From(file.FileContent);
+            outcome = await _dispatcher.DispatchAsync(new NachaTransmissionRequest
+            {
+                TenantId = _actor.TenantId,
+                FileReference = file.FileReference,
+                FileName = file.FileName,
+                Content = file.FileContent,
+                RunId = runId,
+                BatchId = file.FileReference,
+                TransmittedBy = ActorId,
+            });
+        }
+        finally
+        {
+            file.FileContent = string.Empty;
+        }
+
+        var now = DateTime.UtcNow;
+        var result = new NachaFileResult
+        {
+            FileReference = file.FileReference,
+            FileName = file.FileName,
+            EntryCount = file.EntryCount,
+            TotalAmount = file.TotalAmount,
+            TotalDebitAmount = facts.TotalDebitAmount,
+            TotalCreditAmount = facts.TotalCreditAmount,
+            GeneratedAt = file.GeneratedAt,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        for (int i = 0; i < drafts.Count; i++)
+        {
+            var draft = drafts[i];
+            draft.LastUpdatedBy = ActorId;
+            switch (outcome.Status)
+            {
+                case NachaTransmissionStatus.Transmitted:
+                    draft.NachaFileReference = file.FileReference;
+                    draft.TraceNumber = entries[i].TraceNumber;
+                    draft.Status = EftDraftStatus.Submitted;
+                    draft.SubmittedAt = now;
+                    draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    draft.ErrorMessage = null;
+                    break;
+                case NachaTransmissionStatus.AwaitingRetrieval:
+                    draft.NachaFileReference = file.FileReference;
+                    draft.TraceNumber = entries[i].TraceNumber;
+                    draft.Status = EftDraftStatus.AwaitingRetrieval;
+                    draft.ErrorMessage = AwaitingRetrievalMessage(file.FileReference, outcome.Reason);
+                    break;
+                default:
+                    // Nothing was sent or held: the draft stays Pending for the next file.
+                    draft.NachaFileReference = null;
+                    draft.TraceNumber = null;
+                    draft.Status = EftDraftStatus.Pending;
+                    draft.ErrorMessage = outcome.Reason;
+                    break;
+            }
             await _draftRepository.UpdateAsync(draft);
+
+            var summary = Summary(draft);
+            summary.AccountHolderName = entries[i].IndividualName;
+            result.Entries.Add(summary);
         }
 
         return result;
     }
+
+    private static string AwaitingRetrievalMessage(string fileReference, string? reason)
+        => $"NACHA file {fileReference} was not delivered to the bank: {reason} It is held encrypted for 7 days: " +
+           "a platform admin must retrieve it, or another user with payments:approve must retry it.";
+
+    public Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync()
+        => _dispatcher.ListHeldAsync(_actor.TenantId);
+
+    public async Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference)
+    {
+        var tenantId = _actor.TenantId;
+        var drafts = (await _draftRepository.GetByStatusAsync(EftDraftStatus.AwaitingRetrieval))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        NachaDispatchOutcome outcome;
+        try
+        {
+            outcome = await _dispatcher.RetryAsync(tenantId, fileReference, new NachaActor(ActorId, _actor.IsService));
+        }
+        catch (Exception ex) when (ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException)
+        {
+            // The held file is gone: its drafts go back to Pending, so the next
+            // release builds a new file for them.
+            foreach (var draft in drafts)
+            {
+                draft.Status = EftDraftStatus.Pending;
+                draft.NachaFileReference = null;
+                draft.TraceNumber = null;
+                draft.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
+            throw;
+        }
+
+        var held = await _dispatcher.GetHeldAsync(tenantId, fileReference);
+        var result = new NachaFileResult
+        {
+            FileReference = fileReference,
+            FileName = held?.FileName ?? string.Empty,
+            EntryCount = held?.EntryCount ?? drafts.Count,
+            TotalAmount = drafts.Sum(d => d.Amount),
+            TotalDebitAmount = held?.TotalDebitAmount ?? 0,
+            TotalCreditAmount = held?.TotalCreditAmount ?? 0,
+            GeneratedAt = held?.CreatedAt ?? DateTime.UtcNow,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        var now = DateTime.UtcNow;
+        foreach (var draft in drafts)
+        {
+            if (outcome.Status == NachaTransmissionStatus.Transmitted)
+            {
+                draft.Status = EftDraftStatus.Submitted;
+                draft.SubmittedAt = now;
+                draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                draft.ErrorMessage = null;
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
+            result.Entries.Add(Summary(draft));
+        }
+
+        return result;
+    }
+
+    public async Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string fileReference, string reason)
+    {
+        var file = await _dispatcher.RetrieveAsync(_actor.TenantId, fileReference, new NachaActor(ActorId, _actor.IsService), reason);
+        if (file.FirstRetrieval)
+        {
+            // The platform admin now delivers it by hand: its drafts count as submitted.
+            var now = DateTime.UtcNow;
+            foreach (var draft in (await _draftRepository.GetByStatusAsync(EftDraftStatus.AwaitingRetrieval))
+                     .Where(d => d.NachaFileReference == fileReference))
+            {
+                draft.Status = EftDraftStatus.Submitted;
+                draft.SubmittedAt = now;
+                draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                draft.ErrorMessage = $"NACHA file retrieved by platform admin {ActorId} for manual delivery to the bank.";
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
+        }
+        return file;
+    }
+
+    private static string? Last4(string? number)
+        => string.IsNullOrEmpty(number) ? null : number.Length <= 4 ? number : number[^4..];
+
+    private static NachaEntrySummary Summary(EftDraft draft) => new()
+    {
+        DraftId = draft.Id,
+        InvoiceId = draft.InvoiceId,
+        GroupNumber = draft.GroupNumber,
+        RoutingNumberLast4 = draft.RoutingNumberLast4,
+        AccountNumberLast4 = draft.AccountNumberLast4,
+        Amount = draft.Amount,
+        TraceNumber = draft.TraceNumber,
+    };
 
     public Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request)
         => ProcessAchReturnAsync(request, ActorId);

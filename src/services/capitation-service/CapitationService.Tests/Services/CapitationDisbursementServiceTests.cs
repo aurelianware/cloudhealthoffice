@@ -54,10 +54,12 @@ public class CapitationDisbursementServiceTests
             configuration,
             TestSeparationOfDuties.Create(runs: _runRepo.Object),
             _bankAccountSource = new FactoryBackedProviderBankAccountSource(_httpClientFactory.Object),
+            _dispatcher,
             logger.Object);
     }
 
     private readonly FactoryBackedProviderBankAccountSource _bankAccountSource;
+    private readonly RecordingNachaDispatcher _dispatcher = new();
 
     /// <summary>Statements the NACHA file's pending disbursements belong to (separation of duties is checked on them).</summary>
     private void StatementsFor(IEnumerable<CapitationDisbursement> disbursements)
@@ -211,7 +213,7 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync((CapitationDisbursement d) => d);
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
         {
@@ -434,7 +436,7 @@ public class CapitationDisbursementServiceTests
                 for (int i = 0; i < entries.Count; i++)
                     entries[i].TraceNumber = $"091000010000{i + 1}";
             })
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST", EntryCount = 2, TotalAmount = 13000 });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST", EntryCount = 2, TotalAmount = 13000 });
 
         var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
@@ -445,6 +447,43 @@ public class CapitationDisbursementServiceTests
         // Verify disbursements updated to Submitted with trace numbers
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
             d.Status == DisbursementStatus.Submitted && d.TraceNumber != null)), Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.Transmitted, DisbursementStatus.Submitted)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.AwaitingRetrieval, DisbursementStatus.AwaitingRetrieval)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.NotSent, DisbursementStatus.Pending)]
+    public async Task GenerateNachaCreditFileAsync_SubmittedOnlyWhenTheBankHasTheFile(
+        CloudHealthOffice.NachaTransmission.NachaTransmissionStatus outcome, DisbursementStatus expected)
+    {
+        var disbursement = new CapitationDisbursement
+        {
+            Id = "d1", TenantId = "tenant-1", ProviderNPI = "1234567890", ProviderName = "Dr. Chen", AccountNumberLast4 = "6789",
+            Method = DisbursementMethod.NachaCredit, Amount = 5000, Status = DisbursementStatus.Pending
+        };
+        _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(new List<CapitationDisbursement> { disbursement });
+        StatementsFor(new List<CapitationDisbursement> { disbursement });
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>())).ReturnsAsync((CapitationDisbursement d) => d);
+        var handler = new MockHttpMessageHandler<ProviderBankAccountDto>(_ => new ProviderBankAccountDto
+        {
+            EftEnabled = true, RoutingNumber = "091000019", AccountNumber = "123456789", AccountHolderName = "DR CHEN"
+        });
+        _httpClientFactory.Setup(f => f.CreateClient("ProviderService"))
+            .Returns(new HttpClient(handler) { BaseAddress = new Uri("http://provider-service") });
+        _nachaService.Setup(s => s.GenerateNachaCreditFile(It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST", FileContent = "622...", EntryCount = 1, TotalAmount = 5000 });
+        _dispatcher.Status = outcome;
+
+        var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
+
+        disbursement.Status.Should().Be(expected);
+        if (expected != DisbursementStatus.Submitted) disbursement.SubmittedAt.Should().BeNull();
+        result.TransmissionStatus.Should().Be(outcome.ToString());
+        result.Entries.Should().ContainSingle(e => e.DisbursementId == "d1" && e.AccountNumberLast4 == "6789" && e.Amount == 5000);
+        var sent = _dispatcher.Sent.Should().ContainSingle().Subject;
+        sent.TransmittedBy.Should().Be("releaser-1");
+        sent.TenantId.Should().Be("tenant-1");
+        typeof(NachaCreditFileResult).GetProperty("FileContent").Should().BeNull("the API type has no file content");
     }
 
     [Fact]
@@ -473,7 +512,7 @@ public class CapitationDisbursementServiceTests
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.Is<List<NachaCreditEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
@@ -508,7 +547,7 @@ public class CapitationDisbursementServiceTests
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.Is<List<NachaCreditEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         await _service.GenerateNachaCreditFileAsync("releaser-1");
 
@@ -759,7 +798,7 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync((CapitationDisbursement d) => d);
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
         {
@@ -794,7 +833,7 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync((CapitationDisbursement d) => d);
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
         {

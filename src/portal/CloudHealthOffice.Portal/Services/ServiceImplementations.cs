@@ -3109,6 +3109,12 @@ public class PremiumBillingService : IPremiumBillingService
     public Task<NachaFileResult> GenerateNachaFileAsync()
         => SendAsync<NachaFileResult>(HttpMethod.Post, "eft/nacha/generate");
 
+    public Task<List<NachaHeldFile>> GetHeldNachaFilesAsync()
+        => SendAsync<List<NachaHeldFile>>(HttpMethod.Get, "eft/nacha/held");
+
+    public Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference)
+        => SendAsync<NachaFileResult>(HttpMethod.Post, $"eft/nacha/held/{Uri.EscapeDataString(fileReference)}/retry");
+
     public async Task<MemberPremiumSummary?> GetMemberPremiumSummaryAsync(string memberId)
     {
         var baseUrl = _configuration["Services:BillingService"];
@@ -4057,6 +4063,26 @@ public class CapitationService : ICapitationService
                 new { StatementIds = statementIds, InitiatedBy = initiatedBy });
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<CapDisbursementBatchResult>() ?? new();
+        }
+        catch (HttpRequestException ex) { _logger.LogError(ex, "Capitation Service unavailable"); throw new ServiceUnavailableException("Capitation Service", ex); }
+    }
+
+    public async Task<List<NachaHeldFile>> GetHeldNachaFilesAsync()
+    {
+        try { return await _httpClient.GetFromJsonAsync<List<NachaHeldFile>>($"{BaseUrl}/v1/capitation/disbursements/nacha/held") ?? new(); }
+        catch (HttpRequestException ex) { _logger.LogError(ex, "Capitation Service unavailable"); throw new ServiceUnavailableException("Capitation Service", ex); }
+    }
+
+    public async Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync(
+                $"{BaseUrl}/v1/capitation/disbursements/nacha/held/{Uri.EscapeDataString(fileReference)}/retry", null);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(
+                    $"Retry refused ({(int)response.StatusCode}): {await response.Content.ReadAsStringAsync()}");
+            return await response.Content.ReadFromJsonAsync<NachaFileResult>() ?? new();
         }
         catch (HttpRequestException ex) { _logger.LogError(ex, "Capitation Service unavailable"); throw new ServiceUnavailableException("Capitation Service", ex); }
     }

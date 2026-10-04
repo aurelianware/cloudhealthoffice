@@ -177,6 +177,100 @@ public sealed class TenantPlatformSettingsRoundTripTests : IAsyncLifetime
         config.GetProperty("paymentControls").GetProperty("enforceSeparationOfDuties").GetBoolean().Should().BeTrue();
     }
 
+    private const string Pin = "SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU";
+
+    private static object NachaBody(object nachaTransmission) => new
+    {
+        configuration = new { paymentControls = new { enforceSeparationOfDuties = true, nachaTransmission } },
+    };
+
+    private static object ValidNacha() => new
+    {
+        enabled = true,
+        host = "sftp.bank.example",
+        port = 22,
+        username = "cho-plan",
+        privateKeySecretRef = "nacha--tenant-a--sftp-key",
+        passwordSecretRef = "nacha--tenant-a--sftp-passphrase",
+        hostKeyFingerprint = Pin,
+        remoteDirectory = "/inbound/ach",
+    };
+
+    [Fact]
+    public async Task NachaTransmission_RoundTrips_SecretNamesOnlyToServicesAndSettingsManagers()
+    {
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+
+        var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(ValidNacha()));
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+
+        var stored = await _database.GetCollection<BsonDocument>("Tenants")
+            .Find(new BsonDocument("tenantId", TenantServiceFactory.TenantA)).SingleAsync();
+        var storedNacha = stored["configuration"]["paymentControls"]["nachaTransmission"].AsBsonDocument;
+        storedNacha["hostKeyFingerprint"].AsString.Should().Be(Pin);
+        storedNacha["privateKeySecretRef"].AsString.Should().Be("nacha--tenant-a--sftp-key");
+        storedNacha.Names.Should().NotContain(new[] { "unknownProperties", "privateKeyConfigured", "passwordConfigured" });
+
+        // premium-billing-service and capitation-service read it with their own service token.
+        using (var asService = JsonDocument.Parse(await _factory.ServiceClient("premium-billing-service", TenantServiceFactory.TenantA)
+                   .GetStringAsync("/api/v1/tenants/tenant-a")))
+        {
+            var nacha = asService.RootElement.GetProperty("configuration").GetProperty("paymentControls").GetProperty("nachaTransmission");
+            nacha.GetProperty("enabled").GetBoolean().Should().BeTrue();
+            nacha.GetProperty("host").GetString().Should().Be("sftp.bank.example");
+            nacha.GetProperty("privateKeySecretRef").GetString().Should().Be("nacha--tenant-a--sftp-key");
+            nacha.GetProperty("passwordSecretRef").GetString().Should().Be("nacha--tenant-a--sftp-passphrase");
+            nacha.GetProperty("hostKeyFingerprint").GetString().Should().Be(Pin);
+            nacha.GetProperty("remoteDirectory").GetString().Should().Be("/inbound/ach");
+        }
+
+        // A reader without settings:manage sees that credentials are configured, not their names.
+        var approver = _factory.UserClient(TenantServiceFactory.TenantA, "approver-1", ChoRolePermissions.FinanceApprover);
+        var readerBody = await approver.GetStringAsync("/api/v1/tenants/tenant-a");
+        readerBody.Should().NotContain("nacha--tenant-a--");
+        using var reader = JsonDocument.Parse(readerBody);
+        var masked = reader.RootElement.GetProperty("configuration").GetProperty("paymentControls").GetProperty("nachaTransmission");
+        masked.GetProperty("privateKeyConfigured").GetBoolean().Should().BeTrue();
+        masked.GetProperty("passwordConfigured").GetBoolean().Should().BeTrue();
+        masked.GetProperty("privateKeySecretRef").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Theory]
+    [InlineData("password")]
+    [InlineData("privateKey")]
+    public async Task NachaTransmission_WithALiteralCredential_IsRefused_AndNothingIsStored(string field)
+    {
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+        var body = new Dictionary<string, object?>
+        {
+            ["enabled"] = false, ["host"] = "sftp.bank.example", [field] = "hunter2-literal-secret",
+        };
+
+        var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(body));
+
+        put.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await put.Content.ReadAsStringAsync()).Should().NotContain("hunter2");
+        var stored = await _database.GetCollection<BsonDocument>("Tenants")
+            .Find(new BsonDocument("tenantId", TenantServiceFactory.TenantA)).SingleAsync();
+        stored.ToJson().Should().NotContain("hunter2");
+    }
+
+    [Theory]
+    [InlineData("privateKeySecretRef", "nacha--tenant-b--key")]      // another tenant's secret
+    [InlineData("privateKeySecretRef", "cosmos-primary-key")]        // a platform secret
+    [InlineData("hostKeyFingerprint", null)]                         // enabled without a pinned host key
+    [InlineData("hostKeyFingerprint", "MD5:aa:bb")]                  // not a SHA-256 pin
+    public async Task NachaTransmission_Invalid_IsRefused(string field, string? value)
+    {
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+        var nacha = JsonSerializer.Deserialize<Dictionary<string, object?>>(JsonSerializer.Serialize(ValidNacha()))!;
+        nacha[field] = value;
+
+        var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(nacha));
+
+        put.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     /// <summary>The real pipeline over a real <see cref="TenantRepository"/> in MongoDB.</summary>
     private sealed class MongoBackedTenantServiceFactory : TenantServiceFactory
     {

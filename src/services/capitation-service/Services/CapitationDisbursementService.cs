@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CapitationService.Models;
 using CapitationService.Repositories;
+using CloudHealthOffice.NachaTransmission;
 
 namespace CapitationService.Services;
 
@@ -24,10 +25,20 @@ public interface ICapitationDisbursementService
     Task<BatchDisbursementResult> InitiateBatchDisbursementAsync(InitiateBatchDisbursementRequest request);
 
     /// <summary>
-    /// Generate a NACHA credit file for all pending NACHA disbursements.
-    /// <paramref name="releasedBy"/> is the user releasing the file (token subject).
+    /// Generate a NACHA credit file for all pending NACHA disbursements and send
+    /// it to the bank. <paramref name="releasedBy"/> is the user releasing the
+    /// file (token subject). Returns the masked summary and receipt, never the file.
     /// </summary>
     Task<NachaCreditFileResult> GenerateNachaCreditFileAsync(string releasedBy);
+
+    /// <summary>NACHA files of the tenant that were not delivered (no content).</summary>
+    Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync(string tenantId);
+
+    /// <summary>Re-sends a held NACHA file; the actor must not be the user who released it.</summary>
+    Task<NachaCreditFileResult> RetryNachaTransmissionAsync(string tenantId, string fileReference, NachaActor actor);
+
+    /// <summary>A held NACHA file for a platform admin (not the releaser), audited with the reason.</summary>
+    Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string tenantId, string fileReference, NachaActor actor, string reason);
 
     /// <summary>
     /// Process an ACH return (bank rejection of credit)
@@ -71,6 +82,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
     private readonly IConfiguration _configuration;
     private readonly IPaymentSeparationOfDuties _separationOfDuties;
     private readonly IProviderBankAccountSource _bankAccounts;
+    private readonly INachaDispatcher _dispatcher;
     private readonly ILogger<CapitationDisbursementService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -88,10 +100,12 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         IConfiguration configuration,
         IPaymentSeparationOfDuties separationOfDuties,
         IProviderBankAccountSource bankAccounts,
+        INachaDispatcher dispatcher,
         ILogger<CapitationDisbursementService> logger)
     {
         _separationOfDuties = separationOfDuties;
         _bankAccounts = bankAccounts;
+        _dispatcher = dispatcher;
         _disbursementRepository = disbursementRepository;
         _statementRepository = statementRepository;
         _runRepository = runRepository;
@@ -337,24 +351,13 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             }
         }
 
-        // Generate NACHA credit file if there are NACHA entries
+        // Build the NACHA credit file and send it straight to the bank. The
+        // disbursements are Submitted only once the bank has it; otherwise they
+        // await retrieval (file held encrypted) or stay Pending (nothing held).
         if (nachaEntries.Count > 0)
         {
-            var nachaOptions = BuildNachaCreditOptionsFromConfig();
-            var nachaResult = _nachaCreditFileService.GenerateNachaCreditFile(nachaEntries, nachaOptions);
-            result.NachaFile = nachaResult;
-
-            // Update NACHA disbursements with file reference, trace numbers, mark as submitted
-            for (int i = 0; i < nachaDisbursements.Count; i++)
-            {
-                var disbursement = nachaDisbursements[i];
-                disbursement.NachaFileReference = nachaResult.FileReference;
-                disbursement.Status = DisbursementStatus.Submitted;
-                disbursement.SubmittedAt = DateTime.UtcNow;
-                disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-                disbursement.TraceNumber = nachaEntries[i].TraceNumber;
-                await _disbursementRepository.UpdateAsync(disbursement);
-            }
+            result.NachaFile = await SendNachaFileAsync(
+                nachaEntries, nachaDisbursements, request.InitiatedBy ?? string.Empty, request.CapitationRunId);
         }
 
         _logger.LogInformation(
@@ -429,6 +432,9 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 continue;
             }
 
+            // The masked summary shows the last 4 of the account actually paid.
+            disbursement.RoutingNumberLast4 = payee.RoutingNumberLast4 ?? Last4(payee.RoutingNumber) ?? disbursement.RoutingNumberLast4;
+            disbursement.AccountNumberLast4 = payee.AccountNumberLast4 ?? Last4(payee.AccountNumber) ?? disbursement.AccountNumberLast4;
             entries.Add(new NachaCreditEntryDetail
             {
                 RoutingNumber = payee.RoutingNumber!,
@@ -447,24 +453,198 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 "No disbursements with approved bank accounts to include in NACHA credit file. Needs attention: " +
                 string.Join(" | ", needsAttention.Select(a => $"{a.DisbursementId}: {a.Reason}")));
 
-        var nachaOptions = BuildNachaCreditOptionsFromConfig();
-        var result = _nachaCreditFileService.GenerateNachaCreditFile(entries, nachaOptions);
+        var result = await SendNachaFileAsync(entries, includedDisbursements, releasedBy, runId: null);
         result.NeedsAttention = needsAttention;
+        return result;
+    }
 
-        for (int i = 0; i < includedDisbursements.Count; i++)
+    /// <summary>
+    /// Generates the credit file, hands it to the dispatcher (bank SFTP, or
+    /// held encrypted for retrieval), updates the disbursements to match what
+    /// happened, and returns the masked summary. The file content never leaves
+    /// this method.
+    /// </summary>
+    private async Task<NachaCreditFileResult> SendNachaFileAsync(
+        List<NachaCreditEntryDetail> entries, List<CapitationDisbursement> disbursements, string releasedBy, string? runId)
+    {
+        // Repositories stamp the token tenant on every disbursement they write or read.
+        var tenants = disbursements.Select(d => d.TenantId).Where(t => !string.IsNullOrEmpty(t)).Distinct().ToList();
+        if (tenants.Count > 1)
+            throw new InvalidOperationException("A NACHA credit file must hold disbursements of exactly one tenant.");
+        var tenantId = tenants.SingleOrDefault() ?? string.Empty;
+
+        var file = _nachaCreditFileService.GenerateNachaCreditFile(entries, BuildNachaCreditOptionsFromConfig());
+        NachaDispatchOutcome outcome;
+        NachaFileFacts facts;
+        try
         {
-            var disbursement = includedDisbursements[i];
-            disbursement.NachaFileReference = result.FileReference;
-            disbursement.Status = DisbursementStatus.Submitted;
-            disbursement.SubmittedAt = DateTime.UtcNow;
-            disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-            disbursement.TraceNumber = entries[i].TraceNumber;
-            disbursement.ErrorMessage = null;
+            facts = NachaFileFacts.From(file.FileContent);
+            outcome = await _dispatcher.DispatchAsync(new NachaTransmissionRequest
+            {
+                TenantId = tenantId,
+                FileReference = file.FileReference,
+                FileName = file.FileName,
+                Content = file.FileContent,
+                RunId = runId,
+                BatchId = file.FileReference,
+                TransmittedBy = releasedBy,
+            });
+        }
+        finally
+        {
+            file.FileContent = string.Empty;
+        }
+
+        var now = DateTime.UtcNow;
+        var result = new NachaCreditFileResult
+        {
+            FileReference = file.FileReference,
+            FileName = file.FileName,
+            EntryCount = file.EntryCount,
+            TotalAmount = file.TotalAmount,
+            TotalDebitAmount = facts.TotalDebitAmount,
+            TotalCreditAmount = facts.TotalCreditAmount,
+            GeneratedAt = file.GeneratedAt,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        for (int i = 0; i < disbursements.Count; i++)
+        {
+            var disbursement = disbursements[i];
+            switch (outcome.Status)
+            {
+                case NachaTransmissionStatus.Transmitted:
+                    disbursement.NachaFileReference = file.FileReference;
+                    disbursement.TraceNumber = entries[i].TraceNumber;
+                    disbursement.Status = DisbursementStatus.Submitted;
+                    disbursement.SubmittedAt = now;
+                    disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    disbursement.ErrorMessage = null;
+                    break;
+                case NachaTransmissionStatus.AwaitingRetrieval:
+                    disbursement.NachaFileReference = file.FileReference;
+                    disbursement.TraceNumber = entries[i].TraceNumber;
+                    disbursement.Status = DisbursementStatus.AwaitingRetrieval;
+                    disbursement.ErrorMessage =
+                        $"NACHA file {file.FileReference} was not delivered to the bank: {outcome.Reason} It is held encrypted for 7 days: " +
+                        "a platform admin must retrieve it, or another user with payments:approve must retry it.";
+                    break;
+                default:
+                    // Nothing was sent or held: stays Pending for the next file.
+                    disbursement.NachaFileReference = null;
+                    disbursement.TraceNumber = null;
+                    disbursement.Status = DisbursementStatus.Pending;
+                    disbursement.ErrorMessage = outcome.Reason;
+                    break;
+            }
             await _disbursementRepository.UpdateAsync(disbursement);
+
+            var summary = Summary(disbursement);
+            summary.ProviderName = entries[i].IndividualName;
+            result.Entries.Add(summary);
         }
 
         return result;
     }
+
+    public Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync(string tenantId)
+        => _dispatcher.ListHeldAsync(tenantId);
+
+    public async Task<NachaCreditFileResult> RetryNachaTransmissionAsync(string tenantId, string fileReference, NachaActor actor)
+    {
+        var disbursements = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.AwaitingRetrieval))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        NachaDispatchOutcome outcome;
+        try
+        {
+            outcome = await _dispatcher.RetryAsync(tenantId, fileReference, actor);
+        }
+        catch (Exception ex) when (ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException)
+        {
+            // The held file is gone: back to Pending, so the next release builds a new file.
+            foreach (var disbursement in disbursements)
+            {
+                disbursement.Status = DisbursementStatus.Pending;
+                disbursement.NachaFileReference = null;
+                disbursement.TraceNumber = null;
+                disbursement.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
+            throw;
+        }
+
+        var held = await _dispatcher.GetHeldAsync(tenantId, fileReference);
+        var result = new NachaCreditFileResult
+        {
+            FileReference = fileReference,
+            FileName = held?.FileName ?? string.Empty,
+            EntryCount = held?.EntryCount ?? disbursements.Count,
+            TotalAmount = disbursements.Sum(d => d.Amount),
+            TotalDebitAmount = held?.TotalDebitAmount ?? 0,
+            TotalCreditAmount = held?.TotalCreditAmount ?? 0,
+            GeneratedAt = held?.CreatedAt ?? DateTime.UtcNow,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        var now = DateTime.UtcNow;
+        foreach (var disbursement in disbursements)
+        {
+            if (outcome.Status == NachaTransmissionStatus.Transmitted)
+            {
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt = now;
+                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                disbursement.ErrorMessage = null;
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
+            result.Entries.Add(Summary(disbursement));
+        }
+
+        return result;
+    }
+
+    public async Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string tenantId, string fileReference, NachaActor actor, string reason)
+    {
+        var file = await _dispatcher.RetrieveAsync(tenantId, fileReference, actor, reason);
+        if (file.FirstRetrieval)
+        {
+            // The platform admin now delivers it by hand: its disbursements count as submitted.
+            var now = DateTime.UtcNow;
+            foreach (var disbursement in (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.AwaitingRetrieval))
+                     .Where(d => d.NachaFileReference == fileReference))
+            {
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt = now;
+                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                disbursement.ErrorMessage = $"NACHA file retrieved by platform admin {actor.UserId} for manual delivery to the bank.";
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
+        }
+        return file;
+    }
+
+    private static string? Last4(string? number)
+        => string.IsNullOrEmpty(number) ? null : number.Length <= 4 ? number : number[^4..];
+
+    private static NachaCreditEntrySummary Summary(CapitationDisbursement d) => new()
+    {
+        DisbursementId = d.Id,
+        StatementId = d.StatementId,
+        ProviderNPI = d.ProviderNPI,
+        ProviderName = d.ProviderName,
+        RoutingNumberLast4 = d.RoutingNumberLast4,
+        AccountNumberLast4 = d.AccountNumberLast4,
+        Amount = d.Amount,
+        TraceNumber = d.TraceNumber,
+    };
 
     public async Task<CapitationDisbursement> ProcessReturnAsync(ProcessReturnRequest request)
     {

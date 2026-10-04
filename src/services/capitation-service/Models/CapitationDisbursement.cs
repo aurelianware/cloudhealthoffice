@@ -216,7 +216,14 @@ public enum DisbursementStatus
     /// <summary>
     /// Cancelled before settlement
     /// </summary>
-    Cancelled
+    Cancelled,
+
+    /// <summary>
+    /// In a NACHA credit file that could not be sent to the bank (transmission
+    /// not configured or failed). The file is held encrypted for 7 days: a
+    /// platform admin must retrieve it or another approver retry it.
+    /// </summary>
+    AwaitingRetrieval
 }
 
 /// <summary>
@@ -296,7 +303,22 @@ public class ProcessReturnRequest
 }
 
 /// <summary>
-/// Result of a NACHA credit file generation for provider disbursements
+/// A generated NACHA credit file. Holds full routing and account numbers: it
+/// never leaves the service except to the bank (INachaDispatcher). Not an API type.
+/// </summary>
+public class GeneratedNachaCreditFile
+{
+    public string FileReference { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public string FileContent { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// What an approver gets back for a NACHA credit file: a masked summary and
+/// the transmission receipt. Never the file, never a full routing or account number.
 /// </summary>
 public class NachaCreditFileResult
 {
@@ -311,11 +333,6 @@ public class NachaCreditFileResult
     public string FileName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Raw NACHA file content
-    /// </summary>
-    public string FileContent { get; set; } = string.Empty;
-
-    /// <summary>
     /// Number of credit entries in the file
     /// </summary>
     public int EntryCount { get; set; }
@@ -325,10 +342,28 @@ public class NachaCreditFileResult
     /// </summary>
     public decimal TotalAmount { get; set; }
 
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalCreditAmount { get; set; }
+
     /// <summary>
     /// When the file was generated
     /// </summary>
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Transmitted, AwaitingRetrieval or NotSent.</summary>
+    public string TransmissionStatus { get; set; } = string.Empty;
+
+    /// <summary>Why the file was not delivered (AwaitingRetrieval, NotSent).</summary>
+    public string? TransmissionError { get; set; }
+
+    /// <summary>When a held file is deleted (AwaitingRetrieval).</summary>
+    public DateTime? HeldUntil { get; set; }
+
+    /// <summary>Set when the bank received the file.</summary>
+    public CloudHealthOffice.NachaTransmission.NachaTransmissionReceipt? Receipt { get; set; }
+
+    /// <summary>One line per credit: provider, last 4 and amount.</summary>
+    public List<NachaCreditEntrySummary> Entries { get; set; } = new();
 
     /// <summary>
     /// Pending NACHA disbursements left out of the file because something needs
@@ -336,6 +371,19 @@ public class NachaCreditFileResult
     /// full-number read was refused or failed). They stay Pending.
     /// </summary>
     public List<DisbursementAttentionItem> NeedsAttention { get; set; } = new();
+}
+
+/// <summary>One credit in a NACHA file, masked.</summary>
+public class NachaCreditEntrySummary
+{
+    public string DisbursementId { get; set; } = string.Empty;
+    public string StatementId { get; set; } = string.Empty;
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string? ProviderName { get; set; }
+    public string? RoutingNumberLast4 { get; set; }
+    public string? AccountNumberLast4 { get; set; }
+    public decimal Amount { get; set; }
+    public string? TraceNumber { get; set; }
 }
 
 /// <summary>

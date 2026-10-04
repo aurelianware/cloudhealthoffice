@@ -230,7 +230,7 @@ public class DisbursementIntegrityTests
             Mock.Of<ICapitationRunRepository>(), Mock.Of<INachaCreditFileService>(),
             Mock.Of<IStripeConnectService>(), factory.Object,
             new ConfigurationBuilder().Build(), TestSeparationOfDuties.Create(), new FactoryBackedProviderBankAccountSource(factory.Object),
-            Mock.Of<ILogger<CapitationDisbursementService>>());
+            new RecordingNachaDispatcher(), Mock.Of<ILogger<CapitationDisbursementService>>());
         return (service, disbursements);
     }
 

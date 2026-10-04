@@ -80,7 +80,7 @@ public class SeparationOfDutiesTests
         return new CapitationDisbursementService(_disbursements.Object, _statements.Object, _runs.Object,
             _nacha.Object, Mock.Of<IStripeConnectService>(), factory.Object,
             new ConfigurationBuilder().Build(), Rule(enforced), new FactoryBackedProviderBankAccountSource(factory.Object),
-            Mock.Of<ILogger<CapitationDisbursementService>>());
+            new RecordingNachaDispatcher(), Mock.Of<ILogger<CapitationDisbursementService>>());
     }
 
     // ── Approve ────────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ public class SeparationOfDutiesTests
             new() { Id = "d-1", StatementId = "stmt-1", Method = DisbursementMethod.NachaCredit, Amount = 5000m, ProviderNPI = "1234567890" }
         });
         _nacha.Setup(n => n.GenerateNachaCreditFile(It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "file-1" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "file-1" });
 
         var result = await DisbursementService().GenerateNachaCreditFileAsync(Checker);
 

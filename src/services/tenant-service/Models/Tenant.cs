@@ -231,6 +231,136 @@ public class PaymentControlsConfig
     /// </summary>
     [JsonPropertyName("enforceSeparationOfDuties")]
     public bool EnforceSeparationOfDuties { get; set; } = true;
+
+    /// <summary>
+    /// Where premium-billing-service and capitation-service send NACHA files:
+    /// the tenant's bank SFTP drop. Null when not configured (files are then
+    /// held encrypted for a platform admin's retrieval).
+    /// </summary>
+    [JsonPropertyName("nachaTransmission")]
+    public NachaTransmissionConfig? NachaTransmission { get; set; }
+}
+
+/// <summary>
+/// The tenant's bank SFTP drop for NACHA files. Holds no credential: only the
+/// names of Key Vault secrets (<c>nacha--{tenantId}--...</c>), which the
+/// sending service reads with its managed identity. A body that carries a
+/// credential itself is refused (400). Readers without <c>settings:manage</c>
+/// see only whether each credential is configured, not its secret name.
+/// </summary>
+public class NachaTransmissionConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonPropertyName("host")]
+    public string? Host { get; set; }
+
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 22;
+
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
+
+    /// <summary>Key Vault secret name of the SSH private key.</summary>
+    [JsonPropertyName("privateKeySecretRef")]
+    public string? PrivateKeySecretRef { get; set; }
+
+    /// <summary>Key Vault secret name of the key's passphrase, or of the password when there is no key.</summary>
+    [JsonPropertyName("passwordSecretRef")]
+    public string? PasswordSecretRef { get; set; }
+
+    /// <summary>The bank's SSH host key, pinned: <c>SHA256:&lt;base64&gt;</c>. Required to enable.</summary>
+    [JsonPropertyName("hostKeyFingerprint")]
+    public string? HostKeyFingerprint { get; set; }
+
+    [JsonPropertyName("remoteDirectory")]
+    public string? RemoteDirectory { get; set; }
+
+    /// <summary>Read-only: whether a private key secret is configured.</summary>
+    [JsonPropertyName("privateKeyConfigured")]
+    public bool PrivateKeyConfigured => MaskedPrivateKey || !string.IsNullOrEmpty(PrivateKeySecretRef);
+
+    /// <summary>Read-only: whether a password secret is configured.</summary>
+    [JsonPropertyName("passwordConfigured")]
+    public bool PasswordConfigured => MaskedPassword || !string.IsNullOrEmpty(PasswordSecretRef);
+
+    /// <summary>
+    /// Anything else the body carried (for example a literal <c>password</c> or
+    /// <c>privateKey</c>). Refused when present; never stored.
+    /// </summary>
+    [JsonExtensionData]
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    public Dictionary<string, System.Text.Json.JsonElement>? UnknownProperties { get; set; }
+
+    /// <summary>The same settings without secret names (for readers without settings:manage).</summary>
+    public NachaTransmissionConfig WithoutSecretNames() => new()
+    {
+        Enabled = Enabled,
+        Host = Host,
+        Port = Port,
+        Username = Username,
+        HostKeyFingerprint = HostKeyFingerprint,
+        RemoteDirectory = RemoteDirectory,
+        PrivateKeySecretRef = null,
+        PasswordSecretRef = null,
+        MaskedPrivateKey = PrivateKeyConfigured,
+        MaskedPassword = PasswordConfigured,
+    };
+
+    // Carry the "configured" flags through WithoutSecretNames.
+    [System.Text.Json.Serialization.JsonIgnore]
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    internal bool MaskedPrivateKey { get; init; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    internal bool MaskedPassword { get; init; }
+
+    private static readonly System.Text.RegularExpressions.Regex SecretNameChars = new("^[0-9A-Za-z-]+$");
+
+    /// <summary>Key Vault secret names for a tenant's NACHA credentials must start with this.</summary>
+    public static string SecretPrefix(string tenantId) => $"nacha--{tenantId}--";
+
+    /// <summary>Null when the settings may be stored for <paramref name="tenantId"/>, else why not.</summary>
+    public string? Validate(string tenantId)
+    {
+        if (UnknownProperties is { Count: > 0 })
+            return $"paymentControls.nachaTransmission does not accept '{UnknownProperties.Keys.First()}'. Credentials are never " +
+                   "stored here: put them in Key Vault and give the secret names in privateKeySecretRef / passwordSecretRef.";
+        foreach (var (field, name) in new[] { ("privateKeySecretRef", PrivateKeySecretRef), ("passwordSecretRef", PasswordSecretRef) })
+        {
+            if (string.IsNullOrEmpty(name)) continue;
+            var prefix = SecretPrefix(tenantId);
+            if (name.Length > 127 || !SecretNameChars.IsMatch(name) || !name.StartsWith(prefix, StringComparison.Ordinal) || name.Length == prefix.Length)
+                return $"paymentControls.nachaTransmission.{field} must be a Key Vault secret name (letters, digits and '-', " +
+                       $"at most 127) starting with '{prefix}'.";
+        }
+        if (Port is < 1 or > 65535)
+            return "paymentControls.nachaTransmission.port is out of range.";
+        if (!string.IsNullOrEmpty(HostKeyFingerprint) && !IsSha256Fingerprint(HostKeyFingerprint))
+            return "paymentControls.nachaTransmission.hostKeyFingerprint must be 'SHA256:<base64>' (ssh-keygen -lf -E sha256).";
+        if (RemoteDirectory?.Contains("..", StringComparison.Ordinal) == true)
+            return "paymentControls.nachaTransmission.remoteDirectory may not contain '..'.";
+        if (!Enabled)
+            return null;
+        if (string.IsNullOrWhiteSpace(Host) || string.IsNullOrWhiteSpace(Username) || string.IsNullOrWhiteSpace(RemoteDirectory))
+            return "Enabling paymentControls.nachaTransmission needs host, username and remoteDirectory.";
+        if (string.IsNullOrEmpty(PrivateKeySecretRef) && string.IsNullOrEmpty(PasswordSecretRef))
+            return "Enabling paymentControls.nachaTransmission needs privateKeySecretRef or passwordSecretRef.";
+        if (string.IsNullOrWhiteSpace(HostKeyFingerprint))
+            return "Enabling paymentControls.nachaTransmission needs hostKeyFingerprint: the bank's SSH host key is pinned.";
+        return null;
+    }
+
+    private static bool IsSha256Fingerprint(string text)
+    {
+        if (!text.StartsWith("SHA256:", StringComparison.Ordinal)) return false;
+        var b64 = text["SHA256:".Length..].TrimEnd('=');
+        b64 = b64.PadRight(b64.Length + (4 - b64.Length % 4) % 4, '=');
+        try { return Convert.FromBase64String(b64).Length == 32; }
+        catch (FormatException) { return false; }
+    }
 }
 
 public class ClearinghouseConfig

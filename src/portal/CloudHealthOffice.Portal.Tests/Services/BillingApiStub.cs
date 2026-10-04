@@ -126,15 +126,40 @@ public static class BillingApiShapes
          "needsAttention":[{"invoiceId":"inv-2","draftId":null,"groupNumber":"G3","reason":"No approved bank account for sponsor G3"}]}
         """;
 
-    /// <summary>A NACHA file: entry detail records carry the full account number 000123456789.</summary>
+    /// <summary>Full numbers that must never appear on a page.</summary>
     public const string FullAccountNumber = "000123456789";
     public const string FullRoutingNumber = "091000019";
 
+    /// <summary>premium-billing-service sent the file to the bank: masked summary and receipt.</summary>
     public const string NachaResult = """
-        {"fileReference":"NACHA-20260216","fileName":"NACHA-20260216.txt",
-         "fileContent":"101 091000019 1234567890260216\n6270910000190001234567890000045000G1 ACME CORP\n",
-         "entryCount":1,"totalAmount":450,"generatedAt":"2026-02-16T09:00:00Z",
+        {"fileReference":"NACHA-20260216","fileName":"ACH-1234567890-20260216-090000.ach",
+         "entryCount":1,"totalAmount":450,"totalDebitAmount":450,"totalCreditAmount":0,"generatedAt":"2026-02-16T09:00:00Z",
+         "transmissionStatus":"Transmitted","transmissionError":null,"heldUntil":null,
+         "receipt":{"tenantId":"t1","fileReference":"NACHA-20260216","remoteFileName":"ACH-1234567890-20260216-090000.ach",
+           "destination":"sftp://sftp.bank.example:22/inbound","byteSize":940,
+           "sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","entryCount":1,
+           "totalDebitAmount":450,"totalCreditAmount":0,"transmittedAt":"2026-02-16T09:00:05Z","transmittedBy":"approver-1",
+           "runId":null,"batchId":"NACHA-20260216"},
+         "entries":[{"draftId":"d-1","invoiceId":"inv-1","groupNumber":"G1","accountHolderName":"ACME CORP",
+           "routingNumberLast4":"0019","accountNumberLast4":"6789","amount":450,"traceNumber":"091000010000001"}],
          "needsAttention":[{"invoiceId":null,"draftId":"d-9","groupNumber":"G4","reason":"Sponsor G4 bank account refused by sponsor-service"}]}
+        """;
+
+    /// <summary>The bank could not be reached: the file is held for a platform admin or a second approver.</summary>
+    public const string NachaAwaitingRetrieval = """
+        {"fileReference":"NACHA-HELD0001","fileName":"ACH-1234567890-20260216-091500.ach",
+         "entryCount":1,"totalAmount":450,"totalDebitAmount":450,"totalCreditAmount":0,"generatedAt":"2026-02-16T09:15:00Z",
+         "transmissionStatus":"AwaitingRetrieval","transmissionError":"The upload to the bank's SFTP server failed (SshConnectionException).",
+         "heldUntil":"2026-02-23T09:15:00Z","receipt":null,
+         "entries":[{"draftId":"d-1","invoiceId":"inv-1","groupNumber":"G1","routingNumberLast4":"0019","accountNumberLast4":"6789","amount":450}],
+         "needsAttention":[]}
+        """;
+
+    public const string HeldFiles = """
+        [{"fileReference":"NACHA-HELD0001","fileName":"ACH-1.ach","status":"AwaitingRetrieval",
+          "reason":"The upload to the bank's SFTP server failed (SshConnectionException).","entryCount":1,
+          "totalDebitAmount":450,"totalCreditAmount":0,"byteSize":940,"sha256":"ab","runId":"run-2","releasedBy":"approver-1",
+          "createdAt":"2026-02-16T09:15:00Z","expiresAt":"2026-02-23T09:15:00Z","attempts":0,"lastAttemptBy":null,"retrievalCount":0}]
         """;
 
     public const string SeparationOfDuties = """

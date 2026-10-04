@@ -369,7 +369,9 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         (await client.PostAsJsonAsync("/api/v1/eft/drafts/batch", new { invoiceIds = new[] { "inv-1" } })).StatusCode
             .Should().Be(HttpStatusCode.Forbidden);
         (await client.PostAsync("/api/v1/eft/nacha/generate", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await client.PostAsync("/api/v1/eft/nacha/generate-and-download", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.PostAsync("/api/v1/eft/nacha/held/NACHA-1/retry", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.PostAsJsonAsync("/api/v1/eft/nacha/held/NACHA-1/retrieve", new { reason = "x" })).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden);
 
         _factory.Invoices.Verify(r => r.GetByIdAsync(It.IsAny<string>()), Times.Never);
         _factory.Drafts.VerifyNoOtherCalls();

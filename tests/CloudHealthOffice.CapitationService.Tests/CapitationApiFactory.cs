@@ -72,6 +72,11 @@ public class CapitationApiFactory : WebApplicationFactory<Program>
             foreach (var descriptor in infraDescriptors)
                 services.Remove(descriptor);
 
+            // Undelivered NACHA files are held in Mongo in a real deployment; in memory here.
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(CloudHealthOffice.NachaTransmission.INachaHeldFileStore)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton<CloudHealthOffice.NachaTransmission.INachaHeldFileStore, CloudHealthOffice.NachaTransmission.InMemoryNachaHeldFileStore>();
+
             // Register mocks
             services.AddSingleton(ContractRepository);
             services.AddSingleton(RunRepository);

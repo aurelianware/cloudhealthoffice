@@ -1,4 +1,5 @@
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.NachaTransmission;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
@@ -10,7 +11,11 @@ namespace PremiumBillingService.Controllers;
 /// EFT/ACH auto-debit of sponsors. Releasing a debit (initiating drafts, which
 /// for Stripe and batches submits them at once, and generating NACHA debit
 /// files) needs payments:approve from a user who did not prepare the invoice
-/// (maker-checker, see DebitSeparationOfDuties). Settlement, returns and
+/// (maker-checker, see DebitSeparationOfDuties). NACHA files go from this
+/// service straight to the bank; no response carries a file or a full number.
+/// An undelivered file is held encrypted: a platform admin may retrieve it
+/// (audited, with a reason) and another approver may retry it, never the
+/// user who released it. Settlement, returns and
 /// cancellation change the ledger and need finance:write. Reads need
 /// billing:read or payments:read. The Stripe webhook is anonymous and
 /// authenticated by its Stripe signature.
@@ -78,7 +83,11 @@ public class EftController : ControllerBase
     }
 
     /// <summary>
-    /// Generate a NACHA file for all pending NACHA drafts
+    /// Generate a NACHA debit file for all pending NACHA drafts and send it
+    /// straight to the tenant's bank (SFTP). Returns a masked summary (sponsor,
+    /// last 4, amount per entry) and the transmission receipt, never the file.
+    /// Drafts become Submitted only once the bank has the file; when it cannot
+    /// be sent they are AwaitingRetrieval (file held encrypted for 7 days).
     /// </summary>
     [HttpPost("nacha/generate")]
     [RequirePermission("payments:approve")]
@@ -102,31 +111,77 @@ public class EftController : ControllerBase
     }
 
     /// <summary>
-    /// Generate a NACHA file for all pending drafts and return it as a downloadable file.
-    /// This endpoint has side effects: it marks pending drafts as submitted.
-    /// Use POST /nacha/generate if you only need the file metadata.
+    /// NACHA files that were not delivered to the bank and wait for a platform
+    /// admin's retrieval or another approver's retry. Never the file.
     /// </summary>
-    [HttpPost("nacha/generate-and-download")]
+    [HttpGet("nacha/held")]
+    [RequirePermission("billing:read,payments:read,payments:approve")]
+    [ProducesResponseType(typeof(IEnumerable<NachaHeldFileView>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<NachaHeldFileView>>> ListHeldNachaFiles()
+        => Ok((await _eftDraftService.ListHeldNachaFilesAsync()).Select(NachaHeldFileView.From));
+
+    /// <summary>
+    /// Send a held NACHA file to the bank again. payments:approve, a user token,
+    /// and not the user who released it.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retry")]
     [RequirePermission("payments:approve")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult> GenerateAndDownloadNachaFile()
+    [ProducesResponseType(typeof(NachaFileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult<NachaFileResult>> RetryNachaTransmission(string fileReference)
     {
         try
         {
-            var result = await _eftDraftService.GenerateNachaFileForPendingDraftsAsync();
-            var bytes = System.Text.Encoding.ASCII.GetBytes(result.FileContent);
-            return File(bytes, "text/plain", result.FileName);
+            return Ok(await _eftDraftService.RetryNachaTransmissionAsync(fileReference));
         }
-        catch (SeparationOfDutiesException ex)
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
         {
-            return SeparationOfDuties(ex);
+            return problem;
         }
-        catch (InvalidOperationException ex)
+    }
+
+    /// <summary>
+    /// A held NACHA file, for a platform admin to deliver by hand: platform:admin,
+    /// a user token, not the user who released it, and a reason. Every retrieval
+    /// is recorded and audit-logged. The first retrieval marks its drafts Submitted.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retrieve")]
+    [RequirePermission("platform:admin")]
+    [Produces("text/plain", "application/json")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult> RetrieveHeldNachaFile(string fileReference, [FromBody] RetrieveNachaFileRequest request)
+    {
+        try
+        {
+            var file = await _eftDraftService.RetrieveHeldNachaFileAsync(fileReference, request?.Reason ?? string.Empty);
+            Response.Headers.CacheControl = "no-store";
+            return File(NachaFileFacts.Encode(file.Content), "text/plain", file.FileName);
+        }
+        catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
     }
+
+    private ActionResult? HeldFileProblem(Exception ex) => ex switch
+    {
+        NachaSeparationOfDutiesException => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden),
+        NachaHeldFileNotFoundException => NotFound(new { error = ex.Message }),
+        NachaHeldFileExpiredException => StatusCode(StatusCodes.Status410Gone, new { error = ex.Message }),
+        NachaHeldFileStateException => Conflict(new { error = ex.Message }),
+        _ => null
+    };
 
     /// <summary>
     /// Get EFT draft by ID

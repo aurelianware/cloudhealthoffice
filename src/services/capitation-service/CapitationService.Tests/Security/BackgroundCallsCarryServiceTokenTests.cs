@@ -130,6 +130,7 @@ public class BackgroundCallsCarryServiceTokenTests
             new ConfigurationBuilder().Build(),
             TestSeparationOfDuties.Create(runs: runs.Object, tenantId: Tenant),
             new UnavailableProviderBankAccountSource(),
+            new RecordingNachaDispatcher(),
             Mock.Of<ILogger<CapitationDisbursementService>>());
 
         await service.InitiateDisbursementAsync(new InitiateDisbursementRequest { StatementId = "stmt-1", InitiatedBy = "checker" });

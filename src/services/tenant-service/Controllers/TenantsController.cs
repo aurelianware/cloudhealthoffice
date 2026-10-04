@@ -90,7 +90,7 @@ public class TenantsController : ControllerBase
         Status = t.Status,
         ContactInfo = t.ContactInfo,
         ApiKeys = new List<ApiKey>(),
-        Configuration = t.Configuration,
+        Configuration = WithoutSecretNames(t.Configuration),
         Billing = null,
         OperatingMode = t.OperatingMode,
         Usage = t.Usage,
@@ -101,6 +101,20 @@ public class TenantsController : ControllerBase
         ActivatedAt = t.ActivatedAt,
         LastActivityAt = t.LastActivityAt,
     };
+
+    /// <summary>
+    /// The configuration with the NACHA transmission Key Vault secret names
+    /// replaced by "configured" flags. (No credential value is ever stored.)
+    /// </summary>
+    internal static TenantConfiguration WithoutSecretNames(TenantConfiguration configuration)
+    {
+        if (configuration.PaymentControls?.NachaTransmission is not { } nacha)
+            return configuration;
+        var copy = System.Text.Json.JsonSerializer.Deserialize<TenantConfiguration>(
+            System.Text.Json.JsonSerializer.Serialize(configuration))!;
+        copy.PaymentControls.NachaTransmission = nacha.WithoutSecretNames();
+        return copy;
+    }
 
     /// <summary>
     /// Get all tenants. Platform administrators only.
@@ -135,9 +149,20 @@ public class TenantsController : ControllerBase
                 new { error = "Changing a tenant's status or subscription tier needs platform:tenants." });
         }
 
+        // NACHA transmission settings name Key Vault secrets of this tenant only,
+        // pin the bank's host key, and never carry a credential.
+        if (request.Configuration?.PaymentControls?.NachaTransmission is { } nacha)
+        {
+            if (nacha.Validate(tenantId) is { } problem)
+                return BadRequest(new { error = problem });
+            nacha.UnknownProperties = null;
+        }
+
         try
         {
             var tenant = await _tenantService.UpdateTenantAsync(tenantId, request);
+            if (request.Configuration?.PaymentControls?.NachaTransmission != null)
+                _audit.Record("update NACHA transmission settings", tenantId);
             if (changesPlatformFields)
                 _audit.Record($"update tenant status/tier (status={request.Status}, tier={request.SubscriptionTier})", tenantId);
             return Ok(tenant);

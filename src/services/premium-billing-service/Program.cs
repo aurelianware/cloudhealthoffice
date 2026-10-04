@@ -11,6 +11,8 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.FieldProtection;
+using CloudHealthOffice.NachaTransmission;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -94,6 +96,14 @@ builder.Services.AddScoped<ICoverageServiceClient, CoverageServiceClient>();
 // maker-checker. No approved account or a refusal is an item needing
 // attention; "not enrolled" is a normal skip. See HttpSponsorBankAccountSource.
 builder.Services.AddScoped<ISponsorBankAccountSource, HttpSponsorBankAccountSource>();
+
+// NACHA debit files go from this service straight to the tenant's bank (SFTP
+// settings from tenant-service paymentControls.nachaTransmission, credentials
+// from Key Vault, pinned host key). No person receives the file. One that
+// cannot be sent is held encrypted (FieldProtection key ring) for 7 days for a
+// platform admin's retrieval or another approver's retry.
+builder.Services.AddChoFieldProtection(builder.Configuration, builder.Environment, "premium-billing-service");
+builder.Services.AddChoNachaTransmission(builder.Configuration, builder.Environment, "premium-billing-service", databaseProvider);
 
 // HttpClients for service-to-service communication. AddChoAuthentication puts
 // ChoOutboundTokenHandler on every factory client: a caller's token is

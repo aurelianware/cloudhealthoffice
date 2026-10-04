@@ -274,9 +274,26 @@ public class PremiumBillingServiceTests
 
         var file = await CreateService().GenerateNachaFileAsync();
 
-        file.FileName.Should().Be("NACHA-20260216.txt");
+        file.FileReference.Should().Be("NACHA-20260216");
         file.EntryCount.Should().Be(1);
+        file.TransmissionStatus.Should().Be("Transmitted");
+        file.Receipt!.Sha256.Should().HaveLength(64);
+        file.Entries.Single().AccountNumberLast4.Should().Be("6789");
         file.NeedsAttention.Single().Reason.Should().Contain("refused");
+        typeof(NachaFileResult).GetProperty("FileContent").Should().BeNull("the portal never receives a NACHA file");
+    }
+
+    [Fact]
+    public async Task HeldFiles_AndRetry_UseTheServiceEndpoints()
+    {
+        _api.On("GET", "/api/v1/eft/nacha/held", HttpStatusCode.OK, BillingApiShapes.HeldFiles);
+        _api.On("POST", "/api/v1/eft/nacha/held/NACHA-HELD0001/retry", HttpStatusCode.OK, BillingApiShapes.NachaResult);
+
+        var held = await CreateService().GetHeldNachaFilesAsync();
+        var retried = await CreateService().RetryNachaTransmissionAsync("NACHA-HELD0001");
+
+        held.Single().ReleasedBy.Should().Be("approver-1");
+        retried.TransmissionStatus.Should().Be("Transmitted");
     }
 
     [Fact]

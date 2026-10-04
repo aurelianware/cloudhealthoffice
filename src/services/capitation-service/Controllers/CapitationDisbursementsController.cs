@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Services;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.NachaTransmission;
 
 namespace CapitationService.Controllers;
 
@@ -81,7 +82,11 @@ public class CapitationDisbursementsController : ControllerBase
     }
 
     /// <summary>
-    /// Generate a NACHA credit file for all pending NACHA disbursements
+    /// Generate a NACHA credit file for all pending NACHA disbursements and send
+    /// it straight to the tenant's bank (SFTP). Returns a masked summary
+    /// (provider, last 4, amount per entry) and the transmission receipt, never
+    /// the file. Disbursements become Submitted only once the bank has the file;
+    /// when it cannot be sent they are AwaitingRetrieval (held encrypted, 7 days).
     /// </summary>
     [HttpPost("nacha-file")]
     [RequirePermission(ApprovePermission)]
@@ -104,6 +109,81 @@ public class CapitationDisbursementsController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>
+    /// NACHA files that were not delivered to the bank and wait for a platform
+    /// admin's retrieval or another approver's retry. Never the file.
+    /// </summary>
+    [HttpGet("nacha/held")]
+    [RequirePermission("payments:read,payments:approve")]
+    [ProducesResponseType(typeof(IEnumerable<NachaHeldFileView>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<NachaHeldFileView>>> ListHeldNachaFiles()
+        => Ok((await _disbursementService.ListHeldNachaFilesAsync(_actor.TenantId)).Select(NachaHeldFileView.From));
+
+    /// <summary>
+    /// Send a held NACHA file to the bank again. payments:approve, a user token,
+    /// and not the user who released it.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retry")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(NachaCreditFileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult<NachaCreditFileResult>> RetryNachaTransmission(string fileReference)
+    {
+        try
+        {
+            return Ok(await _disbursementService.RetryNachaTransmissionAsync(
+                _actor.TenantId, fileReference, new NachaActor(_actor.UserId, _actor.IsService)));
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
+    /// A held NACHA file, for a platform admin to deliver by hand: platform:admin,
+    /// a user token, not the user who released it, and a reason. Every retrieval
+    /// is recorded and audit-logged. The first retrieval marks its disbursements Submitted.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retrieve")]
+    [RequirePermission("platform:admin")]
+    [Produces("text/plain", "application/json")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult> RetrieveHeldNachaFile(string fileReference, [FromBody] RetrieveNachaFileRequest request)
+    {
+        try
+        {
+            var file = await _disbursementService.RetrieveHeldNachaFileAsync(
+                _actor.TenantId, fileReference, new NachaActor(_actor.UserId, _actor.IsService), request?.Reason ?? string.Empty);
+            Response.Headers.CacheControl = "no-store";
+            return File(NachaFileFacts.Encode(file.Content), "text/plain", file.FileName);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    private ActionResult? HeldFileProblem(Exception ex) => ex switch
+    {
+        NachaSeparationOfDutiesException => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden),
+        NachaHeldFileNotFoundException => NotFound(new { error = ex.Message }),
+        NachaHeldFileExpiredException => StatusCode(StatusCodes.Status410Gone, new { error = ex.Message }),
+        NachaHeldFileStateException => Conflict(new { error = ex.Message }),
+        _ => null
+    };
 
     /// <summary>
     /// Get disbursement by ID

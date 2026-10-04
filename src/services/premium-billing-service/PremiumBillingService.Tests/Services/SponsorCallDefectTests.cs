@@ -298,6 +298,7 @@ public class SponsorCallDefectTests
     private EftDraftService EftService(ISponsorBankAccountSource? source = null, HttpContext? http = null) => new(
         _drafts.Object, _invoices.Object, _runs.Object, _nacha.Object, _stripe.Object,
         source ?? new UnavailableSponsorBankAccountSource(),
+        new RecordingNachaDispatcher(),
         _actor.Object, new HttpContextAccessor { HttpContext = http ?? new DefaultHttpContext() },
         new ConfigurationBuilder().Build(), _eftLog);
 

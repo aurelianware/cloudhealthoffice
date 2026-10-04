@@ -10,6 +10,8 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.FieldProtection;
+using CloudHealthOffice.NachaTransmission;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -104,6 +106,13 @@ builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
 // releasing user passed payments:approve and separation of duties. No approved
 // account or a refusal leaves the disbursement needing attention.
 builder.Services.AddScoped<IProviderBankAccountSource, HttpProviderBankAccountSource>();
+// NACHA credit files go from this service straight to the tenant's bank (SFTP
+// settings from tenant-service paymentControls.nachaTransmission, credentials
+// from Key Vault, pinned host key). No person receives the file. One that
+// cannot be sent is held encrypted (FieldProtection key ring) for 7 days for a
+// platform admin's retrieval or another approver's retry.
+builder.Services.AddChoFieldProtection(builder.Configuration, builder.Environment, "capitation-service");
+builder.Services.AddChoNachaTransmission(builder.Configuration, builder.Environment, "capitation-service", databaseProvider);
 builder.Services.AddScoped<ICapitationDisbursementService, CapitationDisbursementService>();
 builder.Services.AddSingleton<ICapitationEraService, CapitationEraService>();
 

@@ -9,9 +9,8 @@ namespace CloudHealthOffice.Portal.Services;
 //
 // Bank details: no type here has a full routing or account number property.
 // The masked reads only carry the last 4; the portal could not show more even
-// if a response carried it. The one exception is a generated NACHA file
-// (NachaFileResult.FileContent), which the portal hands to the browser as a
-// download and never renders.
+// if a response carried it. NACHA files go from the services straight to the
+// bank: the portal gets a masked summary and a receipt, never a file.
 
 // ── Billing runs ──────────────────────────────────────────────────────────
 
@@ -256,20 +255,81 @@ public class BatchEftResult
     public List<EftAttentionItem> NeedsAttention { get; set; } = new();
 }
 
+/// <summary>
+/// A NACHA file as the services report it: the services send the file to the
+/// bank themselves, so this is a masked summary and a receipt. There is no
+/// file content and no full number here.
+/// </summary>
 public class NachaFileResult
 {
     public string FileReference { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
-    /// <summary>
-    /// The NACHA file itself. It carries full routing and account numbers (the
-    /// bank needs them), so the portal only passes it to the browser as a
-    /// download and never renders it.
-    /// </summary>
-    public string FileContent { get; set; } = string.Empty;
     public int EntryCount { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalCreditAmount { get; set; }
     public DateTime GeneratedAt { get; set; }
+    /// <summary>Transmitted, AwaitingRetrieval or NotSent.</summary>
+    public string TransmissionStatus { get; set; } = string.Empty;
+    public string? TransmissionError { get; set; }
+    public DateTime? HeldUntil { get; set; }
+    public NachaTransmissionReceipt? Receipt { get; set; }
+    public List<NachaEntrySummary> Entries { get; set; } = new();
     public List<EftAttentionItem> NeedsAttention { get; set; } = new();
+}
+
+/// <summary>One debit or credit in a NACHA file: who, last 4, amount.</summary>
+public class NachaEntrySummary
+{
+    public string? DraftId { get; set; }
+    public string? InvoiceId { get; set; }
+    public string? GroupNumber { get; set; }
+    public string? DisbursementId { get; set; }
+    public string? StatementId { get; set; }
+    public string? ProviderNPI { get; set; }
+    public string? ProviderName { get; set; }
+    public string? AccountHolderName { get; set; }
+    public string? RoutingNumberLast4 { get; set; }
+    public string? AccountNumberLast4 { get; set; }
+    public decimal Amount { get; set; }
+    public string? TraceNumber { get; set; }
+}
+
+/// <summary>The bank's drop received the file.</summary>
+public class NachaTransmissionReceipt
+{
+    public string TenantId { get; set; } = string.Empty;
+    public string FileReference { get; set; } = string.Empty;
+    public string RemoteFileName { get; set; } = string.Empty;
+    public string Destination { get; set; } = string.Empty;
+    public long ByteSize { get; set; }
+    public string Sha256 { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalCreditAmount { get; set; }
+    public DateTime TransmittedAt { get; set; }
+    public string TransmittedBy { get; set; } = string.Empty;
+    public string? RunId { get; set; }
+    public string? BatchId { get; set; }
+}
+
+/// <summary>A NACHA file that did not reach the bank and waits (never the file).</summary>
+public class NachaHeldFile
+{
+    public string FileReference { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    /// <summary>AwaitingRetrieval or Transmitting.</summary>
+    public string Status { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalCreditAmount { get; set; }
+    public string? RunId { get; set; }
+    public string ReleasedBy { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public int Attempts { get; set; }
+    public string? LastAttemptBy { get; set; }
 }
 
 /// <summary>An invoice or draft that was not debited for a reason someone has to fix.</summary>

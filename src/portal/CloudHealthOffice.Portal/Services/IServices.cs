@@ -2090,7 +2090,14 @@ public interface IPremiumBillingService
     Task<List<EftDraft>> GetDraftsForInvoicesAsync(IEnumerable<string> invoiceIds);
     Task<EftDraft> InitiateDraftAsync(InitiateEftDraftRequest request);
     Task<BatchEftResult> InitiateBatchDraftsAsync(InitiateBatchEftRequest request);
+    /// <summary>The service sends the file to the bank; this is the masked summary and receipt.</summary>
     Task<NachaFileResult> GenerateNachaFileAsync();
+
+    /// <summary>NACHA files that did not reach the bank (awaiting retrieval). Never the file.</summary>
+    Task<List<NachaHeldFile>> GetHeldNachaFilesAsync();
+
+    /// <summary>payments:approve, and not the user who released it.</summary>
+    Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference);
 
     /// <summary>
     /// Member-scoped premium rollup consumed by the portal Member Details
@@ -2954,6 +2961,12 @@ public interface ICapitationService
     // Disbursements
     Task<string> InitiateDisbursementAsync(string statementId, string? initiatedBy = null);
     Task<CapDisbursementBatchResult> InitiateBatchDisbursementAsync(List<string> statementIds, string? initiatedBy = null);
+
+    /// <summary>NACHA credit files that did not reach the bank (awaiting retrieval). Never the file.</summary>
+    Task<List<NachaHeldFile>> GetHeldNachaFilesAsync();
+
+    /// <summary>payments:approve, and not the user who released it.</summary>
+    Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference);
 }
 
 public class CapitationRateConfigSummary
@@ -3114,6 +3127,9 @@ public class CapDisbursementBatchResult
     public int Errors { get; set; }
     public decimal TotalAmount { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+
+    /// <summary>The NACHA credit file capitation-service sent to the bank: masked summary and receipt.</summary>
+    public NachaFileResult? NachaFile { get; set; }
 }
 
 // ── Terminology Service ─────────────────────────────────────────────────────

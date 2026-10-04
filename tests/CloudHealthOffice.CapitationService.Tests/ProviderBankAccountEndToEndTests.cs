@@ -4,7 +4,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using CapitationService.Models;
 using CapitationService.Services;
+using CloudHealthOffice.FieldProtection;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.NachaTransmission;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +33,8 @@ public class ProviderBankAccountEndToEndFactory : CapitationApiFactory
     public ITenantPaymentControls PaymentControls { get; } = Substitute.For<ITenantPaymentControls>();
     public StandInProviderService ProviderService { get; } = new();
     public CapturingLoggerProvider Logs { get; } = new();
+    public StandInBank Bank { get; } = new();
+    public InMemoryNachaHeldFileStore Held { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -57,6 +62,13 @@ public class ProviderBankAccountEndToEndFactory : CapitationApiFactory
             // The real clients and HttpProviderBankAccountSource stay; only the wire is answered here.
             services.AddHttpClient("ProviderService").ConfigurePrimaryHttpMessageHandler(() => ProviderService);
             services.AddHttpClient(HttpProviderBankAccountSource.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => ProviderService);
+            // The real NachaDispatcher stays; the bank and the held-file store are stand-ins.
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(INachaTransmitter)
+                         || d.ServiceType == typeof(INachaHeldFileStore) || d.ServiceType == typeof(IFieldProtector)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton<INachaTransmitter>(Bank);
+            services.AddSingleton<INachaHeldFileStore>(Held);
+            services.AddSingleton<IFieldProtector>(new DataProtectionFieldProtector(new EphemeralDataProtectionProvider(), "capitation-service"));
         });
     }
 }
@@ -79,6 +91,8 @@ public class ProviderBankAccountEndToEndTests : IClassFixture<ProviderBankAccoun
         _factory = factory;
         _factory.ProviderService.Reset();
         _factory.Logs.Clear();
+        _factory.Bank.Received.Clear();
+        _factory.Bank.Down = false;
         _factory.StatementRepository.ClearReceivedCalls();
         _factory.DisbursementRepository.ClearReceivedCalls();
         _factory.PaymentControls.IsSeparationOfDutiesEnforcedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -142,6 +156,104 @@ public class ProviderBankAccountEndToEndTests : IClassFixture<ProviderBankAccoun
         Assert.DoesNotContain(Routing, all);
     }
 
+    private static void NoNumbersOrFile(string body)
+    {
+        Assert.DoesNotContain(Account, body);
+        Assert.DoesNotContain(Routing[..8], body);
+        Assert.DoesNotContain("fileContent", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("enc:v1:", body);
+        Assert.DoesNotContain("101 0910", body);
+    }
+
+    private async Task<string> HeldFileReference(string by = Approver, string role = ChoRolePermissions.FinanceApprover)
+    {
+        ApprovedAccount();
+        PendingNachaDisbursement("d-held", "s-held");
+        _factory.Bank.Down = true;
+        var response = await As(by, role).PostAsync("/api/v1/capitation/disbursements/nacha-file", null);
+        var text = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, text);
+        NoNumbersOrFile(text);
+        var body = JsonDocument.Parse(text).RootElement;
+        Assert.Equal("AwaitingRetrieval", body.GetProperty("transmissionStatus").GetString());
+        _factory.Bank.Down = false;
+        var reference = body.GetProperty("fileReference").GetString()!;
+        // From now on the repository answers with what the service wrote.
+        var awaiting = _updated.Where(d => d.Status == DisbursementStatus.AwaitingRetrieval).ToList();
+        Assert.Single(awaiting);
+        _factory.DisbursementRepository.GetByStatusAsync(DisbursementStatus.AwaitingRetrieval)
+            .Returns(_ => _updated.Where(d => d.Status == DisbursementStatus.AwaitingRetrieval).Distinct().ToList());
+        return reference;
+    }
+
+    [Fact]
+    public async Task BankDown_HoldsTheFileEncrypted_DisbursementAwaitsRetrieval_NeverSubmitted()
+    {
+        var reference = await HeldFileReference();
+
+        Assert.DoesNotContain(_updated, d => d.Status == DisbursementStatus.Submitted);
+        var held = _factory.Held.All.Single(h => h.FileReference == reference);
+        Assert.StartsWith("enc:v1:", held.ProtectedContent);
+        Assert.DoesNotContain(Account, held.ProtectedContent);
+        Assert.Equal(Approver, held.ReleasedBy);
+
+        var list = await As(Approver, ChoRolePermissions.FinanceApprover).GetAsync("/api/v1/capitation/disbursements/nacha/held");
+        var listText = await list.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Contains(reference, listText);
+        NoNumbersOrFile(listText);
+        NoNumbersLogged();
+    }
+
+    [Fact]
+    public async Task Retry_ByTheReleaser_IsRefused_ByASecondApprover_Delivers()
+    {
+        var reference = await HeldFileReference();
+
+        var refused = await As(Approver, ChoRolePermissions.FinanceApprover).PostAsync($"/api/v1/capitation/disbursements/nacha/held/{reference}/retry", null);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Empty(_factory.Bank.Received);
+
+        var ok = await As("approver-2", ChoRolePermissions.FinanceApprover).PostAsync($"/api/v1/capitation/disbursements/nacha/held/{reference}/retry", null);
+        var text = await ok.Content.ReadAsStringAsync();
+        Assert.True(ok.StatusCode == HttpStatusCode.OK, text);
+        NoNumbersOrFile(text);
+        Assert.Equal("Transmitted", JsonDocument.Parse(text).RootElement.GetProperty("transmissionStatus").GetString());
+        Assert.Equal("approver-2", Assert.Single(_factory.Bank.Received).TransmittedBy);
+        Assert.Contains(_updated, d => d.Id == "d-held" && d.Status == DisbursementStatus.Submitted);
+    }
+
+    [Theory]
+    [InlineData("approver-x", ChoRolePermissions.FinanceApprover)]
+    [InlineData("admin-1", ChoRolePermissions.TenantAdmin)]
+    public async Task Retrieve_ByAnyoneButAPlatformAdmin_IsRefused(string user, string role)
+    {
+        var reference = await HeldFileReference();
+
+        var response = await As(user, role).PostAsJsonAsync($"/api/v1/capitation/disbursements/nacha/held/{reference}/retrieve", new { reason = "need it" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        NoNumbersOrFile(await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Retrieve_ByAPlatformAdmin_IsAudited_ButNotByTheReleasingPlatformAdmin()
+    {
+        var reference = await HeldFileReference(by: "ops-releaser", role: ChoRolePermissions.PlatformAdmin);
+
+        var refused = await As("ops-releaser", ChoRolePermissions.PlatformAdmin)
+            .PostAsJsonAsync($"/api/v1/capitation/disbursements/nacha/held/{reference}/retrieve", new { reason = "mine" });
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        NoNumbersOrFile(await refused.Content.ReadAsStringAsync());
+
+        var ok = await As("ops-1", ChoRolePermissions.PlatformAdmin)
+            .PostAsJsonAsync($"/api/v1/capitation/disbursements/nacha/held/{reference}/retrieve", new { reason = "bank outage INC-7" });
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.Contains(Account, await ok.Content.ReadAsStringAsync());
+        Assert.Contains(_factory.Logs.Messages, m => m.Contains("retrieved by platform admin ops-1") && m.Contains("INC-7"));
+        Assert.Contains(_updated, d => d.Id == "d-held" && d.Status == DisbursementStatus.Submitted);
+    }
+
     private static async Task<JsonElement> Json(HttpResponseMessage response)
         => JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
 
@@ -154,10 +266,17 @@ public class ProviderBankAccountEndToEndTests : IClassFixture<ProviderBankAccoun
         var response = await As(Approver, ChoRolePermissions.FinanceApprover).PostAsync("/api/v1/capitation/disbursements/nacha-file", null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var text = await response.Content.ReadAsStringAsync();
+        NoNumbersOrFile(text);
         var body = await Json(response);
-        var file = body.GetProperty("fileContent").GetString()!;
-        Assert.Contains(Account, file);
-        Assert.Contains(Routing[..8], file);
+        Assert.Equal("Transmitted", body.GetProperty("transmissionStatus").GetString());
+        Assert.Equal(64, body.GetProperty("receipt").GetProperty("sha256").GetString()!.Length);
+        Assert.Equal(1500m, body.GetProperty("totalCreditAmount").GetDecimal());
+        Assert.Equal("6789", Assert.Single(body.GetProperty("entries").EnumerateArray()).GetProperty("accountNumberLast4").GetString());
+        // The bank got the full numbers; the approver did not.
+        var sent = Assert.Single(_factory.Bank.Received);
+        Assert.Contains(Account, sent.Content);
+        Assert.Contains(Routing[..8], sent.Content);
         Assert.Equal(1, body.GetProperty("entryCount").GetInt32());
         Assert.Equal(0, body.GetProperty("needsAttention").GetArrayLength());
         Assert.Contains(_updated, d => d.Id == "d-1" && d.Status == DisbursementStatus.Submitted);
@@ -179,8 +298,9 @@ public class ProviderBankAccountEndToEndTests : IClassFixture<ProviderBankAccoun
         var body = await Json(response);
         Assert.Equal(1, body.GetProperty("disbursementsInitiated").GetInt32());
         Assert.Equal(0, body.GetProperty("needsAttention").GetArrayLength());
-        var file = body.GetProperty("nachaFile").GetProperty("fileContent").GetString()!;
-        Assert.Contains(Account, file);
+        NoNumbersOrFile(await response.Content.ReadAsStringAsync());
+        Assert.False(body.GetProperty("nachaFile").TryGetProperty("fileContent", out _));
+        Assert.Contains(Account, Assert.Single(_factory.Bank.Received).Content);
         var created = Assert.Single(_created);
         Assert.Equal("6789", created.AccountNumberLast4);
         // The masked read carried the user's token; the full read only capitation-service's.
@@ -401,5 +521,26 @@ public sealed class CapturingLoggerProvider : ILoggerProvider
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter)
             => _messages.Enqueue(formatter(state, exception) + (exception == null ? string.Empty : " " + exception));
+    }
+}
+
+/// <summary>The bank's SFTP drop, in memory.</summary>
+public sealed class StandInBank : INachaTransmitter
+{
+    public List<NachaTransmissionRequest> Received { get; } = new();
+    public bool Down { get; set; }
+
+    public Task<NachaTransmissionReceipt> TransmitAsync(NachaTransmissionRequest request, CancellationToken cancellationToken = default)
+    {
+        if (Down) throw new NachaTransmissionException("The upload to the bank's SFTP server failed (SshConnectionException).");
+        Received.Add(request);
+        var facts = NachaFileFacts.From(request.Content);
+        return Task.FromResult(new NachaTransmissionReceipt
+        {
+            TenantId = request.TenantId, FileReference = request.FileReference, RemoteFileName = request.FileName,
+            ByteSize = facts.ByteSize, Sha256 = facts.Sha256, EntryCount = facts.EntryCount,
+            TotalDebitAmount = facts.TotalDebitAmount, TotalCreditAmount = facts.TotalCreditAmount,
+            TransmittedAt = DateTime.UtcNow, TransmittedBy = request.TransmittedBy,
+        });
     }
 }
