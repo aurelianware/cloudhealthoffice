@@ -34,11 +34,15 @@ public sealed record PersonalRepActivationDecision
 ///   tenant-service (<c>configuration.personalRepresentativeControls.requireSecondPerson = false</c>);
 ///   every same-user activation that allows is logged as an audit warning and
 ///   marked on the audit event.</item>
-///   <item>Proof of authority: a legal guardian, healthcare power of attorney or
-///   healthcare surrogate needs a document in member-document-service, in the
-///   same tenant and linked to every member the representative is associated
-///   with. Parent, Conservator and Other need none.</item>
+///   <item>Proof of authority: a legal guardian, conservator, healthcare power
+///   of attorney or healthcare surrogate needs a document in
+///   member-document-service, in the same tenant and linked to every member the
+///   representative covers (every association that has not ended, including
+///   future-dated ones). Parent and Other need none.</item>
 /// </list>
+/// Members are added only while a representative is a Draft (the controller
+/// answers 409 otherwise), so these controls approve every member a
+/// representative ever covers.
 /// </summary>
 public interface IPersonalRepActivationControls
 {
@@ -64,6 +68,7 @@ public sealed class PersonalRepActivationControls : IPersonalRepActivationContro
     public static bool RequiresProofOfAuthority(PersonalRepCredentialType type) => type switch
     {
         PersonalRepCredentialType.LegalGuardian => true,
+        PersonalRepCredentialType.Conservator => true, // court-appointed, like a guardian
         PersonalRepCredentialType.HealthcarePowerOfAttorney => true,
         PersonalRepCredentialType.HealthcareSurrogate => true,
         _ => false

@@ -11,7 +11,7 @@ public class PersonalRepActivationControlsUnitTests
     [InlineData(PersonalRepCredentialType.HealthcarePowerOfAttorney, true)]
     [InlineData(PersonalRepCredentialType.HealthcareSurrogate, true)]
     [InlineData(PersonalRepCredentialType.Parent, false)]
-    [InlineData(PersonalRepCredentialType.Conservator, false)]
+    [InlineData(PersonalRepCredentialType.Conservator, true)]
     [InlineData(PersonalRepCredentialType.Other, false)]
     public void RequiresProofOfAuthority_ByCredentialType(PersonalRepCredentialType type, bool required)
         => PersonalRepActivationControls.RequiresProofOfAuthority(type).Should().Be(required);

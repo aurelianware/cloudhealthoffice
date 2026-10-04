@@ -231,7 +231,8 @@ public enum PersonalRepCredentialType
     HealthcareSurrogate = 4,
 
     /// <summary>
-    /// Court-appointed conservator. In most state probate law, conservators
+    /// Court-appointed conservator. Activation needs the appointing order as
+    /// a proof-of-authority document, as for <see cref="LegalGuardian"/>. In most state probate law, conservators
     /// have financial-decision authority distinct from a
     /// <see cref="LegalGuardian"/>'s personal/healthcare authority. Legal
     /// review on the PR confirms whether Texas Medicaid treats this as

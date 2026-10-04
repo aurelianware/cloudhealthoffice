@@ -98,6 +98,7 @@ public class PersonalRepActivationControlsTests : IClassFixture<PersonalRepLifec
 
     [Theory]
     [InlineData(PersonalRepCredentialType.LegalGuardian)]
+    [InlineData(PersonalRepCredentialType.Conservator)]
     [InlineData(PersonalRepCredentialType.HealthcarePowerOfAttorney)]
     [InlineData(PersonalRepCredentialType.HealthcareSurrogate)]
     public async Task DocumentTypes_WithoutDocument_Return400_AndStayDraft(PersonalRepCredentialType type)
@@ -116,7 +117,6 @@ public class PersonalRepActivationControlsTests : IClassFixture<PersonalRepLifec
 
     [Theory]
     [InlineData(PersonalRepCredentialType.Parent)]
-    [InlineData(PersonalRepCredentialType.Conservator)]
     [InlineData(PersonalRepCredentialType.Other)]
     public async Task OtherTypes_WithoutDocument_AreActivatedByASecondUser(PersonalRepCredentialType type)
     {

@@ -44,9 +44,9 @@ public class MemberRepresentativesControllerTests
             FirstName = "Alice", LastName = "Smith"
         }, CancellationToken.None);
         var id1 = ((PersonalRepresentative)((CreatedAtActionResult)create1).Value!).Id;
-        await primary.Activate(id1, null, CancellationToken.None);
         await primary.AddAssociation(id1,
             new AddAssociationRequest { MemberId = "M123" }, CancellationToken.None);
+        await primary.Activate(id1, null, CancellationToken.None);
 
         var result = await resolver.ListAll("M123", asOf: null, CancellationToken.None);
         var response = ((OkObjectResult)result).Value.Should().BeOfType<MemberRepresentativesResponse>().Subject;
@@ -67,8 +67,8 @@ public class MemberRepresentativesControllerTests
             CredentialType = PersonalRepCredentialType.Parent, FirstName = "Bob", LastName = "Parent"
         }, CancellationToken.None);
         var id1 = ((PersonalRepresentative)((CreatedAtActionResult)c1).Value!).Id;
-        await primary.Activate(id1, null, CancellationToken.None);
         await primary.AddAssociation(id1, new AddAssociationRequest { MemberId = "M123" }, CancellationToken.None);
+        await primary.Activate(id1, null, CancellationToken.None);
 
         // Rep 2: LegalGuardian, active.
         var c2 = await primary.CreateRepresentative(new CreatePersonalRepRequest
@@ -76,8 +76,8 @@ public class MemberRepresentativesControllerTests
             CredentialType = PersonalRepCredentialType.LegalGuardian, FirstName = "Carol", LastName = "Guardian"
         }, CancellationToken.None);
         var id2 = ((PersonalRepresentative)((CreatedAtActionResult)c2).Value!).Id;
-        await primary.Activate(id2, null, CancellationToken.None);
         await primary.AddAssociation(id2, new AddAssociationRequest { MemberId = "M123" }, CancellationToken.None);
+        await primary.Activate(id2, null, CancellationToken.None);
 
         // Rep 3: LegalGuardian, revoked — must NOT appear on /active.
         var c3 = await primary.CreateRepresentative(new CreatePersonalRepRequest
@@ -85,8 +85,8 @@ public class MemberRepresentativesControllerTests
             CredentialType = PersonalRepCredentialType.LegalGuardian, FirstName = "Dan", LastName = "Revoked"
         }, CancellationToken.None);
         var id3 = ((PersonalRepresentative)((CreatedAtActionResult)c3).Value!).Id;
-        await primary.Activate(id3, null, CancellationToken.None);
         await primary.AddAssociation(id3, new AddAssociationRequest { MemberId = "M123" }, CancellationToken.None);
+        await primary.Activate(id3, null, CancellationToken.None);
         await primary.Revoke(id3, null, CancellationToken.None);
 
         // No credential-type filter — two active reps.
@@ -120,8 +120,8 @@ public class MemberRepresentativesControllerTests
             FirstName = "Eve", LastName = "Decryptable"
         }, CancellationToken.None);
         var id = ((PersonalRepresentative)((CreatedAtActionResult)create).Value!).Id;
-        await primary.Activate(id, null, CancellationToken.None);
         await primary.AddAssociation(id, new AddAssociationRequest { MemberId = "M1" }, CancellationToken.None);
+        await primary.Activate(id, null, CancellationToken.None);
 
         var before = encryptor.DecryptCalls;
         var result = await resolver.ListActive("M1", asOf: null, credentialTypes: null, CancellationToken.None);
@@ -151,8 +151,8 @@ public class MemberRepresentativesControllerTests
             RelationshipNotes = "sensitive notes"
         }, CancellationToken.None);
         var id = ((PersonalRepresentative)((CreatedAtActionResult)create).Value!).Id;
-        await primary.Activate(id, null, CancellationToken.None);
         await primary.AddAssociation(id, new AddAssociationRequest { MemberId = "M1" }, CancellationToken.None);
+        await primary.Activate(id, null, CancellationToken.None);
 
         var result = await resolver.ListActive("M1", asOf: null, credentialTypes: null, CancellationToken.None);
         var summary = ((MemberRepresentativesResponse)((OkObjectResult)result).Value!).Items.Single();
