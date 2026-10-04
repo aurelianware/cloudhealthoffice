@@ -22,6 +22,7 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
 
     public async Task<TradingPartner?> GetAsync(string tenantId, string tradingPartnerId, string environment)
     {
+        RequireTenant(tenantId);
         // Document ids keep the composite shape used by the Cosmos repository so the two
         // implementations address the same records.
         var id = $"{tradingPartnerId}-{tenantId}-{environment}";
@@ -45,12 +46,14 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
 
     public async Task<IEnumerable<TradingPartner>> GetByTenantAsync(string tenantId)
     {
+        RequireTenant(tenantId);
         var filter = Builders<TradingPartner>.Filter.Eq(x => x.TenantId, tenantId);
         return await _collection.Find(filter).ToListAsync();
     }
 
     public async Task<TradingPartner> CreateAsync(TradingPartner partner)
     {
+        RequireTenant(partner.TenantId);
         await _collection.InsertOneAsync(partner);
 
         _logger.LogInformation(
@@ -62,6 +65,7 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
 
     public async Task<TradingPartner> UpdateAsync(TradingPartner partner)
     {
+        RequireTenant(partner.TenantId);
         var filter = Builders<TradingPartner>.Filter.And(
             Builders<TradingPartner>.Filter.Eq(x => x.Id, partner.Id),
             Builders<TradingPartner>.Filter.Eq(x => x.TenantId, partner.TenantId)
@@ -84,6 +88,7 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
 
     public async Task DeleteAsync(string id, string partitionKey)
     {
+        RequireTenant(partitionKey);
         var filter = Builders<TradingPartner>.Filter.And(
             Builders<TradingPartner>.Filter.Eq(x => x.Id, id),
             Builders<TradingPartner>.Filter.Eq(x => x.TenantId, partitionKey)
@@ -95,6 +100,11 @@ public class TradingPartnerRepositoryMongo : ITradingPartnerRepository
             "Deleted trading partner: {Id} from partition {PartitionKey}",
             SanitizeForLog(id), SanitizeForLog(partitionKey));
     }
+
+    private static string RequireTenant(string? tenantId)
+        => string.IsNullOrWhiteSpace(tenantId)
+            ? throw new InvalidOperationException("A tenant is required; trading partners are never read or written without one.")
+            : tenantId;
 
     private static string SanitizeForLog(string? value)
     {

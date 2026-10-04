@@ -1,12 +1,11 @@
 using Microsoft.Azure.Cosmos;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Identity.Web;
 using CloudHealthOffice.TradingPartnerService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -25,15 +24,15 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Azure AD JWT Authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-
-// Authorization policies
-builder.Services.AddAuthorization(options =>
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+// Reads need trading-partners:read (ClaimsSupervisor, Finance; service tokens satisfy it).
+// No trading-partners:write permission exists, so writes need settings:manage.
+// The payment-service NPI lookup also admits payments:read (see the controller).
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
-    options.AddPolicy("RequireAdministratorRole", policy =>
-        policy.RequireRole("Administrator"));
+    auth.DefaultReadPermission = "trading-partners:read";
+    auth.DefaultWritePermission = "settings:manage";
 });
 
 // Database provider selection. MongoDB is the default so the service stays cloud-agnostic;
@@ -110,23 +109,8 @@ app.UseCors();
 // Health checks before auth so they're accessible without a token
 app.MapChoHealthChecks();
 
-app.UseAuthentication();
-app.UseAuthorization();
-
-// Multi-tenant middleware (extract TenantId from validated JWT claims)
-app.Use(async (context, next) =>
-{
-    if (context.User.Identity?.IsAuthenticated == true)
-    {
-        var tenantIdClaim = context.User.Claims.FirstOrDefault(c => c.Type == "tenant_id" || c.Type == "http://schemas.microsoft.com/identity/claims/tenantid");
-        if (tenantIdClaim != null)
-        {
-            context.Items["TenantId"] = tenantIdClaim.Value;
-        }
-    }
-
-    await next();
-});
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.MapControllers();

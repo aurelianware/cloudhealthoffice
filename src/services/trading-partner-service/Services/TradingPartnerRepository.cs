@@ -28,6 +28,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task<TradingPartner?> GetAsync(string tenantId, string tradingPartnerId, string environment)
     {
+        RequireTenant(tenantId);
         var id = $"{tradingPartnerId}-{tenantId}-{environment}";
         
         try
@@ -49,6 +50,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task<IEnumerable<TradingPartner>> GetByTenantAsync(string tenantId)
     {
+        RequireTenant(tenantId);
         var query = new QueryDefinition(
             "SELECT * FROM c WHERE c.tenantId = @tenantId")
             .WithParameter("@tenantId", tenantId);
@@ -69,6 +71,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task<TradingPartner> CreateAsync(TradingPartner partner)
     {
+        RequireTenant(partner.TenantId);
         var response = await _container.CreateItemAsync(
             partner,
             new PartitionKey(partner.TenantId));
@@ -82,6 +85,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task<TradingPartner> UpdateAsync(TradingPartner partner)
     {
+        RequireTenant(partner.TenantId);
         var response = await _container.ReplaceItemAsync(
             partner,
             partner.Id,
@@ -96,6 +100,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task DeleteAsync(string id, string partitionKey)
     {
+        RequireTenant(partitionKey);
         await _container.DeleteItemAsync<TradingPartner>(
             id,
             new PartitionKey(partitionKey));
@@ -104,6 +109,11 @@ public class TradingPartnerRepository : ITradingPartnerRepository
             "Deleted trading partner: {Id} from partition {PartitionKey}",
             SanitizeForLog(id), SanitizeForLog(partitionKey));
     }
+
+    private static string RequireTenant(string? tenantId)
+        => string.IsNullOrWhiteSpace(tenantId)
+            ? throw new InvalidOperationException("A tenant is required; trading partners are never read or written without one.")
+            : tenantId;
 
     private static string SanitizeForLog(string? value)
     {
