@@ -35,6 +35,26 @@ public class PaymentRunsController : ControllerBase
     }
 
     /// <summary>
+    /// Release a claim's payment reservation that this run holds but did not pay
+    /// (the run failed, was cancelled, or is stuck), so a later run may pay the
+    /// claim. Needs payments:approve from a user who did not execute the run (a
+    /// service token is refused) and a reason; audited and listed on the run.
+    /// 409 when the claim has a Posted or PaidPendingFinalize payment (not
+    /// unpaid: retry its finalize instead) or the run is still executing.
+    /// </summary>
+    [HttpPost("{id}/reservations/{claimId}/release")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(ReservationReleaseResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<ReservationReleaseResult>> ReleaseReservation(
+        string id, string claimId, [FromBody] ReleaseReservationRequest? request,
+        [FromServices] IReservationReconciliationService reconciliation)
+        => ReservationRelease.HandleAsync(this, reconciliation, Repositories.ClaimReservationKind.Payment, id, claimId, request);
+
+    /// <summary>
     /// Create a new payment run (does not execute)
     /// </summary>
     [HttpPost]
@@ -200,6 +220,36 @@ public class PaymentRunsController : ControllerBase
         if (string.IsNullOrEmpty(value))
             return string.Empty;
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+    }
+}
+
+/// <summary>The manual release, shared by payment runs and reversal runs.</summary>
+internal static class ReservationRelease
+{
+    public static async Task<ActionResult<ReservationReleaseResult>> HandleAsync(
+        ControllerBase controller, IReservationReconciliationService reconciliation,
+        Repositories.ClaimReservationKind kind, string runId, string claimId, ReleaseReservationRequest? request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Reason))
+            return controller.Problem(title: "Reason required",
+                detail: "A reason is required to release a claim reservation.",
+                statusCode: StatusCodes.Status400BadRequest);
+        try
+        {
+            return controller.Ok(await reconciliation.ReleaseManuallyAsync(kind, runId, claimId, request.Reason));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return controller.Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (ReservationNotFoundException ex)
+        {
+            return controller.Problem(title: "Not found", detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (ReservationConflictException ex)
+        {
+            return controller.Problem(title: "Reservation not released", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
     }
 }
 

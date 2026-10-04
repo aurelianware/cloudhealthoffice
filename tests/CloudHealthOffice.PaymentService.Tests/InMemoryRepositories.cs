@@ -42,8 +42,16 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
         => Task.FromResult<IEnumerable<Payment>>(All);
     public Task<PaymentsSummary> GetPaymentsSummaryAsync(DateTime from, DateTime to) => Task.FromResult(new PaymentsSummary());
 
+    /// <summary>When true, the next CreateAsync throws (the insert was attempted; the run keeps its reservations).</summary>
+    public bool FailNextCreate { get; set; }
+
     public Task<Payment> CreateAsync(Payment payment)
     {
+        if (FailNextCreate)
+        {
+            FailNextCreate = false;
+            throw new InvalidOperationException("payment store unavailable");
+        }
         if (_tenant != null) payment.TenantId = _tenant;
         lock (_items) _items.Add(payment);
         return Task.FromResult(payment);
@@ -105,6 +113,19 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
     }
 
     public Task<PaymentRun> UpdateAsync(PaymentRun run) { lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
+
+    public Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run == null)
+                return Task.FromResult(false);
+            outcomes.ApplyTo(run.ReleasedReservationClaimIds, run.ReservationsNeedingAttention, run.Warnings);
+            return Task.FromResult(true);
+        }
+    }
+
     public Task DeleteAsync(string id) { _items.RemoveAll(r => r.Id == id); return Task.CompletedTask; }
 }
 
@@ -147,6 +168,19 @@ public sealed class InMemoryReversalRunRepository : IReversalRunRepository
     }
 
     public Task<ReversalRun> UpdateAsync(ReversalRun run) { lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
+
+    public Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run == null)
+                return Task.FromResult(false);
+            outcomes.ApplyTo(run.ReleasedReservationClaimIds, run.ReservationsNeedingAttention, run.Warnings);
+            return Task.FromResult(true);
+        }
+    }
+
     public Task DeleteAsync(string id) { _items.RemoveAll(r => r.Id == id); return Task.CompletedTask; }
 }
 
@@ -165,14 +199,96 @@ public sealed class InMemoryClaimReservationRepository : IClaimReservationReposi
         if (BeforeReserve != null)
             await BeforeReserve();
         reservation.Id = ClaimReservation.KeyFor(reservation.Kind, reservation.TenantId, reservation.ClaimId);
-        return _items.TryAdd(reservation.Id, reservation);
+        reservation.Version ??= Guid.NewGuid().ToString("N");
+        return _items.TryAdd(reservation.Id, Copy(reservation));
     }
 
     public Task ReleaseAsync(ClaimReservationKind kind, string tenantId, string claimId, string runId)
     {
         var key = ClaimReservation.KeyFor(kind, tenantId, claimId);
-        if (_items.TryGetValue(key, out var held) && held.RunId == runId)
-            _items.TryRemove(key, out _);
+        lock (_lock)
+        {
+            if (_items.TryGetValue(key, out var held) && held.RunId == runId)
+                _items.TryRemove(key, out _);
+        }
         return Task.CompletedTask;
     }
+
+    private readonly object _lock = new();
+
+    // Copies in and out, as a database does.
+    private static ClaimReservation Copy(ClaimReservation r) => JsonSerializer.Deserialize<ClaimReservation>(JsonSerializer.Serialize(r))!;
+
+    /// <summary>Runs once before each conditional delete; concurrency tests use it to interleave another release and a new run.</summary>
+    public Func<Task>? BeforeConditionalDelete { get; set; }
+
+    public Task<ClaimReservation?> GetAsync(ClaimReservationKind kind, string tenantId, string claimId)
+        => Task.FromResult(_items.TryGetValue(ClaimReservation.KeyFor(kind, tenantId, claimId), out var r) ? Copy(r) : null);
+
+    public Task<IReadOnlyCollection<string>> ListTenantsAsync()
+        => Task.FromResult<IReadOnlyCollection<string>>(_items.Values.Select(r => r.TenantId).Distinct().ToList());
+
+    public Task<IReadOnlyList<ClaimReservation>> ListByTenantAsync(string tenantId, bool needsAttentionOnly = false)
+        => Task.FromResult<IReadOnlyList<ClaimReservation>>(_items.Values
+            .Where(r => r.TenantId == tenantId && (!needsAttentionOnly || r.NeedsAttention))
+            .OrderBy(r => r.ReservedAt)
+            .Select(Copy)
+            .ToList());
+
+    public async Task<bool> TryDeleteIfUnchangedAsync(ClaimReservation observed)
+    {
+        var hook = BeforeConditionalDelete;
+        if (hook != null)
+        {
+            BeforeConditionalDelete = null;
+            await hook();
+        }
+        lock (_lock)
+        {
+            if (!_items.TryGetValue(observed.Id, out var current))
+                return false;
+            if (current.RunId != observed.RunId || current.Version != observed.Version)
+                return false;
+            return _items.TryRemove(observed.Id, out _);
+        }
+    }
+
+    public Task<bool> TrySetAttentionIfUnchangedAsync(ClaimReservation observed, string? reason, DateTime? flaggedAt)
+    {
+        lock (_lock)
+        {
+            if (!_items.TryGetValue(observed.Id, out var current)
+                || current.RunId != observed.RunId || current.Version != observed.Version)
+                return Task.FromResult(false);
+            var updated = Copy(current);
+            updated.NeedsAttention = reason != null;
+            updated.AttentionReason = reason;
+            updated.FlaggedAt = reason != null ? flaggedAt : null;
+            _items[observed.Id] = updated;
+            return Task.FromResult(true);
+        }
+    }
+}
+
+/// <summary>Append-only audit, kept for assertions.</summary>
+public sealed class InMemoryReservationAuditLog : IReservationAuditLog
+{
+    private readonly List<ReservationAuditEntry> _entries = new();
+
+    public IReadOnlyList<ReservationAuditEntry> All
+    {
+        get { lock (_entries) return _entries.ToList(); }
+    }
+
+    public Task RecordAsync(ReservationAuditEntry entry)
+    {
+        lock (_entries) _entries.Add(entry);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<ReservationAuditEntry>> ListAsync(string tenantId, string? runId = null)
+        => Task.FromResult<IReadOnlyList<ReservationAuditEntry>>(All
+            .Where(e => e.TenantId == tenantId && (runId == null || e.RunId == runId))
+            .OrderByDescending(e => e.At)
+            .ToList());
 }

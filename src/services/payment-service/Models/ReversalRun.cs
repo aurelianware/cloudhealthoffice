@@ -136,6 +136,19 @@ public class ReversalRun
     /// PendingReversal and are picked up once a partner is configured.
     /// </summary>
     public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims whose reversal reservation this run held, released
+    /// after it failed or was cancelled without recouping them (automatically,
+    /// or by a second approver). A later reversal run may reverse them.
+    /// </summary>
+    public List<string> ReleasedReservationClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Reversal reservations reconciliation could not release safely. A person
+    /// releases them with POST /api/reversalruns/{id}/reservations/{claimId}/release.
+    /// </summary>
+    public List<ReservationAttention> ReservationsNeedingAttention { get; set; } = new();
 }
 
 /// <summary>

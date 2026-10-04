@@ -159,6 +159,22 @@ public class PaymentRun
     public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Claims whose payment reservation this run held, and which were released
+    /// after it failed or was cancelled without paying them: automatically (no
+    /// payment and no 835 in payment-service) or by a second approver. A later
+    /// run may pay them. The audit log (PaymentReservationAudit) has who and why.
+    /// </summary>
+    public List<string> ReleasedReservationClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Reservations this run holds that reconciliation could not release safely
+    /// (a payment or 835 exists, the run is stuck Running, or the state cannot
+    /// be classified). A person releases them with
+    /// POST /api/paymentruns/{id}/reservations/{claimId}/release.
+    /// </summary>
+    public List<ReservationAttention> ReservationsNeedingAttention { get; set; } = new();
+
+    /// <summary>
     /// Payment method for this run (ACH, Check)
     /// </summary>
     [StringLength(10)]

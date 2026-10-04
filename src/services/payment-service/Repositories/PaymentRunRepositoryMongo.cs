@@ -88,6 +88,39 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         return result.ModifiedCount == 1;
     }
 
+    public async Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<PaymentRun>.Filter.And(
+            Builders<PaymentRun>.Filter.Eq(x => x.Id, id),
+            Builders<PaymentRun>.Filter.Eq(x => x.TenantId, tenantId));
+
+        // Two partial updates (one array cannot be pulled from and pushed to in
+        // one update); neither touches status or results.
+        var touched = outcomes.TouchedClaimIds;
+        if (touched.Count > 0)
+        {
+            var pulled = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.PullFilter(
+                x => x.ReservationsNeedingAttention,
+                Builders<ReservationAttention>.Filter.In(a => a.ClaimId, touched)));
+            if (pulled.MatchedCount == 0)
+                return false;
+        }
+
+        var updates = new List<UpdateDefinition<PaymentRun>>();
+        if (outcomes.Released.Count > 0)
+            updates.Add(Builders<PaymentRun>.Update.AddToSetEach(x => x.ReleasedReservationClaimIds, outcomes.Released));
+        if (outcomes.Attention.Count > 0)
+            updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.ReservationsNeedingAttention, outcomes.Attention));
+        if (outcomes.Warnings.Count > 0)
+            updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.Warnings, outcomes.Warnings));
+        if (updates.Count == 0)
+            return true;
+
+        var result = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.Combine(updates));
+        return result.MatchedCount == 1;
+    }
+
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)
     {
         var filter = Builders<PaymentRun>.Filter.And(

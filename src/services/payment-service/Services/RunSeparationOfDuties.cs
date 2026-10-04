@@ -38,6 +38,15 @@ public interface IRunSeparationOfDuties
     /// <summary>The acting user, after checking they may release money for a run created by <paramref name="createdBy"/>.</summary>
     /// <exception cref="SeparationOfDutiesException">The actor is a service, unauthenticated, or the run's creator.</exception>
     string EnsureMayRelease(string runKind, string runNumber, string? createdBy);
+
+    /// <summary>
+    /// The acting user, after checking they may release a claim reservation a
+    /// run holds: a user (never a service token) other than the user who
+    /// executed the run. Releasing lets a later run pay (or reverse) the claim,
+    /// so the executor does not get to judge their own run's leftovers.
+    /// </summary>
+    /// <exception cref="SeparationOfDutiesException">The actor is a service, unauthenticated, or the run's executor.</exception>
+    string EnsureMayReleaseReservation(string runKind, string runNumber, string? executedBy);
 }
 
 public sealed class RunSeparationOfDuties : IRunSeparationOfDuties
@@ -53,17 +62,43 @@ public sealed class RunSeparationOfDuties : IRunSeparationOfDuties
         _logger = logger;
     }
 
-    public string EnsureMayRelease(string runKind, string runNumber, string? createdBy)
+    public string EnsureMayReleaseReservation(string runKind, string runNumber, string? executedBy)
+    {
+        var action = $"releasing a claim reservation of a {runKind} lets a later run pay it";
+        var user = EnsureUser(action);
+
+        if (string.IsNullOrWhiteSpace(executedBy))
+        {
+            _logger.LogWarning(NoMakerRecordedEvent,
+                "No executor recorded for {RunKind} {RunNumber}; reservation release by {User} allowed without an executor comparison",
+                runKind, Sanitize(runNumber), Sanitize(user));
+            return user;
+        }
+
+        if (string.Equals(executedBy, user, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: you executed {runKind} {runNumber}, so you cannot release its claim reservations. " +
+                "A different user with payments:approve must release them.");
+
+        return user;
+    }
+
+    private string EnsureUser(string action)
     {
         if (!_actor.IsAuthenticated)
             throw new SeparationOfDutiesException(
-                $"Separation of duties: executing a {runKind} releases money and needs a user with payments:approve");
+                $"Separation of duties: {action} and needs a user with payments:approve");
 
         if (_actor.IsService)
             throw new SeparationOfDutiesException(
-                $"Separation of duties: executing a {runKind} releases money and needs a user with payments:approve, not a service token");
+                $"Separation of duties: {action} and needs a user with payments:approve, not a service token");
 
-        var user = _actor.UserId;
+        return _actor.UserId;
+    }
+
+    public string EnsureMayRelease(string runKind, string runNumber, string? createdBy)
+    {
+        var user = EnsureUser($"executing a {runKind} releases money");
 
         if (string.IsNullOrWhiteSpace(createdBy))
         {

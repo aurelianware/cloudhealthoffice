@@ -36,6 +36,25 @@ public class ReversalRunsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Release a predecessor claim's reversal reservation that this run holds
+    /// but did not recoup, so a later reversal run may reverse it. Same rules as
+    /// the payment-run release: payments:approve, a user who did not execute the
+    /// run, a reason; 409 when a Posted or PaidPendingFinalize reversal payment
+    /// exists (retry the void with POST /api/reversalruns/{id}/void instead).
+    /// </summary>
+    [HttpPost("{id}/reservations/{claimId}/release")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(ReservationReleaseResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<ReservationReleaseResult>> ReleaseReservation(
+        string id, string claimId, [FromBody] ReleaseReservationRequest? request,
+        [FromServices] IReservationReconciliationService reconciliation)
+        => ReservationRelease.HandleAsync(this, reconciliation, Repositories.ClaimReservationKind.Reversal, id, claimId, request);
+
     /// <summary>Create a new reversal run (does not execute).</summary>
     [HttpPost]
     [ProducesResponseType(typeof(ReversalRun), StatusCodes.Status201Created)]

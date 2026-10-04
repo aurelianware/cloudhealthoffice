@@ -17,6 +17,13 @@ public interface IPaymentRunRepository
     /// any more (another executor won), or does not exist.
     /// </summary>
     Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt);
+
+    /// <summary>
+    /// Records released and needs-attention reservations (and warnings) on the
+    /// run as a partial update: never rewrites the run's status or results, so
+    /// it cannot undo a run that finished meanwhile. False when the run is gone.
+    /// </summary>
+    Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes);
     Task DeleteAsync(string id);
 }
 
@@ -172,6 +179,39 @@ public class PaymentRunRepository : IPaymentRunRepository
         {
             return false;
         }
+    }
+
+    public async Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
+    {
+        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            ItemResponse<PaymentRun> current;
+            try
+            {
+                current = await _container.ReadItemAsync<PaymentRun>(id, new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            var run = current.Resource;
+            outcomes.ApplyTo(run.ReleasedReservationClaimIds, run.ReservationsNeedingAttention, run.Warnings);
+            try
+            {
+                // Only the version just read: a concurrent write (the run
+                // finishing) is re-read and kept, never overwritten.
+                await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId),
+                    new ItemRequestOptions { IfMatchEtag = current.ETag });
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Changed since read: try again on the new version.
+            }
+        }
+        throw new InvalidOperationException($"Payment run {id} kept changing; reservation outcomes not recorded");
     }
 
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)

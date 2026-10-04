@@ -23,6 +23,13 @@ public interface IReversalRunRepository
     /// any more (another executor won), or does not exist.
     /// </summary>
     Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt);
+
+    /// <summary>
+    /// Records released and needs-attention reservations (and warnings) on the
+    /// run as a partial update that never rewrites its status or results. False
+    /// when the run is gone.
+    /// </summary>
+    Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes);
     Task DeleteAsync(string id);
 }
 
@@ -183,6 +190,37 @@ public class ReversalRunRepository : IReversalRunRepository
         {
             return false;
         }
+    }
+
+    public async Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
+    {
+        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            ItemResponse<ReversalRun> current;
+            try
+            {
+                current = await _container.ReadItemAsync<ReversalRun>(id, new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            var run = current.Resource;
+            outcomes.ApplyTo(run.ReleasedReservationClaimIds, run.ReservationsNeedingAttention, run.Warnings);
+            try
+            {
+                await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId),
+                    new ItemRequestOptions { IfMatchEtag = current.ETag });
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Changed since read: try again on the new version.
+            }
+        }
+        throw new InvalidOperationException($"Reversal run {id} kept changing; reservation outcomes not recorded");
     }
 
     public async Task<ReversalRun> UpdateAsync(ReversalRun reversalRun)

@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
@@ -57,6 +58,7 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepositoryMongo>();
     builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
     builder.Services.AddScoped<IClaimReservationRepository, ClaimReservationRepositoryMongo>();
+    builder.Services.AddScoped<IReservationAuditLog, ReservationAuditLogMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -80,6 +82,7 @@ else
     builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
     builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepository>();
     builder.Services.AddSingleton<IClaimReservationRepository, ClaimReservationRepositoryCosmos>();
+    builder.Services.AddSingleton<IReservationAuditLog, ReservationAuditLogCosmos>();
     // EraEnvelope persistence on Cosmos-only deployments uses the
     // in-memory fallback. payment-service's canonical store is Mongo;
     // Cosmos paths are dev-only and don't need durable EraEnvelope storage.
@@ -97,6 +100,19 @@ builder.Services.AddSingleton<IBatchEraGeneratorService, BatchEraGeneratorServic
 builder.Services.AddSingleton<ICarcRarcMappingService, CarcRarcMappingService>();
 builder.Services.AddScoped<ITradingPartnersClient, TradingPartnersClient>();
 builder.Services.AddScoped<IRunSeparationOfDuties, RunSeparationOfDuties>();
+
+// Stranded claim reservations (a run reserved a claim, then failed or was
+// cancelled without paying it). The hosted job releases only the safe case
+// (run Failed/Cancelled, past PaymentRuns:ReservationGracePeriod, no payment
+// and no 835 in payment-service) as payment-service itself, per tenant, with
+// no outbound calls; everything else is flagged NeedsAttention for a second
+// approver (POST /api/{paymentruns|reversalruns}/{id}/reservations/{claimId}/release).
+builder.Services.Configure<PaymentService.Models.ReservationReconciliationOptions>(
+    builder.Configuration.GetSection(PaymentService.Models.ReservationReconciliationOptions.SectionName));
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IReservationReconciliationService, ReservationReconciliationService>();
+builder.Services.AddSingleton<ReservationReconciliationJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ReservationReconciliationJob>());
 
 // Run-execution clients. claims-service (search, read, remittance, void,
 // adjustments) and trading-partner-service are called only while a payment or

@@ -35,10 +35,16 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
     public InMemoryClaimReservationRepository Reservations { get; } = new();
     public StandInClaimsService Claims { get; } = new();
     public StandInTradingPartnerService TradingPartners { get; } = new();
+    public InMemoryReservationAuditLog Audit { get; } = new();
+    public ManualClock Clock { get; } = new();
+
+    /// <summary>The reconciliation job (its timer is off here; tests call RunOnceAsync).</summary>
+    public ReservationReconciliationJob ReconciliationJob => Services.GetRequiredService<ReservationReconciliationJob>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        builder.UseSetting("PaymentRuns:ReservationReconciliationEnabled", "false");
         builder.ConfigureServices(services =>
         {
             var remove = services
@@ -59,6 +65,8 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
             services.AddSingleton<IReversalRunRepository>(ReversalRuns);
             services.AddSingleton<IEraEnvelopeRepository>(Envelopes);
             services.AddSingleton<IClaimReservationRepository>(Reservations);
+            services.AddSingleton<IReservationAuditLog>(Audit);
+            services.AddSingleton<TimeProvider>(Clock);
             services.AddHttpClient(ClaimsServiceClient.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => Claims);
             services.AddHttpClient(TradingPartnersClient.HttpClientName)
@@ -81,6 +89,16 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
             "Bearer", ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken(clientId, Tenant));
         return client;
     }
+}
+
+/// <summary>A clock tests move forward (real time plus an offset).</summary>
+public sealed class ManualClock : TimeProvider
+{
+    private long _offsetTicks;
+
+    public void Advance(TimeSpan by) => Interlocked.Add(ref _offsetTicks, by.Ticks);
+
+    public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow.AddTicks(Interlocked.Read(ref _offsetTicks));
 }
 
 /// <summary>What a stand-in saw on one request, after validating its token.</summary>
@@ -398,6 +416,17 @@ public sealed class RecordingEnvelopeRepository : IEraEnvelopeRepository
         => Task.FromResult<IEnumerable<EraEnvelopeRecord>>(All.Where(r => r.ReversalRunId == reversalRunId).ToList());
     public Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId, string? reversalRunId = null)
         => Task.FromResult<IEnumerable<EraEnvelopeRecord>>(All);
+
+    public Task<IReadOnlyCollection<string>> GetClaimIdsWithEnvelopeAsync(IReadOnlyCollection<string> claimIds, bool reversal)
+    {
+        var wanted = new HashSet<string>(claimIds, StringComparer.Ordinal);
+        IReadOnlyCollection<string> found = All
+            .Where(r => !string.IsNullOrEmpty(r.ReversalRunId) == reversal)
+            .SelectMany(r => r.ClaimIds)
+            .Where(wanted.Contains)
+            .ToHashSet(StringComparer.Ordinal);
+        return Task.FromResult(found);
+    }
 
     public Task<EraEnvelopeRecord> CreateAsync(EraEnvelopeRecord record)
     {
