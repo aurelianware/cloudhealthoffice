@@ -301,10 +301,18 @@ public class AttachmentsController : ControllerBase
                 TradingPartnerFound = tradingPartner != null
             });
         }
+        catch (TradingPartnerLookupException ex)
+        {
+            // Never an acknowledgment built from default interchange ids because the lookup failed.
+            _logger.LogError(ex, "Trading partner configuration unavailable for attachment {AttachmentId}", SanitizeForLog(id));
+            return StatusCode(StatusCodes.Status502BadGateway,
+                new { error = "Trading partner configuration is unavailable; no acknowledgment was generated. Retry later." });
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating acknowledgment for attachment {AttachmentId}", SanitizeForLog(id));
-            return StatusCode(500, new { error = "Failed to generate acknowledgment", details = ex.Message });
+            _logger.LogError(ex, "Error generating acknowledgment for attachment {AttachmentId} (trace id {TraceId})",
+                SanitizeForLog(id), HttpContext.TraceIdentifier);
+            return StatusCode(500, new { error = "Failed to generate acknowledgment", traceId = HttpContext.TraceIdentifier });
         }
     }
 

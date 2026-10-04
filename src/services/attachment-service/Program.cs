@@ -99,13 +99,21 @@ builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
 if (databaseProvider == ChoDatabaseProvider.CosmosDb)
 {
     builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
-    builder.Services.AddScoped<ITradingPartnerLookup, CosmosTradingPartnerLookup>();
 }
 else
 {
     builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
-    builder.Services.AddScoped<ITradingPartnerLookup, MongoTradingPartnerLookup>();
 }
+
+// Trading partners are trading-partner-service's data: read through its API,
+// never from its TradingPartners collection (see HttpTradingPartnerLookup).
+builder.Services.AddHttpClient(HttpTradingPartnerLookup.ClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:TradingPartnerService"]
+        ?? HttpTradingPartnerLookup.DefaultBaseUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddScoped<ITradingPartnerLookup, HttpTradingPartnerLookup>();
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 
