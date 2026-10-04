@@ -166,6 +166,20 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
         return (await response.Content.ReadFromJsonAsync<BankAccountChangeView>(Json))!;
     }
 
+    /// <summary>
+    /// Makes the old account the approved one through dual control: one user
+    /// proposes it, a different user with payments:approve approves it. The
+    /// copy on the provider row is not approved.
+    /// </summary>
+    private async Task ApprovedOldAccountAsync()
+    {
+        var change = await ProposeAsync(ProviderRelations("user-seed-pr"), OldRouting, OldAccount);
+        var approve = await FinanceApprover("user-seed-approver").PostAsync($"{ChangesPath}/{change.Id}/approve", null);
+        approve.StatusCode.Should().Be(HttpStatusCode.OK, await approve.Content.ReadAsStringAsync());
+        (await PaymentsReadAsync())!.AccountNumberLast4.Should().Be("3333");
+        _factory.Logs.Clear();
+    }
+
     private async Task<ProviderBankAccount?> PaymentsReadAsync()
     {
         var response = await Finance().GetAsync(CapitationReadPath);
@@ -177,6 +191,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
     [Fact]
     public async Task Propose_is_pending_and_the_payments_read_still_returns_the_old_account()
     {
+        await ApprovedOldAccountAsync();
         var change = await ProposeAsync(ProviderRelations());
 
         change.Status.Should().Be(BankAccountChangeStatus.Pending);
@@ -232,6 +247,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
     [Fact]
     public async Task The_requester_cannot_approve_even_with_payments_approve()
     {
+        await ApprovedOldAccountAsync();
         // TenantAdmin holds both providers:write and payments:approve.
         var admin = Client("user-admin", ChoRolePermissions.TenantAdmin);
         var change = await ProposeAsync(admin);
@@ -249,6 +265,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
     [InlineData(ChoRolePermissions.ClaimsSupervisor)]
     public async Task A_user_without_payments_approve_cannot_approve_or_reject(string role)
     {
+        await ApprovedOldAccountAsync();
         var change = await ProposeAsync(ProviderRelations());
         var other = Client("user-other", role);
 
@@ -260,6 +277,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
     [Fact]
     public async Task A_service_token_cannot_approve()
     {
+        await ApprovedOldAccountAsync();
         var change = await ProposeAsync(ProviderRelations());
 
         var response = await ServiceClient("capitation-service").PostAsync($"{ChangesPath}/{change.Id}/approve", null);
@@ -271,6 +289,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
     [Fact]
     public async Task A_different_finance_approver_approves_and_payments_use_the_new_account()
     {
+        await ApprovedOldAccountAsync();
         var change = await ProposeAsync(ProviderRelations());
 
         var response = await FinanceApprover().PostAsJsonAsync($"{ChangesPath}/{change.Id}/approve",
@@ -296,6 +315,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
     [Fact]
     public async Task Approving_a_stale_change_is_a_conflict()
     {
+        await ApprovedOldAccountAsync();
         var stale = await ProposeAsync(ProviderRelations());
         await ProposeAsync(ProviderRelations(), account: "555566667777");
 
@@ -308,6 +328,7 @@ public class ProviderBankAccountDualControlPipelineTests : IClassFixture<Provide
     [Fact]
     public async Task Reject_keeps_the_active_account()
     {
+        await ApprovedOldAccountAsync();
         var change = await ProposeAsync(ProviderRelations());
 
         var response = await FinanceApprover().PostAsJsonAsync($"{ChangesPath}/{change.Id}/reject",

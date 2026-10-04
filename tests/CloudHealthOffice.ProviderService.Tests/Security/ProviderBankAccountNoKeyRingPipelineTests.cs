@@ -125,18 +125,19 @@ public class ProviderBankAccountNoKeyRingPipelineTests : IClassFixture<ProviderB
     [Fact]
     public async Task The_full_read_of_an_account_without_encrypted_values_still_works()
     {
-        // A legacy plaintext row account: readable without a key ring.
-        _factory.Providers.Setup(r => r.GetByNPIAsync(Npi)).ReturnsAsync(() => new Provider
-        {
-            Id = "p-1", ProviderId = "p-1", TenantId = Tenant, NPI = Npi, VersionId = "v-1", VersionState = ProviderVersionState.Active,
-            BankAccount = new ProviderBankAccount { EftEnabled = true, RoutingNumber = "091000019", AccountNumber = "111122223333" },
-        });
+        // An approved account stored before encryption (plaintext in the
+        // store, approved through dual control): readable without a key ring.
+        await ApprovedBankAccounts.SeedAsync(_factory.BankAccounts,
+            new Provider { Id = "p-1", ProviderId = "p-1", TenantId = Tenant, NPI = Npi },
+            new ProviderBankAccount { EftEnabled = true, RoutingNumber = "091000019", AccountNumber = "111122223333" });
         var client = _factory.CreateDefaultClient();
         client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer",
             ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("capitation-service", Tenant));
 
         var response = await client.GetAsync($"/api/v1/internal/providers/npi/{Npi}/bank-account");
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("accountNumber").GetString()
+            .Should().Be("111122223333");
     }
 }

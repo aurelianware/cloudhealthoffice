@@ -73,9 +73,14 @@ public class ProvidersControllerBankAccountTests
         return body;
     }
 
+    /// <summary>Approves the old account through dual control (one user proposes, another approves).</summary>
+    private async Task ApproveOldAccountAsync()
+        => await ApprovedBankAccounts.SeedAsync(_bankAccounts, await Head(), Account(OldAccount));
+
     [Fact]
     public async Task Update_with_a_new_account_keeps_the_active_account_and_creates_a_pending_change()
     {
+        await ApproveOldAccountAsync();
         var head = await Head();
 
         var result = await _controller.UpdateProvider(ProviderId, Body(head, Account(NewAccount)));
@@ -93,11 +98,32 @@ public class ProvidersControllerBankAccountTests
     [Fact]
     public async Task Update_echoing_the_current_account_creates_no_change()
     {
+        await ApproveOldAccountAsync();
+        var before = _bankAccounts.Records.Single();
         var head = await Head();
 
         await _controller.UpdateProvider(ProviderId, Body(head, Account(OldAccount)));
 
-        _bankAccounts.Records.Should().BeEmpty();
+        var after = _bankAccounts.Records.Single();
+        after.Revision.Should().Be(before.Revision, "echoing the approved account writes nothing");
+        after.Changes.Should().HaveCount(1);
+        after.Pending.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Update_sending_the_row_account_from_before_dual_control_proposes_it()
+    {
+        // The row's account was never approved: sending it with its numbers is
+        // a proposal for a second user to approve, not an echo.
+        var head = await Head();
+
+        await _controller.UpdateProvider(ProviderId, Body(head, Account(OldAccount)));
+
+        var updated = await Head();
+        (await _changes.GetActiveAccountAsync(updated)).Should().BeNull();
+        var pending = await _changes.GetPendingAsync(updated);
+        pending!.RequestedBy.Should().Be("user-editor");
+        pending.Proposed!.AccountNumber.Should().Be(OldAccount);
     }
 
     [Fact]

@@ -91,16 +91,21 @@ public class PendingBankAccountChange
 /// account are one atomic step.
 ///
 /// <para>
-/// Providers whose account was set before dual control have it on the
-/// provider row (<see cref="Provider.BankAccount"/>). Until the first change is
-/// proposed there is no record and that row account is the active one; the
-/// first proposal seeds <see cref="Active"/> from it (<see cref="LegacyChangeId"/>).
+/// An account set before dual control (on the provider row,
+/// <see cref="Provider.BankAccount"/>) is not active: it must be proposed and
+/// approved like any other. An earlier build seeded <see cref="Active"/> from
+/// the row with <see cref="LegacyChangeId"/>; such an account is not active
+/// either. Only an account whose <see cref="ActiveChangeId"/> names an
+/// Approved change in <see cref="Changes"/> counts.
 /// </para>
 /// </summary>
 [BsonIgnoreExtraElements]
 public class ProviderBankAccountRecord
 {
-    /// <summary><see cref="ActiveChangeId"/> of an account carried over from the provider row.</summary>
+    /// <summary>
+    /// <see cref="ActiveChangeId"/> an earlier build gave an account carried
+    /// over from the provider row. Not an approval: such an account is not active.
+    /// </summary>
     public const string LegacyChangeId = "legacy-provider-row";
 
     [JsonPropertyName("id")]
@@ -119,7 +124,10 @@ public class ProviderBankAccountRecord
     [JsonPropertyName("active")]
     public ProviderBankAccount? Active { get; set; }
 
-    /// <summary>The change that made <see cref="Active"/> active, or <see cref="LegacyChangeId"/>.</summary>
+    /// <summary>
+    /// The approved change that made <see cref="Active"/> active
+    /// (<see cref="LegacyChangeId"/> on records an earlier build seeded; those do not count).
+    /// </summary>
     [JsonPropertyName("activeChangeId")]
     public string? ActiveChangeId { get; set; }
 

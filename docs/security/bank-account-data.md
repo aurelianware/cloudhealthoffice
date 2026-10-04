@@ -23,6 +23,19 @@ the active account is one atomic step.
 
 - A change is only proposed. It does nothing until a different user holding
   `payments:approve` approves it. The first account is pending too.
+- **Provider accounts set before dual control are not active; they must be
+  proposed and approved.** There were no live payments before dual control,
+  so every account goes through approval once. The `Provider.BankAccount`
+  copy on the provider row is never the active account: with no approved
+  record, the masked read is 404, the full read is 404 `NoApprovedAccount`,
+  `GET` provider (by id or NPI) shows no bank account, and capitation marks
+  the disbursement as needing attention. Records an earlier build seeded from
+  the row (`activeChangeId` `legacy-provider-row`) do not count either: an
+  account is active only when `activeChangeId` names an Approved change in the
+  record's history. To restore such an account, propose it again (its full
+  numbers; a masked echo of the row copy is not a change) and have a second
+  user approve it. List, search and version reads still show the row copy,
+  masked; it is not what payments use.
 - The proposer cannot approve (403 "Separation of duties"). A service token
   cannot approve or reject (403), although service tokens satisfy every tenant
   permission. There is no per-tenant override.
@@ -83,10 +96,9 @@ approval.
   a refusal is an item needing attention. "Not enrolled" is a normal skip.
 - **Provider accounts:** only capitation-service's service token, through
   `GET /api/v1/internal/providers/npi/{npi}/bank-account`. It returns the
-  active account (the approved one; for a provider whose account was set
-  before dual control and never changed since, the account on the provider
-  row, exactly as the masked read capitation already used), never a pending
-  change: none is 404 `NoApprovedAccount` (unknown NPI: `ProviderNotFound`).
+  active account, the one approved through dual control (never the provider
+  row's copy from before dual control, and never a pending change): none is
+  404 `NoApprovedAccount` (unknown NPI: `ProviderNotFound`).
   It returns routing and account numbers, type, holder, method, Stripe id and
   last 4; never the bank tax id. An account without EFT enabled is answered
   without numbers. Numbers that cannot be decrypted are 503, never
@@ -190,6 +202,8 @@ dotnet provider-service.dll --encrypt-bank-accounts [--tenant <id>]... [--dry-ru
 dotnet run --project src/services/provider-service -- --encrypt-bank-accounts --dry-run
 ```
 
+- It only encrypts. It never makes an account active: a provider-row account
+  from before dual control still has to be proposed and approved.
 - Without `--tenant` every tenant found in the two collections is processed,
   plus rows without a tenant. With `MongoDb:UseTenantScoping`, name each
   tenant (one database per tenant).

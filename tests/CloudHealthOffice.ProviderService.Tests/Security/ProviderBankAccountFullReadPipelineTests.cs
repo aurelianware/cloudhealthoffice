@@ -138,16 +138,17 @@ public class ProviderBankAccountFullReadPipelineTests : IClassFixture<ProviderBa
         TaxIdType = TaxIdType.EIN,
     };
 
-    private async Task<BankAccountChangeView> ProposeAsync()
+    private async Task<BankAccountChangeView> ProposeAsync(ProviderBankAccount? account = null)
     {
-        var response = await As("user-pr", ChoRolePermissions.ProviderRelations).PutAsJsonAsync(AccountPath, BankAccount(), Json);
+        var response = await As("user-pr", ChoRolePermissions.ProviderRelations).PutAsJsonAsync(AccountPath, account ?? BankAccount(), Json);
         response.StatusCode.Should().Be(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync());
         return (await response.Content.ReadFromJsonAsync<BankAccountChangeView>(Json))!;
     }
 
-    private async Task ApprovedAccountAsync()
+    /// <summary>Dual control: user-pr proposes, a different user with payments:approve approves.</summary>
+    private async Task ApprovedAccountAsync(ProviderBankAccount? account = null)
     {
-        var change = await ProposeAsync();
+        var change = await ProposeAsync(account);
         var approve = await As("user-approver", ChoRolePermissions.FinanceApprover).PostAsync($"{ChangesPath}/{change.Id}/approve", null);
         approve.StatusCode.Should().Be(HttpStatusCode.OK, await approve.Content.ReadAsStringAsync());
     }
@@ -244,13 +245,59 @@ public class ProviderBankAccountFullReadPipelineTests : IClassFixture<ProviderBa
     [Fact]
     public async Task A_pending_change_is_never_returned_the_approved_account_is()
     {
-        _rowAccount = BankAccount(RowRouting, RowAccount);
+        await ApprovedAccountAsync(BankAccount(RowRouting, RowAccount));
         var change = await ProposeAsync();
         change.Status.Should().Be(BankAccountChangeStatus.Pending);
 
         var body = await Capitation.GetFromJsonAsync<JsonElement>(FullPath);
 
-        // The account set before dual control is the active one until a change is approved.
+        // The approved account stays the one payments use until the new change is approved.
+        body.GetProperty("accountNumber").GetString().Should().Be(RowAccount);
+    }
+
+    [Fact]
+    public async Task An_account_on_the_provider_row_from_before_dual_control_is_404_NoApprovedAccount()
+    {
+        _rowAccount = BankAccount(RowRouting, RowAccount);
+
+        var response = await Capitation.GetAsync(FullPath);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("NoApprovedAccount").And.NotContain(RowAccount).And.NotContain(RowRouting);
+    }
+
+    [Fact]
+    public async Task A_record_seeded_from_the_provider_row_is_404_NoApprovedAccount()
+    {
+        _rowAccount = BankAccount(RowRouting, RowAccount);
+        var legacy = new ProviderBankAccountRecord
+        {
+            TenantId = Tenant, ProviderId = "p-1", ProviderNpi = Npi,
+            Active = BankAccount(RowRouting, RowAccount),
+            ActiveChangeId = ProviderBankAccountRecord.LegacyChangeId,
+        };
+        (await _factory.BankAccounts.SaveAsync(legacy, 0)).Should().BeTrue();
+
+        var response = await Capitation.GetAsync(FullPath);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("NoApprovedAccount").And.NotContain(RowAccount).And.NotContain(RowRouting);
+    }
+
+    [Fact]
+    public async Task A_row_account_becomes_readable_once_proposed_and_approved_by_another_user()
+    {
+        _rowAccount = BankAccount(RowRouting, RowAccount);
+        var change = await ProposeAsync(BankAccount(RowRouting, RowAccount));
+        change.Status.Should().Be(BankAccountChangeStatus.Pending, "sending the row's account is a proposal, not an echo");
+        (await Capitation.GetAsync(FullPath)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var approve = await As("user-approver", ChoRolePermissions.FinanceApprover).PostAsync($"{ChangesPath}/{change.Id}/approve", null);
+        approve.StatusCode.Should().Be(HttpStatusCode.OK, await approve.Content.ReadAsStringAsync());
+
+        var body = await Capitation.GetFromJsonAsync<JsonElement>(FullPath);
         body.GetProperty("accountNumber").GetString().Should().Be(RowAccount);
     }
 
@@ -271,7 +318,7 @@ public class ProviderBankAccountFullReadPipelineTests : IClassFixture<ProviderBa
         var account = BankAccount();
         account.EftEnabled = false;
         account.PreferredDisbursementMethod = DisbursementMethod.Check;
-        _rowAccount = account;
+        await ApprovedAccountAsync(account);
 
         var body = await Capitation.GetFromJsonAsync<JsonElement>(FullPath);
 

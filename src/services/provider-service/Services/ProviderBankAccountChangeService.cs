@@ -43,10 +43,10 @@ public readonly record struct BankAccountActor(string UserId, bool IsService);
 public interface IProviderBankAccountChangeService
 {
     /// <summary>
-    /// The account payments use: the approved account on the provider's
-    /// bank-account record, or, for a provider with no record yet, the
-    /// account carried on the provider row from before dual control. Never a
-    /// pending one.
+    /// The account payments use: the account approved through dual control on
+    /// the provider's bank-account record. Never a pending one, and never the
+    /// copy on the provider row from before dual control (no live payments
+    /// predate it, so every account must be approved once).
     /// </summary>
     Task<ProviderBankAccount?> GetActiveAccountAsync(Provider provider, CancellationToken ct = default);
 
@@ -101,7 +101,7 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
     public async Task<ProviderBankAccount?> GetActiveAccountAsync(Provider provider, CancellationToken ct = default)
     {
         var record = await _repository.GetAsync(provider.TenantId, provider.ProviderId, ct);
-        return record != null ? record.Active : provider.BankAccount;
+        return ApprovedActive(record);
     }
 
     public async Task<PendingBankAccountChange?> GetPendingAsync(Provider provider, CancellationToken ct = default)
@@ -121,7 +121,7 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
     public async Task<bool> DiffersFromCurrentAsync(Provider provider, ProviderBankAccount account, CancellationToken ct = default)
     {
         var record = await _repository.GetAsync(provider.TenantId, provider.ProviderId, ct);
-        var active = record != null ? record.Active : provider.BankAccount;
+        var active = ApprovedActive(record);
         var pending = record?.Pending?.Proposed;
 
         // Reads return the account masked, so a client that PUTs back what it
@@ -225,7 +225,8 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
 
         var expectedRevision = record.Revision;
         var now = DateTime.UtcNow;
-        var previous = BankAccountMasking.Mask(record.Active);
+        // An account seeded from the provider row was never approved, so it is not "previous".
+        var previous = BankAccountMasking.Mask(ApprovedActive(record));
         var newAccount = change.Proposed;
 
         record.Active = newAccount;
@@ -334,11 +335,34 @@ public sealed class ProviderBankAccountChangeService : IProviderBankAccountChang
         TenantId = provider.TenantId,
         ProviderId = provider.ProviderId,
         ProviderNpi = provider.NPI,
-        // An account set before dual control stays active until a change is approved.
-        Active = provider.BankAccount == null ? null : Clone(provider.BankAccount),
-        ActiveChangeId = provider.BankAccount == null ? null : ProviderBankAccountRecord.LegacyChangeId,
+        // An account set before dual control is not active: it must be proposed
+        // and approved like any other.
+        Active = null,
+        ActiveChangeId = null,
         Revision = 0,
     };
+
+    /// <summary>
+    /// The record's active account if a dual-control approval made it active:
+    /// <see cref="ProviderBankAccountRecord.ActiveChangeId"/> names an Approved
+    /// change in the record's history. A record an earlier build seeded from
+    /// the provider row (<see cref="ProviderBankAccountRecord.LegacyChangeId"/>),
+    /// or any account with no approval behind it, has none.
+    /// </summary>
+    private static ProviderBankAccount? ApprovedActive(ProviderBankAccountRecord? record)
+    {
+        if (record?.Active == null) return null;
+        var changeId = record.ActiveChangeId;
+        if (string.IsNullOrEmpty(changeId)
+            || string.Equals(changeId, ProviderBankAccountRecord.LegacyChangeId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+        return record.Changes.Any(c => c.Status == BankAccountChangeStatus.Approved
+                                       && string.Equals(c.Id, changeId, StringComparison.Ordinal))
+            ? record.Active
+            : null;
+    }
 
     /// <summary>Audit entry: actor, provider, tenant and change; never an account number.</summary>
     private void Audit(EventId eventId, string action, PendingBankAccountChange change, string actor, string tenantId)

@@ -52,10 +52,35 @@ public class ProviderBankAccountChangeServiceTests
 
     private static BankAccountActor User(string id) => new(id, IsService: false);
 
+    /// <summary>
+    /// A provider whose old account was approved through dual control (proposed
+    /// by one user, approved by another). The provider row carries the same
+    /// account, as rows written before dual control do; that copy is not what
+    /// makes it active.
+    /// </summary>
+    private async Task<Provider> ProviderWithApprovedOldAccountAsync()
+    {
+        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        await ApprovedBankAccounts.SeedAsync(_repo, provider, Account(OldRouting, OldAccount));
+        return provider;
+    }
+
+    /// <summary>A record as an earlier build seeded it from the provider row: active, but never approved.</summary>
+    private async Task SeedLegacyRecordAsync(Provider provider)
+    {
+        var record = new ProviderBankAccountRecord
+        {
+            TenantId = provider.TenantId, ProviderId = provider.ProviderId, ProviderNpi = provider.NPI,
+            Active = Account(OldRouting, OldAccount),
+            ActiveChangeId = ProviderBankAccountRecord.LegacyChangeId,
+        };
+        (await _repo.SaveAsync(record, 0)).Should().BeTrue();
+    }
+
     [Fact]
     public async Task Propose_creates_a_pending_change_and_leaves_the_active_account()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
 
         var change = await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
 
@@ -89,7 +114,7 @@ public class ProviderBankAccountChangeServiceTests
     [Fact]
     public async Task The_requester_cannot_approve_their_own_change()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
         var change = await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
 
         var act = () => _service.ApproveAsync(provider, change.Id, User(Requester), null);
@@ -126,7 +151,7 @@ public class ProviderBankAccountChangeServiceTests
     [Fact]
     public async Task A_different_user_approves_and_the_active_account_changes_with_history_kept()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
         var change = await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
 
         var approved = await _service.ApproveAsync(provider, change.Id, User(Approver), "verified by phone");
@@ -139,7 +164,7 @@ public class ProviderBankAccountChangeServiceTests
         active!.AccountNumber.Should().Be(NewAccount);
         active.RoutingNumber.Should().Be(NewRouting);
 
-        var history = (await _service.ListChangesAsync(provider)).Single();
+        var history = (await _service.ListChangesAsync(provider)).Single(c => c.Id == change.Id);
         history.PreviousAccount!.AccountNumberLast4.Should().Be("3333");
         history.PreviousAccount.AccountNumber.Should().BeNull("history is masked");
         history.PreviousAccount.RoutingNumber.Should().BeNull();
@@ -179,7 +204,7 @@ public class ProviderBankAccountChangeServiceTests
     [Fact]
     public async Task Approving_when_the_active_account_changed_since_the_request_is_a_conflict()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
         var change = await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
 
         // The record's active account moved on after the change was proposed
@@ -198,7 +223,7 @@ public class ProviderBankAccountChangeServiceTests
     [Fact]
     public async Task Approval_that_loses_a_race_with_another_write_is_a_conflict_and_changes_nothing()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
         var change = await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
         _repo.AfterNextGet = repo => repo.TouchAll();
 
@@ -213,7 +238,7 @@ public class ProviderBankAccountChangeServiceTests
     [Fact]
     public async Task Reject_leaves_the_active_account_and_drops_the_proposed_numbers()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
         var change = await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
 
         var rejected = await _service.RejectAsync(provider, change.Id, User(Approver), "caller could not be verified");
@@ -255,17 +280,62 @@ public class ProviderBankAccountChangeServiceTests
     }
 
     [Fact]
-    public async Task A_provider_without_a_record_keeps_its_pre_dual_control_account()
+    public async Task An_account_on_the_provider_row_from_before_dual_control_is_not_active()
     {
         var provider = ProviderWith(Account(OldRouting, OldAccount));
 
+        (await _service.GetActiveAccountAsync(provider)).Should().BeNull(
+            "an account set before dual control must be proposed and approved once");
+        (await _service.DiffersFromCurrentAsync(provider, Account(OldRouting, OldAccount))).Should().BeTrue(
+            "sending the row's account again is a proposal, not an echo");
+    }
+
+    [Fact]
+    public async Task A_record_seeded_from_the_provider_row_is_not_active()
+    {
+        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        await SeedLegacyRecordAsync(provider);
+
+        (await _service.GetActiveAccountAsync(provider)).Should().BeNull();
+        (await _service.DiffersFromCurrentAsync(provider, Account(OldRouting, OldAccount))).Should().BeTrue();
+        (await _service.DiffersFromCurrentAsync(provider, BankAccountMasking.Mask(Account(OldRouting, OldAccount))!))
+            .Should().BeTrue("a masked copy of an unapproved account is not an echo of the active one");
+    }
+
+    [Fact]
+    public async Task An_active_account_whose_change_id_names_no_approved_change_is_not_active()
+    {
+        var provider = ProviderWith(null);
+        var record = new ProviderBankAccountRecord
+        {
+            TenantId = Tenant, ProviderId = "p-1", ProviderNpi = provider.NPI,
+            Active = Account(OldRouting, OldAccount), ActiveChangeId = "change-never-approved",
+        };
+        (await _repo.SaveAsync(record, 0)).Should().BeTrue();
+
+        (await _service.GetActiveAccountAsync(provider)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_legacy_seeded_account_becomes_active_only_once_proposed_and_approved_by_another_user()
+    {
+        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        await SeedLegacyRecordAsync(provider);
+
+        var change = await _service.ProposeAsync(provider, Account(OldRouting, OldAccount), Requester, "test");
+        (await _service.GetActiveAccountAsync(provider)).Should().BeNull("a proposal is not an approval");
+
+        await _service.ApproveAsync(provider, change.Id, User(Approver), null);
+
         (await _service.GetActiveAccountAsync(provider))!.AccountNumber.Should().Be(OldAccount);
+        (await _service.ListChangesAsync(provider)).Single().PreviousAccount.Should().BeNull(
+            "the seeded account was never active, so it is not the previous one");
     }
 
     [Fact]
     public async Task Echoing_the_active_or_pending_account_is_not_a_change()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
         (await _service.DiffersFromCurrentAsync(provider, Account(OldRouting, OldAccount))).Should().BeFalse();
 
         await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
@@ -276,7 +346,7 @@ public class ProviderBankAccountChangeServiceTests
     [Fact]
     public async Task Audit_entries_name_actor_provider_and_tenant_and_never_an_account_number()
     {
-        var provider = ProviderWith(Account(OldRouting, OldAccount));
+        var provider = await ProviderWithApprovedOldAccountAsync();
         var first = await _service.ProposeAsync(provider, Account(NewRouting, NewAccount), Requester, "test");
         var second = await _service.ProposeAsync(provider, Account(NewRouting, "555566667777"), Requester, "test");
         try { await _service.ApproveAsync(provider, second.Id, User(Requester), null); } catch (BankAccountChangeForbiddenException) { }

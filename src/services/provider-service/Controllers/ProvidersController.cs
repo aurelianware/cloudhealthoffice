@@ -616,11 +616,15 @@ public class ProvidersController : ControllerBase
         }
 
         // A body bank account is not written to the provider. When it differs
-        // from what the provider shows (an echo of the GET body is not a
-        // change), it becomes a pending change for a second user to approve.
+        // from the approved account and the pending one, it becomes a pending
+        // change for a second user to approve. The provider row's copy from
+        // before dual control is not approved, so sending its full numbers
+        // proposes it; a masked echo of it (what list, search and version
+        // reads show) has no numbers and is not a change.
         var bodyBankAccount = TakeBankAccount(provider);
         var proposeBankAccount = bodyBankAccount != null
-            && !BankAccountMasking.SameAccount(bodyBankAccount, existing.BankAccount)
+            && !(BankAccountMasking.IsMaskedOnly(bodyBankAccount)
+                 && BankAccountMasking.SameMaskedView(bodyBankAccount, existing.BankAccount))
             && await _bankAccountChanges.DiffersFromCurrentAsync(existing, bodyBankAccount);
         if (proposeBankAccount) EnsureBankNumbersCanBeEncrypted(bodyBankAccount);
 
@@ -914,25 +918,28 @@ public class ProvidersController : ControllerBase
     /// bank-account record instead of the copy on the provider row, which
     /// goes stale once a change is approved. Masked here and again by the
     /// response serializer (<see cref="MaskedProviderBankAccountJsonConverter"/>).
-    /// If the record cannot be read, the masked row copy is shown.
+    /// The row copy is never shown: an account set before dual control is not
+    /// active until it is proposed and approved. If the record cannot be read,
+    /// no account is shown.
     /// </summary>
     private async Task<Provider> WithActiveBankAccountAsync(Provider provider)
     {
+        ProviderBankAccount? active = null;
         if (!string.IsNullOrEmpty(provider.ProviderId))
         {
             if (string.IsNullOrEmpty(provider.TenantId)) provider.TenantId = TenantId;
             try
             {
-                provider.BankAccount = await _bankAccountChanges.GetActiveAccountAsync(provider);
+                active = await _bankAccountChanges.GetActiveAccountAsync(provider);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
-                    "Could not read the bank-account record of provider {ProviderId}; showing the provider row's account, masked",
+                    "Could not read the bank-account record of provider {ProviderId}; showing no bank account",
                     SanitizeForLog(provider.ProviderId));
             }
         }
-        provider.BankAccount = BankAccountMasking.Mask(provider.BankAccount);
+        provider.BankAccount = BankAccountMasking.Mask(active);
         return provider;
     }
 

@@ -157,6 +157,10 @@ public class ProviderReadBankAccountMaskingPipelineTests : IClassFixture<Provide
     [MemberData(nameof(ReadPaths))]
     public async Task Provider_reads_never_return_full_bank_numbers(string reader, string path)
     {
+        // The row's account approved through dual control, so single reads
+        // (which show the approved account) and list reads (the row copy) both
+        // carry it.
+        await ApprovedBankAccounts.SeedAsync(_factory.BankAccounts, Row(), Row().BankAccount!);
         var client = reader == "MemberServices" ? MemberServices() : ProviderRelations();
 
         var response = await client.GetAsync(path);
@@ -183,22 +187,63 @@ public class ProviderReadBankAccountMaskingPipelineTests : IClassFixture<Provide
     [InlineData("/api/v1/providers/npi/" + Npi)]
     public async Task Single_provider_reads_show_the_approved_account_not_the_stale_row_copy(string path)
     {
-        var record = new ProviderBankAccountRecord
+        await ApprovedBankAccounts.SeedAsync(_factory.BankAccounts, Row(), new ProviderBankAccount
         {
-            TenantId = Tenant, ProviderId = "p-1", ProviderNpi = Npi, ActiveChangeId = "change-1",
-            Active = new ProviderBankAccount
-            {
-                EftEnabled = true, PreferredDisbursementMethod = DisbursementMethod.NachaCredit,
-                RoutingNumber = ApprovedRouting, AccountNumber = ApprovedAccount,
-                RoutingNumberLast4 = "0089", AccountNumberLast4 = "7777",
-            },
-        };
-        (await _factory.BankAccounts.SaveAsync(record, 0)).Should().BeTrue();
+            EftEnabled = true, PreferredDisbursementMethod = DisbursementMethod.NachaCredit,
+            RoutingNumber = ApprovedRouting, AccountNumber = ApprovedAccount,
+        });
 
         var body = await (await MemberServices().GetAsync(path)).Content.ReadAsStringAsync();
 
         body.Should().Contain("7777").And.Contain("0089");
         body.Should().NotContain("\"3333\"");
         ShouldHaveNoFullNumbers(body);
+    }
+
+    /// <summary>A record as an earlier build seeded it from the provider row: active, never approved.</summary>
+    private async Task SeedLegacyRecordAsync()
+    {
+        var record = new ProviderBankAccountRecord
+        {
+            TenantId = Tenant, ProviderId = "p-1", ProviderNpi = Npi,
+            ActiveChangeId = ProviderBankAccountRecord.LegacyChangeId,
+            Active = Row().BankAccount,
+        };
+        (await _factory.BankAccounts.SaveAsync(record, 0)).Should().BeTrue();
+    }
+
+    public static IEnumerable<object[]> UnapprovedCases() => new[]
+    {
+        "/api/v1/providers/p-1", "/api/v1/providers/npi/" + Npi,
+    }.SelectMany(path => new[] { new object[] { path, false }, new object[] { path, true } });
+
+    [Theory]
+    [MemberData(nameof(UnapprovedCases))]
+    public async Task Single_provider_reads_show_no_account_when_only_the_row_or_a_legacy_seeded_record_has_one(
+        string path, bool legacySeededRecord)
+    {
+        if (legacySeededRecord) await SeedLegacyRecordAsync();
+
+        var response = await MemberServices().GetAsync(path);
+
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        body.Should().NotContain("3333", "an account set before dual control is not active and is not shown as the provider's account");
+        ShouldHaveNoFullNumbers(body);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_masked_bank_account_read_is_404_when_only_the_row_or_a_legacy_seeded_record_has_one(bool legacySeededRecord)
+    {
+        if (legacySeededRecord) await SeedLegacyRecordAsync();
+
+        var response = await MemberServices().GetAsync($"/api/providers/npi/{Npi}/bank-account");
+
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound, body);
+        body.Should().Contain("No approved bank account");
+        body.Should().NotContain("3333");
     }
 }
