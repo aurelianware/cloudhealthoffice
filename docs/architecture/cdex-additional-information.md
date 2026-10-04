@@ -417,7 +417,10 @@ Structured, PHI-free events with safe identifiers only.
 Also on the record: who created the request (`RequestedBy`), **why**
 (`RequestSource` = `review-decision-a4`, plus the `ReviewDecision` itself), who
 submitted each artifact (`SubmittedBy`), through which channel (`Channel`), and
-its integrity hash.
+its integrity hash. `RequestedBy`, `SubmittedBy` and `ClosedBy` are the subject
+of the CHO token rfai-service received (the user, or the calling service's
+client id, e.g. `fhir-service` for a SMART submitter); body values are ignored.
+rfai-service responses omit `storageProvider` and `storageKey`.
 
 Never logged: attachment content, document titles, diagnoses, notes, member
 demographics, raw FHIR payloads, tokens or credentials. The resume-review
