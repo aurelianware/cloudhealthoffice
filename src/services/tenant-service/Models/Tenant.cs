@@ -197,6 +197,25 @@ public class TenantConfiguration
 
     [JsonPropertyName("paymentControls")]
     public PaymentControlsConfig PaymentControls { get; set; } = new();
+
+    [JsonPropertyName("personalRepresentativeControls")]
+    public PersonalRepresentativeControlsConfig PersonalRepresentativeControls { get; set; } = new();
+}
+
+/// <summary>
+/// Personal representative activation controls, read by
+/// personal-representative-service.
+/// </summary>
+public class PersonalRepresentativeControlsConfig
+{
+    /// <summary>
+    /// A user who established a personal representative cannot activate it;
+    /// another user must. On by default; set to false only for very small
+    /// tenants without a second reviewer. Every same-user activation this
+    /// allows is logged as an audit warning.
+    /// </summary>
+    [JsonPropertyName("requireSecondPerson")]
+    public bool RequireSecondPerson { get; set; } = true;
 }
 
 /// <summary>

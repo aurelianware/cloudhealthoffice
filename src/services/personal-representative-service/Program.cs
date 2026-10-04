@@ -131,6 +131,28 @@ else
     Console.WriteLine("[dev] IPersonalRepFieldEncryptor = NoOp (personal rep body fields stored plaintext). Configure PersonalRepEncryption to enable.");
 }
 
+// ── Activation controls ─────────────────────────────────────────────
+// Activating a representative needs a user other than its creator (unless the
+// tenant's configuration.personalRepresentativeControls.requireSecondPerson is
+// false in tenant-service) and, for guardians, healthcare powers of attorney and
+// surrogates, a proof-of-authority document in member-document-service. Both
+// clients forward the caller's token through the shared outbound handler
+// (ChoAuth:Outbound:Hosts names their hosts).
+builder.Services.AddSingleton<ITenantPersonalRepControls, TenantPersonalRepControls>();
+builder.Services.AddSingleton<IProofOfAuthorityDocuments, MemberDocumentProofOfAuthorityDocuments>();
+builder.Services.AddScoped<IPersonalRepActivationControls, PersonalRepActivationControls>();
+
+builder.Services.AddHttpClient(TenantPersonalRepControls.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["TenantService:BaseUrl"] ?? "http://tenant-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddHttpClient(MemberDocumentProofOfAuthorityDocuments.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["MemberDocumentService:BaseUrl"] ?? "http://member-document-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 // ── Kafka producer (personal rep status events) ──────────────────────
 builder.Services.AddSingleton<PersonalRepEventPublisher>();
 builder.Services.AddSingleton<IPersonalRepEventPublisher>(sp => sp.GetRequiredService<PersonalRepEventPublisher>());

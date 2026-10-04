@@ -21,7 +21,8 @@ public class MemberRepresentativesControllerTests
 
         var primaryHttp = PersonalRepresentativesControllerTests.NewHttpContext(tenantId, "alice@tenant.com");
         var primary = new PersonalRepresentativesController(repo, repo, encryptor, publisher,
-            PersonalRepresentativesControllerTests.ActorFor(primaryHttp));
+            PersonalRepresentativesControllerTests.ActorFor(primaryHttp),
+            new AllowingActivationControls());
         primary.ControllerContext = new ControllerContext { HttpContext = primaryHttp };
 
         var resolver = new MemberRepresentativesController(repo, encryptor);

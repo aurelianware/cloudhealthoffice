@@ -43,6 +43,7 @@ public class PersonalRepresentativesController : ControllerBase
     private readonly IPersonalRepFieldEncryptor _encryptor;
     private readonly IPersonalRepEventPublisher _publisher;
     private readonly ICurrentActor _currentActor;
+    private readonly IPersonalRepActivationControls _activationControls;
     private readonly ILogger<PersonalRepresentativesController>? _logger;
 
     public PersonalRepresentativesController(
@@ -51,9 +52,11 @@ public class PersonalRepresentativesController : ControllerBase
         IPersonalRepFieldEncryptor encryptor,
         IPersonalRepEventPublisher publisher,
         ICurrentActor currentActor,
+        IPersonalRepActivationControls activationControls,
         ILogger<PersonalRepresentativesController>? logger = null)
     {
         _currentActor = currentActor;
+        _activationControls = activationControls;
         _reps = reps;
         _events = events;
         _encryptor = encryptor;
@@ -140,10 +143,24 @@ public class PersonalRepresentativesController : ControllerBase
         return Ok(new PersonalRepHistoryResponse { Items = events.ToList() });
     }
 
+    /// <summary>
+    /// Draft → Active. Checked by <see cref="IPersonalRepActivationControls"/>
+    /// before anything is written: a user (not a service) other than the
+    /// creator activates (unless the tenant turned the second-person rule off),
+    /// and guardians, healthcare powers of attorney and surrogates need a
+    /// proof-of-authority document in member-document-service that belongs to
+    /// this tenant and is linked to the representative's members. Who verified
+    /// the document and when is stored on the representative and on the audit
+    /// and Kafka events.
+    /// </summary>
     [HttpPost("{repId}/activate")]
     [ProducesResponseType(typeof(PersonalRepresentative), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
     [ProducesResponseType(404)]
     [ProducesResponseType(typeof(ProblemDetails), 409)]
+    [ProducesResponseType(typeof(ProblemDetails), 422)]
+    [ProducesResponseType(typeof(ProblemDetails), 503)]
     public async Task<IActionResult> Activate(
         [FromRoute] string repId,
         [FromBody] ActivatePersonalRepRequest? request,
@@ -169,16 +186,43 @@ public class PersonalRepresentativesController : ControllerBase
             return ConflictTransition(ex);
         }
 
+        var memberIds = (await _reps.ListAssociationsForRepAsync(TenantId, repId, activeOnly: true, ct: ct))
+            .Select(a => a.MemberId).Distinct().ToList();
+
+        var decision = await _activationControls.EvaluateAsync(
+            rep, request?.ProofOfAuthorityDocumentId, memberIds, ct);
+        if (!decision.Allowed)
+        {
+            return StatusCode(decision.StatusCode, new ProblemDetails
+            {
+                Status = decision.StatusCode,
+                Title = decision.Title,
+                Detail = decision.Detail
+            });
+        }
+
         var actor = Actor;
         var from = rep.Status;
+        var now = DateTime.UtcNow;
         rep.Status = PersonalRepStatus.Active;
         rep.ActivatedBy = actor;
-        rep.ActivatedAt = DateTime.UtcNow;
+        rep.ActivatedAt = now;
         if (!rep.EffectiveFrom.HasValue)
             rep.EffectiveFrom = rep.ActivatedAt;
+        if (decision.VerifiedDocumentId != null)
+        {
+            rep.ProofOfAuthorityDocumentId = decision.VerifiedDocumentId;
+            rep.ProofOfAuthorityVerifiedBy = actor;
+            rep.ProofOfAuthorityVerifiedAt = now;
+        }
 
         var auditEvent = BuildRepEvent(rep, PersonalRepEventType.PersonalRepActivated,
             fromStatus: from, toStatus: PersonalRepStatus.Active, actor, request?.EventId, memberId: null);
+        auditEvent.Payload!["proofOfAuthorityDocumentId"] = rep.ProofOfAuthorityDocumentId;
+        auditEvent.Payload["proofOfAuthorityVerifiedBy"] = rep.ProofOfAuthorityVerifiedBy;
+        auditEvent.Payload["proofOfAuthorityVerifiedAt"] = rep.ProofOfAuthorityVerifiedAt?.ToString("o");
+        auditEvent.Payload["createdBy"] = rep.CreatedBy;
+        auditEvent.Payload["secondPersonOverride"] = decision.SecondPersonOverridden;
 
         PersonalRepresentative updated;
         try
@@ -189,9 +233,6 @@ public class PersonalRepresentativesController : ControllerBase
         {
             return ConflictTransition(ex);
         }
-
-        var memberIds = (await _reps.ListAssociationsForRepAsync(TenantId, repId, activeOnly: true, ct: ct))
-            .Select(a => a.MemberId).Distinct().ToList();
 
         await _publisher.PublishStatusChangedAsync(
             updated, fromStatus: from, toStatus: PersonalRepStatus.Active,
@@ -465,6 +506,8 @@ public class PersonalRepresentativesController : ControllerBase
             EffectiveTo = rep.EffectiveTo,
             ExpiresAt = rep.ExpiresAt,
             ProofOfAuthorityDocumentId = rep.ProofOfAuthorityDocumentId,
+            ProofOfAuthorityVerifiedBy = rep.ProofOfAuthorityVerifiedBy,
+            ProofOfAuthorityVerifiedAt = rep.ProofOfAuthorityVerifiedAt,
             FirstName = await _encryptor.DecryptAsync(rep.FirstName, ct),
             MiddleName = await _encryptor.DecryptAsync(rep.MiddleName, ct),
             LastName = await _encryptor.DecryptAsync(rep.LastName, ct),
@@ -544,6 +587,15 @@ public class CreatePersonalRepRequest
 
 public class ActivatePersonalRepRequest
 {
+    /// <summary>
+    /// The member-document-service id of the guardianship order, power of
+    /// attorney or surrogate designation. Required (here or on the
+    /// representative) for LegalGuardian, HealthcarePowerOfAttorney and
+    /// HealthcareSurrogate; replaces the id recorded at creation.
+    /// </summary>
+    [StringLength(100)]
+    public string? ProofOfAuthorityDocumentId { get; set; }
+
     public string? EventId { get; set; }
 }
 

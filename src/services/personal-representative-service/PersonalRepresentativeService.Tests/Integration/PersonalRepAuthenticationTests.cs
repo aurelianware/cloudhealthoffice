@@ -79,7 +79,13 @@ public class PersonalRepAuthenticationTests : IClassFixture<PersonalRepLifecycle
         var rep = await ReadRepAsync(await admin.PostAsJsonAsync(Base, GuardianBody()));
         (await admin.PostAsJsonAsync($"{Base}/{rep.Id}/associations",
             new JsonObject { ["memberId"] = memberId })).EnsureSuccessStatusCode();
-        (await admin.PostAsync($"{Base}/{rep.Id}/activate", null)).EnsureSuccessStatusCode();
+
+        // A second user activates, with the guardianship order on file.
+        var reviewer = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler("reviewer-7", ChoRolePermissions.TenantAdmin));
+        reviewer.DefaultRequestHeaders.Add("X-Tenant-ID", tenant);
+        var order = _factory.MemberDocuments.Add(tenant, memberId);
+        (await reviewer.PostAsJsonAsync($"{Base}/{rep.Id}/activate",
+            new JsonObject { ["proofOfAuthorityDocumentId"] = order })).EnsureSuccessStatusCode();
         return rep;
     }
 
@@ -91,6 +97,10 @@ public class PersonalRepAuthenticationTests : IClassFixture<PersonalRepLifecycle
         var tenant = NewTenant();
         var client = NewClient(tenant);
         var forged = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        // One user does every write here, so the tenant has turned the
+        // second-person rule off; the guardianship order is on file.
+        _factory.TenantService.SetRequireSecondPerson(tenant, false);
+        var order = _factory.MemberDocuments.Add(tenant, "M1");
 
         var body = GuardianBody();
         body["createdBy"] = "attacker";
@@ -112,7 +122,7 @@ public class PersonalRepAuthenticationTests : IClassFixture<PersonalRepLifecycle
         (await client.PostAsJsonAsync($"{Base}/{created.Id}/associations",
             new JsonObject { ["memberId"] = "M1", ["createdBy"] = "attacker" })).EnsureSuccessStatusCode();
         (await client.PostAsJsonAsync($"{Base}/{created.Id}/activate",
-            new JsonObject { ["activatedBy"] = "attacker" })).EnsureSuccessStatusCode();
+            new JsonObject { ["activatedBy"] = "attacker", ["proofOfAuthorityDocumentId"] = order })).EnsureSuccessStatusCode();
         (await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{Base}/{created.Id}/associations/M1")
         {
             Content = JsonContent.Create(new JsonObject { ["updatedBy"] = "attacker" })

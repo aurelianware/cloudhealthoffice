@@ -23,7 +23,8 @@ public class PersonalRepresentativesControllerTests
         var encryptor = new ReversiblePersonalRepFieldEncryptor();
 
         var http = NewHttpContext(tenantId, user);
-        var controller = new PersonalRepresentativesController(repo, repo, encryptor, publisher, ActorFor(http));
+        var controller = new PersonalRepresentativesController(repo, repo, encryptor, publisher, ActorFor(http),
+            new AllowingActivationControls());
         controller.ControllerContext = new ControllerContext { HttpContext = http };
         return (controller, repo, publisher, encryptor);
     }
@@ -146,7 +147,8 @@ public class PersonalRepresentativesControllerTests
         var controllerB = new PersonalRepresentativesController(repoA, repoA,
             new ReversiblePersonalRepFieldEncryptor(),
             new RecordingPersonalRepEventPublisher(),
-            ActorFor(http));
+            ActorFor(http),
+            new AllowingActivationControls());
         controllerB.ControllerContext = new ControllerContext { HttpContext = http };
 
         var result = await controllerB.GetRepresentative(id, CancellationToken.None);
@@ -412,12 +414,15 @@ public class PersonalRepresentativesControllerTests
         };
         repo.Setup(r => r.GetByIdAsync("tenant-a", "r-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(rep);
+        repo.Setup(r => r.ListAssociationsForRepAsync("tenant-a", "r-1", It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<PersonalRepAssociation>());
         repo.Setup(r => r.TransitionStatusAsync(It.IsAny<PersonalRepresentative>(), It.IsAny<PersonalRepEvent>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidPersonalRepTransitionException(
                 PersonalRepStatus.Active, PersonalRepStatus.Active));
 
         var http = NewHttpContext("tenant-a", "alice");
-        var controller = new PersonalRepresentativesController(repo.Object, events.Object, encryptor, publisher, ActorFor(http));
+        var controller = new PersonalRepresentativesController(repo.Object, events.Object, encryptor, publisher, ActorFor(http),
+            new AllowingActivationControls());
         controller.ControllerContext = new ControllerContext { HttpContext = http };
 
         var result = await controller.Activate("r-1", request: null, CancellationToken.None);

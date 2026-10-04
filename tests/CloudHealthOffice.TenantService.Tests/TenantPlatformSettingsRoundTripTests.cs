@@ -144,6 +144,39 @@ public sealed class TenantPlatformSettingsRoundTripTests : IAsyncLifetime
         config.GetProperty("claimsPlatform").GetProperty("platform").GetString().Should().Be("qnxt");
     }
 
+    [Fact]
+    public async Task PersonalRepresentativeControls_DefaultToSecondPerson_AndTheOverrideRoundTrips()
+    {
+        var asPersonalRepService = _factory.ServiceClient("personal-representative-service", TenantServiceFactory.TenantA);
+
+        // Never set: the typed default (a second person is required) is returned.
+        using (var before = JsonDocument.Parse(await asPersonalRepService.GetStringAsync("/api/v1/tenants/tenant-a")))
+        {
+            before.RootElement.GetProperty("configuration").GetProperty("personalRepresentativeControls")
+                .GetProperty("requireSecondPerson").GetBoolean().Should().BeTrue();
+        }
+
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+        var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", new
+        {
+            configuration = new
+            {
+                personalRepresentativeControls = new { requireSecondPerson = false },
+                paymentControls = new { enforceSeparationOfDuties = true },
+            },
+        });
+        put.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var stored = await _database.GetCollection<BsonDocument>("Tenants")
+            .Find(new BsonDocument("tenantId", TenantServiceFactory.TenantA)).SingleAsync();
+        stored["configuration"]["personalRepresentativeControls"]["requireSecondPerson"].AsBoolean.Should().BeFalse();
+
+        using var after = JsonDocument.Parse(await asPersonalRepService.GetStringAsync("/api/v1/tenants/tenant-a"));
+        var config = after.RootElement.GetProperty("configuration");
+        config.GetProperty("personalRepresentativeControls").GetProperty("requireSecondPerson").GetBoolean().Should().BeFalse();
+        config.GetProperty("paymentControls").GetProperty("enforceSeparationOfDuties").GetBoolean().Should().BeTrue();
+    }
+
     /// <summary>The real pipeline over a real <see cref="TenantRepository"/> in MongoDB.</summary>
     private sealed class MongoBackedTenantServiceFactory : TenantServiceFactory
     {

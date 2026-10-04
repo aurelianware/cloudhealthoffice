@@ -72,6 +72,18 @@ public class PersonalRepresentative
     [StringLength(100)]
     public string? ProofOfAuthorityDocumentId { get; set; }
 
+    /// <summary>
+    /// The user who activated the rep after
+    /// <see cref="ProofOfAuthorityDocumentId"/> was found in member-document-service
+    /// (same tenant, linked to every associated member). Null for credential
+    /// types that need no document (<see cref="Services.PersonalRepActivationControls.RequiresProofOfAuthority"/>).
+    /// </summary>
+    [StringLength(200)]
+    public string? ProofOfAuthorityVerifiedBy { get; set; }
+
+    /// <summary>When <see cref="ProofOfAuthorityDocumentId"/> was verified.</summary>
+    public DateTime? ProofOfAuthorityVerifiedAt { get; set; }
+
     // ── Encrypted at rest — never included in Kafka event payload ───────
 
     /// <summary>Encrypted at rest via <see cref="Services.IPersonalRepFieldEncryptor"/>.</summary>

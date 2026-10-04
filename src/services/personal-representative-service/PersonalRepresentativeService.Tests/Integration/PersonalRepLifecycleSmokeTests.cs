@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace PersonalRepresentativeService.Tests.Integration;
 
@@ -39,10 +40,14 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
         public InMemoryPersonalRepRepository Repo { get; } = new();
         public RecordingPersonalRepEventPublisher Publisher { get; } = new();
         public ReversiblePersonalRepFieldEncryptor Encryptor { get; } = new();
+        public FakeMemberDocumentService MemberDocuments { get; } = new();
+        public FakeTenantService TenantService { get; } = new();
+        public CapturingLoggerProvider Logs { get; } = new();
 
         protected override IHost CreateHost(IHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.ConfigureLogging(logging => logging.AddProvider(Logs));
             builder.ConfigureAppConfiguration((ctx, cfg) =>
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
@@ -72,6 +77,13 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
                 services.AddSingleton<IPersonalRepEventSink>(Repo);
                 services.AddSingleton<IPersonalRepFieldEncryptor>(Encryptor);
                 services.AddSingleton<IPersonalRepEventPublisher>(Publisher);
+
+                // Downstream CHO services, behind the real clients and the
+                // shared outbound token handler.
+                services.AddHttpClient(MemberDocumentProofOfAuthorityDocuments.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => MemberDocuments.Handler());
+                services.AddHttpClient(TenantPersonalRepControls.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => TenantService.Handler());
             });
 
             return base.CreateHost(builder);
@@ -92,6 +104,14 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
     private HttpClient NewClient()
     {
         var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-int");
+        return client;
+    }
+
+    /// <summary>A second user of tenant-int, who may activate what dev-user established.</summary>
+    private HttpClient ReviewerClient()
+    {
+        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler("reviewer-1", ChoRolePermissions.TenantAdmin));
         client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-int");
         return client;
     }
@@ -133,8 +153,10 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
             new AddAssociationRequest { MemberId = "M2" }, Json);
         addM2.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var activate = await client.PostAsync(
-            $"/api/v1/personal-representatives/{rep.Id}/activate", content: null);
+        var guardianshipOrder = _factory.MemberDocuments.Add("tenant-int", "M1", "M2");
+        var activate = await ReviewerClient().PostAsJsonAsync(
+            $"/api/v1/personal-representatives/{rep.Id}/activate",
+            new ActivatePersonalRepRequest { ProofOfAuthorityDocumentId = guardianshipOrder }, Json);
         activate.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var removeM1 = await client.DeleteAsync(
@@ -200,8 +222,11 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
         await client.PostAsJsonAsync(
             $"/api/v1/personal-representatives/{rep!.Id}/associations",
             new AddAssociationRequest { MemberId = "M42" }, Json);
-        await client.PostAsync(
-            $"/api/v1/personal-representatives/{rep.Id}/activate", content: null);
+        var poa = _factory.MemberDocuments.Add("tenant-int", "M42");
+        (await ReviewerClient().PostAsJsonAsync(
+            $"/api/v1/personal-representatives/{rep.Id}/activate",
+            new ActivatePersonalRepRequest { ProofOfAuthorityDocumentId = poa }, Json))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
         // The resolver is a service-to-service authority check.
         var resp = await NewServiceClient("consent-service").GetFromJsonAsync<MemberRepresentativesResponse>(

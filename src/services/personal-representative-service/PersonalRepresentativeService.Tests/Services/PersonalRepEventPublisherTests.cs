@@ -75,7 +75,8 @@ public class PersonalRepEventPublisherTests
             "effectiveFrom", "effectiveTo", "expiresAt",
             "associatedMemberIds",
             "actor", "correlationId",
-            "inactivationReasonCode"
+            "inactivationReasonCode",
+            "proofOfAuthorityVerifiedBy", "proofOfAuthorityVerifiedAt"
         };
 
         actualFields.Should().BeEquivalentTo(expected,
