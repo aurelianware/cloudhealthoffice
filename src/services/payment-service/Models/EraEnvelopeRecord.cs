@@ -68,4 +68,7 @@ public class EraEnvelopeRecord
 
     /// <summary>Claim ids included in this envelope (audit-trail crumb for reconciliation).</summary>
     public List<string> ClaimIds { get; set; } = new();
+
+    /// <summary>The user who released the run that generated this 835 (the approver).</summary>
+    public string? CreatedBy { get; set; }
 }

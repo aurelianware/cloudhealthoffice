@@ -99,8 +99,8 @@ public class TradingPartnersClient : ITradingPartnersClient
         try
         {
             var path = $"/api/tradingpartners/by-npi/{Uri.EscapeDataString(tenantId)}/{Uri.EscapeDataString(npi)}/{Uri.EscapeDataString(environment)}";
-            // Name the tenant so the shared outbound handler can mint a service
-            // token for it when there is no caller to forward.
+            // A run-execution client: inside the run's RunExecutionGrant the call
+            // carries payment-service's service token for this tenant.
             using var request = new HttpRequestMessage(HttpMethod.Get, path);
             request.Headers.Add(CloudHealthOffice.Infrastructure.Middleware.TenantMiddleware.TenantHeaderName, tenantId);
             var response = await _http.SendAsync(request, ct);

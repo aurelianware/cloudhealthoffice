@@ -11,7 +11,9 @@ namespace PaymentService.Controllers;
 /// releases money (check numbers, Posted payments, 835 envelopes, claims
 /// finalized as paid), so it needs payments:approve from a user who did not
 /// create the run (maker-checker, RunSeparationOfDuties); a service token is
-/// refused. The tenant and the acting user come from the CHO token.
+/// refused. The tenant and the acting user come from the CHO token. During
+/// execution, claims-service and trading-partner calls carry payment-service's
+/// own service token (RunExecutionGrant), opened only after that check.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -95,6 +97,37 @@ public class PaymentRunsController : ControllerBase
         catch (SeparationOfDutiesException ex)
         {
             return SeparationOfDuties(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Retry the claims-service finalize for the claims an executed run paid but
+    /// claims-service did not finalize (<c>PendingFinalizeClaimIds</c>, payments
+    /// <c>PaidPendingFinalize</c>). Creates no payment and reuses each payment's
+    /// check number, which claims-service treats as idempotent. Needs
+    /// payments:run: the money was already released by the run's approver, who
+    /// stays the recorded actor; the calls carry payment-service's service token.
+    /// </summary>
+    [HttpPost("{id}/finalize")]
+    [RequirePermission("payments:run")]
+    [ProducesResponseType(typeof(PaymentRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PaymentRun>> RetryFinalize(string id)
+    {
+        _logger.LogInformation("Retrying finalize for payment run {PaymentRunId} by {User}",
+            SanitizeForLog(id), SanitizeForLog(_actor.UserId));
+        try
+        {
+            return Ok(await _paymentRunService.RetryFinalizeAsync(id));
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(ex.Message);
         }
         catch (InvalidOperationException ex)
         {

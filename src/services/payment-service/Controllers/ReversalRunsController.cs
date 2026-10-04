@@ -99,6 +99,35 @@ public class ReversalRunsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retry the claims-service void for the predecessor claims an executed
+    /// reversal run recouped but claims-service did not void
+    /// (<c>PendingVoidClaimIds</c>). Creates no reversal payment; the void is
+    /// idempotent in claims-service. Needs payments:run.
+    /// </summary>
+    [HttpPost("{id}/void")]
+    [RequirePermission("payments:run")]
+    [ProducesResponseType(typeof(ReversalRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ReversalRun>> RetryVoids(string id)
+    {
+        _logger.LogInformation("Retrying voids for reversal run {ReversalRunId} by {User}",
+            SanitizeForLog(id), SanitizeForLog(_actor.UserId));
+        try
+        {
+            return Ok(await _reversalRunService.RetryVoidsAsync(id));
+        }
+        catch (InvalidOperationException ex) when (IsNotFound(ex))
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     /// <summary>Get reversal run by ID.</summary>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(ReversalRun), StatusCodes.Status200OK)]

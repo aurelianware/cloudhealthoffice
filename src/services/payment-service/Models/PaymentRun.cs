@@ -136,6 +136,18 @@ public class PaymentRun
     public List<string> Warnings { get; set; } = new();
 
     /// <summary>
+    /// Claims this run paid that claims-service has not finalized yet (the
+    /// finalize call failed, or no trading partner resolved so no 835 was
+    /// emitted). Their payments are <c>PaidPendingFinalize</c>. They are never
+    /// paid again; POST /api/paymentruns/{id}/finalize (or the next run that
+    /// sees them) retries the finalize without a new payment.
+    /// </summary>
+    public List<string> PendingFinalizeClaimIds { get; set; } = new();
+
+    /// <summary>Claims returned by claims-service that this run did not pay because payment-service already holds a payment for them.</summary>
+    public List<string> AlreadyPaidClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Payment method for this run (ACH, Check)
     /// </summary>
     [StringLength(10)]

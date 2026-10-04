@@ -4,13 +4,15 @@ using CloudHealthOffice.Infrastructure.Middleware;
 namespace PaymentService.Services;
 
 /// <summary>
-/// The claims-service calls payment and reversal runs make. Every call names
-/// the run's tenant in <c>X-Tenant-ID</c>: inside a request the shared
-/// <c>ChoOutboundTokenHandler</c> forwards the caller's token (and echoes the
-/// token tenant), and with no caller it mints a payment-service token for this
-/// tenant. Without the header a call from a background job would go out with no
-/// token and claims-service would answer 401. Responses are returned as is; the
-/// runs decide what a failure means.
+/// The claims-service calls payment and reversal runs make, used only while a
+/// run is executed (or its finalizes / voids retried). The factory client is a
+/// run-execution client (Program.cs, <c>AddRunExecutionServiceToken</c>): inside
+/// the <see cref="RunExecutionGrant"/> a run opens after payments:approve and
+/// separation of duties, each call carries payment-service's own service token
+/// for the run's tenant, never the approver's token; outside one, a call goes out
+/// without credentials and claims-service answers 401. Every call also names the
+/// run's tenant in <c>X-Tenant-ID</c>. Responses are returned as is; the runs
+/// decide what a failure means.
 /// </summary>
 public interface IClaimsServiceClient
 {

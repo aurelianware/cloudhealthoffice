@@ -11,6 +11,13 @@ public interface IPaymentRunService
 {
     Task<PaymentRun> CreatePaymentRunAsync(PaymentRunCriteria criteria, string? createdBy = null);
     Task<PaymentRun> ExecutePaymentRunAsync(string paymentRunId);
+
+    /// <summary>
+    /// Retries the claims-service finalize for the claims an executed run paid
+    /// but claims-service has not finalized (<see cref="PaymentRun.PendingFinalizeClaimIds"/>).
+    /// Idempotent: reuses each payment's check number, creates no payment.
+    /// </summary>
+    Task<PaymentRun> RetryFinalizeAsync(string paymentRunId);
     Task<PaymentRun> GetPaymentRunAsync(string paymentRunId);
     Task<IEnumerable<PaymentRun>> GetPaymentRunsAsync(DateTime? from = null, DateTime? to = null);
     Task CancelPaymentRunAsync(string paymentRunId);
@@ -83,8 +90,15 @@ public class PaymentRunService : IPaymentRunService
 
         // Executing issues the payments: a user other than the run's creator,
         // never a service token (throws SeparationOfDutiesException -> 403).
-        paymentRun.ExecutedBy = _separationOfDuties.EnsureMayRelease(
+        var approver = _separationOfDuties.EnsureMayRelease(
             "payment run", paymentRun.PaymentRunNumber, paymentRun.CreatedBy);
+        paymentRun.ExecutedBy = approver;
+
+        // Approved: from here the run's claims-service and trading-partner calls
+        // carry payment-service's service token for the run's tenant (the
+        // approver holds no claims permissions). The approver stays the actor
+        // on the run, the payments and the 835s.
+        using var grant = RunExecutionGrant.Open(paymentRun.TenantId, paymentRun.Id, approver);
 
         paymentRun.Status = PaymentRunStatus.Running;
         paymentRun.ExecutionStartedAt = DateTime.UtcNow;
@@ -92,8 +106,12 @@ public class PaymentRunService : IPaymentRunService
 
         try
         {
-            // Step 1: Fetch approved/finalized claims from claims-service
-            var claims = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
+            // Step 1: Fetch approved claims from claims-service, then drop every
+            //         claim payment-service already paid (whatever its status
+            //         in claims-service), so a failed finalize never leads to a
+            //         second payment.
+            var fetched = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
+            var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
 
             _logger.LogInformation(
                 "Found {ClaimCount} approved claims for payment run {PaymentRunNumber}",
@@ -139,6 +157,7 @@ public class PaymentRunService : IPaymentRunService
             //         ICarcRarcMappingService so downstream Generate835
             //         emits CAS segments correctly for denials/cost-share.
             var eraInputs = new List<EraPaymentInput>();
+            var issuedPayments = new List<Payment>();
             foreach (var group in claimGroups)
             {
                 var providerNpi = group.Value.First().PayToProviderNPI ?? group.Value.First().BillingProviderNPI;
@@ -169,8 +188,10 @@ public class PaymentRunService : IPaymentRunService
                     paymentRun,
                     group.Key,
                     tradingPartnerId,
-                    checkNumber);
+                    checkNumber,
+                    approver);
 
+                issuedPayments.Add(payment);
                 paymentRun.PaymentIds.Add(payment.Id);
                 paymentRun.ClaimIds.AddRange(group.Value.Select(c => c.Id));
                 paymentRun.TotalPaymentAmount += payment.TotalPaymentAmount;
@@ -212,7 +233,8 @@ public class PaymentRunService : IPaymentRunService
                     ClaimCount = env.ClaimCount,
                     TotalPaymentAmount = env.TotalPaymentAmount,
                     ControlNumber = env.ControlNumber,
-                    ClaimIds = env.ClaimIds.ToList()
+                    ClaimIds = env.ClaimIds.ToList(),
+                    CreatedBy = approver
                 });
                 paymentRun.EraEnvelopeIds.Add(record.Id);
                 foreach (var claimId in env.ClaimIds)
@@ -221,15 +243,24 @@ public class PaymentRunService : IPaymentRunService
                 }
             }
 
+            foreach (var payment in issuedPayments)
+            {
+                payment.EraEnvelopeId = payment.ClaimPayments
+                    .Select(cp => claimToEnvelopeId.TryGetValue(cp.ClaimId, out var envId) ? envId : null)
+                    .FirstOrDefault(id => id != null);
+            }
+
             // Step 7: Finalize each claim via the claims-service
             //         POST /api/claims/{id}/remittance endpoint. Idempotent
-            //         on the server side (5.10 ClaimFinalizationService).
-            //         Only claims that landed in a generated envelope are
-            //         finalized — claims whose trading partner didn't resolve
-            //         are surfaced via PaymentRun.Warnings instead, so a
-            //         later run can retry once trading-partner config is
-            //         fixed.
-            await FinalizeClaimsAsync(claims, paymentRun, eraInputs, claimToEnvelopeId, paymentRun.Warnings);
+            //         on the server side for the same check number (5.10
+            //         ClaimFinalizationService). Only claims that landed in a
+            //         generated envelope are finalized. A claim that is not
+            //         finalized (call failed, or no trading partner so no 835)
+            //         keeps its payment PaidPendingFinalize, is listed on the
+            //         run and in its errors, and is never paid again: the
+            //         finalize is retried (POST {id}/finalize, or the next run
+            //         that sees the claim), never re-paid.
+            await FinalizeIssuedPaymentsAsync(issuedPayments, eraInputs, paymentRun);
 
             paymentRun.Status = PaymentRunStatus.Completed;
             paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
@@ -256,6 +287,49 @@ public class PaymentRunService : IPaymentRunService
             await _paymentRunRepository.UpdateAsync(paymentRun);
             throw;
         }
+    }
+
+    public async Task<PaymentRun> RetryFinalizeAsync(string paymentRunId)
+    {
+        var paymentRun = await _paymentRunRepository.GetByIdAsync(paymentRunId);
+        if (paymentRun == null)
+            throw new InvalidOperationException($"Payment run {paymentRunId} not found");
+
+        if (paymentRun.Status is not (PaymentRunStatus.Completed or PaymentRunStatus.Failed))
+            throw new InvalidOperationException(
+                $"Payment run {paymentRunId} has not been executed; only an executed run's finalizes can be retried");
+
+        // The money was released when a second user executed the run; the retry
+        // only records that release in claims-service, under that approval.
+        if (string.IsNullOrWhiteSpace(paymentRun.ExecutedBy))
+            throw new InvalidOperationException(
+                $"Payment run {paymentRunId} records no approver; its finalizes cannot be retried");
+
+        using var grant = RunExecutionGrant.Open(paymentRun.TenantId, paymentRun.Id, paymentRun.ExecutedBy);
+
+        var finalized = 0;
+        var stillPending = new List<string>();
+        foreach (var paymentId in paymentRun.PaymentIds)
+        {
+            var payment = await _paymentRepository.GetByIdAsync(paymentId);
+            if (payment == null || payment.IsReversal)
+                continue;
+
+            var (done, pending) = await FinalizePendingClaimsAsync(payment);
+            finalized += done;
+            stillPending.AddRange(pending);
+        }
+
+        paymentRun.PendingFinalizeClaimIds = stillPending.Distinct(StringComparer.Ordinal).ToList();
+        paymentRun.Warnings.Add(
+            $"Finalize retried by {_actor.UserId} at {DateTime.UtcNow:O}: {finalized} claim(s) finalized, " +
+            $"{paymentRun.PendingFinalizeClaimIds.Count} still pending; no payment was created");
+
+        _logger.LogInformation(
+            "Finalize retry for payment run {PaymentRunNumber}: {Finalized} finalized, {Pending} pending",
+            paymentRun.PaymentRunNumber, finalized, paymentRun.PendingFinalizeClaimIds.Count);
+
+        return await _paymentRunRepository.UpdateAsync(paymentRun);
     }
 
     public async Task<PaymentRun> GetPaymentRunAsync(string paymentRunId)
@@ -334,6 +408,84 @@ public class PaymentRunService : IPaymentRunService
             claims = claims.Where(c => criteria.MemberIds.Contains(c.MemberId)).ToList();
 
         return claims;
+    }
+
+    /// <summary>
+    /// The duplicate-selection guard. Drops repeated claim ids, then every claim
+    /// that already appears in a (non-reversal) payment in payment-service,
+    /// whatever claims-service says its status is: a claim whose finalize failed
+    /// is still Approved there, and must not be paid a second time. For such a
+    /// claim whose earlier finalize is pending, the finalize is retried now
+    /// (idempotent, same check number, no new payment).
+    /// </summary>
+    private async Task<List<ClaimDto>> ExcludeAlreadyPaidAsync(List<ClaimDto> fetched, PaymentRun paymentRun)
+    {
+        var unique = new List<ClaimDto>(fetched.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var claim in fetched)
+        {
+            if (string.IsNullOrEmpty(claim.Id) || !seen.Add(claim.Id))
+            {
+                paymentRun.Warnings.Add($"Claim {claim.Id} was returned more than once; selected once");
+                continue;
+            }
+            unique.Add(claim);
+        }
+
+        if (unique.Count == 0)
+            return unique;
+
+        var paid = await _paymentRepository.GetClaimIdsWithPaymentAsync(
+            unique.Select(c => c.Id).ToList(), reversal: false) ?? Array.Empty<string>();
+        var paidSet = new HashSet<string>(paid, StringComparer.Ordinal);
+        if (paidSet.Count == 0)
+            return unique;
+
+        foreach (var claimId in unique.Where(c => paidSet.Contains(c.Id)).Select(c => c.Id))
+        {
+            paymentRun.AlreadyPaidClaimIds.Add(claimId);
+            paymentRun.Warnings.Add($"Claim {claimId} already has a payment in payment-service; not paid again");
+            _logger.LogWarning(
+                "Claim {ClaimId} is Approved in claims-service but already paid in payment-service; excluded from run {PaymentRunNumber}",
+                SanitizeForLog(claimId), paymentRun.PaymentRunNumber);
+
+            await RetryPendingFinalizeForClaimAsync(claimId, paymentRun);
+        }
+
+        return unique.Where(c => !paidSet.Contains(c.Id)).ToList();
+    }
+
+    /// <summary>
+    /// A later run found a claim an earlier run paid: if that payment's finalize
+    /// failed after its 835 was emitted, finalize it now with the earlier
+    /// payment's check number. Payments with no 835 (no trading partner) are
+    /// left for POST {id}/finalize, where an operator decides.
+    /// </summary>
+    private async Task RetryPendingFinalizeForClaimAsync(string claimId, PaymentRun paymentRun)
+    {
+        var payments = await _paymentRepository.GetByClaimIdAsync(claimId) ?? Enumerable.Empty<Payment>();
+        foreach (var payment in payments.Where(p => !p.IsReversal && !string.IsNullOrEmpty(p.EraEnvelopeId)))
+        {
+            var claimPayment = payment.ClaimPayments.FirstOrDefault(cp => cp.ClaimId == claimId && cp.FinalizedAt == null);
+            if (claimPayment == null)
+                continue;
+
+            var ok = await TryFinalizeAsync(payment, claimPayment);
+            await SavePaymentStatusAsync(payment);
+            paymentRun.Warnings.Add(ok
+                ? $"Claim {claimId}: pending finalize from payment run {payment.RunNumber} completed (check {payment.CheckNumber})"
+                : $"Claim {claimId}: pending finalize from payment run {payment.RunNumber} failed again: {claimPayment.FinalizeError}");
+
+            if (ok && !string.IsNullOrEmpty(payment.RunId) && payment.RunId != paymentRun.Id)
+            {
+                var original = await _paymentRunRepository.GetByIdAsync(payment.RunId);
+                if (original != null && original.PendingFinalizeClaimIds.Remove(claimId))
+                {
+                    original.Warnings.Add($"Claim {claimId} finalized by payment run {paymentRun.PaymentRunNumber} at {DateTime.UtcNow:O}");
+                    await _paymentRunRepository.UpdateAsync(original);
+                }
+            }
+        }
     }
 
     private Dictionary<string, List<ClaimDto>> GroupClaimsByProvider(List<ClaimDto> claims, PaymentRunCriteria criteria)
@@ -421,7 +573,8 @@ public class PaymentRunService : IPaymentRunService
         PaymentRun paymentRun,
         string providerKey,
         string? tradingPartnerId,
-        string checkNumber)
+        string checkNumber,
+        string approver)
     {
         var firstClaim = claims.First();
         var providerNpi = firstClaim.PayToProviderNPI ?? firstClaim.BillingProviderNPI;
@@ -437,7 +590,14 @@ public class PaymentRunService : IPaymentRunService
             PayeeName = firstClaim.ProviderName ?? providerKey,
             PayeeNPI = providerNpi,
             TradingPartnerId = tradingPartnerId,
-            Status = PaymentStatus.Posted,
+            // Issued, not yet finalized in claims-service. Becomes Posted once
+            // every claim in it is finalized; a crash before that leaves it
+            // pending (and its claims excluded from later runs), never unpaid.
+            Status = PaymentStatus.PaidPendingFinalize,
+            PostedBy = approver,
+            PostedAt = DateTime.UtcNow,
+            RunId = paymentRun.Id,
+            RunNumber = paymentRun.PaymentRunNumber,
             ClaimPayments = claims.Select(claim =>
             {
                 var snapshot = BuildAdjudicationSnapshot(claim);
@@ -523,72 +683,123 @@ public class PaymentRunService : IPaymentRunService
         return snapshot;
     }
 
-    private async Task FinalizeClaimsAsync(
-        List<ClaimDto> claims,
-        PaymentRun paymentRun,
+    private async Task FinalizeIssuedPaymentsAsync(
+        List<Payment> issuedPayments,
         List<EraPaymentInput> eraInputs,
-        IReadOnlyDictionary<string, string> claimToEnvelopeId,
-        List<string> warnings)
+        PaymentRun paymentRun)
     {
-        // Map each claim to the payment it landed in so the finalize call
-        // carries the right CheckNumber, PaymentDate, and PaymentAmount.
-        // Claims absent from this map were skipped (no trading partner
-        // resolved); they are not finalized — surface as a single
-        // PaymentRun warning per skipped claim and move on.
-        var claimToPayment = new Dictionary<string, Payment>(StringComparer.Ordinal);
-        foreach (var input in eraInputs)
-        {
-            foreach (var cp in input.Payment.ClaimPayments)
-            {
-                claimToPayment[cp.ClaimId] = input.Payment;
-            }
-        }
+        var inEnvelope = new HashSet<string>(eraInputs.Select(i => i.Payment.Id), StringComparer.Ordinal);
+        var pending = new List<string>();
 
-        foreach (var claim in claims)
+        foreach (var payment in issuedPayments)
         {
-            if (!claimToPayment.TryGetValue(claim.Id, out var payment))
+            if (!inEnvelope.Contains(payment.Id))
             {
-                // Claim was filtered out of envelope emission upstream
-                // (no trading partner resolved). Don't call finalize —
-                // the empty CheckNumber would be rejected by the
-                // claims-service validation. The original "no trading
-                // partner" warning was already recorded.
-                _logger.LogDebug(
-                    "Claim {ClaimId} skipped from finalize — not in any generated envelope",
-                    SanitizeForLog(claim.Id));
+                // No trading partner resolved, so no 835 was emitted. The payment
+                // was issued all the same: the claims stay PaidPendingFinalize
+                // (never re-paid) until an operator retries the finalize.
+                foreach (var cp in payment.ClaimPayments)
+                {
+                    cp.FinalizeError = "No trading partner resolved; no 835 emitted; not finalized";
+                    pending.Add(cp.ClaimId);
+                    paymentRun.Errors.Add(
+                        $"Claim {cp.ClaimId} paid by check {payment.CheckNumber} but not finalized: no trading partner resolved, no 835 emitted");
+                }
+                await SavePaymentStatusAsync(payment);
                 continue;
             }
 
-            try
+            foreach (var cp in payment.ClaimPayments)
             {
-                var clp = payment.ClaimPayments.First(cp => cp.ClaimId == claim.Id);
+                if (await TryFinalizeAsync(payment, cp))
+                    continue;
 
-                var body = new RemittancePostBody
-                {
-                    ControlNumber = paymentRun.PaymentRunNumber,
-                    CheckNumber = payment.CheckNumber,
-                    PaymentDate = payment.PaymentDate,
-                    PaymentAmount = clp.PaymentAmount,
-                    PaymentRunId = paymentRun.Id,
-                    EraEnvelopeId = claimToEnvelopeId.TryGetValue(claim.Id, out var envelopeId) ? envelopeId : null
-                };
+                pending.Add(cp.ClaimId);
+                paymentRun.Warnings.Add($"Finalize call for claim {cp.ClaimId} failed: {cp.FinalizeError}");
+                paymentRun.Errors.Add(
+                    $"Claim {cp.ClaimId} paid by check {payment.CheckNumber} but claims-service did not finalize it ({cp.FinalizeError}); " +
+                    $"payment is PaidPendingFinalize; retry with POST /api/paymentruns/{paymentRun.Id}/finalize");
+            }
 
-                var response = await _claimsService.PostRemittanceAsync(paymentRun.TenantId, claim.Id, body);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var bodyText = await response.Content.ReadAsStringAsync();
-                    warnings.Add($"Finalize call for claim {claim.Id} returned {(int)response.StatusCode}");
-                    _logger.LogWarning(
-                        "Finalize call for claim {ClaimId} returned {Status}: {Body}",
-                        SanitizeForLog(claim.Id), response.StatusCode, SanitizeForLog(bodyText));
-                }
-            }
-            catch (Exception ex)
-            {
-                warnings.Add($"Finalize call for claim {claim.Id} threw: {ex.Message}");
-                _logger.LogError(ex, "Error finalizing claim {ClaimId}", SanitizeForLog(claim.Id));
-            }
+            await SavePaymentStatusAsync(payment);
         }
+
+        paymentRun.PendingFinalizeClaimIds = pending.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Finalizes the pending claims of one payment; returns how many were
+    /// finalized and which are still pending.
+    /// </summary>
+    private async Task<(int Finalized, List<string> Pending)> FinalizePendingClaimsAsync(Payment payment)
+    {
+        var finalized = 0;
+        var pending = new List<string>();
+        var attempted = false;
+        foreach (var cp in payment.ClaimPayments.Where(cp => cp.FinalizedAt == null))
+        {
+            attempted = true;
+            if (await TryFinalizeAsync(payment, cp))
+                finalized++;
+            else
+                pending.Add(cp.ClaimId);
+        }
+
+        if (attempted)
+            await SavePaymentStatusAsync(payment);
+        return (finalized, pending);
+    }
+
+    /// <summary>
+    /// One POST /api/claims/{id}/remittance for a claim of an issued payment,
+    /// with that payment's check number (claims-service treats the same check
+    /// number as an idempotent no-op and a different one as 409).
+    /// </summary>
+    private async Task<bool> TryFinalizeAsync(Payment payment, ClaimPayment cp)
+    {
+        try
+        {
+            var body = new RemittancePostBody
+            {
+                ControlNumber = payment.RunNumber ?? string.Empty,
+                CheckNumber = payment.CheckNumber,
+                PaymentDate = payment.PaymentDate,
+                PaymentAmount = cp.PaymentAmount,
+                PaymentRunId = payment.RunId,
+                EraEnvelopeId = payment.EraEnvelopeId
+            };
+
+            // Always inside an open grant: the run's tenant, not whatever the record carries.
+            var tenantId = RunExecutionGrant.Current?.TenantId ?? payment.TenantId;
+            using var response = await _claimsService.PostRemittanceAsync(tenantId, cp.ClaimId, body);
+            if (response.IsSuccessStatusCode)
+            {
+                cp.FinalizedAt = DateTime.UtcNow;
+                cp.FinalizeError = null;
+                return true;
+            }
+
+            var bodyText = await response.Content.ReadAsStringAsync();
+            cp.FinalizeError = $"claims-service returned {(int)response.StatusCode}";
+            _logger.LogWarning(
+                "Finalize call for claim {ClaimId} returned {Status}: {Body}",
+                SanitizeForLog(cp.ClaimId), response.StatusCode, SanitizeForLog(bodyText));
+            return false;
+        }
+        catch (Exception ex)
+        {
+            cp.FinalizeError = $"finalize call threw: {ex.Message}";
+            _logger.LogError(ex, "Error finalizing claim {ClaimId}", SanitizeForLog(cp.ClaimId));
+            return false;
+        }
+    }
+
+    private async Task SavePaymentStatusAsync(Payment payment)
+    {
+        payment.Status = payment.ClaimPayments.All(cp => cp.FinalizedAt != null)
+            ? PaymentStatus.Posted
+            : PaymentStatus.PaidPendingFinalize;
+        await _paymentRepository.UpdateAsync(payment);
     }
 
     private async Task<int> GetNextCheckNumberAsync()

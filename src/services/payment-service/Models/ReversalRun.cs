@@ -110,11 +110,25 @@ public class ReversalRun
     /// <summary>Execution wall-clock duration in seconds.</summary>
     public double? ExecutionDurationSeconds { get; set; }
 
-    /// <summary>Hard-stop errors (run lands in Failed when populated).</summary>
+    /// <summary>
+    /// Errors: a hard stop (run lands in Failed), or a void claims-service did
+    /// not record (run completes; the claim is listed in <see cref="PendingVoidClaimIds"/>).
+    /// </summary>
     public List<string> Errors { get; set; } = new();
 
     /// <summary>Per-adjustment warning surface (run completes with warnings).</summary>
     public List<string> Warnings { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims this run recouped (a reversal payment exists) that
+    /// claims-service has not voided yet. They are never reversed again; the
+    /// next reversal run that selects their adjustment retries the void
+    /// (idempotent in claims-service) without a new reversal payment.
+    /// </summary>
+    public List<string> PendingVoidClaimIds { get; set; } = new();
+
+    /// <summary>Predecessor claims skipped because payment-service already holds a reversal payment for them.</summary>
+    public List<string> AlreadyReversedClaimIds { get; set; } = new();
 }
 
 /// <summary>

@@ -96,16 +96,21 @@ builder.Services.AddSingleton<ICarcRarcMappingService, CarcRarcMappingService>()
 builder.Services.AddScoped<ITradingPartnersClient, TradingPartnersClient>();
 builder.Services.AddScoped<IRunSeparationOfDuties, RunSeparationOfDuties>();
 
-// HttpClients for service-to-service calls. AddChoAuthentication puts
-// ChoOutboundTokenHandler on every factory client: a caller's token is
-// forwarded, and without a caller a service token is minted for the tenant the
-// request names in X-Tenant-ID (the clients always set it from the run).
+// Run-execution clients. claims-service (search, read, remittance, void,
+// adjustments) and trading-partner-service are called only while a payment or
+// reversal run is executed (or its finalizes retried), after the caller passed
+// payments:approve and separation of duties. Those calls carry payment-service's
+// own service token for the run's tenant, never the approver's token
+// (FinanceApprover holds no claims permissions): AddRunExecutionServiceToken
+// removes the shared forwarding handler from these clients and mints the token
+// only inside an open RunExecutionGrant. The approver is recorded on the run,
+// payments and 835s. Every other factory client keeps ChoOutboundTokenHandler.
 builder.Services.AddHttpClient(ClaimsServiceClient.HttpClientName, client =>
 {
     var claimsServiceUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";
     client.BaseAddress = new Uri(claimsServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
-});
+}).AddRunExecutionServiceToken();
 
 // 5.10 — typed HttpClient for trading-partner-service NPI lookups
 // during PaymentRun execution. 10s timeout matches credentialing/
@@ -118,7 +123,7 @@ builder.Services.AddHttpClient(TradingPartnersClient.HttpClientName, client =>
         ?? "http://trading-partner-service:8080";
     client.BaseAddress = new Uri(tradingPartnerUrl);
     client.Timeout = TimeSpan.FromSeconds(10);
-});
+}).AddRunExecutionServiceToken();
 
 // Health checks (MongoDB or Cosmos DB, claims-service HTTP)
 var claimsServiceHealthUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";

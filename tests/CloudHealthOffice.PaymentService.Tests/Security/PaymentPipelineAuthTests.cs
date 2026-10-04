@@ -247,10 +247,11 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         await _f.Runs.Received().UpdateAsync(Arg.Is<PaymentRun>(r => r.ExecutedBy == Approver));
-        // claims-service is asked with the approver's own token and the run's tenant.
+        // After approval, claims-service is asked with payment-service's own
+        // service token for the run's tenant, never the approver's token.
         var search = Assert.Single(_f.Claims.Requests);
         Assert.Equal("/api/claims/search", search.RequestUri!.AbsolutePath);
-        Assert.Equal((Tenant, Approver), NoCallerHost.TokenOf(search));
+        Assert.Equal((Tenant, "payment-service"), NoCallerHost.TokenOf(search));
         Assert.Equal(Tenant, search.Headers.GetValues("X-Tenant-ID").Single());
     }
 
@@ -331,7 +332,7 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
             await _f.ReversalRuns.Received().UpdateAsync(Arg.Is<ReversalRun>(r => r.ExecutedBy == Approver));
             var list = Assert.Single(_f.Claims.Requests);
             Assert.Equal("/api/v1/adjustments", list.RequestUri!.AbsolutePath);
-            Assert.Equal((Tenant, Approver), NoCallerHost.TokenOf(list));
+            Assert.Equal((Tenant, "payment-service"), NoCallerHost.TokenOf(list));
         }
         finally
         {
