@@ -56,6 +56,7 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepositoryMongo>();
     builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepositoryMongo>();
     builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
+    builder.Services.AddScoped<IClaimReservationRepository, ClaimReservationRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -78,6 +79,7 @@ else
     builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
     builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
     builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepository>();
+    builder.Services.AddSingleton<IClaimReservationRepository, ClaimReservationRepositoryCosmos>();
     // EraEnvelope persistence on Cosmos-only deployments uses the
     // in-memory fallback. payment-service's canonical store is Mongo;
     // Cosmos paths are dev-only and don't need durable EraEnvelope storage.

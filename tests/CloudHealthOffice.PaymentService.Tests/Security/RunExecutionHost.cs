@@ -32,6 +32,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
     public InMemoryPaymentRunRepository Runs { get; } = new(Tenant);
     public InMemoryReversalRunRepository ReversalRuns { get; } = new(Tenant);
     public RecordingEnvelopeRepository Envelopes { get; } = new(Tenant);
+    public InMemoryClaimReservationRepository Reservations { get; } = new();
     public StandInClaimsService Claims { get; } = new();
     public StandInTradingPartnerService TradingPartners { get; } = new();
 
@@ -57,6 +58,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
             services.AddSingleton<IPaymentRunRepository>(Runs);
             services.AddSingleton<IReversalRunRepository>(ReversalRuns);
             services.AddSingleton<IEraEnvelopeRepository>(Envelopes);
+            services.AddSingleton<IClaimReservationRepository>(Reservations);
             services.AddHttpClient(ClaimsServiceClient.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => Claims);
             services.AddHttpClient(TradingPartnersClient.HttpClientName)
@@ -348,12 +350,20 @@ public sealed class StandInClaimsService : StandInService
 /// <summary>trading-partner-service: every NPI maps to TP-1 (needs trading-partners:read).</summary>
 public sealed class StandInTradingPartnerService : StandInService
 {
+    /// <summary>NPIs with no trading partner (404).</summary>
+    public HashSet<string> MissingNpis { get; } = new(StringComparer.Ordinal);
+
     protected override string RequiredPermission(HttpRequestMessage request) => "trading-partners:read";
 
     protected override Task<HttpResponseMessage> HandleAsync(HttpRequestMessage request, string body, Caller caller)
     {
         var segments = request.RequestUri!.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var npi = segments.Length >= 5 ? segments[4] : "unknown";
+        lock (MissingNpis)
+        {
+            if (MissingNpis.Contains(npi))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
         var partner = new TradingPartnerSummary
         {
             Id = "tp-doc-1",

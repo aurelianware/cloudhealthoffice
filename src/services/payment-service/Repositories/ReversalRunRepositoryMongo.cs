@@ -73,6 +73,21 @@ public class ReversalRunRepositoryMongo : IReversalRunRepository
         return reversalRun;
     }
 
+    public async Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<ReversalRun>.Filter.And(
+            Builders<ReversalRun>.Filter.Eq(x => x.Id, id),
+            Builders<ReversalRun>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<ReversalRun>.Filter.Eq(x => x.Status, ReversalRunStatus.Pending));
+        var update = Builders<ReversalRun>.Update
+            .Set(x => x.Status, ReversalRunStatus.Running)
+            .Set(x => x.ExecutedBy, executedBy)
+            .Set(x => x.ExecutionStartedAt, startedAt);
+        var result = await _collection.UpdateOneAsync(filter, update);
+        return result.ModifiedCount == 1;
+    }
+
     public async Task<ReversalRun> UpdateAsync(ReversalRun reversalRun)
     {
         var filter = Builders<ReversalRun>.Filter.And(

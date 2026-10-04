@@ -32,6 +32,7 @@ public class ReversalRunServiceTests
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly IConfiguration _configuration;
     private readonly TestActor _actor = TestActor.Approver();
+    private readonly InMemoryClaimReservationRepository _reservations = new();
 
     public ReversalRunServiceTests()
     {
@@ -49,6 +50,7 @@ public class ReversalRunServiceTests
         var http = new HttpClient(_claimsHandler) { BaseAddress = new Uri("http://claims-service") };
         _httpFactory.CreateClient("ClaimsService").Returns(http);
 
+        _runRepo.TryStartAsync(default!, default!, default).ReturnsForAnyArgs(true);
         _paymentRepo.CreateAsync(Arg.Any<Payment>()).Returns(call =>
         {
             var p = call.Arg<Payment>();
@@ -73,7 +75,8 @@ public class ReversalRunServiceTests
         NullLogger<ReversalRunService>.Instance,
         _configuration,
         _actor,
-        _actor.SeparationOfDuties());
+        _actor.SeparationOfDuties(),
+        _reservations);
 
     private static ReversalRun PendingRun() => new()
     {
@@ -230,7 +233,7 @@ public class ReversalRunServiceTests
         run.Status = ReversalRunStatus.Running;
         _runRepo.GetByIdAsync(run.Id).Returns(run);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<RunConflictException>(
             () => CreateService().ExecuteReversalRunAsync(run.Id));
     }
 

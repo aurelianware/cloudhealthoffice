@@ -12,6 +12,16 @@ public sealed class SeparationOfDutiesException : Exception
 }
 
 /// <summary>
+/// Thrown when a run cannot be started because it is not Pending: it was
+/// executed already, or another executor started it a moment earlier (the
+/// Pending -> Running write is conditional). Controllers answer 409.
+/// </summary>
+public sealed class RunConflictException : InvalidOperationException
+{
+    public RunConflictException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Maker-checker for releasing money, after the capitation-service
 /// (<c>PaymentSeparationOfDuties</c>) and premium-billing-service
 /// (<c>DebitSeparationOfDuties</c>) precedent. Executing a payment run issues

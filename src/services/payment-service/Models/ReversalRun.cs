@@ -129,6 +129,13 @@ public class ReversalRun
 
     /// <summary>Predecessor claims skipped because payment-service already holds a reversal payment for them.</summary>
     public List<string> AlreadyReversedClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims not reversed because their provider has no trading
+    /// partner, so no reversal 835 could be sent. Their adjustments stay
+    /// PendingReversal and are picked up once a partner is configured.
+    /// </summary>
+    public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 }
 
 /// <summary>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PaymentService.Models;
 using PaymentService.Repositories;
 
@@ -21,7 +22,10 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
     public Task<IEnumerable<Payment>> GetByClaimIdAsync(string claimId)
         => Task.FromResult<IEnumerable<Payment>>(All.Where(p => p.ClaimPayments.Any(cp => cp.ClaimId == claimId)).ToList());
 
-    public Task<IReadOnlyCollection<string>> GetClaimIdsWithPaymentAsync(IReadOnlyCollection<string> claimIds, bool reversal)
+    /// <summary>Runs after the "already paid" lookup; concurrency tests use it as a rendezvous.</summary>
+    public Func<Task>? AfterPaidLookup { get; set; }
+
+    public async Task<IReadOnlyCollection<string>> GetClaimIdsWithPaymentAsync(IReadOnlyCollection<string> claimIds, bool reversal)
     {
         var wanted = new HashSet<string>(claimIds, StringComparer.Ordinal);
         IReadOnlyCollection<string> found = All
@@ -29,7 +33,9 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
             .SelectMany(p => p.ClaimPayments.Select(cp => cp.ClaimId))
             .Where(wanted.Contains)
             .ToHashSet(StringComparer.Ordinal);
-        return Task.FromResult(found);
+        if (AfterPaidLookup != null)
+            await AfterPaidLookup();
+        return found;
     }
 
     public Task<IEnumerable<Payment>> SearchAsync(DateTime? paymentDateFrom, DateTime? paymentDateTo, string? payerId, PaymentStatus? status, int page = 1, int pageSize = 50)
@@ -67,11 +73,38 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
 
     public InMemoryPaymentRunRepository(string? tenant = null) => _tenant = tenant;
 
-    public Task<PaymentRun?> GetByIdAsync(string id) => Task.FromResult<PaymentRun?>(_items.FirstOrDefault(r => r.Id == id));
+    // Copies in and out, as a database does: concurrent requests never share an instance.
+    private static PaymentRun Copy(PaymentRun run) => JsonSerializer.Deserialize<PaymentRun>(JsonSerializer.Serialize(run))!;
+
+    /// <summary>Runs after a read; concurrency tests use it as a rendezvous.</summary>
+    public Func<Task>? AfterGet { get; set; }
+
+    public async Task<PaymentRun?> GetByIdAsync(string id)
+    {
+        PaymentRun? copy;
+        lock (_items) copy = _items.FirstOrDefault(r => r.Id == id) is { } r ? Copy(r) : null;
+        if (AfterGet != null)
+            await AfterGet();
+        return copy;
+    }
     public Task<PaymentRun?> GetByPaymentRunNumberAsync(string paymentRunNumber) => Task.FromResult<PaymentRun?>(_items.FirstOrDefault(r => r.PaymentRunNumber == paymentRunNumber));
     public Task<IEnumerable<PaymentRun>> SearchAsync(DateTime from, DateTime to, PaymentRunStatus? status = null) => Task.FromResult<IEnumerable<PaymentRun>>(_items.ToList());
-    public Task<PaymentRun> CreateAsync(PaymentRun run) { if (_tenant != null) run.TenantId = _tenant; _items.RemoveAll(r => r.Id == run.Id); _items.Add(run); return Task.FromResult(run); }
-    public Task<PaymentRun> UpdateAsync(PaymentRun run) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(run); return Task.FromResult(run); }
+    public Task<PaymentRun> CreateAsync(PaymentRun run) { if (_tenant != null) run.TenantId = _tenant; lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
+    public Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run == null || run.Status != PaymentRunStatus.Pending)
+                return Task.FromResult(false);
+            run.Status = PaymentRunStatus.Running;
+            run.ExecutedBy = executedBy;
+            run.ExecutionStartedAt = startedAt;
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<PaymentRun> UpdateAsync(PaymentRun run) { lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
     public Task DeleteAsync(string id) { _items.RemoveAll(r => r.Id == id); return Task.CompletedTask; }
 }
 
@@ -82,10 +115,64 @@ public sealed class InMemoryReversalRunRepository : IReversalRunRepository
 
     public InMemoryReversalRunRepository(string? tenant = null) => _tenant = tenant;
 
-    public Task<ReversalRun?> GetByIdAsync(string id) => Task.FromResult<ReversalRun?>(_items.FirstOrDefault(r => r.Id == id));
+    // Copies in and out, as a database does: concurrent requests never share an instance.
+    private static ReversalRun Copy(ReversalRun run) => JsonSerializer.Deserialize<ReversalRun>(JsonSerializer.Serialize(run))!;
+
+    /// <summary>Runs after a read; concurrency tests use it as a rendezvous.</summary>
+    public Func<Task>? AfterGet { get; set; }
+
+    public async Task<ReversalRun?> GetByIdAsync(string id)
+    {
+        ReversalRun? copy;
+        lock (_items) copy = _items.FirstOrDefault(r => r.Id == id) is { } r ? Copy(r) : null;
+        if (AfterGet != null)
+            await AfterGet();
+        return copy;
+    }
     public Task<ReversalRun?> GetByReversalRunNumberAsync(string number) => Task.FromResult<ReversalRun?>(_items.FirstOrDefault(r => r.ReversalRunNumber == number));
     public Task<IEnumerable<ReversalRun>> SearchAsync(DateTime from, DateTime to, ReversalRunStatus? status = null) => Task.FromResult<IEnumerable<ReversalRun>>(_items.ToList());
-    public Task<ReversalRun> CreateAsync(ReversalRun run) { if (_tenant != null) run.TenantId = _tenant; _items.RemoveAll(r => r.Id == run.Id); _items.Add(run); return Task.FromResult(run); }
-    public Task<ReversalRun> UpdateAsync(ReversalRun run) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(run); return Task.FromResult(run); }
+    public Task<ReversalRun> CreateAsync(ReversalRun run) { if (_tenant != null) run.TenantId = _tenant; lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
+    public Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run == null || run.Status != ReversalRunStatus.Pending)
+                return Task.FromResult(false);
+            run.Status = ReversalRunStatus.Running;
+            run.ExecutedBy = executedBy;
+            run.ExecutionStartedAt = startedAt;
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<ReversalRun> UpdateAsync(ReversalRun run) { lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
     public Task DeleteAsync(string id) { _items.RemoveAll(r => r.Id == id); return Task.CompletedTask; }
+}
+
+/// <summary>Insert-if-absent reservations, as the Mongo / Cosmos stores behave (duplicate key / 409).</summary>
+public sealed class InMemoryClaimReservationRepository : IClaimReservationRepository
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ClaimReservation> _items = new();
+
+    public IReadOnlyCollection<ClaimReservation> All => _items.Values.ToList();
+
+    /// <summary>Optional delay inside TryReserveAsync, to widen race windows in concurrency tests.</summary>
+    public Func<Task>? BeforeReserve { get; set; }
+
+    public async Task<bool> TryReserveAsync(ClaimReservation reservation)
+    {
+        if (BeforeReserve != null)
+            await BeforeReserve();
+        reservation.Id = ClaimReservation.KeyFor(reservation.Kind, reservation.TenantId, reservation.ClaimId);
+        return _items.TryAdd(reservation.Id, reservation);
+    }
+
+    public Task ReleaseAsync(ClaimReservationKind kind, string tenantId, string claimId, string runId)
+    {
+        var key = ClaimReservation.KeyFor(kind, tenantId, claimId);
+        if (_items.TryGetValue(key, out var held) && held.RunId == runId)
+            _items.TryRemove(key, out _);
+        return Task.CompletedTask;
+    }
 }

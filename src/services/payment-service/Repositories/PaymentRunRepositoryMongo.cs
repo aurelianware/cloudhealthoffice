@@ -73,6 +73,21 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         return paymentRun;
     }
 
+    public async Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<PaymentRun>.Filter.And(
+            Builders<PaymentRun>.Filter.Eq(x => x.Id, id),
+            Builders<PaymentRun>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<PaymentRun>.Filter.Eq(x => x.Status, PaymentRunStatus.Pending));
+        var update = Builders<PaymentRun>.Update
+            .Set(x => x.Status, PaymentRunStatus.Running)
+            .Set(x => x.ExecutedBy, executedBy)
+            .Set(x => x.ExecutionStartedAt, startedAt);
+        var result = await _collection.UpdateOneAsync(filter, update);
+        return result.ModifiedCount == 1;
+    }
+
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)
     {
         var filter = Builders<PaymentRun>.Filter.And(

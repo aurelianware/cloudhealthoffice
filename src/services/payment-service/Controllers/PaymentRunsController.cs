@@ -84,6 +84,7 @@ public class PaymentRunsController : ControllerBase
     [ProducesResponseType(typeof(PaymentRun), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaymentRun>> ExecutePaymentRun(string id)
     {
@@ -97,6 +98,10 @@ public class PaymentRunsController : ControllerBase
         catch (SeparationOfDutiesException ex)
         {
             return SeparationOfDuties(ex);
+        }
+        catch (RunConflictException ex)
+        {
+            return Problem(title: "Run already started", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
         }
         catch (InvalidOperationException ex)
         {

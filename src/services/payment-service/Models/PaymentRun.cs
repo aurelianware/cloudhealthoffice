@@ -144,8 +144,19 @@ public class PaymentRun
     /// </summary>
     public List<string> PendingFinalizeClaimIds { get; set; } = new();
 
-    /// <summary>Claims returned by claims-service that this run did not pay because payment-service already holds a payment for them.</summary>
+    /// <summary>
+    /// Claims returned by claims-service that this run did not pay because
+    /// payment-service already holds a payment for them, or another run holds
+    /// their payment reservation.
+    /// </summary>
     public List<string> AlreadyPaidClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims not paid because their pay-to / billing provider has no trading
+    /// partner, so no 835 could be sent. They stay Approved in claims-service
+    /// and are picked up by a run once a partner is configured.
+    /// </summary>
+    public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 
     /// <summary>
     /// Payment method for this run (ACH, Check)

@@ -50,6 +50,7 @@ public class ReversalRunService : IReversalRunService
     private readonly IConfiguration _configuration;
     private readonly ICurrentActor _actor;
     private readonly IRunSeparationOfDuties _separationOfDuties;
+    private readonly IClaimReservationRepository _reservations;
 
     public ReversalRunService(
         IPaymentRepository paymentRepository,
@@ -61,8 +62,10 @@ public class ReversalRunService : IReversalRunService
         ILogger<ReversalRunService> logger,
         IConfiguration configuration,
         ICurrentActor actor,
-        IRunSeparationOfDuties separationOfDuties)
+        IRunSeparationOfDuties separationOfDuties,
+        IClaimReservationRepository reservations)
     {
+        _reservations = reservations;
         _paymentRepository = paymentRepository;
         _reversalRunRepository = reversalRunRepository;
         _batchEraGenerator = batchEraGenerator;
@@ -100,22 +103,26 @@ public class ReversalRunService : IReversalRunService
             throw new InvalidOperationException($"Reversal run {reversalRunId} not found");
 
         if (run.Status != ReversalRunStatus.Pending)
-            throw new InvalidOperationException($"Reversal run {reversalRunId} is not in Pending status");
+            throw new RunConflictException($"Reversal run {reversalRunId} is not in Pending status");
 
         // Executing recoups payments and voids claims: a user other than the
         // run's creator, never a service token (SeparationOfDutiesException -> 403).
         var approver = _separationOfDuties.EnsureMayRelease(
             "reversal run", run.ReversalRunNumber, run.CreatedBy);
-        run.ExecutedBy = approver;
 
         // Approved: claims-service and trading-partner calls for this run carry
         // payment-service's service token for the run's tenant; the approver is
         // recorded on the run, the reversal payments, the 835s and the void reason.
         using var grant = RunExecutionGrant.Open(run.TenantId, run.Id, approver);
 
+        // Pending -> Running in one conditional write; a second executor gets 409.
+        var startedAt = DateTime.UtcNow;
+        if (!await _reversalRunRepository.TryStartAsync(run.Id, approver, startedAt))
+            throw new RunConflictException(
+                $"Reversal run {reversalRunId} is already being executed or has been executed");
         run.Status = ReversalRunStatus.Running;
-        run.ExecutionStartedAt = DateTime.UtcNow;
-        await _reversalRunRepository.UpdateAsync(run);
+        run.ExecutedBy = approver;
+        run.ExecutionStartedAt = startedAt;
 
         try
         {
@@ -237,6 +244,35 @@ public class ReversalRunService : IReversalRunService
                     && resolvedTradingPartners.TryGetValue(providerNpi, out var partner))
                 {
                     tradingPartnerId = partner.TradingPartnerId;
+                }
+
+                // No trading partner, no reversal 835: not recouped. The
+                // adjustment stays PendingReversal for a later run.
+                if (string.IsNullOrEmpty(tradingPartnerId))
+                {
+                    run.NeedsTradingPartnerClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) not reversed: provider NPI {providerNpi} has no trading partner, so no reversal 835 can be sent");
+                    continue;
+                }
+
+                // One reversal per claim, even across concurrent runs.
+                var reservedNow = await _reservations.TryReserveAsync(new ClaimReservation
+                {
+                    TenantId = run.TenantId,
+                    Kind = ClaimReservationKind.Reversal,
+                    ClaimId = pred.Id,
+                    RunId = run.Id,
+                    RunNumber = run.ReversalRunNumber,
+                    ReservedBy = approver,
+                    ReservedAt = DateTime.UtcNow,
+                });
+                if (!reservedNow)
+                {
+                    run.AlreadyReversedClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) is already reserved for reversal by another run; not reversed again");
+                    continue;
                 }
 
                 var checkNumber = $"R-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";

@@ -36,6 +36,7 @@ public class PaymentRunBatchedEndToEndTests
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly IConfiguration _configuration;
     private readonly TestActor _actor = TestActor.Approver();
+    private readonly InMemoryClaimReservationRepository _reservations = new();
 
     public PaymentRunBatchedEndToEndTests()
     {
@@ -77,7 +78,8 @@ public class PaymentRunBatchedEndToEndTests
         NullLogger<PaymentRunService>.Instance,
         _configuration,
         _actor,
-        _actor.SeparationOfDuties());
+        _actor.SeparationOfDuties(),
+        _reservations);
 
     [Fact]
     public async Task EndToEnd_50ClaimsAcross3Partners_ProducesThreeEnvelopesAndFinalizesAll()

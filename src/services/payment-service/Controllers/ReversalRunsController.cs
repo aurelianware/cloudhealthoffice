@@ -77,6 +77,7 @@ public class ReversalRunsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ReversalRun>> ExecuteReversalRun(string id)
     {
         _logger.LogInformation("Executing reversal run {ReversalRunId}", SanitizeForLog(id));
@@ -88,6 +89,10 @@ public class ReversalRunsController : ControllerBase
         catch (SeparationOfDutiesException ex)
         {
             return SeparationOfDuties(ex);
+        }
+        catch (RunConflictException ex)
+        {
+            return Problem(title: "Run already started", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
         }
         catch (InvalidOperationException ex) when (IsNotFound(ex))
         {

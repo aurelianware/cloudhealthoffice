@@ -30,6 +30,7 @@ public class PaymentRunServiceBatchedTests
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly IConfiguration _configuration;
     private readonly TestActor _actor = TestActor.Approver();
+    private readonly InMemoryClaimReservationRepository _reservations = new();
 
     public PaymentRunServiceBatchedTests()
     {
@@ -48,6 +49,7 @@ public class PaymentRunServiceBatchedTests
         var http = new HttpClient(_claimsHandler) { BaseAddress = new Uri("http://claims-service") };
         _httpFactory.CreateClient("ClaimsService").Returns(http);
 
+        _runRepo.TryStartAsync(default!, default!, default).ReturnsForAnyArgs(true);
         _mapper.MapClaimAdjustments(Arg.Any<ClaimAdjudicationSnapshot>())
             .Returns(Array.Empty<ClaimAdjustment>());
         _mapper.MapLineAdjustments(Arg.Any<ClaimAdjudicationSnapshot>())
@@ -65,7 +67,8 @@ public class PaymentRunServiceBatchedTests
         NullLogger<PaymentRunService>.Instance,
         _configuration,
         _actor,
-        _actor.SeparationOfDuties());
+        _actor.SeparationOfDuties(),
+        _reservations);
 
     private static PaymentRun PendingRun() => new()
     {
@@ -197,7 +200,7 @@ public class PaymentRunServiceBatchedTests
     }
 
     [Fact]
-    public async Task ExecutePaymentRunAsync_UnresolvedTradingPartner_AddsWarningAndSkipsFinalize()
+    public async Task ExecutePaymentRunAsync_UnresolvedTradingPartner_ClaimNotPaid_ListedForLater()
     {
         var run = PendingRun();
         _runRepo.GetByIdAsync(run.Id).Returns(run);
@@ -221,9 +224,12 @@ public class PaymentRunServiceBatchedTests
         Assert.Equal(PaymentRunStatus.Completed, result.Status);
         Assert.Contains(result.Warnings, w => w.Contains("NPI-MISSING"));
 
-        // Claims that didn't resolve to a trading partner are excluded from
-        // finalize — empty CheckNumber would be rejected by claims-service
-        // validation.
+        // No trading partner, no 835: the claim is not paid at all, and is
+        // listed so a run picks it up once a partner exists.
+        Assert.Equal(new[] { "c1" }, result.NeedsTradingPartnerClaimIds);
+        Assert.Empty(result.PaymentIds);
+        await _paymentRepo.DidNotReceiveWithAnyArgs().CreateAsync(default!);
+        Assert.Empty(_reservations.All);
         var finalizeCalls = _claimsHandler.RecordedRequests
             .Where(r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/remittance"))
             .ToList();
@@ -273,7 +279,8 @@ public class PaymentRunServiceBatchedTests
         run.Status = PaymentRunStatus.Completed;
         _runRepo.GetByIdAsync(run.Id).Returns(run);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // RunConflictException (an InvalidOperationException) -> 409.
+        var ex = await Assert.ThrowsAsync<RunConflictException>(() =>
             CreateService().ExecutePaymentRunAsync(run.Id));
         Assert.Contains("not in Pending status", ex.Message);
     }

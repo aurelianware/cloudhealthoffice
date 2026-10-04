@@ -36,6 +36,7 @@ public class PaymentRunService : IPaymentRunService
     private readonly IConfiguration _configuration;
     private readonly ICurrentActor _actor;
     private readonly IRunSeparationOfDuties _separationOfDuties;
+    private readonly IClaimReservationRepository _reservations;
 
     public PaymentRunService(
         IPaymentRepository paymentRepository,
@@ -48,8 +49,10 @@ public class PaymentRunService : IPaymentRunService
         ILogger<PaymentRunService> logger,
         IConfiguration configuration,
         ICurrentActor actor,
-        IRunSeparationOfDuties separationOfDuties)
+        IRunSeparationOfDuties separationOfDuties,
+        IClaimReservationRepository reservations)
     {
+        _reservations = reservations;
         _paymentRepository = paymentRepository;
         _paymentRunRepository = paymentRunRepository;
         _batchEraGenerator = batchEraGenerator;
@@ -86,13 +89,12 @@ public class PaymentRunService : IPaymentRunService
             throw new InvalidOperationException($"Payment run {paymentRunId} not found");
 
         if (paymentRun.Status != PaymentRunStatus.Pending)
-            throw new InvalidOperationException($"Payment run {paymentRunId} is not in Pending status");
+            throw new RunConflictException($"Payment run {paymentRunId} is not in Pending status");
 
         // Executing issues the payments: a user other than the run's creator,
         // never a service token (throws SeparationOfDutiesException -> 403).
         var approver = _separationOfDuties.EnsureMayRelease(
             "payment run", paymentRun.PaymentRunNumber, paymentRun.CreatedBy);
-        paymentRun.ExecutedBy = approver;
 
         // Approved: from here the run's claims-service and trading-partner calls
         // carry payment-service's service token for the run's tenant (the
@@ -100,9 +102,20 @@ public class PaymentRunService : IPaymentRunService
         // on the run, the payments and the 835s.
         using var grant = RunExecutionGrant.Open(paymentRun.TenantId, paymentRun.Id, approver);
 
+        // Pending -> Running in one conditional write: of two executors of the
+        // same run exactly one gets here; the other gets 409 before any call.
+        var startedAt = DateTime.UtcNow;
+        if (!await _paymentRunRepository.TryStartAsync(paymentRun.Id, approver, startedAt))
+            throw new RunConflictException(
+                $"Payment run {paymentRunId} is already being executed or has been executed");
         paymentRun.Status = PaymentRunStatus.Running;
-        paymentRun.ExecutionStartedAt = DateTime.UtcNow;
-        await _paymentRunRepository.UpdateAsync(paymentRun);
+        paymentRun.ExecutedBy = approver;
+        paymentRun.ExecutionStartedAt = startedAt;
+
+        // Claims this run reserved but has not yet tried to pay; released if the
+        // run fails before it gets to them. A claim whose payment insert was
+        // attempted keeps its reservation (it may have been paid).
+        var reservedNotAttempted = new HashSet<string>(StringComparer.Ordinal);
 
         try
         {
@@ -113,42 +126,50 @@ public class PaymentRunService : IPaymentRunService
             var fetched = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
             var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
 
+            // Step 2: Resolve trading partners for each unique pay-to / billing
+            //         provider NPI. A claim whose provider has none is not paid:
+            //         without a partner no 835 can be sent. It stays Approved in
+            //         claims-service and is listed for the next run.
+            var environment = _configuration["TradingPartners:Environment"] ?? "Production";
+            var tenantId = paymentRun.TenantId;
+            var resolvedTradingPartners = claims.Count == 0
+                ? new Dictionary<string, TradingPartnerSummary>(StringComparer.Ordinal)
+                : await ResolveTradingPartnersAsync(
+                    claims.Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal),
+                    tenantId,
+                    environment,
+                    paymentRun.Warnings);
+            claims = ExcludeWithoutTradingPartner(claims, resolvedTradingPartners, paymentRun);
+
+            // Step 3: Reserve each claim (insert-if-absent, one holder per
+            //         tenant + claim). A claim another run holds, even one
+            //         executing at this moment, is skipped.
+            claims = await ReserveClaimsAsync(claims, paymentRun, approver);
+            reservedNotAttempted.UnionWith(claims.Select(c => c.Id));
+
             _logger.LogInformation(
-                "Found {ClaimCount} approved claims for payment run {PaymentRunNumber}",
+                "Found {ClaimCount} approved claims to pay for payment run {PaymentRunNumber}",
                 claims.Count, paymentRun.PaymentRunNumber);
 
             if (!claims.Any())
             {
-                paymentRun.Warnings.Add("No approved claims found matching criteria");
+                paymentRun.Warnings.Add(fetched.Count == 0
+                    ? "No approved claims found matching criteria"
+                    : "No approved claims left to pay after excluding paid, reserved and trading-partner-less claims");
                 paymentRun.Status = PaymentRunStatus.Completed;
                 paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
                 paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
                 return await _paymentRunRepository.UpdateAsync(paymentRun);
             }
 
-            // Step 2: Group claims by provider (existing semantics)
+            // Group claims by provider (existing semantics)
             var claimGroups = GroupClaimsByProvider(claims, paymentRun.Criteria);
-
-            // Step 3: Resolve trading partners for each unique billing
-            //         provider NPI in the run. Run-scoped cache (no global
-            //         singleton); credentialing-style 1-hour TTL doesn't
-            //         apply here because each PaymentRun is a fresh
-            //         lookup batch.
-            var environment = _configuration["TradingPartners:Environment"] ?? "Production";
-            var tenantId = paymentRun.TenantId;
-            var resolvedTradingPartners = await ResolveTradingPartnersAsync(
-                claims.Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal),
-                tenantId,
-                environment,
-                paymentRun.Warnings);
 
             // Step 4: Allocate one check number per trading partner. Multiple
             //         provider groups under the same partner share that check
             //         so the batched envelope's TRN matches every CLP loop's
-            //         finalize CheckNumber. Provider groups whose NPI doesn't
-            //         resolve to a trading partner allocate their own check
-            //         (legacy per-payment semantics) but are excluded from
-            //         envelope emission and from finalization.
+            //         finalize CheckNumber. Every claim left here has a
+            //         trading partner (Step 2 excluded the rest).
             var checkByTradingPartner = new Dictionary<string, string>(StringComparer.Ordinal);
             var checkNumberStart = paymentRun.NextCheckNumber;
 
@@ -183,6 +204,8 @@ public class PaymentRunService : IPaymentRunService
                     checkNumber = (paymentRun.NextCheckNumber++).ToString().PadLeft(10, '0');
                 }
 
+                // From the insert attempt on, the reservation stays.
+                reservedNotAttempted.ExceptWith(group.Value.Select(c => c.Id));
                 var payment = await GeneratePaymentForClaimsAsync(
                     group.Value,
                     paymentRun,
@@ -276,6 +299,19 @@ public class PaymentRunService : IPaymentRunService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error executing payment run {PaymentRunId}", SanitizeForLog(paymentRunId));
+
+            foreach (var claimId in reservedNotAttempted)
+            {
+                try
+                {
+                    await _reservations.ReleaseAsync(ClaimReservationKind.Payment, paymentRun.TenantId, claimId, paymentRun.Id);
+                }
+                catch (Exception releaseEx)
+                {
+                    _logger.LogError(releaseEx, "Could not release the reservation of claim {ClaimId} for failed run {PaymentRunId}",
+                        SanitizeForLog(claimId), SanitizeForLog(paymentRunId));
+                }
+            }
 
             paymentRun.Status = PaymentRunStatus.Failed;
             paymentRun.Errors.Add($"Execution failed: {ex.Message}");
@@ -486,6 +522,53 @@ public class PaymentRunService : IPaymentRunService
                 }
             }
         }
+    }
+
+    private List<ClaimDto> ExcludeWithoutTradingPartner(
+        List<ClaimDto> claims, IReadOnlyDictionary<string, TradingPartnerSummary> resolved, PaymentRun paymentRun)
+    {
+        var payable = new List<ClaimDto>(claims.Count);
+        foreach (var claim in claims)
+        {
+            var npi = claim.PayToProviderNPI ?? claim.BillingProviderNPI;
+            if (!string.IsNullOrEmpty(npi) && resolved.ContainsKey(npi))
+            {
+                payable.Add(claim);
+                continue;
+            }
+
+            paymentRun.NeedsTradingPartnerClaimIds.Add(claim.Id);
+            paymentRun.Warnings.Add(
+                $"Claim {claim.Id} not paid: provider NPI {npi} has no trading partner, so no 835 can be sent; it will be picked up once one is configured");
+        }
+        return payable;
+    }
+
+    private async Task<List<ClaimDto>> ReserveClaimsAsync(List<ClaimDto> claims, PaymentRun paymentRun, string approver)
+    {
+        var reserved = new List<ClaimDto>(claims.Count);
+        foreach (var claim in claims)
+        {
+            var ok = await _reservations.TryReserveAsync(new ClaimReservation
+            {
+                TenantId = paymentRun.TenantId,
+                Kind = ClaimReservationKind.Payment,
+                ClaimId = claim.Id,
+                RunId = paymentRun.Id,
+                RunNumber = paymentRun.PaymentRunNumber,
+                ReservedBy = approver,
+                ReservedAt = DateTime.UtcNow,
+            });
+            if (ok)
+            {
+                reserved.Add(claim);
+                continue;
+            }
+
+            paymentRun.AlreadyPaidClaimIds.Add(claim.Id);
+            paymentRun.Warnings.Add($"Claim {claim.Id} is already reserved for payment by another run; not paid again");
+        }
+        return reserved;
     }
 
     private Dictionary<string, List<ClaimDto>> GroupClaimsByProvider(List<ClaimDto> claims, PaymentRunCriteria criteria)
