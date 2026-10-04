@@ -10,11 +10,13 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/sponsor-service/sponsor-service.csproj src/services/sponsor-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.FieldProtection/CloudHealthOffice.FieldProtection.csproj src/services/shared/CloudHealthOffice.FieldProtection/
 RUN dotnet restore src/services/sponsor-service/sponsor-service.csproj
 
 # Copy source code and build
 COPY src/services/sponsor-service/ src/services/sponsor-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.FieldProtection/ src/services/shared/CloudHealthOffice.FieldProtection/
 RUN dotnet build src/services/sponsor-service/sponsor-service.csproj -c Release --no-restore
 
 # Publish stage

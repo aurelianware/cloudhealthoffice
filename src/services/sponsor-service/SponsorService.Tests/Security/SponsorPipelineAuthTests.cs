@@ -24,9 +24,19 @@ public class SponsorPipelineAuthTests : IClassFixture<SponsorPipelineAuthTests.F
     {
         public Mock<ISponsorRepository> Repository { get; } = new();
 
+        /// <summary>A throwaway local key ring for field encryption (Data Protection creates keys at startup).</summary>
+        public string KeyDirectory { get; } = Path.Combine(Path.GetTempPath(), "cho-sponsor-auth-keys-" + Guid.NewGuid().ToString("N"));
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            try { Directory.Delete(KeyDirectory, recursive: true); } catch { /* best effort */ }
+        }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            builder.UseSetting("FieldProtection:KeyRing:LocalDirectory", KeyDirectory);
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MongoDb:ConnectionString"] = "",

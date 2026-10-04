@@ -207,7 +207,17 @@ public class SponsorsController : ControllerBase
         if (request.ContactPhone != null) sponsor.ContactPhone = request.ContactPhone;
         if (request.ContactEmail != null) sponsor.ContactEmail = request.ContactEmail;
         if (request.Status.HasValue) sponsor.Status = request.Status.Value;
-        if (request.BillingInfo != null) sponsor.BillingInfo = request.BillingInfo;
+        if (request.BillingInfo != null)
+        {
+            // Responses mask the billing account number, so a client that sends
+            // back what it read sends none: keep the stored one. An empty string
+            // clears it.
+            if (request.BillingInfo.BillingAccountNumber == null)
+                request.BillingInfo.BillingAccountNumber = sponsor.BillingInfo?.BillingAccountNumber;
+            else if (request.BillingInfo.BillingAccountNumber.Length == 0)
+                request.BillingInfo.BillingAccountNumber = null;
+            sponsor.BillingInfo = request.BillingInfo;
+        }
         if (request.Broker != null) sponsor.Broker = request.Broker;
         if (request.OpenEnrollment != null) sponsor.OpenEnrollment = request.OpenEnrollment;
 

@@ -88,10 +88,12 @@ builder.Services.AddScoped<IStripeAchService, StripeAchService>();
 builder.Services.AddScoped<IEftDraftService, EftDraftService>();
 builder.Services.AddScoped<ISponsorServiceClient, SponsorServiceClient>();
 builder.Services.AddScoped<ICoverageServiceClient, CoverageServiceClient>();
-// Sponsor bank details have no system of record (sponsor-service stores none),
-// so every auto-debit attempt is refused as needing attention rather than
-// silently treated as "not enrolled". See UnavailableSponsorBankAccountSource.
-builder.Services.AddSingleton<ISponsorBankAccountSource, UnavailableSponsorBankAccountSource>();
+// Sponsor bank details come from sponsor-service's service-only full read of
+// the active approved account (dual control there), fetched with this
+// service's own token after the releasing user passed payments:approve and
+// maker-checker. No approved account or a refusal is an item needing
+// attention; "not enrolled" is a normal skip. See HttpSponsorBankAccountSource.
+builder.Services.AddScoped<ISponsorBankAccountSource, HttpSponsorBankAccountSource>();
 
 // HttpClients for service-to-service communication. AddChoAuthentication puts
 // ChoOutboundTokenHandler on every factory client: a caller's token is
@@ -105,6 +107,15 @@ builder.Services.AddHttpClient(CoverageServiceClient.HttpClientName, client =>
 });
 
 builder.Services.AddHttpClient(SponsorServiceClient.HttpClientName, client =>
+{
+    var sponsorServiceUrl = builder.Configuration["SponsorService:BaseUrl"] ?? "http://sponsor-service:8080";
+    client.BaseAddress = new Uri(sponsorServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// sponsor-service's full bank-account read: HttpSponsorBankAccountSource sets
+// premium-billing-service's own service token on every request.
+builder.Services.AddHttpClient(HttpSponsorBankAccountSource.HttpClientName, client =>
 {
     var sponsorServiceUrl = builder.Configuration["SponsorService:BaseUrl"] ?? "http://sponsor-service:8080";
     client.BaseAddress = new Uri(sponsorServiceUrl);

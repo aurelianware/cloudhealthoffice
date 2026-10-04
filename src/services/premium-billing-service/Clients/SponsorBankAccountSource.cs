@@ -1,3 +1,9 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using PremiumBillingService.Models;
 
 namespace PremiumBillingService.Clients;
@@ -44,21 +50,157 @@ public sealed record SponsorBankAccountLookup(
 }
 
 /// <summary>
-/// The production source today. premium-billing-service used to call
-/// <c>GET sponsor-service/api/v1/sponsors/{group}/bank-account</c>, which does
-/// not exist: every lookup was a 404, read as "no bank account", and every
-/// auto-debit was silently skipped or refused as "EFT not enabled". Sponsor
-/// bank details have no system of record anywhere in CHO (sponsor-service's
-/// BillingInfo holds only a free-text PaymentMethod and a billing account
-/// number). Until one exists, every lookup answers <see cref="SponsorBankAccountLookupStatus.Unavailable"/>
-/// so the draft is refused loudly as needing attention.
+/// A source with nothing behind it: every lookup answers
+/// <see cref="SponsorBankAccountLookupStatus.Unavailable"/>, so a draft is
+/// refused loudly as needing attention. No longer registered in production
+/// (see <see cref="HttpSponsorBankAccountSource"/>); kept for tests and as
+/// the fail-closed behaviour.
 /// </summary>
 public sealed class UnavailableSponsorBankAccountSource : ISponsorBankAccountSource
 {
     public const string Reason =
-        "Sponsor bank details are unavailable: no CHO service stores sponsor bank accounts " +
-        "(sponsor-service has no bank-account endpoint), so auto-debit cannot be performed. Needs attention.";
+        "Sponsor bank details are unavailable: no sponsor bank-account source is configured, " +
+        "so auto-debit cannot be performed. Needs attention.";
 
     public Task<SponsorBankAccountLookup> GetAsync(string tenantId, string groupNumber, CancellationToken cancellationToken = default)
         => Task.FromResult(SponsorBankAccountLookup.Unavailable(Reason));
+}
+
+/// <summary>
+/// The production source: sponsor-service's service-only full read,
+/// <c>GET /api/v1/internal/sponsors/{group}/bank-account</c>, which returns the
+/// sponsor's <em>active approved</em> account (dual control in sponsor-service)
+/// and admits only premium-billing-service's service token.
+///
+/// <para>
+/// The call always carries this service's own token for the record's tenant,
+/// never the caller's: sponsor-service refuses a user's token there whatever
+/// its permissions. EftDraftService calls this only after it has checked the
+/// user who releases the debit (payments:approve, user token, maker-checker),
+/// so the service token fetches numbers for a debit a user already released.
+/// </para>
+///
+/// <list type="bullet">
+///   <item>200 with <c>eftEnabled: true</c>: <see cref="SponsorBankAccountLookupStatus.Found"/>.</item>
+///   <item>200 with <c>eftEnabled: false</c>: <see cref="SponsorBankAccountLookupStatus.NotEnrolled"/> (a normal skip).</item>
+///   <item>404 (no approved account, unknown sponsor), a refusal (401/403),
+///   any other answer, or no answer: <see cref="SponsorBankAccountLookupStatus.Unavailable"/>
+///   with the reason, so the item needs attention.</item>
+/// </list>
+/// Account numbers are never logged.
+/// </summary>
+public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
+{
+    public const string HttpClientName = "SponsorBankAccounts";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ChoTokenIssuer? _issuer;
+    private readonly ChoAuthOptions? _authOptions;
+    private readonly ILogger<HttpSponsorBankAccountSource> _logger;
+
+    public HttpSponsorBankAccountSource(
+        IHttpClientFactory httpClientFactory,
+        IServiceProvider services,
+        ILogger<HttpSponsorBankAccountSource> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _issuer = services.GetService<ChoTokenIssuer>();
+        _authOptions = services.GetService<ChoAuthOptions>();
+        _logger = logger;
+    }
+
+    public async Task<SponsorBankAccountLookup> GetAsync(string tenantId, string groupNumber, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(groupNumber))
+            return SponsorBankAccountLookup.Unavailable(
+                "Sponsor bank details unavailable: no tenant or group number to look up. Needs attention.");
+
+        var clientId = _authOptions?.ServiceToken?.ClientId;
+        if (_issuer == null || string.IsNullOrEmpty(clientId))
+        {
+            _logger.LogError("Sponsor bank details for group {GroupNumber} cannot be fetched: ChoAuth:ServiceToken is not configured",
+                Sanitize(groupNumber));
+            return SponsorBankAccountLookup.Unavailable(
+                "Sponsor bank details unavailable: premium-billing-service has no service token configured (ChoAuth:ServiceToken). Needs attention.");
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient(HttpClientName);
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/v1/internal/sponsors/{Uri.EscapeDataString(groupNumber)}/bank-account");
+            request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
+            // Always this service's own token. Set here, the shared outbound
+            // handler leaves it alone instead of forwarding the user's token.
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _issuer.IssueServiceToken(clientId, tenantId));
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var account = await response.Content.ReadFromJsonAsync<SponsorBankAccount>(JsonOptions, cancellationToken);
+                return account == null
+                    ? SponsorBankAccountLookup.Unavailable(
+                        $"sponsor-service returned an empty bank account for sponsor {groupNumber}. Needs attention.")
+                    : SponsorBankAccountLookup.Found(account);
+            }
+
+            var body = await SafeReadAsync(response, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("Sponsor {GroupNumber} in tenant {TenantId} has no approved bank account in sponsor-service: {Body}",
+                    Sanitize(groupNumber), Sanitize(tenantId), body);
+                return SponsorBankAccountLookup.Unavailable(
+                    $"Sponsor {groupNumber} has no approved bank account in sponsor-service (a pending change must be approved " +
+                    $"by a user with payments:approve): {body}. Needs attention.");
+            }
+
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                _logger.LogError("sponsor-service refused the bank-account read for sponsor {GroupNumber} in tenant {TenantId} " +
+                                 "({StatusCode}); check service authentication",
+                    Sanitize(groupNumber), Sanitize(tenantId), (int)response.StatusCode);
+                return SponsorBankAccountLookup.Unavailable(
+                    $"sponsor-service refused the bank-account read for sponsor {groupNumber} " +
+                    $"({(int)response.StatusCode} {response.StatusCode}). Needs attention.");
+            }
+
+            _logger.LogError("sponsor-service answered {StatusCode} to the bank-account read for sponsor {GroupNumber} in tenant {TenantId}",
+                (int)response.StatusCode, Sanitize(groupNumber), Sanitize(tenantId));
+            return SponsorBankAccountLookup.Unavailable(
+                $"sponsor-service answered {(int)response.StatusCode} {response.StatusCode} to the bank-account read " +
+                $"for sponsor {groupNumber}: {body}. Needs attention.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+                                   || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            _logger.LogError("The bank-account read for sponsor {GroupNumber} in tenant {TenantId} failed: {Error}",
+                Sanitize(groupNumber), Sanitize(tenantId), ex.GetType().Name);
+            return SponsorBankAccountLookup.Unavailable(
+                $"The bank-account read for sponsor {groupNumber} from sponsor-service failed ({ex.GetType().Name}). Needs attention.");
+        }
+    }
+
+    /// <summary>Error bodies only (never a 200 body, which holds numbers), trimmed.</summary>
+    private static async Task<string> SafeReadAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            body = body.Replace("\r", string.Empty).Replace("\n", " ");
+            return body.Length > 300 ? body[..300] : body;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string Sanitize(string? value)
+        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

@@ -58,8 +58,21 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
                 services.AddSingleton(Sponsors.Object);
                 services.AddSingleton(Coverage.Object);
                 services.AddSingleton(Stripe.Object);
+                // sponsor-service's full bank-account read: no approved account.
+                services.AddHttpClient(HttpSponsorBankAccountSource.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => new NoApprovedAccountSponsorService());
             });
         }
+    }
+
+    /// <summary>sponsor-service answering the full bank-account read with "no approved account".</summary>
+    public sealed class NoApprovedAccountSponsorService : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = JsonContent.Create(new { code = "NoApprovedAccount", error = "Sponsor GRP001 has no approved bank account" })
+            });
     }
 
     private const string Tenant = "tenant-1";
@@ -390,18 +403,18 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
     }
 
     [Fact]
-    public async Task ReleasingDebit_ByAnotherApprover_FailsLoudlyBecauseBankDetailsAreUnavailable()
+    public async Task ReleasingDebit_ByAnotherApprover_FailsLoudlyWhenNoAccountIsApproved()
     {
-        // Past the maker-checker, the production bank-account source (there is
-        // no system of record for sponsor bank details) refuses the draft as
-        // needing attention instead of treating it as "not enrolled".
+        // Past the maker-checker, the production bank-account source asks
+        // sponsor-service; with no approved account the draft is refused as
+        // needing attention instead of treated as "not enrolled".
         SetupPreparedInvoice(preparedBy: User);
 
         var response = await ClientAs(Approver, Tenant, ChoRolePermissions.FinanceApprover)
             .PostAsJsonAsync("/api/v1/eft/drafts", new { invoiceId = "inv-1", initiatedBy = "someone-else" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadAsStringAsync()).Should().Contain("unavailable").And.Contain("Needs attention");
+        (await response.Content.ReadAsStringAsync()).Should().Contain("no approved bank account").And.Contain("Needs attention");
         _factory.Drafts.Verify(r => r.CreateAsync(It.IsAny<EftDraft>()), Times.Never);
         _factory.Stripe.VerifyNoOtherCalls();
     }

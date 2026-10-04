@@ -7,14 +7,28 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.FieldProtection;
+using SponsorService.Security;
+using SponsorService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers()
-    .AddCloudHealthOfficeJsonOptions();
+builder.Services.AddControllers(options => options.Filters.Add<FieldProtectionExceptionFilter>())
+    .AddCloudHealthOfficeJsonOptions()
+    // Responses never carry the full billing account number (last 4 only).
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Insert(0, new MaskedBillingInfoJsonConverter()));
+
+// ── Encryption at rest ─────────────────────────────────────────────
+// Bank routing/account numbers and the billing account number are stored
+// encrypted (ASP.NET Data Protection; key ring in Azure Blob Storage wrapped
+// by a Key Vault key, shared by every pod; a local key ring in Development).
+// Without FieldProtection:KeyRing outside Development, writes of those fields
+// fail (503) instead of storing plaintext. See docs/security/bank-account-data.md.
+var keyRing = builder.Services.AddChoFieldProtection(builder.Configuration, builder.Environment, "sponsor-service");
+Console.WriteLine($"Field protection key ring: {keyRing}");
 
 // ── Authentication ──────────────────────────────────────────────────
 // Every caller presents a CHO token; the tenant and the acting user come from
@@ -45,7 +59,12 @@ var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
 if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
     // Use MongoDB
-    builder.Services.AddScoped<ISponsorRepository, SponsorRepositoryMongo>();
+    builder.Services.AddScoped<SponsorRepositoryMongo>();
+    builder.Services.AddScoped<ISponsorRepository>(sp => new ProtectedSponsorRepository(
+        sp.GetRequiredService<SponsorRepositoryMongo>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedSponsorRepository>>()));
+    builder.Services.AddScoped<ISponsorBankAccountRepository, MongoSponsorBankAccountRepository>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -73,10 +92,17 @@ else
         var cosmosClient = sp.GetRequiredService<CosmosClient>();
         var configuration = sp.GetRequiredService<IConfiguration>();
         var databaseName = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        return new SponsorRepository(cosmosClient, databaseName);
+        return new ProtectedSponsorRepository(
+            new SponsorRepository(cosmosClient, databaseName),
+            sp.GetRequiredService<IFieldProtector>(),
+            sp.GetRequiredService<ILogger<ProtectedSponsorRepository>>());
     });
+    builder.Services.AddScoped<ISponsorBankAccountRepository, CosmosSponsorBankAccountRepository>();
     Console.WriteLine("Using Cosmos DB repository");
 }
+
+// Sponsor bank accounts under dual control (see SponsorBankAccountsController).
+builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService>();
 
 // CORS (configure as needed)
 builder.Services.AddCors(options =>

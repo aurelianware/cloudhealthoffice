@@ -53,6 +53,10 @@
     <PackageVersion Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
     <PackageVersion Include="Azure.Core" Version="1.44.1" />
     <PackageVersion Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.4.0" />
+    <!-- Field encryption key ring (CloudHealthOffice.FieldProtection): Azure.Core 1.44.1
+         and Azure.Storage.Blobs 12.23.0 floors, so no Azure.Core 1.55 is pulled in. -->
+    <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.0" />
+    <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.4.0" />
     <PackageVersion Include="Azure.Identity" Version="1.13.2" />
     <PackageVersion Include="Azure.Messaging.ServiceBus" Version="7.17.5" />
     <PackageVersion Include="Azure.Security.KeyVault.Keys" Version="4.7.0" />
