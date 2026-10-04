@@ -136,15 +136,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ConsentEventPublis
 // Kafka facade; kept separate by design.)
 builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 // Health checks: Mongo / Cosmos via the shared bootstrap, plus the
 // local consent-encryption-key readiness check. Local to consent-service
@@ -173,7 +166,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
 app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();

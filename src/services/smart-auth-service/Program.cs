@@ -187,8 +187,10 @@ builder.Services.AddChoHealthChecks(options =>
 {
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 });
-builder.Services.AddCors(options =>
-    options.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// CORS: browser SMART apps call this service. Allowlist only
+// (Cors:AllowedOrigins, default Portal:BaseUrl), no credentials,
+// closed when unconfigured outside Development. See ChoCors.
+builder.Services.AddChoBrowserCors(builder.Configuration, builder.Environment);
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -204,7 +206,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseChoBrowserCors();
 
 // Health checks before auth so they're accessible without a token
 app.MapChoHealthChecks();

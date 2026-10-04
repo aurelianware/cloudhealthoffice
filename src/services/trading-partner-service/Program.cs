@@ -67,20 +67,8 @@ else
 }
 builder.Services.AddScoped<PathResolver>();
 
-// CORS
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.WithOrigins(
-                "http://localhost:5000",
-                "http://portal.cloudhealthoffice",
-                "https://portal.cloudhealthoffice.com")
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 // Health checks (MongoDB or Cosmos DB)
 builder.Services.AddChoHealthChecks(options =>
@@ -104,7 +92,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
 
 // Health checks before auth so they're accessible without a token
 app.MapChoHealthChecks();

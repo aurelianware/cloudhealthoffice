@@ -111,16 +111,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS for CHO portal
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -132,7 +124,6 @@ app.UseChoObservability();
 // Pipeline
 // ──────────────────────────────────────────────────────
 app.UseSerilogRequestLogging();
-app.UseCors();
 
 // Authentication, then tenant from the validated token, then authorization.
 app.UseChoAuthentication();

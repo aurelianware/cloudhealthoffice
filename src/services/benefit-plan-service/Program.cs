@@ -443,8 +443,8 @@ builder.Services.AddChoHealthChecks(options =>
             $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 
-builder.Services.AddCors(options => options.AddPolicy("AllowAll",
-    policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -457,7 +457,6 @@ app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingM
 if (!estimateOnly)
 {
     app.UseHttpsRedirection();
-    app.UseCors("AllowAll");
 }
 // External estimate-only deployments additionally require the shared X-Api-Key
 // (EstimateApiSecurityMiddleware); it runs before, and in addition to, CHO

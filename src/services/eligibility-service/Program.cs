@@ -133,16 +133,8 @@ builder.Services.AddBatchEligibilityStorage(builder.Configuration, builder.Envir
 builder.Services.AddScoped<IBatchEligibilityService, BatchEligibilityService>();
 builder.Services.AddHostedService<BatchEligibilityQueueWorker>();
 
-// CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 // Health checks (MongoDB or Cosmos DB)
 builder.Services.AddChoHealthChecks(options =>
@@ -169,7 +161,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
 app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();

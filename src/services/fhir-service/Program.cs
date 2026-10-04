@@ -592,8 +592,10 @@ builder.Services.AddHealthChecks()
 builder.Services.AddHostedService<SmartTrustWarmupHostedService>();
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddCors(options => options.AddPolicy("AllowAll",
-    p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// CORS: browser SMART apps call this service. Allowlist only
+// (Cors:AllowedOrigins, default Portal:BaseUrl), no credentials,
+// closed when unconfigured outside Development. See ChoCors.
+builder.Services.AddChoBrowserCors(builder.Configuration, builder.Environment);
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -604,7 +606,7 @@ app.UseChoObservability();
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseChoBrowserCors();
 app.UseMiddleware<AdapterLabelMiddleware>();
 // Authentication (CHO or SMART), tenant from the token, then [FhirAccess].
 // The first UseAuthentication + FhirTenantRefusalMiddleware only give tenant

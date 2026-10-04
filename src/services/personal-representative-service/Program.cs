@@ -160,15 +160,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PersonalRepEventPu
 
 builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -194,7 +187,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
 app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();

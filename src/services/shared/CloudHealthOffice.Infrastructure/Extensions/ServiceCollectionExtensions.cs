@@ -45,22 +45,12 @@ public static class ServiceCollectionExtensions
             options.ConfigureHealthChecks?.Invoke(hc);
         });
 
-        // CORS — use custom configuration if provided, otherwise default to AllowAll
+        // CORS: none unless the service asks for it. CHO services are called
+        // server-to-server (the portal is Blazor Server); a service a browser
+        // calls directly sets ConfigureCors and CorsPolicyName (see ChoCors).
         if (options.ConfigureCors is not null)
         {
             services.AddCors(options.ConfigureCors);
-        }
-        else
-        {
-            services.AddCors(cors =>
-            {
-                cors.AddPolicy("AllowAll", policy =>
-                {
-                    policy.AllowAnyOrigin()
-                          .AllowAnyMethod()
-                          .AllowAnyHeader();
-                });
-            });
         }
 
         // Swagger
@@ -122,7 +112,8 @@ public static class ServiceCollectionExtensions
         app.UseHttpsRedirection();
 
         var corsPolicyName = app.ApplicationServices.GetRequiredService<CorsPolicyNameHolder>().PolicyName;
-        app.UseCors(corsPolicyName);
+        if (!string.IsNullOrEmpty(corsPolicyName))
+            app.UseCors(corsPolicyName);
 
         if (app.ApplicationServices.GetService<Security.ChoAuthOptions>() is null)
         {
@@ -266,16 +257,17 @@ public class ChoInfrastructureOptions
     public TenantMiddlewareOptions TenantOptions { get; set; } = new();
 
     /// <summary>
-    /// Custom CORS configuration. When set, replaces the default AllowAll policy.
-    /// Leave null to use the default permissive policy (AllowAnyOrigin/Method/Header).
+    /// CORS configuration for a service that browsers call directly. Leave null
+    /// (the default) for a server-to-server service: no CORS is registered.
+    /// Use an allowlist (see <see cref="Security.ChoCors"/>), never AllowAnyOrigin.
     /// </summary>
     public Action<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>? ConfigureCors { get; set; }
 
     /// <summary>
-    /// The CORS policy name applied in the middleware pipeline. Default: "AllowAll".
-    /// Must match a policy name registered via <see cref="ConfigureCors"/> if customized.
+    /// The CORS policy applied in the pipeline, registered via <see cref="ConfigureCors"/>.
+    /// Null (the default): no CORS middleware.
     /// </summary>
-    public string CorsPolicyName { get; set; } = "AllowAll";
+    public string? CorsPolicyName { get; set; }
 
     /// <summary>
     /// Additional health check configuration (e.g., HTTP dependency URLs).
@@ -286,6 +278,6 @@ public class ChoInfrastructureOptions
 
 internal class CorsPolicyNameHolder
 {
-    public string PolicyName { get; }
-    public CorsPolicyNameHolder(string policyName) => PolicyName = policyName;
+    public string? PolicyName { get; }
+    public CorsPolicyNameHolder(string? policyName) => PolicyName = policyName;
 }

@@ -104,16 +104,8 @@ else
 // Sponsor bank accounts under dual control (see SponsorBankAccountsController).
 builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService>();
 
-// CORS (configure as needed)
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 // Health checks (MongoDB or Cosmos DB)
 builder.Services.AddChoHealthChecks(options =>
@@ -138,7 +130,6 @@ if (app.Environment.IsDevelopment())
 }
 
 // Middleware pipeline
-app.UseCors();
 // Authentication, then tenant from the validated token, then authorization.
 app.UseChoAuthentication();
 app.MapControllers();

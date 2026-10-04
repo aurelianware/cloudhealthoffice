@@ -253,10 +253,8 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -284,7 +282,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
 // Authentication, then tenant from the validated token, then authorization.
 app.UseChoAuthentication();
 app.UseRateLimiter();

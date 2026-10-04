@@ -94,11 +94,8 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
     options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -118,7 +115,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
 // Token authentication, tenant from the token, then permission policies.
 app.UseChoAuthentication();
 app.MapControllers();

@@ -93,16 +93,8 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
-// CORS (for development)
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -124,7 +116,6 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
 
 // Authentication, then tenant from the token, then authorization.
 app.UseChoAuthentication();

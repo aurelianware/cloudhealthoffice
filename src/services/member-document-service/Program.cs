@@ -88,15 +88,8 @@ else
     });
 }
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-            .AllowAnyMethod()
-            .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -120,7 +113,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors();
 // Authentication, then tenant from the validated token, then authorization.
 app.UseChoAuthentication();
 app.MapControllers();

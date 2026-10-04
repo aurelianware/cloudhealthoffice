@@ -72,7 +72,8 @@ builder.Services.AddSingleton<IAccumulatorEventPublisher>(sp => sp.GetRequiredSe
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KafkaAccumulatorEventPublisher>());
 builder.Services.AddHostedService<ClaimFinalizedConsumer>();
 
-builder.Services.AddCors(o => o.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -94,7 +95,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Accumulator Service API v1"));
 }
 
-app.UseCors("AllowAll");
 app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
