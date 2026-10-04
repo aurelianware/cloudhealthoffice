@@ -199,7 +199,15 @@ public class CapitationRunService : ICapitationRunService
                         contract, periodStart, periodEnd, daysInMonth, run, executedBy);
 
                     run.StatementIds.Add(statement.Id);
-                    if (statement.MemberIssues.Count > 0)
+                    if (statement.MemberIssues.Any(i => i.Reason == CoverageUnavailable))
+                    {
+                        run.RequiresAttention = true;
+                        run.MembersNeedingAttention.AddRange(statement.MemberIssues);
+                        run.Errors.Add(
+                            $"Statement {statement.StatementNumber} is on hold: the member list for provider {contract.ProviderNPI} " +
+                            $"could not be read ({statement.MemberIssues.First(i => i.Reason == CoverageUnavailable).Detail}).");
+                    }
+                    else if (statement.MemberIssues.Count > 0)
                     {
                         run.RequiresAttention = true;
                         run.MembersNeedingAttention.AddRange(statement.MemberIssues);
@@ -392,7 +400,8 @@ public class CapitationRunService : ICapitationRunService
         CapitationRun run, string? executedBy)
     {
         // Fetch members assigned to this PCP from coverage-service
-        var coverages = await FetchCoveragesByPcpAsync(run.TenantId, contract.ProviderNPI);
+        var coverageFetch = await FetchCoveragesByPcpAsync(run.TenantId, contract.ProviderNPI);
+        var coverages = coverageFetch.Coverages ?? new List<CapitationCoverageDto>();
 
         // Filter to plan IDs covered by this contract (if contract specifies plans)
         if (contract.PlanIds.Count > 0)
@@ -412,6 +421,35 @@ public class CapitationRunService : ICapitationRunService
             CreatedBy = string.IsNullOrWhiteSpace(executedBy) ? CapitationStatement.SystemCreator : executedBy,
             RunCreatedBy = run.CreatedBy
         };
+
+        if (coverageFetch.Failure != null)
+        {
+            // The member list is unknown: the statement is held with no lines
+            // (never a zero statement that looks complete) and the run lists it.
+            _logger.LogError(
+                "Capitation run {RunNumber}: member list unavailable for PCP {NPI} ({ContractNumber}): {Failure}. The statement is held",
+                run.RunNumber, contract.ProviderNPI, contract.ContractNumber, coverageFetch.Failure);
+            statement.MemberIssues.Add(new CapitationMemberIssue
+            {
+                MemberId = string.Empty,
+                ProviderNPI = contract.ProviderNPI,
+                StatementId = statement.Id,
+                Reason = CoverageUnavailable,
+                Detail = coverageFetch.Failure
+            });
+            statement.RecalculateTotals();
+            statement.RequiresAttention = true;
+            statement.Status = CapitationStatementStatus.OnHold;
+            statement.Adjustments.Add(new CapitationAdjustment
+            {
+                Type = CapitationAdjustmentType.Other,
+                Description = "Statement held: the PCP's member list could not be read from coverage-service " +
+                              $"({coverageFetch.Failure}); no member was calculated. Re-run when coverage-service answers",
+                Amount = 0,
+                AdjustmentDate = DateTime.UtcNow
+            });
+            return await _statementRepository.CreateAsync(statement);
+        }
 
         foreach (var coverage in coverages)
         {
@@ -613,8 +651,16 @@ public class CapitationRunService : ICapitationRunService
         return tiers.FirstOrDefault(t => age >= t.AgeFrom && age <= t.AgeTo);
     }
 
-    private async Task<List<CapitationCoverageDto>> FetchCoveragesByPcpAsync(string tenantId, string providerNpi)
+    /// <summary>
+    /// The PCP's assigned members from coverage-service. A successful answer
+    /// (possibly an empty list: the PCP has no members) is returned as is. Any
+    /// failure (401/403, 404, 5xx, transport, an unreadable or missing body) is
+    /// returned as a failure, never as an empty list: an empty list would
+    /// produce a statement that silently pays the PCP nothing.
+    /// </summary>
+    private async Task<CoverageFetch> FetchCoveragesByPcpAsync(string tenantId, string providerNpi)
     {
+        HttpResponseMessage response;
         try
         {
             var client = _httpClientFactory.CreateClient("CoverageService");
@@ -623,17 +669,45 @@ public class CapitationRunService : ICapitationRunService
             // Names the run's tenant for ChoOutboundTokenHandler: a run with no
             // inbound caller still carries a service token for it.
             request.Headers.Add("X-Tenant-ID", tenantId);
-            using var response = await client.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-
-            return await response.Content.ReadFromJsonAsync<List<CapitationCoverageDto>>(JsonOptions) ?? new();
+            response = await client.SendAsync(request);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch coverages for PCP {NPI}", providerNpi);
-            return new List<CapitationCoverageDto>();
+            _logger.LogError(ex, "Coverage request failed for PCP {NPI}", providerNpi);
+            return CoverageFetch.Failed($"coverage-service unreachable: {ex.GetType().Name}");
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Coverage request for PCP {NPI} answered {Status}", providerNpi, (int)response.StatusCode);
+                return CoverageFetch.Failed($"coverage-service answered {(int)response.StatusCode}");
+            }
+
+            try
+            {
+                var coverages = await response.Content.ReadFromJsonAsync<List<CapitationCoverageDto>>(JsonOptions);
+                return coverages is null
+                    ? CoverageFetch.Failed("coverage-service returned no member list")
+                    : CoverageFetch.Found(coverages);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unreadable coverage response for PCP {NPI}", providerNpi);
+                return CoverageFetch.Failed("coverage-service returned an unreadable member list");
+            }
         }
     }
+
+    private sealed record CoverageFetch(List<CapitationCoverageDto>? Coverages, string? Failure)
+    {
+        public static CoverageFetch Found(List<CapitationCoverageDto> coverages) => new(coverages, null);
+        public static CoverageFetch Failed(string failure) => new(null, failure);
+    }
+
+    /// <summary>Reason on a <see cref="CapitationMemberIssue"/> when the PCP's member list could not be read.</summary>
+    public const string CoverageUnavailable = "CoverageUnavailable";
 
     /// <summary>
     /// Reads the member's score from risk-adjustment-service's minimum-necessary
