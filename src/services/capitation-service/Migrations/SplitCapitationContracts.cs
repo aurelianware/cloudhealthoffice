@@ -70,6 +70,16 @@ public static class SplitCapitationContracts
             options.ServiceToken.PrivateKeyPem, options.ServiceToken.SymmetricKey,
             options.ServiceToken.Lifetime));
         services.AddHttpContextAccessor();
+        // The outbound handler only attaches tokens to allowlisted CHO hosts.
+        // This CLI calls exactly one: the provider-contracts URL it was given.
+        var outboundConfiguration = new ConfigurationBuilder()
+            .AddConfiguration(configuration)
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Services:ProviderContractsService"] = providerContractsServiceUrl
+            })
+            .Build();
+        services.AddSingleton(new ChoOutboundHosts(outboundConfiguration));
         services.AddTransient<ChoOutboundTokenHandler>();
 
         var client = services.AddHttpClient(HttpClientName, c =>
