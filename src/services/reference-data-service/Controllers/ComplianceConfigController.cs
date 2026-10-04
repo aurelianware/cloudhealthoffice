@@ -134,7 +134,8 @@ public class ComplianceConfigController : ControllerBase
 
     /// <summary>
     /// Development-only: seed compliance config for E2E test environments.
-    /// Available only when ASPNETCORE_ENVIRONMENT is Development or Test, and like
+    /// Available only when ASPNETCORE_ENVIRONMENT is Development, Test or Testing
+    /// (the name the shared auth and test hosts use), and like
     /// every write it needs a CHO token with settings:manage for the path tenant.
     /// </summary>
     [HttpPost("{tenantId}/dev-seed")]
@@ -149,7 +150,7 @@ public class ComplianceConfigController : ControllerBase
         if (PathTenantMismatch(tenantId) is { } refused) return refused;
         tenantId = _actor.TenantId;
 
-        if (!_env.IsDevelopment() && !string.Equals(_env.EnvironmentName, "Test", StringComparison.OrdinalIgnoreCase))
+        if (!IsDevSeedEnvironment(_env))
         {
             return Forbid();
         }
@@ -202,6 +203,12 @@ public class ComplianceConfigController : ControllerBase
         return StatusCode(StatusCodes.Status403Forbidden,
             new { message = "The tenant in the path does not match the authenticated tenant." });
     }
+
+    /// <summary>Hosts on which dev-seed is available: Development, Test and Testing.</summary>
+    internal static bool IsDevSeedEnvironment(IHostEnvironment env)
+        => env.IsDevelopment()
+           || env.IsEnvironment("Test")
+           || env.IsEnvironment("Testing");
 
     private static string SanitizeForLog(string? value)
     {

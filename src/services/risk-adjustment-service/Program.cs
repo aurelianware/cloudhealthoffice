@@ -85,9 +85,9 @@ builder.Services.AddHttpContextAccessor();
 // query string or body. Risk scores carry diagnoses (PHI): reads need
 // risk-adjustment:read (Finance; ComplianceOfficer through *:read). Writes
 // (score upserts, RAF calculations, submission status, deletes) need
-// risk-adjustment:write, the playbook default, or finance:write: no built-in
-// role holds risk-adjustment:write yet, and Finance, which already reads the
-// scores, runs the submissions. Each action also names its permission.
+// risk-adjustment:write only (Finance, which calculates the scores and runs the
+// submissions, holds it; finance:write does not reach risk scores). Each action
+// also names its permission.
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
     auth.DefaultReadPermission = RiskAdjustmentPermissions.Read;

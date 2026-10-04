@@ -287,8 +287,13 @@ public class ReferenceDataPipelineAuthTests : IClassFixture<ReferenceDataPipelin
     {
         await SeedComplianceAsync(Tenant, 30);
 
-        // Finance holds no reference-data permission.
-        var response = await Client(Tenant, ChoRolePermissions.Finance).GetAsync($"/api/compliance-config/{Tenant}/state");
+        // Every built-in tenant role now reads reference data, so this token
+        // lists its permissions explicitly (a custom role with none of them).
+        var client = _factory.CreateDefaultClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
+            ChoDevelopmentAuth.UserTokenIssuer().IssueUserToken(Subject, Tenant, ["CustomPaymentsRole"],
+                ["payments:read", "payments:run", "finance:read", "finance:write"]));
+        var response = await client.GetAsync($"/api/compliance-config/{Tenant}/state");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -323,10 +328,29 @@ public class ReferenceDataPipelineAuthTests : IClassFixture<ReferenceDataPipelin
             .ReturnsAsync(new Icd10Code { Code = "E119", ShortDescription = "Type 2 diabetes", StatusCode = "A", Billable = true });
 
         var examiner = await Client(Tenant, ChoRolePermissions.ClaimsExaminer).GetAsync("/api/ReferenceData/icd10/E119/validate");
-        var finance = await Client(Tenant, ChoRolePermissions.Finance).GetAsync("/api/ReferenceData/icd10/E119/validate");
+        var noReferenceData = _factory.CreateDefaultClient();
+        noReferenceData.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
+            ChoDevelopmentAuth.UserTokenIssuer().IssueUserToken(Subject, Tenant, ["CustomPaymentsRole"],
+                ["payments:read", "payments:run", "finance:read", "finance:write"]));
+        var denied = await noReferenceData.GetAsync("/api/ReferenceData/icd10/E119/validate");
 
         examiner.StatusCode.Should().Be(HttpStatusCode.OK);
-        finance.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        denied.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    // Code sets are not PHI; these roles' lookups used to be refused.
+    [InlineData(ChoRolePermissions.Finance)]
+    [InlineData(ChoRolePermissions.FinanceApprover)]
+    [InlineData(ChoRolePermissions.ComplianceViewer)]
+    public async Task FinanceAndComplianceViewerRoles_CanLookUpCodes(string role)
+    {
+        _factory.Legacy.Setup(r => r.GetIcd10CodeAsync("E119"))
+            .ReturnsAsync(new Icd10Code { Code = "E119", ShortDescription = "Type 2 diabetes", StatusCode = "A", Billable = true });
+
+        var response = await Client(Tenant, role).GetAsync("/api/ReferenceData/icd10/E119/validate");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ── Canonical codes: global vs tenant-scoped ─────────────────────────
@@ -348,6 +372,42 @@ public class ReferenceDataPipelineAuthTests : IClassFixture<ReferenceDataPipelin
 
     private async Task<int> CountAsync(string tenant)
         => (await _factory.Canonical.SearchAsync(new ReferenceDataQuery { CodeSystem = "CPT", TenantId = tenant })).Total;
+
+    [Fact]
+    public async Task SameBatchImportedByAnotherTenant_IsImportedForThisTenant_AndRevealsNothing()
+    {
+        // Tenant 2 imports a batch first; tenant 1 then imports the identical
+        // batch (same source, version and checksum) for itself.
+        var other = await Client(OtherTenant, ChoRolePermissions.TenantAdmin)
+            .PostAsJsonAsync("/api/reference-data/codes/import", new[] { Code("99213", OtherTenant, "shared") }, Json);
+        other.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await Client(Tenant, ChoRolePermissions.TenantAdmin)
+            .PostAsJsonAsync("/api/reference-data/codes/import", new[] { Code("99213", Tenant, "shared") }, Json);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<ImportResult>(Json);
+        result!.AlreadyImported.Should().BeFalse("another tenant's import is neither a reason to skip nor something to disclose");
+        result.ImportedCount.Should().Be(1);
+        (await CountAsync(Tenant)).Should().Be(1);
+
+        var again = await (await Client(Tenant, ChoRolePermissions.TenantAdmin)
+            .PostAsJsonAsync("/api/reference-data/codes/import", new[] { Code("99213", Tenant, "shared") }, Json))
+            .Content.ReadFromJsonAsync<ImportResult>(Json);
+        again!.AlreadyImported.Should().BeTrue("re-importing in the same tenant stays idempotent");
+    }
+
+    [Fact]
+    public async Task Import_RecordsTheTokenSubjectOnTheLedger()
+    {
+        var response = await Client(Tenant, ChoRolePermissions.TenantAdmin)
+            .PostAsJsonAsync("/api/reference-data/codes/import", new[] { Code("99213", Tenant, "actor") }, Json);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var entry = _factory.Canonical.Imports.Should().ContainSingle().Subject;
+        entry.ImportedBy.Should().Be(Subject);
+        entry.Scope.Should().Be(Tenant);
+    }
 
     [Fact]
     public async Task TenantAdmin_CannotImportGlobalCodes()

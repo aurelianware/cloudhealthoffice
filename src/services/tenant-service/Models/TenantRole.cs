@@ -159,7 +159,9 @@ public static class StandardRoles
         {
             "payments:read", "payments:run",
             "billing:read", "billing:run",
-            "reports:financial", "claims:read", "encounters:read"
+            "reports:financial", "claims:read", "encounters:read",
+            "risk-adjustment:read", "risk-adjustment:write",
+            "reference-data:read"
         }
     };
 
@@ -172,7 +174,8 @@ public static class StandardRoles
         {
             "payments:read", "payments:approve",
             "billing:read",
-            "finance:read", "reports:financial"
+            "finance:read", "reports:financial",
+            "reference-data:read"
         }
     };
 
@@ -194,7 +197,8 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
-            "compliance:read", "authorizations:read", "audit:read"
+            "compliance:read", "authorizations:read", "audit:read",
+            "reference-data:read"
         }
     };
 

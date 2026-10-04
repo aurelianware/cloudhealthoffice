@@ -12,10 +12,9 @@ public static class RiskAdjustmentPermissions
 
     /// <summary>
     /// Score upserts, RAF calculations, submission status and deletes:
-    /// <c>risk-adjustment:write</c> (the playbook default) or <c>finance:write</c>.
-    /// No built-in role holds risk-adjustment:write yet (only <c>*:*</c> and
-    /// service tokens satisfy it); Finance, which reads the scores and runs the
-    /// CMS submissions, holds finance:write.
+    /// <c>risk-adjustment:write</c> only. Finance holds it (it calculates the
+    /// scores and runs the CMS submissions); <c>finance:write</c> (ledger
+    /// changes) does not reach risk scores.
     /// </summary>
-    public const string Write = "risk-adjustment:write,finance:write";
+    public const string Write = "risk-adjustment:write";
 }

@@ -16,6 +16,18 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
+// One-off migration (operator CLI): dotnet run -- --migrate-split
+if (args.Contains("--migrate-split"))
+{
+    Environment.ExitCode = await CapitationService.Migrations.SplitCapitationContracts.RunAsync(
+        builder.Configuration["MongoDb:ConnectionString"] ?? string.Empty,
+        builder.Configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice",
+        builder.Configuration["ProviderContractsService:BaseUrl"] ?? "http://provider-contracts-service:8080",
+        builder.Configuration,
+        builder.Environment.EnvironmentName);
+    return;
+}
+
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();

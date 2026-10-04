@@ -267,13 +267,14 @@ public class RiskAdjustmentPipelineAuthTests : IClassFixture<RiskAdjustmentPipel
         Assert.Equal(1.75m, score!.RiskScore);
     }
 
-    // ── Permissions: writes need risk-adjustment:write or finance:write ──
+    // ── Permissions: writes need risk-adjustment:write ─────────────────
 
     [Theory]
     [InlineData(ChoRolePermissions.ComplianceOfficer)]
     [InlineData(ChoRolePermissions.FinanceApprover)]
     [InlineData(ChoRolePermissions.MemberServices)]
     [InlineData(ChoRolePermissions.ClaimsSupervisor)]
+    [InlineData(ChoRolePermissions.ComplianceViewer)]
     public async Task RolesWithoutWritePermission_CannotChangeScores(string role)
     {
         var existing = Seed(Tenant, "m-1");
@@ -291,6 +292,42 @@ public class RiskAdjustmentPipelineAuthTests : IClassFixture<RiskAdjustmentPipel
         Assert.Equal(HttpStatusCode.Forbidden, delete.StatusCode);
         var only = Assert.Single(_factory.Store.All());
         Assert.Equal(ScoreStatus.Calculated, only.Status);
+    }
+
+    [Theory]
+    // finance:write is a ledger permission; it no longer reaches risk scores.
+    [InlineData("finance:write", "risk-adjustment:read")]
+    [InlineData("finance:write", "finance:read", "payments:run", "billing:run")]
+    [InlineData("risk-adjustment:read")]
+    public async Task TokenWithoutRiskAdjustmentWrite_CannotChangeScores(params string[] permissions)
+    {
+        var existing = Seed(Tenant, "m-1");
+        var client = BearerClient(ChoDevelopmentAuth.UserTokenIssuer()
+            .IssueUserToken(User, Tenant, ["CustomFinanceRole"], permissions));
+
+        var put = await client.PutAsJsonAsync($"/api/risk-adjustment/members/m-2/scores/{Year}", ScoreBody("m-2", null));
+        var calc = await client.PostAsJsonAsync("/api/risk-adjustment/scores/calculate", CalculateBody("m-3"));
+        var batch = await client.PostAsJsonAsync("/api/risk-adjustment/scores/batch-status",
+            new { memberIds = new[] { "m-1" }, measurementYear = Year, status = "Submitted" });
+        var delete = await client.DeleteAsync($"/api/risk-adjustment/scores/{existing.Id}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, put.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, calc.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, batch.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, delete.StatusCode);
+        var only = Assert.Single(_factory.Store.All());
+        Assert.Equal(ScoreStatus.Calculated, only.Status);
+    }
+
+    [Fact]
+    public async Task TokenWithRiskAdjustmentWriteOnly_CanCalculate()
+    {
+        var client = BearerClient(ChoDevelopmentAuth.UserTokenIssuer()
+            .IssueUserToken(User, Tenant, ["CustomRiskRole"], ["risk-adjustment:write"]));
+
+        var calc = await client.PostAsJsonAsync("/api/risk-adjustment/scores/calculate", CalculateBody("m-3"));
+
+        Assert.Equal(HttpStatusCode.OK, calc.StatusCode);
     }
 
     [Theory]

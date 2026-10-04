@@ -199,6 +199,14 @@ public class CapitationRunService : ICapitationRunService
                         contract, periodStart, periodEnd, daysInMonth, run, executedBy);
 
                     run.StatementIds.Add(statement.Id);
+                    if (statement.MemberIssues.Count > 0)
+                    {
+                        run.RequiresAttention = true;
+                        run.MembersNeedingAttention.AddRange(statement.MemberIssues);
+                        run.Errors.Add(
+                            $"Statement {statement.StatementNumber} is on hold: capitation could not be calculated for " +
+                            $"{statement.MemberIssues.Count} member(s) ({string.Join(", ", statement.MemberIssues.Select(i => i.MemberId))}).");
+                    }
                     totalGross += statement.GrossCapitation;
                     totalWithholds += statement.WithholdAmount;
                     totalAdjustments += statement.TotalAdjustments;
@@ -419,13 +427,54 @@ public class CapitationRunService : ICapitationRunService
             var rateTier = FindRateTier(contract.RateTiers, memberAge, coverage.Gender, ageSexCategory);
             var basePmpm = rateTier?.BasePMPM ?? 0m;
 
-            // Fetch risk score (or use contract default)
-            var riskScore = contract.RiskAdjusted
-                ? await FetchRiskScoreAsync(run.TenantId, coverage.MemberId, periodStart.Year)
-                : contract.DefaultRiskScore;
+            // Risk score. A risk-adjusted contract uses the member's score; the
+            // contract default applies only when the service has no score for
+            // the measurement year (404). Any other failure (401/403, 5xx,
+            // transport, unreadable body) fails this member's line: it is left
+            // off the statement, the statement is held and the run lists it.
+            // Paying a default score instead would quietly change the payment.
+            decimal riskScore;
+            string riskScoreSource;
+            if (contract.RiskAdjusted)
+            {
+                var lookup = await FetchRiskScoreAsync(run.TenantId, coverage.MemberId, periodStart.Year);
+                if (lookup.Failure != null)
+                {
+                    _logger.LogError(
+                        "Capitation run {RunNumber}: risk score unavailable for member {MemberId} (provider {NPI}, year {Year}): {Failure}. " +
+                        "The member is left off the statement and the statement is held",
+                        run.RunNumber, SanitizeForLog(coverage.MemberId), contract.ProviderNPI, periodStart.Year, lookup.Failure);
+                    statement.MemberIssues.Add(new CapitationMemberIssue
+                    {
+                        MemberId = coverage.MemberId,
+                        CoverageId = coverage.CoverageId,
+                        ProviderNPI = contract.ProviderNPI,
+                        StatementId = statement.Id,
+                        Reason = CapitationMemberIssue.RiskScoreUnavailable,
+                        Detail = lookup.Failure
+                    });
+                    continue;
+                }
 
-            if (riskScore <= 0)
+                if (lookup.Score is { } score)
+                {
+                    riskScore = score;
+                    riskScoreSource = RiskScoreSources.Service;
+                }
+                else
+                {
+                    riskScore = contract.DefaultRiskScore;
+                    riskScoreSource = RiskScoreSources.NoScoreForYear;
+                    _logger.LogInformation(
+                        "Capitation run {RunNumber}: no risk score for member {MemberId}, year {Year}; using contract default {Default}",
+                        run.RunNumber, SanitizeForLog(coverage.MemberId), periodStart.Year, contract.DefaultRiskScore);
+                }
+            }
+            else
+            {
                 riskScore = contract.DefaultRiskScore;
+                riskScoreSource = RiskScoreSources.NotRiskAdjusted;
+            }
 
             var adjustedPmpm = Math.Round(basePmpm * riskScore, 2);
 
@@ -454,6 +503,7 @@ public class CapitationRunService : ICapitationRunService
                 Gender = coverage.Gender,
                 BasePMPM = basePmpm,
                 RiskScore = riskScore,
+                RiskScoreSource = riskScoreSource,
                 AdjustedPMPM = adjustedPmpm,
                 ProrationFactor = prorationFactor,
                 GrossAmount = grossAmount,
@@ -488,6 +538,20 @@ public class CapitationRunService : ICapitationRunService
         }
 
         statement.RecalculateTotals();
+
+        if (statement.MemberIssues.Count > 0)
+        {
+            statement.RequiresAttention = true;
+            statement.Status = CapitationStatementStatus.OnHold;
+            statement.Adjustments.Add(new CapitationAdjustment
+            {
+                Type = CapitationAdjustmentType.Other,
+                Description = $"Statement held: capitation could not be calculated for {statement.MemberIssues.Count} member(s) " +
+                              "(risk score unavailable); they are not included in this statement",
+                Amount = 0,
+                AdjustmentDate = DateTime.UtcNow
+            });
+        }
 
         return await _statementRepository.CreateAsync(statement);
     }
@@ -571,28 +635,63 @@ public class CapitationRunService : ICapitationRunService
         }
     }
 
-    private async Task<decimal> FetchRiskScoreAsync(string tenantId, string memberId, int year)
+    /// <summary>
+    /// Reads the member's score from risk-adjustment-service's minimum-necessary
+    /// summary endpoint (score and factors, no diagnoses). Returns the score;
+    /// no score (404: none for that measurement year); or a failure for any
+    /// other outcome. A failure is never turned into a default score.
+    /// </summary>
+    private async Task<RiskScoreLookup> FetchRiskScoreAsync(string tenantId, string memberId, int year)
     {
+        HttpResponseMessage response;
         try
         {
             var client = _httpClientFactory.CreateClient("RiskAdjustmentService");
             using var request = new HttpRequestMessage(HttpMethod.Get,
-                $"/api/risk-adjustment/members/{Uri.EscapeDataString(memberId)}/scores/{year}");
+                $"/api/risk-adjustment/members/{Uri.EscapeDataString(memberId)}/scores/{year}/summary");
+            // Names the run's tenant for ChoOutboundTokenHandler.
             request.Headers.Add("X-Tenant-ID", tenantId);
-            using var response = await client.SendAsync(request);
-
-            if (!response.IsSuccessStatusCode)
-                return 1.0m;
-
-            var scoreDto = await response.Content.ReadFromJsonAsync<RiskScoreDto>(JsonOptions);
-            return scoreDto?.RiskScore ?? 1.0m;
+            response = await client.SendAsync(request);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Risk score not available for member {MemberId}, year {Year}, using default",
-                memberId, year);
-            return 1.0m;
+            _logger.LogError(ex, "Risk score request failed for member {MemberId}, year {Year}",
+                SanitizeForLog(memberId), year);
+            return RiskScoreLookup.Failed($"risk-adjustment-service unreachable: {ex.GetType().Name}");
         }
+
+        using (response)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return RiskScoreLookup.NoScore;
+
+            if (!response.IsSuccessStatusCode)
+                return RiskScoreLookup.Failed($"risk-adjustment-service answered {(int)response.StatusCode}");
+
+            RiskScoreDto? dto;
+            try
+            {
+                dto = await response.Content.ReadFromJsonAsync<RiskScoreDto>(JsonOptions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unreadable risk score response for member {MemberId}, year {Year}",
+                    SanitizeForLog(memberId), year);
+                return RiskScoreLookup.Failed("risk-adjustment-service returned an unreadable score");
+            }
+
+            if (dto?.RiskScore is not { } score || score <= 0)
+                return RiskScoreLookup.Failed("risk-adjustment-service returned no positive risk score");
+
+            return RiskScoreLookup.Found(score);
+        }
+    }
+
+    private sealed record RiskScoreLookup(decimal? Score, string? Failure)
+    {
+        public static readonly RiskScoreLookup NoScore = new(null, null);
+        public static RiskScoreLookup Found(decimal score) => new(score, null);
+        public static RiskScoreLookup Failed(string failure) => new(null, failure);
     }
 
     private static void Touch(CapitationStatement statement, string actor)
@@ -651,14 +750,24 @@ public class CapitationCoverageDto
 }
 
 /// <summary>
-/// DTO for risk score data fetched from risk-adjustment-service
+/// The fields capitation reads from risk-adjustment-service's member score
+/// summary (<c>GET members/{id}/scores/{year}/summary</c>), which carries no
+/// diagnoses. A missing score is not defaulted.
 /// </summary>
 public class RiskScoreDto
 {
     public string MemberId { get; set; } = string.Empty;
-    public int Year { get; set; }
-    public decimal RiskScore { get; set; } = 1.0m;
-    public string? Model { get; set; }
+    public int MeasurementYear { get; set; }
+    public decimal? RiskScore { get; set; }
+    public string? RiskModel { get; set; }
+}
+
+/// <summary>Values of <see cref="CapitationLineItem.RiskScoreSource"/>.</summary>
+public static class RiskScoreSources
+{
+    public const string Service = "risk-adjustment-service";
+    public const string NoScoreForYear = "contract-default:no-score-for-year";
+    public const string NotRiskAdjusted = "contract-default:not-risk-adjusted";
 }
 
 /// <summary>

@@ -90,8 +90,12 @@ public static class ChoRolePermissions
                 "billing:read", "billing:run",
                 "finance:read", "finance:write",
                 "reports:financial", "claims:read", "contracts:read",
-                "trading-partners:read", "risk-adjustment:read",
-                "encounters:read"
+                "trading-partners:read",
+                // Finance calculates RAF scores and runs the CMS submissions.
+                "risk-adjustment:read", "risk-adjustment:write",
+                "encounters:read",
+                // Code-set lookups (not PHI).
+                "reference-data:read"
             ],
             // The checker: approves and releases payments someone else prepared.
             // billing:read lets it review the premium invoices and billing runs
@@ -100,7 +104,8 @@ public static class ChoRolePermissions
             [
                 "payments:read", "payments:approve",
                 "billing:read",
-                "finance:read", "reports:financial"
+                "finance:read", "reports:financial",
+                "reference-data:read"
             ],
             [ComplianceOfficer] =
             [
@@ -108,7 +113,8 @@ public static class ChoRolePermissions
             ],
             [ComplianceViewer] =
             [
-                "compliance:read", "authorizations:read", "audit:read"
+                "compliance:read", "authorizations:read", "audit:read",
+                "reference-data:read"
             ],
             [TenantAdmin] =
             [

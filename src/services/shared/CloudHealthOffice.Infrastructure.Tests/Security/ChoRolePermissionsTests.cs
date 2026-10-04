@@ -72,7 +72,7 @@ public class ChoRolePermissionsTests
         var granted = ChoRolePermissions.Expand([ChoRolePermissions.FinanceApprover]);
 
         Assert.Equal(
-            new[] { "billing:read", "finance:read", "payments:approve", "payments:read", "reports:financial" },
+            new[] { "billing:read", "finance:read", "payments:approve", "payments:read", "reference-data:read", "reports:financial" },
             granted.OrderBy(p => p, StringComparer.Ordinal));
         Assert.False(ChoRolePermissions.Satisfies(granted, "payments:run"));
         Assert.False(ChoRolePermissions.Satisfies(granted, "billing:run"));
@@ -101,6 +101,31 @@ public class ChoRolePermissionsTests
     [InlineData(ChoRolePermissions.ClaimsExaminer, "billing:read", false)]
     [InlineData(ChoRolePermissions.ComplianceViewer, "billing:read", false)]
     public void Billing_grants(string role, string permission, bool expected)
+    {
+        var granted = ChoRolePermissions.Expand([role]);
+
+        Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
+    }
+
+    [Theory]
+    // Code sets are not PHI: the finance and compliance-viewer roles look them up.
+    [InlineData(ChoRolePermissions.Finance, "reference-data:read", true)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "reference-data:read", true)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, "reference-data:read", true)]
+    [InlineData(ChoRolePermissions.Finance, "settings:manage", false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "settings:manage", false)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, "settings:manage", false)]
+    // Finance calculates RAF scores and submits them; nobody else but admins writes them.
+    [InlineData(ChoRolePermissions.Finance, "risk-adjustment:read", true)]
+    [InlineData(ChoRolePermissions.Finance, "risk-adjustment:write", true)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "risk-adjustment:write", false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "risk-adjustment:read", false)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, "risk-adjustment:write", false)]
+    [InlineData(ChoRolePermissions.ComplianceOfficer, "risk-adjustment:write", false)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, "risk-adjustment:write", false)]
+    [InlineData(ChoRolePermissions.MemberServices, "risk-adjustment:write", false)]
+    [InlineData(ChoRolePermissions.TenantAdmin, "risk-adjustment:write", true)]
+    public void Reference_data_and_risk_adjustment_grants(string role, string permission, bool expected)
     {
         var granted = ChoRolePermissions.Expand([role]);
 

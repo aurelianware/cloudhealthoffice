@@ -666,6 +666,8 @@ public class UserContextServiceTests
         sut.HasPermission("compliance:read").Should().BeTrue();
         sut.HasPermission("authorizations:read").Should().BeTrue();
         sut.HasPermission("audit:read").Should().BeTrue();
+        // Code-set lookups (not PHI).
+        sut.HasPermission("reference-data:read").Should().BeTrue();
     }
 
     [Fact]
@@ -692,6 +694,9 @@ public class UserContextServiceTests
         sut.HasPermission("billing:run").Should().BeTrue();
         sut.HasPermission("reports:financial").Should().BeTrue();
         sut.HasPermission("payments:approve").Should().BeFalse();
+        // Calculates and submits risk scores; looks up code sets.
+        sut.HasPermission("risk-adjustment:write").Should().BeTrue();
+        sut.HasPermission("reference-data:read").Should().BeTrue();
     }
 
     [Fact]
@@ -708,6 +713,8 @@ public class UserContextServiceTests
         sut.HasPermission("payments:run").Should().BeFalse();
         sut.HasPermission("billing:run").Should().BeFalse();
         sut.HasPermission("finance:write").Should().BeFalse();
+        sut.HasPermission("risk-adjustment:write").Should().BeFalse();
+        sut.HasPermission("reference-data:read").Should().BeTrue();
     }
 
     [Fact]

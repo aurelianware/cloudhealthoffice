@@ -5,8 +5,9 @@ using TenantService.Models;
 namespace CloudHealthOffice.TenantService.Tests;
 
 /// <summary>
-/// The role catalogue tenant-service shows must grant the same clinical and
-/// Payer-to-Payer permissions as the shared table the services enforce.
+/// The role catalogue tenant-service shows must grant the same clinical,
+/// Payer-to-Payer, billing, reference-data and risk-adjustment permissions as
+/// the shared table the services enforce.
 /// </summary>
 public class StandardRolesTests
 {
@@ -31,6 +32,17 @@ public class StandardRolesTests
     [InlineData("Finance", "billing:read", true)]
     [InlineData("Finance", "payments:approve", false)]
     [InlineData("ProviderRelations", "billing:read", false)]
+    // Code-set lookups (not PHI) for the finance and compliance-viewer roles.
+    [InlineData("Finance", "reference-data:read", true)]
+    [InlineData("FinanceApprover", "reference-data:read", true)]
+    [InlineData("ComplianceViewer", "reference-data:read", true)]
+    [InlineData("ComplianceViewer", "settings:manage", false)]
+    // Finance calculates and submits risk scores.
+    [InlineData("Finance", "risk-adjustment:read", true)]
+    [InlineData("Finance", "risk-adjustment:write", true)]
+    [InlineData("FinanceApprover", "risk-adjustment:write", false)]
+    [InlineData("ComplianceViewer", "risk-adjustment:write", false)]
+    [InlineData("ComplianceOfficer", "risk-adjustment:write", false)]
     public void Catalogue_grants_match_the_shared_table(string role, string permission, bool expected)
     {
         StandardRoles.HasPermission([role], permission, StandardRoles.All).Should().Be(expected);

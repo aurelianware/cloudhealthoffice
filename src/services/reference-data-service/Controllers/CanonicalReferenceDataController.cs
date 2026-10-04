@@ -18,7 +18,9 @@ namespace ReferenceDataService.Controllers;
 /// the token's tenant, never a header. Imports need settings:manage (default) and
 /// may only carry records for the token's tenant; a batch with any global record
 /// changes data every tenant sees, so it also needs platform:admin, which tenant
-/// roles and service tokens never hold.
+/// roles and service tokens never hold. Idempotency ("already imported") is per
+/// tenant (global batches are their own scope) and the import ledger records the
+/// token subject.
 /// </summary>
 [ApiController]
 [Route("api/reference-data/codes")]
@@ -118,13 +120,17 @@ public sealed class CanonicalReferenceDataController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden,
                 new { message = $"Global reference data is shared by every tenant; importing it needs {GlobalWritePermission}." });
 
+        // "Already imported" is decided within the batch's scope (the token
+        // tenant, or global), so the answer never reflects another tenant's imports.
+        // The ledger's actor is the token subject, never a body value.
+        var subject = User.FindFirst(ChoClaimTypes.Subject)?.Value;
         try
         {
-            var result = await _repository.ImportAsync(records, ct);
+            var result = await _repository.ImportAsync(records, subject, ct);
             _logger?.LogInformation(
                 "AUDIT reference-data import: {Count} {Scope} records (source {SourceId} {SourceVersion}) by {Subject} in tenant {TenantId}; already imported: {AlreadyImported}",
                 result.ImportedCount, global ? "global" : "tenant", Sanitize(records[0].SourceId), Sanitize(records[0].SourceVersion),
-                Sanitize(User.FindFirst(ChoClaimTypes.Subject)?.Value), Sanitize(tenantId), result.AlreadyImported);
+                Sanitize(subject), Sanitize(tenantId), result.AlreadyImported);
             return Ok(result);
         }
         catch (ArgumentException exception)

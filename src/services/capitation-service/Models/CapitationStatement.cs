@@ -186,6 +186,15 @@ public class CapitationStatement
     public DateTime? ApprovedAt { get; set; }
 
     /// <summary>
+    /// True when one or more members could not be calculated; the statement is
+    /// generated on hold and those members are listed in <see cref="MemberIssues"/>.
+    /// </summary>
+    public bool RequiresAttention { get; set; }
+
+    /// <summary>Members left off this statement because their line could not be calculated.</summary>
+    public List<CapitationMemberIssue> MemberIssues { get; set; } = new();
+
+    /// <summary>
     /// Recalculate computed totals from line items and adjustments.
     /// Mirrors PremiumInvoice.RecalculateTotals() pattern.
     /// </summary>
@@ -256,6 +265,13 @@ public class CapitationLineItem
     /// Member-level risk score (HCC/RAF). 1.0 = average risk.
     /// </summary>
     public decimal RiskScore { get; set; } = 1.0m;
+
+    /// <summary>
+    /// Where <see cref="RiskScore"/> came from: <c>risk-adjustment-service</c>,
+    /// <c>contract-default:no-score-for-year</c> (the service has no score for the
+    /// member's measurement year) or <c>contract-default:not-risk-adjusted</c>.
+    /// </summary>
+    public string? RiskScoreSource { get; set; }
 
     /// <summary>
     /// Risk-adjusted PMPM (BasePMPM × RiskScore)
