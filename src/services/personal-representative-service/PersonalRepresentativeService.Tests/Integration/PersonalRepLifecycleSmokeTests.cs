@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using CloudHealthOffice.Infrastructure.Security;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PersonalRepresentativeService.Controllers;
@@ -89,8 +91,17 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
 
     private HttpClient NewClient()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-int");
+        return client;
+    }
+
+    /// <summary>A service token for <paramref name="clientId"/> in <paramref name="tenant"/>.</summary>
+    private HttpClient NewServiceClient(string clientId, string tenant = "tenant-int")
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken(clientId, tenant));
         return client;
     }
 
@@ -192,7 +203,8 @@ public class PersonalRepLifecycleSmokeTests : IClassFixture<PersonalRepLifecycle
         await client.PostAsync(
             $"/api/v1/personal-representatives/{rep.Id}/activate", content: null);
 
-        var resp = await client.GetFromJsonAsync<MemberRepresentativesResponse>(
+        // The resolver is a service-to-service authority check.
+        var resp = await NewServiceClient("consent-service").GetFromJsonAsync<MemberRepresentativesResponse>(
             "/api/v1/members/M42/personal-representatives/active", Json);
         resp!.Items.Should().ContainSingle(s =>
             s.PersonalRepId == rep.Id &&

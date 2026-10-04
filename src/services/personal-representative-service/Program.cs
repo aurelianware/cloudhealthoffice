@@ -4,8 +4,8 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using PersonalRepresentativeService.HostedServices;
-using PersonalRepresentativeService.Middleware;
 using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
 using Microsoft.Azure.Cosmos;
@@ -29,6 +29,19 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Records Personal Representative delegation (§164.502(g)) with symmetric-pair associations, field-level encryption, and an append-only audit trail."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user (who
+// established, activated, associated or revoked a representative) come from
+// that token only. Reads need members:read, writes members:write. The
+// "is X a representative of member Y" resolver
+// (MemberRepresentativesController.ListActive) admits named service clients
+// only.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "members:read";
+    auth.DefaultWritePermission = "members:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -160,8 +173,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

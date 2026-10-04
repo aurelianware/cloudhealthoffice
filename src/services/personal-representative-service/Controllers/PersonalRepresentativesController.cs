@@ -4,6 +4,7 @@ using PersonalRepresentativeService.Middleware;
 using PersonalRepresentativeService.Models;
 using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 // TODO(review-workflow-followup): multi-step approval workflows (legal
@@ -21,6 +22,12 @@ namespace PersonalRepresentativeService.Controllers;
 /// are never hard-deleted; the lifecycle is Draft → Active → Inactive, with
 /// an append-only audit trail on every transition. Associations to members
 /// are symmetric pairs written atomically.
+///
+/// Identity: the tenant and the acting user come from the validated CHO
+/// token only (<see cref="ICurrentActor"/>). Who established, activated,
+/// associated, removed or revoked a representative is the token subject,
+/// never a body field. Reads need <c>members:read</c>, writes
+/// <c>members:write</c> (defaults set in Program.cs).
 /// </summary>
 [ApiController]
 [Route("api/v1/personal-representatives")]
@@ -28,10 +35,14 @@ public class PersonalRepresentativesController : ControllerBase
 {
     private string TenantId => HttpContext.GetTenantId();
 
+    /// <summary>The token subject. Every write records this as its actor.</summary>
+    private string Actor => _currentActor.UserId;
+
     private readonly IPersonalRepRepository _reps;
     private readonly IPersonalRepEventRepository _events;
     private readonly IPersonalRepFieldEncryptor _encryptor;
     private readonly IPersonalRepEventPublisher _publisher;
+    private readonly ICurrentActor _currentActor;
     private readonly ILogger<PersonalRepresentativesController>? _logger;
 
     public PersonalRepresentativesController(
@@ -39,8 +50,10 @@ public class PersonalRepresentativesController : ControllerBase
         IPersonalRepEventRepository events,
         IPersonalRepFieldEncryptor encryptor,
         IPersonalRepEventPublisher publisher,
+        ICurrentActor currentActor,
         ILogger<PersonalRepresentativesController>? logger = null)
     {
+        _currentActor = currentActor;
         _reps = reps;
         _events = events;
         _encryptor = encryptor;
@@ -57,7 +70,7 @@ public class PersonalRepresentativesController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
 
         var rep = new PersonalRepresentative
         {
@@ -156,7 +169,7 @@ public class PersonalRepresentativesController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var from = rep.Status;
         rep.Status = PersonalRepStatus.Active;
         rep.ActivatedBy = actor;
@@ -198,6 +211,18 @@ public class PersonalRepresentativesController : ControllerBase
         [FromBody] RevokePersonalRepRequest? request,
         CancellationToken ct)
     {
+        // Only the system records a lapse (read-time expiry observation); a
+        // caller claiming "Expired" would misstate why authority ended.
+        if (request?.ReasonCode == PersonalRepInactivationReasonCode.Expired)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = 400,
+                Title = "Invalid revocation reason",
+                Detail = "ReasonCode Expired is recorded by the system when ExpiresAt passes; choose the reason the authority ended."
+            });
+        }
+
         var rep = await _reps.GetByIdAsync(TenantId, repId, ct);
         if (rep == null) return NotFound();
 
@@ -218,7 +243,7 @@ public class PersonalRepresentativesController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var from = rep.Status;
         rep.Status = PersonalRepStatus.Inactive;
         rep.InactivatedBy = actor;
@@ -272,7 +297,7 @@ public class PersonalRepresentativesController : ControllerBase
             Detail = $"Rep {repId} already has an active association with member {request.MemberId}."
         });
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var pairId = Guid.NewGuid().ToString();
         var now = DateTime.UtcNow;
 
@@ -338,7 +363,7 @@ public class PersonalRepresentativesController : ControllerBase
         var existing = await _reps.FindActiveAssociationAsync(TenantId, repId, memberId, ct);
         if (existing == null) return NotFound();
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
 
         var auditEvent = BuildRepEvent(rep, PersonalRepEventType.PersonalRepAssociationRemoved,
             fromStatus: null, toStatus: null, actor, request?.EventId, memberId);

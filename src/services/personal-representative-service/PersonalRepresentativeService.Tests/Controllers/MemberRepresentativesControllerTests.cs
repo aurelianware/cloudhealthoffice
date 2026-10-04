@@ -19,17 +19,16 @@ public class MemberRepresentativesControllerTests
         var publisher = new RecordingPersonalRepEventPublisher();
         var encryptor = new ReversiblePersonalRepFieldEncryptor();
 
-        var primary = new PersonalRepresentativesController(repo, repo, encryptor, publisher);
-        var resolver = new MemberRepresentativesController(repo, encryptor);
+        var primaryHttp = PersonalRepresentativesControllerTests.NewHttpContext(tenantId, "alice@tenant.com");
+        var primary = new PersonalRepresentativesController(repo, repo, encryptor, publisher,
+            PersonalRepresentativesControllerTests.ActorFor(primaryHttp));
+        primary.ControllerContext = new ControllerContext { HttpContext = primaryHttp };
 
-        foreach (var c in new ControllerBase[] { primary, resolver })
+        var resolver = new MemberRepresentativesController(repo, encryptor);
+        resolver.ControllerContext = new ControllerContext
         {
-            var http = new DefaultHttpContext();
-            http.Items["TenantId"] = tenantId;
-            http.User = new ClaimsPrincipal(new ClaimsIdentity(
-                new[] { new Claim(ClaimTypes.Name, "alice@tenant.com") }, "test"));
-            c.ControllerContext = new ControllerContext { HttpContext = http };
-        }
+            HttpContext = PersonalRepresentativesControllerTests.NewHttpContext(tenantId, "alice@tenant.com")
+        };
         return (primary, resolver, repo, encryptor);
     }
 

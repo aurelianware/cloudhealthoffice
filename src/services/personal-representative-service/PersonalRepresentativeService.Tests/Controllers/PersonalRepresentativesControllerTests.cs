@@ -4,6 +4,7 @@ using PersonalRepresentativeService.Middleware;
 using PersonalRepresentativeService.Models;
 using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Tests.Fakes;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,13 +22,75 @@ public class PersonalRepresentativesControllerTests
         var publisher = new RecordingPersonalRepEventPublisher();
         var encryptor = new ReversiblePersonalRepFieldEncryptor();
 
-        var controller = new PersonalRepresentativesController(repo, repo, encryptor, publisher);
-        var http = new DefaultHttpContext();
-        http.Items["TenantId"] = tenantId;
-        http.User = new ClaimsPrincipal(new ClaimsIdentity(
-            new[] { new Claim(ClaimTypes.Name, user) }, "test"));
+        var http = NewHttpContext(tenantId, user);
+        var controller = new PersonalRepresentativesController(repo, repo, encryptor, publisher, ActorFor(http));
         controller.ControllerContext = new ControllerContext { HttpContext = http };
         return (controller, repo, publisher, encryptor);
+    }
+
+    /// <summary>
+    /// The shape the shared authentication leaves behind: the tenant in
+    /// HttpContext.Items and the token subject as the "sub" claim.
+    /// </summary>
+    internal static DefaultHttpContext NewHttpContext(string tenantId, string? subject)
+    {
+        var http = new DefaultHttpContext();
+        http.Items["TenantId"] = tenantId;
+        http.User = subject is null
+            ? new ClaimsPrincipal(new ClaimsIdentity())
+            : new ClaimsPrincipal(new ClaimsIdentity(
+                new[] { new Claim(ChoClaimTypes.Subject, subject) }, "test"));
+        return http;
+    }
+
+    internal static ICurrentActor ActorFor(HttpContext http)
+        => new HttpContextCurrentActor(new HttpContextAccessor { HttpContext = http });
+
+    [Fact]
+    public async Task Writes_RecordTokenSubject_AsActor_NotSystem()
+    {
+        var (controller, repo, publisher, _) = BuildController(user: "token-user-7");
+
+        var create = await controller.CreateRepresentative(new CreatePersonalRepRequest
+        {
+            CredentialType = PersonalRepCredentialType.LegalGuardian,
+            FirstName = "Alice"
+        }, CancellationToken.None);
+        var id = ((PersonalRepresentative)((CreatedAtActionResult)create).Value!).Id;
+        await controller.AddAssociation(id, new AddAssociationRequest { MemberId = "M1" }, CancellationToken.None);
+        await controller.Activate(id, null, CancellationToken.None);
+        await controller.RemoveAssociation(id, "M1", null, CancellationToken.None);
+        var revoked = (PersonalRepresentative)((OkObjectResult)await controller.Revoke(id, null, CancellationToken.None)).Value!;
+
+        var stored = (await repo.GetByIdAsync("tenant-a", id))!;
+        stored.CreatedBy.Should().Be("token-user-7");
+        revoked.ActivatedBy.Should().Be("token-user-7");
+        revoked.InactivatedBy.Should().Be("token-user-7");
+        repo.SnapshotEvents().Should().HaveCount(5).And.OnlyContain(e => e.ActorId == "token-user-7");
+        publisher.StatusCalls.Should().OnlyContain(c => c.Actor == "token-user-7");
+        publisher.AssociationCalls.Should().HaveCount(2).And.OnlyContain(c => c.Actor == "token-user-7");
+    }
+
+    [Fact]
+    public async Task Revoke_WithExpiredReasonCode_Returns400_AndDoesNotTransition()
+    {
+        var (controller, repo, publisher, _) = BuildController();
+        var create = await controller.CreateRepresentative(new CreatePersonalRepRequest
+        {
+            CredentialType = PersonalRepCredentialType.LegalGuardian
+        }, CancellationToken.None);
+        var id = ((PersonalRepresentative)((CreatedAtActionResult)create).Value!).Id;
+        await controller.Activate(id, null, CancellationToken.None);
+        publisher.StatusCalls.Clear();
+
+        var result = await controller.Revoke(id,
+            new RevokePersonalRepRequest { ReasonCode = PersonalRepInactivationReasonCode.Expired },
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        (await repo.GetByIdAsync("tenant-a", id))!.Status.Should().Be(PersonalRepStatus.Active);
+        repo.SnapshotEvents().Should().NotContain(e => e.EventType == PersonalRepEventType.PersonalRepInactivated);
+        publisher.StatusCalls.Should().BeEmpty();
     }
 
     [Fact]
@@ -79,12 +142,11 @@ public class PersonalRepresentativesControllerTests
         }, CancellationToken.None);
         var id = ((PersonalRepresentative)((CreatedAtActionResult)create).Value!).Id;
 
+        var http = NewHttpContext("tenant-b", subject: null);
         var controllerB = new PersonalRepresentativesController(repoA, repoA,
             new ReversiblePersonalRepFieldEncryptor(),
-            new RecordingPersonalRepEventPublisher());
-        var http = new DefaultHttpContext();
-        http.Items["TenantId"] = "tenant-b";
-        http.User = new ClaimsPrincipal(new ClaimsIdentity());
+            new RecordingPersonalRepEventPublisher(),
+            ActorFor(http));
         controllerB.ControllerContext = new ControllerContext { HttpContext = http };
 
         var result = await controllerB.GetRepresentative(id, CancellationToken.None);
@@ -354,11 +416,8 @@ public class PersonalRepresentativesControllerTests
             .ThrowsAsync(new InvalidPersonalRepTransitionException(
                 PersonalRepStatus.Active, PersonalRepStatus.Active));
 
-        var controller = new PersonalRepresentativesController(repo.Object, events.Object, encryptor, publisher);
-        var http = new DefaultHttpContext();
-        http.Items["TenantId"] = "tenant-a";
-        http.User = new ClaimsPrincipal(new ClaimsIdentity(
-            new[] { new Claim(ClaimTypes.Name, "alice") }, "test"));
+        var http = NewHttpContext("tenant-a", "alice");
+        var controller = new PersonalRepresentativesController(repo.Object, events.Object, encryptor, publisher, ActorFor(http));
         controller.ControllerContext = new ControllerContext { HttpContext = http };
 
         var result = await controller.Activate("r-1", request: null, CancellationToken.None);
