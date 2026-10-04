@@ -49,14 +49,17 @@ public class MemberDocumentService : IMemberDocumentService
         }
     }
 
-    public async Task ToggleLegalHoldAsync(string documentId, bool legalHold)
+    public async Task ToggleLegalHoldAsync(string documentId, bool legalHold, string reason)
     {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason is required to place or release a legal hold.", nameof(reason));
+
         var baseUrl = GetBaseUrl();
         try
         {
             var response = await _httpClient.PutAsJsonAsync(
                 $"{baseUrl}/api/v1/member-documents/{Uri.EscapeDataString(documentId)}/legal-hold",
-                new { legalHold });
+                new { legalHold, reason = reason.Trim() });
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)

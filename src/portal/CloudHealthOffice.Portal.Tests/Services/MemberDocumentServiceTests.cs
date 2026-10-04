@@ -122,6 +122,40 @@ public class MemberDocumentServiceTests
         content.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         content.Content.Should().BeNull();
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ToggleLegalHold_SendsTheReason(bool legalHold)
+    {
+        string? body = null;
+        var handler = new FakeHandler(request =>
+        {
+            body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var service = new MemberDocumentService(new HttpClient(handler), Config(), NullLogger<MemberDocumentService>.Instance);
+
+        await service.ToggleLegalHoldAsync("doc-1", legalHold, "  Litigation notice 2026-14  ");
+
+        body.Should().Contain($"\"legalHold\":{legalHold.ToString().ToLowerInvariant()}");
+        body.Should().Contain("\"reason\":\"Litigation notice 2026-14\"");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ToggleLegalHold_RefusesABlankReason_WithoutCallingTheService(string reason)
+    {
+        var calls = 0;
+        var handler = new FakeHandler(_ => { calls++; return new HttpResponseMessage(HttpStatusCode.OK); });
+        var service = new MemberDocumentService(new HttpClient(handler), Config(), NullLogger<MemberDocumentService>.Instance);
+
+        var act = () => service.ToggleLegalHoldAsync("doc-1", false, reason);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        calls.Should().Be(0);
+    }
 }
 
 /// <summary>

@@ -7,6 +7,7 @@
 @inject IFamilyRelationshipService FamilyRelationshipService
 @inject IMemberNoteService MemberNoteService
 @inject IMemberDocumentService MemberDocumentService
+@inject IUserContextService UserContextService
 @inject IIdCardService IdCardService
 @inject IClaimsService ClaimsService
 @inject IArService ArService
@@ -716,13 +717,24 @@
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">@context.RetentionPolicyId</MudText>
                                     </MudTd>
                                     <MudTd DataLabel="Legal Hold">
-                                        <MudButton Size="Size.Small"
-                                                   Variant="Variant.Outlined"
-                                                   Color="@(context.LegalHold ? Color.Warning : Color.Default)"
-                                                   StartIcon="@(context.LegalHold ? Icons.Material.Filled.Lock : Icons.Material.Filled.LockOpen)"
-                                                   OnClick="@(() => ToggleLegalHoldAsync(context))">
-                                            @(context.LegalHold ? "Held" : "Not Held")
-                                        </MudButton>
+                                        @if (CanManageLegalHold)
+                                        {
+                                            <MudButton Size="Size.Small"
+                                                       Variant="Variant.Outlined"
+                                                       Color="@(context.LegalHold ? Color.Warning : Color.Default)"
+                                                       StartIcon="@(context.LegalHold ? Icons.Material.Filled.Lock : Icons.Material.Filled.LockOpen)"
+                                                       OnClick="@(() => ToggleLegalHoldAsync(context))">
+                                                @(context.LegalHold ? "Held" : "Not Held")
+                                            </MudButton>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@(context.LegalHold ? Color.Warning : Color.Default)"
+                                                     Icon="@(context.LegalHold ? Icons.Material.Filled.Lock : Icons.Material.Filled.LockOpen)">
+                                                @(context.LegalHold ? "Held" : "Not Held")
+                                            </MudChip>
+                                        }
                                     </MudTd>
                                     <MudTd DataLabel="Download">
                                         <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.Id)" Target="_blank" download rel="noopener">
@@ -2044,11 +2056,23 @@
         return LoadDocumentsAsync();
     }
 
+    /// <summary>Placing or releasing a hold needs records:legal-hold (member-document-service enforces it).</summary>
+    private bool CanManageLegalHold => UserContextService.HasPermission("records:legal-hold");
+
     private async Task ToggleLegalHoldAsync(MemberDocumentSummary doc)
     {
+        var place = !doc.LegalHold;
+        var parameters = new DialogParameters<LegalHoldReasonDialog> { { d => d.Place, place } };
+        var dialog = await DialogService.ShowAsync<LegalHoldReasonDialog>(
+            place ? "Place legal hold" : "Release legal hold", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result == null || result.Canceled || result.Data is not string reason || string.IsNullOrWhiteSpace(reason))
+            return;
+
         try
         {
-            await MemberDocumentService.ToggleLegalHoldAsync(doc.Id, !doc.LegalHold);
+            await MemberDocumentService.ToggleLegalHoldAsync(doc.Id, place, reason);
             await LoadDocumentsAsync();
         }
         catch (Exception ex)

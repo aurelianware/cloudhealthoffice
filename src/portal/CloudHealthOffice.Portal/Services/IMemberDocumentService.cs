@@ -6,7 +6,8 @@ public interface IMemberDocumentService
 {
     Task<List<MemberDocumentSummary>> GetDocumentsAsync(string memberId, string? category = null);
     Task<MemberDocumentSummary?> GetDocumentAsync(string documentId);
-    Task ToggleLegalHoldAsync(string documentId, bool legalHold);
+    /// <summary>Places or releases a legal hold. A reason is required (member-document-service refuses a release without one).</summary>
+    Task ToggleLegalHoldAsync(string documentId, bool legalHold, string reason);
     Task<Stream> DownloadDocumentAsync(string documentId);
 
     /// <summary>
