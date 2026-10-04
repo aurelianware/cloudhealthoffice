@@ -81,9 +81,24 @@ GET /fhir/ConceptMap/$translate?system=http://snomed.info/sct&code=390840006&tar
 # With patient context (age/gender rules)
 GET /fhir/ConceptMap/$translate?system=http://snomed.info/sct&code=390840006&target=http://hl7.org/fhir/sid/icd-10-cm&age=5&gender=male&state=TX
 
-# With plan-specific overrides
-GET /fhir/ConceptMap/$translate?system=http://snomed.info/sct&code=390840006&target=http://hl7.org/fhir/sid/icd-10-cm&tenantId=tenant-001
+# Plan-specific overrides are always the token tenant's (no parameter needed).
+# A tenantId parameter is accepted only when it equals the token tenant; any other value is 403.
 ```
+
+### Authentication
+
+Every endpoint except `/health` needs a CHO token (shared `AddChoAuthentication`);
+the tenant comes from the token, never from a header, query or body.
+
+| Endpoint | Permission |
+|---|---|
+| `GET/POST /fhir/ConceptMap/$translate`, `POST $batch-translate`, `GET /fhir/CodeSystem/$lookup`, `GET /admin/maps` | `terminology:read` (service tokens satisfy it) |
+| `POST /admin/maps/load?isOverride=true` (the token tenant's plan overrides) | `settings:manage` |
+| `POST /admin/maps/load` without `isOverride` (a global map every tenant reads) | `platform:admin` |
+| `GET /health` | anonymous; lists global maps only |
+
+`GET /admin/maps` lists the global maps and the caller's own override versions.
+The former `X-Admin-Key` header is no longer used.
 
 ### Response
 
@@ -153,12 +168,12 @@ and local fallback do not drift independently.
 ### Load a crosswalk map
 
 ```bash
-# Load NLM SNOMED→ICD-10-CM RF2 file
-curl -X POST "http://localhost:5080/admin/maps/load?format=RF2&mapName=NLM-SNOMED-ICD10CM&version=202603&sourceSystem=http://snomed.info/sct&targetSystem=http://hl7.org/fhir/sid/icd-10-cm" \
+# Load NLM SNOMED→ICD-10-CM RF2 file (global: platform:admin)
+curl -X POST -H "Authorization: Bearer $CHO_TOKEN" "http://localhost:5080/admin/maps/load?format=RF2&mapName=NLM-SNOMED-ICD10CM&version=202603&sourceSystem=http://snomed.info/sct&targetSystem=http://hl7.org/fhir/sid/icd-10-cm" \
   --data-binary @der2_iisssccRefset_ExtendedMapFull_US.txt
 
-# Load plan-specific overrides (CSV)
-curl -X POST "http://localhost:5080/admin/maps/load?format=CSV&mapName=Plan-TMPPM-Overrides&version=2026Q1&sourceSystem=http://snomed.info/sct&targetSystem=http://hl7.org/fhir/sid/icd-10-cm&tenantId=tenant-001&isOverride=true" \
+# Load plan-specific overrides (CSV) for the token's tenant (settings:manage)
+curl -X POST -H "Authorization: Bearer $CHO_TOKEN" "http://localhost:5080/admin/maps/load?format=CSV&mapName=Plan-TMPPM-Overrides&version=2026Q1&sourceSystem=http://snomed.info/sct&targetSystem=http://hl7.org/fhir/sid/icd-10-cm&isOverride=true" \
   --data-binary @plan_tmppm_overrides.csv
 ```
 

@@ -9,6 +9,7 @@ using MongoDB.Driver;
 using Serilog;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -78,6 +79,20 @@ builder.Services.AddControllers()
             System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
 
+// ──────────────────────────────────────────────────────
+// Authentication
+// ──────────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+// Reads (including the POST $translate/$batch-translate operations, which are annotated)
+// need terminology:read; service tokens satisfy it. Tenant-scoped writes (a tenant's own
+// plan overrides) need settings:manage. Loading a global map that every tenant reads
+// needs platform:admin, checked in the load action.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "terminology:read";
+    auth.DefaultWritePermission = "settings:manage";
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -118,6 +133,9 @@ app.UseChoObservability();
 // ──────────────────────────────────────────────────────
 app.UseSerilogRequestLogging();
 app.UseCors();
+
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 if (app.Environment.IsDevelopment())
 {

@@ -92,6 +92,22 @@ public sealed class MongoConceptMapRepositoryTests : IAsyncLifetime
         Assert.Equal("active", result.Id);
     }
 
+    [Fact]
+    public async Task UpsertOverrideAsync_NewOverride_IsReadableByItsTenantOnly()
+    {
+        await _repository.UpsertOverrideAsync(Entry(
+            "plan-overrides-1:44054006:E11.65:2", mapVersionId: "plan-overrides-1",
+            isOverride: true, tenantId: "tenant-a", targetDisplay: "Tenant A display"));
+
+        var forTenantA = await _repository.FindBySourceCodeAsync(SnomedSystem, "44054006", Icd10CmSystem, "tenant-a");
+        var forTenantB = await _repository.FindBySourceCodeAsync(SnomedSystem, "44054006", Icd10CmSystem, "tenant-b");
+
+        var entry = Assert.Single(forTenantA);
+        Assert.Equal("plan-overrides-1:44054006:E11.65:2", entry.Id);
+        Assert.Equal("Tenant A display", entry.TargetDisplay);
+        Assert.Empty(forTenantB);
+    }
+
     private static ConceptMapEntry Entry(
         string id,
         string mapVersionId = "override",
