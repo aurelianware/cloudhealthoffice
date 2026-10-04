@@ -5,6 +5,8 @@ using System.Text.Json;
 using CloudHealthOffice.ProviderVerificationEngine.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
+using System.Security.Cryptography;
+using CloudHealthOffice.Infrastructure.Security;
 using Xunit;
 
 namespace CloudHealthOffice.ProviderVerificationEngine.Tests;
@@ -20,7 +22,9 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<CloudHeal
         {
             builder.UseEnvironment("Development");
         });
-        _client = _factory.CreateClient();
+        // Every API call carries a development CHO token for this tenant.
+        _client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-a");
     }
 
     // ── Health checks ────────────────────────────────────────────
@@ -61,11 +65,22 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<CloudHeal
     [Fact]
     public async Task SwaggerEndpoint_Returns404_InProduction()
     {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var prodFactory = _factory.WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Production");
+            // Production refuses symmetric (development) keys and starts only
+            // with a trusted issuer configured: give it an asymmetric one.
+            builder.UseSetting("ChoAuth:Issuers:0:Issuer", "cho-token-service");
+            builder.UseSetting("ChoAuth:Issuers:0:PublicKeyPem", key.ExportSubjectPublicKeyInfoPem());
         });
+        // An authenticated caller, so the 404 shows Swagger is not mapped
+        // (an anonymous caller is refused with 401 before routing matters).
+        var token = ChoTokenIssuer
+            .FromKeys("cho-token-service", ChoDevelopmentAuth.Audience, key.ExportPkcs8PrivateKeyPem(), null, TimeSpan.FromMinutes(5))
+            .IssueUserToken("prod-user", "tenant-a", [ChoRolePermissions.TenantAdmin]);
         var prodClient = prodFactory.CreateClient();
+        prodClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         var response = await prodClient.GetAsync("/swagger/v1/swagger.json");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
