@@ -526,4 +526,17 @@ public class TenantServiceAuthTests : IClassFixture<TenantServiceFactory>
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         saved!.CreatedBy.Should().Be("ops-9");
     }
+
+    [Fact]
+    public async Task NoCorsGrant_ForBrowserOrigins()
+    {
+        // Called server-to-server only (the portal is Blazor Server).
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/tenants/tenant-a");
+        request.Headers.Add("Origin", "https://evil.example");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await _factory.CreateClient().SendAsync(request);
+
+        response.Headers.Contains("Access-Control-Allow-Origin").Should().BeFalse();
+    }
 }

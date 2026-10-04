@@ -457,4 +457,17 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         (await response.Content.ReadAsStringAsync()).Should().Contain("Stripe-Signature");
         _factory.Stripe.VerifyNoOtherCalls();
     }
+
+    [Fact]
+    public async Task NoCorsGrant_ForBrowserOrigins()
+    {
+        // Called server-to-server only (the portal is Blazor Server).
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/billing-runs");
+        request.Headers.Add("Origin", "https://evil.example");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await _factory.CreateClient().SendAsync(request);
+
+        response.Headers.Contains("Access-Control-Allow-Origin").Should().BeFalse();
+    }
 }

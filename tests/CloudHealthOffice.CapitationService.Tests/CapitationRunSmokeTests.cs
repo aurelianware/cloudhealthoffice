@@ -455,4 +455,17 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         Assert.Equal(4500m, result.TotalNetPayable);
         Assert.Equal(2, result.ByLineOfBusiness.Count);
     }
+
+    [Fact]
+    public async Task NoCorsGrant_ForBrowserOrigins()
+    {
+        // Called server-to-server only (the portal is Blazor Server).
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/capitation/runs");
+        request.Headers.Add("Origin", "https://evil.example");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await _factory.CreateClient().SendAsync(request);
+
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+    }
 }
