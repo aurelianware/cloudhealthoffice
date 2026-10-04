@@ -12,12 +12,21 @@ namespace ProviderContractsService.Controllers;
 /// and the acting user is the token subject: CreatedBy / LastUpdatedBy are
 /// stamped by the repository, an amendment's ApprovedBy here. Actor and tenant
 /// values in a request body are ignored.
+///
+/// ProviderTin: list and search always return it masked to the last 4 digits.
+/// A single-record read (by id or number) returns it in full only to callers
+/// who may edit the contract (contracts:write, which ProviderRelations and
+/// admins hold) and to service tokens; read-only holders (Finance and
+/// ComplianceOfficer through *:read) get it masked.
 /// </summary>
 [ApiController]
 [Route("api/v1/contracts")]
 [Produces("application/json")]
 public class ProviderContractsController : ControllerBase
 {
+    /// <summary>Largest page a search may ask for.</summary>
+    public const int MaxPageSize = 200;
+
     private readonly IProviderContractRepository _contractRepository;
     private readonly ILogger<ProviderContractsController> _logger;
 
@@ -44,6 +53,11 @@ public class ProviderContractsController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
+        if (page < 1)
+            return BadRequest(new { error = "page must be 1 or greater" });
+        if (pageSize < 1 || pageSize > MaxPageSize)
+            return BadRequest(new { error = $"pageSize must be between 1 and {MaxPageSize}" });
+
         var results = await _contractRepository.SearchAsync(npi, lob, status, paymentMethodology, networkStatus, page, pageSize);
 
         // Mask TIN in list responses — full TIN only via GET /{id}
@@ -57,7 +71,8 @@ public class ProviderContractsController : ControllerBase
     }
 
     /// <summary>
-    /// Get provider contract by ID (includes full ProviderTin)
+    /// Get provider contract by ID. ProviderTin is full for contracts:write
+    /// holders and service tokens, masked to the last 4 digits for others.
     /// </summary>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(ProviderContract), StatusCodes.Status200OK)]
@@ -67,11 +82,11 @@ public class ProviderContractsController : ControllerBase
         var contract = await _contractRepository.GetByIdAsync(id);
         if (contract == null)
             return NotFound(new { error = $"Contract {id} not found" });
-        return Ok(contract);
+        return Ok(ForCaller(contract));
     }
 
     /// <summary>
-    /// Get provider contract by contract number
+    /// Get provider contract by contract number (ProviderTin as for GET by id)
     /// </summary>
     [HttpGet("number/{number}")]
     [ProducesResponseType(typeof(ProviderContract), StatusCodes.Status200OK)]
@@ -81,7 +96,7 @@ public class ProviderContractsController : ControllerBase
         var contract = await _contractRepository.GetByContractNumberAsync(number);
         if (contract == null)
             return NotFound(new { error = $"Contract number {number} not found" });
-        return Ok(contract);
+        return Ok(ForCaller(contract));
     }
 
     /// <summary>
@@ -100,6 +115,11 @@ public class ProviderContractsController : ControllerBase
             contract.ContractNumber = $"CTR-{contract.ProviderNPI}-{DateTime.UtcNow.Year}";
 
         contract.Status = ProviderContractStatus.Draft;
+        // Verification results are server-set only.
+        contract.IntegrityScore = null;
+        contract.IntegrityRating = null;
+        contract.LastVerifiedAt = null;
+        contract.NextVerificationDue = null;
         _logger.LogInformation("Creating provider contract {ContractNumber} for provider {NPI}",
             SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
 
@@ -128,6 +148,21 @@ public class ProviderContractsController : ControllerBase
         // body cannot activate a contract or rewrite who approved an amendment.
         contract.Status = existing.Status;
         contract.Amendments = existing.Amendments;
+        // Termination is recorded only by the terminate action, so a PUT body
+        // cannot back-date, clear or invent a termination.
+        contract.TerminationDate = existing.TerminationDate;
+        contract.TerminationReason = existing.TerminationReason;
+        // Verification results are server-set (cached from provider
+        // verification); a PUT body cannot raise a score or mark a contract
+        // verified. The portal does not send them, so a portal edit used to
+        // clear them.
+        contract.IntegrityScore = existing.IntegrityScore;
+        contract.IntegrityRating = existing.IntegrityRating;
+        contract.LastVerifiedAt = existing.LastVerifiedAt;
+        contract.NextVerificationDue = existing.NextVerificationDue;
+        // CapitationRateConfigIds / FfsRateConfigIds stay editable here: no
+        // other endpoint links rate configs to a contract (rate-configs is
+        // read-only and sync-children is a stub), and the portal sends them.
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -308,6 +343,20 @@ public class ProviderContractsController : ControllerBase
             capitationRateConfigIds = contract.CapitationRateConfigIds,
             ffsRateConfigIds = contract.FfsRateConfigIds
         });
+    }
+
+    /// <summary>
+    /// The contract as this caller may see it: full ProviderTin for
+    /// contracts:write holders and service tokens (HasPermission is true for a
+    /// service token), masked for everyone else, including callers with no
+    /// token context.
+    /// </summary>
+    private ProviderContract ForCaller(ProviderContract contract)
+    {
+        var user = HttpContext?.User;
+        if (user == null || !ChoPrincipal.HasPermission(user, "contracts:write"))
+            contract.ProviderTin = MaskTin(contract.ProviderTin);
+        return contract;
     }
 
     /// <summary>

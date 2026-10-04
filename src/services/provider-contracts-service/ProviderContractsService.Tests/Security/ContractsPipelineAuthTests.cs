@@ -429,6 +429,82 @@ public class ContractsPipelineAuthTests : IClassFixture<ContractsPipelineAuthTes
         _factory.Store.TenantsSeen.Should().OnlyContain(t => t == Tenant);
     }
 
+    // ── TIN visibility ────────────────────────────────────────────────────
+
+    private static async Task<string?> TinOf(HttpResponseMessage response)
+    {
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        return body.GetProperty("providerTin").GetString();
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.Finance)]
+    [InlineData(ChoRolePermissions.ComplianceOfficer)]
+    public async Task ReadOnlyRoles_GetMaskedTin(string role)
+    {
+        // Before: GET {id} returned the full TIN to every contracts:read holder.
+        Seed(Tenant);
+        var client = Client(Tenant, role);
+
+        (await TinOf(await client.GetAsync("/api/v1/contracts/c-1"))).Should().Be("***-**-6789");
+        (await TinOf(await client.GetAsync("/api/v1/contracts/number/CTR-c-1"))).Should().Be("***-**-6789");
+    }
+
+    [Fact]
+    public async Task ContractsWriter_GetsFullTin()
+    {
+        Seed(Tenant);
+        var client = Client(Tenant, ChoRolePermissions.ProviderRelations);
+
+        (await TinOf(await client.GetAsync("/api/v1/contracts/c-1"))).Should().Be("123456789");
+    }
+
+    [Fact]
+    public async Task ServiceToken_GetsFullTin()
+    {
+        Seed(Tenant);
+        var token = ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("capitation-service", Tenant);
+
+        (await TinOf(await BearerClient(token).GetAsync("/api/v1/contracts/c-1"))).Should().Be("123456789");
+    }
+
+    [Fact]
+    public async Task Search_PageSizeAboveMax_Is400()
+    {
+        Seed(Tenant);
+        var client = Client(Tenant, ChoRolePermissions.ProviderRelations);
+
+        (await client.GetAsync("/api/v1/contracts?pageSize=201")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await client.GetAsync("/api/v1/contracts?pageSize=200")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Put_CannotSetVerificationOrTermination()
+    {
+        Seed(Tenant);
+        var client = Client(Tenant, ChoRolePermissions.ProviderRelations);
+        var body = PortalCreateBody();
+        body["providerName"] = "Dr. Updated";
+        body["integrityScore"] = 100;
+        body["integrityRating"] = "High";
+        body["lastVerifiedAt"] = "2026-09-01T00:00:00Z";
+        body["terminationDate"] = "2026-06-30T00:00:00Z";
+        body["terminationReason"] = "Set by PUT";
+
+        var response = await client.PutAsJsonAsync("/api/v1/contracts/c-1", body);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var stored = Stored(Tenant);
+        stored.ProviderName.Should().Be("Dr. Updated");
+        stored.IntegrityScore.Should().BeNull();
+        stored.IntegrityRating.Should().BeNull();
+        stored.LastVerifiedAt.Should().BeNull();
+        stored.TerminationDate.Should().BeNull();
+        stored.TerminationReason.Should().BeNull();
+        stored.Status.Should().Be(ProviderContractStatus.Draft);
+    }
+
     [Fact]
     public async Task HealthEndpoint_NeedsNoToken()
     {

@@ -182,10 +182,13 @@
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Benefit Plans
                         </MudNavLink>
-                        <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Sponsors
-                        </MudNavLink>
+                        @if (_canReadSponsors)
+                        {
+                            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Sponsors
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Trading Partners
@@ -257,9 +260,12 @@
                             </MudNavGroup>
                             <MudNavGroup Title="Capitation" Icon="@Icons.Material.Filled.LocalHospital"
                                          Expanded="false" Style="border-left: 3px solid transparent;">
-                                <MudNavLink Href="/capitation/rate-config" Match="NavLinkMatch.Prefix"
-                                    Icon="@Icons.Material.Filled.Settings"
-                                    Style="border-left: 3px solid transparent;">Rate Config</MudNavLink>
+                                @if (_canReadContracts)
+                                {
+                                    <MudNavLink Href="/capitation/rate-config" Match="NavLinkMatch.Prefix"
+                                        Icon="@Icons.Material.Filled.Settings"
+                                        Style="border-left: 3px solid transparent;">Rate Config</MudNavLink>
+                                }
                                 <MudNavLink Href="/capitation/runs" Match="NavLinkMatch.Prefix"
                                     Icon="@Icons.Material.Filled.PlayCircle"
                                     Style="border-left: 3px solid transparent;">Capitation Runs</MudNavLink>
@@ -413,6 +419,10 @@
     private bool _isImpersonating;
     private bool _isTenantAdmin;
     private bool _isPlatformAdmin;
+    // Sponsors are read through sponsor-service (enrollment:read); capitation
+    // rate configs are contract data (contracts:read, the page's gate).
+    private bool _canReadSponsors;
+    private bool _canReadContracts;
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
@@ -443,6 +453,8 @@
             var userContext = await UserContextService.GetCurrentUserAsync();
             _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
             _isPlatformAdmin = userContext != null && UserContextService.HasPermission("platform:admin");
+            _canReadSponsors = userContext != null && UserContextService.HasPermission("enrollment:read");
+            _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
         }
         catch (Exception ex)
         {

@@ -82,10 +82,12 @@ public class ClaimFinalizationServiceVoidReversalHookTests
     }
 
     [Fact]
-    public async Task VoidAsync_AlreadyVoided_DoesNotFireHook()
+    public async Task VoidAsync_AlreadyVoided_WithReversalRunId_DrivesTheAdjustmentTransition_WithoutReVoiding()
     {
-        // Idempotent re-invocation of a previously-voided claim must not
-        // re-fire the lifecycle transition (no double-update).
+        // Before: an already-voided claim returned early, so if the first
+        // void persisted but its PendingReversal -> Active step failed, no
+        // retry could ever complete it. A repeat void now re-drives that
+        // (idempotent) step; it does not void again or re-emit events.
         var claim = PaidClaim();
         claim.Status = ClaimStatus.Voided;
         claim.VersionState = ClaimVersionState.Voided;
@@ -97,9 +99,124 @@ public class ClaimFinalizationServiceVoidReversalHookTests
             "t1", "actor", "corr");
 
         Assert.Equal(ClaimVoidOutcome.AlreadyVoided, result.Outcome);
+        await _adjustmentService.Received(1)
+            .MarkActiveOnReversalAsync("t1", "c1", "rr-1", Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().MarkVoidedProjectionAsync(default!, default!, default, default, default);
+        await _versionPublisher.DidNotReceiveWithAnyArgs()
+            .PublishVersionVoidedAsync(default!, default!, default, default, default);
+        await _kafkaPublisher.DidNotReceiveWithAnyArgs().PublishClaimFinalizedAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task VoidAsync_AlreadyVoided_WithoutReversalRunId_DoesNotFireHook()
+    {
+        var claim = PaidClaim();
+        claim.Status = ClaimStatus.Voided;
+        claim.VersionState = ClaimVersionState.Voided;
+        _repo.GetByIdAsync("c1").Returns(claim);
+
+        var result = await CreateService().VoidAsync(
+            "c1", new ClaimVoidRequest { Reason = "retry" }, "t1", "actor", "corr");
+
+        Assert.Equal(ClaimVoidOutcome.AlreadyVoided, result.Outcome);
         await _adjustmentService.DidNotReceiveWithAnyArgs()
             .MarkActiveOnReversalAsync(default!, default!, default!, default);
     }
+
+    [Fact]
+    public async Task VoidAsync_AlreadyVoided_HookThrows_StillAlreadyVoided()
+    {
+        var claim = PaidClaim();
+        claim.Status = ClaimStatus.Voided;
+        claim.VersionState = ClaimVersionState.Voided;
+        _repo.GetByIdAsync("c1").Returns(claim);
+        _adjustmentService
+            .MarkActiveOnReversalAsync("t1", "c1", "rr-1", Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("downstream blip")));
+
+        var result = await CreateService().VoidAsync(
+            "c1", new ClaimVoidRequest { Reason = "retry", ReversalRunId = "rr-1" }, "t1", "actor", "corr");
+
+        Assert.Equal(ClaimVoidOutcome.AlreadyVoided, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RepeatVoid_AfterAdjustmentStepFailed_CompletesTheAdjustment_Once()
+    {
+        // End to end with the real ClaimAdjustmentService: the first void
+        // persists but the adjustment write fails, leaving it
+        // PendingReversal. The retry (same reversal run) moves it to Active;
+        // a further retry changes nothing. One void, one set of events.
+        var claim = PaidClaim();
+        var voided = PaidClaim();
+        voided.Status = ClaimStatus.Voided;
+        voided.VersionState = ClaimVersionState.Voided;
+        _repo.GetByIdAsync("c1").Returns(claim, voided);
+        _repo.MarkVoidedProjectionAsync("t1", "c1", Arg.Any<DateTime>(), "actor", Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var adjustment = new ClaimAdjustment
+        {
+            Id = "adj-1",
+            TenantId = "t1",
+            ClaimVersionId = "c1",
+            PredecessorClaimId = "c1",
+            PredecessorVersionId = "c1",
+            NewClaimId = "c2",
+            AdjustmentReason = "correction",
+            IdempotencyKey = "idem-1",
+            RequestHash = "hash",
+            CreatedBy = "actor",
+            Status = ClaimAdjustmentStatus.PendingReversal,
+        };
+        var adjustmentRepo = Substitute.For<IClaimAdjustmentRepository>();
+        adjustmentRepo
+            .GetByPredecessorAndStatusAsync("t1", "c1", ClaimAdjustmentStatus.PendingReversal, Arg.Any<CancellationToken>())
+            .Returns(_ => adjustment.Status == ClaimAdjustmentStatus.PendingReversal
+                ? Clone(adjustment)
+                : null);
+        var updates = 0;
+        adjustmentRepo.UpdateAsync(Arg.Any<ClaimAdjustment>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                if (++updates == 1)
+                    throw new TimeoutException("adjustment store unavailable");
+                adjustment = ci.Arg<ClaimAdjustment>();
+                return adjustment;
+            });
+        var adjustmentService = new ClaimAdjustmentService(
+            Substitute.For<IClaimRepository>(),
+            adjustmentRepo,
+            Substitute.For<IClaimSubmissionService>(),
+            Substitute.For<IClaimVersionEventPublisher>(),
+            Substitute.For<CloudHealthOffice.Infrastructure.Messaging.IMessageBus>(),
+            NullLogger<ClaimAdjustmentService>.Instance);
+        var service = new ClaimFinalizationService(
+            _repo, _versionPublisher, _kafkaPublisher, adjustmentService, NullLogger<ClaimFinalizationService>.Instance);
+        var request = new ClaimVoidRequest { Reason = "reversal run", ReversalRunId = "rr-1" };
+
+        var first = await service.VoidAsync("c1", request, "t1", "actor", "corr");
+        Assert.Equal(ClaimVoidOutcome.Voided, first.Outcome);
+        Assert.Equal(ClaimAdjustmentStatus.PendingReversal, adjustment.Status);
+
+        var second = await service.VoidAsync("c1", request, "t1", "actor", "corr");
+        Assert.Equal(ClaimVoidOutcome.AlreadyVoided, second.Outcome);
+        Assert.Equal(ClaimAdjustmentStatus.Active, adjustment.Status);
+        Assert.Equal("rr-1", adjustment.ReversalRunId);
+        Assert.NotNull(adjustment.ReversalCompletedAt);
+
+        var third = await service.VoidAsync("c1", request, "t1", "actor", "corr");
+        Assert.Equal(ClaimVoidOutcome.AlreadyVoided, third.Outcome);
+        Assert.Equal(2, updates);
+
+        await _repo.Received(1).MarkVoidedProjectionAsync("t1", "c1", Arg.Any<DateTime>(), "actor", Arg.Any<CancellationToken>());
+        await _versionPublisher.Received(1)
+            .PublishVersionVoidedAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await _kafkaPublisher.Received(1).PublishClaimFinalizedAsync(Arg.Any<Claim>(), "t1", Arg.Any<CancellationToken>());
+    }
+
+    private static ClaimAdjustment Clone(ClaimAdjustment a)
+        => System.Text.Json.JsonSerializer.Deserialize<ClaimAdjustment>(System.Text.Json.JsonSerializer.Serialize(a))!;
 
     [Fact]
     public async Task VoidAsync_HookThrows_VoidStillSucceeds()

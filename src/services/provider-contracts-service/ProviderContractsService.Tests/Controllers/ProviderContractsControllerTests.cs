@@ -394,9 +394,28 @@ public class ProviderContractsControllerTests
         items.First().ProviderTin.Should().Be("***-**-6789");
     }
 
-    [Fact]
-    public async Task GetContractById_ReturnsFullTin()
+    private void CallerHasRole(string role)
     {
+        var identity = new System.Security.Claims.ClaimsIdentity(
+            new[]
+            {
+                new System.Security.Claims.Claim(ChoClaimTypes.Subject, "u-1"),
+                new System.Security.Claims.Claim(ChoClaimTypes.Role, role)
+            },
+            authenticationType: "test");
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+            {
+                User = new System.Security.Claims.ClaimsPrincipal(identity)
+            }
+        };
+    }
+
+    [Fact]
+    public async Task GetContractById_ContractsWriter_GetsFullTin()
+    {
+        CallerHasRole(ChoRolePermissions.ProviderRelations);
         var contract = CreateContract(tin: "123456789");
         _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(contract);
 
@@ -404,6 +423,113 @@ public class ProviderContractsControllerTests
 
         var ok = result.Result as OkObjectResult;
         (ok!.Value as ProviderContract)!.ProviderTin.Should().Be("123456789");
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.Finance)]
+    [InlineData(ChoRolePermissions.ComplianceOfficer)]
+    public async Task GetContractById_ReadOnlyCaller_GetsMaskedTin(string role)
+    {
+        // Before: GET {id} returned the full TIN to every contracts:read holder.
+        CallerHasRole(role);
+        _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(CreateContract(tin: "123456789"));
+        _contractRepo.Setup(r => r.GetByContractNumberAsync("CTR-1")).ReturnsAsync(CreateContract(tin: "123456789"));
+
+        var byId = (await _controller.GetContractById("c-1")).Result as OkObjectResult;
+        var byNumber = (await _controller.GetContractByNumber("CTR-1")).Result as OkObjectResult;
+
+        (byId!.Value as ProviderContract)!.ProviderTin.Should().Be("***-**-6789");
+        (byNumber!.Value as ProviderContract)!.ProviderTin.Should().Be("***-**-6789");
+    }
+
+    [Fact]
+    public async Task GetContractById_NoCallerContext_GetsMaskedTin()
+    {
+        _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(CreateContract(tin: "123456789"));
+
+        var ok = (await _controller.GetContractById("c-1")).Result as OkObjectResult;
+
+        (ok!.Value as ProviderContract)!.ProviderTin.Should().Be("***-**-6789");
+    }
+
+    [Theory]
+    [InlineData(201)]
+    [InlineData(1000)]
+    [InlineData(0)]
+    public async Task SearchContracts_PageSizeOutOfRange_Returns400(int pageSize)
+    {
+        // Before: any pageSize went to the database (pageSize=1000000 read the
+        // whole collection).
+        var result = await _controller.SearchContracts(pageSize: pageSize);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _contractRepo.Verify(r => r.SearchAsync(It.IsAny<string?>(), It.IsAny<LineOfBusiness?>(),
+            It.IsAny<ProviderContractStatus?>(), It.IsAny<PaymentMethodology?>(),
+            It.IsAny<NetworkParticipationStatus?>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SearchContracts_MaxPageSize_IsAllowed()
+    {
+        _contractRepo.Setup(r => r.SearchAsync(null, null, null, null, null, 1, 200))
+            .ReturnsAsync(new List<ProviderContract>());
+
+        var result = await _controller.SearchContracts(pageSize: 200);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateContract_IgnoresVerificationAndTerminationFields_KeepsRateConfigIds()
+    {
+        // Before: PUT stored whatever the body said for the integrity score,
+        // verification dates and termination date/reason.
+        var existing = CreateContract();
+        existing.IntegrityScore = 40;
+        existing.IntegrityRating = "Low";
+        existing.LastVerifiedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero);
+        existing.NextVerificationDue = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        _contractRepo.Setup(r => r.GetByIdAsync("c-1")).ReturnsAsync(existing);
+        _contractRepo.Setup(r => r.UpdateAsync(It.IsAny<ProviderContract>()))
+            .ReturnsAsync((ProviderContract c) => c);
+
+        var body = CreateContract();
+        body.ProviderName = "Dr. Renamed";
+        body.IntegrityScore = 100;
+        body.IntegrityRating = "High";
+        body.LastVerifiedAt = DateTimeOffset.UtcNow;
+        body.NextVerificationDue = DateTimeOffset.UtcNow.AddYears(5);
+        body.TerminationDate = new DateTime(2026, 6, 30);
+        body.TerminationReason = "Set by PUT";
+        body.CapitationRateConfigIds = new List<string> { "cap-9" };
+
+        var ok = (await _controller.UpdateContract("c-1", body)).Result as OkObjectResult;
+
+        var saved = (ok!.Value as ProviderContract)!;
+        saved.ProviderName.Should().Be("Dr. Renamed");
+        saved.IntegrityScore.Should().Be(40);
+        saved.IntegrityRating.Should().Be("Low");
+        saved.LastVerifiedAt.Should().Be(existing.LastVerifiedAt);
+        saved.NextVerificationDue.Should().Be(existing.NextVerificationDue);
+        saved.TerminationDate.Should().BeNull();
+        saved.TerminationReason.Should().BeNull();
+        saved.CapitationRateConfigIds.Should().Equal("cap-9");
+    }
+
+    [Fact]
+    public async Task CreateContract_IgnoresVerificationFields()
+    {
+        _contractRepo.Setup(r => r.CreateAsync(It.IsAny<ProviderContract>()))
+            .ReturnsAsync((ProviderContract c) => c);
+        var body = CreateContract();
+        body.IntegrityScore = 100;
+        body.LastVerifiedAt = DateTimeOffset.UtcNow;
+
+        var created = (await _controller.CreateContract(body)).Result as CreatedAtActionResult;
+
+        var saved = (created!.Value as ProviderContract)!;
+        saved.IntegrityScore.Should().BeNull();
+        saved.LastVerifiedAt.Should().BeNull();
     }
 
     [Fact]
