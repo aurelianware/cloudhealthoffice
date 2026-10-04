@@ -166,7 +166,7 @@ public class MainLayoutNavGatingTests : TestContext
     public void WithoutPermissions_SponsorsAndRateConfigLinksAreHidden()
     {
         // Before: both links were shown to every signed-in user.
-        var cut = Render("billing:read", "payments:read");
+        var cut = Render("payments:read");
 
         Links(cut, "/sponsors").Should().BeFalse();
         Links(cut, "/capitation/rate-config").Should().BeFalse();
@@ -180,5 +180,15 @@ public class MainLayoutNavGatingTests : TestContext
 
         Links(cut, "/sponsors").Should().BeTrue();
         Links(cut, "/capitation/rate-config").Should().BeTrue();
+    }
+
+    [Fact]
+    public void BillingRead_ShowsSponsorsLink()
+    {
+        // sponsor-service reads accept billing:read (Finance bills sponsors).
+        var cut = Render("billing:read");
+
+        Links(cut, "/sponsors").Should().BeTrue();
+        Links(cut, "/capitation/rate-config").Should().BeFalse();
     }
 }

@@ -419,7 +419,7 @@
     private bool _isImpersonating;
     private bool _isTenantAdmin;
     private bool _isPlatformAdmin;
-    // Sponsors are read through sponsor-service (enrollment:read); capitation
+    // Sponsors are read through sponsor-service (enrollment:read or billing:read); capitation
     // rate configs are contract data (contracts:read, the page's gate).
     private bool _canReadSponsors;
     private bool _canReadContracts;
@@ -453,7 +453,8 @@
             var userContext = await UserContextService.GetCurrentUserAsync();
             _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
             _isPlatformAdmin = userContext != null && UserContextService.HasPermission("platform:admin");
-            _canReadSponsors = userContext != null && UserContextService.HasPermission("enrollment:read");
+            _canReadSponsors = userContext != null
+                && (UserContextService.HasPermission("enrollment:read") || UserContextService.HasPermission("billing:read"));
             _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
         }
         catch (Exception ex)
