@@ -50,6 +50,8 @@ spec:
             configMapKeyRef:
               name: payment-service-config
               key: MongoDb__DatabaseName
+        - name: TradingPartnerService__BaseUrl
+          value: "http://trading-partner-service.cloudhealthoffice"
         - name: ClaimsService__BaseUrl
           value: "http://claims-service.cloudhealthoffice"
         resources:

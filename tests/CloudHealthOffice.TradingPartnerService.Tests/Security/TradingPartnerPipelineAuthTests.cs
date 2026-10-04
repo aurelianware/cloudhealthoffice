@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.TradingPartnerService.Models;
+using CloudHealthOffice.TradingPartnerService.Services;
 using FluentAssertions;
 using Xunit;
 
@@ -218,7 +219,8 @@ public class TradingPartnerPipelineAuthTests : IClassFixture<TradingPartnerPipel
         _factory.Repository.All.Should().ContainSingle();
         var stored = _factory.Repository.Find(Tenant, "availity", "prod");
         stored!.TenantId.Should().Be(Tenant);
-        stored.Id.Should().Be($"availity-{Tenant}-prod");
+        // Server-assigned and unambiguous (never the body's id, never the old {partner}-{tenant}-{env}).
+        stored.Id.Should().Be(TradingPartnerIds.For(Tenant, "availity", "prod")).And.NotBe("forged-id");
         _factory.Repository.All.Should().NotContain(p => p.TenantId == OtherTenant);
     }
 

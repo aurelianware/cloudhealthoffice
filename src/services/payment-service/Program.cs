@@ -137,8 +137,12 @@ builder.Services.AddHttpClient(ClaimsServiceClient.HttpClientName, client =>
 // PaymentRun outright.
 builder.Services.AddHttpClient(TradingPartnersClient.HttpClientName, client =>
 {
+    // The cluster Service listens on port 80 (targetPort 8080); the former
+    // default http://trading-partner-service:8080 addressed the container port
+    // through the Service and was refused in the cluster. docker-compose sets
+    // TradingPartnerService__BaseUrl to the container port explicitly.
     var tradingPartnerUrl = builder.Configuration["TradingPartnerService:BaseUrl"]
-        ?? "http://trading-partner-service:8080";
+        ?? TradingPartnersClient.DefaultBaseUrl;
     client.BaseAddress = new Uri(tradingPartnerUrl);
     client.Timeout = TimeSpan.FromSeconds(10);
 }).AddRunExecutionServiceToken();

@@ -78,6 +78,13 @@ public class TradingPartnersClient : ITradingPartnersClient
 {
     public const string HttpClientName = "TradingPartnerService";
 
+    /// <summary>
+    /// The in-cluster Service (port 80; it forwards to the container's 8080).
+    /// Under <c>.cloudhealthoffice</c>, so it is a CHO host without an
+    /// allowlist entry.
+    /// </summary>
+    public const string DefaultBaseUrl = "http://trading-partner-service.cloudhealthoffice";
+
     private readonly HttpClient _http;
     private readonly ILogger<TradingPartnersClient> _logger;
 

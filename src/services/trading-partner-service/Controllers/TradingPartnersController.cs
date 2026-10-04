@@ -268,7 +268,8 @@ public class TradingPartnersController : ControllerBase
         var now = DateTime.UtcNow;
         var partner = new TradingPartner
         {
-            Id = $"{request.TradingPartnerId}-{tenantId}-{request.Environment}",
+            // Unambiguous per (tenant, partner id, environment); see TradingPartnerIds.
+            Id = TradingPartnerIds.For(tenantId, request.TradingPartnerId, request.Environment),
             TenantId = tenantId,
             TradingPartnerId = request.TradingPartnerId,
             Environment = request.Environment,
@@ -279,7 +280,18 @@ public class TradingPartnersController : ControllerBase
         };
         Apply(request, partner, existingSftp: null);
 
-        var created = await _repository.CreateAsync(partner);
+        TradingPartner created;
+        try
+        {
+            created = await _repository.CreateAsync(partner);
+        }
+        catch (DuplicateTradingPartnerException)
+        {
+            return Conflict(new
+            {
+                message = $"Trading partner {request.TradingPartnerId} ({request.Environment}) already exists. Use PUT to change it."
+            });
+        }
 
         _logger.LogInformation(
             "AUDIT trading partner created: {TenantId}/{TradingPartnerId}/{Environment} by {Actor}",

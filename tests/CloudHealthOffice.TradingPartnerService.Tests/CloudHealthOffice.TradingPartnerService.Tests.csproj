@@ -12,6 +12,11 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Moq" />
+    <PackageReference Include="EphemeralMongo" />
     <ProjectReference Include="..\..\src\services\trading-partner-service\trading-partner-service.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

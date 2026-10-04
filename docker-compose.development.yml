@@ -185,6 +185,7 @@ services:
     environment:
       <<: *common-env
       ClaimsService__BaseUrl: http://claims-service:8080
+      TradingPartnerService__BaseUrl: http://trading-partner-service:8080
     depends_on:
       mongodb:
         condition: service_healthy

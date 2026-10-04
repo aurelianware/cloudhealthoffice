@@ -41,8 +41,10 @@ public sealed class InMemoryTradingPartnerRepository : ITradingPartnerRepository
 
     public IReadOnlyCollection<TradingPartner> All => _items.Values.ToList();
 
+    /// <summary>By the record's fields, like the real repositories (records keep whichever id they were saved with).</summary>
     public TradingPartner? Find(string tenantId, string tradingPartnerId, string environment)
-        => _items.TryGetValue((tenantId, $"{tradingPartnerId}-{tenantId}-{environment}"), out var p) ? p : null;
+        => _items.Values.FirstOrDefault(p =>
+            p.TenantId == tenantId && p.TradingPartnerId == tradingPartnerId && p.Environment == environment);
 
     public void Seed(TradingPartner partner) => _items[(partner.TenantId, partner.Id)] = partner;
 
@@ -61,7 +63,9 @@ public sealed class InMemoryTradingPartnerRepository : ITradingPartnerRepository
     public Task<TradingPartner> CreateAsync(TradingPartner partner)
     {
         Calls.Enqueue($"create:{partner.TenantId}");
-        _items[(partner.TenantId, partner.Id)] = partner;
+        if (Find(partner.TenantId, partner.TradingPartnerId, partner.Environment) != null
+            || !_items.TryAdd((partner.TenantId, partner.Id), partner))
+            throw new DuplicateTradingPartnerException(partner.TradingPartnerId, partner.Environment);
         return Task.FromResult(partner);
     }
 
