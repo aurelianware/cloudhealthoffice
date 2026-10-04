@@ -187,7 +187,12 @@ ComplianceOfficer by name and by TenantAdmin and PlatformAdmin through `*:*`.
 Placing a hold is a write, so `*:read` does not satisfy it (ComplianceViewer and
 every read-only grant are refused), and neither does `members:write`
 (EnrollmentSpecialist cannot place or release a hold). member-document-service
-uses it today: see its row below.
+uses it today: see its row below. member-service uses it for member alerts:
+creating or ending an alert of type `LitigationHold`
+(`POST api/v1/members/{id}/alerts`, `POST .../alerts/{alertId}/end`) needs
+`records:legal-hold`; every other alert type keeps `members:write` (the route
+admits either permission and the action checks the alert's type; a refusal
+is logged as `AUDIT member alert ... refused`).
 
 Billing: Finance runs premium billing end to end with billing:read,
 billing:run and finance:write; it holds no coverage or enrollment permission,

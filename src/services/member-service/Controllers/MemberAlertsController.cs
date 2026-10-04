@@ -9,6 +9,8 @@ using MemberService.Middleware;
 using MemberService.Models;
 using MemberService.Repositories;
 using MemberService.Services;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MemberService.Controllers;
@@ -81,10 +83,41 @@ public class MemberAlertsController : ControllerBase
         return Ok(alert);
     }
 
-    /// <summary>Create a new alert.</summary>
+    /// <summary>
+    /// Writes to alerts admit either permission at the door; the alert type
+    /// then decides (<see cref="RequiredPermissionFor"/>).
+    /// </summary>
+    private const string AlertWritePermissions = "members:write," + ChoRolePermissions.LegalHold;
+
+    /// <summary>
+    /// A LitigationHold alert places (or, ended, releases) a legal hold on the
+    /// member: it needs records:legal-hold (ComplianceOfficer; TenantAdmin and
+    /// PlatformAdmin through *:*), not members:write, so an enrollment or
+    /// member-services user cannot place or lift one. Every other alert type
+    /// needs members:write.
+    /// </summary>
+    internal static string RequiredPermissionFor(MemberAlertType type)
+        => type == MemberAlertType.LitigationHold ? ChoRolePermissions.LegalHold : "members:write";
+
+    private IActionResult? RefuseUnlessPermitted(MemberAlertType type, string action)
+    {
+        var required = RequiredPermissionFor(type);
+        if (ChoPrincipal.HasPermission(User, required))
+            return null;
+
+        _logger?.LogWarning(
+            "AUDIT member alert {Action} refused: {AlertType} needs {Permission} (subject {Subject}, tenant {TenantId})",
+            action, type, required, User.FindFirst(ChoClaimTypes.Subject)?.Value, TenantId);
+        return StatusCode(StatusCodes.Status403Forbidden,
+            new { error = $"A {type} alert needs {required} to {action}." });
+    }
+
+    /// <summary>Create a new alert. A LitigationHold alert needs records:legal-hold; any other type members:write.</summary>
     [HttpPost]
+    [RequirePermission(AlertWritePermissions)]
     [ProducesResponseType(typeof(MemberAlert), 201)]
     [ProducesResponseType(400)]
+    [ProducesResponseType(403)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> CreateAlert(
         [FromRoute] string memberId,
@@ -92,6 +125,9 @@ public class MemberAlertsController : ControllerBase
         CancellationToken ct)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        if (RefuseUnlessPermitted(request.AlertType, "create") is { } refused)
+            return refused;
 
         var member = await _members.GetByMemberIdAsync(TenantId, memberId);
         if (member == null) return NotFound();
@@ -140,9 +176,14 @@ public class MemberAlertsController : ControllerBase
             new { memberId, alertId = created.Id }, created);
     }
 
-    /// <summary>End-date an alert. Idempotent: ending an already-ended alert is a no-op (200).</summary>
+    /// <summary>
+    /// End-date an alert. Idempotent: ending an already-ended alert is a no-op (200).
+    /// Ending a LitigationHold alert releases the hold: records:legal-hold; any other type members:write.
+    /// </summary>
     [HttpPost("{alertId}/end")]
+    [RequirePermission(AlertWritePermissions)]
     [ProducesResponseType(typeof(MemberAlert), 200)]
+    [ProducesResponseType(403)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> EndAlert(
         [FromRoute] string memberId,
@@ -152,6 +193,9 @@ public class MemberAlertsController : ControllerBase
     {
         var alert = await _alerts.GetByIdAsync(TenantId, memberId, alertId);
         if (alert == null) return NotFound();
+
+        if (RefuseUnlessPermitted(alert.AlertType, "end") is { } refused)
+            return refused;
 
         if (alert.EndDate.HasValue)
         {
