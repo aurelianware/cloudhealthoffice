@@ -21,6 +21,13 @@ public static class ChoRolePermissions
     public const string TenantAdmin = "TenantAdmin";
     public const string PlatformAdmin = "PlatformAdmin";
 
+    /// <summary>
+    /// Sets and releases a legal hold on a record (member documents today).
+    /// It is a write: <c>*:read</c> never satisfies it, and neither does a
+    /// resource's own write permission such as <c>members:write</c>.
+    /// </summary>
+    public const string LegalHold = "records:legal-hold";
+
     private static readonly string[] ExaminerPermissions =
     [
         "claims:read", "claims:work", "claims:override-request",
@@ -107,9 +114,13 @@ public static class ChoRolePermissions
                 "finance:read", "reports:financial",
                 "reference-data:read"
             ],
+            // Compliance owns legal holds: a held record cannot be deleted or
+            // changed until compliance releases it, with a reason. TenantAdmin
+            // and PlatformAdmin hold records:legal-hold through *:*.
             [ComplianceOfficer] =
             [
-                "*:read", "audit:read", "compliance:read", "reports:compliance"
+                "*:read", "audit:read", "compliance:read", "reports:compliance",
+                LegalHold
             ],
             [ComplianceViewer] =
             [

@@ -182,11 +182,12 @@ public static class StandardRoles
     public static readonly TenantRole ComplianceOfficer = new()
     {
         RoleName = "ComplianceOfficer",
-        Description = "Read-only access to all functions, audit logs, compliance reports",
+        Description = "Read access to all functions, audit logs and compliance reports; sets and releases legal holds",
         IsBuiltIn = true,
         Permissions = new List<string>
         {
-            "*:read", "audit:read", "compliance:read", "reports:compliance"
+            "*:read", "audit:read", "compliance:read", "reports:compliance",
+            "records:legal-hold"
         }
     };
 

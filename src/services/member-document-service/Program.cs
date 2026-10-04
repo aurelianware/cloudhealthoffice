@@ -21,8 +21,9 @@ builder.Services.AddControllers().AddCloudHealthOfficeJsonOptions();
 // ── Authentication ──────────────────────────────────────────────────
 // Every caller presents a CHO token; the tenant and the uploader come from that
 // token. Member documents (ID cards, letters, EOBs, uploads) are PHI: reads and
-// downloads need members:read, uploads, finalize and legal hold need
-// members:write. This service makes no outbound CHO calls.
+// downloads need members:read, uploads and finalize need members:write.
+// Placing or releasing a legal hold (or uploading under one) needs
+// records:legal-hold instead. This service makes no outbound CHO calls.
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
     auth.DefaultReadPermission = "members:read";

@@ -64,7 +64,24 @@ public class MemberDocument
 
     public DateTime UploadedDate { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// While true the document cannot be deleted, modified or have its content
+    /// replaced by anyone. Set and released only with records:legal-hold.
+    /// </summary>
     public bool LegalHold { get; set; }
+
+    /// <summary>Who placed the current hold (token subject); null when not held.</summary>
+    [StringLength(200)]
+    public string? LegalHoldSetBy { get; set; }
+
+    public DateTime? LegalHoldSetAt { get; set; }
+
+    /// <summary>Why the current hold was placed, when a reason was given.</summary>
+    [StringLength(LegalHoldRequest.MaxReasonLength)]
+    public string? LegalHoldReason { get; set; }
+
+    /// <summary>Every hold placed on and released from this document, oldest first.</summary>
+    public List<LegalHoldEvent> LegalHoldHistory { get; set; } = new();
 
     [StringLength(2)]
     public string? StateCode { get; set; }
@@ -104,7 +121,10 @@ public sealed class CreateMemberDocumentRequest
     public List<string>? LinkedResources { get; set; }
     // UploadedBy is ignored: the uploader is the token subject.
     public string? UploadedBy { get; set; }
+    // Uploading under a legal hold places a hold: it needs records:legal-hold.
     public bool LegalHold { get; set; }
+    [StringLength(LegalHoldRequest.MaxReasonLength)]
+    public string? LegalHoldReason { get; set; }
     public string? StateCode { get; set; }
     public DateTime? CoverageTerminationDate { get; set; }
 }
@@ -127,7 +147,10 @@ public sealed class PresignedUploadRequest
     public string? RetentionPolicyId { get; set; }
     public string? StateCode { get; set; }
     public DateTime? CoverageTerminationDate { get; set; }
+    // Uploading under a legal hold places a hold: it needs records:legal-hold.
     public bool LegalHold { get; set; }
+    [StringLength(LegalHoldRequest.MaxReasonLength)]
+    public string? LegalHoldReason { get; set; }
 }
 
 public sealed class PresignedUploadResponse
@@ -138,7 +161,36 @@ public sealed class PresignedUploadResponse
     public DateTime ExpiresAtUtc { get; set; }
 }
 
+/// <summary>
+/// Places (<c>LegalHold = true</c>) or releases (<c>false</c>) a legal hold.
+/// Requires records:legal-hold. A release must give a reason.
+/// </summary>
 public sealed class LegalHoldRequest
 {
+    public const int MaxReasonLength = 500;
+
     public bool LegalHold { get; set; }
+
+    [StringLength(MaxReasonLength)]
+    public string? Reason { get; set; }
+}
+
+public enum LegalHoldAction
+{
+    Set = 1,
+    Released = 2
+}
+
+/// <summary>One placement or release of a legal hold, with who did it and why.</summary>
+public sealed class LegalHoldEvent
+{
+    public LegalHoldAction Action { get; set; }
+
+    [StringLength(200)]
+    public string Actor { get; set; } = string.Empty;
+
+    [StringLength(LegalHoldRequest.MaxReasonLength)]
+    public string? Reason { get; set; }
+
+    public DateTime At { get; set; }
 }

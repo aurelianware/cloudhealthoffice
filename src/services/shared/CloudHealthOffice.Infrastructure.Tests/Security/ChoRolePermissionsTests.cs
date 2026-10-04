@@ -185,6 +185,48 @@ public class ChoRolePermissionsTests
         Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
     }
 
+    [Theory]
+    // records:legal-hold: placing or releasing a legal hold is a write.
+    [InlineData(ChoRolePermissions.ComplianceOfficer, true)]
+    [InlineData(ChoRolePermissions.TenantAdmin, true)]
+    [InlineData(ChoRolePermissions.PlatformAdmin, true)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, false)]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist, false)] // members:write is not enough
+    [InlineData(ChoRolePermissions.MemberServices, false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, false)]
+    [InlineData(ChoRolePermissions.ClaimsSupervisor, false)]
+    [InlineData(ChoRolePermissions.UMCoordinator, false)]
+    [InlineData(ChoRolePermissions.ProviderRelations, false)]
+    [InlineData(ChoRolePermissions.Finance, false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, false)]
+    public void Legal_hold_grants(string role, bool expected)
+    {
+        var granted = ChoRolePermissions.Expand([role]);
+
+        Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, ChoRolePermissions.LegalHold));
+    }
+
+    [Theory]
+    [InlineData("*:read")]
+    [InlineData("records:read")]
+    [InlineData("members:write")]
+    [InlineData("records:write")]
+    public void Legal_hold_is_not_satisfied_by_read_or_write_grants(string granted)
+    {
+        Assert.Equal("records:legal-hold", ChoRolePermissions.LegalHold);
+        Assert.False(ChoRolePermissions.Matches(granted, ChoRolePermissions.LegalHold));
+    }
+
+    [Fact]
+    public void ComplianceOfficer_holds_legal_hold_by_name_not_through_its_read_wildcard()
+    {
+        var withoutByName = ChoRolePermissions.ForRole(ChoRolePermissions.ComplianceOfficer)
+            .Where(p => p != ChoRolePermissions.LegalHold);
+
+        Assert.Contains(ChoRolePermissions.LegalHold, ChoRolePermissions.ForRole(ChoRolePermissions.ComplianceOfficer));
+        Assert.False(ChoRolePermissions.Satisfies(withoutByName, ChoRolePermissions.LegalHold));
+    }
+
     [Fact]
     public void No_role_holds_a_bulk_export_permission_by_name()
     {

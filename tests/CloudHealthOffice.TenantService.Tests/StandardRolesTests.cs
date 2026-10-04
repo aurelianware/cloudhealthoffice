@@ -43,9 +43,22 @@ public class StandardRolesTests
     [InlineData("FinanceApprover", "risk-adjustment:write", false)]
     [InlineData("ComplianceViewer", "risk-adjustment:write", false)]
     [InlineData("ComplianceOfficer", "risk-adjustment:write", false)]
+    // Legal holds: compliance (and admins through *:*), never *:read or members:write.
+    [InlineData("ComplianceOfficer", "records:legal-hold", true)]
+    [InlineData("TenantAdmin", "records:legal-hold", true)]
+    [InlineData("ComplianceViewer", "records:legal-hold", false)]
+    [InlineData("EnrollmentSpecialist", "records:legal-hold", false)]
+    [InlineData("MemberServices", "records:legal-hold", false)]
     public void Catalogue_grants_match_the_shared_table(string role, string permission, bool expected)
     {
         StandardRoles.HasPermission([role], permission, StandardRoles.All).Should().Be(expected);
         ChoRolePermissions.Satisfies(ChoRolePermissions.ForRole(role), permission).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ComplianceOfficer_permissions_match_the_shared_table()
+    {
+        StandardRoles.ComplianceOfficer.Permissions.Should()
+            .BeEquivalentTo(ChoRolePermissions.ForRole(ChoRolePermissions.ComplianceOfficer));
     }
 }

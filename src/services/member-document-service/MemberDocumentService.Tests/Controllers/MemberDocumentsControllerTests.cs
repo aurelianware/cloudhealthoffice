@@ -5,7 +5,9 @@ using MemberDocumentService.Services;
 using MemberDocumentService.Controllers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using System.Security.Claims;
 
 namespace MemberDocumentService.Tests.Controllers;
 
@@ -17,7 +19,11 @@ public class MemberDocumentsControllerTests
 
     private MemberDocumentsController CreateController(string tenantId = "test-tenant")
     {
-        var context = new DefaultHttpContext();
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ChoClaimTypes.Subject, "compliance-1")], authenticationType: "test"))
+        };
         context.Items["TenantId"] = tenantId;
 
         var controller = new MemberDocumentsController(
@@ -25,7 +31,8 @@ public class MemberDocumentsControllerTests
             _blobServiceMock.Object,
             _retentionPolicyService,
             new HttpContextCurrentActor(new HttpContextAccessor { HttpContext = context }),
-            MemberDocumentUploadPolicy.Default);
+            MemberDocumentUploadPolicy.Default,
+            NullLogger<MemberDocumentsController>.Instance);
 
         controller.ControllerContext = new ControllerContext { HttpContext = context };
         return controller;
@@ -179,5 +186,87 @@ public class MemberDocumentsControllerTests
             It.Is<IDictionary<string, string>>(tags =>
                 tags.ContainsKey("retentionPolicyId") && tags.ContainsKey("legalHold")),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private MemberDocument HeldDocument() => new()
+    {
+        Id = "doc3",
+        TenantId = "test-tenant",
+        MemberId = "m3",
+        Category = "Letter",
+        BlobPath = "tenants/test-tenant/members/m3/doc3.pdf",
+        BlobContainer = "member-documents",
+        LegalHold = true,
+        LegalHoldSetBy = "someone",
+        LegalHoldReason = "litigation 2026-17",
+        LegalHoldHistory = { new LegalHoldEvent { Action = LegalHoldAction.Set, Actor = "someone", Reason = "litigation 2026-17" } }
+    };
+
+    [Fact]
+    public async Task UpdateLegalHold_RecordsWhoPlacedTheHoldAndWhy()
+    {
+        var doc = HeldDocument();
+        doc.LegalHold = false;
+        doc.LegalHoldHistory.Clear();
+        _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "doc3")).ReturnsAsync(doc);
+        _repositoryMock.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>())).ReturnsAsync((MemberDocument d) => d);
+
+        var result = await CreateController().UpdateLegalHold("doc3",
+            new LegalHoldRequest { LegalHold = true, Reason = "  subpoena 44  " }, CancellationToken.None);
+
+        var updated = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<MemberDocument>().Subject;
+        updated.LegalHold.Should().BeTrue();
+        updated.LegalHoldSetBy.Should().Be("compliance-1");
+        updated.LegalHoldReason.Should().Be("subpoena 44");
+        updated.LegalHoldHistory.Should().ContainSingle(e =>
+            e.Action == LegalHoldAction.Set && e.Actor == "compliance-1" && e.Reason == "subpoena 44");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task UpdateLegalHold_ReleaseWithoutAReason_IsRejected(string? reason)
+    {
+        _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "doc3")).ReturnsAsync(HeldDocument());
+
+        var result = await CreateController().UpdateLegalHold("doc3",
+            new LegalHoldRequest { LegalHold = false, Reason = reason }, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
+        _blobServiceMock.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateLegalHold_ReleaseRecordsWhoReleasedItAndWhy()
+    {
+        _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "doc3")).ReturnsAsync(HeldDocument());
+        _repositoryMock.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>())).ReturnsAsync((MemberDocument d) => d);
+
+        var result = await CreateController().UpdateLegalHold("doc3",
+            new LegalHoldRequest { LegalHold = false, Reason = "case dismissed" }, CancellationToken.None);
+
+        var updated = result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<MemberDocument>().Subject;
+        updated.LegalHold.Should().BeFalse();
+        updated.LegalHoldSetBy.Should().BeNull();
+        updated.LegalHoldHistory.Should().HaveCount(2);
+        updated.LegalHoldHistory[^1].Should().Match<LegalHoldEvent>(e =>
+            e.Action == LegalHoldAction.Released && e.Actor == "compliance-1" && e.Reason == "case dismissed");
+        _blobServiceMock.Verify(b => b.SetTagsAsync("member-documents", "tenants/test-tenant/members/m3/doc3.pdf",
+            It.Is<IDictionary<string, string>>(tags => tags["legalHold"] == "false"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task FinalizeUpload_OfAFinalizedHeldDocument_ChangesNothing()
+    {
+        _repositoryMock.Setup(r => r.GetByIdAsync("test-tenant", "doc3")).ReturnsAsync(HeldDocument());
+
+        var result = await CreateController().FinalizeUpload("doc3", CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        _repositoryMock.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
+        _blobServiceMock.VerifyNoOtherCalls();
     }
 }

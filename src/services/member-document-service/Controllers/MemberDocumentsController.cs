@@ -15,6 +15,14 @@ namespace MemberDocumentService.Controllers;
 /// by (token tenant, id), and blob paths start with the token tenant, so no id,
 /// path or link reaches another tenant's documents. Content is streamed through
 /// <c>/content</c>; this service issues no read links.
+///
+/// Legal holds: placing or releasing one (including uploading a document
+/// already under hold) needs records:legal-hold, not members:write. A held
+/// document is immutable: no endpoint deletes it, modifies its record or
+/// replaces its content while the hold stands (finalize of an already
+/// finalized document answers 409). A release needs a reason. Every placement
+/// and release is kept in the document's LegalHoldHistory and written to the
+/// audit log with the actor and the reason.
 /// </summary>
 [ApiController]
 public class MemberDocumentsController : ControllerBase
@@ -29,19 +37,22 @@ public class MemberDocumentsController : ControllerBase
     private readonly IRetentionPolicyService _retentionPolicyService;
     private readonly ICurrentActor _actor;
     private readonly MemberDocumentUploadPolicy _uploadPolicy;
+    private readonly ILogger<MemberDocumentsController> _logger;
 
     public MemberDocumentsController(
         IMemberDocumentRepository repository,
         IMemberDocumentBlobService blobService,
         IRetentionPolicyService retentionPolicyService,
         ICurrentActor actor,
-        MemberDocumentUploadPolicy uploadPolicy)
+        MemberDocumentUploadPolicy uploadPolicy,
+        ILogger<MemberDocumentsController> logger)
     {
         _repository = repository;
         _blobService = blobService;
         _retentionPolicyService = retentionPolicyService;
         _actor = actor;
         _uploadPolicy = uploadPolicy;
+        _logger = logger;
     }
 
     /// <summary>
@@ -74,6 +85,11 @@ public class MemberDocumentsController : ControllerBase
         if (!MemberDocumentUploadPolicy.IsSafePathSegment(formRequest.MemberId))
         {
             return BadRequest("MemberId may contain only letters, digits, '.', '_' and '-'.");
+        }
+
+        if (formRequest.LegalHold && !CanManageLegalHolds())
+        {
+            return LegalHoldForbidden();
         }
 
         if (file.Length > _uploadPolicy.MaxUploadBytes)
@@ -138,12 +154,19 @@ public class MemberDocumentsController : ControllerBase
             ContentHashSha256 = hash,
             UploadedBy = _actor.UserId,
             UploadedDate = DateTime.UtcNow,
-            LegalHold = formRequest.LegalHold,
             StateCode = formRequest.StateCode,
             CoverageTerminationDate = formRequest.CoverageTerminationDate
         };
+        if (formRequest.LegalHold)
+        {
+            PlaceHold(document, formRequest.LegalHoldReason);
+        }
 
         var created = await _repository.CreateAsync(document);
+        if (created.LegalHold)
+        {
+            AuditHold(created, LegalHoldAction.Set, created.LegalHoldReason);
+        }
         return CreatedAtAction(nameof(GetMemberDocument), new { id = created.Id }, created);
     }
 
@@ -187,17 +210,45 @@ public class MemberDocumentsController : ControllerBase
         return Ok(documents);
     }
 
+    /// <summary>
+    /// Places or releases a legal hold. Needs records:legal-hold (ComplianceOfficer,
+    /// TenantAdmin, PlatformAdmin); members:write is not enough. A release must
+    /// give a reason. Asking for the state the document is already in changes
+    /// nothing and records nothing.
+    /// </summary>
     [HttpPut("api/v1/member-documents/{id}/legal-hold")]
+    [RequirePermission(ChoRolePermissions.LegalHold)]
     public async Task<IActionResult> UpdateLegalHold(string id, [FromBody] LegalHoldRequest request, CancellationToken ct)
     {
+        var reason = NormalizeReason(request.Reason);
+        if (!request.LegalHold && reason == null)
+        {
+            return BadRequest("A reason is required to release a legal hold.");
+        }
+
         var doc = await _repository.GetByIdAsync(TenantId, id);
         if (doc == null)
         {
             return NotFound();
         }
 
-        doc.LegalHold = request.LegalHold;
+        if (doc.LegalHold == request.LegalHold)
+        {
+            return Ok(doc);
+        }
+
+        var action = request.LegalHold ? LegalHoldAction.Set : LegalHoldAction.Released;
+        if (request.LegalHold)
+        {
+            PlaceHold(doc, reason);
+        }
+        else
+        {
+            ReleaseHold(doc, reason!);
+        }
+
         var updated = await _repository.UpdateAsync(doc);
+        AuditHold(updated, action, reason);
 
         if (doc.PendingUploadBlobPath != null)
         {
@@ -233,7 +284,16 @@ public class MemberDocumentsController : ControllerBase
 
         if (doc.PendingUploadBlobPath != null)
         {
+            // The document's first content; a hold placed at creation still
+            // applies once it is written.
             return await FinalizePendingUploadAsync(doc, ct);
+        }
+
+        if (doc.LegalHold)
+        {
+            // Already finalized: re-finalizing would rewrite its record from
+            // the blob. A held document is not changed.
+            return LegalHoldConflict();
         }
 
         // Apply lifecycle tags that were deferred because the blob didn't exist yet.
@@ -363,6 +423,11 @@ public class MemberDocumentsController : ControllerBase
             return BadRequest("MemberId may contain only letters, digits, '.', '_' and '-'.");
         }
 
+        if (request.LegalHold && !CanManageLegalHolds())
+        {
+            return LegalHoldForbidden();
+        }
+
         var contentType = MemberDocumentUploadPolicy.NormalizeContentType(request.ContentType);
         if (contentType == null || !_uploadPolicy.IsAllowedContentType(contentType))
         {
@@ -403,12 +468,19 @@ public class MemberDocumentsController : ControllerBase
             ContentType = contentType,
             UploadedBy = _actor.UserId,
             UploadedDate = DateTime.UtcNow,
-            LegalHold = request.LegalHold,
             StateCode = request.StateCode,
             CoverageTerminationDate = request.CoverageTerminationDate
         };
+        if (request.LegalHold)
+        {
+            PlaceHold(document, request.LegalHoldReason);
+        }
 
         await _repository.CreateAsync(document);
+        if (document.LegalHold)
+        {
+            AuditHold(document, LegalHoldAction.Set, document.LegalHoldReason);
+        }
 
         return Ok(new PresignedUploadResponse
         {
@@ -418,6 +490,65 @@ public class MemberDocumentsController : ControllerBase
             ExpiresAtUtc = expires.UtcDateTime
         });
     }
+
+    private bool CanManageLegalHolds() => _actor.HasPermission(ChoRolePermissions.LegalHold);
+
+    private ObjectResult LegalHoldForbidden()
+        => StatusCode(StatusCodes.Status403Forbidden,
+            $"Placing a legal hold requires {ChoRolePermissions.LegalHold}.");
+
+    private ObjectResult LegalHoldConflict()
+        => StatusCode(StatusCodes.Status409Conflict,
+            "The document is under legal hold and cannot be deleted or changed until the hold is released.");
+
+    private void PlaceHold(MemberDocument doc, string? reason)
+    {
+        reason = NormalizeReason(reason);
+        var now = DateTime.UtcNow;
+        doc.LegalHold = true;
+        doc.LegalHoldSetBy = _actor.UserId;
+        doc.LegalHoldSetAt = now;
+        doc.LegalHoldReason = reason;
+        doc.LegalHoldHistory.Add(new LegalHoldEvent
+        {
+            Action = LegalHoldAction.Set,
+            Actor = _actor.UserId,
+            Reason = reason,
+            At = now
+        });
+    }
+
+    private void ReleaseHold(MemberDocument doc, string reason)
+    {
+        doc.LegalHold = false;
+        doc.LegalHoldSetBy = null;
+        doc.LegalHoldSetAt = null;
+        doc.LegalHoldReason = null;
+        doc.LegalHoldHistory.Add(new LegalHoldEvent
+        {
+            Action = LegalHoldAction.Released,
+            Actor = _actor.UserId,
+            Reason = reason,
+            At = DateTime.UtcNow
+        });
+    }
+
+    private void AuditHold(MemberDocument doc, LegalHoldAction action, string? reason)
+    {
+        _logger.LogInformation(
+            "AUDIT member document legal hold {Action}: {TenantId}/{DocumentId} by {Actor}; reason: {Reason}",
+            action, ForLog(doc.TenantId), ForLog(doc.Id), ForLog(_actor.UserId), ForLog(reason) ?? "(none)");
+    }
+
+    private static string? NormalizeReason(string? reason)
+    {
+        var trimmed = reason?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+    }
+
+    /// <summary>One log line per entry: control characters (newlines) cannot forge another.</summary>
+    private static string? ForLog(string? value)
+        => value == null ? null : new string(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
 
     private static IDictionary<string, string> BuildLifecycleTags(string retentionPolicyId, DateTime retentionUntilDate, bool legalHold)
     {

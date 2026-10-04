@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace MemberDocumentService.Tests.Security;
 
@@ -29,6 +30,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     {
         public Mock<IMemberDocumentRepository> Repository { get; } = new();
         public Mock<IMemberDocumentBlobService> Blobs { get; } = new();
+        public AuditCapture Audit { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -45,8 +47,35 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
                 services.RemoveAll<IMemberDocumentBlobService>();
                 services.AddSingleton(Repository.Object);
                 services.AddSingleton(Blobs.Object);
+                services.AddSingleton<ILoggerProvider>(Audit);
             });
         }
+    }
+
+    /// <summary>Collects the service's AUDIT log lines.</summary>
+    public sealed class AuditCapture : ILoggerProvider, ILogger
+    {
+        private readonly List<string> _lines = new();
+
+        public IReadOnlyList<string> Lines { get { lock (_lines) return _lines.ToList(); } }
+
+        public void Clear() { lock (_lines) _lines.Clear(); }
+
+        public ILogger CreateLogger(string categoryName) => this;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var line = formatter(state, exception);
+            if (line.StartsWith("AUDIT", StringComparison.Ordinal))
+                lock (_lines) _lines.Add(line);
+        }
+
+        public void Dispose() { }
     }
 
     private const string Tenant = "tenant-1";
@@ -66,6 +95,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         _factory = factory;
         _factory.Repository.Reset();
         _factory.Blobs.Reset();
+        _factory.Audit.Clear();
 
         _factory.Repository.Setup(r => r.CreateAsync(It.IsAny<MemberDocument>()))
             .ReturnsAsync((MemberDocument d) => d);
@@ -91,7 +121,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             .Returns((string c, string p, string _, DateTimeOffset _) => new Uri($"https://blob.example/{c}/{p}?sig=x"));
     }
 
-    private static MemberDocument StoredDocument(string? pendingPath = null) => new()
+    private static MemberDocument StoredDocument(string? pendingPath = null, bool legalHold = false) => new()
     {
         Id = DocId,
         TenantId = Tenant,
@@ -101,6 +131,11 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         BlobPath = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf",
         ContentType = "application/pdf",
         PendingUploadBlobPath = pendingPath,
+        LegalHold = legalHold,
+        LegalHoldSetBy = legalHold ? "compliance-9" : null,
+        LegalHoldHistory = legalHold
+            ? [new LegalHoldEvent { Action = LegalHoldAction.Set, Actor = "compliance-9", Reason = "subpoena" }]
+            : [],
     };
 
     private HttpClient Client(string tenant = Tenant, params string[] roles)
@@ -111,7 +146,7 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
     }
 
     private static MultipartFormDataContent Upload(byte[] bytes, string contentType, string memberId = "mem-1",
-        string fileName = "eob.pdf", string fileField = "file")
+        string fileName = "eob.pdf", string fileField = "file", bool legalHold = false)
     {
         var form = new MultipartFormDataContent
         {
@@ -120,6 +155,11 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             { new StringContent("Uploaded"), "Source" },
             { new StringContent("someone-else"), "UploadedBy" },
         };
+        if (legalHold)
+        {
+            form.Add(new StringContent("true"), "LegalHold");
+            form.Add(new StringContent("litigation 2026-17"), "LegalHoldReason");
+        }
         var file = new ByteArrayContent(bytes);
         file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         form.Add(file, fileField, fileName);
@@ -241,6 +281,168 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
         Assert.Equal(HttpStatusCode.Forbidden, finalize.StatusCode);
         _factory.Repository.VerifyNoOtherCalls();
         NothingStored();
+    }
+
+    // ── Legal holds ─────────────────────────────────────────────────
+
+    private static object Hold(bool legalHold, string? reason = "subpoena 44") => new { legalHold, reason };
+
+    private void NoHoldChange()
+    {
+        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
+        _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_factory.Audit.Lines);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EnrollmentSpecialist_WithMembersWrite_CannotSetOrReleaseALegalHold(bool legalHold)
+    {
+        // Before: the hold endpoint took the default members:write, so any
+        // enrollment user could place or lift a hold.
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(legalHold: !legalHold));
+
+        var response = await Client(Tenant, ChoRolePermissions.EnrollmentSpecialist)
+            .PutAsJsonAsync($"/api/v1/member-documents/{DocId}/legal-hold", Hold(legalHold));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        _factory.Repository.VerifyNoOtherCalls();
+        NoHoldChange();
+    }
+
+    [Fact]
+    public async Task ComplianceViewer_CannotSetALegalHold()
+    {
+        var response = await Client(Tenant, ChoRolePermissions.ComplianceViewer)
+            .PutAsJsonAsync($"/api/v1/member-documents/{DocId}/legal-hold", Hold(true));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        _factory.Repository.VerifyNoOtherCalls();
+        NoHoldChange();
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.ComplianceOfficer)]
+    [InlineData(ChoRolePermissions.TenantAdmin)]
+    public async Task LegalHoldRole_SetsAHold_RecordedAndAudited(string role)
+    {
+        // ComplianceOfficer has no members:write; records:legal-hold is enough.
+        var response = await Client(Tenant, role)
+            .PutAsJsonAsync($"/api/v1/member-documents/{DocId}/legal-hold", Hold(true));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.Is<MemberDocument>(d =>
+            d.LegalHold && d.LegalHoldSetBy == User && d.LegalHoldReason == "subpoena 44"
+            && d.LegalHoldHistory.Count == 1
+            && d.LegalHoldHistory[0].Action == LegalHoldAction.Set
+            && d.LegalHoldHistory[0].Actor == User)), Times.Once);
+        _factory.Blobs.Verify(b => b.SetTagsAsync("member-documents", $"tenants/{Tenant}/members/mem-1/{DocId}.pdf",
+            It.Is<IDictionary<string, string>>(t => t["legalHold"] == "true"), It.IsAny<CancellationToken>()), Times.Once);
+        var audit = Assert.Single(_factory.Audit.Lines);
+        Assert.Contains("legal hold Set", audit);
+        Assert.Contains($"{Tenant}/{DocId}", audit);
+        Assert.Contains($"by {User}", audit);
+        Assert.Contains("subpoena 44", audit);
+    }
+
+    [Fact]
+    public async Task ComplianceOfficer_ReleasesAHold_WithAReason_RecordedAndAudited()
+    {
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(legalHold: true));
+
+        var response = await Client(Tenant, ChoRolePermissions.ComplianceOfficer)
+            .PutAsJsonAsync($"/api/v1/member-documents/{DocId}/legal-hold", Hold(false, "case dismissed\nAUDIT forged"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.Is<MemberDocument>(d =>
+            !d.LegalHold
+            && d.LegalHoldHistory.Count == 2
+            && d.LegalHoldHistory[1].Action == LegalHoldAction.Released
+            && d.LegalHoldHistory[1].Actor == User
+            && d.LegalHoldHistory[1].Reason == "case dismissed\nAUDIT forged")), Times.Once);
+        var audit = Assert.Single(_factory.Audit.Lines);
+        Assert.Contains("legal hold Released", audit);
+        Assert.Contains($"by {User}", audit);
+        // The reason cannot start a second log line.
+        Assert.DoesNotContain('\n', audit);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task ReleasingAHold_WithoutAReason_IsRejected(string? reason)
+    {
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(legalHold: true));
+
+        var response = await Client(Tenant, ChoRolePermissions.ComplianceOfficer)
+            .PutAsJsonAsync($"/api/v1/member-documents/{DocId}/legal-hold", Hold(false, reason));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        NoHoldChange();
+    }
+
+    [Fact]
+    public async Task EnrollmentSpecialist_CannotUploadUnderALegalHold()
+    {
+        // Before: an upload with LegalHold=true placed a hold with members:write.
+        var client = Client(Tenant, ChoRolePermissions.EnrollmentSpecialist);
+
+        var multipart = await client.PostAsync("/api/v1/member-documents", Upload(Pdf, "application/pdf", legalHold: true));
+        var presigned = await client.PostAsJsonAsync("/api/v1/member-documents", new
+        {
+            memberId = "mem-1",
+            category = "Letter",
+            fileName = "letter.pdf",
+            contentType = "application/pdf",
+            legalHold = true,
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, multipart.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, presigned.StatusCode);
+        NothingStored();
+        _factory.Blobs.Verify(b => b.GenerateUploadSasUri(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTimeOffset>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task TenantAdmin_UploadsUnderALegalHold_RecordedAndAudited()
+    {
+        var response = await Client(Tenant, ChoRolePermissions.TenantAdmin)
+            .PostAsync("/api/v1/member-documents", Upload(Pdf, "application/pdf", legalHold: true));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        _factory.Repository.Verify(r => r.CreateAsync(It.Is<MemberDocument>(d =>
+            d.LegalHold && d.LegalHoldSetBy == User && d.LegalHoldReason == "litigation 2026-17"
+            && d.LegalHoldHistory.Count == 1)), Times.Once);
+        Assert.Contains("legal hold Set", Assert.Single(_factory.Audit.Lines));
+    }
+
+    [Theory]
+    [InlineData(ChoRolePermissions.EnrollmentSpecialist)]
+    [InlineData(ChoRolePermissions.TenantAdmin)]
+    public async Task HeldDocument_CannotBeDeletedModifiedOrReplaced(string role)
+    {
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(legalHold: true));
+        var client = Client(Tenant, role);
+
+        var delete = await client.DeleteAsync($"/api/v1/member-documents/{DocId}");
+        var put = await client.PutAsJsonAsync($"/api/v1/member-documents/{DocId}", new { category = "Other" });
+        var patch = await client.PatchAsync($"/api/v1/member-documents/{DocId}", JsonContent.Create(new { category = "Other" }));
+        var refinalize = await client.PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
+
+        // No route deletes or edits a document (405: the path exists for GET only).
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, delete.StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, put.StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, patch.StatusCode);
+        // Before: finalize of a finalized document rewrote its size from the blob.
+        Assert.Equal(HttpStatusCode.Conflict, refinalize.StatusCode);
+        _factory.Repository.Verify(r => r.UpdateAsync(It.IsAny<MemberDocument>()), Times.Never);
+        _factory.Blobs.Verify(b => b.DeleteIfExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_uploads);
     }
 
     // ── Uploads ─────────────────────────────────────────────────────
