@@ -4,11 +4,12 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using CloudHealthOffice.PricingApi.Configuration;
 using CloudHealthOffice.PricingApi.Data;
-using CloudHealthOffice.PricingApi.Middleware;
+using CloudHealthOffice.PricingApi.Security;
 using CloudHealthOffice.PricingApi.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using MongoDB.Driver;
 using Serilog;
 
@@ -53,6 +54,22 @@ try
     builder.Services.AddScoped<IRepricingService, RepricingService>();
     builder.Services.AddSingleton<IFeeScheduleLoaderService, FeeScheduleLoaderService>();
 
+    // ── Authentication ──
+    // CHO callers (the portal, other services) present a CHO token; the tenant
+    // and the actor come from it. Unannotated GETs need a pricing read
+    // permission; every unannotated write needs platform:admin, because each
+    // write here changes global data (Medicare fee schedules) or the keys of
+    // every external customer.
+    builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+    {
+        auth.DefaultReadPermission = PricingApiAuth.PricePermissions;
+        auth.DefaultWritePermission = PricingApiAuth.GlobalWritePermission;
+    });
+
+    // External customers hold no CHO token. They keep their API key, now a
+    // scheme of its own ("PricingApiKey"), bound to its own credential tenant.
+    builder.Services.AddPricingApiCallers();
+
     // ── Controllers + JSON ──
     // PricingApi publishes camelCase properties + camelCase-cased enum names
     // (e.g. "medicareFeeSchedule") and omits null values. The shared helper is
@@ -85,8 +102,10 @@ try
                 **Getting started:**
                 1. Browse available fee schedules at GET /api/v1/fee-schedules (no auth needed)
                 2. Register for a free API key at https://cloudhealthoffice.com/pricing-api
-                3. Look up a code: GET /api/v1/lookup/99213
-                4. Reprice a claim: POST /api/v1/reprice
+                3. Look up a code: GET /api/v1/lookup/99213 (CMS Medicare schedules: no auth needed)
+                4. Reprice a claim: POST /api/v1/reprice (X-API-Key)
+
+                CHO callers use a CHO bearer token instead of an API key.
                 """,
             Contact = new Microsoft.OpenApi.Models.OpenApiContact
             {
@@ -107,6 +126,16 @@ try
             Name = "X-API-Key",
             Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
             Description = "API key obtained from https://cloudhealthoffice.com/pricing-api"
+        });
+
+        c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        {
+            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+            Name = "Authorization",
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "CHO access token (CHO callers only)"
         });
 
         c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
@@ -176,7 +205,7 @@ try
     }
 
     app.UseRateLimiter();
-    app.UseApiKeyAuthentication();
+    app.UseChoAuthentication();
     app.MapControllers();
     app.MapHealthChecks("/health");
 

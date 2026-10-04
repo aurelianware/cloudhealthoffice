@@ -1,6 +1,8 @@
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.PricingApi.Security;
 using CloudHealthOffice.PricingApi.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CloudHealthOffice.PricingApi.Controllers;
@@ -8,9 +10,15 @@ namespace CloudHealthOffice.PricingApi.Controllers;
 /// <summary>
 /// Claims repricing — the core value endpoint.
 /// POST /api/v1/reprice
+///
+/// Callers: external customers with an API key (metered against their monthly
+/// quota), or CHO callers holding contracts:read, claims:work or benefits:read.
+/// Repricing only reads fee schedules; it writes nothing but the key's usage.
 /// </summary>
 [ApiController]
 [Route("api/v1")]
+[PricingApiCaller]
+[PricingQuota]
 [Produces("application/json")]
 public class RepricingController : ControllerBase
 {
@@ -123,7 +131,9 @@ public class RepricingController : ControllerBase
 
     private async Task TrackUsageAsync(string endpoint, int lineCount, int responseTimeMs, bool success)
     {
-        if (HttpContext.Items.TryGetValue("ApiKeyRecord", out var keyObj) && keyObj is ApiKeyRecord apiKey)
+        if (PricingApiAuth.IsApiKeyCustomer(User) &&
+            HttpContext.Items.TryGetValue(PricingApiKeyAuthenticationHandler.ApiKeyRecordItem, out var keyObj) &&
+            keyObj is ApiKeyRecord apiKey)
         {
             await _apiKeyRepo.IncrementUsageAsync(apiKey.ApiKey, lineCount);
             await _usageRepo.RecordUsageAsync(new UsageRecord
@@ -142,17 +152,31 @@ public class RepricingController : ControllerBase
 /// <summary>
 /// Single-code lookup — the "hello world" endpoint for exploring fee schedules.
 /// GET /api/v1/lookup/{code}
+///
+/// Anonymous for CMS-published Medicare schedules (RBRVS, OPPS, MS-DRG): those
+/// rates are public federal data and carry nothing of any tenant or customer.
+/// Any other schedule (Medicaid, commercial) is served only to an API-key
+/// customer or a CHO caller holding a pricing permission, and reads as not
+/// found to everyone else.
 /// </summary>
 [ApiController]
 [Route("api/v1/lookup")]
 [Produces("application/json")]
+[AllowAnonymous]
 public class LookupController : ControllerBase
 {
     private readonly IRepricingService _repricingService;
+    private readonly IFeeScheduleRepository _feeScheduleRepo;
+    private readonly IAuthorizationService _authorization;
 
-    public LookupController(IRepricingService repricingService)
+    public LookupController(
+        IRepricingService repricingService,
+        IFeeScheduleRepository feeScheduleRepo,
+        IAuthorizationService authorization)
     {
         _repricingService = repricingService;
+        _feeScheduleRepo = feeScheduleRepo;
+        _authorization = authorization;
     }
 
     /// <summary>
@@ -172,7 +196,11 @@ public class LookupController : ControllerBase
         [FromQuery] string? locality = null,
         [FromQuery] bool facility = false)
     {
-        var result = await _repricingService.LookupCodeAsync(new CodeLookupRequest
+        var schedule = await _feeScheduleRepo.GetScheduleInfoAsync(feeScheduleId);
+        var visible = schedule is not null &&
+            await FeeScheduleVisibility.CanReadAsync(schedule, User, _authorization);
+
+        var result = !visible ? null : await _repricingService.LookupCodeAsync(new CodeLookupRequest
         {
             ProcedureCode = code.Trim(),
             FeeScheduleId = feeScheduleId,
@@ -200,17 +228,24 @@ public class LookupController : ControllerBase
 /// <summary>
 /// Fee schedule catalog — browse available fee schedules.
 /// GET /api/v1/fee-schedules  (no API key required)
+///
+/// Anonymous: the catalog is metadata about global schedules. Anonymous callers
+/// see the CMS-published Medicare schedules only; other schedule types need an
+/// API-key customer or a CHO caller holding a pricing permission.
 /// </summary>
 [ApiController]
 [Route("api/v1/fee-schedules")]
 [Produces("application/json")]
+[AllowAnonymous]
 public class FeeScheduleController : ControllerBase
 {
     private readonly IFeeScheduleRepository _feeScheduleRepo;
+    private readonly IAuthorizationService _authorization;
 
-    public FeeScheduleController(IFeeScheduleRepository feeScheduleRepo)
+    public FeeScheduleController(IFeeScheduleRepository feeScheduleRepo, IAuthorizationService authorization)
     {
         _feeScheduleRepo = feeScheduleRepo;
+        _authorization = authorization;
     }
 
     /// <summary>
@@ -221,7 +256,13 @@ public class FeeScheduleController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<List<FeeScheduleInfo>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListSchedules()
     {
-        var schedules = await _feeScheduleRepo.GetAllSchedulesAsync();
+        var all = await _feeScheduleRepo.GetAllSchedulesAsync();
+        var schedules = new List<FeeScheduleInfo>(all.Count);
+        foreach (var s in all)
+        {
+            if (await FeeScheduleVisibility.CanReadAsync(s, User, _authorization))
+                schedules.Add(s);
+        }
         return Ok(new ApiResponse<List<FeeScheduleInfo>> { Data = schedules });
     }
 
@@ -234,7 +275,7 @@ public class FeeScheduleController : ControllerBase
     public async Task<IActionResult> GetSchedule([FromRoute] string id)
     {
         var schedule = await _feeScheduleRepo.GetScheduleInfoAsync(id);
-        if (schedule is null)
+        if (schedule is null || !await FeeScheduleVisibility.CanReadAsync(schedule, User, _authorization))
         {
             return NotFound(new ApiResponse<object>
             {
@@ -244,5 +285,22 @@ public class FeeScheduleController : ControllerBase
         }
 
         return Ok(new ApiResponse<FeeScheduleInfo> { Data = schedule });
+    }
+}
+
+/// <summary>
+/// Who may read a fee schedule: anyone for CMS-published Medicare schedules;
+/// otherwise an API-key customer or a CHO caller holding a pricing permission.
+/// </summary>
+internal static class FeeScheduleVisibility
+{
+    public static async Task<bool> CanReadAsync(
+        FeeScheduleInfo schedule, System.Security.Claims.ClaimsPrincipal user, IAuthorizationService authorization)
+    {
+        if (PricingApiAuth.IsPublicCmsSchedule(schedule.Type))
+            return true;
+        if (user.Identity?.IsAuthenticated != true)
+            return false;
+        return (await authorization.AuthorizeAsync(user, PricingApiAuth.CallerPolicy)).Succeeded;
     }
 }

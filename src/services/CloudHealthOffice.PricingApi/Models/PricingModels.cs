@@ -218,6 +218,14 @@ public record ApiKeyRecord
     public int CurrentMonthUsage { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
     public bool IsActive { get; init; } = true;
+
+    /// <summary>Token subject of the platform admin who issued the key (null for keys issued before CHO tokens).</summary>
+    public string? CreatedBy { get; init; }
+
+    /// <summary>Token subject of the platform admin who deactivated the key.</summary>
+    public string? DeactivatedBy { get; init; }
+
+    public DateTimeOffset? DeactivatedAt { get; init; }
 }
 
 public record UsageRecord

@@ -50,22 +50,48 @@ EOF
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `GET` | `/api/v1/fee-schedules` | No | List available fee schedules |
-| `GET` | `/api/v1/fee-schedules/{id}` | No | Get fee schedule details |
-| `GET` | `/api/v1/lookup/{code}` | Yes | Look up a single procedure code |
-| `POST` | `/api/v1/reprice` | Yes | Reprice a claim |
-| `POST` | `/api/v1/reprice/batch` | Yes | Reprice up to 100 claims |
+| `GET` | `/api/v1/fee-schedules` | No (CMS Medicare schedules only) | List available fee schedules |
+| `GET` | `/api/v1/fee-schedules/{id}` | No (CMS Medicare schedules only) | Get fee schedule details |
+| `GET` | `/api/v1/lookup/{code}` | No (CMS Medicare schedules only) | Look up a single procedure code |
+| `POST` | `/api/v1/reprice` | API key, or CHO token | Reprice a claim |
+| `POST` | `/api/v1/reprice/batch` | API key, or CHO token | Reprice up to 100 claims |
+| `POST` | `/api/v1/signup` | CHO token, `platform:admin` | Issue a free-tier key |
+| `*` | `/api/v1/admin/*` | CHO token, `platform:admin` | API keys, usage, fee schedule loads |
 | `GET` | `/health` | No | Health check |
 
 ## Authentication
 
-Pass your API key in the `X-API-Key` header:
+Two schemes; a request carries exactly one (both together is 401).
+
+**External customers: `PricingApiKey`.** Pass your API key in the `X-API-Key` header:
 
 ```
 X-API-Key: cho_pk_a1b2c3d4e5f6...
 ```
 
-Register for a free key at [cloudhealthoffice.com/pricing-api](https://cloudhealthoffice.com/pricing-api).
+Request access at [cloudhealthoffice.com/pricing-api](https://cloudhealthoffice.com/pricing-api).
+The key is bound to its own credential tenant (`pricing-api-key:<fingerprint>`),
+never a CHO tenant; an `X-Tenant-ID` header that names another tenant is
+refused (403). A key holds no CHO permission: it can reprice (metered against
+its monthly quota) and read every fee schedule, nothing else.
+
+**CHO callers: CHO bearer token** (`AddChoAuthentication`). The tenant and the
+actor come from the token.
+
+| Action | Permission |
+|---|---|
+| Reprice, batch reprice, reading non-CMS schedules | `contracts:read`, `claims:work` or `benefits:read` (service tokens qualify); not metered |
+| Admin (API keys, usage reset, RBRVS/OPPS/DRG loads, demo seed) and signup | `platform:admin` (global data; tenant roles via `*:*` and service tokens never qualify) |
+
+The issuing or deactivating admin (token subject) is recorded on the key
+(`createdBy`, `deactivatedBy`) and every admin action is logged with `AUDIT`.
+The former `X-Admin-Secret` header is no longer read.
+
+**Anonymous.** The catalog and single-code lookup serve CMS-published Medicare
+schedules (RBRVS, OPPS, MS-DRG) without credentials: they are public federal
+data with nothing of any tenant or customer. Any other schedule type (Medicaid,
+commercial) reads as not found unless the caller is an API-key customer or a
+CHO caller with a pricing permission.
 
 ## Fee Schedules
 

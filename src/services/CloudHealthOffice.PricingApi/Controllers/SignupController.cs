@@ -1,25 +1,35 @@
 using System.Security.Cryptography;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.PricingApi.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CloudHealthOffice.PricingApi.Controllers;
 
 /// <summary>
-/// Public self-service signup for free-tier API keys.
-/// No authentication required — rate-limited by IP via the global rate limiter.
+/// Self-service signup for free-tier API keys.
+///
+/// No longer anonymous: anyone on the public ingress could mint unlimited keys
+/// under any organization name, and the per-minute limiter does not bound it
+/// (see README). No CHO surface calls it; the public site collects requests
+/// through its lead-capture form and keys are issued by a platform admin.
+/// Re-opening it anonymously is a product decision (with abuse controls).
 /// </summary>
 [ApiController]
 [Route("api/v1/signup")]
+[RequirePermission(PricingApiAuth.GlobalWritePermission)]
 [Produces("application/json")]
 public class SignupController : ControllerBase
 {
     private readonly IApiKeyRepository _apiKeyRepo;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<SignupController> _logger;
 
-    public SignupController(IApiKeyRepository apiKeyRepo, ILogger<SignupController> logger)
+    public SignupController(IApiKeyRepository apiKeyRepo, ICurrentActor actor, ILogger<SignupController> logger)
     {
         _apiKeyRepo = apiKeyRepo;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -46,13 +56,14 @@ public class SignupController : ControllerBase
             MonthlyLimit = 1_000,
             CurrentMonthUsage = 0,
             CreatedAt = DateTimeOffset.UtcNow,
-            IsActive = true
+            IsActive = true,
+            CreatedBy = _actor.UserId
         };
 
         await _apiKeyRepo.CreateAsync(record);
 
-        _logger.LogInformation("New free-tier signup: {Org} ({Email})",
-            SanitizeForLog(record.TenantName), SanitizeForLog(record.ContactEmail));
+        _logger.LogInformation("AUDIT pricing free-tier signup: {Org} ({Email}) by {Actor}",
+            SanitizeForLog(record.TenantName), SanitizeForLog(record.ContactEmail), _actor.UserId);
 
         return StatusCode(StatusCodes.Status201Created, new SignupResponse
         {

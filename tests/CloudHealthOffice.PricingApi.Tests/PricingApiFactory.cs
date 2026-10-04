@@ -1,7 +1,9 @@
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MongoDB.Driver;
@@ -23,6 +25,11 @@ public class PricingApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // Trust the development CHO issuers explicitly, so the tests do not
+        // depend on appsettings.Development.json.
+        builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(ChoDevelopmentAuth.Configuration("pricing-api")));
 
         builder.ConfigureServices(services =>
         {

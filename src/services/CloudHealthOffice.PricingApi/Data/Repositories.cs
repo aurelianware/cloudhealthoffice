@@ -25,6 +25,8 @@ public interface IApiKeyRepository
     Task IncrementUsageAsync(string apiKey, int lineCount);
     Task<ApiKeyRecord> CreateAsync(ApiKeyRecord record);
     Task ResetMonthlyUsageAsync();
+    Task<List<ApiKeyRecord>> ListAsync();
+    Task DeactivateAsync(string apiKey, string deactivatedBy, DateTimeOffset deactivatedAt);
 }
 
 public interface IUsageRepository
@@ -172,6 +174,18 @@ public class MongoApiKeyRepository : IApiKeyRepository
     {
         var update = Builders<ApiKeyRecord>.Update.Set(k => k.CurrentMonthUsage, 0);
         await _collection.UpdateManyAsync(_ => true, update);
+    }
+
+    public async Task<List<ApiKeyRecord>> ListAsync()
+        => await _collection.Find(_ => true).ToListAsync();
+
+    public async Task DeactivateAsync(string apiKey, string deactivatedBy, DateTimeOffset deactivatedAt)
+    {
+        var update = Builders<ApiKeyRecord>.Update
+            .Set(k => k.IsActive, false)
+            .Set(k => k.DeactivatedBy, deactivatedBy)
+            .Set(k => k.DeactivatedAt, deactivatedAt);
+        await _collection.UpdateOneAsync(k => k.ApiKey == apiKey, update);
     }
 }
 

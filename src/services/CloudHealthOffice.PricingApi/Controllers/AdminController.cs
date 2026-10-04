@@ -1,38 +1,42 @@
 using System.Security.Cryptography;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.PricingApi.Security;
 using CloudHealthOffice.PricingApi.Services;
 using Microsoft.AspNetCore.Mvc;
-using MongoDB.Driver;
 
 namespace CloudHealthOffice.PricingApi.Controllers;
 
 /// <summary>
-/// Admin API for managing API keys and usage.
-/// Protected by X-Admin-Secret header.
+/// Admin API for managing API keys, usage and the fee schedules.
 /// POST/GET/DELETE /api/v1/admin/api-keys
+///
+/// Platform only: the API keys belong to every external customer and the fee
+/// schedules are global (CMS Medicare data every caller prices against), so
+/// nothing here belongs to a CHO tenant. Every action needs platform:admin,
+/// which tenant roles (even through *:*), service tokens and API-key customers
+/// never hold. The acting admin comes from the CHO token and is recorded.
 /// </summary>
 [ApiController]
 [Route("api/v1/admin")]
+[RequirePermission(PricingApiAuth.GlobalWritePermission)]
 [Produces("application/json")]
 public class AdminController : ControllerBase
 {
     private readonly IApiKeyRepository _apiKeyRepo;
-    private readonly IMongoCollection<ApiKeyRecord> _apiKeyCollection;
-    private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<AdminController> _logger;
     private readonly IFeeScheduleLoaderService _feeScheduleLoader;
 
     public AdminController(
         IApiKeyRepository apiKeyRepo,
-        IMongoDatabase database,
-        IConfiguration configuration,
+        ICurrentActor actor,
         ILogger<AdminController> logger,
         IFeeScheduleLoaderService feeScheduleLoader)
     {
         _apiKeyRepo = apiKeyRepo;
-        _apiKeyCollection = database.GetCollection<ApiKeyRecord>("api_keys");
-        _configuration = configuration;
+        _actor = actor;
         _logger = logger;
         _feeScheduleLoader = feeScheduleLoader;
     }
@@ -43,13 +47,10 @@ public class AdminController : ControllerBase
     [HttpPost("api-keys")]
     [ProducesResponseType(typeof(ApiResponse<ApiKeyRecord>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateApiKey([FromBody] CreateApiKeyRequest request)
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
         if (string.IsNullOrWhiteSpace(request.TenantName))
         {
             return BadRequest(new ApiResponse<object>
@@ -59,14 +60,7 @@ public class AdminController : ControllerBase
             });
         }
 
-        var monthlyLimit = request.Tier switch
-        {
-            PricingTier.Free => 1_000,
-            PricingTier.Starter => 10_000,
-            PricingTier.Professional => 100_000,
-            PricingTier.Enterprise => int.MaxValue,
-            _ => 1_000
-        };
+        var monthlyLimit = PricingApiAuth.MonthlyLimit(request.Tier);
 
         var apiKey = "cho_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
 
@@ -79,12 +73,14 @@ public class AdminController : ControllerBase
             MonthlyLimit = monthlyLimit,
             CurrentMonthUsage = 0,
             CreatedAt = DateTimeOffset.UtcNow,
-            IsActive = true
+            IsActive = true,
+            CreatedBy = _actor.UserId
         };
 
         var created = await _apiKeyRepo.CreateAsync(record);
 
-        _logger.LogInformation("Admin created API key for tenant {Tenant} (tier={Tier})", request.TenantName, request.Tier);
+        _logger.LogInformation("AUDIT pricing api-key created for customer {Customer} (tier={Tier}) by {Actor}",
+            SanitizeForLog(request.TenantName), request.Tier, _actor.UserId);
 
         return StatusCode(StatusCodes.Status201Created, new ApiResponse<ApiKeyRecord> { Data = created });
     }
@@ -94,14 +90,11 @@ public class AdminController : ControllerBase
     /// </summary>
     [HttpGet("api-keys")]
     [ProducesResponseType(typeof(ApiResponse<List<ApiKeyRecord>>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListApiKeys()
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
-        var keys = await _apiKeyCollection.Find(_ => true).ToListAsync();
+        var keys = await _apiKeyRepo.ListAsync();
 
         // Redact keys — show only first 8 chars
         var redacted = keys.Select(k => k with { ApiKey = k.ApiKey[..Math.Min(8, k.ApiKey.Length)] + "..." }).ToList();
@@ -115,13 +108,10 @@ public class AdminController : ControllerBase
     [HttpDelete("api-keys/{apiKey}")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeactivateApiKey([FromRoute] string apiKey)
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
         var existing = await _apiKeyRepo.GetByKeyAsync(apiKey);
         if (existing is null)
         {
@@ -132,10 +122,10 @@ public class AdminController : ControllerBase
             });
         }
 
-        var update = Builders<ApiKeyRecord>.Update.Set(k => k.IsActive, false);
-        await _apiKeyCollection.UpdateOneAsync(k => k.ApiKey == apiKey, update);
+        await _apiKeyRepo.DeactivateAsync(apiKey, _actor.UserId, DateTimeOffset.UtcNow);
 
-        _logger.LogInformation("Admin deactivated API key for tenant {Tenant}", existing.TenantName);
+        _logger.LogInformation("AUDIT pricing api-key deactivated for customer {Customer} by {Actor}",
+            SanitizeForLog(existing.TenantName), _actor.UserId);
 
         return Ok(new ApiResponse<object> { Data = new { message = "API key deactivated.", tenantName = existing.TenantName } });
     }
@@ -145,16 +135,13 @@ public class AdminController : ControllerBase
     /// </summary>
     [HttpPost("api-keys/reset-usage")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ResetUsage()
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
         await _apiKeyRepo.ResetMonthlyUsageAsync();
 
-        _logger.LogInformation("Admin reset monthly usage for all API keys");
+        _logger.LogInformation("AUDIT pricing api-key usage reset for all keys by {Actor}", _actor.UserId);
 
         return Ok(new ApiResponse<object> { Data = new { message = "Monthly usage reset for all API keys." } });
     }
@@ -170,12 +157,10 @@ public class AdminController : ControllerBase
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UploadRbrvs(IFormFile file, [FromQuery] int year = 2025)
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
         var validationResult = ValidateCsvFile(file);
         if (validationResult is not null) return validationResult;
 
@@ -188,7 +173,7 @@ public class AdminController : ControllerBase
             }
 
             var codeCount = await _feeScheduleLoader.SeedMedicareRbrvs(tempPath, year);
-            _logger.LogInformation("Admin uploaded RBRVS {Year}: {Count} codes", year, codeCount);
+            _logger.LogInformation("AUDIT pricing global fee schedule RBRVS {Year} loaded: {Count} codes by {Actor}", year, codeCount, _actor.UserId);
 
             return Ok(new ApiResponse<object>
             {
@@ -218,12 +203,10 @@ public class AdminController : ControllerBase
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UploadOpps(IFormFile file, [FromQuery] int year = 2025)
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
         var validationResult = ValidateCsvFile(file);
         if (validationResult is not null) return validationResult;
 
@@ -236,7 +219,7 @@ public class AdminController : ControllerBase
             }
 
             var codeCount = await _feeScheduleLoader.SeedMedicareOpps(tempPath, year);
-            _logger.LogInformation("Admin uploaded OPPS {Year}: {Count} codes", year, codeCount);
+            _logger.LogInformation("AUDIT pricing global fee schedule OPPS {Year} loaded: {Count} codes by {Actor}", year, codeCount, _actor.UserId);
 
             return Ok(new ApiResponse<object>
             {
@@ -266,12 +249,10 @@ public class AdminController : ControllerBase
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UploadDrg(IFormFile file, [FromQuery] int year = 2025, [FromQuery] decimal baseRate = 6377.73m)
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
         var validationResult = ValidateCsvFile(file);
         if (validationResult is not null) return validationResult;
 
@@ -284,7 +265,7 @@ public class AdminController : ControllerBase
             }
 
             var codeCount = await _feeScheduleLoader.SeedMedicareDrg(tempPath, year, baseRate);
-            _logger.LogInformation("Admin uploaded DRG {Year}: {Count} codes (baseRate={BaseRate})", year, codeCount, baseRate);
+            _logger.LogInformation("AUDIT pricing global fee schedule DRG {Year} loaded: {Count} codes (baseRate={BaseRate}) by {Actor}", year, codeCount, baseRate, _actor.UserId);
 
             return Ok(new ApiResponse<object>
             {
@@ -312,15 +293,13 @@ public class AdminController : ControllerBase
     /// </summary>
     [HttpPost("fee-schedules/seed-demo")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> SeedDemoData()
     {
-        var authResult = ValidateAdminSecret();
-        if (authResult is not null) return authResult;
-
         await _feeScheduleLoader.SeedDemoDataAsync();
 
-        _logger.LogInformation("Admin re-seeded demo fee schedule data");
+        _logger.LogInformation("AUDIT pricing global demo fee schedules re-seeded by {Actor}", _actor.UserId);
 
         return Ok(new ApiResponse<object>
         {
@@ -354,35 +333,8 @@ public class AdminController : ControllerBase
         return null;
     }
 
-    /// <summary>
-    /// Validates the X-Admin-Secret header against the configured admin secret.
-    /// Returns null if valid, or an IActionResult to short-circuit if invalid.
-    /// </summary>
-    private IActionResult? ValidateAdminSecret()
-    {
-        var configuredSecret = _configuration.GetValue<string>("PricingApi:AdminSecret") ?? "";
-
-        if (string.IsNullOrEmpty(configuredSecret))
-        {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new ApiResponse<object>
-            {
-                Success = false,
-                Error = new ApiError { Code = "ADMIN_NOT_CONFIGURED", Message = "Admin API not configured." }
-            });
-        }
-
-        if (!Request.Headers.TryGetValue("X-Admin-Secret", out var providedSecret) ||
-            providedSecret.ToString() != configuredSecret)
-        {
-            return Unauthorized(new ApiResponse<object>
-            {
-                Success = false,
-                Error = new ApiError { Code = "UNAUTHORIZED", Message = "Invalid or missing admin secret." }
-            });
-        }
-
-        return null;
-    }
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }
 
 /// <summary>
@@ -390,6 +342,7 @@ public class AdminController : ControllerBase
 /// </summary>
 public record CreateApiKeyRequest
 {
+    // The issuing admin is the token subject (CreatedBy); no actor field is read from the body.
     public required string TenantName { get; init; }
     public string? ContactEmail { get; init; }
     public PricingTier Tier { get; init; } = PricingTier.Free;
