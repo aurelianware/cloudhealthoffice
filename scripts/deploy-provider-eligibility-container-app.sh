@@ -7,7 +7,9 @@
 #   az keyvault secret set --vault-name cho-kv \
 #     --name provider-eligibility-stedi-api-key --value "<stedi key>"
 #
-# Required: CHO_PROVIDER_ELIGIBILITY_TENANT_IDS, comma-separated CDO tenant ids.
+# Required: CHO_PROVIDER_ELIGIBILITY_TENANT_ID, the one CDO tenant the client
+# credential acts for (the tenant is bound to the credential, never chosen by
+# a request header).
 # Optional: CHO_PROVIDER_ELIGIBILITY_STEDI_ENV=test|production (default test).
 set -euo pipefail
 
@@ -17,7 +19,7 @@ KEY_VAULT_NAME="${CHO_PROVIDER_ELIGIBILITY_KEY_VAULT_NAME:-cho-kv}"
 TEMPLATE_FILE="${CHO_PROVIDER_ELIGIBILITY_TEMPLATE_FILE:-infrastructure/azure/provider-eligibility-container-app.bicep}"
 IMAGE_TAG="${CHO_PROVIDER_ELIGIBILITY_IMAGE_TAG:-sha-$(git rev-parse HEAD)}"
 STEDI_ENVIRONMENT="${CHO_PROVIDER_ELIGIBILITY_STEDI_ENV:-test}"
-TENANT_IDS="${CHO_PROVIDER_ELIGIBILITY_TENANT_IDS:-}"
+TENANT_ID="${CHO_PROVIDER_ELIGIBILITY_TENANT_ID:-}"
 REPOSITORY="cloudhealthoffice-provider-eligibility-api"
 
 if [[ "${1:-}" != "preview" && "${1:-}" != "deploy" ]]; then
@@ -30,21 +32,17 @@ if [[ "$STEDI_ENVIRONMENT" != "test" && "$STEDI_ENVIRONMENT" != "production" ]];
   exit 2
 fi
 
-tenant_json="["
-IFS=',' read -r -a tenants <<<"$TENANT_IDS"
-for tenant in "${tenants[@]}"; do
-  tenant="${tenant// /}"
-  [[ -z "$tenant" ]] && continue
-  if [[ ! "$tenant" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    echo "Invalid tenant id in CHO_PROVIDER_ELIGIBILITY_TENANT_IDS." >&2
-    exit 2
-  fi
-  [[ "$tenant_json" != "[" ]] && tenant_json+=","
-  tenant_json+="\"$tenant\""
-done
-tenant_json+="]"
-if [[ "$tenant_json" == "[]" ]]; then
-  echo "Set CHO_PROVIDER_ELIGIBILITY_TENANT_IDS to the CloudDentalOffice tenant id(s)." >&2
+if [[ -n "${CHO_PROVIDER_ELIGIBILITY_TENANT_IDS:-}" ]]; then
+  echo "CHO_PROVIDER_ELIGIBILITY_TENANT_IDS is no longer read: each credential is bound to one tenant." >&2
+  echo "Set CHO_PROVIDER_ELIGIBILITY_TENANT_ID to that tenant." >&2
+  exit 2
+fi
+if [[ -z "$TENANT_ID" ]]; then
+  echo "Set CHO_PROVIDER_ELIGIBILITY_TENANT_ID to the CloudDentalOffice tenant id." >&2
+  exit 2
+fi
+if [[ ! "$TENANT_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Invalid tenant id in CHO_PROVIDER_ELIGIBILITY_TENANT_ID." >&2
   exit 2
 fi
 
@@ -61,7 +59,7 @@ if [[ "$mode" == "preview" ]]; then
       stediEnvironment="$STEDI_ENVIRONMENT" \
       stediApiKey=preview-not-deployed \
       cdoClientApiKey=preview-not-deployed \
-      cdoTenantIds="$tenant_json" \
+      cdoTenantId="$TENANT_ID" \
     --result-format ResourceIdOnly
   exit 0
 fi
@@ -101,7 +99,7 @@ cat >"$parameters_file" <<EOF
   "stediEnvironment": { "value": "$STEDI_ENVIRONMENT" },
   "stediApiKey": { "value": "$stedi_api_key" },
   "cdoClientApiKey": { "value": "$cdo_client_api_key" },
-  "cdoTenantIds": { "value": $tenant_json }
+  "cdoTenantId": { "value": "$TENANT_ID" }
 }
 EOF
 
