@@ -16,6 +16,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
+// One-off migration (operator CLI): dotnet CHO.TerminologyService.dll --backfill-override-tenants
+// [--dry-run]. Sets the tenant on override map versions saved before versions carried one.
+if (args.Contains(CHO.TerminologyService.Migrations.BackfillOverrideVersionTenants.Switch))
+{
+    Environment.ExitCode = await CHO.TerminologyService.Migrations.BackfillOverrideVersionTenants.RunAsync(
+        args, builder.Configuration);
+    return;
+}
+
 // ──────────────────────────────────────────────────────
 // Logging
 // ──────────────────────────────────────────────────────

@@ -198,6 +198,27 @@ source_code,source_display,target_code,target_display,equivalence,priority,rule_
 The customer provides their AMA-licensed CPT crosswalk file; CHO's loader ingests it.
 CHO does not redistribute AMA-copyrighted content.
 
+## Operations: override map version tenants
+
+Override map versions saved before `MapVersion.TenantId` existed read as global
+(listed to every tenant). Backfill them once:
+
+```
+dotnet CHO.TerminologyService.dll --backfill-override-tenants --dry-run
+dotnet CHO.TerminologyService.dll --backfill-override-tenants
+```
+
+For each version without a tenant it reads the entries pointing at it: only
+global entries means a global map (left alone); only override entries of one
+tenant sets that tenant (compare-and-set); overrides of several tenants, or
+overrides mixed with global entries, are listed as ambiguous; a version with no
+entries (a later load re-pointed them) is listed for an operator to decide.
+Exit code 0 when nothing is left, 2 when versions are listed.
+
+Override loads now get version and entry ids that name the tenant
+(`override:<length>:<tenant>:<map>-<version>-<time>-<random>`), so two tenants
+loading the same file no longer collide.
+
 ## Kubernetes Deployment
 
 ```bash

@@ -33,7 +33,7 @@ public class CsvMapLoader : IMapLoader
         var result = new MapLoadResult();
         var entries = new List<ConceptMapEntry>();
 
-        var mapVersionId = $"{options.MapName}-{options.Version}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var mapVersionId = MapVersionIds.For(options);
 
         try
         {

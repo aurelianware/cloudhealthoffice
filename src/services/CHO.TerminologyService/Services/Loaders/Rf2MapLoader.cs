@@ -45,7 +45,7 @@ public class Rf2MapLoader : IMapLoader
         var entries = new List<ConceptMapEntry>();
         var errors = new List<string>();
 
-        var mapVersionId = $"{options.MapName}-{options.Version}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var mapVersionId = MapVersionIds.For(options);
 
         try
         {
