@@ -72,10 +72,39 @@ public class ChoRolePermissionsTests
         var granted = ChoRolePermissions.Expand([ChoRolePermissions.FinanceApprover]);
 
         Assert.Equal(
-            new[] { "finance:read", "payments:approve", "payments:read", "reports:financial" },
+            new[] { "billing:read", "finance:read", "payments:approve", "payments:read", "reports:financial" },
             granted.OrderBy(p => p, StringComparer.Ordinal));
         Assert.False(ChoRolePermissions.Satisfies(granted, "payments:run"));
         Assert.False(ChoRolePermissions.Satisfies(granted, "billing:run"));
+    }
+
+    [Theory]
+    // The checker reviews premium invoices and billing runs before releasing
+    // sponsor debits, but neither runs billing nor changes the ledger.
+    [InlineData(ChoRolePermissions.FinanceApprover, "billing:read", true)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "billing:run", false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "finance:write", false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "coverage:read", false)]
+    [InlineData(ChoRolePermissions.FinanceApprover, "enrollment:process", false)]
+    // Finance suspends delinquent sponsors (finance:write) but holds no
+    // enrollment or coverage permission; billing:read is what the billing
+    // reads of sponsors and coverage admit.
+    [InlineData(ChoRolePermissions.Finance, "billing:read", true)]
+    [InlineData(ChoRolePermissions.Finance, "finance:write", true)]
+    [InlineData(ChoRolePermissions.Finance, "coverage:read", false)]
+    [InlineData(ChoRolePermissions.Finance, "coverage:write", false)]
+    [InlineData(ChoRolePermissions.Finance, "enrollment:read", false)]
+    [InlineData(ChoRolePermissions.Finance, "enrollment:process", false)]
+    // Roles that still hold no billing permission.
+    [InlineData(ChoRolePermissions.ProviderRelations, "billing:read", false)]
+    [InlineData(ChoRolePermissions.MemberServices, "billing:read", false)]
+    [InlineData(ChoRolePermissions.ClaimsExaminer, "billing:read", false)]
+    [InlineData(ChoRolePermissions.ComplianceViewer, "billing:read", false)]
+    public void Billing_grants(string role, string permission, bool expected)
+    {
+        var granted = ChoRolePermissions.Expand([role]);
+
+        Assert.Equal(expected, ChoRolePermissions.Satisfies(granted, permission));
     }
 
     [Theory]

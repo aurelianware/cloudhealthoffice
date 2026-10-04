@@ -450,7 +450,8 @@ public class PremiumBillingService : IPremiumBillingService
     {
         if (!outcomes.TryGetValue(invoice.GroupNumber, out var outcome))
         {
-            outcome = await _sponsorClient.SuspendSponsorAsync(invoice.TenantId, invoice.GroupNumber);
+            outcome = await _sponsorClient.SuspendSponsorAsync(invoice.TenantId, invoice.GroupNumber,
+                $"Premium delinquency: invoice {invoice.InvoiceNumber} unpaid past its grace period");
             outcomes[invoice.GroupNumber] = outcome;
             if (outcome.Success)
                 result.SponsorsSuspended++;

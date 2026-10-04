@@ -94,9 +94,12 @@ public static class ChoRolePermissions
                 "encounters:read"
             ],
             // The checker: approves and releases payments someone else prepared.
+            // billing:read lets it review the premium invoices and billing runs
+            // behind the sponsor debits it releases; it still cannot run billing.
             [FinanceApprover] =
             [
                 "payments:read", "payments:approve",
+                "billing:read",
                 "finance:read", "reports:financial"
             ],
             [ComplianceOfficer] =

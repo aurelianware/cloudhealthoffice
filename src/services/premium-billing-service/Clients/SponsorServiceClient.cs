@@ -22,10 +22,14 @@ public interface ISponsorServiceClient
     Task<List<SponsorDto>> GetActiveSponsorsAsync(string tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sets the sponsor's status to Suspended. Never throws: the outcome says
+    /// Sets the sponsor's status to Suspended through sponsor-service's
+    /// status-only endpoint (<c>PUT /api/v1/sponsors/{group}/status</c>, which
+    /// admits finance:write), recording <paramref name="reason"/>. A sponsor that
+    /// is already Suspended counts as success. Never throws: the outcome says
     /// whether it worked and, if not, why (status code and body).
     /// </summary>
-    Task<SponsorSuspensionOutcome> SuspendSponsorAsync(string tenantId, string groupNumber, CancellationToken cancellationToken = default);
+    Task<SponsorSuspensionOutcome> SuspendSponsorAsync(
+        string tenantId, string groupNumber, string reason, CancellationToken cancellationToken = default);
 }
 
 public sealed class SponsorServiceClient : ISponsorServiceClient
@@ -107,7 +111,7 @@ public sealed class SponsorServiceClient : ISponsorServiceClient
     }
 
     public async Task<SponsorSuspensionOutcome> SuspendSponsorAsync(
-        string tenantId, string groupNumber, CancellationToken cancellationToken = default)
+        string tenantId, string groupNumber, string reason, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(tenantId))
             return SponsorSuspensionOutcome.Failed(null, "No tenant to name on the sponsor-service call");
@@ -115,9 +119,11 @@ public sealed class SponsorServiceClient : ISponsorServiceClient
         try
         {
             var client = _httpClientFactory.CreateClient(HttpClientName);
-            using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/sponsors/{Uri.EscapeDataString(groupNumber)}")
+            // The status-only endpoint: Finance holds finance:write, not the
+            // enrollment:process the full PUT /sponsors/{group} needs.
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/sponsors/{Uri.EscapeDataString(groupNumber)}/status")
             {
-                Content = JsonContent.Create(new { status = "Suspended" })
+                Content = JsonContent.Create(new { status = "Suspended", reason })
             };
             request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
             using var response = await client.SendAsync(request, cancellationToken);

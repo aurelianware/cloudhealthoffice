@@ -20,7 +20,9 @@ builder.Services.AddControllers()
 // Every caller presents a CHO token; the tenant and the acting user come from
 // it. Sponsors (employer groups) are enrollment data: reads need
 // enrollment:read, writes need enrollment:process. The compact member view
-// also admits members:read (see SponsorsController.GetMemberView).
+// also admits members:read (see SponsorsController.GetMemberView); billing
+// reads admit billing:read, and the status-only PUT {group}/status admits
+// finance:write (see SponsorsController.ChangeSponsorStatus).
 builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
     auth.DefaultReadPermission = "enrollment:read";

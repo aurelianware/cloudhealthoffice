@@ -130,6 +130,14 @@ once in `ChoRolePermissions.cs` and mirrored in tenant-service's
   transfer; TenantAdmin and PlatformAdmin through `*:*`. `*:read` does not
   satisfy it.
 
+Billing: Finance runs premium billing end to end with billing:read,
+billing:run and finance:write; it holds no coverage or enrollment permission,
+so the reads billing makes (sponsor list, coverage search) also admit
+billing:read and sponsor suspension has a status-only endpoint that admits
+finance:write (rows below). FinanceApprover holds billing:read (no
+billing:run, no finance:write) so it can review the premium invoices and
+billing runs behind the sponsor debits it releases.
+
 | Service | Default read | Default write | Stricter actions |
 |---|---|---|---|
 | accumulator-service | accumulators:read | accumulators:write | |
@@ -142,7 +150,7 @@ once in `ChoRolePermissions.cs` and mirrored in tenant-service's
 | claims-service | claims:read | claims:work | void (POST {id}/void, DELETE {id}, status → Voided): claims:void; adjustments: claims:adjust; work-queue override: claims:override-approve; work-queue assign: workqueue:assign; Cosmos partition migration: platform:admin |
 | claims-examiner-service | claims:read | claims:work | |
 | consent-service | consent:read | consent:write | |
-| coverage-service | coverage:read | coverage:write | |
+| coverage-service | coverage:read | coverage:write | coverage search (`GET /api/v1/coverage`, what premium billing reads to price a sponsor's invoice with the Finance user's forwarded token): coverage:read or billing:read. Every other read and all writes keep the defaults |
 | eligibility-service | eligibility:check | settings:manage | POST inquiries that only read (270-style) get eligibility:check |
 | encounter-service | encounters:read | encounters:write | |
 | encounter-submission-service | encounters:read | encounters:write | |
@@ -152,14 +160,14 @@ once in `ChoRolePermissions.cs` and mirrored in tenant-service's
 | idcard-service | members:read | members:write | |
 | member-document-service | members:read | members:write | |
 | personal-representative-service | members:read | members:write | |
-| premium-billing-service | billing:read | billing:run | ledger changes (record payment, void invoice, settle/return/cancel EFT draft) and process-delinquencies (suspends sponsors): finance:write. Releasing sponsor debits (POST eft/drafts, eft/drafts/batch, eft/nacha/generate, eft/nacha/generate-and-download): payments:approve, user tokens only, and maker-checker: the user who created or executed the invoice's billing run gets 403 "Separation of duties" (no tenant override). Draft reads: billing:read or payments:read. Member premium summary: billing:read or members:read. Stripe webhook: anonymous, Stripe signature required, tenant from the signed PaymentIntent metadata |
+| premium-billing-service | billing:read | billing:run | ledger changes (record payment, void invoice, settle/return/cancel EFT draft) and process-delinquencies (suspends sponsors through sponsor-service's status endpoint, forwarding the caller's token; a failed suspension is recorded on the invoice, answered 502 and retried on the next run): finance:write. Releasing sponsor debits (POST eft/drafts, eft/drafts/batch, eft/nacha/generate, eft/nacha/generate-and-download): payments:approve, user tokens only, and maker-checker: the user who created or executed the invoice's billing run gets 403 "Separation of duties" (no tenant override). Draft reads: billing:read or payments:read. Member premium summary: billing:read or members:read. Stripe webhook: anonymous, Stripe signature required, tenant from the signed PaymentIntent metadata |
 | provider-contracts-service | contracts:read | contracts:write | |
 | provider-service | providers:read | providers:write | credentialing decisions: providers:credential. Bank accounts are under dual control: a change (bank-account PUT/POST, or an account in a provider create/update body) is only proposed (providers:write) and stays pending until a different user approves it (`POST npi/{npi}/bank-account-changes/{id}/approve` or `/reject`: payments:approve, user tokens only; the proposer gets 403 "Separation of duties"; no tenant override). The masked read capitation uses returns the approved account only; the pending change is readable masked with payments:approve or providers:read |
 | provider-verification-service | providers:read | providers:credential | |
 | reference-data-service | reference-data:read | settings:manage | |
 | rfai-service | rfai:read | rfai:write | |
 | risk-adjustment-service | risk-adjustment:read | risk-adjustment:write | |
-| sponsor-service | enrollment:read | enrollment:process | |
+| sponsor-service | enrollment:read | enrollment:process | sponsor list, get and coverage-summary: enrollment:read or billing:read; member view: enrollment:read or members:read. Status only (`PUT /api/v1/sponsors/{group}/status`, body `{ status, reason }`, every other field ignored; premium billing suspends delinquent sponsors here): finance:write or enrollment:process. It allows Active → Suspended and Suspended → Active only (setting the current status again is a no-op 200; anything else 409; Terminated is terminal here), records reason, actor (token subject) and time on the sponsor with a status history entry, writes only those fields, and logs `AUDIT sponsor status ...`. The full `PUT /api/v1/sponsors/{group}` (any field, status included) and `DELETE` (terminate) stay enrollment:process |
 | tenant-service | (none: every action is annotated) | (none) | `{tenantId}` routes must match the token tenant unless the caller holds platform:tenants (audited). Own tenant record, operating mode, usage, role catalogue: any authenticated caller (billing ids and API key records only with settings:manage). Users, invitations (create/list/revoke/resend) and unlinking a user's Entra identity: users:manage; an invitation can never grant PlatformAdmin or cho.service. Tenant settings/configuration, API keys, billing: settings:manage. Operating-mode write: operating-mode:manage. Create/list/activate/suspend/delete tenants, status/tier changes, role catalogue writes: platform:tenants. `/internal/v1/identity/*` (including invitation redemption): `[RequireServiceClient("token-service")]`. `POST /internal/v1/tenants/{tenantId}/onboarding-complete` (pending → active only, own tenant, audited): `[RequireServiceClient("wf-tenant-onboarding")]`, the tenant-onboarding Argo workflow's workload token (docs/security/argo-service-tokens.md). Stripe webhook: anonymous, Stripe signature required |
 | trading-partner-service | trading-partners:read | settings:manage | |
 | CHO.TerminologyService | terminology:read | settings:manage | |

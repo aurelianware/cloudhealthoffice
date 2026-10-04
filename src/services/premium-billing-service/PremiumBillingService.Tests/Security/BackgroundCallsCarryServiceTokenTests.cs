@@ -42,11 +42,12 @@ public class BackgroundCallsCarryServiceTokenTests
     {
         using var host = SponsorHost();
 
-        var outcome = await host.Services.GetRequiredService<ISponsorServiceClient>().SuspendSponsorAsync(Tenant, "GRP-1");
+        var outcome = await host.Services.GetRequiredService<ISponsorServiceClient>()
+            .SuspendSponsorAsync(Tenant, "GRP-1", "Premium delinquency");
 
         outcome.Success.Should().BeTrue();
         host.Outbound.Last!.Method.Should().Be(HttpMethod.Put);
-        host.Outbound.Last.RequestUri!.AbsolutePath.Should().Be("/api/v1/sponsors/GRP-1");
+        host.Outbound.Last.RequestUri!.AbsolutePath.Should().Be("/api/v1/sponsors/GRP-1/status");
         NoCallerHost.TokenOf(host.Outbound.Last).Should().Be((Tenant, ClientId));
     }
 

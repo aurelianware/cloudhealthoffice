@@ -119,11 +119,76 @@ public class CoveragePipelineAuthTests : IClassFixture<CoveragePipelineAuthTests
     [Fact]
     public async Task RoleWithoutCoverageRead_IsForbidden()
     {
-        var client = Client("tenant-1", "dev-user", ChoRolePermissions.Finance);
+        // ProviderRelations holds neither coverage:read nor billing:read.
+        var client = Client("tenant-1", "dev-user", ChoRolePermissions.ProviderRelations);
 
-        var response = await client.GetAsync(ByIdPath);
+        var byId = await client.GetAsync(ByIdPath);
+        var search = await client.GetAsync(BillingSearchPath);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        byId.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        search.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _factory.Coverage.VerifyNoOtherCalls();
+    }
+
+    // ── premium billing reads coverage with the Finance user's token ────
+
+    /// <summary>The search premium-billing's CoverageServiceClient makes.</summary>
+    private const string BillingSearchPath = "/api/v1/coverage?groupNumber=GRP-1&activeOnly=true&pageSize=100";
+
+    private void SetupSearch()
+        => _factory.Coverage.Setup(r => r.SearchAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string?>()))
+            .ReturnsAsync(((IEnumerable<Coverage>)new List<Coverage>(), (string?)null));
+
+    [Fact]
+    public async Task Finance_CanSearchCoverageForBilling()
+    {
+        // Before: Finance (billing:read, no coverage:read) got 403 here, so a
+        // billing run started by a Finance user priced no sponsor.
+        SetupSearch();
+        var client = Client("tenant-1", "finance-user", ChoRolePermissions.Finance);
+
+        var response = await client.GetAsync(BillingSearchPath);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _factory.Coverage.Verify(r => r.SearchAsync("tenant-1", null, "GRP-1", null, true, 100, null), Times.Once);
+    }
+
+    [Fact]
+    public async Task BillingRead_AloneReachesOnlyTheSearch()
+    {
+        // A custom role holding billing:read only: the search, nothing else.
+        SetupSearch();
+        var token = ChoDevelopmentAuth.UserTokenIssuer()
+            .IssueUserToken("billing-clerk", "tenant-1", new[] { "BillingClerk" }, new[] { "billing:read" });
+        var client = _factory.CreateDefaultClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+
+        (await client.GetAsync(BillingSearchPath)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetAsync(ByIdPath)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.GetAsync("/api/v1/coverage/member/M1/active")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.GetAsync("/api/v1/coverage/group/GRP-1/summary")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Finance_CannotWriteCoverage()
+    {
+        var client = Client("tenant-1", "finance-user", ChoRolePermissions.Finance);
+
+        var create = await client.PostAsJsonAsync("/api/v1/coverage", new
+        {
+            memberId = "M1", groupNumber = "G", planId = "P", effectiveDate = DateTime.UtcNow.Date
+        });
+        var update = await client.PutAsJsonAsync(ByIdPath, new { planId = "P2" });
+        var delete = await client.DeleteAsync(ByIdPath);
+        var terminate = await client.PostAsJsonAsync("/api/v1/coverage/member/M1/terminate",
+            new { terminationDate = DateTime.UtcNow.Date, reason = "x" });
+        var pcp = await client.PutAsJsonAsync("/api/v1/coverage/member/M1/pcp", new { npi = "1234567893" });
+
+        foreach (var response in new[] { create, update, delete, terminate, pcp })
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden, response.RequestMessage!.RequestUri!.ToString());
+        _factory.Coverage.Verify(r => r.CreateAsync(It.IsAny<Coverage>()), Times.Never);
+        _factory.Coverage.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
     }
 
     [Fact]

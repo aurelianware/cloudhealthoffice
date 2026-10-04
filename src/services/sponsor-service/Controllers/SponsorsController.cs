@@ -14,7 +14,9 @@ namespace SponsorService.Controllers;
 /// Sponsor management API - manages employer groups purchasing health coverage.
 /// Data populated by X12 834 Enrollment transactions.
 /// Reads need enrollment:read and writes enrollment:process (the defaults set in
-/// Program.cs); the tenant and the acting user come from the CHO token.
+/// Program.cs); the tenant and the acting user come from the CHO token. Billing
+/// reads also admit billing:read, and the status-only endpoint admits
+/// finance:write (premium billing suspends delinquent sponsors).
 /// </summary>
 [ApiController]
 [Route("api/v1/sponsors")]
@@ -184,6 +186,9 @@ public class SponsorsController : ControllerBase
     /// Update sponsor information
     /// </summary>
     [HttpPut("{groupNumber}")]
+    // Every field, status included: enrollment work. Finance changes only the
+    // status, through PUT {groupNumber}/status.
+    [RequirePermission("enrollment:process")]
     [ProducesResponseType(typeof(Sponsor), 200)]
     [ProducesResponseType(404)]
     public async Task<IActionResult> UpdateSponsor(
@@ -210,6 +215,106 @@ public class SponsorsController : ControllerBase
         var updated = await _sponsorRepository.UpdateAsync(sponsor);
         _logger.LogInformation("Updated sponsor {GroupNumber}", SanitizeForLog(updated.GroupNumber));
         return Ok(updated);
+    }
+
+    /// <summary>
+    /// Change a sponsor's status and nothing else: premium billing suspends a
+    /// delinquent sponsor here, with the Finance user's token (or its own
+    /// service token on a scheduled run). Only <c>status</c> and <c>reason</c>
+    /// are read from the body; the actor and time come from the token and the
+    /// clock. Allowed changes: <see cref="SponsorStatusTransitions"/>. Setting
+    /// the current status again answers 200 with <c>changed: false</c>.
+    /// </summary>
+    [HttpPut("{groupNumber}/status")]
+    [RequirePermission("finance:write,enrollment:process")]
+    [ProducesResponseType(typeof(SponsorStatusChangeResponse), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    [ProducesResponseType(409)]
+    public async Task<IActionResult> ChangeSponsorStatus(
+        [FromRoute] string groupNumber,
+        [FromBody] ChangeSponsorStatusRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var to = request.Status!.Value;
+        var reason = request.Reason!.Trim();
+        if (reason.Length == 0)
+            return BadRequest(new { error = "A reason is required" });
+
+        var sponsor = await _sponsorRepository.GetByGroupNumberAsync(TenantId, groupNumber);
+        if (sponsor == null)
+            return NotFound(new { error = $"Sponsor with group number '{groupNumber}' not found" });
+
+        var from = sponsor.Status;
+        if (from == to)
+        {
+            _logger.LogInformation(
+                "AUDIT sponsor status unchanged: sponsor {GroupNumber} in tenant {TenantId} is already {Status}; " +
+                "requested by {UserId} (service: {IsService}), reason {Reason}",
+                SanitizeForLog(groupNumber), SanitizeForLog(TenantId), to,
+                SanitizeForLog(_actor.UserId), _actor.IsService, SanitizeForLog(reason));
+            return Ok(new SponsorStatusChangeResponse
+            {
+                GroupNumber = sponsor.GroupNumber,
+                PreviousStatus = from,
+                Status = to,
+                Changed = false
+            });
+        }
+
+        if (!SponsorStatusTransitions.IsAllowed(from, to))
+        {
+            _logger.LogWarning(
+                "AUDIT sponsor status change refused: {From} -> {To} for sponsor {GroupNumber} in tenant {TenantId} " +
+                "by {UserId} (service: {IsService}), reason {Reason}",
+                from, to, SanitizeForLog(groupNumber), SanitizeForLog(TenantId),
+                SanitizeForLog(_actor.UserId), _actor.IsService, SanitizeForLog(reason));
+            var allowed = SponsorStatusTransitions.AllowedFrom(from);
+            return Conflict(new
+            {
+                error = $"A sponsor that is {from} cannot be set to {to} here",
+                currentStatus = from.ToString(),
+                allowed = allowed.Select(a => a.ToString()).ToArray()
+            });
+        }
+
+        var change = new SponsorStatusChange
+        {
+            From = from,
+            To = to,
+            Reason = reason,
+            ChangedBy = _actor.UserId,
+            ChangedByIsService = _actor.IsService,
+            ChangedAt = DateTime.UtcNow
+        };
+
+        if (!await _sponsorRepository.UpdateStatusAsync(TenantId, sponsor.Id, change))
+        {
+            _logger.LogWarning(
+                "AUDIT sponsor status change refused: {From} -> {To} for sponsor {GroupNumber} in tenant {TenantId} " +
+                "by {UserId}: the status changed while the request was processed",
+                from, to, SanitizeForLog(groupNumber), SanitizeForLog(TenantId), SanitizeForLog(_actor.UserId));
+            return Conflict(new { error = "The sponsor's status changed while the request was processed; read it and try again" });
+        }
+
+        _logger.LogInformation(
+            "AUDIT sponsor status changed: {From} -> {To} for sponsor {GroupNumber} in tenant {TenantId} " +
+            "by {UserId} (service: {IsService}) at {ChangedAt:O}, reason {Reason}",
+            from, to, SanitizeForLog(groupNumber), SanitizeForLog(TenantId),
+            SanitizeForLog(change.ChangedBy), change.ChangedByIsService, change.ChangedAt, SanitizeForLog(reason));
+
+        return Ok(new SponsorStatusChangeResponse
+        {
+            GroupNumber = sponsor.GroupNumber,
+            PreviousStatus = from,
+            Status = to,
+            Changed = true,
+            Reason = reason,
+            ChangedBy = change.ChangedBy,
+            ChangedAt = change.ChangedAt
+        });
     }
 
     /// <summary>
@@ -313,6 +418,32 @@ public class UpdateSponsorRequest
     public BillingInfo? BillingInfo { get; set; }
     public BrokerInfo? Broker { get; set; }
     public OpenEnrollmentWindow? OpenEnrollment { get; set; }
+}
+
+/// <summary>
+/// Body of <c>PUT /api/v1/sponsors/{groupNumber}/status</c>. Only these two
+/// fields exist; anything else in the body is ignored.
+/// </summary>
+public class ChangeSponsorStatusRequest
+{
+    [Required]
+    public SponsorStatus? Status { get; set; }
+
+    [Required]
+    [StringLength(500, MinimumLength = 1)]
+    public string? Reason { get; set; }
+}
+
+public class SponsorStatusChangeResponse
+{
+    public string GroupNumber { get; set; } = string.Empty;
+    public SponsorStatus PreviousStatus { get; set; }
+    public SponsorStatus Status { get; set; }
+    /// <summary>False when the sponsor already had the requested status.</summary>
+    public bool Changed { get; set; }
+    public string? Reason { get; set; }
+    public string? ChangedBy { get; set; }
+    public DateTime? ChangedAt { get; set; }
 }
 
 public class SponsorListResponse

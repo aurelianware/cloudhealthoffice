@@ -703,8 +703,11 @@ public class UserContextServiceTests
         sut.HasPermission("payments:approve").Should().BeTrue();
         sut.HasPermission("finance:read").Should().BeTrue();
         sut.HasPermission("reports:financial").Should().BeTrue();
+        // Reviews premium billing before releasing sponsor debits; cannot run it.
+        sut.HasPermission("billing:read").Should().BeTrue();
         sut.HasPermission("payments:run").Should().BeFalse();
         sut.HasPermission("billing:run").Should().BeFalse();
+        sut.HasPermission("finance:write").Should().BeFalse();
     }
 
     [Fact]

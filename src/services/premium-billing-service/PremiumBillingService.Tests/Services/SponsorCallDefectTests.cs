@@ -245,6 +245,34 @@ public class SponsorCallDefectTests
     }
 
     [Fact]
+    public async Task Delinquency_SuspendsThroughTheStatusOnlyEndpoint_WithAReason()
+    {
+        // Before: PUT /api/v1/sponsors/{group} (every field, enrollment:process),
+        // which Finance cannot call, so every suspension by a Finance user failed
+        // with 403. The status endpoint admits finance:write and reads only
+        // { status, reason }.
+        var invoice = OverdueInvoice();
+        _invoices.Setup(r => r.GetOverdueAsync()).ReturnsAsync(new List<PremiumInvoice> { invoice });
+        string? body = null;
+        SponsorService(req =>
+        {
+            body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") };
+        });
+
+        var result = await Service().ProcessDelinquenciesAsync();
+
+        result.SponsorsSuspended.Should().Be(1);
+        var request = _sponsorRequests.Single();
+        request.Method.Should().Be(HttpMethod.Put);
+        request.RequestUri!.AbsolutePath.Should().Be("/api/v1/sponsors/GRP001/status");
+        using var json = System.Text.Json.JsonDocument.Parse(body!);
+        json.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("status", "reason");
+        json.RootElement.GetProperty("status").GetString().Should().Be("Suspended");
+        json.RootElement.GetProperty("reason").GetString().Should().Contain(invoice.InvoiceNumber);
+    }
+
+    [Fact]
     public async Task Delinquency_SuspendsEachSponsorOncePerRun()
     {
         var first = OverdueInvoice("inv-1");

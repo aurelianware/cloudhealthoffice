@@ -171,6 +171,7 @@ public static class StandardRoles
         Permissions = new List<string>
         {
             "payments:read", "payments:approve",
+            "billing:read",
             "finance:read", "reports:financial"
         }
     };

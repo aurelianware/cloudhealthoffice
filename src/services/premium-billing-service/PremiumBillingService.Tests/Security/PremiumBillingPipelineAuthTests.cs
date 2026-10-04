@@ -278,7 +278,9 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
     [Fact]
     public async Task RolesWithoutBilling_CannotReadOrRunBilling()
     {
-        foreach (var role in new[] { ChoRolePermissions.MemberServices, ChoRolePermissions.FinanceApprover, ChoRolePermissions.ClaimsExaminer })
+        // FinanceApprover now reads billing (below); ProviderRelations holds no
+        // billing permission at all.
+        foreach (var role in new[] { ChoRolePermissions.MemberServices, ChoRolePermissions.ProviderRelations, ChoRolePermissions.ClaimsExaminer })
         {
             var client = Client(Tenant, role);
             (await client.GetAsync("/api/v1/billing-runs")).StatusCode.Should().Be(HttpStatusCode.Forbidden, role);
@@ -286,6 +288,26 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
                 .Should().Be(HttpStatusCode.Forbidden, role);
         }
         _factory.Runs.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task FinanceApprover_ReadsBilling_ButCannotRunItOrChangeTheLedger()
+    {
+        // The checker reviews the invoices and runs behind the debits it releases.
+        var client = ClientAs(Approver, Tenant, ChoRolePermissions.FinanceApprover);
+
+        (await client.GetAsync("/api/v1/billing-runs")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.PostAsJsonAsync("/api/v1/billing-runs", new { billingPeriod = "2026-03-01T00:00:00Z" })).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden);
+        (await client.PostAsJsonAsync("/api/v1/billing-runs/execute", new { billingPeriod = "2026-03-01T00:00:00Z" })).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden);
+        (await client.PostAsync("/api/v1/premium-invoices/process-delinquencies", null)).StatusCode
+            .Should().Be(HttpStatusCode.Forbidden);
+        (await client.PostAsJsonAsync("/api/v1/premium-invoices/inv-1/payments", new { amount = 10m, paymentDate = "2026-03-05" }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _factory.Runs.Verify(r => r.CreateAsync(It.IsAny<BillingRun>()), Times.Never);
+        _factory.Invoices.Verify(r => r.UpdateAsync(It.IsAny<PremiumInvoice>()), Times.Never);
+        _factory.Sponsors.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -394,7 +416,7 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
             DueDate = DateTime.UtcNow.AddDays(-60), GracePeriodExpires = DateTime.UtcNow.AddDays(-5)
         };
         _factory.Invoices.Setup(r => r.GetOverdueAsync()).ReturnsAsync(new List<PremiumInvoice> { invoice });
-        _factory.Sponsors.Setup(s => s.SuspendSponsorAsync(Tenant, "GRP009", It.IsAny<CancellationToken>()))
+        _factory.Sponsors.Setup(s => s.SuspendSponsorAsync(Tenant, "GRP009", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(SponsorSuspensionOutcome.Failed(403, "sponsor-service answered 403 Forbidden"));
 
         var response = await Client(Tenant, ChoRolePermissions.Finance).PostAsync("/api/v1/premium-invoices/process-delinquencies", null);

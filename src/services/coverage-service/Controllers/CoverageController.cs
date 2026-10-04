@@ -49,6 +49,11 @@ public class CoverageController : ControllerBase
     /// Search coverage records by various criteria
     /// </summary>
     [HttpGet]
+    // Premium billing lists a sponsor group's active coverage to price its
+    // invoice (PremiumBillingService CoverageServiceClient), forwarding the
+    // Finance user's token: billing:read reads this search too. Every other
+    // coverage read and all writes keep the defaults.
+    [RequirePermission("coverage:read,billing:read")]
     [ProducesResponseType(typeof(CoverageListResponse), 200)]
     public async Task<IActionResult> SearchCoverage(
         [FromQuery] string? memberId = null,

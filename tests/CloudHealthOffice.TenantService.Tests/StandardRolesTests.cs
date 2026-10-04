@@ -23,6 +23,14 @@ public class StandardRolesTests
     [InlineData("ComplianceOfficer", "payer-to-payer:initiate", false)]
     [InlineData("UMCoordinator", "payer-to-payer:initiate", false)]
     [InlineData("ClaimsExaminer", "payer-to-payer:initiate", false)]
+    // FinanceApprover reviews billing before releasing sponsor debits.
+    [InlineData("FinanceApprover", "billing:read", true)]
+    [InlineData("FinanceApprover", "billing:run", false)]
+    [InlineData("FinanceApprover", "payments:approve", true)]
+    [InlineData("FinanceApprover", "payments:run", false)]
+    [InlineData("Finance", "billing:read", true)]
+    [InlineData("Finance", "payments:approve", false)]
+    [InlineData("ProviderRelations", "billing:read", false)]
     public void Catalogue_grants_match_the_shared_table(string role, string permission, bool expected)
     {
         StandardRoles.HasPermission([role], permission, StandardRoles.All).Should().Be(expected);
