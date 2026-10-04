@@ -397,7 +397,19 @@ builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCross
 });
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
-builder.Services.AddControllers()
+// ── Plan document locations ──────────────────────────────────────────────────
+// Plan document links are rendered by the portal, so a location must be an
+// https URL on an operator-allowed host (BenefitPlan:AllowedDocumentHosts,
+// empty by default) or an internal documentreference/{id}. Enforced on write
+// (400) and on read (bad stored values are withheld by the result filter).
+builder.Services.Configure<PlanDocumentLocationOptions>(
+    builder.Configuration.GetSection(PlanDocumentLocationOptions.SectionName));
+builder.Services.AddSingleton(sp => new PlanDocumentLocationPolicy(
+    sp.GetRequiredService<IOptions<PlanDocumentLocationOptions>>(),
+    sp.GetRequiredService<ILogger<PlanDocumentLocationPolicy>>()));
+builder.Services.AddScoped<PlanDocumentLocationResultFilter>();
+
+builder.Services.AddControllers(o => o.Filters.AddService<PlanDocumentLocationResultFilter>())
     .AddCloudHealthOfficeJsonOptions()
     // Register BenefitJsonConverter here (not via [JsonConverter] on Benefit) so
     // that WithoutSelf() can reliably strip it from a copy, avoiding the

@@ -279,20 +279,28 @@ Deleted, as recommended (the services already do this work):
    development workload tokens.
 4. **Argo.** Apply `infrastructure/argo-workflows/cho-workload-identity.yaml`
    before the workflows. The workflows run in `cho-workflows`; the registrations
-   are keyed on that namespace.
+   are keyed on that namespace. Apply `infrastructure/argo-events/sensor-rbac.yaml`
+   before the sensors: they run in `cloudhealthoffice` and submit into
+   `cho-workflows`.
 
 ## Limits and follow-ups
 
 - `x12-834-enrollment-import` still has a single `tenant-id` parameter; a
   per-tenant fan-out is still needed for several 834 feeds.
-- The Argo Events sensors (`rfai-sensor`, `sftp-sensor`) submit workflows into
-  namespace `cloudhealthoffice` while the WorkflowTemplates and service accounts
-  live in `cho-workflows`. Such workflows would not find their templates, and
-  their service account would not match a registration. The sensors need to
-  submit into `cho-workflows`.
-- `tenant-onboarding` has pre-existing defects outside the CHO calls: the
-  `send-welcome-notification` template it references does not exist, and
-  `create-api-keys` has two `args` keys (welcome-email text, not key creation).
+- Fixed: the Argo Events sensors (`rfai-sensor`, `sftp-sensor`) stay in
+  `cloudhealthoffice` with their EventSources but now submit their Workflows
+  into `cho-workflows`, naming the template's service account
+  (`wf-277-rfai`, `wf-278-ingest`, `argo-workflow-sa` for 275/276). They run as
+  `cho-workflow-sensor` (`infrastructure/argo-events/sensor-rbac.yaml`), which
+  may only create Workflows (and get WorkflowTemplates, for submit validation)
+  in `cho-workflows`. The `sftp-sensor` triggers no longer write the transaction
+  type into `sftp-host` / `tenant-id`; they pass the event's folder and pattern.
+- Fixed: `tenant-onboarding` no longer references the undefined
+  `send-welcome-notification` template, and the `create-api-keys` template (two
+  `args` keys, both a welcome-email stub that printed the temporary admin
+  password, SFTP password and API key to the pod log, and no key creation) is
+  removed with its step. There is no notification capability yet; a TODO in the
+  workflow says what a replacement needs.
 - Several steps install tools at run time from unpinned images (`alpine` +
   `apk add`, `curlimages/curl:latest`), and the 278 templates use `jq` in
   `curlimages/curl`, which does not ship it. A compromised step can obtain

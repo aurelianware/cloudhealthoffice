@@ -522,11 +522,7 @@
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var doc in _benefitView.Documents)
                                         {
-                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                       Href="@doc.Location" Target="_blank">
-                                                @(string.IsNullOrEmpty(doc.DisplayName) ? doc.DocType : doc.DisplayName)
-                                            </MudButton>
+                                            <PlanDocumentLinkButton Document="@doc" />
                                         }
                                     </div>
                                 }

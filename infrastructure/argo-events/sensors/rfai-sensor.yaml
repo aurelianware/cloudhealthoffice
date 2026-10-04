@@ -2,6 +2,13 @@
 #
 # Listens to: kafka-events EventSource (rfai-requests topic)
 # Triggers: x12-277-rfai WorkflowTemplate
+#
+# The Sensor runs in `cloudhealthoffice` next to its EventSources, but submits
+# Workflows into `cho-workflows`, where the WorkflowTemplates, the workload
+# service accounts and their token-service registrations live
+# (docs/security/argo-service-tokens.md). Its service account
+# `cho-workflow-sensor` may only create Workflows there
+# (infrastructure/argo-events/sensor-rbac.yaml).
 
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -14,7 +21,7 @@ metadata:
     app.kubernetes.io/part-of: cloudhealthoffice
 spec:
   template:
-    serviceAccountName: argo-events-sa
+    serviceAccountName: cho-workflow-sensor
     container:
       resources:
         requests:
@@ -53,10 +60,11 @@ spec:
               kind: Workflow
               metadata:
                 generateName: x12-277-rfai-
-                namespace: cloudhealthoffice
+                namespace: cho-workflows
                 labels:
                   trigger: "kafka-rfai"
               spec:
+                serviceAccountName: wf-277-rfai
                 workflowTemplateRef:
                   name: x12-277-rfai
                 arguments:
@@ -85,10 +93,11 @@ spec:
               kind: Workflow
               metadata:
                 generateName: x12-278-replay-
-                namespace: cloudhealthoffice
+                namespace: cho-workflows
                 labels:
                   trigger: "kafka-replay"
               spec:
+                serviceAccountName: wf-278-ingest
                 workflowTemplateRef:
                   name: x12-278-replay
                 arguments:

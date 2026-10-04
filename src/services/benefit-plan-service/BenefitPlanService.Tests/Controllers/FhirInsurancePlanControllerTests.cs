@@ -241,7 +241,8 @@ public sealed class FhirInsurancePlanControllerTests
         var repo = new InMemoryBenefitPlanRepository();
         var controller = new FhirInsurancePlanController(
             repo,
-            new FhirInsurancePlanProjector(),
+            // Fixtures use example.com document hosts; allow them explicitly.
+            new FhirInsurancePlanProjector(new FhirEndpointProjector(new PlanDocumentLocationPolicy(new[] { "example.com" }))),
             new StubOrganizationLookup(),
             new StubAcaLimits(),
             new PlanYearResolver(),

@@ -1,0 +1,66 @@
+@*
+    PlanDocumentLinkButton — one plan document (SBC, EOC, ...) from the
+    benefit-plan member view. The location comes from benefit-plan-service
+    data, so it is rendered as a link only when it is an https URL without
+    credentials or a plain relative path; anything else (javascript:, data:,
+    http:, protocol-relative //host, null from a server-side block) renders
+    as inert text. Links open in a new tab with rel="noopener noreferrer".
+*@
+
+@if (_href is not null)
+{
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.OpenInNew"
+               Href="@_href" Target="_blank" Rel="noopener noreferrer">
+        @Label
+    </MudButton>
+}
+else
+{
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="true"
+               StartIcon="@Icons.Material.Filled.LinkOff">
+        @Label (unavailable)
+    </MudButton>
+}
+
+@code {
+    [Parameter, EditorRequired] public PlanDocumentLink Document { get; set; } = default!;
+
+    private string? _href;
+
+    private string Label => string.IsNullOrEmpty(Document.DisplayName) ? Document.DocType : Document.DisplayName;
+
+    protected override void OnParametersSet() => _href = SafeHref(Document?.Location);
+
+    /// <summary>
+    /// Returns <paramref name="location"/> when it is safe to use as an href
+    /// (absolute https without userinfo, or a relative path with no scheme
+    /// and no authority), otherwise null.
+    /// </summary>
+    public static string? SafeHref(string? location)
+    {
+        if (string.IsNullOrWhiteSpace(location)) return null;
+        foreach (var c in location)
+        {
+            if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '\\') return null;
+        }
+
+        if (location.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return Uri.TryCreate(location, UriKind.Absolute, out var uri)
+                   && uri.Scheme == Uri.UriSchemeHttps
+                   && string.IsNullOrEmpty(uri.UserInfo)
+                   && !string.IsNullOrEmpty(uri.Host)
+                ? location
+                : null;
+        }
+
+        // Relative: no protocol-relative "//host", and no scheme (a ':'
+        // before the first '/', '?' or '#').
+        if (location.StartsWith("//", StringComparison.Ordinal)) return null;
+        var end = location.IndexOfAny(new[] { '/', '?', '#' });
+        var head = end < 0 ? location : location[..end];
+        if (head.Contains(':')) return null;
+        return Uri.IsWellFormedUriString(location, UriKind.Relative) ? location : null;
+    }
+}

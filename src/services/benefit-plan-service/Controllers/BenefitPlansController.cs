@@ -20,17 +20,22 @@ public class BenefitPlansController : ControllerBase
     private readonly BenefitPlanAdapterFactory _adapterFactory;
     private readonly ICurrentActor _actor;
     private readonly ILogger<BenefitPlansController> _logger;
+    private readonly PlanDocumentLocationPolicy _documentPolicy;
 
     public BenefitPlansController(
         IBenefitPlanService service,
         BenefitPlanAdapterFactory adapterFactory,
         ICurrentActor actor,
-        ILogger<BenefitPlansController> logger)
+        ILogger<BenefitPlansController> logger,
+        PlanDocumentLocationPolicy? documentPolicy = null)
     {
         _service = service;
         _adapterFactory = adapterFactory;
         _actor = actor;
         _logger = logger;
+        // No policy injected (unit tests): no hosts allowed, so only
+        // internal documentreference/{id} locations pass.
+        _documentPolicy = documentPolicy ?? PlanDocumentLocationPolicy.Empty;
     }
 
     /// <summary>
@@ -97,7 +102,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            PlanDocumentValidation.ValidateDocuments(plan.Documents);
+            _documentPolicy.ValidateDocuments(plan.Documents);
         }
         catch (ArgumentException ex)
         {
@@ -134,7 +139,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            PlanDocumentValidation.ValidateDocuments(plan.Documents);
+            _documentPolicy.ValidateDocuments(plan.Documents);
         }
         catch (ArgumentException ex)
         {
@@ -448,7 +453,7 @@ public class BenefitPlansController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        try { PlanDocumentValidation.ValidateDocuments(plan.Documents); }
+        try { _documentPolicy.ValidateDocuments(plan.Documents); }
         catch (ArgumentException ex) { return BadRequest(new { field = ex.ParamName, message = ex.Message }); }
 
         try
