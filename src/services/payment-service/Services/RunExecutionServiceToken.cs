@@ -138,19 +138,9 @@ public sealed class RunExecutionServiceTokenHandler : DelegatingHandler
         return base.SendAsync(request, cancellationToken);
     }
 
-    /// <summary>The same notion of "a CHO service" as ChoOutboundTokenHandler.</summary>
+    /// <summary>The same notion of "a CHO service" as ChoOutboundTokenHandler: the configured allowlist.</summary>
     private bool IsInternal(Uri? uri)
-    {
-        if (uri == null || !uri.IsAbsoluteUri)
-            return false;
-
-        var host = uri.Host;
-        var configured = _services.GetService<ChoAuthOptions>()?.InternalHostSuffixes ?? [];
-        return !host.Contains('.')
-               || host.EndsWith(".svc", StringComparison.OrdinalIgnoreCase)
-               || host.EndsWith(".svc.cluster.local", StringComparison.OrdinalIgnoreCase)
-               || configured.Any(s => host.EndsWith(s, StringComparison.OrdinalIgnoreCase));
-    }
+        => _services.GetService<ChoOutboundHosts>()?.IsChoService(uri) == true;
 }
 
 public static class RunExecutionHttpClientExtensions
