@@ -289,6 +289,7 @@ builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();
 builder.Services.AddScoped<IEdiOperationsService, EdiOperationsService>();
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
 builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService>();
+builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
 builder.Services.AddScoped<IWorkQueueService, WorkQueueService>();
 builder.Services.AddScoped<IEnrollmentOperationsService, EnrollmentOperationsService>();

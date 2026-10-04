@@ -1,0 +1,32 @@
+@* Header and section links shared by the premium billing pages. *@
+
+<MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
+    <MudIcon Icon="@Icons.Material.Filled.RequestQuote" Class="mr-2" Style="vertical-align: middle;" />
+    Premium Billing
+</MudText>
+<MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.5);" Class="mb-3">
+    Sponsor premium invoices from billing runs, collections, delinquency and auto-debit
+</MudText>
+
+<div class="d-flex flex-wrap gap-2 mb-4" data-testid="premium-billing-nav">
+    @foreach (var (key, href, label, icon) in Sections)
+    {
+        <MudButton Href="@href" Size="Size.Small" StartIcon="@icon"
+                   Variant="@(key == Active ? Variant.Filled : Variant.Outlined)"
+                   Color="Color.Primary">@label</MudButton>
+    }
+</div>
+
+@code {
+    /// <summary>runs, invoices, delinquency, eft or bank-accounts.</summary>
+    [Parameter] public string Active { get; set; } = "runs";
+
+    private static readonly (string Key, string Href, string Label, string Icon)[] Sections =
+    {
+        ("runs", "/premium-billing", "Billing Runs", Icons.Material.Filled.PlayCircle),
+        ("invoices", "/premium-billing/invoices", "Invoices", Icons.Material.Filled.Receipt),
+        ("delinquency", "/premium-billing/delinquency", "Delinquency", Icons.Material.Filled.Warning),
+        ("eft", "/premium-billing/eft", "Auto-Debit (EFT)", Icons.Material.Filled.AccountBalance),
+        ("bank-accounts", "/premium-billing/sponsor-bank-accounts", "Sponsor Bank Accounts", Icons.Material.Filled.Lock),
+    };
+}

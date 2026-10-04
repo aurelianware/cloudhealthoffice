@@ -2058,21 +2058,60 @@ public interface IPaymentRunService
 }
 
 // Premium Billing
+/// <summary>
+/// premium-billing-service (<c>Services:BillingService</c>, e.g.
+/// <c>http://premium-billing-service:8080/api</c>). Refusals throw
+/// <see cref="BillingApiException"/> with the service's reason; an unreachable
+/// service throws <see cref="ServiceUnavailableException"/>.
+/// </summary>
 public interface IPremiumBillingService
 {
-    Task<List<BillingCycle>> GetBillingCyclesAsync(string? sponsorId = null, string? status = null);
-    Task<BillingCycleDetails?> GetBillingCycleByIdAsync(string cycleId);
-    Task<string> GenerateInvoiceAsync(CreateInvoiceRequest request);
-    Task<List<PremiumRate>> GetPremiumRatesAsync(string? planId = null);
-    Task UpdatePremiumRateAsync(string rateId, decimal newRate, DateTime effectiveDate);
-    Task MarkCycleAsPaidAsync(string cycleId, DateTime paidDate);
-    Task<Stream> DownloadInvoiceAsync(string cycleId);
+    // Billing runs: reads billing:read, writes billing:run.
+    Task<List<BillingRun>> GetBillingRunsAsync(DateTime? from = null, DateTime? to = null);
+    Task<BillingRun?> GetBillingRunAsync(string id);
+    Task<BillingRun> CreateBillingRunAsync(CreateBillingRunRequest request);
+    Task<BillingRun> ExecuteBillingRunAsync(string id);
+    Task CancelBillingRunAsync(string id);
+
+    // Invoices: reads billing:read; payment and void finance:write; mark sent billing:run.
+    Task<List<PremiumInvoice>> SearchInvoicesAsync(string? groupNumber = null, string? status = null,
+        DateTime? periodFrom = null, DateTime? periodTo = null, int page = 1, int pageSize = 50);
+    Task<PremiumInvoice?> GetInvoiceAsync(string id);
+    Task<PremiumInvoice> RecordPaymentAsync(string invoiceId, RecordPremiumPaymentRequest request);
+    Task<PremiumInvoice> VoidInvoiceAsync(string invoiceId, string reason);
+    Task<PremiumInvoice> MarkInvoiceSentAsync(string invoiceId);
+    Task<PremiumAgingReport> GetAgingReportAsync();
+
+    /// <summary>finance:write. Returns the result for 200 and for 502 (some suspension failed).</summary>
+    Task<DelinquencyRunResult> ProcessDelinquenciesAsync();
+
+    // EFT: reads billing:read or payments:read; releases payments:approve (maker-checker).
+    Task<List<EftDraft>> GetDraftsByInvoiceAsync(string invoiceId);
+    Task<List<EftDraft>> GetDraftsForInvoicesAsync(IEnumerable<string> invoiceIds);
+    Task<EftDraft> InitiateDraftAsync(InitiateEftDraftRequest request);
+    Task<BatchEftResult> InitiateBatchDraftsAsync(InitiateBatchEftRequest request);
+    Task<NachaFileResult> GenerateNachaFileAsync();
 
     /// <summary>
     /// Member-scoped premium rollup consumed by the portal Member Details
     /// dialog (Premium tab). Returns null if the member has no invoices.
     /// </summary>
     Task<MemberPremiumSummary?> GetMemberPremiumSummaryAsync(string memberId);
+}
+
+/// <summary>
+/// Sponsor bank accounts in sponsor-service (<c>Services:SponsorService</c>),
+/// under dual control. Reads are masked to the last 4.
+/// </summary>
+public interface ISponsorBankAccountService
+{
+    /// <summary>The approved account and pending change (masked); null when the sponsor does not exist.</summary>
+    Task<SponsorBankAccountView?> GetBankAccountAsync(string groupNumber);
+    Task<List<SponsorBankAccountChange>> GetChangesAsync(string groupNumber);
+    Task<SponsorBankAccountChange> ProposeChangeAsync(string groupNumber, ProposeSponsorBankAccountRequest request);
+    Task<SponsorBankAccountChange> ApproveChangeAsync(string groupNumber, string changeId, string? reason);
+    Task<SponsorBankAccountChange> RejectChangeAsync(string groupNumber, string changeId, string? reason);
+    Task<SponsorBankAccountChange> CancelChangeAsync(string groupNumber, string changeId, string? reason);
 }
 
 // Reporting
@@ -2361,64 +2400,6 @@ public class CreatePaymentRunRequest
     public string? SponsorId { get; set; }
     public string? PlanId { get; set; }
     public List<string> ClaimStatuses { get; set; } = new() { "Approved" };
-}
-
-// ── PR15: Premium Billing ────────────────────────────────────────────────────
-
-public class BillingCycle
-{
-    public string CycleId { get; set; } = string.Empty;
-    public string SponsorId { get; set; } = string.Empty;
-    public string SponsorName { get; set; } = string.Empty;
-    public string BillingPeriod { get; set; } = string.Empty; // YYYY-MM
-    public string BillingFrequency { get; set; } = string.Empty; // Monthly, Quarterly
-    public DateTime DueDate { get; set; }
-    public decimal TotalPremium { get; set; }
-    public string Status { get; set; } = string.Empty; // Draft, Sent, Paid, Overdue, Void
-    public DateTime? PaidDate { get; set; }
-    public string? InvoiceNumber { get; set; }
-    public int MemberCount { get; set; }
-}
-
-public class BillingCycleDetails : BillingCycle
-{
-    public List<BillingLineItem> LineItems { get; set; } = new();
-    public decimal TaxAmount { get; set; }
-    public decimal AdjustmentAmount { get; set; }
-    public string? Notes { get; set; }
-}
-
-public class BillingLineItem
-{
-    public string PlanId { get; set; } = string.Empty;
-    public string PlanName { get; set; } = string.Empty;
-    public string CoverageLevel { get; set; } = string.Empty; // Employee, Employee+Spouse, Family
-    public int MemberCount { get; set; }
-    public decimal UnitRate { get; set; }
-    public decimal SubTotal { get; set; }
-    public string? AgeBand { get; set; }
-}
-
-public class PremiumRate
-{
-    public string RateId { get; set; } = string.Empty;
-    public string PlanId { get; set; } = string.Empty;
-    public string PlanName { get; set; } = string.Empty;
-    public string CoverageLevel { get; set; } = string.Empty;
-    public string? AgeBand { get; set; }
-    public decimal Rate { get; set; }
-    public DateTime EffectiveDate { get; set; }
-    public DateTime? TerminationDate { get; set; }
-    public bool IsEditing { get; set; } // UI state only
-    public decimal EditRate { get; set; } // UI edit buffer
-}
-
-public class CreateInvoiceRequest
-{
-    public string SponsorId { get; set; } = string.Empty;
-    public string BillingPeriod { get; set; } = string.Empty;
-    public DateTime DueDate { get; set; }
-    public string? Notes { get; set; }
 }
 
 // ── PR16: Enhanced Benefit Configuration ────────────────────────────────────

@@ -63,7 +63,7 @@ public class EndpointContractTests
             ["Services:AppealsService"] = "http://appeals-service/api",
             ["Services:CapitationService"] = "http://capitation-service/api",
             ["Services:PaymentService"] = "http://payment-service/api",
-            ["Services:BillingService"] = "http://billing-service/api",
+            ["Services:BillingService"] = "http://premium-billing-service/api",
         };
         foreach (var kv in overrides) defaults[kv.Key] = kv.Value;
         return new ConfigurationBuilder().AddInMemoryCollection(defaults).Build();

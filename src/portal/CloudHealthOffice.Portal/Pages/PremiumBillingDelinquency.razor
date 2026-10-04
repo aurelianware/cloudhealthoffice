@@ -1,0 +1,207 @@
+@page "/premium-billing/delinquency"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IPremiumBillingService BillingService
+@inject IUserContextService UserContextService
+
+<PageTitle>Premium Delinquency — Cloud Health Office</PageTitle>
+
+@* Delinquency processing marks invoices past their grace period delinquent and
+   suspends their sponsors in sponsor-service: finance:write. Reading the
+   delinquent invoices and failed suspensions: billing:read. *@
+<PermissionGate Permission="billing:read" RoleName="Finance">
+<PremiumBillingNav Active="delinquency" />
+<BillingError Error="_error" OnClose="() => _error = null" />
+
+@if (_canFinance)
+{
+    <MudPaper Class="pa-4 mb-4" data-testid="delinquency-run-panel"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,0,85,0.3); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Style="color: #ff0055; font-weight: 600;">Run delinquency processing</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(255,255,255,0.6);">
+            Marks every invoice past its grace period as Delinquent and suspends its sponsor in sponsor-service.
+            Suspensions that failed before are retried.
+        </MudText>
+        @if (!_confirming)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="() => _confirming = true" Disabled="_busy"
+                       data-testid="delinquency-start">Run delinquency processing</MudButton>
+        }
+        else
+        {
+            <div class="d-flex gap-2 align-center">
+                <MudText Typo="Typo.body2">Sponsors with delinquent invoices will be suspended. Continue?</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="Run" Disabled="_busy"
+                           data-testid="delinquency-confirm">Yes, process delinquencies</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="() => _confirming = false">Cancel</MudButton>
+            </div>
+        }
+    </MudPaper>
+}
+
+@if (_result != null)
+{
+    <MudPaper Class="pa-4 mb-4" data-testid="delinquency-result"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.25); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Result</MudText>
+        <div class="d-flex gap-4 mb-2">
+            <span>Marked delinquent: <strong data-testid="delinquent-count">@_result.DelinquentCount</strong></span>
+            <span>Sponsors suspended: <strong>@_result.SponsorsSuspended</strong></span>
+            <span>Earlier failures retried: <strong>@_result.SuspensionRetries</strong></span>
+            <span>Suspensions failed: <strong>@_result.SuspensionFailures.Count</strong></span>
+        </div>
+        @if (_result.SuspensionsFailed || _result.SuspensionFailures.Count > 0)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Class="mb-2" data-testid="suspension-failed-alert">
+                @_result.SuspensionFailures.Count sponsor suspension(s) FAILED in sponsor-service. The invoices are delinquent,
+                but these sponsors are still active. Each failure is recorded on its invoice and retried on the next run.
+            </MudAlert>
+            <MudSimpleTable Dense="true" Style="background: transparent;" data-testid="suspension-failures">
+                <thead><tr><th>Invoice</th><th>Group</th><th>HTTP</th><th>Error</th></tr></thead>
+                <tbody>
+                    @foreach (var f in _result.SuspensionFailures)
+                    {
+                        <tr>
+                            <td>@f.InvoiceNumber</td>
+                            <td>@f.GroupNumber</td>
+                            <td>@(f.StatusCode?.ToString() ?? "—")</td>
+                            <td>@f.Error</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Success" Dense="true">@(_result.Message ?? "Done")</MudAlert>
+        }
+    </MudPaper>
+}
+
+<MudText Typo="Typo.h6" Class="mb-2">Suspensions awaiting retry</MudText>
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+<MudTable Items="FailedSuspensions" Dense="true" T="PremiumInvoice" data-testid="pending-retries" Class="mb-6"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,0,85,0.3); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Invoice</MudTh>
+        <MudTh>Sponsor</MudTh>
+        <MudTh>Balance</MudTh>
+        <MudTh>Attempts</MudTh>
+        <MudTh>Last attempt</MudTh>
+        <MudTh>HTTP</MudTh>
+        <MudTh>Error</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.InvoiceNumber</MudTd>
+        <MudTd>@context.SponsorName (@context.GroupNumber)</MudTd>
+        <MudTd>@context.BalanceDue.ToString("C2")</MudTd>
+        <MudTd>@context.SponsorSuspension!.Attempts</MudTd>
+        <MudTd>@context.SponsorSuspension!.LastAttemptAt.ToLocalTime().ToString("g") @(context.SponsorSuspension!.LastAttemptBy is string by ? $"by {by}" : "")</MudTd>
+        <MudTd>@(context.SponsorSuspension!.LastStatusCode?.ToString() ?? "—")</MudTd>
+        <MudTd>@context.SponsorSuspension!.LastError</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No failed sponsor suspensions</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+<MudText Typo="Typo.h6" Class="mb-2">Delinquent invoices</MudText>
+<MudTable Items="_delinquent" Dense="true" T="PremiumInvoice" data-testid="delinquent-invoices"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Invoice</MudTh>
+        <MudTh>Sponsor</MudTh>
+        <MudTh>Due</MudTh>
+        <MudTh>Grace expired</MudTh>
+        <MudTh>Balance</MudTh>
+        <MudTh>Suspension</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.InvoiceNumber</MudTd>
+        <MudTd>@context.SponsorName (@context.GroupNumber)</MudTd>
+        <MudTd>@context.DueDate.ToString("MM/dd/yyyy")</MudTd>
+        <MudTd>@(context.GracePeriodExpires?.ToString("MM/dd/yyyy") ?? "—")</MudTd>
+        <MudTd>@context.BalanceDue.ToString("C2")</MudTd>
+        <MudTd>
+            @switch (context.SponsorSuspension?.State)
+            {
+                case "Suspended":
+                    <MudChip T="string" Size="Size.Small" Color="Color.Dark">Sponsor suspended</MudChip>
+                    break;
+                case "Failed":
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Failed — will retry</MudChip>
+                    break;
+                default:
+                    <MudChip T="string" Size="Size.Small">Not recorded</MudChip>
+                    break;
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No delinquent invoices</MudText>
+    </NoRecordsContent>
+    <PagerContent><MudTablePager /></PagerContent>
+</MudTable>
+</PermissionGate>
+
+@code {
+    private List<PremiumInvoice> _delinquent = new();
+    private DelinquencyRunResult? _result;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _confirming;
+    private bool _canFinance;
+    private Exception? _error;
+
+    private IEnumerable<PremiumInvoice> FailedSuspensions =>
+        _delinquent.Where(i => i.SponsorSuspension?.State == "Failed");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserContextService.GetCurrentUserAsync();
+        _canFinance = UserContextService.HasPermission("finance:write");
+        if (UserContextService.HasPermission("billing:read"))
+            await LoadDelinquent();
+        _loading = false;
+    }
+
+    private async Task LoadDelinquent()
+    {
+        _loading = true;
+        try
+        {
+            _delinquent = await BillingService.SearchInvoicesAsync(status: "Delinquent", pageSize: 200);
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task Run()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            _result = await BillingService.ProcessDelinquenciesAsync();
+            _confirming = false;
+            await LoadDelinquent();
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

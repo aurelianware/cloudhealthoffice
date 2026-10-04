@@ -2974,6 +2974,7 @@ public class PaymentRunService : IPaymentRunService
 
 public class PremiumBillingService : IPremiumBillingService
 {
+    internal const string ServiceName = "Premium Billing Service";
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PremiumBillingService> _logger;
@@ -2985,111 +2986,128 @@ public class PremiumBillingService : IPremiumBillingService
         _logger = logger;
     }
 
-    public async Task<List<BillingCycle>> GetBillingCyclesAsync(string? sponsorId = null, string? status = null)
+    private string Url(string path) => $"{_configuration["Services:BillingService"]}/v1/{path}";
+
+    private static string Esc(string value) => Uri.EscapeDataString(value);
+
+    private Task<T> SendAsync<T>(HttpMethod method, string path, object? body = null)
+        => BillingApiHttp.SendAsync<T>(_httpClient, _logger, ServiceName, method, Url(path), body);
+
+    // ── Billing runs ──
+
+    public async Task<List<BillingRun>> GetBillingRunsAsync(DateTime? from = null, DateTime? to = null)
     {
-        var baseUrl = _configuration["Services:BillingService"];
+        var query = new List<string>();
+        if (from.HasValue) query.Add($"from={from.Value:yyyy-MM-dd}");
+        if (to.HasValue) query.Add($"to={to.Value:yyyy-MM-dd}");
+        var path = "billing-runs" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        return await SendAsync<List<BillingRun>?>(HttpMethod.Get, path) ?? new();
+    }
+
+    public async Task<BillingRun?> GetBillingRunAsync(string id)
+    {
         try
         {
-            var url = $"{baseUrl}/v1/billing-runs" + (sponsorId != null ? $"?sponsorId={sponsorId}" : "");
-            var result = await _httpClient.GetFromJsonAsync<List<BillingCycle>>(url);
-            return result ?? new();
+            return await SendAsync<BillingRun>(HttpMethod.Get, $"billing-runs/{Esc(id)}");
         }
-        catch (HttpRequestException ex)
+        catch (BillingApiException ex) when (ex.StatusCode == 404)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
+            return null;
         }
     }
 
-    public async Task<BillingCycleDetails?> GetBillingCycleByIdAsync(string cycleId)
+    public Task<BillingRun> CreateBillingRunAsync(CreateBillingRunRequest request)
+        => SendAsync<BillingRun>(HttpMethod.Post, "billing-runs", request);
+
+    public Task<BillingRun> ExecuteBillingRunAsync(string id)
+        => SendAsync<BillingRun>(HttpMethod.Post, $"billing-runs/{Esc(id)}/execute");
+
+    public Task CancelBillingRunAsync(string id)
+        => SendAsync<object?>(HttpMethod.Post, $"billing-runs/{Esc(id)}/cancel");
+
+    // ── Invoices ──
+
+    public async Task<List<PremiumInvoice>> SearchInvoicesAsync(string? groupNumber = null, string? status = null,
+        DateTime? periodFrom = null, DateTime? periodTo = null, int page = 1, int pageSize = 50)
     {
-        var baseUrl = _configuration["Services:BillingService"];
+        var query = new List<string> { $"page={page}", $"pageSize={pageSize}" };
+        if (!string.IsNullOrWhiteSpace(groupNumber)) query.Add($"groupNumber={Esc(groupNumber.Trim())}");
+        if (!string.IsNullOrWhiteSpace(status)) query.Add($"status={Esc(status)}");
+        if (periodFrom.HasValue) query.Add($"periodFrom={periodFrom.Value:yyyy-MM-dd}");
+        if (periodTo.HasValue) query.Add($"periodTo={periodTo.Value:yyyy-MM-dd}");
+        return await SendAsync<List<PremiumInvoice>?>(HttpMethod.Get, "premium-invoices?" + string.Join("&", query)) ?? new();
+    }
+
+    public async Task<PremiumInvoice?> GetInvoiceAsync(string id)
+    {
         try
         {
-            return await _httpClient.GetFromJsonAsync<BillingCycleDetails>($"{baseUrl}/v1/billing-runs/{cycleId}");
+            return await SendAsync<PremiumInvoice>(HttpMethod.Get, $"premium-invoices/{Esc(id)}");
         }
-        catch (HttpRequestException ex)
+        catch (BillingApiException ex) when (ex.StatusCode == 404)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
+            return null;
         }
     }
 
-    public async Task<string> GenerateInvoiceAsync(CreateInvoiceRequest request)
+    public Task<PremiumInvoice> RecordPaymentAsync(string invoiceId, RecordPremiumPaymentRequest request)
+        => SendAsync<PremiumInvoice>(HttpMethod.Post, $"premium-invoices/{Esc(invoiceId)}/payments", request);
+
+    public Task<PremiumInvoice> VoidInvoiceAsync(string invoiceId, string reason)
+        => SendAsync<PremiumInvoice>(HttpMethod.Post, $"premium-invoices/{Esc(invoiceId)}/void", new { reason });
+
+    public Task<PremiumInvoice> MarkInvoiceSentAsync(string invoiceId)
+        => SendAsync<PremiumInvoice>(HttpMethod.Post, $"premium-invoices/{Esc(invoiceId)}/send");
+
+    public async Task<PremiumAgingReport> GetAgingReportAsync()
+        => await SendAsync<PremiumAgingReport?>(HttpMethod.Get, "premium-invoices/aging-report") ?? new();
+
+    public async Task<DelinquencyRunResult> ProcessDelinquenciesAsync()
     {
-        var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/billing-runs", request);
-            response.EnsureSuccessStatusCode();
-            return (await response.Content.ReadFromJsonAsync<CreateCycleResponse>())?.CycleId ?? string.Empty;
+            return await SendAsync<DelinquencyRunResult?>(HttpMethod.Post, "premium-invoices/process-delinquencies")
+                   ?? new DelinquencyRunResult();
         }
-        catch (HttpRequestException ex)
+        catch (BillingApiException ex) when (ex.StatusCode == 502 && !string.IsNullOrWhiteSpace(ex.Body))
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
+            // 502: invoices were marked delinquent but some sponsor suspensions
+            // failed in sponsor-service; the body says which.
+            var result = BillingApiHttp.TryDeserialize<DelinquencyRunResult>(ex.Body!);
+            if (result == null) throw;
+            result.SuspensionsFailed = true;
+            return result;
         }
     }
 
-    public async Task<List<PremiumRate>> GetPremiumRatesAsync(string? planId = null)
+    // ── EFT ──
+
+    public async Task<List<EftDraft>> GetDraftsByInvoiceAsync(string invoiceId)
+        => await SendAsync<List<EftDraft>?>(HttpMethod.Get, $"eft/drafts/invoice/{Esc(invoiceId)}") ?? new();
+
+    public async Task<List<EftDraft>> GetDraftsForInvoicesAsync(IEnumerable<string> invoiceIds)
     {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
+        // premium-billing-service has no "list drafts" endpoint, only drafts
+        // per invoice, so a run's drafts are read invoice by invoice.
+        using var gate = new SemaphoreSlim(4);
+        var tasks = invoiceIds.Distinct().Select(async id =>
         {
-            var url = $"{baseUrl}/v1/premium-invoices" + (planId != null ? $"?planId={planId}" : "");
-            var result = await _httpClient.GetFromJsonAsync<List<PremiumRate>>(url);
-            return result ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
+            await gate.WaitAsync();
+            try { return await GetDraftsByInvoiceAsync(id); }
+            finally { gate.Release(); }
+        }).ToList();
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(d => d).OrderByDescending(d => d.CreatedAt).ToList();
     }
 
-    public async Task UpdatePremiumRateAsync(string rateId, decimal newRate, DateTime effectiveDate)
-    {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
-        {
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/premium-invoices/{rateId}", new { Rate = newRate, EffectiveDate = effectiveDate });
-            response.EnsureSuccessStatusCode();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
-    }
+    public Task<EftDraft> InitiateDraftAsync(InitiateEftDraftRequest request)
+        => SendAsync<EftDraft>(HttpMethod.Post, "eft/drafts", request);
 
-    public async Task MarkCycleAsPaidAsync(string cycleId, DateTime paidDate)
-    {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/billing-runs/{cycleId}/mark-paid", new { PaidDate = paidDate });
-            response.EnsureSuccessStatusCode();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
-    }
+    public Task<BatchEftResult> InitiateBatchDraftsAsync(InitiateBatchEftRequest request)
+        => SendAsync<BatchEftResult>(HttpMethod.Post, "eft/drafts/batch", request);
 
-    public async Task<Stream> DownloadInvoiceAsync(string cycleId)
-    {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
-        {
-            return await _httpClient.GetStreamAsync($"{baseUrl}/v1/billing-runs/{cycleId}/invoice");
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
-    }
+    public Task<NachaFileResult> GenerateNachaFileAsync()
+        => SendAsync<NachaFileResult>(HttpMethod.Post, "eft/nacha/generate");
 
     public async Task<MemberPremiumSummary?> GetMemberPremiumSummaryAsync(string memberId)
     {
@@ -3107,8 +3125,169 @@ public class PremiumBillingService : IPremiumBillingService
             throw new ServiceUnavailableException("Billing Service", ex);
         }
     }
+}
 
-    private class CreateCycleResponse { public string CycleId { get; set; } = string.Empty; }
+// ── Sponsor bank accounts (sponsor-service) ─────────────────────────────
+
+public class SponsorBankAccountService : ISponsorBankAccountService
+{
+    internal const string ServiceName = "Sponsor Service";
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<SponsorBankAccountService> _logger;
+
+    public SponsorBankAccountService(HttpClient httpClient, IConfiguration configuration, ILogger<SponsorBankAccountService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    private string Url(string groupNumber, string path)
+        => $"{_configuration["Services:SponsorService"]}/sponsors/{Uri.EscapeDataString(groupNumber.Trim())}/{path}";
+
+    private Task<T> SendAsync<T>(HttpMethod method, string groupNumber, string path, object? body = null)
+        => BillingApiHttp.SendAsync<T>(_httpClient, _logger, ServiceName, method, Url(groupNumber, path), body);
+
+    public async Task<SponsorBankAccountView?> GetBankAccountAsync(string groupNumber)
+    {
+        try
+        {
+            return await SendAsync<SponsorBankAccountView>(HttpMethod.Get, groupNumber, "bank-account");
+        }
+        catch (BillingApiException ex) when (ex.StatusCode == 404)
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<SponsorBankAccountChange>> GetChangesAsync(string groupNumber)
+        => await SendAsync<List<SponsorBankAccountChange>?>(HttpMethod.Get, groupNumber, "bank-account-changes") ?? new();
+
+    public Task<SponsorBankAccountChange> ProposeChangeAsync(string groupNumber, ProposeSponsorBankAccountRequest request)
+        => SendAsync<SponsorBankAccountChange>(HttpMethod.Post, groupNumber, "bank-account-changes", request);
+
+    public Task<SponsorBankAccountChange> ApproveChangeAsync(string groupNumber, string changeId, string? reason)
+        => Decide(groupNumber, changeId, "approve", reason);
+
+    public Task<SponsorBankAccountChange> RejectChangeAsync(string groupNumber, string changeId, string? reason)
+        => Decide(groupNumber, changeId, "reject", reason);
+
+    public Task<SponsorBankAccountChange> CancelChangeAsync(string groupNumber, string changeId, string? reason)
+        => Decide(groupNumber, changeId, "cancel", reason);
+
+    private Task<SponsorBankAccountChange> Decide(string groupNumber, string changeId, string action, string? reason)
+        => SendAsync<SponsorBankAccountChange>(HttpMethod.Post, groupNumber,
+            $"bank-account-changes/{Uri.EscapeDataString(changeId)}/{action}",
+            new DecisionBody { Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim() });
+
+    private sealed class DecisionBody
+    {
+        public string? Reason { get; set; }
+    }
+}
+
+/// <summary>
+/// Request/response handling shared by the premium billing and sponsor
+/// bank-account clients: camelCase JSON with string enums, a refusal turned
+/// into <see cref="BillingApiException"/> carrying the service's reason, and
+/// an unreachable service into <see cref="ServiceUnavailableException"/>.
+/// </summary>
+internal static class BillingApiHttp
+{
+    internal static readonly JsonSerializerOptions JsonOptions = CreateOptions();
+
+    private static JsonSerializerOptions CreateOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
+
+    public static async Task<T> SendAsync<T>(HttpClient client, ILogger logger, string serviceName,
+        HttpMethod method, string url, object? body)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            using var request = new HttpRequestMessage(method, url);
+            if (body != null)
+                request.Content = JsonContent.Create(body, body.GetType(), options: JsonOptions);
+            response = await client.SendAsync(request);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Service unavailable: {ServiceName}", serviceName);
+            throw new ServiceUnavailableException(serviceName, ex);
+        }
+
+        using (response)
+        {
+            var text = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                var (title, detail) = ParseError(text);
+                logger.LogWarning("{ServiceName} refused {Method} {Path}: {Status} {Title}",
+                    serviceName, method, new Uri(url).AbsolutePath, (int)response.StatusCode, title);
+                throw new BillingApiException((int)response.StatusCode, title, detail) { Body = text };
+            }
+
+            if (string.IsNullOrWhiteSpace(text)) return default!;
+            return JsonSerializer.Deserialize<T>(text, JsonOptions)!;
+        }
+    }
+
+    public static T? TryDeserialize<T>(string text) where T : class
+    {
+        try { return JsonSerializer.Deserialize<T>(text, JsonOptions); }
+        catch (JsonException) { return null; }
+    }
+
+    /// <summary>
+    /// The services refuse with ProblemDetails (<c>title</c>, <c>detail</c>),
+    /// <c>{ error }</c>, <c>{ error, errors: [...] }</c> (bank-account
+    /// validation) or ValidationProblemDetails (<c>errors: { field: [...] }</c>).
+    /// </summary>
+    private static (string? Title, string? Detail) ParseError(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return (null, null);
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return (null, Truncate(text));
+
+            string? Str(string name) =>
+                root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+            var title = Str("title");
+            var detail = Str("detail") ?? Str("error") ?? Str("message");
+            if (root.TryGetProperty("errors", out var errors))
+            {
+                var items = errors.ValueKind switch
+                {
+                    JsonValueKind.Array => errors.EnumerateArray().Select(e => e.ToString()).ToList(),
+                    JsonValueKind.Object => errors.EnumerateObject().SelectMany(p =>
+                        p.Value.ValueKind == JsonValueKind.Array
+                            ? p.Value.EnumerateArray().Select(e => e.ToString())
+                            : new[] { p.Value.ToString() }).ToList(),
+                    _ => new List<string>()
+                };
+                var joined = string.Join(" ", items.Where(s => !string.IsNullOrWhiteSpace(s)));
+                if (joined.Length > 0) detail = string.IsNullOrEmpty(detail) ? joined : $"{detail}: {joined}";
+            }
+            return (title, detail);
+        }
+        catch (JsonException)
+        {
+            return (null, Truncate(text));
+        }
+    }
+
+    private static string Truncate(string text) => text.Length > 300 ? text[..300] : text;
 }
 
 // ── Reporting Service ───────────────────────────────────────────────────

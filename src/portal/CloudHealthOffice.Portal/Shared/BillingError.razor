@@ -1,0 +1,41 @@
+@*
+    Shows a premium billing / sponsor bank-account failure. Separation of
+    duties (403) and stale changes (409) get their own wording so the user
+    knows what to do next.
+*@
+
+@if (Error is BillingApiException api && api.IsSeparationOfDuties)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4" ShowCloseIcon="true"
+              CloseIconClicked="Close" data-testid="billing-error-sod">
+        <strong>Separation of duties.</strong> @api.UserMessage
+    </MudAlert>
+}
+else if (Error is BillingApiException stale && stale.IsStale)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-4" ShowCloseIcon="true"
+              CloseIconClicked="Close" data-testid="billing-error-stale">
+        <strong>Out of date.</strong> @stale.UserMessage
+    </MudAlert>
+}
+else if (Error is BillingApiException other)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true"
+              CloseIconClicked="Close" data-testid="billing-error">
+        @other.UserMessage
+    </MudAlert>
+}
+else if (Error != null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4" ShowCloseIcon="true"
+              CloseIconClicked="Close" data-testid="billing-error">
+        @Error.Message
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public Exception? Error { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private Task Close() => OnClose.InvokeAsync();
+}

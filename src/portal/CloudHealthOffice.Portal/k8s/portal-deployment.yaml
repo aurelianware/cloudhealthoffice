@@ -16,7 +16,7 @@ data:
   Services__TenantService: "http://tenant-service.cloudhealthoffice/api"
   Services__TokenService: "http://token-service.cloudhealthoffice"
   TokenService__Scope: "api://cfada1ac-f251-48ea-9330-39212aa4c862/Cho.Token"
-  Services__BillingService: "http://billing-service.cloudhealthoffice/api"
+  Services__BillingService: "http://premium-billing-service.cloudhealthoffice/api"
   Services__RfaiService: "http://rfai-service.cloudhealthoffice/api"
   Services__PricingApi: "http://pricing-api.cloudhealthoffice"
   Services__AppealsService: "http://appeals-service.cloudhealthoffice/api"
