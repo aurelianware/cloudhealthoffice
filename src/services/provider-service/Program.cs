@@ -11,18 +11,41 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
 using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.FieldProtection;
+using ProviderService.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers()
+// One-off migration (operator CLI): dotnet provider-service.dll --encrypt-bank-accounts
+// [--tenant <id>] [--dry-run]. Re-encrypts bank numbers stored before encryption.
+if (args.Contains(ProviderService.Migrations.EncryptProviderBankAccounts.Switch))
+{
+    Environment.ExitCode = await ProviderService.Migrations.EncryptProviderBankAccounts.RunAsync(
+        args, builder.Configuration, builder.Environment);
+    return;
+}
+
+builder.Services.AddControllers(options => options.Filters.Add<FieldProtectionExceptionFilter>())
     .AddCloudHealthOfficeJsonOptions()
     // Responses never carry full bank-account, routing or tax numbers.
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
         new ProviderService.Security.MaskedProviderBankAccountJsonConverter()));
 builder.Services.AddEndpointsApiExplorer();
+
+// ── Encryption at rest ─────────────────────────────────────────────
+// Bank routing, account and tax numbers (ProviderBankAccounts records and the
+// legacy Provider.BankAccount copy on provider documents and version rows) are
+// stored encrypted (ASP.NET Data Protection; key ring in Azure Blob Storage
+// wrapped by a Key Vault key, shared by every pod; a local key ring in
+// Development/Testing). Without FieldProtection:KeyRing elsewhere, writes of
+// those numbers fail (503) instead of storing plaintext.
+// See docs/security/bank-account-data.md.
+var keyRing = builder.Services.AddChoFieldProtection(
+    builder.Configuration, builder.Environment, ProviderBankAccountProtection.Purpose);
+Console.WriteLine($"Field protection key ring: {keyRing}");
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -53,7 +76,11 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
     // MongoDB Registration
     
-    builder.Services.AddScoped<IProviderRepository, ProviderRepositoryMongo>();
+    builder.Services.AddScoped<ProviderRepositoryMongo>();
+    builder.Services.AddScoped<IProviderRepository>(sp => new ProtectedProviderRepository(
+        sp.GetRequiredService<ProviderRepositoryMongo>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderRepository>>()));
     builder.Services.AddScoped<IOrganizationRepository, OrganizationRepositoryMongo>();
     builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
     builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
@@ -61,7 +88,11 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventPublisher, MongoCredentialingEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventRepository, MongoCredentialingEventRepository>();
-    builder.Services.AddScoped<IProviderBankAccountRepository, MongoProviderBankAccountRepository>();
+    builder.Services.AddScoped<MongoProviderBankAccountRepository>();
+    builder.Services.AddScoped<IProviderBankAccountRepository>(sp => new ProtectedProviderBankAccountRepository(
+        sp.GetRequiredService<MongoProviderBankAccountRepository>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderBankAccountRepository>>()));
     builder.Services.AddHostedService<ProviderQueryIndexInitializer>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
     builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
@@ -87,7 +118,11 @@ else
     });
 
     // Repositories
-    builder.Services.AddScoped<IProviderRepository, ProviderRepository>();
+    builder.Services.AddScoped<ProviderRepository>();
+    builder.Services.AddScoped<IProviderRepository>(sp => new ProtectedProviderRepository(
+        sp.GetRequiredService<ProviderRepository>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderRepository>>()));
     builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();
     builder.Services.AddScoped<IProviderTransitionRepository, CosmosProviderTransitionRepository>();
     // Cosmos-only deployments don't have a provisioned events stream; the
@@ -99,7 +134,11 @@ else
     builder.Services.AddScoped<ICredentialingEventPublisher, NoopCredentialingEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventRepository, CosmosCredentialingEventRepository>();
     // Needs a "ProviderBankAccounts" container (partition key /tenantId).
-    builder.Services.AddScoped<IProviderBankAccountRepository, CosmosProviderBankAccountRepository>();
+    builder.Services.AddScoped<CosmosProviderBankAccountRepository>();
+    builder.Services.AddScoped<IProviderBankAccountRepository>(sp => new ProtectedProviderBankAccountRepository(
+        sp.GetRequiredService<CosmosProviderBankAccountRepository>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderBankAccountRepository>>()));
 }
 
 // Provider versioning service (5.1 — provider identity & versioning)

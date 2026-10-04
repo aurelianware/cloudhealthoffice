@@ -98,6 +98,12 @@ builder.Services.AddScoped<ICapitationRunService, CapitationRunService>();
 builder.Services.AddSingleton<INachaCreditFileService, NachaCreditFileService>();
 builder.Services.AddSingleton<IStripeTransferClient, StripeTransferClient>();
 builder.Services.AddScoped<IStripeConnectService, StripeConnectService>();
+// Full provider routing/account numbers for NACHA credits come from
+// provider-service's service-only read of the active approved account (dual
+// control there), fetched with capitation-service's own token after the
+// releasing user passed payments:approve and separation of duties. No approved
+// account or a refusal leaves the disbursement needing attention.
+builder.Services.AddScoped<IProviderBankAccountSource, HttpProviderBankAccountSource>();
 builder.Services.AddScoped<ICapitationDisbursementService, CapitationDisbursementService>();
 builder.Services.AddSingleton<ICapitationEraService, CapitationEraService>();
 
@@ -110,6 +116,15 @@ builder.Services.AddHttpClient("CoverageService", client =>
 });
 
 builder.Services.AddHttpClient("ProviderService", client =>
+{
+    var providerServiceUrl = builder.Configuration["ProviderService:BaseUrl"] ?? "http://provider-service:8080";
+    client.BaseAddress = new Uri(providerServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// provider-service's full bank-account read: HttpProviderBankAccountSource sets
+// capitation-service's own service token on every request (never the user's).
+builder.Services.AddHttpClient(HttpProviderBankAccountSource.HttpClientName, client =>
 {
     var providerServiceUrl = builder.Configuration["ProviderService:BaseUrl"] ?? "http://provider-service:8080";
     client.BaseAddress = new Uri(providerServiceUrl);

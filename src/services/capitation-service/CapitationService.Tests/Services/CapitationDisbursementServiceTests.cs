@@ -53,7 +53,24 @@ public class CapitationDisbursementServiceTests
             _httpClientFactory.Object,
             configuration,
             TestSeparationOfDuties.Create(runs: _runRepo.Object),
+            _bankAccountSource = new FactoryBackedProviderBankAccountSource(_httpClientFactory.Object),
             logger.Object);
+    }
+
+    private readonly FactoryBackedProviderBankAccountSource _bankAccountSource;
+
+    /// <summary>Statements the NACHA file's pending disbursements belong to (separation of duties is checked on them).</summary>
+    private void StatementsFor(IEnumerable<CapitationDisbursement> disbursements)
+    {
+        foreach (var d in disbursements)
+        {
+            if (string.IsNullOrEmpty(d.StatementId)) d.StatementId = "stmt-" + d.Id;
+            _statementRepo.Setup(r => r.GetByIdAsync(d.StatementId)).ReturnsAsync(new CapitationStatement
+            {
+                Id = d.StatementId, ProviderNPI = d.ProviderNPI, Status = CapitationStatementStatus.PaymentInitiated,
+                NetPayable = d.Amount, CreatedBy = "maker-1"
+            });
+        }
     }
 
     private static CapitationStatement CreateApprovedStatement(
@@ -392,6 +409,7 @@ public class CapitationDisbursementServiceTests
                      Method = DisbursementMethod.NachaCredit, Amount = 8000, Status = DisbursementStatus.Pending }
         };
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(disbursements);
+        StatementsFor(disbursements);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
 
@@ -438,6 +456,7 @@ public class CapitationDisbursementServiceTests
             new() { Id = "d2", ProviderNPI = "2222222222", Method = DisbursementMethod.NachaCredit, Amount = 3000, Status = DisbursementStatus.Pending }
         };
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(disbursements);
+        StatementsFor(disbursements);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
 
@@ -456,13 +475,16 @@ public class CapitationDisbursementServiceTests
                 It.IsAny<NachaCreditFileOptions>()))
             .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
 
-        await _service.GenerateNachaCreditFileAsync("releaser-1");
+        var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
-        // Only d1 should be updated (d2 skipped due to missing bank)
+        // Only d1 is submitted; d2 is left out of the file, stays Pending and needs attention.
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
             d.Id == "d1" && d.Status == DisbursementStatus.Submitted)), Times.Once);
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
-            d.Id == "d2")), Times.Never);
+            d.Id == "d2" && d.Status != DisbursementStatus.Pending)), Times.Never);
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
+            d.Id == "d2" && d.Status == DisbursementStatus.Pending && d.ErrorMessage!.Contains("Needs attention"))), Times.Once);
+        result.NeedsAttention.Should().ContainSingle(a => a.DisbursementId == "d2" && a.ProviderNPI == "2222222222");
     }
 
     [Fact]
@@ -474,6 +496,7 @@ public class CapitationDisbursementServiceTests
             new() { Id = "d2", ProviderNPI = "1234567890", Method = DisbursementMethod.StripeConnect, Amount = 3000, Status = DisbursementStatus.Pending }
         };
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(disbursements);
+        StatementsFor(disbursements);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
 

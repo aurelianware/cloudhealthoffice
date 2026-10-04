@@ -254,6 +254,9 @@ public static class BankAccountMasking
             && string.Equals(ma.AccountNumberLast4 ?? string.Empty, mb.AccountNumberLast4 ?? string.Empty, StringComparison.Ordinal);
     }
 
+    /// <summary>The last 4 characters; nothing for a value still encrypted (<c>enc:v1:...</c>), whose tail means nothing.</summary>
     private static string? Last4(string? value)
-        => string.IsNullOrEmpty(value) ? null : value.Length >= 4 ? value[^4..] : value;
+        => string.IsNullOrEmpty(value) || value.StartsWith(CloudHealthOffice.FieldProtection.DataProtectionFieldProtector.Prefix, StringComparison.Ordinal)
+            ? null
+            : value.Length >= 4 ? value[^4..] : value;
 }

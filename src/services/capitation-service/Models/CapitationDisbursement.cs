@@ -329,6 +329,25 @@ public class NachaCreditFileResult
     /// When the file was generated
     /// </summary>
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Pending NACHA disbursements left out of the file because something needs
+    /// fixing first (no approved bank account in provider-service, or the
+    /// full-number read was refused or failed). They stay Pending.
+    /// </summary>
+    public List<DisbursementAttentionItem> NeedsAttention { get; set; } = new();
+}
+
+/// <summary>
+/// A statement or disbursement that could not be paid for a reason someone has
+/// to fix (as opposed to a normal skip such as a provider without EFT).
+/// </summary>
+public class DisbursementAttentionItem
+{
+    public string? StatementId { get; set; }
+    public string? DisbursementId { get; set; }
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -375,4 +394,7 @@ public class BatchDisbursementResult
     /// Generated NACHA credit file (if any disbursements used NACHA)
     /// </summary>
     public NachaCreditFileResult? NachaFile { get; set; }
+
+    /// <summary>Statements not paid for a reason someone has to fix (also counted in Errors).</summary>
+    public List<DisbursementAttentionItem> NeedsAttention { get; set; } = new();
 }

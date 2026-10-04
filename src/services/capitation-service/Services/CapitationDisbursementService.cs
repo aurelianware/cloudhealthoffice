@@ -70,6 +70,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly IPaymentSeparationOfDuties _separationOfDuties;
+    private readonly IProviderBankAccountSource _bankAccounts;
     private readonly ILogger<CapitationDisbursementService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -86,9 +87,11 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         IPaymentSeparationOfDuties separationOfDuties,
+        IProviderBankAccountSource bankAccounts,
         ILogger<CapitationDisbursementService> logger)
     {
         _separationOfDuties = separationOfDuties;
+        _bankAccounts = bankAccounts;
         _disbursementRepository = disbursementRepository;
         _statementRepository = statementRepository;
         _runRepository = runRepository;
@@ -113,9 +116,12 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         // Maker-checker: whoever prepared the statement cannot release its payment.
         await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, request.InitiatedBy, PaymentAction.Release);
 
-        // Fetch provider bank account info
-        var bankAccount = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
-        if (bankAccount == null || !bankAccount.EftEnabled)
+        // The provider's approved account, masked (method, Stripe id, last 4).
+        // Full numbers are read only when a NACHA file is built.
+        var (bankAccount, problem) = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
+        if (bankAccount == null)
+            throw new InvalidOperationException(problem);
+        if (!bankAccount.EftEnabled)
             throw new InvalidOperationException($"EFT not enabled for provider {statement.ProviderNPI}");
 
         // An override may pay part of the approved amount, never more than it.
@@ -231,8 +237,14 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     continue;
                 }
 
-                var bankAccount = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
-                if (bankAccount == null || !bankAccount.EftEnabled)
+                var (bankAccount, problem) = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
+                if (bankAccount == null)
+                {
+                    // No approved account (or provider-service did not answer): never a silent skip.
+                    NeedsAttention(result, statement.Id, null, statement.ProviderNPI, problem!);
+                    continue;
+                }
+                if (!bankAccount.EftEnabled)
                 {
                     result.Skipped++;
                     continue;
@@ -255,6 +267,17 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 }
                 else if (method == DisbursementMethod.NachaCredit)
                 {
+                    // The releasing user passed payments:approve and separation of duties
+                    // (above) for every statement in the batch: only now are the full
+                    // numbers read, with capitation-service's own token.
+                    var full = await _bankAccounts.GetForDisbursementAsync(statement.TenantId, statement.ProviderNPI);
+                    if (!full.Found)
+                    {
+                        NeedsAttention(result, statement.Id, null, statement.ProviderNPI, full.Reason!);
+                        continue;
+                    }
+                    var payee = full.Account!;
+
                     // Collect for NACHA batch
                     var disbursement = new CapitationDisbursement
                     {
@@ -265,8 +288,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                         Amount = statement.NetPayable,
                         Method = DisbursementMethod.NachaCredit,
                         Status = DisbursementStatus.Pending,
-                        RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
-                        AccountNumberLast4 = bankAccount.AccountNumberLast4,
+                        RoutingNumberLast4 = payee.RoutingNumberLast4 ?? bankAccount.RoutingNumberLast4,
+                        AccountNumberLast4 = payee.AccountNumberLast4 ?? bankAccount.AccountNumberLast4,
                         InitiatedBy = request.InitiatedBy
                     };
                     disbursement = await _disbursementRepository.CreateAsync(disbursement);
@@ -274,12 +297,12 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
                     nachaEntries.Add(new NachaCreditEntryDetail
                     {
-                        RoutingNumber = bankAccount.RoutingNumber!,
-                        AccountNumber = bankAccount.AccountNumber!,
-                        AccountType = MapAccountType(bankAccount.AccountType),
+                        RoutingNumber = payee.RoutingNumber!,
+                        AccountNumber = payee.AccountNumber!,
+                        AccountType = MapAccountType(payee.AccountType),
                         Amount = statement.NetPayable,
                         ProviderNpi = statement.ProviderNPI,
-                        IndividualName = bankAccount.AccountHolderName ?? statement.ProviderName,
+                        IndividualName = payee.AccountHolderName ?? statement.ProviderName,
                         IndividualId = statement.ProviderNPI
                     });
 
@@ -335,8 +358,10 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         }
 
         _logger.LogInformation(
-            "Batch disbursement: {Initiated}/{Total} disbursements initiated, {Skipped} skipped, {Errors} errors, ${Amount:N2} total",
-            result.DisbursementsInitiated, result.TotalStatements, result.Skipped, result.Errors, result.TotalAmount);
+            "Batch disbursement: {Initiated}/{Total} disbursements initiated, {Skipped} skipped, {Errors} errors " +
+            "({NeedsAttention} need attention), ${Amount:N2} total",
+            result.DisbursementsInitiated, result.TotalStatements, result.Skipped, result.Errors, result.NeedsAttention.Count,
+            result.TotalAmount);
 
         return result;
     }
@@ -352,46 +377,79 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
         // Generating the file is what sends the money. Maker-checker before any of it:
         // if the releasing user prepared any statement in the file, no file is generated.
+        var checkedStatements = new HashSet<string>(StringComparer.Ordinal);
         foreach (var statementId in pendingDisbursements.Select(d => d.StatementId).Distinct())
         {
             var statement = await _statementRepository.GetByIdAsync(statementId);
             if (statement != null)
+            {
                 await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, releasedBy, PaymentAction.Release);
+                checkedStatements.Add(statementId);
+            }
             else
                 _logger.LogWarning("Separation of duties not checked for statement {StatementId}: statement not found", statementId);
         }
 
         var entries = new List<NachaCreditEntryDetail>();
         var includedDisbursements = new List<CapitationDisbursement>();
+        var needsAttention = new List<DisbursementAttentionItem>();
 
+        // Only now, with the release checks passed, are the full numbers read
+        // (capitation-service's own token, never the releasing user's).
         foreach (var disbursement in pendingDisbursements)
         {
-            var bankAccount = await FetchProviderBankAccountAsync(disbursement.TenantId, disbursement.ProviderNPI);
-            if (bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
+            string? reason = null;
+            ProviderBankAccountDto? payee = null;
+            if (!checkedStatements.Contains(disbursement.StatementId))
             {
-                _logger.LogWarning("Skipping disbursement {DisbursementId}: missing bank account for provider {NPI}",
-                    disbursement.Id, disbursement.ProviderNPI);
+                reason = $"Statement {disbursement.StatementId} was not found, so separation of duties cannot be checked. Needs attention.";
+            }
+            else
+            {
+                var lookup = await _bankAccounts.GetForDisbursementAsync(disbursement.TenantId, disbursement.ProviderNPI);
+                if (lookup.Found) payee = lookup.Account;
+                else reason = lookup.Reason;
+            }
+
+            if (payee == null)
+            {
+                reason ??= "Provider bank details unavailable. Needs attention.";
+                needsAttention.Add(new DisbursementAttentionItem
+                {
+                    DisbursementId = disbursement.Id,
+                    StatementId = disbursement.StatementId,
+                    ProviderNPI = disbursement.ProviderNPI,
+                    Reason = reason
+                });
+                // Stays Pending, with the reason on the record.
+                disbursement.ErrorMessage = reason;
+                await _disbursementRepository.UpdateAsync(disbursement);
+                _logger.LogWarning("Disbursement {DisbursementId} for provider {NPI} left out of the NACHA file: needs attention",
+                    SanitizeForLog(disbursement.Id), SanitizeForLog(disbursement.ProviderNPI));
                 continue;
             }
 
             entries.Add(new NachaCreditEntryDetail
             {
-                RoutingNumber = bankAccount.RoutingNumber,
-                AccountNumber = bankAccount.AccountNumber,
-                AccountType = MapAccountType(bankAccount.AccountType),
+                RoutingNumber = payee.RoutingNumber!,
+                AccountNumber = payee.AccountNumber!,
+                AccountType = MapAccountType(payee.AccountType),
                 Amount = disbursement.Amount,
                 ProviderNpi = disbursement.ProviderNPI,
-                IndividualName = bankAccount.AccountHolderName ?? disbursement.ProviderName,
+                IndividualName = payee.AccountHolderName ?? disbursement.ProviderName,
                 IndividualId = disbursement.ProviderNPI
             });
             includedDisbursements.Add(disbursement);
         }
 
         if (entries.Count == 0)
-            throw new InvalidOperationException("No disbursements with valid bank accounts to include in NACHA credit file");
+            throw new InvalidOperationException(
+                "No disbursements with approved bank accounts to include in NACHA credit file. Needs attention: " +
+                string.Join(" | ", needsAttention.Select(a => $"{a.DisbursementId}: {a.Reason}")));
 
         var nachaOptions = BuildNachaCreditOptionsFromConfig();
         var result = _nachaCreditFileService.GenerateNachaCreditFile(entries, nachaOptions);
+        result.NeedsAttention = needsAttention;
 
         for (int i = 0; i < includedDisbursements.Count; i++)
         {
@@ -401,6 +459,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             disbursement.SubmittedAt = DateTime.UtcNow;
             disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
             disbursement.TraceNumber = entries[i].TraceNumber;
+            disbursement.ErrorMessage = null;
             await _disbursementRepository.UpdateAsync(disbursement);
         }
 
@@ -568,7 +627,12 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     // --- Private helpers ---
 
-    private async Task<ProviderBankAccountDto?> FetchProviderBankAccountAsync(string tenantId, string providerNpi)
+    /// <summary>
+    /// The provider's approved account, masked (no full numbers): EFT
+    /// enrollment, method, Stripe id and last 4. Null with the reason when
+    /// there is none or provider-service did not answer (needs attention).
+    /// </summary>
+    private async Task<(ProviderBankAccountDto? Account, string? Problem)> FetchProviderBankAccountAsync(string tenantId, string providerNpi)
     {
         try
         {
@@ -580,23 +644,49 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             // for it (provider-service requires one).
             request.Headers.Add("X-Tenant-ID", tenantId);
             using var response = await client.SendAsync(request);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (null, $"Provider {providerNpi} has no approved bank account in provider-service " +
+                              "(a pending change must be approved by a user with payments:approve). Needs attention.");
             if (!response.IsSuccessStatusCode)
-                return null;
+                return (null, $"provider-service answered {(int)response.StatusCode} {response.StatusCode} to the bank-account " +
+                              $"read for provider {providerNpi}. Needs attention.");
 
-            return await response.Content.ReadFromJsonAsync<ProviderBankAccountDto>(JsonOptions);
+            var account = await response.Content.ReadFromJsonAsync<ProviderBankAccountDto>(JsonOptions);
+            return account == null
+                ? (null, $"provider-service returned no bank account for provider {providerNpi}. Needs attention.")
+                : (account, null);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch bank account for provider {NPI}", providerNpi);
-            return null;
+            _logger.LogWarning("Failed to fetch bank account for provider {NPI}: {Error}", SanitizeForLog(providerNpi), ex.GetType().Name);
+            return (null, $"The bank-account read for provider {providerNpi} from provider-service failed ({ex.GetType().Name}). Needs attention.");
         }
+    }
+
+    private void NeedsAttention(BatchDisbursementResult result, string? statementId, string? disbursementId, string providerNpi, string reason)
+    {
+        result.Errors++;
+        result.ErrorMessages.Add($"Statement {statementId}: {reason}");
+        result.NeedsAttention.Add(new DisbursementAttentionItem
+        {
+            StatementId = statementId,
+            DisbursementId = disbursementId,
+            ProviderNPI = providerNpi,
+            Reason = reason
+        });
+        _logger.LogWarning("Statement {StatementId} for provider {NPI} was not disbursed: needs attention",
+            SanitizeForLog(statementId), SanitizeForLog(providerNpi));
     }
 
     private static void ValidateBankAccountForMethod(ProviderBankAccountDto bankAccount, DisbursementMethod method, string providerNpi)
     {
         if (method == DisbursementMethod.NachaCredit)
         {
-            if (string.IsNullOrEmpty(bankAccount.RoutingNumber) || string.IsNullOrEmpty(bankAccount.AccountNumber))
+            // The masked read shows whether an account is on file (last 4); the
+            // full numbers are read when the NACHA file is generated.
+            var hasRouting = !string.IsNullOrEmpty(bankAccount.RoutingNumberLast4) || !string.IsNullOrEmpty(bankAccount.RoutingNumber);
+            var hasAccount = !string.IsNullOrEmpty(bankAccount.AccountNumberLast4) || !string.IsNullOrEmpty(bankAccount.AccountNumber);
+            if (!hasRouting || !hasAccount)
                 throw new InvalidOperationException(
                     $"NACHA credit requires routing and account numbers for provider {providerNpi}");
         }

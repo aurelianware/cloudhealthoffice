@@ -726,8 +726,23 @@ public enum LineOfBusiness
 /// Mirrors SponsorBankAccount from premium-billing-service but for the credit (payment) side.
 /// Used by capitation-service to disburse NACHA credits or Stripe Connect payouts.
 /// </summary>
-public class ProviderBankAccount
+public class ProviderBankAccount : IValidatableObject
 {
+    /// <summary>
+    /// A request may not carry a value in the stored encrypted form
+    /// (<c>enc:v1:...</c>): it would be stored as is and could never be
+    /// decrypted, blocking the provider's bank-account record.
+    /// </summary>
+    IEnumerable<ValidationResult> IValidatableObject.Validate(ValidationContext validationContext)
+    {
+        const string prefix = CloudHealthOffice.FieldProtection.DataProtectionFieldProtector.Prefix;
+        foreach (var (name, value) in new[] { (nameof(RoutingNumber), RoutingNumber), (nameof(AccountNumber), AccountNumber), (nameof(TaxId), TaxId) })
+        {
+            if (value != null && value.StartsWith(prefix, StringComparison.Ordinal))
+                yield return new ValidationResult($"{name} is not a valid value.", new[] { name });
+        }
+    }
+
     /// <summary>
     /// Whether EFT disbursement is enabled for this provider
     /// </summary>

@@ -79,7 +79,8 @@ public class SeparationOfDutiesTests
 
         return new CapitationDisbursementService(_disbursements.Object, _statements.Object, _runs.Object,
             _nacha.Object, Mock.Of<IStripeConnectService>(), factory.Object,
-            new ConfigurationBuilder().Build(), Rule(enforced), Mock.Of<ILogger<CapitationDisbursementService>>());
+            new ConfigurationBuilder().Build(), Rule(enforced), new FactoryBackedProviderBankAccountSource(factory.Object),
+            Mock.Of<ILogger<CapitationDisbursementService>>());
     }
 
     // ── Approve ────────────────────────────────────────────────────────

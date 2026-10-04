@@ -354,6 +354,7 @@ public class ProvidersController : ControllerBase
         var actor = ResolveActorId();
         StampFromToken(provider, actor, existing: null);
         var bankAccount = TakeBankAccount(provider);
+        EnsureBankNumbersCanBeEncrypted(bankAccount);
         var draft = await _versioning.CreateDraftAsync(provider, actor);
         await ProposeFirstAccountAsync(draft, bankAccount, actor, "POST drafts");
         return CreatedAtAction(nameof(GetVersion),
@@ -583,6 +584,7 @@ public class ProvidersController : ControllerBase
         var actor = ResolveActorId();
         StampFromToken(provider, actor, existing: null);
         var bankAccount = TakeBankAccount(provider);
+        EnsureBankNumbersCanBeEncrypted(bankAccount);
         var draft = await _versioning.CreateDraftAsync(provider, actor);
         var activated = await _versioning.ActivateVersionAsync(draft.ProviderId, draft.VersionId, actor);
         // The first account is pending like any other: payments cannot use it
@@ -620,6 +622,7 @@ public class ProvidersController : ControllerBase
         var proposeBankAccount = bodyBankAccount != null
             && !BankAccountMasking.SameAccount(bodyBankAccount, existing.BankAccount)
             && await _bankAccountChanges.DiffersFromCurrentAsync(existing, bodyBankAccount);
+        if (proposeBankAccount) EnsureBankNumbersCanBeEncrypted(bodyBankAccount);
 
         try
         {
@@ -939,6 +942,20 @@ public class ProvidersController : ControllerBase
         var account = provider.BankAccount;
         provider.BankAccount = null;
         return account;
+    }
+
+    /// <summary>
+    /// Fails (503, <see cref="CloudHealthOffice.FieldProtection.FieldProtectionException"/>)
+    /// before anything is written when the body's bank numbers could not be
+    /// stored encrypted (no key ring outside Development), so a provider is
+    /// not created or updated without the account its caller sent.
+    /// </summary>
+    private void EnsureBankNumbersCanBeEncrypted(ProviderBankAccount? account)
+    {
+        if (account == null) return;
+        var protector = HttpContext?.RequestServices?.GetService(typeof(CloudHealthOffice.FieldProtection.IFieldProtector))
+            as CloudHealthOffice.FieldProtection.IFieldProtector;
+        if (protector != null) ProviderBankAccountProtection.ForStorage(protector, account);
     }
 
     /// <summary>A new provider's first account is proposed, never applied.</summary>
