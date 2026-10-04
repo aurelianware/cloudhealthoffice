@@ -114,6 +114,33 @@ public enum ChoInvitationStatus
     Unavailable,
 }
 
+/// <summary>What the Signup page sends (the directory and admin address come from the user's Entra token).</summary>
+public sealed class ChoSignupRequest
+{
+    [JsonPropertyName("organizationName")] public string OrganizationName { get; set; } = string.Empty;
+    [JsonPropertyName("tier")] public string Tier { get; set; } = "starter";
+    [JsonPropertyName("stripeCustomerId")] public string? StripeCustomerId { get; set; }
+    [JsonPropertyName("stripeSubscriptionId")] public string? StripeSubscriptionId { get; set; }
+}
+
+public enum ChoSignupStatus
+{
+    Success,
+    NotAuthenticated,
+    /// <summary>The user's directory already has a subscription.</summary>
+    AlreadySubscribed,
+    InvalidRequest,
+    RateLimited,
+    InvalidToken,
+    ConsentRequired,
+    Unavailable,
+}
+
+public sealed record ChoSignupResult(ChoSignupStatus Status, string? TenantId)
+{
+    public bool Succeeded => Status == ChoSignupStatus.Success && !string.IsNullOrEmpty(TenantId);
+}
+
 /// <summary>The outcome of redeeming an invitation. Only success carries a token.</summary>
 public sealed class ChoInvitationResult
 {

@@ -9,7 +9,7 @@
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
 @inject IJSRuntime JSRuntime
-@inject ITenantService TenantService
+@inject IChoTokenProvider TokenProvider
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ILogger<Signup> Logger
 
@@ -280,9 +280,16 @@
             // Get authenticated user info
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             var user = authState.User;
+            // The directory is the signed-in user's own: the token service and
+            // tenant-service take it from the Entra token, never from this page.
+            // No made-up fallback: without a signed-in user there is no signup.
             var azureTenantId = user.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid")?.Value
-                             ?? user.FindFirst("tid")?.Value
-                             ?? Guid.NewGuid().ToString(); // Fallback for testing
+                             ?? user.FindFirst("tid")?.Value;
+            if (user.Identity?.IsAuthenticated != true || string.IsNullOrEmpty(azureTenantId))
+            {
+                errorMessage = "Please sign in with your organization's Microsoft account to sign up.";
+                return;
+            }
             var userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
                          ?? user.FindFirst("preferred_username")?.Value
                          ?? signupModel.Email;
@@ -316,21 +323,30 @@
             if (enableAttachments) enabledModules.Add("attachments");
             if (enableEnrollment) enabledModules.Add("enrollment");
 
-            var createTenantRequest = new CreateTenantRequest
+            // tenant-service creates a Trial subscription for the user's directory,
+            // through the token service (the user has no CHO tenant yet). This page
+            // chooses only these fields; status, demo flag and admins are fixed there.
+            var signup = await TokenProvider.SignupAsync(new ChoSignupRequest
             {
-                AzureTenantId = azureTenantId,
                 OrganizationName = signupModel.OrganizationName,
-                TenantDisplayName = signupModel.TenantName,
                 Tier = signupModel.SubscriptionTier,
-                AdminEmail = userEmail,
-                StripePaymentMethodId = stripePaymentMethodId,
                 StripeCustomerId = stripeCustomerId,
                 StripeSubscriptionId = stripeSubscriptionId,
-                EnabledModules = enabledModules
-            };
+            });
+            if (!signup.Succeeded)
+            {
+                Logger.LogWarning("Signup refused for directory {TenantId}: {Status}", azureTenantId, signup.Status);
+                errorMessage = signup.Status switch
+                {
+                    ChoSignupStatus.AlreadySubscribed => "Your organization already has a Cloud Health Office subscription. Sign in instead.",
+                    ChoSignupStatus.NotAuthenticated or ChoSignupStatus.InvalidToken => "Please sign in again and retry.",
+                    ChoSignupStatus.InvalidRequest => "Some signup details were not accepted. Check the form and retry.",
+                    _ => "Signup is unavailable right now. Please try again later.",
+                };
+                return;
+            }
+            createdTenantId = signup.TenantId;
 
-            createdTenantId = await TenantService.CreateTenantAsync(createTenantRequest);
-            
             Logger.LogInformation("Successfully created tenant {TenantId} for organization {OrgName}", 
                 createdTenantId, signupModel.OrganizationName);
             
@@ -342,7 +358,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Signup error for {Email}", signupModel.Email);
-            errorMessage = $"An error occurred: {ex.Message}";
+            errorMessage = "An error occurred during signup. Please try again later.";
         }
         finally
         {

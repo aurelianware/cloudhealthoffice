@@ -50,6 +50,14 @@ public interface IChoTokenProvider
     /// token's tenant becomes the current tenant. The code is never logged.
     /// </summary>
     Task<ChoInvitationResult> RedeemInvitationAsync(string code, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Self-service signup for the signed-in user's Entra directory, through the
+    /// token service (with the same Entra token as the exchange). The directory
+    /// and admin address come from that token; the portal writes nothing to the
+    /// tenant database itself.
+    /// </summary>
+    Task<ChoSignupResult> SignupAsync(ChoSignupRequest request, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Sends the user to Entra again (re-sign-in or incremental consent).</summary>
@@ -473,6 +481,63 @@ public sealed class ChoTokenProvider : IChoTokenProvider
         {
             return null;
         }
+    }
+
+    public async Task<ChoSignupResult> SignupAsync(ChoSignupRequest signup, CancellationToken cancellationToken = default)
+    {
+        var user = await GetUserAsync();
+        if (user == null || IsLocalDemo(user))
+            return new ChoSignupResult(ChoSignupStatus.NotAuthenticated, null);
+
+        var baseUrl = TokenServiceBaseUrl();
+        if (baseUrl == null)
+            return new ChoSignupResult(ChoSignupStatus.Unavailable, null);
+
+        var entraToken = await AcquireEntraTokenAsync(user);
+        if (entraToken.Token == null)
+            return new ChoSignupResult(entraToken.Failure == ChoTokenStatus.ConsentRequired
+                ? ChoSignupStatus.ConsentRequired
+                : ChoSignupStatus.Unavailable, null);
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/signup")
+            {
+                Content = JsonContent.Create(signup),
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", entraToken.Token);
+
+            using var response = await TokenServiceClient().SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var status = (int)response.StatusCode switch
+                {
+                    401 => ChoSignupStatus.InvalidToken,
+                    409 => ChoSignupStatus.AlreadySubscribed,
+                    400 => ChoSignupStatus.InvalidRequest,
+                    429 => ChoSignupStatus.RateLimited,
+                    _ => ChoSignupStatus.Unavailable,
+                };
+                _logger.LogWarning("Signup refused: {Status} ({HttpStatus})", status, (int)response.StatusCode);
+                return new ChoSignupResult(status, null);
+            }
+
+            var body = await response.Content.ReadFromJsonAsync<SignupResponse>(cancellationToken: cancellationToken);
+            return string.IsNullOrEmpty(body?.TenantId)
+                ? new ChoSignupResult(ChoSignupStatus.Unavailable, null)
+                : new ChoSignupResult(ChoSignupStatus.Success, body.TenantId);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException or NotSupportedException
+                                       || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            _logger.LogWarning("Token service could not be reached for signup ({Error})", ex.GetType().Name);
+            return new ChoSignupResult(ChoSignupStatus.Unavailable, null);
+        }
+    }
+
+    private sealed class SignupResponse
+    {
+        [JsonPropertyName("tenantId")] public string? TenantId { get; set; }
     }
 
     private sealed class RedeemRequest

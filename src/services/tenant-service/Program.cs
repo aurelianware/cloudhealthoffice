@@ -73,6 +73,8 @@ builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<ISftpProvisioningService, SftpProvisioningService>();
 // Identity lookups for token-service (Controllers/InternalIdentityController.cs).
 builder.Services.AddScoped<IIdentityDirectory, IdentityDirectory>();
+// Subscription records (portal PlatformTenants and self-service signup) are written here only.
+builder.Services.AddScoped<ISubscriptionStore, MongoSubscriptionStore>();
 // Invitations (Controllers/InvitationsController.cs; redemption via the internal identity controller).
 var invitationOptions = builder.Configuration.GetSection(InvitationOptions.SectionName).Get<InvitationOptions>()
                         ?? new InvitationOptions();

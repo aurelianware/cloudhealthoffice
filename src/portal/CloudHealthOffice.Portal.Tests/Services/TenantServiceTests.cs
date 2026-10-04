@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
@@ -33,8 +34,11 @@ public class TenantServiceTests
         _database.Setup(d => d.GetCollection<BsonDocument>("Members", null)).Returns(_membersCol.Object);
     }
 
+    /// <summary>tenant-service's platform API (subscription writes and the platform listing).</summary>
+    private FakeHandler _tenantApi = new(HttpStatusCode.OK, "{}");
+
     private TenantService CreateService()
-        => new(_mongoClient.Object, _configuration, _logger.Object);
+        => new(_mongoClient.Object, new HttpClient(_tenantApi), _configuration, _logger.Object);
 
     private static Mock<IAsyncCursor<T>> CreateCursor<T>(List<T> items)
     {
@@ -156,15 +160,13 @@ public class TenantServiceTests
 
     // ── CreateTenantAsync ──
 
-    [Fact]
-    public async Task CreateTenantAsync_InsertsAndReturnsTenantId()
-    {
-        _tenantsCol.Setup(c => c.InsertOneAsync(
-            It.IsAny<TenantSubscription>(),
-            It.IsAny<InsertOneOptions>(),
-            It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+    // Subscription writes go to tenant-service's platform API (platform:tenants);
+    // the portal never writes the Tenants collection itself.
 
+    [Fact]
+    public async Task CreateTenantAsync_PostsToTenantServicePlatformApi_AndReturnsItsTenantId()
+    {
+        _tenantApi = new FakeHandler(HttpStatusCode.Created, """{"tenantId":"tenant-from-service","azureTenantId":"azure-new"}""");
         var sut = CreateService();
 
         var result = await sut.CreateTenantAsync(new CreateTenantRequest
@@ -175,53 +177,61 @@ public class TenantServiceTests
             AdminEmail = "admin@new.com"
         });
 
-        result.Should().StartWith("tenant-");
-        _tenantsCol.Verify(c => c.InsertOneAsync(
-            It.Is<TenantSubscription>(t => t.OrganizationName == "New Corp"),
-            It.IsAny<InsertOneOptions>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+        result.Should().Be("tenant-from-service");
+        var request = _tenantApi.CapturedRequests.Should().ContainSingle().Subject;
+        request.Method.Should().Be(HttpMethod.Post);
+        request.RequestUri!.AbsolutePath.Should().EndWith("/v1/platform/subscriptions");
+        _tenantsCol.Invocations.Should().BeEmpty();
     }
 
     // ── DeleteTenantAsync ──
 
     [Fact]
-    public async Task DeleteTenantAsync_WhenTenantExists_DeletesSuccessfully()
+    public async Task DeleteTenantAsync_WhenTenantExists_DeletesThroughTheApi()
     {
-        var deleteResult = new Mock<DeleteResult>();
-        deleteResult.Setup(r => r.DeletedCount).Returns(1);
-        _tenantsCol.Setup(c => c.DeleteOneAsync(
-            It.IsAny<FilterDefinition<TenantSubscription>>(),
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(deleteResult.Object);
-
+        _tenantApi = new FakeHandler(HttpStatusCode.NoContent);
         var sut = CreateService();
 
         await sut.DeleteTenantAsync("azure-123");
 
-        _tenantsCol.Verify(c => c.DeleteOneAsync(
-            It.IsAny<FilterDefinition<TenantSubscription>>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+        var request = _tenantApi.CapturedRequests.Should().ContainSingle().Subject;
+        request.Method.Should().Be(HttpMethod.Delete);
+        request.RequestUri!.AbsolutePath.Should().EndWith("/v1/platform/subscriptions/azure-123");
+        _tenantsCol.Invocations.Should().BeEmpty();
     }
 
     [Fact]
     public async Task DeleteTenantAsync_WhenTenantNotFound_ThrowsKeyNotFoundException()
     {
-        var deleteResult = new Mock<DeleteResult>();
-        deleteResult.Setup(r => r.DeletedCount).Returns(0);
-        _tenantsCol.Setup(c => c.DeleteOneAsync(
-            It.IsAny<FilterDefinition<TenantSubscription>>(),
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(deleteResult.Object);
-
+        _tenantApi = new FakeHandler(HttpStatusCode.NotFound);
         var sut = CreateService();
 
         await Assert.ThrowsAsync<KeyNotFoundException>(() => sut.DeleteTenantAsync("azure-nope"));
     }
 
+    [Fact]
+    public async Task PlatformWrite_Forbidden_Throws()
+    {
+        _tenantApi = new FakeHandler(HttpStatusCode.Forbidden);
+        var sut = CreateService();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.DeleteTenantAsync("azure-123"));
+    }
+
     // ── GetAllSubscriptionsAsync ──
-    // Skipped: GetAllSubscriptionsAsync uses .Find().SortByDescending().ToListAsync()
-    // which relies on extension methods that cannot be mocked with Moq.
-    // This is better suited for integration testing.
+
+    [Fact]
+    public async Task GetAllSubscriptionsAsync_ReadsThePlatformApi()
+    {
+        _tenantApi = new FakeHandler(HttpStatusCode.OK,
+            """[{"tenantId":"t1","azureTenantId":"azure-1","organizationName":"Acme","subscriptionStatus":"Active","tier":"starter","adminEmails":["a@acme.com"]}]""");
+        var sut = CreateService();
+
+        var result = await sut.GetAllSubscriptionsAsync();
+
+        result.Should().ContainSingle(t => t.TenantId == "t1" && t.SubscriptionStatus == "Active" && t.AdminEmails.Contains("a@acme.com"));
+        _tenantApi.CapturedRequests.Single().RequestUri!.AbsolutePath.Should().EndWith("/v1/platform/subscriptions");
+    }
 
     // ── IsMemberOfTenantAsync ──
 
@@ -277,26 +287,17 @@ public class TenantServiceTests
     // ── UpdateSubscriptionStatusAsync ──
 
     [Fact]
-    public async Task UpdateSubscriptionStatusAsync_CallsUpdateOne()
+    public async Task UpdateSubscriptionStatusAsync_PutsTheStatusThroughTheApi()
     {
-        var updateResult = new Mock<UpdateResult>();
-        updateResult.Setup(r => r.MatchedCount).Returns(1);
-        _tenantsCol.Setup(c => c.UpdateOneAsync(
-            It.IsAny<FilterDefinition<TenantSubscription>>(),
-            It.IsAny<UpdateDefinition<TenantSubscription>>(),
-            It.IsAny<UpdateOptions>(),
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(updateResult.Object);
-
+        _tenantApi = new FakeHandler(HttpStatusCode.NoContent);
         var sut = CreateService();
 
         await sut.UpdateSubscriptionStatusAsync("azure-123", "Active");
 
-        _tenantsCol.Verify(c => c.UpdateOneAsync(
-            It.IsAny<FilterDefinition<TenantSubscription>>(),
-            It.IsAny<UpdateDefinition<TenantSubscription>>(),
-            It.IsAny<UpdateOptions>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+        var request = _tenantApi.CapturedRequests.Should().ContainSingle().Subject;
+        request.Method.Should().Be(HttpMethod.Put);
+        request.RequestUri!.AbsolutePath.Should().EndWith("/v1/platform/subscriptions/azure-123/status");
+        _tenantsCol.Invocations.Should().BeEmpty();
     }
 
     // ── UpdateTenantAsync ──
@@ -304,15 +305,7 @@ public class TenantServiceTests
     [Fact]
     public async Task UpdateTenantAsync_WhenTenantNotFound_ThrowsKeyNotFoundException()
     {
-        var updateResult = new Mock<UpdateResult>();
-        updateResult.Setup(r => r.MatchedCount).Returns(0);
-        _tenantsCol.Setup(c => c.UpdateOneAsync(
-            It.IsAny<FilterDefinition<TenantSubscription>>(),
-            It.IsAny<UpdateDefinition<TenantSubscription>>(),
-            It.IsAny<UpdateOptions>(),
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(updateResult.Object);
-
+        _tenantApi = new FakeHandler(HttpStatusCode.NotFound);
         var sut = CreateService();
 
         await Assert.ThrowsAsync<KeyNotFoundException>(

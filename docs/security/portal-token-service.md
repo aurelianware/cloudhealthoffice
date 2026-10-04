@@ -87,6 +87,25 @@ JSON body `{ "code": "<invitation code>" }`. See "Invitations" below.
 | 429 | `{ "error": "rate_limited" }` | More than `TokenService:InvitationRedeemPermitsPerMinute` (10) attempts by this tid+oid in a minute |
 | 503 | `{ "error": "unavailable" }` | tenant-service or signing unavailable |
 
+### `POST /v1/signup`
+
+Self-service signup from the portal's Signup page, for a user with an Entra
+token and no CHO tenant yet. Request: `Authorization: Bearer <Entra access
+token>` (validated as for the exchange) and JSON body
+`{ "organizationName", "tier", "stripeCustomerId", "stripeSubscriptionId" }`.
+token-service calls tenant-service `POST /internal/v1/identity/signups` over
+its service token with the token's `tid`, `oid` and username; tenant-service
+creates a Trial subscription for that directory. Nothing else in the body is
+read. Limited per identity like invitation redemption.
+
+| Status | Body | When |
+|---|---|---|
+| 201 | `{ "tenantId" }` | Created. No CHO token is issued here. |
+| 400 | `{ "error": "invalid_request" }` | No username in the token, missing fields, a tier other than starter/professional, malformed Stripe ids |
+| 409 | `{ "error": "already_subscribed" }` | The directory already has a subscription |
+| 429 | | Rate limited |
+| 503 | `{ "error": "unavailable" }` | tenant-service unreachable |
+
 ### Other endpoints
 
 - `/health`, `/health/live`, `/health/ready`: anonymous.

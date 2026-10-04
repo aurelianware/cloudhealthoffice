@@ -29,14 +29,20 @@ public class InternalIdentityController : ControllerBase
 {
     private readonly IIdentityDirectory _directory;
     private readonly IInvitationStore _invitations;
+    private readonly ISubscriptionStore _subscriptions;
+    private readonly ILogger<InternalIdentityController> _logger;
 
     /// <summary>The only identity allowed to call these endpoints.</summary>
     public const string TokenServiceClientId = "token-service";
 
-    public InternalIdentityController(IIdentityDirectory directory, IInvitationStore invitations)
+    public InternalIdentityController(
+        IIdentityDirectory directory, IInvitationStore invitations, ISubscriptionStore subscriptions,
+        ILogger<InternalIdentityController> logger)
     {
         _directory = directory;
         _invitations = invitations;
+        _subscriptions = subscriptions;
+        _logger = logger;
     }
 
     /// <summary>
@@ -71,6 +77,48 @@ public class InternalIdentityController : ControllerBase
                 new { error = "email_mismatch", invitedEmail = result.MaskedEmail }),
             _ => Conflict(new { error = "conflict" }),
         };
+    }
+
+    /// <summary>
+    /// Self-service signup (the portal's anonymous Signup page, through
+    /// token-service, which validated the user's Entra token). Creates a Trial
+    /// subscription for the token's directory (<c>tid</c>) with the signed-in
+    /// address as admin. The caller chooses only the organization name, a
+    /// self-service tier (starter, professional) and the Stripe customer and
+    /// subscription ids; status, demo flag, trial end, notes and the directory
+    /// are never taken from it. 201 <c>{ tenantId }</c>; 409
+    /// <c>already_subscribed</c> when the directory has a subscription; 400
+    /// <c>invalid_request</c>.
+    /// </summary>
+    [HttpPost("signups")]
+    public async Task<IActionResult> Signup([FromBody] SignupRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Tid) || string.IsNullOrWhiteSpace(request.Oid)
+            || string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@')
+            || string.IsNullOrWhiteSpace(request.OrganizationName) || request.OrganizationName.Length > 300
+            || request.Tier is null || !SubscriptionRules.SignupTiers.Contains(request.Tier)
+            || !SubscriptionRules.IsStripeCustomerId(request.StripeCustomerId)
+            || !SubscriptionRules.IsStripeSubscriptionId(request.StripeSubscriptionId))
+        {
+            return BadRequest(new { error = "invalid_request" });
+        }
+
+        var created = await _subscriptions.SignupAsync(new SignupWrite
+        {
+            AzureTenantId = request.Tid.Trim(),
+            AdminEmail = request.Email.Trim().ToLowerInvariant(),
+            OrganizationName = request.OrganizationName.Trim(),
+            Tier = request.Tier,
+            StripeCustomerId = request.StripeCustomerId,
+            StripeSubscriptionId = request.StripeSubscriptionId,
+        }, ct);
+        if (created is null)
+            return Conflict(new { error = "already_subscribed" });
+
+        _logger.LogWarning(
+            "AUDIT tenant signup: subscription {TenantId} (Trial, tier {Tier}) for directory {Directory} by Entra object {Oid}",
+            created.TenantId, created.Tier, TenantAuditLog.Sanitize(created.AzureTenantId), TenantAuditLog.Sanitize(request.Oid));
+        return StatusCode(StatusCodes.Status201Created, new { tenantId = created.TenantId });
     }
 
     /// <summary>TenantUsers linked to Entra object <paramref name="oid"/> in directory <paramref name="tid"/>.</summary>

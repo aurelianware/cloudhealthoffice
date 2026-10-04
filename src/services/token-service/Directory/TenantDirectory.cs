@@ -27,6 +27,33 @@ public interface ITenantDirectory
     /// not an outage.
     /// </summary>
     Task<InvitationRedemption> RedeemInvitationAsync(string code, string tid, string oid, string email, CancellationToken ct);
+
+    /// <summary>
+    /// Self-service signup for this Entra identity's directory. A refusal is an
+    /// answer (<see cref="SignupOutcome.Error"/>: already_subscribed,
+    /// invalid_request), not an outage.
+    /// </summary>
+    Task<SignupOutcome> SignupAsync(SignupForm form, string tid, string oid, string email, CancellationToken ct);
+}
+
+/// <summary>What the signup form chooses (everything else comes from the Entra token or is fixed by tenant-service).</summary>
+public sealed class SignupForm
+{
+    [JsonPropertyName("organizationName")] public string? OrganizationName { get; set; }
+    [JsonPropertyName("tier")] public string? Tier { get; set; }
+    [JsonPropertyName("stripeCustomerId")] public string? StripeCustomerId { get; set; }
+    [JsonPropertyName("stripeSubscriptionId")] public string? StripeSubscriptionId { get; set; }
+}
+
+public sealed class SignupOutcome
+{
+    public static readonly IReadOnlySet<string> KnownErrors =
+        new HashSet<string>(StringComparer.Ordinal) { "already_subscribed", "invalid_request" };
+
+    [JsonPropertyName("tenantId")] public string? TenantId { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
+
+    public bool Succeeded => Error == null && !string.IsNullOrEmpty(TenantId);
 }
 
 /// <summary>tenant-service's answer to a redemption.</summary>
@@ -155,6 +182,61 @@ public sealed class HttpTenantDirectory : ITenantDirectory
                     return answer;
             }
             // Anything else (including a 403 from tenant-service's own authorization) is an outage.
+            throw new TenantDirectoryUnavailableException($"tenant-service answered {status} for POST {path}.");
+        }
+        catch (TenantDirectoryUnavailableException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or NotSupportedException
+                                       or InvalidOperationException)
+        {
+            if (ex is TaskCanceledException && ct.IsCancellationRequested)
+                throw;
+            throw new TenantDirectoryUnavailableException("tenant-service is unreachable.", ex);
+        }
+    }
+
+    public async Task<SignupOutcome> SignupAsync(SignupForm form, string tid, string oid, string email, CancellationToken ct)
+    {
+        const string path = Base + "/signups";
+        try
+        {
+            // tid, oid and email are the validated Entra token's; the form adds only its own fields.
+            using var request = new HttpRequestMessage(HttpMethod.Post, path)
+            {
+                Content = JsonContent.Create(new
+                {
+                    tid,
+                    oid,
+                    email,
+                    organizationName = form.OrganizationName,
+                    tier = form.Tier,
+                    stripeCustomerId = form.StripeCustomerId,
+                    stripeSubscriptionId = form.StripeSubscriptionId,
+                }),
+            };
+            request.Options.Set(TenantServiceTokenHandler.TenantScopeKey, TenantServiceTokenHandler.CrossTenantScope);
+
+            using var response = await _factory.CreateClient(ClientName).SendAsync(request, ct);
+            var status = (int)response.StatusCode;
+            if (response.IsSuccessStatusCode || status is 400 or 409)
+            {
+                SignupOutcome? answer = null;
+                try
+                {
+                    answer = await response.Content.ReadFromJsonAsync<SignupOutcome>(cancellationToken: ct);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // handled below
+                }
+
+                if (response.IsSuccessStatusCode && answer is { Succeeded: true })
+                    return answer;
+                if (!response.IsSuccessStatusCode && answer?.Error != null && SignupOutcome.KnownErrors.Contains(answer.Error))
+                    return answer;
+            }
             throw new TenantDirectoryUnavailableException($"tenant-service answered {status} for POST {path}.");
         }
         catch (TenantDirectoryUnavailableException)

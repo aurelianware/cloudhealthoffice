@@ -2134,16 +2134,28 @@ public class ReferenceDataService : IReferenceDataService
     }
 }
 
+/// <summary>
+/// Subscription records. Writes (and the PlatformTenants listing) go to
+/// tenant-service's platform API (<c>/v1/platform/subscriptions</c>,
+/// platform:tenants) with the user's CHO token; tenant-service is the only
+/// writer of the <c>Tenants</c> collection. Self-service signup goes through
+/// the token service (<see cref="IChoTokenProvider.SignupAsync"/>). The
+/// sign-in reads below still read the collection directly.
+/// </summary>
 public class TenantService : ITenantService
 {
     private readonly IMongoCollection<TenantSubscription> _tenantsCollection;
     private readonly IMongoCollection<BsonDocument> _membersCollection;
     private readonly IMongoCollection<BsonDocument> _tenantUsersCollection;
+    private readonly HttpClient _http;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<TenantService> _logger;
 
-    public TenantService(IMongoClient mongoClient, IConfiguration configuration, ILogger<TenantService> logger)
+    public TenantService(IMongoClient mongoClient, HttpClient http, IConfiguration configuration, ILogger<TenantService> logger)
     {
         _logger = logger;
+        _http = http;
+        _configuration = configuration;
         var databaseName = configuration["MongoDB:DatabaseName"] ?? "CloudHealthOffice";
         var db = mongoClient.GetDatabase(databaseName);
         _tenantsCollection = db.GetCollection<TenantSubscription>(
@@ -2268,102 +2280,100 @@ public class TenantService : ITenantService
         }
     }
 
-    public async Task<string> CreateTenantAsync(CreateTenantRequest request)
+    private string PlatformSubscriptionsUrl =>
+        $"{(_configuration["Services:TenantService"] ?? "http://tenant-service.cloudhealthoffice/api").TrimEnd('/')}/v1/platform/subscriptions";
+
+    private string SubscriptionUrl(string azureTenantId) => $"{PlatformSubscriptionsUrl}/{Uri.EscapeDataString(azureTenantId)}";
+
+    private async Task<HttpResponseMessage> SendPlatformAsync(HttpMethod method, string url, object? body, string what)
     {
+        using var request = new HttpRequestMessage(method, url);
+        if (body != null)
+            request.Content = JsonContent.Create(body);
+        HttpResponseMessage response;
         try
         {
-            var tenantId = $"tenant-{Guid.NewGuid():N}";
-            var now = DateTime.UtcNow;
-
-            // Merge AdminEmail (from signup) into AdminEmails list
-            var adminEmails = request.AdminEmails ?? new List<string>();
-            if (!string.IsNullOrWhiteSpace(request.AdminEmail) && !adminEmails.Contains(request.AdminEmail))
-                adminEmails.Add(request.AdminEmail);
-
-            var tenant = new TenantSubscription
-            {
-                TenantId = tenantId,
-                AzureTenantId = request.AzureTenantId,
-                OrganizationName = request.OrganizationName,
-                SubscriptionStatus = request.SubscriptionStatus,
-                Tier = request.Tier,
-                IsDemo = request.IsDemo,
-                StripeCustomerId = request.StripeCustomerId,
-                StripeSubscriptionId = request.StripeSubscriptionId,
-                TrialEndsAt = request.SubscriptionStatus == "Trial" ? now.AddDays(14) : null,
-                CreatedAt = now,
-                UpdatedAt = now,
-                AdminEmails = adminEmails,
-                Notes = request.Notes
-            };
-
-            _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} (Azure: {AzureTenantId})",
-                tenantId, request.OrganizationName, request.AzureTenantId);
-
-            await _tenantsCollection.InsertOneAsync(tenant);
-
-            _logger.LogInformation("Successfully created tenant {TenantId} in MongoDB", tenantId);
-            return tenantId;
+            response = await _http.SendAsync(request);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to create tenant for organization {OrgName}", request.OrganizationName);
-            throw;
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Tenant Service");
+            throw new ServiceUnavailableException("Tenant Service", ex);
         }
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            response.Dispose();
+            throw new KeyNotFoundException($"No subscription found ({what}).");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            var status = (int)response.StatusCode;
+            response.Dispose();
+            _logger.LogWarning("Tenant service refused {What}: {Status}", what, status);
+            throw new InvalidOperationException($"tenant-service refused {what} ({status}).");
+        }
+        return response;
+    }
+
+    /// <summary>A subscription created by a platform administrator (PlatformTenants): tenant-service, platform:tenants.</summary>
+    public async Task<string> CreateTenantAsync(CreateTenantRequest request)
+    {
+        // Merge AdminEmail into AdminEmails list
+        var adminEmails = request.AdminEmails ?? new List<string>();
+        if (!string.IsNullOrWhiteSpace(request.AdminEmail) && !adminEmails.Contains(request.AdminEmail))
+            adminEmails.Add(request.AdminEmail);
+
+        using var response = await SendPlatformAsync(HttpMethod.Post, PlatformSubscriptionsUrl, new
+        {
+            azureTenantId = request.AzureTenantId,
+            organizationName = request.OrganizationName,
+            subscriptionStatus = request.SubscriptionStatus,
+            tier = request.Tier,
+            isDemo = request.IsDemo,
+            adminEmails,
+            notes = request.Notes,
+            stripeCustomerId = request.StripeCustomerId,
+            stripeSubscriptionId = request.StripeSubscriptionId,
+        }, "the subscription create");
+
+        var created = await response.Content.ReadFromJsonAsync<TenantSubscription>();
+        if (string.IsNullOrEmpty(created?.TenantId))
+            throw new InvalidOperationException("tenant-service returned no tenant id.");
+        _logger.LogInformation("Created tenant {TenantId} for organization {OrgName}", created.TenantId, request.OrganizationName);
+        return created.TenantId;
     }
 
     public async Task UpdateTenantAsync(string azureTenantId, UpdateTenantRequest request)
     {
-        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        var updates = new List<UpdateDefinition<TenantSubscription>>
+        using var _ = await SendPlatformAsync(HttpMethod.Put, SubscriptionUrl(azureTenantId), new
         {
-            Builders<TenantSubscription>.Update.Set(t => t.UpdatedAt, DateTime.UtcNow)
-        };
-
-        if (request.OrganizationName != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.OrganizationName, request.OrganizationName));
-        if (request.Tier != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Tier, request.Tier));
-        if (request.SubscriptionStatus != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.SubscriptionStatus, request.SubscriptionStatus));
-        if (request.AdminEmails != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.AdminEmails, request.AdminEmails));
-        if (request.IsDemo.HasValue)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.IsDemo, request.IsDemo.Value));
-        updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Notes, request.Notes));
-
-        var update = Builders<TenantSubscription>.Update.Combine(updates);
-        var result = await _tenantsCollection.UpdateOneAsync(filter, update);
-        if (result.MatchedCount == 0)
-            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
+            organizationName = request.OrganizationName,
+            tier = request.Tier,
+            subscriptionStatus = request.SubscriptionStatus,
+            adminEmails = request.AdminEmails,
+            isDemo = request.IsDemo,
+            notes = request.Notes,
+        }, "the subscription update");
         _logger.LogInformation("Updated tenant {AzureTenantId}: {OrgName}", azureTenantId, request.OrganizationName);
     }
 
     public async Task DeleteTenantAsync(string azureTenantId)
     {
-        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        var result = await _tenantsCollection.DeleteOneAsync(filter);
-        if (result.DeletedCount == 0)
-            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
+        using var _ = await SendPlatformAsync(HttpMethod.Delete, SubscriptionUrl(azureTenantId), null, "the subscription delete");
         _logger.LogInformation("Deleted tenant {AzureTenantId}", azureTenantId);
     }
 
     public async Task<List<TenantSubscription>> GetAllSubscriptionsAsync()
     {
-        var tenants = await _tenantsCollection
-            .Find(Builders<TenantSubscription>.Filter.Empty)
-            .SortByDescending(t => t.CreatedAt)
-            .ToListAsync();
-        return tenants;
+        using var response = await SendPlatformAsync(HttpMethod.Get, PlatformSubscriptionsUrl, null, "the subscription list");
+        return await response.Content.ReadFromJsonAsync<List<TenantSubscription>>() ?? new List<TenantSubscription>();
     }
 
     public async Task UpdateSubscriptionStatusAsync(string azureTenantId, string status)
     {
-        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        var update = Builders<TenantSubscription>.Update
-            .Set(t => t.SubscriptionStatus, status)
-            .Set(t => t.UpdatedAt, DateTime.UtcNow);
-        await _tenantsCollection.UpdateOneAsync(filter, update);
+        using var _ = await SendPlatformAsync(HttpMethod.Put, $"{SubscriptionUrl(azureTenantId)}/status", new { status },
+            "the subscription status change");
         _logger.LogInformation("Updated subscription status for tenant {TenantId} to {Status}", azureTenantId, status);
     }
 

@@ -96,6 +96,13 @@ public sealed class FakeTenantService : HttpMessageHandler
     public List<string?> AuthorizationHeaders { get; } = new();
     public bool Down { get; set; }
 
+    /// <summary>Bodies of internal signup calls.</summary>
+    public List<JsonNode> Signups { get; } = new();
+
+    /// <summary>tenant-service's answer to a signup; by default it creates tenant-new.</summary>
+    public Func<JsonNode, HttpResponseMessage> Signup { get; set; } =
+        _ => new HttpResponseMessage(HttpStatusCode.Created) { Content = JsonContent.Create(new { tenantId = "tenant-new" }) };
+
     /// <summary>Bodies of internal redemption calls.</summary>
     public List<JsonNode> Redemptions { get; } = new();
 
@@ -150,6 +157,13 @@ public sealed class FakeTenantService : HttpMessageHandler
         if (!path.StartsWith(b, StringComparison.Ordinal))
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         var parts = path[b.Length..].Split('/').Select(Uri.UnescapeDataString).ToArray();
+
+        if (request.Method == HttpMethod.Post && parts is ["signups"])
+        {
+            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+            Signups.Add(body);
+            return Signup(body);
+        }
 
         if (request.Method == HttpMethod.Post && parts is ["invitations", "redeem"])
         {

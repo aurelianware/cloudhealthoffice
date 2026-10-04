@@ -76,6 +76,8 @@ builder.Services.AddChoHealthChecks();
 
 // Invitation redemption attempts are limited per Entra identity.
 builder.Services.AddInvitationRedemptionRateLimit(serviceOptions);
+// Self-service signup attempts likewise (same per-minute limit).
+builder.Services.AddSignupRateLimit(serviceOptions);
 
 var app = builder.Build();
 
@@ -91,6 +93,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapInvitationRedemption();
+app.MapSignup();
 app.MapWorkloadTokens();
 
 app.MapPost("/v1/token/exchange", async (HttpContext http, TokenExchangeService exchange, TokenAudit audit) =>
