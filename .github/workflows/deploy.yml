@@ -51,6 +51,15 @@ jobs:
           SFTP_USERNAME="${{ secrets.SFTP_USERNAME }}"
           SFTP_PASSWORD="${{ secrets.SFTP_PASSWORD }}"
 
+          # No default password: a missing secret fails the deployment instead
+          # of deploying with a well-known value. (The former fallback,
+          # "changeme", is in git history and must be treated as compromised.)
+          if [[ -z "$SFTP_PASSWORD" ]]; then
+            echo "::error::The SFTP_PASSWORD secret is not set. Add it to the repository or environment secrets (or Key Vault) and re-run."
+            exit 1
+          fi
+          echo "::add-mask::${SFTP_PASSWORD}"
+
           # Export to environment
           {
             echo "CLIENT_ID=${CLIENT_ID}"
@@ -58,7 +67,7 @@ jobs:
             echo "SUBSCRIPTION_ID=${SUBSCRIPTION_ID}"
             echo "SFTP_HOST=${SFTP_HOST:-sftp.example.com}"
             echo "SFTP_USERNAME=${SFTP_USERNAME:-logicapp}"
-            echo "SFTP_PASSWORD=${SFTP_PASSWORD:-changeme}"
+            echo "SFTP_PASSWORD=${SFTP_PASSWORD}"
             echo "HAS_AZURE_CREDS=$([[ -n \"$CLIENT_ID\" && -n \"$TENANT_ID\" && -n \"$SUBSCRIPTION_ID\" ]] && echo 'true' || echo 'false')"
           } >> "$GITHUB_ENV"
 

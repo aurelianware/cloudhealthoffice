@@ -384,69 +384,75 @@ spec:
                 key: secret-key
     
     # Template: Create Azure AD B2C user
+    # TODO(onboarding-admin-user): not implemented. The stub generated a
+    # temporary password, printed it to the pod log and wrote it to the shared
+    # work volume, without creating any user. Admins now join through
+    # tenant-service invitations (docs/security/portal-token-service.md), which
+    # need no password. If B2C user creation is added, the password must go
+    # straight to Key Vault (as generate-sftp-credentials does) and never to a
+    # log, a file on the work volume or a workflow parameter.
     - name: create-azure-ad-user
-      container:
-        image: mcr.microsoft.com/azure-cli:latest
-        command: [sh, -c]
-        args:
-          - |
-            EMAIL="{{workflow.parameters.admin-email}}"
-            NAME="{{workflow.parameters.admin-name}}"
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
-            
-            echo "Creating Azure AD B2C user for $EMAIL..."
-            
-            # Generate random password
-            PASSWORD=$(openssl rand -base64 16)
-            
-            # TODO: Implement actual Azure AD B2C user creation
-            # az ad user create --display-name "$NAME" --user-principal-name "$EMAIL" --password "$PASSWORD"
-            
-            echo "User created: $EMAIL"
-            echo "Temporary password: $PASSWORD (will be sent via email)"
-            
-            # Store password for email step
-            echo "$PASSWORD" > /work/admin-password.txt
-        volumeMounts:
-          - name: work
-            mountPath: /work
-          - name: azure-credentials
-            mountPath: /secrets
-    
-    # Template: Generate SFTP credentials
-    - name: generate-sftp-credentials
       container:
         image: alpine:3.18
         command: [sh, -c]
         args:
           - |
-            apk add --no-cache openssh-keygen
-            
+            echo "Admin user for {{workflow.parameters.tenant-id}}: invite through tenant-service (no B2C user is created here)."
+
+    # Template: Generate SFTP credentials
+    # The generated SFTP password and private key go to Key Vault only
+    # (cho-sftp--<tenant>--password, cho-sftp--<tenant>--private-key). Neither
+    # is written to the shared work volume, a log or a workflow parameter; the
+    # working copies live in this container's memory-backed scratch and are
+    # removed before it exits. The step fails (and onboarding with it) when
+    # Key Vault is not configured, rather than leaving the secret in a file.
+    # Needs: secret azure-service-principal with keys client-id, client-secret,
+    # tenant-id for an identity that may set secrets in the vault, and
+    # configmap onboarding-config key key-vault-name.
+    # TODO(onboarding-sftp-keyvault): the service principal key names and the
+    # onboarding-config configmap are assumptions; this step has not been run
+    # against a real vault. Prefer workload identity over a client secret.
+    - name: generate-sftp-credentials
+      container:
+        image: mcr.microsoft.com/azure-cli:latest
+        command: [bash, -c]
+        args:
+          - |
+            set -euo pipefail
             TENANT_ID="{{workflow.parameters.tenant-id}}"
-            
+            : "${KEY_VAULT_NAME:?KEY_VAULT_NAME is not set (configmap onboarding-config, key key-vault-name)}"
+
+            SCRATCH=$(mktemp -d -p /dev/shm 2>/dev/null || mktemp -d)
+            chmod 700 "$SCRATCH"
+            trap 'rm -rf "$SCRATCH"' EXIT
+            umask 077
+
             echo "Generating SFTP credentials for $TENANT_ID..."
-            
-            # Generate SSH key pair for SFTP access
-            ssh-keygen -t ed25519 -f /work/sftp-key -N "" -C "cho-$TENANT_ID"
-            
-            # Generate password for fallback authentication
-            SFTP_PASSWORD=$(openssl rand -base64 24)
-            echo "$SFTP_PASSWORD" > /work/sftp-password.txt
-            
-            # SFTP connection details
+            ssh-keygen -q -t ed25519 -f "$SCRATCH/sftp-key" -N "" -C "cho-$TENANT_ID"
+            openssl rand -base64 24 | tr -d '\n' > "$SCRATCH/sftp-password"
+
+            az login --service-principal \
+              --username "$(cat /secrets/client-id)" \
+              --password "$(cat /secrets/client-secret)" \
+              --tenant "$(cat /secrets/tenant-id)" --output none
+
+            # --file, not --value: the secret never appears in a command line.
+            az keyvault secret set --vault-name "$KEY_VAULT_NAME" \
+              --name "cho-sftp--$TENANT_ID--password" --file "$SCRATCH/sftp-password" --output none
+            az keyvault secret set --vault-name "$KEY_VAULT_NAME" \
+              --name "cho-sftp--$TENANT_ID--private-key" --file "$SCRATCH/sftp-key" --output none
+
+            # Only non-secret connection details go to the shared volume.
+            cp "$SCRATCH/sftp-key.pub" /work/sftp-key.pub
             cat > /work/sftp-config.txt <<EOF
             SFTP Host: sftp.cloudhealthoffice.com
             Port: 22
             Username: cho-$TENANT_ID
-            
-            Authentication Methods:
-            1. SSH Key (recommended):
-               - Download private key from portal
-               - Use with sftp -i /path/to/key cho-$TENANT_ID@sftp.cloudhealthoffice.com
-            
-            2. Password:
-               Password: $SFTP_PASSWORD
-            
+
+            Credentials are in Key Vault $KEY_VAULT_NAME:
+              cho-sftp--$TENANT_ID--private-key (SSH key, recommended)
+              cho-sftp--$TENANT_ID--password (password fallback)
+
             Directory Structure:
             /tenants/$TENANT_ID/
             ├── inbound/837/   (drop professional claims here)
@@ -456,21 +462,29 @@ spec:
             ├── outbound/271/  (eligibility responses)
             ├── outbound/277/  (claim status responses)
             └── archive/       (processed files after 7 days)
-            
+
             File Naming Convention:
             - {transaction-type}_{payer-id}_{YYYYMMDD}_{sequence}.edi
             - Example: 837_BCBSCA_20260208_001.edi
             EOF
-            
-            echo "SFTP credentials generated successfully"
-            
+
+            echo "SFTP credentials stored in Key Vault"
+
             # TODO: Store SSH public key in SFTP server authorized_keys
             # TODO: Create SFTP user account with chroot jail
-            # TODO: Store credentials in Azure Key Vault
+        env:
+          - name: KEY_VAULT_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: onboarding-config
+                key: key-vault-name
         volumeMounts:
           - name: work
             mountPath: /work
-    
+          - name: azure-credentials
+            mountPath: /secrets
+            readOnly: true
+
     # Template: Seed benefit plans
     - name: seed-benefit-plans
       container:
