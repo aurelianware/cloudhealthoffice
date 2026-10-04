@@ -68,6 +68,10 @@ public static class ChoAuthenticationExtensions
                 options.ServiceToken.PrivateKeyPem, options.ServiceToken.SymmetricKey,
                 options.ServiceToken.Lifetime));
         }
+        // The allowlist is read from the final configuration (the one the host
+        // builds), so test hosts and environment overrides apply.
+        services.TryAddSingleton(sp => new ChoOutboundHosts(
+            sp.GetService<IConfiguration>() ?? configuration, sp.GetService<IHostEnvironment>() ?? environment));
         services.TryAddTransient<ChoOutboundTokenHandler>();
 
         // Every factory-built client authenticates its calls to other CHO
@@ -152,17 +156,19 @@ public static class ChoAuthenticationExtensions
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddSingleton<IAuthorizationHandler, ServiceClientAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationHandler, DefaultPermissionFallbackHandler>();
         var passthrough = services.BuildTenantOptions().PassthroughPaths;
         services.AddAuthorization(authz =>
         {
             // Anything that reaches authorization without its own metadata
-            // (minimal APIs, health/metrics middleware, unmatched routes) still
-            // requires a caller, except the probe and scrape paths.
+            // (minimal-API endpoints, health/metrics middleware, unmatched
+            // routes) lands here. A matched endpoint gets the same default
+            // read/write permission an unannotated controller action gets
+            // (DefaultPermissionConvention); the probe and scrape paths pass
+            // without a caller; an unmatched route needs a caller and then 404s.
             authz.FallbackPolicy = new AuthorizationPolicyBuilder()
-                .RequireAssertion(ctx =>
-                    ctx.User.Identity?.IsAuthenticated == true
-                    || (ctx.Resource is HttpContext http
-                        && passthrough.Any(p => http.Request.Path.StartsWithSegments(p))))
+                .AddRequirements(new DefaultPermissionFallbackRequirement(
+                    defaults.DefaultReadPermission, defaults.DefaultWritePermission, passthrough))
                 .Build();
         });
 

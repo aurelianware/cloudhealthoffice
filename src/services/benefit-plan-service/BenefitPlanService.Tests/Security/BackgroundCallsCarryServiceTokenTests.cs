@@ -1,5 +1,6 @@
 using System.Net;
 using BenefitPlanService.Adapters;
+using BenefitPlanService.Models;
 using BenefitPlanService.Services;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Services;
@@ -106,5 +107,45 @@ public class BackgroundCallsCarryServiceTokenTests
             [new CodeCrosswalkRequest { ProcedureCode = "99213", CodeType = "CPT", LineNumber = 1 }]);
 
         NoCallerHost.TokenOf(host.Outbound.Last).Should().Be((Tenant, ClientId));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProviderIntegrityGate_WithoutCaller_SendsTenantAndServiceTokenToBothCallees(bool forceRefresh)
+    {
+        // The production clients: base addresses from Program.cs's defaults,
+        // which the service's ChoAuth:Outbound:Hosts admit.
+        using var host = new NoCallerHost(ClientId, (services, outbound) =>
+        {
+            services.AddMemoryCache();
+            services.AddOptions<ProviderIntegrityGateOptions>();
+            services.AddHttpClient(HttpProviderIntegrityGate.ProviderServiceClientName,
+                    c => c.BaseAddress = new Uri("http://provider-service/"))
+                .ConfigurePrimaryHttpMessageHandler(() => outbound);
+            services.AddHttpClient(HttpProviderIntegrityGate.VerificationServiceClientName,
+                    c => c.BaseAddress = new Uri("http://provider-verification-service/"))
+                .ConfigurePrimaryHttpMessageHandler(() => outbound);
+            services.AddSingleton<IProviderIntegrityGate, HttpProviderIntegrityGate>();
+        });
+        host.Outbound.Respond = request => request.RequestUri!.Host == "provider-service"
+            // A projection that was never refreshed, so the gate goes live.
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"IntegrityScore":null}""") }
+            : new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"CompositeScore":91,"Rating":"Clear","Status":"Verified"}"""),
+            };
+
+        var result = await host.Services.GetRequiredService<IProviderIntegrityGate>()
+            .CheckAsync("1234567893", Tenant, forceRefresh);
+
+        result.Passed.Should().BeTrue();
+        var verification = host.Outbound.Requests.Single(r => r.RequestUri!.Host == "provider-verification-service");
+        verification.RequestUri!.AbsolutePath.Should().Be("/api/v1/providers/1234567893/integrity-score");
+        verification.Headers.GetValues("X-Tenant-ID").Should().ContainSingle().Which.Should().Be(Tenant);
+        NoCallerHost.TokenOf(verification).Should().Be((Tenant, ClientId));
+        foreach (var request in host.Outbound.Requests)
+            NoCallerHost.TokenOf(request).Should().Be((Tenant, ClientId));
+        host.Outbound.Requests.Should().HaveCount(forceRefresh ? 1 : 2);
     }
 }

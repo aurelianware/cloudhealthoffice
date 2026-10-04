@@ -551,7 +551,11 @@ public sealed class WorkloadTokenTests : IDisposable
             tenant = actor.TenantId,
             isService = actor.IsService,
             isWorkload = ChoPrincipal.IsWorkload(http.User),
-        }));
+        }))
+        // A diagnostic endpoint for any authenticated caller, declared as such:
+        // an unannotated minimal API in a service with no default permissions
+        // is denied (the shared fallback policy).
+        .RequireAuthorization();
 
         await app.StartAsync();
         return app;

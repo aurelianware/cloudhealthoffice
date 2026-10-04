@@ -39,29 +39,28 @@ public sealed class ChoOutboundTokenHandler : DelegatingHandler
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        if (request.Headers.Authorization == null && IsInternal(request.RequestUri))
-            request.Headers.Authorization = ResolveAuthorization(request);
+        if (request.Headers.Authorization == null)
+        {
+            if (IsChoService(request.RequestUri))
+                request.Headers.Authorization = ResolveAuthorization(request);
+            else
+                _logger.LogDebug(
+                    "Outbound call to {Host} is not to a configured CHO host; no CHO token or tenant added.",
+                    request.RequestUri?.Host);
+        }
 
         return base.SendAsync(request, cancellationToken);
     }
 
     /// <summary>
-    /// CHO tokens are only ever sent to CHO services. Registered for every
-    /// factory client, this guard is what keeps a user's token away from
-    /// clearinghouses, model vendors and identity providers.
+    /// CHO tokens are only ever sent to CHO services, as configured in
+    /// <see cref="ChoOutboundHosts"/>. Registered for every factory client, this
+    /// guard is what keeps a user's token away from clearinghouses, model
+    /// vendors, identity providers and anything misconfigured. With no host
+    /// policy registered, nothing is a CHO host.
     /// </summary>
-    private bool IsInternal(Uri? uri)
-    {
-        if (uri == null || !uri.IsAbsoluteUri)
-            return false;
-
-        var host = uri.Host;
-        var configured = _services.GetService<ChoAuthOptions>()?.InternalHostSuffixes ?? [];
-        return !host.Contains('.')
-               || host.EndsWith(".svc", StringComparison.OrdinalIgnoreCase)
-               || host.EndsWith(".svc.cluster.local", StringComparison.OrdinalIgnoreCase)
-               || configured.Any(s => host.EndsWith(s, StringComparison.OrdinalIgnoreCase));
-    }
+    private bool IsChoService(Uri? uri)
+        => _services.GetService<ChoOutboundHosts>()?.IsChoService(uri) == true;
 
     private AuthenticationHeaderValue? ResolveAuthorization(HttpRequestMessage request)
     {

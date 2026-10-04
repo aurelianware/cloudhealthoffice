@@ -25,7 +25,12 @@ public sealed class NoCallerHost : IDisposable
         var settings = new Dictionary<string, string?>(ChoDevelopmentAuth.Configuration(serviceClientId));
         foreach (var (key, value) in configuration ?? new Dictionary<string, string?>())
             settings[key] = value;
-        Configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+        // The service's own appsettings.json underneath, so its outbound host
+        // allowlist (ChoAuth:Outbound) is the one production uses.
+        Configuration = new ConfigurationBuilder()
+            .AddJsonFile(ServiceAppSettings("payment-service"), optional: false)
+            .AddInMemoryCollection(settings)
+            .Build();
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -36,6 +41,18 @@ public sealed class NoCallerHost : IDisposable
     }
 
     public IConfiguration Configuration { get; }
+
+    /// <summary>src/services/{service}/appsettings.json, found above the test output directory.</summary>
+    private static string ServiceAppSettings(string service)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "src", "services", service, "appsettings.json");
+            if (File.Exists(candidate))
+                return candidate;
+        }
+        throw new FileNotFoundException($"{service} appsettings.json not found above {AppContext.BaseDirectory}");
+    }
 
     public CapturingHandler Outbound { get; } = new();
 

@@ -17,6 +17,10 @@ namespace CloudHealthOffice.Infrastructure.Security;
 ///   "ServiceToken": { "Issuer": "cho-internal", "ClientId": "claims-service", "PrivateKeyPem": "..." }
 /// }
 /// </code>
+///
+/// Which hosts receive this service's outbound CHO tokens is configured under
+/// <c>ChoAuth:Outbound</c> (<see cref="ChoOutboundOptions"/>, read by
+/// <see cref="ChoOutboundHosts"/>).
 /// </summary>
 public sealed class ChoAuthOptions
 {
@@ -33,12 +37,6 @@ public sealed class ChoAuthOptions
     /// token is available to forward (message consumers, scheduled jobs).
     /// </summary>
     public ChoServiceTokenOptions? ServiceToken { get; set; }
-
-    /// <summary>
-    /// Host suffixes, beyond single-label and <c>*.svc[.cluster.local]</c>
-    /// names, that count as CHO services for outbound token attachment.
-    /// </summary>
-    public List<string> InternalHostSuffixes { get; set; } = [".cloudhealthoffice"];
 
     /// <summary>Clock skew tolerated on token lifetime checks.</summary>
     public TimeSpan ClockSkew { get; set; } = TimeSpan.FromMinutes(1);

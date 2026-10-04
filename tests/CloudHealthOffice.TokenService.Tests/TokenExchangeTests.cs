@@ -528,7 +528,11 @@ public sealed class TokenExchangeTests : IDisposable
             membersWrite = actor.HasPermission("members:write"),
             platformAdmin = actor.HasPermission("platform:admin"),
             isService = actor.IsService,
-        }));
+        }))
+        // A diagnostic endpoint for any authenticated caller, declared as such:
+        // an unannotated minimal API in a service with no default permissions
+        // is denied (the shared fallback policy).
+        .RequireAuthorization();
         await app.StartAsync();
         return app;
     }

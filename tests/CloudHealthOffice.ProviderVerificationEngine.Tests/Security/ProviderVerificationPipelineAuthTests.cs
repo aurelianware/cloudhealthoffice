@@ -35,6 +35,10 @@ public class ProviderVerificationPipelineAuthTests : IClassFixture<ProviderVerif
         {
             builder.UseEnvironment("Development");
             builder.UseSetting("HealthChecks:EnableExternalNppesCheck", "false");
+            // A CHO callee as a deployment names one: only configured hosts
+            // (Services:*, ChoAuth:Outbound:*) or *.cloudhealthoffice receive
+            // CHO tokens; a dot-less name alone does not.
+            builder.UseSetting("Services:ProviderService", "http://provider-service/api/v1");
             builder.ConfigureServices(services =>
             {
                 // The real NPPES adapter and its client pipeline; only the
@@ -281,6 +285,9 @@ public class ProviderVerificationPipelineAuthTests : IClassFixture<ProviderVerif
     [InlineData("https://data.cms.gov/data-api/v1/dataset")]
     [InlineData("https://openpaymentsdata.cms.gov/api/1/datastore")]
     [InlineData("https://clinicaltables.nlm.nih.gov/api/")]
+    [InlineData("http://wiremock/api")]            // dot-less, configured nowhere
+    [InlineData("http://localhost:5020/api")]
+    [InlineData("http://[::1]:5020/api")]
     public async Task FactoryClient_NoCaller_TenantNamed_ExternalHost_GetsNoToken(string url)
     {
         var client = _factory.Services.GetRequiredService<IHttpClientFactory>().CreateClient("probe");

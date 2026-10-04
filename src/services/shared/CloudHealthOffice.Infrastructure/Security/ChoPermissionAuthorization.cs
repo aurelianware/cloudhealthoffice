@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.Extensions.Options;
 
@@ -192,4 +193,71 @@ public sealed class DefaultPermissionConvention : IApplicationModelConvention
         => attribute is RequirePermissionAttribute
            || attribute is IAllowAnonymous
            || (attribute is AuthorizeAttribute a && !string.IsNullOrEmpty(a.Policy));
+}
+
+/// <summary>
+/// The fallback policy of a CHO service: what applies to any request whose
+/// endpoint carries no authorization metadata of its own (no permission, no
+/// policy, no <c>[AllowAnonymous]</c>). In practice that is a minimal-API
+/// endpoint (<c>MapGet</c>, <c>MapPost</c>, ...) nobody annotated, so it is
+/// held to the same default as an unannotated controller action
+/// (<see cref="DefaultPermissionConvention"/>): the default read permission
+/// for GET/HEAD, the default write permission for everything else, and
+/// denied when that default is not configured.
+///
+/// Requests with no endpoint at all (health/metrics middleware, an unmatched
+/// route) are not endpoints to protect: the passthrough paths need no caller,
+/// and anything else needs an authenticated caller and then 404s.
+/// </summary>
+public sealed class DefaultPermissionFallbackRequirement : IAuthorizationRequirement
+{
+    public DefaultPermissionFallbackRequirement(
+        string? defaultReadPermission, string? defaultWritePermission, IReadOnlyList<string> passthroughPaths)
+    {
+        DefaultReadPermission = defaultReadPermission;
+        DefaultWritePermission = defaultWritePermission;
+        PassthroughPaths = passthroughPaths;
+    }
+
+    public string? DefaultReadPermission { get; }
+
+    public string? DefaultWritePermission { get; }
+
+    public IReadOnlyList<string> PassthroughPaths { get; }
+
+    /// <summary>The permission an unannotated endpoint answering <paramref name="method"/> requires, or null (denied).</summary>
+    public string? PermissionFor(string method)
+        => HttpMethods.IsGet(method) || HttpMethods.IsHead(method) ? DefaultReadPermission : DefaultWritePermission;
+}
+
+public sealed class DefaultPermissionFallbackHandler : AuthorizationHandler<DefaultPermissionFallbackRequirement>
+{
+    protected override Task HandleRequirementAsync(
+        AuthorizationHandlerContext context, DefaultPermissionFallbackRequirement requirement)
+    {
+        // The authorization middleware passes the HttpContext. Anything else
+        // (a direct IAuthorizationService call with no endpoint to judge) is denied.
+        if (context.Resource is not HttpContext http)
+            return Task.CompletedTask;
+
+        if (requirement.PassthroughPaths.Any(p => http.Request.Path.StartsWithSegments(p)))
+        {
+            context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+
+        if (context.User.Identity?.IsAuthenticated != true)
+            return Task.CompletedTask;
+
+        if (http.GetEndpoint() is null)
+        {
+            context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+
+        var permission = requirement.PermissionFor(http.Request.Method);
+        if (permission != null && ChoPrincipal.HasPermission(context.User, permission))
+            context.Succeed(requirement);
+        return Task.CompletedTask;
+    }
 }

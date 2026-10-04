@@ -468,6 +468,10 @@ builder.Services.AddHttpClient("TerminologyService", client =>
             ?? "http://terminology-service.cloudhealthoffice:5010/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
+// integrity-score (PasController $submit, ProviderDirectoryController) takes the
+// tenant from the token, so the caller's authenticated tenant goes on every
+// call: a CHO caller's token is forwarded, a SMART caller's is swapped for
+// fhir-service's service token for that tenant (SmartCallerOutboundHandler).
 builder.Services.AddHttpClient("ProviderVerificationService", client =>
 {
     client.BaseAddress = new Uri(
@@ -475,7 +479,9 @@ builder.Services.AddHttpClient("ProviderVerificationService", client =>
             ?? "http://provider-verification-service.cloudhealthoffice:5020/");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
     client.Timeout = TimeSpan.FromSeconds(5);
-});
+})
+.AddHttpMessageHandler<TenantHeaderPropagationHandler>()
+.AddHttpMessageHandler<CorrelationIdPropagationHandler>();
 builder.Services.AddHttpClient("NppesApi", client =>
 {
     client.BaseAddress = new Uri(

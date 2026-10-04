@@ -16,12 +16,22 @@ worked example.
     `[AllowAnonymous]` gets the default read permission (GET/HEAD) or the
     default write permission (all other methods). With no default set, the
     action is denied.
+  - Minimal-API endpoints (`MapGet`, `MapPost`, ... directly or in a
+    `MapGroup`) get the same defaults through the fallback authorization
+    policy: an endpoint with no authorization metadata of its own requires the
+    default read permission for GET/HEAD and the default write permission
+    otherwise, and is denied when that default is not set. `.AllowAnonymous()`,
+    `.RequireAuthorization(new RequirePermissionAttribute("..."))` and
+    `.RequireAuthorization(new RequireServiceClientAttribute("..."))` replace
+    the default. A bare `.RequireAuthorization()` (any signed-in user) also
+    replaces it, so don't use one; name the permission.
   - Registers `ICurrentActor`. The acting user is read from the token.
   - Every `IHttpClientFactory` client gets `ChoOutboundTokenHandler`. Calls to
     CHO hosts forward the caller's token. When there is no caller (a message
     consumer or a hosted service), the handler mints a service token for the
-    tenant named in the outbound request's `X-Tenant-ID`. Tokens are never sent
-    to external hosts.
+    tenant named in the outbound request's `X-Tenant-ID`. Calls to any other
+    host get no `Authorization` and no `X-Tenant-ID` from the handler (logged
+    at debug). See "Which hosts are CHO hosts" below.
 - `app.UseChoAuthentication();` runs authentication, then
   `TenantMiddleware` (tenant from the token claim only; a header that disagrees
   is rejected with 403; a token without a tenant is rejected with 401), then
@@ -90,6 +100,13 @@ worked example.
    for user tokens and `cho-internal` for service tokens. Comments written by
    earlier runs of the script point at `docs/security/service-authentication.md`,
    which was never written. Read them as pointing at that document.
+   Then check every CHO service this service calls against "Which hosts are
+   CHO hosts" below. A callee whose base URL is not a `Services:*` URL or a
+   `*.cloudhealthoffice` name (for example `ClaimsService:BaseUrl` set to
+   `http://claims-service:8080`, or a code default like
+   `http://tenant-service/`) goes in `ChoAuth:Outbound:Hosts` in
+   `appsettings.json`. Development files that point CHO URLs at `localhost`
+   add `ChoAuth:Outbound:DevelopmentHosts: ["localhost"]`.
 9. **Tests.**
    - Integration tests that use `WebApplicationFactory` must run in the
      `Development` or `Testing` environment. Create clients with
@@ -103,6 +120,41 @@ worked example.
      correct behaviour.
 10. **Commit** one service per commit:
     `feat(<svc>): require CHO tokens; tenant from token; <anything notable>`.
+
+## Which hosts are CHO hosts
+
+`ChoOutboundTokenHandler` (and fhir-service's `SmartCallerOutboundHandler`)
+attach a CHO token and `X-Tenant-ID` only to a host that `ChoOutboundHosts`
+admits. Nothing is inferred from the shape of a host name: a dot-less name is
+not internal. A host is a CHO host only when it is:
+
+- listed in `ChoAuth:Outbound:Hosts` (exact host names, no scheme or port);
+- under `.cloudhealthoffice`, `.cloudhealthoffice.svc` or
+  `.cloudhealthoffice.svc.cluster.local` (always), or under a suffix in
+  `ChoAuth:Outbound:Suffixes` (for another namespace);
+- the host of a `Services:*` URL in configuration, unless the key is
+  `TokenService`, `ArgoWorkflows`, `Prometheus` or listed in
+  `ChoAuth:Outbound:ExcludedServices` (put a `Services:*` entry that is not a
+  CHO backend there);
+- in the Development and Testing environments only, listed in
+  `ChoAuth:Outbound:DevelopmentHosts` (docker-compose names, `localhost`).
+
+`localhost`, `*.localhost` and IP literals (including `[::1]`) are never CHO
+hosts by suffix or because a `Services:*` URL points at them; only an explicit
+`Hosts`/`DevelopmentHosts` entry admits one. A misconfigured or external base
+URL therefore receives no credentials, and the callee's 401 shows the gap:
+fix the configuration, never widen the rule.
+
+```json
+"ChoAuth": {
+  "Outbound": {
+    "Hosts": [ "claims-service", "trading-partner-service" ],
+    "Suffixes": [ ".cho-staging.svc.cluster.local" ],
+    "ExcludedServices": [ "Nppes" ],
+    "DevelopmentHosts": [ "localhost" ]
+  }
+}
+```
 
 ## Default permissions
 

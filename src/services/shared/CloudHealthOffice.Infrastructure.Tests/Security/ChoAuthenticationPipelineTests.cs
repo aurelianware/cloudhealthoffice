@@ -79,8 +79,28 @@ public sealed class ChoAuthenticationPipelineTests : IAsyncLifetime
         app.UseChoAuthentication();
         app.MapControllers();
         app.MapChoHealthChecks();
+        MapMinimalEndpoints(app);
         await app.StartAsync();
         return app;
+    }
+
+    /// <summary>Minimal-API endpoints, unannotated and annotated, beside the controllers.</summary>
+    private static void MapMinimalEndpoints(WebApplication app)
+    {
+        var group = app.MapGroup("/api/minimal");
+        group.MapGet("/", () => Results.Ok());
+        group.MapPost("/", () => Results.Ok());
+        group.MapPut("/{id}", (string id) => Results.Ok());
+        group.MapDelete("/{id}", (string id) => Results.Ok());
+        group.MapPost("/adjust", () => Results.Ok())
+            .RequireAuthorization(new RequirePermissionAttribute("claims:adjust"));
+        group.MapGet("/audit", () => Results.Ok())
+            .RequireAuthorization(new RequirePermissionAttribute("audit:read"));
+        group.MapGet("/public", () => Results.Ok()).AllowAnonymous();
+        group.MapGet("/internal", () => Results.Ok())
+            .RequireAuthorization(new RequireServiceClientAttribute("token-service"));
+        app.MapGet("/minimal-top", () => Results.Ok());
+        app.MapHealthChecks("/health/endpoint");
     }
 
     private static HttpRequestMessage Request(HttpMethod method, string path, string? token, string? tenantHeader = null)
@@ -272,5 +292,104 @@ public sealed class ChoAuthenticationPipelineTests : IAsyncLifetime
         var act = () => builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment);
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*Issuers is empty*");
+    }
+
+    // ── Minimal APIs get the same defaults as controllers ───────────────────
+
+    [Theory]
+    [InlineData("/api/minimal")]
+    [InlineData("/minimal-top")]
+    public async Task MinimalGet_Unannotated_RequiresDefaultReadPermission(string path)
+    {
+        var noRead = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ProviderRelations);
+        var reader = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ComplianceOfficer);
+
+        (await _client.SendAsync(Request(HttpMethod.Get, path, null)))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await _client.SendAsync(Request(HttpMethod.Get, path, noRead)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await _client.SendAsync(Request(HttpMethod.Get, path, reader)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Theory]
+    [InlineData("POST", "/api/minimal")]
+    [InlineData("PUT", "/api/minimal/1")]
+    [InlineData("DELETE", "/api/minimal/1")]
+    public async Task MinimalWrite_Unannotated_RequiresDefaultWritePermission(string method, string path)
+    {
+        // ComplianceOfficer reads everything (*:read) but holds no claims:work.
+        var readerOnly = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ComplianceOfficer);
+        var worker = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ClaimsExaminer);
+
+        (await _client.SendAsync(Request(new HttpMethod(method), path, null)))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await _client.SendAsync(Request(new HttpMethod(method), path, readerOnly)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await _client.SendAsync(Request(new HttpMethod(method), path, worker)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task MinimalAnnotated_UsesItsOwnPermission()
+    {
+        var examiner = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ClaimsExaminer);
+        var supervisor = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ClaimsSupervisor);
+        var compliance = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.ComplianceOfficer);
+
+        // claims:work (the default write) is not enough for claims:adjust.
+        (await _client.SendAsync(Request(HttpMethod.Post, "/api/minimal/adjust", examiner)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await _client.SendAsync(Request(HttpMethod.Post, "/api/minimal/adjust", supervisor)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        // claims:read (the default read) is neither required nor sufficient for audit:read.
+        (await _client.SendAsync(Request(HttpMethod.Get, "/api/minimal/audit", examiner)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await _client.SendAsync(Request(HttpMethod.Get, "/api/minimal/audit", compliance)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task MinimalAnonymous_StaysAnonymous()
+    {
+        (await _client.SendAsync(Request(HttpMethod.Get, "/api/minimal/public", null)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task MinimalServiceClientEndpoint_AdmitsOnlyThatService()
+    {
+        var tokenService = ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("token-service", "tenant-a");
+        var other = ChoDevelopmentAuth.ServiceTokenIssuer().IssueServiceToken("claims-service", "tenant-a");
+        var admin = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.TenantAdmin);
+
+        (await _client.SendAsync(Request(HttpMethod.Get, "/api/minimal/internal", tokenService)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _client.SendAsync(Request(HttpMethod.Get, "/api/minimal/internal", other)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await _client.SendAsync(Request(HttpMethod.Get, "/api/minimal/internal", admin)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task MappedHealthEndpoint_NeedsNoToken()
+    {
+        var response = await _client.SendAsync(Request(HttpMethod.Get, "/health/endpoint", null));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task ServiceWithoutDefaults_DeniesUnannotatedMinimalEndpoints()
+    {
+        await using var app = await StartAsync(defaultRead: null, defaultWrite: null, unmappedService: true);
+        var client = app.GetTestClient();
+        var token = ChoDevelopmentAuth.UserToken("tenant-a", ChoRolePermissions.TenantAdmin);
+
+        (await client.SendAsync(Request(HttpMethod.Get, "/api/minimal", token)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.SendAsync(Request(HttpMethod.Post, "/api/minimal", token)))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.SendAsync(Request(HttpMethod.Get, "/api/minimal/public", null)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }
