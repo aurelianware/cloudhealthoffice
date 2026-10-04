@@ -247,7 +247,15 @@ public class MemberDocumentsController : ControllerBase
             ReleaseHold(doc, reason!);
         }
 
-        var updated = await _repository.UpdateAsync(doc);
+        MemberDocument updated;
+        try
+        {
+            updated = await _repository.UpdateAsync(doc);
+        }
+        catch (MemberDocumentConcurrencyException)
+        {
+            return ConcurrencyConflict();
+        }
         AuditHold(updated, action, reason);
 
         if (doc.PendingUploadBlobPath != null)
@@ -303,7 +311,15 @@ public class MemberDocumentsController : ControllerBase
 
         // Sync the blob size into the metadata record.
         doc.SizeBytes = await _blobService.GetBlobSizeAsync(doc.BlobContainer, doc.BlobPath, ct);
-        var updated = await _repository.UpdateAsync(doc);
+        MemberDocument updated;
+        try
+        {
+            updated = await _repository.UpdateAsync(doc);
+        }
+        catch (MemberDocumentConcurrencyException)
+        {
+            return ConcurrencyConflict();
+        }
 
         return Ok(updated);
     }
@@ -405,7 +421,15 @@ public class MemberDocumentsController : ControllerBase
         doc.SizeBytes = await _blobService.UploadAsync(doc.BlobContainer, doc.BlobPath, buffer, doc.ContentType, tags, ct);
         doc.ContentHashSha256 = hash;
         doc.PendingUploadBlobPath = null;
-        var updated = await _repository.UpdateAsync(doc);
+        MemberDocument updated;
+        try
+        {
+            updated = await _repository.UpdateAsync(doc);
+        }
+        catch (MemberDocumentConcurrencyException)
+        {
+            return ConcurrencyConflict();
+        }
 
         await _blobService.DeleteIfExistsAsync(doc.BlobContainer, stagingPath, ct);
         return Ok(updated);
@@ -496,6 +520,15 @@ public class MemberDocumentsController : ControllerBase
     private ObjectResult LegalHoldForbidden()
         => StatusCode(StatusCodes.Status403Forbidden,
             $"Placing a legal hold requires {ChoRolePermissions.LegalHold}.");
+
+    /// <summary>
+    /// The document changed between this request's read and its save (for
+    /// example a legal hold was placed or released meanwhile). Nothing was
+    /// saved; the caller reloads and retries.
+    /// </summary>
+    private ObjectResult ConcurrencyConflict()
+        => StatusCode(StatusCodes.Status409Conflict,
+            "The document was changed by another request. Reload it and try again.");
 
     private ObjectResult LegalHoldConflict()
         => StatusCode(StatusCodes.Status409Conflict,

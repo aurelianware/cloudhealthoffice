@@ -666,4 +666,34 @@ public class MemberDocumentPipelineAuthTests : IClassFixture<MemberDocumentPipel
             && d.SizeBytes == Pdf.Length
             && d.ContentHashSha256.Length == 64)), Times.Once);
     }
+
+    [Fact]
+    public async Task LegalHold_WhenTheDocumentChangedSinceItWasRead_Is409_AndNothingIsAuditedOrTagged()
+    {
+        // Another write saved the document between this request's read and its
+        // save (the repository's conditional replace refused it).
+        _factory.Repository.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>()))
+            .ThrowsAsync(new MemberDocumentConcurrencyException(DocId));
+
+        var response = await Client(Tenant, ChoRolePermissions.ComplianceOfficer)
+            .PutAsJsonAsync($"/api/v1/member-documents/{DocId}/legal-hold", Hold(true));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(_factory.Audit.Lines);
+        _factory.Blobs.Verify(b => b.SetTagsAsync(It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Finalize_WhenTheDocumentChangedSinceItWasRead_Is409()
+    {
+        var staging = $"tenants/{Tenant}/members/mem-1/{DocId}.pdf.upload";
+        _factory.Repository.Setup(r => r.GetByIdAsync(Tenant, DocId)).ReturnsAsync(StoredDocument(staging));
+        _factory.Repository.Setup(r => r.UpdateAsync(It.IsAny<MemberDocument>()))
+            .ThrowsAsync(new MemberDocumentConcurrencyException(DocId));
+
+        var response = await Client().PostAsync($"/api/v1/member-documents/{DocId}/finalize", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
 }
