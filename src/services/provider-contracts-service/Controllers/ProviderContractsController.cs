@@ -1,9 +1,18 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderContractsService.Models;
 using ProviderContractsService.Repositories;
 
 namespace ProviderContractsService.Controllers;
 
+/// <summary>
+/// Provider contract management. Every caller presents a CHO token: reads need
+/// contracts:read and writes contracts:write (the defaults set in Program.cs).
+/// The tenant comes from the token (the repository scopes every query to it),
+/// and the acting user is the token subject: CreatedBy / LastUpdatedBy are
+/// stamped by the repository, an amendment's ApprovedBy here. Actor and tenant
+/// values in a request body are ignored.
+/// </summary>
 [ApiController]
 [Route("api/v1/contracts")]
 [Produces("application/json")]
@@ -114,6 +123,11 @@ public class ProviderContractsController : ControllerBase
         contract.TenantId = existing.TenantId;
         contract.CreatedAt = existing.CreatedAt;
         contract.CreatedBy = existing.CreatedBy;
+        // Lifecycle and amendments change only through their own endpoints
+        // (activate/suspend/terminate/reinstate, POST amendments), so a PUT
+        // body cannot activate a contract or rewrite who approved an amendment.
+        contract.Status = existing.Status;
+        contract.Amendments = existing.Amendments;
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -122,6 +136,12 @@ public class ProviderContractsController : ControllerBase
     /// <summary>
     /// Activate a draft contract (Draft → Active)
     /// </summary>
+    /// <remarks>
+    /// contracts:write, like the other transitions: no payment path reads a
+    /// provider contract's status yet (capitation and FFS rates live in their
+    /// own services). When one does, activation and reinstatement should need a
+    /// second-user approval permission, which ChoRolePermissions does not define.
+    /// </remarks>
     [HttpPut("{id}/activate")]
     [ProducesResponseType(typeof(ProviderContract), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -217,7 +237,10 @@ public class ProviderContractsController : ControllerBase
     [HttpPost("{id}/amendments")]
     [ProducesResponseType(typeof(ProviderContract), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ProviderContract>> AddAmendment(string id, [FromBody] ContractAmendment amendment)
+    public async Task<ActionResult<ProviderContract>> AddAmendment(
+        string id,
+        [FromBody] ContractAmendment amendment,
+        [FromServices] ICurrentActor actor)
     {
         var contract = await _contractRepository.GetByIdAsync(id);
         if (contract == null)
@@ -225,6 +248,9 @@ public class ProviderContractsController : ControllerBase
 
         amendment.Id = Guid.NewGuid().ToString();
         amendment.CreatedAt = DateTime.UtcNow;
+        // The user who records the amendment, from the token; a body-supplied
+        // ApprovedBy is ignored.
+        amendment.ApprovedBy = actor.UserId;
         contract.Amendments.Add(amendment);
         _logger.LogInformation("Added amendment to provider contract {ContractNumber}: {Type}",
             contract.ContractNumber, SanitizeForLog(amendment.AmendmentType));

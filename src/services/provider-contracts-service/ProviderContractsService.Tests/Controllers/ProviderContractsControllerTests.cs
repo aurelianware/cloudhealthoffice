@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using ProviderContractsService.Controllers;
@@ -10,6 +11,7 @@ public class ProviderContractsControllerTests
 {
     private readonly Mock<IProviderContractRepository> _contractRepo;
     private readonly ProviderContractsController _controller;
+    private static ICurrentActor Actor => Mock.Of<ICurrentActor>(a => a.UserId == "token-user" && a.TenantId == "tenant-1");
 
     public ProviderContractsControllerTests()
     {
@@ -438,7 +440,7 @@ public class ProviderContractsControllerTests
             Description = "Adjusted capitation rates for Q3"
         };
 
-        var result = await _controller.AddAmendment("c-1", amendment);
+        var result = await _controller.AddAmendment("c-1", amendment, Actor);
 
         var ok = result.Result as OkObjectResult;
         ok.Should().NotBeNull();
@@ -460,7 +462,7 @@ public class ProviderContractsControllerTests
             Description = "Test"
         };
 
-        var result = await _controller.AddAmendment("missing", amendment);
+        var result = await _controller.AddAmendment("missing", amendment, Actor);
 
         result.Result.Should().BeOfType<NotFoundObjectResult>();
     }
