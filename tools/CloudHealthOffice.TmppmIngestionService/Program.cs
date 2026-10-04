@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 using CHO.TmppmIngestionService.Loaders;
 using CHO.TmppmIngestionService.Parsers;
 using CHO.TmppmIngestionService.Services;
@@ -157,19 +156,21 @@ public class Program
     private static void ConfigureServices(IServiceCollection services, IConfiguration config)
     {
         services.AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Debug));
+        services.AddSingleton(config);
         services.AddHttpClient<TmhpChapterDownloader>();
 
-        // MongoDB
-        var mongoConn = config["MongoDB:ConnectionString"] ?? "mongodb://localhost:27017";
-        var mongoDb = config["MongoDB:DatabaseName"] ?? "cho_terminology";
-        services.AddSingleton<IMongoClient>(new MongoClient(mongoConn));
-        services.AddSingleton(sp => sp.GetRequiredService<IMongoClient>().GetDatabase(mongoDb));
+        // terminology-service API (it owns the TMPPM collections; no database connection here)
+        var terminologyUrl = config["Terminology:BaseUrl"] ?? "http://terminology-service.cloudhealthoffice";
+        services.AddHttpClient<TmppmRuleStore>(client =>
+        {
+            client.BaseAddress = new Uri(terminologyUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromMinutes(5);
+        });
 
         // Services
         services.AddSingleton<TmppmPdfParser>();
         services.AddSingleton<TmhpChapterDownloader>();
-        services.AddSingleton<TmppmRuleStore>();
-        services.AddSingleton<IngestionPipeline>();
+        services.AddTransient<IngestionPipeline>();
     }
 
     private static int PrintUsage()
@@ -190,8 +191,11 @@ public class Program
               dotnet run -- download 2026 4                  # Download chapters only
             
             Environment variables (prefix CHO_TMPPM_):
-              CHO_TMPPM_MONGODB__CONNECTIONSTRING     MongoDB connection string
-              CHO_TMPPM_MONGODB__DATABASENAME          Database name
+              CHO_TMPPM_TERMINOLOGY__BASEURL           terminology-service URL
+              CHO_TMPPM_TERMINOLOGY__ACCESSTOKENFILE   file holding a CHO bearer token (re-read per request)
+              CHO_TMPPM_TERMINOLOGY__ACCESSTOKEN       or the token itself
+            Rules/editions need platform:admin; --tenant overrides need settings:manage
+            in that tenant (the token's tenant).
             """);
         return 1;
     }

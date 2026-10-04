@@ -301,8 +301,8 @@ builder.Services.AddScoped<IProviderContractsService, ProviderContractsService>(
 builder.Services.AddScoped<IArService, ArServiceImpl>();
 builder.Services.AddScoped<ITerminologyService, TerminologyServiceImpl>();
 
-// TMPPM PA Rule query service (direct MongoDB queries for PA Rule Explorer)
-builder.Services.AddSingleton<ITmppmRuleQueryService, TmppmRuleQueryService>();
+// TMPPM PA Rule Explorer: terminology-service's /api/v1/tmppm API with the user's CHO token
+builder.Services.AddScoped<ITmppmRuleQueryService, TmppmRuleQueryService>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>
@@ -369,7 +369,6 @@ static string BuildAdminConsentErrorUrl(string? tenantId)
 if (!useLocalDemoAuth)
 {
     builder.Services.AddHostedService<TenantSeedService>();
-    builder.Services.AddHostedService<TmppmIndexService>();
 }
 
 var app = builder.Build();

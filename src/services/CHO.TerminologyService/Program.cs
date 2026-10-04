@@ -58,6 +58,8 @@ builder.Services.AddChoDatabase(builder.Configuration);
 // ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<IConceptMapRepository, MongoConceptMapRepository>();
 builder.Services.AddSingleton<ICodeSystemCatalogRepository, MongoCodeSystemCatalogRepository>();
+// TMPPM PA rules: read by the portal and written by the ingestion tool, both through the API.
+builder.Services.AddSingleton<ITmppmStore, MongoTmppmStore>();
 builder.Services.AddSingleton<IContextRuleEngine, ContextRuleEngine>();
 builder.Services.AddSingleton<ITerminologyTranslationService, TerminologyTranslationService>();
 builder.Services.AddHostedService<CodeSystemCatalogSeedService>();

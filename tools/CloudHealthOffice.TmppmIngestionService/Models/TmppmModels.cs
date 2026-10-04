@@ -90,35 +90,3 @@ public class TmppmRuleDelta
     public string? Description { get; set; }
     public bool RequiresHumanReview { get; set; }
 }
-
-/// <summary>
-/// Maps to the existing CHO TerminologyService ConceptMapEntry for MongoDB persistence.
-/// The ingestion pipeline outputs these for bulk upsert into the terminology-service collection.
-/// </summary>
-public class ConceptMapEntryOverride
-{
-    public string Id { get; set; } = string.Empty;
-    public string SourceSystem { get; set; } = string.Empty;
-    public string SourceCode { get; set; } = string.Empty;
-    public string SourceDisplay { get; set; } = string.Empty;
-    public string TargetSystem { get; set; } = string.Empty;
-    public string TargetCode { get; set; } = string.Empty;
-    public string TargetDisplay { get; set; } = string.Empty;
-    public string Equivalence { get; set; } = "equivalent";
-    public string MapGroupId { get; set; } = string.Empty;
-    public int Priority { get; set; } = 1;
-    public MapRule? Rule { get; set; }
-    public string MapVersionId { get; set; } = string.Empty;
-    public bool IsOverride { get; set; } = true;
-    public string? TenantId { get; set; }
-}
-
-public class MapRule
-{
-    public string RuleType { get; set; } = "StateSpecific";
-    public int? AgeMin { get; set; }
-    public int? AgeMax { get; set; }
-    public string? Gender { get; set; }
-    public List<string>? CoMorbidCodes { get; set; }
-    public string? State { get; set; }
-}
