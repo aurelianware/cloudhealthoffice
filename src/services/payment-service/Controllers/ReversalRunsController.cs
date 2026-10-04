@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Services;
@@ -11,6 +12,10 @@ namespace PaymentService.Controllers;
 /// <c>/api/reversalruns</c> via <c>[Route("api/[controller]")]</c> for
 /// parity with <c>/api/paymentruns</c> (no <c>/v1</c> prefix; pattern
 /// parity per Plan-First Premise F).
+/// Reads need payments:read; create and cancel need payments:run. Executing a
+/// reversal run recoups money (negative payments, reversal 835s, predecessor
+/// claims voided), so it needs payments:approve from a user who did not create
+/// the run (maker-checker, RunSeparationOfDuties); a service token is refused.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -18,13 +23,16 @@ namespace PaymentService.Controllers;
 public class ReversalRunsController : ControllerBase
 {
     private readonly IReversalRunService _reversalRunService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ReversalRunsController> _logger;
 
     public ReversalRunsController(
         IReversalRunService reversalRunService,
+        ICurrentActor actor,
         ILogger<ReversalRunsController> logger)
     {
         _reversalRunService = reversalRunService;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -38,27 +46,35 @@ public class ReversalRunsController : ControllerBase
             "Creating reversal run with criteria: Provider={Provider}",
             SanitizeForLog(request.Criteria.ProviderNPI));
 
+        // The creator is the token subject; request.CreatedBy is never read.
         var run = await _reversalRunService.CreateReversalRunAsync(
-            request.Criteria, request.CreatedBy, request.Description);
+            request.Criteria, _actor.UserId, request.Description);
         return CreatedAtAction(nameof(GetReversalRunById), new { id = run.Id }, run);
     }
 
-    /// <summary>Create and immediately execute a reversal run.</summary>
+    /// <summary>
+    /// Create and immediately execute a reversal run. Always refused (403): the
+    /// creator would be the executor. Create with POST /api/reversalruns; a
+    /// different user with payments:approve executes it. Nothing is created.
+    /// </summary>
     [HttpPost("execute")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(ReversalRun), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ReversalRun>> CreateAndExecuteReversalRun([FromBody] CreateReversalRunRequest request)
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<ReversalRun> CreateAndExecuteReversalRun([FromBody] CreateReversalRunRequest request)
     {
-        _logger.LogInformation("Creating and executing reversal run");
-        var run = await _reversalRunService.CreateReversalRunAsync(
-            request.Criteria, request.CreatedBy, request.Description);
-        var executed = await _reversalRunService.ExecuteReversalRunAsync(run.Id);
-        return Ok(executed);
+        _logger.LogWarning("Refused create-and-execute reversal run by {User}: the creator cannot execute",
+            SanitizeForLog(_actor.UserId));
+        return SeparationOfDuties(new SeparationOfDutiesException(
+            "Separation of duties: a reversal run cannot be created and executed by the same caller. " +
+            "Create it with POST /api/reversalruns; a different user with payments:approve executes it."));
     }
 
     /// <summary>Execute an existing reversal run (Pending → Running → Completed).</summary>
     [HttpPost("{id}/execute")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(ReversalRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ReversalRun>> ExecuteReversalRun(string id)
@@ -68,6 +84,10 @@ public class ReversalRunsController : ControllerBase
         {
             var run = await _reversalRunService.ExecuteReversalRunAsync(id);
             return Ok(run);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
         }
         catch (InvalidOperationException ex) when (IsNotFound(ex))
         {
@@ -137,6 +157,9 @@ public class ReversalRunsController : ControllerBase
     private static bool IsNotFound(InvalidOperationException ex) =>
         ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase);
 
+    private ObjectResult SeparationOfDuties(SeparationOfDutiesException ex)
+        => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
@@ -147,6 +170,7 @@ public class ReversalRunsController : ControllerBase
 public class CreateReversalRunRequest
 {
     public ReversalRunCriteria Criteria { get; set; } = new();
+    /// <summary>Ignored: the creator is the token subject.</summary>
     public string? CreatedBy { get; set; }
     public string? Description { get; set; }
 }

@@ -1,3 +1,4 @@
+using CloudHealthOffice.PaymentService.Tests.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -30,6 +31,7 @@ public class ReversalRunServiceTests
     private readonly StubHttpHandler _claimsHandler = new();
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly IConfiguration _configuration;
+    private readonly TestActor _actor = TestActor.Approver();
 
     public ReversalRunServiceTests()
     {
@@ -69,7 +71,9 @@ public class ReversalRunServiceTests
         _tpClient,
         _httpFactory,
         NullLogger<ReversalRunService>.Instance,
-        _configuration);
+        _configuration,
+        _actor,
+        _actor.SeparationOfDuties());
 
     private static ReversalRun PendingRun() => new()
     {

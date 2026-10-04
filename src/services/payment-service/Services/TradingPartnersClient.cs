@@ -99,7 +99,19 @@ public class TradingPartnersClient : ITradingPartnersClient
         try
         {
             var path = $"/api/tradingpartners/by-npi/{Uri.EscapeDataString(tenantId)}/{Uri.EscapeDataString(npi)}/{Uri.EscapeDataString(environment)}";
-            var response = await _http.GetAsync(path, ct);
+            // Name the tenant so the shared outbound handler can mint a service
+            // token for it when there is no caller to forward.
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Add(CloudHealthOffice.Infrastructure.Middleware.TenantMiddleware.TenantHeaderName, tenantId);
+            var response = await _http.SendAsync(request, ct);
+
+            if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                _logger.LogError(
+                    "Trading partner lookup for tenant {Tenant} npi {Npi} was refused ({Status}); the claims are left out of the 835s",
+                    Sanitize(tenantId), Sanitize(npi), response.StatusCode);
+                return null;
+            }
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {

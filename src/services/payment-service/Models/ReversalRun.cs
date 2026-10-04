@@ -86,9 +86,20 @@ public class ReversalRun
     /// <summary>UTC creation timestamp.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    /// <summary>Operator who created the run.</summary>
+    /// <summary>Operator who created the run (token subject). The maker in maker-checker.</summary>
     [StringLength(100)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>User who executed the run, from the token. Never the creator.</summary>
+    [StringLength(100)]
+    public string? ExecutedBy { get; set; }
+
+    /// <summary>User or service that cancelled the run, from the token.</summary>
+    [StringLength(100)]
+    public string? CancelledBy { get; set; }
+
+    /// <summary>When the run was cancelled.</summary>
+    public DateTime? CancelledAt { get; set; }
 
     /// <summary>UTC timestamp when execution started (Status → Running).</summary>
     public DateTime? ExecutionStartedAt { get; set; }

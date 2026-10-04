@@ -1,22 +1,34 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Services;
 
 namespace PaymentService.Controllers;
 
+/// <summary>
+/// Payment runs. Reads need payments:read; creating and cancelling a run
+/// (preparation) need payments:run (Program.cs defaults). Executing a run
+/// releases money (check numbers, Posted payments, 835 envelopes, claims
+/// finalized as paid), so it needs payments:approve from a user who did not
+/// create the run (maker-checker, RunSeparationOfDuties); a service token is
+/// refused. The tenant and the acting user come from the CHO token.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 public class PaymentRunsController : ControllerBase
 {
     private readonly IPaymentRunService _paymentRunService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<PaymentRunsController> _logger;
 
     public PaymentRunsController(
         IPaymentRunService paymentRunService,
+        ICurrentActor actor,
         ILogger<PaymentRunsController> logger)
     {
         _paymentRunService = paymentRunService;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -31,9 +43,10 @@ public class PaymentRunsController : ControllerBase
         _logger.LogInformation("Creating payment run with criteria: LOB={LOB}, Provider={Provider}",
             request.Criteria.LineOfBusiness, SanitizeForLog(request.Criteria.ProviderNPI));
 
+        // The creator is the token subject; request.CreatedBy is never read.
         var paymentRun = await _paymentRunService.CreatePaymentRunAsync(
-            request.Criteria, 
-            request.CreatedBy);
+            request.Criteria,
+            _actor.UserId);
 
         return CreatedAtAction(
             nameof(GetPaymentRunById),
@@ -42,29 +55,32 @@ public class PaymentRunsController : ControllerBase
     }
 
     /// <summary>
-    /// Create and immediately execute a payment run
+    /// Create and immediately execute a payment run. Always refused (403): the
+    /// creator would be the executor, and releasing money needs a second user.
+    /// Create the run with POST /api/paymentruns; a different user with
+    /// payments:approve executes it with POST /api/paymentruns/{id}/execute.
+    /// Nothing is created.
     /// </summary>
     [HttpPost("execute")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(PaymentRun), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaymentRun>> CreateAndExecutePaymentRun([FromBody] CreatePaymentRunRequest request)
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<PaymentRun> CreateAndExecutePaymentRun([FromBody] CreatePaymentRunRequest request)
     {
-        _logger.LogInformation("Creating and executing payment run");
-
-        var paymentRun = await _paymentRunService.CreatePaymentRunAsync(
-            request.Criteria, 
-            request.CreatedBy);
-
-        var executed = await _paymentRunService.ExecutePaymentRunAsync(paymentRun.Id);
-
-        return Ok(executed);
+        _logger.LogWarning("Refused create-and-execute payment run by {User}: the creator cannot execute",
+            SanitizeForLog(_actor.UserId));
+        return SeparationOfDuties(new SeparationOfDutiesException(
+            "Separation of duties: a payment run cannot be created and executed by the same caller. " +
+            "Create it with POST /api/paymentruns; a different user with payments:approve executes it."));
     }
 
     /// <summary>
     /// Execute an existing payment run
     /// </summary>
     [HttpPost("{id}/execute")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(PaymentRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaymentRun>> ExecutePaymentRun(string id)
@@ -75,6 +91,10 @@ public class PaymentRunsController : ControllerBase
         {
             var paymentRun = await _paymentRunService.ExecutePaymentRunAsync(id);
             return Ok(paymentRun);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -134,6 +154,9 @@ public class PaymentRunsController : ControllerBase
         }
     }
 
+    private ObjectResult SeparationOfDuties(SeparationOfDutiesException ex)
+        => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -145,6 +168,7 @@ public class PaymentRunsController : ControllerBase
 public class CreatePaymentRunRequest
 {
     public PaymentRunCriteria Criteria { get; set; } = new();
+    /// <summary>Ignored: the creator is the token subject.</summary>
     public string? CreatedBy { get; set; }
     public string? Description { get; set; }
 }

@@ -9,6 +9,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -17,6 +18,20 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// it. Reads need payments:read; preparing runs (create, cancel) needs
+// payments:run. Releasing money (executing a payment or reversal run, which
+// creates the payments, writes the 835s and finalizes or voids the claims)
+// needs payments:approve from a user who did not create the run (maker-checker,
+// RunSeparationOfDuties); a service token cannot release money. Ledger changes
+// to a payment record (record, post, reconcile) need finance:write.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "payments:read";
+    auth.DefaultWritePermission = "payments:run";
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -29,7 +44,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
 // Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
@@ -79,9 +94,13 @@ builder.Services.AddScoped<IEraGeneratorService, EraGeneratorService>();
 builder.Services.AddSingleton<IBatchEraGeneratorService, BatchEraGeneratorService>();
 builder.Services.AddSingleton<ICarcRarcMappingService, CarcRarcMappingService>();
 builder.Services.AddScoped<ITradingPartnersClient, TradingPartnersClient>();
+builder.Services.AddScoped<IRunSeparationOfDuties, RunSeparationOfDuties>();
 
-// Add HttpClient for claims service integration
-builder.Services.AddHttpClient("ClaimsService", client =>
+// HttpClients for service-to-service calls. AddChoAuthentication puts
+// ChoOutboundTokenHandler on every factory client: a caller's token is
+// forwarded, and without a caller a service token is minted for the tenant the
+// request names in X-Tenant-ID (the clients always set it from the run).
+builder.Services.AddHttpClient(ClaimsServiceClient.HttpClientName, client =>
 {
     var claimsServiceUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";
     client.BaseAddress = new Uri(claimsServiceUrl);
@@ -143,12 +162,10 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
-
 app.UseCors("AllowAll");
 
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();

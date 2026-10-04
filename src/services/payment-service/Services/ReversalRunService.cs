@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using PaymentService.Models;
 using PaymentService.Repositories;
 using System.Net;
@@ -36,9 +37,11 @@ public class ReversalRunService : IReversalRunService
     private readonly IBatchEraGeneratorService _batchEraGenerator;
     private readonly IEraEnvelopeRepository _envelopeRepository;
     private readonly ITradingPartnersClient _tradingPartnersClient;
-    private readonly HttpClient _claimsServiceClient;
+    private readonly IClaimsServiceClient _claimsService;
     private readonly ILogger<ReversalRunService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
+    private readonly IRunSeparationOfDuties _separationOfDuties;
 
     public ReversalRunService(
         IPaymentRepository paymentRepository,
@@ -48,14 +51,18 @@ public class ReversalRunService : IReversalRunService
         ITradingPartnersClient tradingPartnersClient,
         IHttpClientFactory httpClientFactory,
         ILogger<ReversalRunService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ICurrentActor actor,
+        IRunSeparationOfDuties separationOfDuties)
     {
         _paymentRepository = paymentRepository;
         _reversalRunRepository = reversalRunRepository;
         _batchEraGenerator = batchEraGenerator;
         _envelopeRepository = envelopeRepository;
         _tradingPartnersClient = tradingPartnersClient;
-        _claimsServiceClient = httpClientFactory.CreateClient("ClaimsService");
+        _claimsService = new ClaimsServiceClient(httpClientFactory);
+        _actor = actor;
+        _separationOfDuties = separationOfDuties;
         _logger = logger;
         _configuration = configuration;
     }
@@ -87,6 +94,11 @@ public class ReversalRunService : IReversalRunService
         if (run.Status != ReversalRunStatus.Pending)
             throw new InvalidOperationException($"Reversal run {reversalRunId} is not in Pending status");
 
+        // Executing recoups payments and voids claims: a user other than the
+        // run's creator, never a service token (SeparationOfDutiesException -> 403).
+        run.ExecutedBy = _separationOfDuties.EnsureMayRelease(
+            "reversal run", run.ReversalRunNumber, run.CreatedBy);
+
         run.Status = ReversalRunStatus.Running;
         run.ExecutionStartedAt = DateTime.UtcNow;
         await _reversalRunRepository.UpdateAsync(run);
@@ -97,7 +109,7 @@ public class ReversalRunService : IReversalRunService
             //          claims-service. The 5.12a list endpoint already
             //          supports the filter shape we need (status +
             //          createdBy + date range + pagination).
-            var adjustments = await FetchPendingReversalAdjustmentsAsync(run.Criteria);
+            var adjustments = await FetchPendingReversalAdjustmentsAsync(run.TenantId, run.Criteria);
 
             _logger.LogInformation(
                 "Reversal run {ReversalRunNumber} found {Count} PendingReversal adjustments",
@@ -123,7 +135,7 @@ public class ReversalRunService : IReversalRunService
             foreach (var adj in adjustments)
             {
                 if (predecessors.ContainsKey(adj.PredecessorClaimId)) continue;
-                var pred = await FetchClaimAsync(adj.PredecessorClaimId);
+                var pred = await FetchClaimAsync(run.TenantId, adj.PredecessorClaimId);
                 if (pred is null)
                 {
                     run.Warnings.Add($"Predecessor claim {adj.PredecessorClaimId} not found; adjustment {adj.Id} skipped");
@@ -291,12 +303,14 @@ public class ReversalRunService : IReversalRunService
             throw new InvalidOperationException("Cannot cancel a running reversal run");
 
         run.Status = ReversalRunStatus.Cancelled;
+        run.CancelledBy = _actor.UserId;
+        run.CancelledAt = DateTime.UtcNow;
         await _reversalRunRepository.UpdateAsync(run);
     }
 
     // ── Private helpers ────────────────────────────────────────────────
 
-    private async Task<List<ClaimAdjustmentDto>> FetchPendingReversalAdjustmentsAsync(ReversalRunCriteria criteria)
+    private async Task<List<ClaimAdjustmentDto>> FetchPendingReversalAdjustmentsAsync(string tenantId, ReversalRunCriteria criteria)
     {
         // Explicit-override path — operator hand-curated batch.
         if (criteria.AdjustmentIds is { Count: > 0 } explicitIds)
@@ -304,7 +318,7 @@ public class ReversalRunService : IReversalRunService
             var explicitMatches = new List<ClaimAdjustmentDto>();
             foreach (var id in explicitIds)
             {
-                var single = await FetchAdjustmentAsync(id);
+                var single = await FetchAdjustmentAsync(tenantId, id);
                 if (single != null && single.Status == ClaimAdjustmentDtoStatus.PendingReversal)
                     explicitMatches.Add(single);
             }
@@ -335,8 +349,7 @@ public class ReversalRunService : IReversalRunService
             if (criteria.AdjustmentDateTo.HasValue)
                 query.Add($"createdTo={criteria.AdjustmentDateTo.Value:O}");
 
-            var url = "/api/v1/adjustments?" + string.Join("&", query);
-            var response = await _claimsServiceClient.GetAsync(url);
+            var response = await _claimsService.ListAdjustmentsAsync(tenantId, string.Join("&", query));
             if (!response.IsSuccessStatusCode)
                 throw new InvalidOperationException(
                     $"claims-service GET /api/v1/adjustments returned {response.StatusCode}");
@@ -359,9 +372,9 @@ public class ReversalRunService : IReversalRunService
         return collected;
     }
 
-    private async Task<ClaimAdjustmentDto?> FetchAdjustmentAsync(string adjustmentId)
+    private async Task<ClaimAdjustmentDto?> FetchAdjustmentAsync(string tenantId, string adjustmentId)
     {
-        var response = await _claimsServiceClient.GetAsync($"/api/v1/adjustments/{adjustmentId}");
+        var response = await _claimsService.GetAdjustmentAsync(tenantId, adjustmentId);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         if (!response.IsSuccessStatusCode)
@@ -370,9 +383,9 @@ public class ReversalRunService : IReversalRunService
         return await response.Content.ReadFromJsonAsync<ClaimAdjustmentDto>();
     }
 
-    private async Task<ClaimDto?> FetchClaimAsync(string claimId)
+    private async Task<ClaimDto?> FetchClaimAsync(string tenantId, string claimId)
     {
-        var response = await _claimsServiceClient.GetAsync($"/api/claims/{claimId}");
+        var response = await _claimsService.GetClaimAsync(tenantId, claimId);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         if (!response.IsSuccessStatusCode)
@@ -526,8 +539,7 @@ public class ReversalRunService : IReversalRunService
                     Reason = $"Reversed by ReversalRun {run.ReversalRunNumber} (adjustment {adj.Id})",
                     ReversalRunId = run.Id,
                 };
-                var response = await _claimsServiceClient.PostAsJsonAsync(
-                    $"/api/claims/{pred.Id}/void", body);
+                var response = await _claimsService.VoidClaimAsync(run.TenantId, pred.Id, body);
                 if (response.IsSuccessStatusCode)
                 {
                     run.AdjustmentIds.Add(adj.Id);

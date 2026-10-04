@@ -93,10 +93,22 @@ public class PaymentRun
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// User who created the payment run
+    /// User who created the payment run (token subject; a service client id when
+    /// a service created it). The maker in maker-checker.
     /// </summary>
     [StringLength(100)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>User who executed (released) the payment run, from the token. Never the creator.</summary>
+    [StringLength(100)]
+    public string? ExecutedBy { get; set; }
+
+    /// <summary>User or service that cancelled the run, from the token.</summary>
+    [StringLength(100)]
+    public string? CancelledBy { get; set; }
+
+    /// <summary>When the run was cancelled.</summary>
+    public DateTime? CancelledAt { get; set; }
 
     /// <summary>
     /// Payment run execution started

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using PaymentService.Models;
 using PaymentService.Repositories;
 using System.Net.Http.Json;
@@ -23,9 +24,11 @@ public class PaymentRunService : IPaymentRunService
     private readonly ICarcRarcMappingService _carcRarcMapper;
     private readonly IEraEnvelopeRepository _envelopeRepository;
     private readonly ITradingPartnersClient _tradingPartnersClient;
-    private readonly HttpClient _claimsServiceClient;
+    private readonly IClaimsServiceClient _claimsService;
     private readonly ILogger<PaymentRunService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
+    private readonly IRunSeparationOfDuties _separationOfDuties;
 
     public PaymentRunService(
         IPaymentRepository paymentRepository,
@@ -36,7 +39,9 @@ public class PaymentRunService : IPaymentRunService
         ITradingPartnersClient tradingPartnersClient,
         IHttpClientFactory httpClientFactory,
         ILogger<PaymentRunService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ICurrentActor actor,
+        IRunSeparationOfDuties separationOfDuties)
     {
         _paymentRepository = paymentRepository;
         _paymentRunRepository = paymentRunRepository;
@@ -44,7 +49,9 @@ public class PaymentRunService : IPaymentRunService
         _carcRarcMapper = carcRarcMapper;
         _envelopeRepository = envelopeRepository;
         _tradingPartnersClient = tradingPartnersClient;
-        _claimsServiceClient = httpClientFactory.CreateClient("ClaimsService");
+        _claimsService = new ClaimsServiceClient(httpClientFactory);
+        _actor = actor;
+        _separationOfDuties = separationOfDuties;
         _logger = logger;
         _configuration = configuration;
     }
@@ -74,6 +81,11 @@ public class PaymentRunService : IPaymentRunService
         if (paymentRun.Status != PaymentRunStatus.Pending)
             throw new InvalidOperationException($"Payment run {paymentRunId} is not in Pending status");
 
+        // Executing issues the payments: a user other than the run's creator,
+        // never a service token (throws SeparationOfDutiesException -> 403).
+        paymentRun.ExecutedBy = _separationOfDuties.EnsureMayRelease(
+            "payment run", paymentRun.PaymentRunNumber, paymentRun.CreatedBy);
+
         paymentRun.Status = PaymentRunStatus.Running;
         paymentRun.ExecutionStartedAt = DateTime.UtcNow;
         await _paymentRunRepository.UpdateAsync(paymentRun);
@@ -81,7 +93,7 @@ public class PaymentRunService : IPaymentRunService
         try
         {
             // Step 1: Fetch approved/finalized claims from claims-service
-            var claims = await FetchApprovedClaimsAsync(paymentRun.Criteria);
+            var claims = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
 
             _logger.LogInformation(
                 "Found {ClaimCount} approved claims for payment run {PaymentRunNumber}",
@@ -271,12 +283,14 @@ public class PaymentRunService : IPaymentRunService
             throw new InvalidOperationException("Cannot cancel a running payment run");
 
         paymentRun.Status = PaymentRunStatus.Cancelled;
+        paymentRun.CancelledBy = _actor.UserId;
+        paymentRun.CancelledAt = DateTime.UtcNow;
         await _paymentRunRepository.UpdateAsync(paymentRun);
     }
 
     // ── Private helpers ────────────────────────────────────────────────
 
-    private async Task<List<ClaimDto>> FetchApprovedClaimsAsync(PaymentRunCriteria criteria)
+    private async Task<List<ClaimDto>> FetchApprovedClaimsAsync(string tenantId, PaymentRunCriteria criteria)
     {
         var queryParams = new List<string>();
 
@@ -293,7 +307,7 @@ public class PaymentRunService : IPaymentRunService
         queryParams.Add("status=5");
 
         var queryString = string.Join("&", queryParams);
-        var response = await _claimsServiceClient.GetAsync($"/api/claims/search?{queryString}&pageSize=5000");
+        var response = await _claimsService.SearchClaimsAsync(tenantId, $"{queryString}&pageSize=5000");
 
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Failed to fetch claims from claims service: {response.StatusCode}");
@@ -559,7 +573,7 @@ public class PaymentRunService : IPaymentRunService
                     EraEnvelopeId = claimToEnvelopeId.TryGetValue(claim.Id, out var envelopeId) ? envelopeId : null
                 };
 
-                var response = await _claimsServiceClient.PostAsJsonAsync($"/api/claims/{claim.Id}/remittance", body);
+                var response = await _claimsService.PostRemittanceAsync(paymentRun.TenantId, claim.Id, body);
                 if (!response.IsSuccessStatusCode)
                 {
                     var bodyText = await response.Content.ReadAsStringAsync();

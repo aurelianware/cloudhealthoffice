@@ -1,3 +1,4 @@
+using CloudHealthOffice.PaymentService.Tests.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -28,6 +29,7 @@ public class PaymentRunServiceBatchedTests
     private readonly StubHttpHandler _claimsHandler = new();
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly IConfiguration _configuration;
+    private readonly TestActor _actor = TestActor.Approver();
 
     public PaymentRunServiceBatchedTests()
     {
@@ -61,7 +63,9 @@ public class PaymentRunServiceBatchedTests
         _tpClient,
         _httpFactory,
         NullLogger<PaymentRunService>.Instance,
-        _configuration);
+        _configuration,
+        _actor,
+        _actor.SeparationOfDuties());
 
     private static PaymentRun PendingRun() => new()
     {

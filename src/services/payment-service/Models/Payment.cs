@@ -130,9 +130,14 @@ public class Payment
     public DateTime? ReconciledAt { get; set; }
 
     /// <summary>
-    /// User/system that posted the payment
+    /// User/system that posted the payment (token subject; never from a request body)
     /// </summary>
     public string? PostedBy { get; set; }
+
+    /// <summary>
+    /// User/system that reconciled the payment (token subject)
+    /// </summary>
+    public string? ReconciledBy { get; set; }
 
     /// <summary>
     /// Notes about payment or exceptions

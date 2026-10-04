@@ -1,3 +1,4 @@
+using CloudHealthOffice.PaymentService.Tests.Security;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Http;
@@ -34,6 +35,7 @@ public class PaymentRunBatchedEndToEndTests
     private readonly StubHttpHandler _claimsHandler = new();
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly IConfiguration _configuration;
+    private readonly TestActor _actor = TestActor.Approver();
 
     public PaymentRunBatchedEndToEndTests()
     {
@@ -73,7 +75,9 @@ public class PaymentRunBatchedEndToEndTests
         _tpClient,
         _httpFactory,
         NullLogger<PaymentRunService>.Instance,
-        _configuration);
+        _configuration,
+        _actor,
+        _actor.SeparationOfDuties());
 
     [Fact]
     public async Task EndToEnd_50ClaimsAcross3Partners_ProducesThreeEnvelopesAndFinalizesAll()
