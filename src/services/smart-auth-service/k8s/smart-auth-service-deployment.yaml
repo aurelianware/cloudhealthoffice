@@ -25,18 +25,12 @@ data:
   #   ChoAuth__Issuers__0__PublicKeyPem=<token-service public key>
   # See docs/security/smart-auth-tenancy.md.
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: smart-auth-service-secrets
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  MongoDb__ConnectionString: "mongodb://admin:CHANGE_ME@mongodb:27017/CloudHealthOffice"
-  MongoDb__DatabaseName: "CloudHealthOffice"
-  # Production: signing/encryption certificates from Azure Key Vault
-  # Sprint 3: mount KeyVault secrets here
+# The smart-auth-service-secrets Secret is not part of this manifest, so
+# applying it never overwrites real credentials. Create it once per cluster
+# (or from Key Vault through the CSI driver):
+#   kubectl -n cloudhealthoffice create secret generic smart-auth-service-secrets \
+#     --from-literal=MongoDb__ConnectionString='<connection string>' \
+#     --from-literal=MongoDb__DatabaseName=CloudHealthOffice
 
 ---
 apiVersion: apps/v1
