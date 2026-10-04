@@ -15,9 +15,9 @@ namespace RiskAdjustmentService.Models;
 public class MemberRiskScore
 {
     /// <summary>
-    /// Multi-tenant partition key.
+    /// Multi-tenant partition key. Always the token tenant: a value in a request
+    /// body is ignored (the repositories stamp the request tenant on every write).
     /// </summary>
-    [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
@@ -154,13 +154,13 @@ public class MemberRiskScore
     public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Audit: Created by.
+    /// Audit: Created by. The token subject; a value in a request body is ignored.
     /// </summary>
     [StringLength(200)]
     public string? CreatedBy { get; set; }
 
     /// <summary>
-    /// Audit: Last updated by.
+    /// Audit: Last updated by. The token subject; a value in a request body is ignored.
     /// </summary>
     [StringLength(200)]
     public string? LastUpdatedBy { get; set; }

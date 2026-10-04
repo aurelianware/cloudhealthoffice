@@ -3,13 +3,13 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
 using RiskAdjustmentService;
-using RiskAdjustmentService.Middleware;
 using RiskAdjustmentService.Repositories;
 using CloudHealthOffice.RiskAdjustmentEngine.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -76,8 +76,23 @@ builder.Services.AddSingleton<IHccHierarchyResolver, HccHierarchyResolver>();
 builder.Services.AddSingleton<IRiskScoreCalculator, RiskScoreCalculator>();
 builder.Services.AddSingleton<CloudHealthOffice.RiskAdjustmentEngine.Services.RiskAdjustmentEngine>();
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (the repositories read the request tenant from it)
 builder.Services.AddHttpContextAccessor();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// it (ICurrentActor / HttpContext.Items["TenantId"]), never from a header,
+// query string or body. Risk scores carry diagnoses (PHI): reads need
+// risk-adjustment:read (Finance; ComplianceOfficer through *:read). Writes
+// (score upserts, RAF calculations, submission status, deletes) need
+// risk-adjustment:write, the playbook default, or finance:write: no built-in
+// role holds risk-adjustment:write yet, and Finance, which already reads the
+// scores, runs the submissions. Each action also names its permission.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = RiskAdjustmentPermissions.Read;
+    auth.DefaultWritePermission = RiskAdjustmentPermissions.Write;
+});
 
 // Health checks (MongoDB or Cosmos DB)
 builder.Services.AddChoHealthChecks(options =>
@@ -119,14 +134,14 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware
-app.UseTenantMiddleware();
-
 app.UseCors("AllowAll");
 
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();
 
 app.Run();
+
+public partial class Program { }

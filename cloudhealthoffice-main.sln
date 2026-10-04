@@ -257,6 +257,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.TenantSer
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.FfsService.Tests", "tests\CloudHealthOffice.FfsService.Tests\CloudHealthOffice.FfsService.Tests.csproj", "{617D9660-93EC-400B-A2B9-6D1BB4BDF0C8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.RiskAdjustmentService.Tests", "tests\CloudHealthOffice.RiskAdjustmentService.Tests\CloudHealthOffice.RiskAdjustmentService.Tests.csproj", "{91151AB2-3DA6-40F4-9875-A516A3E12805}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1479,6 +1481,18 @@ Global
 		{617D9660-93EC-400B-A2B9-6D1BB4BDF0C8}.Release|x64.Build.0 = Release|Any CPU
 		{617D9660-93EC-400B-A2B9-6D1BB4BDF0C8}.Release|x86.ActiveCfg = Release|Any CPU
 		{617D9660-93EC-400B-A2B9-6D1BB4BDF0C8}.Release|x86.Build.0 = Release|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Debug|x64.Build.0 = Debug|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Debug|x86.Build.0 = Debug|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Release|Any CPU.Build.0 = Release|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Release|x64.ActiveCfg = Release|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Release|x64.Build.0 = Release|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Release|x86.ActiveCfg = Release|Any CPU
+		{91151AB2-3DA6-40F4-9875-A516A3E12805}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1593,6 +1607,7 @@ Global
 		{4654D0A5-2A50-4FD6-8FC9-00951A42486F} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{E3BBA8C8-B5C8-43A4-AFFE-AC8DD9B3C132} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{617D9660-93EC-400B-A2B9-6D1BB4BDF0C8} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{91151AB2-3DA6-40F4-9875-A516A3E12805} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C10C3349-5BEE-4B34-9987-23F0142F9D98}
