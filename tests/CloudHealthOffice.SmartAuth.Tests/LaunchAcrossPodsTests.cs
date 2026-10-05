@@ -62,7 +62,7 @@ public class LaunchAcrossPodsTests
     private static async Task<string> RegisterAsync(SmartAuthDriver pod)
     {
         var resp = await pod.Admin("demo-tenant", ChoRolePermissions.MemberServices)
-            .PostAsJsonAsync("/launch", new { patientId = "pat-001", clientId = "cho-ehr-app" });
+            .PostAsJsonAsync("/launch", new { patientId = "pat-001", clientId = "cho-ehr-app", practitionerId = "provider-001" });
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         return JsonDocument.Parse(await resp.Content.ReadAsStringAsync()).RootElement.GetProperty("launch").GetString()!;
     }

@@ -194,7 +194,7 @@ public class SmartTenancyTests
         var tenant = SmartAuthDriver.NewTenant();
         var (ehrApp, _) = await _smart.RegisterClientAsync(tenant, "provider-app", "openid", "fhirUser", "launch", "launch/patient", "user/*.read");
         var provider = await _smart.LinkedProviderAsync(tenant, "prov-77", ValidNpi);
-        var launch = await RegisterLaunchAsync(tenant, ehrApp, "mbr-7007");
+        var launch = await RegisterLaunchAsync(tenant, ehrApp, "mbr-7007", practitionerId: "prov-77");
 
         var outcome = await SmartAuthDriver.AuthorizeAsync(provider, ehrApp, "openid fhirUser launch user/*.read", launch: launch);
         outcome.Error.Should().BeNull();
@@ -252,6 +252,45 @@ public class SmartTenancyTests
     }
 
     [Fact]
+    public async Task LaunchRegistration_WithoutAPractitioner_IsRefused()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (ehrApp, _) = await _smart.RegisterClientAsync(tenant, "provider-app", "openid", "launch", "user/*.read");
+
+        foreach (var body in new object[]
+                 {
+                     new { patientId = "mbr-1", clientId = ehrApp },
+                     new { patientId = "mbr-1", clientId = ehrApp, practitionerId = "" },
+                 })
+        {
+            var resp = await _smart.Admin(tenant, ChoRolePermissions.MemberServices).PostAsJsonAsync("/launch", body);
+            resp.StatusCode.Should().Be(HttpStatusCode.BadRequest, "any provider user of the tenant could use it");
+            (await resp.Content.ReadAsStringAsync()).Should().Contain("practitionerId is required");
+        }
+    }
+
+    [Fact]
+    public async Task LaunchWithoutAPractitioner_IsAcceptedOnlyWithTheDeprecatedSetting()
+    {
+        await using var lenient = _fixture.Factory.WithWebHostBuilder(b =>
+            b.UseSetting("SmartAuth:AllowLaunchWithoutPractitioner", "true"));
+        var smart = new SmartAuthDriver(lenient);
+        var tenant = SmartAuthDriver.NewTenant();
+        var (ehrApp, _) = await smart.RegisterClientAsync(tenant, "provider-app", "openid", "launch", "user/*.read");
+        var anyProvider = await smart.LinkedProviderAsync(tenant, "prov-whoever", ValidNpi);
+
+        var resp = await smart.Admin(tenant, ChoRolePermissions.MemberServices)
+            .PostAsJsonAsync("/launch", new { patientId = "mbr-5151", clientId = ehrApp });
+        resp.StatusCode.Should().Be(HttpStatusCode.OK, await resp.Content.ReadAsStringAsync());
+        var launch = JsonDocument.Parse(await resp.Content.ReadAsStringAsync()).RootElement.GetProperty("launch").GetString()!;
+
+        // The old rule: any provider user of the tenant on that client.
+        var outcome = await SmartAuthDriver.AuthorizeAsync(anyProvider, ehrApp, "openid launch user/*.read", launch: launch);
+        outcome.Error.Should().BeNull();
+        outcome.Code.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task LaunchRegistration_RefusesAMalformedPractitionerId()
     {
         var tenant = SmartAuthDriver.NewTenant();
@@ -270,7 +309,7 @@ public class SmartTenancyTests
         var (appB, _) = await _smart.RegisterClientAsync(tenantB, "provider-app", "openid", "launch", "user/*.read");
         var providerB = await _smart.LinkedProviderAsync(tenantB, "prov-b", ValidNpi);
 
-        var launchOfA = await RegisterLaunchAsync(tenantA, appA, "mbr-of-a");
+        var launchOfA = await RegisterLaunchAsync(tenantA, appA, "mbr-of-a", practitionerId: "prov-b");
         var outcome = await SmartAuthDriver.AuthorizeAsync(providerB, appB, "openid launch user/*.read", launch: launchOfA);
 
         outcome.Code.Should().BeNull();
@@ -283,7 +322,7 @@ public class SmartTenancyTests
         var tenantA = SmartAuthDriver.NewTenant();
         var tenantB = SmartAuthDriver.NewTenant();
         var (appA, _) = await _smart.RegisterClientAsync(tenantA, "provider-app", "openid", "launch", "user/*.read");
-        var body = new { patientId = "mbr-1", clientId = appA };
+        var body = new { patientId = "mbr-1", clientId = appA, practitionerId = "prov-1" };
 
         // No token, header only: refused.
         var anonymous = _smart.Anonymous();
@@ -560,7 +599,7 @@ public class SmartTenancyTests
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private async Task<string> RegisterLaunchAsync(string tenant, string clientId, string patientId, string? practitionerId = null)
+    private async Task<string> RegisterLaunchAsync(string tenant, string clientId, string patientId, string practitionerId = "prov-any")
     {
         var resp = await _smart.Admin(tenant, ChoRolePermissions.MemberServices)
             .PostAsJsonAsync("/launch", new { patientId, clientId, practitionerId });

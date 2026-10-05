@@ -25,14 +25,19 @@ namespace SmartAuthService.Controllers;
 ///
 /// The registering caller is a CHO user or service, not a SMART provider
 /// identity, so the practitioner cannot be read from its token; the EHR names
-/// it. A launch without one can be used by any provider user of the tenant
-/// using that client (who holds the single-use token).
+/// it, and must: a launch without <c>practitionerId</c> is refused (400), since
+/// any provider user of the tenant holding the token could use it.
+/// <c>SmartAuth:AllowLaunchWithoutPractitioner=true</c> (default false) still
+/// accepts one, with a warning per launch; it is deprecated and will be removed.
 /// </summary>
 [ApiController]
 [Route("launch")]
 [RequirePermission("members:read")]
 public class LaunchContextController : ControllerBase
 {
+    /// <summary>Deprecated escape hatch: accept a launch without practitionerId. Default false.</summary>
+    public const string AllowWithoutPractitionerKey = "SmartAuth:AllowLaunchWithoutPractitioner";
+
     private readonly ILaunchContextStore _store;
     private readonly ISmartIdentityStore _identities;
     private readonly ICurrentActor _actor;
@@ -63,6 +68,15 @@ public class LaunchContextController : ControllerBase
     {
         if (string.IsNullOrEmpty(request.PatientId) && string.IsNullOrEmpty(request.EncounterId))
             return BadRequest(new { error = "At least one of patientId or encounterId is required." });
+        if (string.IsNullOrEmpty(request.PractitionerId))
+        {
+            if (!_config.GetValue(AllowWithoutPractitionerKey, false))
+                return BadRequest(new { error = "practitionerId is required: a launch is for one practitioner." });
+            _logger.LogWarning(
+                "EHR launch registered without practitionerId because {Setting}=true (deprecated): any provider user " +
+                "of tenant {Tenant} holding the launch token can use it",
+                AllowWithoutPractitionerKey, SmartAuthAudit.Clean(_actor.TenantId));
+        }
         if ((request.PatientId != null && !SmartIdentifiers.IsFhirId(request.PatientId))
             || (request.EncounterId != null && !SmartIdentifiers.IsFhirId(request.EncounterId))
             || (request.PractitionerId != null && !SmartIdentifiers.IsFhirId(request.PractitionerId)))

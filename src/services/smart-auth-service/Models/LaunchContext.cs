@@ -47,9 +47,10 @@ public class RegisterLaunchRequest
 
     /// <summary>
     /// The provider id (as bound by a provider enrolment) of the practitioner
-    /// being launched. When set, only a provider user bound to that provider
-    /// can use the launch; anyone else who obtains the launch token cannot use
-    /// or burn it. EHR integrations should always send it.
+    /// being launched. Required (unless the deprecated
+    /// <c>SmartAuth:AllowLaunchWithoutPractitioner</c> is on): only a provider
+    /// user bound to that provider can use the launch; anyone else who obtains
+    /// the launch token cannot use or burn it.
     /// </summary>
     public string? PractitionerId { get; init; }
 }

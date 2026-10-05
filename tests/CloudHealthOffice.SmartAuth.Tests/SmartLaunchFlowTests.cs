@@ -136,7 +136,8 @@ public class SmartLaunchFlowTests
         {
             PatientId = "pat-001",
             EncounterId = "enc-003",
-            ClientId = "cho-ehr-app"
+            ClientId = "cho-ehr-app",
+            PractitionerId = "provider-001"
         });
 
         var resp = await client.PostAsync("/launch",
