@@ -70,6 +70,9 @@ public class ExternalLoginTests
     [InlineData("//evil.example/steal")]
     [InlineData("/\\evil.example")]
     [InlineData("/\t/evil.example")]
+    [InlineData("~//evil.example/steal")]
+    [InlineData("~/\\evil.example")]
+    [InlineData("~/\t/evil.example")]
     public async Task ExternalLogin_NeverRedirectsOffSite_AfterSignIn(string returnUrl)
     {
         var idp = new FakeExternalIdp();
@@ -79,6 +82,39 @@ public class ExternalLoginTests
 
         callback.StatusCode.Should().Be(HttpStatusCode.Redirect);
         callback.Headers.Location!.ToString().Should().Be("/");
+    }
+
+    [Fact]
+    public async Task ExternalLogin_AppRelativeReturnUrl_IsFollowedAsALocalPath()
+    {
+        var idp = new FakeExternalIdp();
+        await using var host = idp.Host(_fixture.Factory);
+
+        var callback = await idp.SignInAsync(Browser(host), returnUrl: "~/account/link");
+
+        callback.Headers.Location!.ToString().Should().Be("/account/link");
+    }
+
+    [Theory]
+    [InlineData("/", "/")]
+    [InlineData("/connect/authorize?x=1", "/connect/authorize?x=1")]
+    [InlineData("~/ok", "/ok")]
+    [InlineData("~/", "/")]
+    [InlineData("/%2F%2Fevil.example", "/%2F%2Fevil.example")] // a path; browsers do not decode %2F in Location
+    [InlineData("//evil.example", null)]
+    [InlineData("/\\evil.example", null)]
+    [InlineData("~//evil.example", null)]
+    [InlineData("~/\\evil.example", null)]
+    [InlineData("~", null)]
+    [InlineData("~evil", null)]
+    [InlineData("https://evil.example", null)]
+    [InlineData("/\t/evil.example", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void LocalUrl_Normalize_KeepsOnlySingleSlashLocalPaths(string? url, string? expected)
+    {
+        LocalUrl.Normalize(url).Should().Be(expected);
+        LocalUrl.IsLocal(url).Should().Be(expected is not null);
     }
 
     // ── The session ───────────────────────────────────────────────────────────

@@ -63,7 +63,7 @@ public class AccountController : ControllerBase
     [HttpGet("~/account/login")]
     public ContentResult Login([FromQuery] string returnUrl = "/")
     {
-        if (!LocalUrl.IsLocal(returnUrl)) returnUrl = "/";
+        returnUrl = LocalUrl.Normalize(returnUrl) ?? "/";
         var safeReturn = System.Web.HttpUtility.HtmlEncode(Uri.EscapeDataString(returnUrl));
 
         var methods = new List<string>();
@@ -127,8 +127,7 @@ public class AccountController : ControllerBase
         if (_external is null)
             return NotFound();
 
-        if (!LocalUrl.IsLocal(returnUrl)) returnUrl = "/";
-        if (returnUrl.StartsWith("~/", StringComparison.Ordinal)) returnUrl = returnUrl[1..];
+        returnUrl = LocalUrl.Normalize(returnUrl) ?? "/";
 
         return Challenge(new AuthenticationProperties { RedirectUri = returnUrl }, ExternalLoginOptions.Scheme);
     }
@@ -141,7 +140,7 @@ public class AccountController : ControllerBase
         [FromForm] string password,
         [FromQuery] string returnUrl = "/")
     {
-        if (!LocalUrl.IsLocal(returnUrl)) returnUrl = "/";
+        returnUrl = LocalUrl.Normalize(returnUrl) ?? "/";
 
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)
             || !DevelopmentLoginEnabled || password != DevelopmentLogin.Password)

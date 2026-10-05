@@ -207,10 +207,10 @@ public static class ExternalLogin
                     context.HttpContext.RequestServices.GetRequiredService<SmartAuthAudit>()
                         .SignInRefused(ExternalLoginOptions.Scheme, context.Failure?.Message ?? "remote_failure");
 
-                    var returnUrl = context.Properties?.RedirectUri;
+                    var returnUrl = LocalUrl.Normalize(context.Properties?.RedirectUri);
                     var target = "/account/login?error=external";
-                    if (LocalUrl.IsLocal(returnUrl))
-                        target += "&returnUrl=" + Uri.EscapeDataString(returnUrl!);
+                    if (returnUrl is not null)
+                        target += "&returnUrl=" + Uri.EscapeDataString(returnUrl);
                     context.Response.Redirect(target);
                     context.HandleResponse();
                     return Task.CompletedTask;
@@ -242,14 +242,30 @@ public static class ExternalLogin
 }
 
 /// <summary>
-/// Local redirect targets only: "/x" or "~/x", never "//host", "/\host" or a
-/// URL with control characters (browsers drop them, so "/\t/host" is "//host").
+/// Local redirect targets only: "/x" or "~/x", never "//host", "/\\host",
+/// "~//host", "~/\\host" or a URL with control characters (browsers drop
+/// them, so "/\t/host" is "//host"). "~/" is the app-relative form of "/"
+/// and obeys the same rule: the character after the leading '/' is never
+/// '/' or '\\'.
 /// </summary>
 public static class LocalUrl
 {
-    public static bool IsLocal(string? url)
-        => !string.IsNullOrEmpty(url)
-            && !url.Any(char.IsControl)
-            && ((url[0] == '/' && (url.Length == 1 || (url[1] != '/' && url[1] != '\\')))
-                || (url.Length > 1 && url[0] == '~' && url[1] == '/'));
+    public static bool IsLocal(string? url) => Normalize(url) is not null;
+
+    /// <summary>
+    /// The local path for <paramref name="url"/> ("~/x" becomes "/x"), or
+    /// null when it is not a local URL. Callers redirect to this value only.
+    /// </summary>
+    public static string? Normalize(string? url)
+    {
+        if (string.IsNullOrEmpty(url) || url.Any(char.IsControl))
+            return null;
+
+        var path = url[0] == '~' ? url[1..] : url;
+        if (path.Length == 0 || path[0] != '/')
+            return null;
+        if (path.Length > 1 && (path[1] == '/' || path[1] == '\\'))
+            return null;
+        return path;
+    }
 }
