@@ -48,7 +48,7 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
             // Override JWT Bearer validation parameters via PostConfigure
             // instead of removing and re-adding the auth scheme (which causes
             // "Scheme already exists: Bearer" when the host registers it first).
-            services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+            services.PostConfigure<JwtBearerOptions>(global::FhirService.Services.Identity.FhirCallerSchemes.Smart, options =>
             {
                 // Disable OIDC discovery entirely so the test host never makes network
                 // calls to the real issuer (https://auth.cloudhealthoffice.com).
@@ -128,18 +128,27 @@ public class FhirTestWebAppFactory : WebApplicationFactory<Program>
     /// X-Tenant-ID header, so a cross-tenant test has to change it HERE — setting
     /// the header alone proves nothing, because the token still says test-tenant.
     /// </param>
-    public string IssueToken(string scopes, string? patientId = null, string tenantId = "test-tenant")
+    /// <param name="extraClaims">Additional claims (security tests), e.g. a CHO role a SMART token must not be able to use.</param>
+    public string IssueToken(
+        string scopes, string? patientId = null, string? tenantId = "test-tenant",
+        IEnumerable<SecurityClaim>? extraClaims = null)
     {
         var claims = new List<SecurityClaim>
         {
             new(JwtRegisteredClaimNames.Sub, "test-user"),
             new("scope", scopes),
             new(JwtRegisteredClaimNames.Aud, "fhir-api"),
-            new("tenant_id", tenantId)
         };
+
+        // Null: a token that names no tenant (security tests).
+        if (tenantId != null)
+            claims.Add(new SecurityClaim("tenant_id", tenantId));
 
         if (patientId != null)
             claims.Add(new SecurityClaim("patient", patientId));
+
+        if (extraClaims != null)
+            claims.AddRange(extraClaims);
 
         var credentials = new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256);
         var token = new JwtSecurityToken(

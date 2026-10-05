@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Repositories;
@@ -5,6 +6,12 @@ using PaymentService.Services;
 
 namespace PaymentService.Controllers;
 
+/// <summary>
+/// Payment records. Reads need payments:read (Program.cs default). Recording,
+/// posting and reconciling a payment change the payment ledger and need
+/// finance:write; the acting user comes from the CHO token, never the body.
+/// The 835 download masks bank routing and account numbers.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -13,17 +20,20 @@ public class PaymentsController : ControllerBase
     private readonly IPaymentRepository _paymentRepository;
     private readonly IEraGeneratorService _eraGenerator;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<PaymentsController> _logger;
 
     public PaymentsController(
         IPaymentRepository paymentRepository,
         IEraGeneratorService eraGenerator,
         IConfiguration configuration,
+        ICurrentActor actor,
         ILogger<PaymentsController> logger)
     {
         _paymentRepository = paymentRepository;
         _eraGenerator = eraGenerator;
         _configuration = configuration;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -31,6 +41,7 @@ public class PaymentsController : ControllerBase
     /// Process 835 ERA payment transaction
     /// </summary>
     [HttpPost]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(Payment), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Payment>> ProcessPayment([FromBody] Payment payment)
@@ -49,6 +60,15 @@ public class PaymentsController : ControllerBase
         {
             return Conflict($"Payment with check number {payment.CheckNumber} already exists");
         }
+
+        // Audit fields come from the token, never the body (the repository
+        // also overwrites TenantId with the token tenant).
+        var actor = _actor.UserId;
+        payment.TenantId = _actor.TenantId;
+        payment.PostedBy = payment.Status is PaymentStatus.Posted or PaymentStatus.Reconciled ? actor : null;
+        payment.PostedAt = payment.PostedBy != null ? DateTime.UtcNow : null;
+        payment.ReconciledBy = payment.Status == PaymentStatus.Reconciled ? actor : null;
+        payment.ReconciledAt = payment.ReconciledBy != null ? DateTime.UtcNow : null;
 
         var created = await _paymentRepository.CreateAsync(payment);
 
@@ -131,6 +151,7 @@ public class PaymentsController : ControllerBase
     /// Post payment (mark as posted to accounts)
     /// </summary>
     [HttpPost("{id}/post")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(Payment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Payment>> PostPayment(string id, [FromBody] PostPaymentRequest request)
@@ -144,12 +165,12 @@ public class PaymentsController : ControllerBase
 
         payment.Status = PaymentStatus.Posted;
         payment.PostedAt = DateTime.UtcNow;
-        payment.PostedBy = request.PostedBy;
+        payment.PostedBy = _actor.UserId; // request.PostedBy is ignored
         payment.Notes = request.Notes;
 
         var updated = await _paymentRepository.UpdateAsync(payment);
 
-        _logger.LogInformation("Payment {PaymentId} posted by {User}", SanitizeForLog(id), SanitizeForLog(request.PostedBy));
+        _logger.LogInformation("Payment {PaymentId} posted by {User}", SanitizeForLog(id), SanitizeForLog(payment.PostedBy));
 
         return Ok(updated);
     }
@@ -158,6 +179,7 @@ public class PaymentsController : ControllerBase
     /// Reconcile payment (mark as reconciled with bank)
     /// </summary>
     [HttpPost("{id}/reconcile")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(Payment), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Payment>> ReconcilePayment(string id, [FromBody] ReconcilePaymentRequest request)
@@ -171,6 +193,7 @@ public class PaymentsController : ControllerBase
 
         payment.Status = PaymentStatus.Reconciled;
         payment.ReconciledAt = DateTime.UtcNow;
+        payment.ReconciledBy = _actor.UserId;
         payment.Notes = string.IsNullOrEmpty(payment.Notes) 
             ? request.Notes 
             : $"{payment.Notes}\n{request.Notes}";
@@ -212,7 +235,9 @@ public class PaymentsController : ControllerBase
         _logger.LogInformation("Generating 835 ERA download for payment {PaymentId} check {CheckNumber}",
             SanitizeForLog(id), SanitizeForLog(payment.CheckNumber));
 
-        var era = _eraGenerator.Generate835(payment, tp);
+        // The BPR segment carries the payer's and payee's bank routing and
+        // account numbers; a download never returns them in full.
+        var era = EdiBankNumberMasking.MaskBpr(_eraGenerator.Generate835(payment, tp));
 
         var filename = $"835_{payment.CheckNumber}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";
@@ -246,6 +271,7 @@ public class PaymentsController : ControllerBase
 
 public class PostPaymentRequest
 {
+    /// <summary>Ignored: the poster is the token subject.</summary>
     public string PostedBy { get; set; } = string.Empty;
     public string? Notes { get; set; }
 }

@@ -27,11 +27,11 @@ public class ProviderRepositoryMongo : IProviderRepository
     private string GetTenantId()
     {
         var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
+        // The tenant comes from the validated token (UseChoAuthentication). A
+        // missing tenant is an error, never an empty-tenant query or write.
         if (string.IsNullOrEmpty(tenantId))
         {
-           // For migration safety, we might return a default or just let it fail at runtime if strictly required.
-           // throw new InvalidOperationException("TenantId not found in request context");
-           return string.Empty;
+            throw new InvalidOperationException("TenantId not found in request context");
         }
         return tenantId;
     }
@@ -207,11 +207,9 @@ public class ProviderRepositoryMongo : IProviderRepository
 
     public async Task<Provider> CreateAsync(Provider provider)
     {
-        var tenantId = GetTenantId();
-        if (string.IsNullOrEmpty(provider.TenantId))
-        {
-            provider.TenantId = tenantId;
-        }
+        // Always the request tenant: a body-supplied TenantId never selects
+        // where the row is written.
+        provider.TenantId = GetTenantId();
 
         if (string.IsNullOrEmpty(provider.Id))
         {
@@ -225,7 +223,7 @@ public class ProviderRepositoryMongo : IProviderRepository
     public async Task<Provider> UpdateAsync(Provider provider)
     {
         var tenantId = GetTenantId();
-        if (!string.IsNullOrEmpty(tenantId) && provider.TenantId != tenantId)
+        if (provider.TenantId != tenantId)
         {
             throw new InvalidOperationException("Cross-tenant updates not allowed");
         }
@@ -489,8 +487,8 @@ public class ProviderRepositoryMongo : IProviderRepository
 
     public async Task<Provider> CreateDraftAsync(Provider draft)
     {
-        var tenantId = GetTenantId();
-        if (string.IsNullOrEmpty(draft.TenantId)) draft.TenantId = tenantId;
+        // Always the request tenant, never a body-supplied one.
+        draft.TenantId = GetTenantId();
         if (string.IsNullOrEmpty(draft.Id)) draft.Id = Guid.NewGuid().ToString();
         if (string.IsNullOrEmpty(draft.ProviderId)) draft.ProviderId = draft.Id;
         draft.VersionState = ProviderVersionState.Draft;

@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using System.Text.Json;
 using CloudHealthOffice.Appeals.Contracts;
 using FhirService.Services;
@@ -28,6 +29,7 @@ namespace FhirService.Controllers;
 /// unprocessed — the caller retries it via the returned retry URL.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "appeals:write")]
 public sealed class AppealSubmitController : FhirControllerBase
 {
     public const string OperationName = "cho-appeal-submit";
@@ -86,6 +88,23 @@ public sealed class AppealSubmitController : FhirControllerBase
                 OperationOutcome.IssueType.Structure,
                 ex.Message));
         }
+
+        // A patient-bound token appeals for its own member only.
+        if (IsOutsidePatientContext(dto.Appeal.MemberId))
+        {
+            return StatusCode(403, BuildOutcome(
+                OperationOutcome.IssueSeverity.Error,
+                OperationOutcome.IssueType.Forbidden,
+                "A patient-context token cannot submit an appeal for another member."));
+        }
+
+        // The actor is the authenticated caller, never Communication.sender
+        // or anything else in the submitted Bundle.
+        var actor = AuthenticatedActorId ?? "unknown";
+        dto.Appeal.SubmittedBy = actor;
+        dto.Appeal.CreatedBy = actor;
+        foreach (var note in dto.Notes)
+            note.CreatedBy = actor;
 
         var outcomes = await _appeals.SubmitAppealAsync(dto, TenantId, ct);
         var operationOutcome = BuildOperationOutcome(outcomes, correlationId);

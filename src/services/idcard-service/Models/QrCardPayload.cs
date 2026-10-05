@@ -61,4 +61,5 @@ public static class ScanErrorCodes
     public const string Revoked = "CARD_REVOKED";
     public const string CoverageInactive = "COVERAGE_INACTIVE";
     public const string RateLimited = "RATE_LIMIT_EXCEEDED";
+    public const string UpstreamUnavailable = "UPSTREAM_UNAVAILABLE";
 }

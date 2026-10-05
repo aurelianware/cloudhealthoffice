@@ -410,6 +410,32 @@ public class EnrollmentImportServiceTests
     }
 
     [Fact]
+    public async Task Import_PlanCodeLookupRefused_FailsTheSubscriberInsteadOfCountingAGap()
+    {
+        var (svc, _, coverageClient, _, _, benefitPlanClient, _) = Build();
+        benefitPlanClient.Setup(b => b.ResolvePlanIdAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("refused", null, System.Net.HttpStatusCode.Forbidden));
+
+        var enrollment = NewSubscriber("M-refused");
+        enrollment.GroupNumber = "GRP0001";
+        enrollment.Coverage.Add(new CoverageDetail { InsuranceLineCode = "HLT", PlanCoverageDescription = "PPO2026" });
+
+        var result = await svc.ImportEnrollmentAsync(new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-refused",
+            Enrollments = new() { enrollment }
+        }, "t1");
+
+        result.FailedCount.Should().Be(1);
+        result.Errors.Should().ContainSingle(e => e.Contains("M-refused"));
+        result.CoverageMappingsUnresolved.Should().Be(0);
+        coverageClient.Verify(c => c.CreateAsync(
+            It.IsAny<string>(), It.IsAny<CreateCoverageRequestDto>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Import_CoverageWithUnmappedPlanCode_SkipsCoverageInsteadOfDefaulting()
     {
         // This is the regression guard for the original bug: an unresolved
@@ -505,5 +531,35 @@ public class EnrollmentImportServiceTests
 
         result.SuccessCount.Should().Be(1);
         events.AllEvents.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Import_RecordsImportingActor_OnEventsAndRun()
+    {
+        // The controller sets ActorId from the token subject; the event stream
+        // and the run summary both record who ran the import.
+        var (svc, events, _, _, _, _, importRuns) = Build();
+
+        var batch = new Enrollment834
+        {
+            FileName = "test.834",
+            BatchId = "B-actor",
+            ActorId = "token-user",
+            Enrollments = new() { NewSubscriber("M-actor") }
+        };
+        await svc.ImportEnrollmentAsync(batch, "t1");
+
+        events.AllEvents.Should().ContainSingle().Which.ActorId.Should().Be("token-user");
+        importRuns.Verify(r => r.CreateAsync(It.Is<EnrollmentImportRun>(run =>
+            run.ActorId == "token-user")), Times.Once);
+    }
+
+    [Fact]
+    public void Enrollment834_ActorId_IsNeverBoundFromJson()
+    {
+        var batch = System.Text.Json.JsonSerializer.Deserialize<Enrollment834>(
+            """{"fileName":"x.834","actorId":"someone-else","ActorId":"someone-else"}""");
+
+        batch!.ActorId.Should().BeNull();
     }
 }

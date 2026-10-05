@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Identity.Web;
 using CloudHealthOffice.Portal.Services;
 
 namespace CloudHealthOffice.Portal.Tests.Services;
@@ -11,7 +10,6 @@ namespace CloudHealthOffice.Portal.Tests.Services;
 public class AttachmentServiceTests
 {
     private readonly Mock<ILogger<AttachmentService>> _logger = new();
-    private readonly Mock<ITokenAcquisition> _tokenAcquisition = new();
     private readonly IConfiguration _configuration;
 
     public AttachmentServiceTests()
@@ -22,18 +20,12 @@ public class AttachmentServiceTests
                 ["Services:AttachmentService"] = "http://localhost:5008"
             })
             .Build();
-
-        _tokenAcquisition
-            .Setup(t => t.GetAccessTokenForUserAsync(It.IsAny<IEnumerable<string>>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<System.Security.Claims.ClaimsPrincipal?>(),
-                It.IsAny<TokenAcquisitionOptions?>()))
-            .ReturnsAsync("fake-token");
     }
 
     private AttachmentService CreateService(HttpClient? httpClient = null)
     {
         httpClient ??= new HttpClient(new FakeHandler(HttpStatusCode.InternalServerError));
-        return new AttachmentService(httpClient, _configuration, _logger.Object, _tokenAcquisition.Object);
+        return new AttachmentService(httpClient, _configuration, _logger.Object);
     }
 
     // ── GetAttachmentsAsync ──

@@ -2,6 +2,7 @@ using CoverageService.Controllers;
 using CoverageService.Models;
 using CoverageService.Repositories;
 using CoverageService.Services;
+using CoverageService.Tests.Support;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,6 +21,7 @@ public class CoverageMemberEndpointsTests
         var careTeam = new Mock<ICareTeamProjector>();
         var ctl = new CoverageController(
             repo.Object,
+            new TestActor(),
             NullLogger<CoverageController>.Instance,
             pcp.Object,
             careTeam.Object);

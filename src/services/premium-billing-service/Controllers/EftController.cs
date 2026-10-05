@@ -1,9 +1,25 @@
+using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.NachaTransmission;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
 using PremiumBillingService.Services;
 
 namespace PremiumBillingService.Controllers;
 
+/// <summary>
+/// EFT/ACH auto-debit of sponsors. Releasing a debit (initiating drafts, which
+/// for Stripe and batches submits them at once, and generating NACHA debit
+/// files) needs payments:approve from a user who did not prepare the invoice
+/// (maker-checker, see DebitSeparationOfDuties). NACHA files go from this
+/// service straight to the bank; no response carries a file or a full number.
+/// An undelivered file is held encrypted: a platform admin may retrieve it
+/// (audited, with a reason) and another approver may retry it, never the
+/// user who released it. Settlement, returns and
+/// cancellation change the ledger and need finance:write. Reads need
+/// billing:read or payments:read. The Stripe webhook is anonymous and
+/// authenticated by its Stripe signature.
+/// </summary>
 [ApiController]
 [Route("api/v1/eft")]
 [Produces("application/json")]
@@ -22,14 +38,24 @@ public class EftController : ControllerBase
     /// Initiate an EFT/ACH draft for a single invoice
     /// </summary>
     [HttpPost("drafts")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<EftDraft>> InitiateDraft([FromBody] InitiateEftDraftRequest request)
     {
         try
         {
             var draft = await _eftDraftService.InitiateDraftAsync(request);
             return CreatedAtAction(nameof(GetDraftById), new { id = draft.Id }, draft);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
+        catch (InvoiceDraftConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -41,6 +67,7 @@ public class EftController : ControllerBase
     /// Initiate EFT drafts for a batch of invoices (from billing run or invoice list)
     /// </summary>
     [HttpPost("drafts/batch")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(BatchEftResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BatchEftResult>> InitiateBatchDraft([FromBody] InitiateBatchEftRequest request)
@@ -50,6 +77,10 @@ public class EftController : ControllerBase
             var result = await _eftDraftService.InitiateBatchDraftAsync(request);
             return Ok(result);
         }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -57,11 +88,19 @@ public class EftController : ControllerBase
     }
 
     /// <summary>
-    /// Generate a NACHA file for all pending NACHA drafts
+    /// Generate a NACHA debit file for all pending NACHA drafts and send it
+    /// straight to the tenant's bank (SFTP). Returns a masked summary (sponsor,
+    /// last 4, amount per entry) and the transmission receipt, never the file.
+    /// Drafts become Submitted only once the bank has the file; when it cannot
+    /// be sent they are AwaitingRetrieval (file held encrypted for 7 days).
+    /// The drafts are claimed (Releasing) before the file is built: a second
+    /// release while one is in progress gets 409, never a second file.
     /// </summary>
     [HttpPost("nacha/generate")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(NachaFileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<NachaFileResult>> GenerateNachaFile()
     {
         try
@@ -69,6 +108,14 @@ public class EftController : ControllerBase
             var result = await _eftDraftService.GenerateNachaFileForPendingDraftsAsync();
             return Ok(result);
         }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
+        catch (NachaReleaseConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -76,31 +123,170 @@ public class EftController : ControllerBase
     }
 
     /// <summary>
-    /// Generate a NACHA file for all pending drafts and return it as a downloadable file.
-    /// This endpoint has side effects: it marks pending drafts as submitted.
-    /// Use POST /nacha/generate if you only need the file metadata.
+    /// NACHA files that were not delivered to the bank and wait for a platform
+    /// admin's retrieval or another approver's retry. Never the file.
     /// </summary>
-    [HttpPost("nacha/generate-and-download")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult> GenerateAndDownloadNachaFile()
+    [HttpGet("nacha/held")]
+    [RequirePermission("billing:read,payments:read,payments:approve")]
+    [ProducesResponseType(typeof(IEnumerable<NachaHeldFileView>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<NachaHeldFileView>>> ListHeldNachaFiles()
+        => Ok((await _eftDraftService.ListHeldNachaFilesAsync()).Select(NachaHeldFileView.From));
+
+    /// <summary>
+    /// Send a held NACHA file to the bank again. payments:approve, a user token,
+    /// and not the user who released it.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retry")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(NachaFileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult<NachaFileResult>> RetryNachaTransmission(string fileReference)
     {
         try
         {
-            var result = await _eftDraftService.GenerateNachaFileForPendingDraftsAsync();
-            var bytes = System.Text.Encoding.ASCII.GetBytes(result.FileContent);
-            return File(bytes, "text/plain", result.FileName);
+            return Ok(await _eftDraftService.RetryNachaTransmissionAsync(fileReference));
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
+    /// A held NACHA file, for a platform admin to deliver by hand: platform:admin,
+    /// a user token, not the user who released it, and a reason. Every retrieval
+    /// is recorded and audit-logged. The first retrieval marks its drafts Submitted.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retrieve")]
+    [RequirePermission("platform:admin")]
+    [Produces("text/plain", "application/json")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult> RetrieveHeldNachaFile(string fileReference, [FromBody] RetrieveNachaFileRequest request)
+    {
+        try
+        {
+            var file = await _eftDraftService.RetrieveHeldNachaFileAsync(fileReference, request?.Reason ?? string.Empty);
+            Response.Headers.CacheControl = "no-store";
+            return File(NachaFileFacts.Encode(file.Content), "text/plain", file.FileName);
+        }
+        catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
     }
+
+    /// <summary>
+    /// Record what the bank said about a NACHA file whose delivery was unknown
+    /// (uploaded, but whether it was renamed into place could not be checked).
+    /// Until then it is neither retried nor retrieved. payments:approve, a user
+    /// token, not the user who released it, and a reason (the bank's answer).
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/resolve-delivery")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(NachaDeliveryResolutionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<NachaDeliveryResolutionResult>> ResolveNachaDelivery(string fileReference, [FromBody] ResolveNachaDeliveryRequest request)
+    {
+        if (request?.BankReceived is not { } bankReceived)
+            return BadRequest(new { error = "bankReceived (true or false, as the bank confirmed) is required." });
+        try
+        {
+            return Ok(await _eftDraftService.ResolveNachaDeliveryAsync(fileReference, bankReceived, request.Reason ?? string.Empty));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
+    /// Drafts that need a person, never recovered automatically: Releasing
+    /// longer than <paramref name="releasingOlderThanMinutes"/> (default 30, at
+    /// least 5; the release stopped mid-send), DeliveryUnknown, PaymentUnknown,
+    /// and held NACHA files stuck in a retry (Transmitting).
+    /// </summary>
+    [HttpGet("drafts/stuck")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(StuckEftDrafts), StatusCodes.Status200OK)]
+    public async Task<ActionResult<StuckEftDrafts>> ListStuckDrafts([FromQuery] int? releasingOlderThanMinutes)
+        => Ok(await _eftDraftService.ListStuckDraftsAsync(TimeSpan.FromMinutes(Math.Max(5, releasingOlderThanMinutes ?? 30))));
+
+    /// <summary>
+    /// After checking with the bank (or Stripe), record whether a stuck draft's
+    /// debit went out: Releasing (past the threshold) goes back to Pending (not
+    /// sent) or to Submitted (sent); a Stripe PaymentUnknown draft to Failed or
+    /// Submitted. payments:approve, a user token, a reason, and not the user who
+    /// released it. Audited.
+    /// </summary>
+    [HttpPost("drafts/{id}/resolve-stuck")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<EftDraft>> ResolveStuckDraft(string id, [FromBody] ResolveStuckDraftRequest request)
+    {
+        if (request?.Sent is not { } sent)
+            return BadRequest(new { error = "sent (true or false, as the bank or Stripe confirmed) is required." });
+        try
+        {
+            return Ok(await _eftDraftService.ResolveStuckDraftAsync(id, sent, request.Reason ?? string.Empty, request.StripePaymentIntentId));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
+    private ActionResult? HeldFileProblem(Exception ex) => ex switch
+    {
+        NachaSeparationOfDutiesException => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden),
+        NachaHeldFileNotFoundException => NotFound(new { error = ex.Message }),
+        NachaHeldFileExpiredException => StatusCode(StatusCodes.Status410Gone, new { error = ex.Message }),
+        NachaHeldFileStateException => Conflict(new { error = ex.Message }),
+        _ => null
+    };
 
     /// <summary>
     /// Get EFT draft by ID
     /// </summary>
     [HttpGet("drafts/{id}")]
+    [RequirePermission("billing:read,payments:read")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<EftDraft>> GetDraftById(string id)
@@ -115,6 +301,7 @@ public class EftController : ControllerBase
     /// Get all EFT drafts for an invoice
     /// </summary>
     [HttpGet("drafts/invoice/{invoiceId}")]
+    [RequirePermission("billing:read,payments:read")]
     [ProducesResponseType(typeof(IEnumerable<EftDraft>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<EftDraft>>> GetDraftsByInvoice(string invoiceId)
     {
@@ -126,6 +313,7 @@ public class EftController : ControllerBase
     /// Mark a draft as settled (for NACHA drafts confirmed by bank)
     /// </summary>
     [HttpPost("drafts/{id}/settle")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EftDraft>> SettleDraft(string id)
@@ -145,6 +333,7 @@ public class EftController : ControllerBase
     /// Process an ACH return (bank rejection)
     /// </summary>
     [HttpPost("drafts/returns")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EftDraft>> ProcessAchReturn([FromBody] ProcessAchReturnRequest request)
@@ -164,6 +353,7 @@ public class EftController : ControllerBase
     /// Cancel a pending EFT draft
     /// </summary>
     [HttpPost("drafts/{id}/cancel")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EftDraft>> CancelDraft(string id)
@@ -183,6 +373,10 @@ public class EftController : ControllerBase
     /// Stripe webhook endpoint for ACH payment events
     /// </summary>
     [HttpPost("webhooks/stripe")]
+    // Called by Stripe, which has no CHO token: authenticated by the
+    // Stripe-Signature check in the service; the tenant comes from the signed
+    // event's PaymentIntent metadata. Returns no tenant data.
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> StripeWebhook()
@@ -204,4 +398,7 @@ public class EftController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    private ObjectResult SeparationOfDuties(SeparationOfDutiesException ex)
+        => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
 }

@@ -22,8 +22,14 @@ public class IntegrityProjectionAdminControllerTests
     {
         var opts = new IntegrityProjectionOptions { AdminBackfillEnabled = adminBackfillEnabled };
         var monitor = new TestOptionsMonitor(opts);
-        return new IntegrityProjectionAdminController(
+        var controller = new IntegrityProjectionAdminController(
             projection, monitor, NullLogger<IntegrityProjectionAdminController>.Instance);
+        // The token's tenant is tenant-a.
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = TestHelpers.TokenHttpContext.For("tenant-a"),
+        };
+        return controller;
     }
 
     private sealed class TestOptionsMonitor : IOptionsMonitor<IntegrityProjectionOptions>
@@ -58,13 +64,26 @@ public class IntegrityProjectionAdminControllerTests
     }
 
     [Fact]
-    public async Task Backfill_returns_400_on_missing_tenantId_when_flag_enabled()
+    public async Task Backfill_without_query_tenant_runs_in_token_tenant()
+    {
+        // The tenant comes from the token; the query parameter is optional.
+        var controller = BuildController(adminBackfillEnabled: true, BuildProjectionService());
+        var result = await controller.BackfillIntegrityProjection(null, null, CancellationToken.None);
+
+        var ok = result.Result as OkObjectResult;
+        ok.Should().NotBeNull();
+        ((IntegrityProjectionTenantSweepResult)ok!.Value!).TenantId.Should().Be("tenant-a");
+    }
+
+    [Fact]
+    public async Task Backfill_for_a_tenant_other_than_the_token_tenant_is_forbidden()
     {
         var controller = BuildController(adminBackfillEnabled: true, BuildProjectionService());
-        var result = await controller.BackfillIntegrityProjection("", null, CancellationToken.None);
+        var result = await controller.BackfillIntegrityProjection("tenant-b", null, CancellationToken.None);
 
-        var bad = result.Result as BadRequestObjectResult;
-        bad.Should().NotBeNull();
+        var status = result.Result as ObjectResult;
+        status.Should().NotBeNull();
+        status!.StatusCode.Should().Be(403);
     }
 
     [Fact]

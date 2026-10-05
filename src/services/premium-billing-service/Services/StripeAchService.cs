@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using PremiumBillingService.Models;
 using Stripe;
 
@@ -10,14 +11,19 @@ namespace PremiumBillingService.Services;
 public interface IStripeAchService
 {
     /// <summary>
-    /// Create a Stripe ACH PaymentIntent to draft a sponsor's bank account
+    /// Create a Stripe ACH PaymentIntent to draft a sponsor's bank account, with
+    /// an idempotency key derived from <paramref name="draftId"/>: a retry of the
+    /// same draft never creates a second debit. Returns Status "failed" only when
+    /// Stripe definitively refused it (no debit was made); any other error is
+    /// thrown, and the outcome is then unknown.
     /// </summary>
     Task<StripeAchDraftResult> CreateAchDraftAsync(
         string stripeCustomerId,
         string stripePaymentMethodId,
         decimal amount,
         string invoiceNumber,
-        string groupNumber);
+        string groupNumber,
+        string draftId);
 
     /// <summary>
     /// Confirm a PaymentIntent (trigger the actual bank draft)
@@ -40,15 +46,66 @@ public interface IStripeAchService
     Task<EftWebhookResult> ProcessWebhookAsync(string json, string stripeSignature);
 }
 
+/// <summary>
+/// Thin wrapper over the Stripe SDK's PaymentIntent create, so the service can be
+/// unit-tested without calling Stripe.
+/// </summary>
+public interface IStripePaymentIntentClient
+{
+    Task<PaymentIntent> CreateAsync(PaymentIntentCreateOptions options, RequestOptions requestOptions);
+}
+
+public sealed class StripePaymentIntentClient : IStripePaymentIntentClient
+{
+    public Task<PaymentIntent> CreateAsync(PaymentIntentCreateOptions options, RequestOptions requestOptions)
+        => new PaymentIntentService().CreateAsync(options, requestOptions);
+}
+
 public class StripeAchService : IStripeAchService
 {
+    /// <summary>PaymentIntent metadata key carrying the CHO draft id.</summary>
+    public const string DraftMetadataKey = "draft_id";
+
+    /// <summary>
+    /// The Stripe idempotency key for a draft's PaymentIntent: the same for every
+    /// attempt of that draft, so Stripe returns the first PaymentIntent instead
+    /// of debiting again.
+    /// </summary>
+    public static string PaymentIntentIdempotencyKey(string draftId) => $"cho-premium-draft-{draftId}";
+
+    /// <summary>
+    /// True when Stripe answered and refused the request (a card or
+    /// invalid-request error, 4xx other than 409): no debit was made. A 5xx, a
+    /// 409 (idempotency or lock conflict), or an error without Stripe's answer
+    /// leaves the outcome unknown.
+    /// </summary>
+    public static bool IsDefinitiveRefusal(StripeException ex)
+    {
+        var status = (int)ex.HttpStatusCode;
+        var type = ex.StripeError?.Type;
+        return status is >= 400 and < 500 && status != 409
+            && (type == "card_error" || type == "invalid_request_error");
+    }
+
+    /// <summary>
+    /// PaymentIntent metadata key carrying the CHO tenant. The Stripe webhook is
+    /// anonymous; this signed value is how an event finds its tenant.
+    /// </summary>
+    public const string TenantMetadataKey = "tenant_id";
+
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<StripeAchService> _logger;
     private readonly string _webhookSecret;
 
-    public StripeAchService(IConfiguration configuration, ILogger<StripeAchService> logger)
+    private readonly IStripePaymentIntentClient _paymentIntents;
+
+    public StripeAchService(IConfiguration configuration, ICurrentActor actor, ILogger<StripeAchService> logger,
+        IStripePaymentIntentClient? paymentIntents = null)
     {
+        _paymentIntents = paymentIntents ?? new StripePaymentIntentClient();
         _configuration = configuration;
+        _actor = actor;
         _logger = logger;
 
         StripeConfiguration.ApiKey = configuration["Stripe:SecretKey"];
@@ -60,10 +117,9 @@ public class StripeAchService : IStripeAchService
         string stripePaymentMethodId,
         decimal amount,
         string invoiceNumber,
-        string groupNumber)
+        string groupNumber,
+        string draftId)
     {
-        var service = new PaymentIntentService();
-
         var options = new PaymentIntentCreateOptions
         {
             Amount = (long)(amount * 100), // Stripe uses cents
@@ -76,15 +132,20 @@ public class StripeAchService : IStripeAchService
             {
                 { "invoice_number", invoiceNumber },
                 { "group_number", groupNumber },
-                { "type", "premium_draft" }
+                { "type", "premium_draft" },
+                // Tenant of the authenticated caller creating the draft.
+                { TenantMetadataKey, _actor.TenantId },
+                { DraftMetadataKey, draftId }
             },
             Description = $"Premium billing draft for {invoiceNumber}",
             StatementDescriptor = "PREMIUM BILLING"
         };
 
+        var requestOptions = new RequestOptions { IdempotencyKey = PaymentIntentIdempotencyKey(draftId) };
+
         try
         {
-            var paymentIntent = await service.CreateAsync(options);
+            var paymentIntent = await _paymentIntents.CreateAsync(options, requestOptions);
 
             _logger.LogInformation(
                 "Created Stripe ACH PaymentIntent {PaymentIntentId} for invoice {InvoiceNumber}, amount ${Amount:N2}",
@@ -92,9 +153,11 @@ public class StripeAchService : IStripeAchService
 
             return MapToResult(paymentIntent);
         }
-        catch (StripeException ex)
+        catch (StripeException ex) when (IsDefinitiveRefusal(ex))
         {
-            _logger.LogError(ex, "Stripe ACH draft failed for invoice {InvoiceNumber}", invoiceNumber);
+            // Stripe said no: no debit exists. Anything else propagates, since the
+            // debit may exist (the caller must not let the invoice be drafted again).
+            _logger.LogError(ex, "Stripe ACH draft refused for invoice {InvoiceNumber}", invoiceNumber);
             return new StripeAchDraftResult
             {
                 Status = "failed",
@@ -161,6 +224,12 @@ public class StripeAchService : IStripeAchService
 
     public async Task<EftWebhookResult> ProcessWebhookAsync(string json, string stripeSignature)
     {
+        // The webhook endpoint is reachable without a CHO token; the signature is
+        // its only authentication. With an empty secret anyone could compute a
+        // valid signature (HMAC with an empty key) and settle any tenant's draft.
+        if (!StripeWebhookSecret.IsUsable(_webhookSecret))
+            throw new InvalidOperationException("Stripe webhook secret is not configured; webhook rejected");
+
         try
         {
             var stripeEvent = EventUtility.ConstructEvent(json, stripeSignature, _webhookSecret);
@@ -208,6 +277,7 @@ public class StripeAchService : IStripeAchService
             EventType = "payment_succeeded",
             PaymentIntentId = paymentIntent.Id,
             InvoiceNumber = invoiceNumber,
+            TenantId = paymentIntent.Metadata.GetValueOrDefault(TenantMetadataKey),
             Amount = paymentIntent.Amount / 100m,
             Status = "settled"
         });
@@ -233,6 +303,7 @@ public class StripeAchService : IStripeAchService
             EventType = "payment_failed",
             PaymentIntentId = paymentIntent.Id,
             InvoiceNumber = invoiceNumber,
+            TenantId = paymentIntent.Metadata.GetValueOrDefault(TenantMetadataKey),
             Amount = paymentIntent.Amount / 100m,
             Status = "failed",
             FailureCode = failureCode,
@@ -258,6 +329,7 @@ public class StripeAchService : IStripeAchService
             EventType = "payment_cancelled",
             PaymentIntentId = paymentIntent.Id,
             InvoiceNumber = invoiceNumber,
+            TenantId = paymentIntent.Metadata.GetValueOrDefault(TenantMetadataKey),
             Status = "cancelled"
         };
     }
@@ -298,6 +370,9 @@ public class EftWebhookResult
     public string? EventType { get; set; }
     public string? PaymentIntentId { get; set; }
     public string? InvoiceNumber { get; set; }
+
+    /// <summary>The CHO tenant from the signed PaymentIntent metadata.</summary>
+    public string? TenantId { get; set; }
     public decimal Amount { get; set; }
     public string? Status { get; set; }
     public string? FailureCode { get; set; }

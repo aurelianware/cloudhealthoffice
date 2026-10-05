@@ -206,7 +206,11 @@ public class DtrService : IDtrService
         if (!string.IsNullOrEmpty(search.QuestionnaireRef))
             query = query.Where(r => r.Questionnaire == search.QuestionnaireRef);
         if (!string.IsNullOrEmpty(search.Patient))
-            query = query.Where(r => r.Subject?.Reference == search.Patient);
+        {
+            // `patient=pat-1` and `patient=Patient/pat-1` name the same member.
+            var wanted = StripPatient(search.Patient);
+            query = query.Where(r => StripPatient(r.Subject?.Reference) == wanted);
+        }
         if (!string.IsNullOrEmpty(search.Status) &&
             Enum.TryParse<QuestionnaireResponse.QuestionnaireResponseStatus>(search.Status, true, out var status))
             query = query.Where(r => r.Status == status);
@@ -220,6 +224,11 @@ public class DtrService : IDtrService
 
         return Task.FromResult<(IReadOnlyList<QuestionnaireResponse>, int)>((items, total));
     }
+
+    private static string? StripPatient(string? reference)
+        => reference != null && reference.StartsWith("Patient/", StringComparison.OrdinalIgnoreCase)
+            ? reference["Patient/".Length..]
+            : reference;
 
     public async Task<QuestionnaireResponse> SubmitResponseAsync(
         QuestionnaireResponse response, string tenantId, CancellationToken ct = default)

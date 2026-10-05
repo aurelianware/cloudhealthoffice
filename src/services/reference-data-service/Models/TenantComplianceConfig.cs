@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using System.Text.Json.Serialization;
 
 namespace ReferenceDataService.Models;
@@ -19,9 +20,10 @@ public class TenantComplianceConfig
 
     /// <summary>
     /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// Always set by the service from the CHO token; a value in a request body is ignored.
     /// </summary>
     [JsonPropertyName("tenantId")]
-    [Required]
+    [ValidateNever]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
@@ -127,4 +129,18 @@ public class TenantComplianceConfig
     /// </summary>
     [JsonPropertyName("updatedAt")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Token subject of the user (or service) that created this document.
+    /// Set by the service from the CHO token; a value in a request body is ignored.
+    /// </summary>
+    [JsonPropertyName("createdBy")]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Token subject of the user (or service) that last wrote this document.
+    /// Set by the service from the CHO token; a value in a request body is ignored.
+    /// </summary>
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
 }

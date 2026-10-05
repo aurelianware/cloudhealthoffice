@@ -26,9 +26,10 @@ public class MpipProviderQualification
 
     /// <summary>
     /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// The server sets it from the caller's token on every write, so it is not
+    /// required (and is ignored) in a request body.
     /// </summary>
     [JsonPropertyName("tenantId")]
-    [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>

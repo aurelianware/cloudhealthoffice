@@ -78,6 +78,13 @@ public class TradingPartnersClient : ITradingPartnersClient
 {
     public const string HttpClientName = "TradingPartnerService";
 
+    /// <summary>
+    /// The in-cluster Service (port 80; it forwards to the container's 8080).
+    /// Under <c>.cloudhealthoffice</c>, so it is a CHO host without an
+    /// allowlist entry.
+    /// </summary>
+    public const string DefaultBaseUrl = "http://trading-partner-service.cloudhealthoffice";
+
     private readonly HttpClient _http;
     private readonly ILogger<TradingPartnersClient> _logger;
 
@@ -99,7 +106,19 @@ public class TradingPartnersClient : ITradingPartnersClient
         try
         {
             var path = $"/api/tradingpartners/by-npi/{Uri.EscapeDataString(tenantId)}/{Uri.EscapeDataString(npi)}/{Uri.EscapeDataString(environment)}";
-            var response = await _http.GetAsync(path, ct);
+            // A run-execution client: inside the run's RunExecutionGrant the call
+            // carries payment-service's service token for this tenant.
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Add(CloudHealthOffice.Infrastructure.Middleware.TenantMiddleware.TenantHeaderName, tenantId);
+            var response = await _http.SendAsync(request, ct);
+
+            if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                _logger.LogError(
+                    "Trading partner lookup for tenant {Tenant} npi {Npi} was refused ({Status}); the claims are left out of the 835s",
+                    Sanitize(tenantId), Sanitize(npi), response.StatusCode);
+                return null;
+            }
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {

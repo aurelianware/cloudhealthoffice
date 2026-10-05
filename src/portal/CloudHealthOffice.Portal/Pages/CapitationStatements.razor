@@ -6,6 +6,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IUserContextService UserContextService
 
 <PageTitle>Capitation Statements — Cloud Health Office</PageTitle>
 
@@ -78,6 +79,15 @@
             Pay Approved
         </MudButton>
     </div>
+
+    @* NACHA credit files go from capitation-service straight to the bank: only
+       the masked summary and receipt come back, never the file. *@
+    @if (_nacha != null)
+    {
+        <NachaFileSummary Result="_nacha" TestId="cap-nacha-result" PartyHeader="Provider" />
+    }
+    <NachaAwaitingRetrieval Items="_held" TestId="cap-awaiting-retrieval" CanApprove="_canApprove" UserId="@_userId"
+                            Busy="_loading" OnRetry="RetryNacha" />
 
     @if (_loading) { <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" /> }
 
@@ -235,8 +245,35 @@ else
     private string? _statusFilter;
     private bool _loading = true;
     private string? _serviceError;
+    private NachaFileResult? _nacha;
+    private List<NachaHeldFile> _held = new();
+    private bool _canApprove;
+    private string? _userId;
 
-    protected override async Task OnInitializedAsync() => await LoadData();
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = (await UserContextService.GetCurrentUserAsync())?.UserId;
+        _canApprove = UserContextService.HasPermission("payments:approve");
+        await LoadData();
+    }
+
+    private async Task LoadHeld()
+    {
+        try { _held = await CapitationService.GetHeldNachaFilesAsync(); }
+        catch (Exception) { _held = new(); }
+    }
+
+    private async Task RetryNacha(string fileReference)
+    {
+        try
+        {
+            _nacha = await CapitationService.RetryNachaTransmissionAsync(fileReference);
+            Snackbar.Add(_nacha.TransmissionStatus == "Transmitted" ? "NACHA file sent to the bank" : "Still not delivered",
+                _nacha.TransmissionStatus == "Transmitted" ? Severity.Success : Severity.Warning);
+            await LoadHeld();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
     protected override async Task OnParametersSetAsync() => await LoadData();
 
     private async Task LoadData()
@@ -250,6 +287,7 @@ else
             {
                 _selectedStatement = null;
                 await LoadStatements();
+                await LoadHeld();
                 return;
             }
         }
@@ -311,7 +349,9 @@ else
         {
             var batchResult = await CapitationService.InitiateBatchDisbursementAsync(approved.Select(s => s.Id).ToList(), "portal-user");
             Snackbar.Add($"Batch payment: {batchResult.DisbursementsInitiated} disbursements initiated, {batchResult.TotalAmount:C2}", Severity.Success);
+            _nacha = batchResult.NachaFile;
             await LoadStatements();
+            await LoadHeld();
         }
         catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
     }

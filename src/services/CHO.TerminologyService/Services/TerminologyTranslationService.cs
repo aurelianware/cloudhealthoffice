@@ -185,9 +185,9 @@ public class TerminologyTranslationService : ITerminologyTranslationService
         return response;
     }
 
-    public async Task<List<MapVersion>> GetMapVersionsAsync(CancellationToken ct = default)
+    public async Task<List<MapVersion>> GetMapVersionsAsync(string? tenantId, CancellationToken ct = default)
     {
-        return await _repository.GetAllMapVersionsAsync(ct);
+        return await _repository.GetMapVersionsVisibleToAsync(tenantId, ct);
     }
 
     private static TranslateMatch ToMatch(ConceptMapEntry entry, bool isContextResolved, bool isOverride)

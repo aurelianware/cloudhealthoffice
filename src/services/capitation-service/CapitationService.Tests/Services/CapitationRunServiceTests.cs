@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
+using CapitationService.Tests.Support;
 
 namespace CapitationService.Tests.Services;
 
@@ -33,6 +34,7 @@ public class CapitationRunServiceTests
             _contractRepo.Object,
             _statementRepo.Object,
             _httpClientFactory.Object,
+            TestSeparationOfDuties.Create(runs: _runRepo.Object),
             logger.Object);
     }
 
@@ -125,6 +127,30 @@ public class CapitationRunServiceTests
     }
 
     #region ExecuteRunAsync
+
+    [Fact]
+    public async Task ExecuteRunAsync_RecordsExecutorAndRunCreatorAsTheStatementsMakers()
+    {
+        var run = CreatePendingRun();
+        run.CreatedBy = "run-creator";
+        _runRepo.Setup(r => r.GetByIdAsync("run-1")).ReturnsAsync(run);
+        SetupDefaultRepos();
+        var created = new List<CapitationStatement>();
+        _statementRepo.Setup(r => r.CreateAsync(It.IsAny<CapitationStatement>()))
+            .Callback<CapitationStatement>(created.Add)
+            .ReturnsAsync((CapitationStatement s) => s);
+        _contractRepo.Setup(r => r.GetActiveContractsAsync(It.IsAny<LineOfBusiness?>(), It.IsAny<ContractType?>()))
+            .ReturnsAsync(new List<CapitationContract> { CreateContract() });
+        SetupCoverageServiceResponse("1234567890", new List<CapitationCoverageDto> { CreateCoverage() });
+        SetupRiskScoreServiceResponse();
+
+        var result = await _service.ExecuteRunAsync("run-1", "run-executor");
+
+        result.ExecutedBy.Should().Be("run-executor");
+        created.Should().ContainSingle();
+        created[0].CreatedBy.Should().Be("run-executor");
+        created[0].RunCreatedBy.Should().Be("run-creator");
+    }
 
     [Fact]
     public async Task ExecuteRunAsync_WithActiveContracts_GeneratesStatements()
@@ -404,7 +430,7 @@ public class CapitationRunServiceTests
         _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
             .ReturnsAsync((CapitationStatement s) => s);
 
-        var result = await _service.ApproveStatementAsync("stmt-1");
+        var result = await _service.ApproveStatementAsync("stmt-1", "approver-1");
 
         result.Status.Should().Be(CapitationStatementStatus.Approved);
     }
@@ -418,7 +444,7 @@ public class CapitationRunServiceTests
         };
         _statementRepo.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(statement);
 
-        var act = () => _service.VoidStatementAsync("stmt-1", "duplicate");
+        var act = () => _service.VoidStatementAsync("stmt-1", "duplicate", "approver-1");
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*paid*");
@@ -436,7 +462,7 @@ public class CapitationRunServiceTests
         _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
             .ReturnsAsync((CapitationStatement s) => s);
 
-        var result = await _service.VoidStatementAsync("stmt-1", "error in data");
+        var result = await _service.VoidStatementAsync("stmt-1", "error in data", "approver-1");
 
         result.Status.Should().Be(CapitationStatementStatus.Voided);
         result.Adjustments.Should().ContainSingle(a => a.Description.Contains("error in data"));
@@ -454,7 +480,7 @@ public class CapitationRunServiceTests
         _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
             .ReturnsAsync((CapitationStatement s) => s);
 
-        var result = await _service.HoldStatementAsync("stmt-1", "under review");
+        var result = await _service.HoldStatementAsync("stmt-1", "under review", "approver-1");
 
         result.Status.Should().Be(CapitationStatementStatus.OnHold);
         result.Adjustments.Should().ContainSingle(a => a.Description.Contains("under review"));
@@ -469,7 +495,7 @@ public class CapitationRunServiceTests
         };
         _statementRepo.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(statement);
 
-        var act = () => _service.HoldStatementAsync("stmt-1", "reason");
+        var act = () => _service.HoldStatementAsync("stmt-1", "reason", "approver-1");
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -485,7 +511,7 @@ public class CapitationRunServiceTests
         _statementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationStatement>()))
             .ReturnsAsync((CapitationStatement s) => s);
 
-        var result = await _service.ApproveStatementAsync("stmt-1");
+        var result = await _service.ApproveStatementAsync("stmt-1", "approver-1");
 
         result.Status.Should().Be(CapitationStatementStatus.Approved);
     }
@@ -499,7 +525,7 @@ public class CapitationRunServiceTests
         };
         _statementRepo.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(statement);
 
-        var act = () => _service.ApproveStatementAsync("stmt-1");
+        var act = () => _service.ApproveStatementAsync("stmt-1", "approver-1");
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }

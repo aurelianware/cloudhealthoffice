@@ -133,15 +133,14 @@ builder.Services.AddChoHealthChecks(options =>
         $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 
-builder.Services.AddCors(options => options.AddPolicy("AllowAll",
-    policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
 app.UseMiddleware<TenantMiddleware>();
 app.UseAuthorization();
 app.MapControllers();

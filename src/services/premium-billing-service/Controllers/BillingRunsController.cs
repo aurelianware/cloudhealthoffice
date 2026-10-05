@@ -1,22 +1,30 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
 using PremiumBillingService.Services;
 
 namespace PremiumBillingService.Controllers;
 
+/// <summary>
+/// Billing runs. Reads need billing:read and writes billing:run (Program.cs
+/// defaults); the tenant and the acting user come from the CHO token.
+/// </summary>
 [ApiController]
 [Route("api/v1/billing-runs")]
 [Produces("application/json")]
 public class BillingRunsController : ControllerBase
 {
     private readonly IPremiumBillingService _billingService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<BillingRunsController> _logger;
 
     public BillingRunsController(
         IPremiumBillingService billingService,
+        ICurrentActor actor,
         ILogger<BillingRunsController> logger)
     {
         _billingService = billingService;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -30,7 +38,8 @@ public class BillingRunsController : ControllerBase
     {
         _logger.LogInformation("Creating billing run for period {BillingPeriod}", request.BillingPeriod);
 
-        var billingRun = await _billingService.CreateBillingRunAsync(request, request.CreatedBy);
+        // The creator is the token subject; request.CreatedBy is never read from the body.
+        var billingRun = await _billingService.CreateBillingRunAsync(request, _actor.UserId);
 
         return CreatedAtAction(
             nameof(GetBillingRunById),
@@ -70,7 +79,7 @@ public class BillingRunsController : ControllerBase
     {
         _logger.LogInformation("Creating and executing billing run for period {BillingPeriod}", request.BillingPeriod);
 
-        var billingRun = await _billingService.CreateBillingRunAsync(request, request.CreatedBy);
+        var billingRun = await _billingService.CreateBillingRunAsync(request, _actor.UserId);
         var executed = await _billingService.ExecuteBillingRunAsync(billingRun.Id);
 
         return Ok(executed);

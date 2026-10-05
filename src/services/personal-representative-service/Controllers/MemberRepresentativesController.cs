@@ -2,14 +2,16 @@ using PersonalRepresentativeService.Middleware;
 using PersonalRepresentativeService.Models;
 using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 // TODO(consent-integration-followup): consent-service will call this
 // controller's resolver endpoint to resolve GrantedBy → structured
 // PersonalRep reference. Not wired in this PR. See consent-service PR #674.
-// When wiring lands, the resolver endpoint should require the
-// `consents:read` or a dedicated `representatives:resolve` scope;
-// authorization-service integration belongs in the consent wiring PR.
+// The resolver (ListActive) admits only the service clients named in
+// ResolverClients. ChoRolePermissions has no `representatives:resolve`
+// permission, and a tenant permission (members:read, consent:read) would
+// admit every service token. Add a client id there when its wiring lands.
 
 namespace PersonalRepresentativeService.Controllers;
 
@@ -24,6 +26,17 @@ namespace PersonalRepresentativeService.Controllers;
 [Route("api/v1/members/{memberId}/personal-representatives")]
 public class MemberRepresentativesController : ControllerBase
 {
+    /// <summary>
+    /// Services that resolve "is X an active representative of member Y" as
+    /// an authority decision: consent-service (a PersonalRepresentative
+    /// grantor, feature 5.8), appeals-service (an appeal filed by a
+    /// representative) and fhir-service (representative access through the
+    /// Patient Access API). Service tokens only (sub == azp == client id);
+    /// the tenant is still the token's. Staff read a member's representatives
+    /// through <see cref="ListAll"/> (members:read).
+    /// </summary>
+    public const string ResolverClients = "consent-service,appeals-service,fhir-service";
+
     private string TenantId => HttpContext.GetTenantId();
 
     private readonly IPersonalRepRepository _reps;
@@ -79,6 +92,7 @@ public class MemberRepresentativesController : ControllerBase
     /// the resolver endpoint from over-disclosing PHI.
     /// </remarks>
     [HttpGet("active")]
+    [RequireServiceClient(ResolverClients)]
     [ProducesResponseType(typeof(MemberRepresentativesResponse), 200)]
     public async Task<IActionResult> ListActive(
         [FromRoute] string memberId,

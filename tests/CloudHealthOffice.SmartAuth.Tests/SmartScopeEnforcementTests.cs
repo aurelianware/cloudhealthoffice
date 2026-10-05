@@ -373,7 +373,7 @@ public class FhirServiceFactory : WebApplicationFactory<Program>
             // Override JWT Bearer validation parameters via PostConfigure
             // instead of removing and re-adding the auth scheme (which causes
             // "Scheme already exists: Bearer" when the host registers it first).
-            services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+            services.PostConfigure<JwtBearerOptions>(global::FhirService.Services.Identity.FhirCallerSchemes.Smart, options =>
             {
                 options.RequireHttpsMetadata = false;
                 options.TokenValidationParameters = new TokenValidationParameters

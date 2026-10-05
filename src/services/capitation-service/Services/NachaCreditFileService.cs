@@ -21,7 +21,7 @@ public interface INachaCreditFileService
     /// <summary>
     /// Generate a NACHA credit file for a batch of capitation disbursements
     /// </summary>
-    NachaCreditFileResult GenerateNachaCreditFile(List<NachaCreditEntryDetail> entries, NachaCreditFileOptions options);
+    GeneratedNachaCreditFile GenerateNachaCreditFile(List<NachaCreditEntryDetail> entries, NachaCreditFileOptions options);
 }
 
 public class NachaCreditFileService : INachaCreditFileService
@@ -35,7 +35,7 @@ public class NachaCreditFileService : INachaCreditFileService
         _logger = logger;
     }
 
-    public NachaCreditFileResult GenerateNachaCreditFile(List<NachaCreditEntryDetail> entries, NachaCreditFileOptions options)
+    public GeneratedNachaCreditFile GenerateNachaCreditFile(List<NachaCreditEntryDetail> entries, NachaCreditFileOptions options)
     {
         if (entries.Count == 0)
             throw new InvalidOperationException("No entries to include in NACHA credit file");
@@ -101,7 +101,7 @@ public class NachaCreditFileService : INachaCreditFileService
             "Generated NACHA credit file {FileName}: {EntryCount} entries, ${TotalAmount:N2} total",
             fileName, entries.Count, totalCreditAmount);
 
-        return new NachaCreditFileResult
+        return new GeneratedNachaCreditFile
         {
             FileReference = $"NACHA-CR-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}",
             FileName = fileName,

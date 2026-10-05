@@ -1,0 +1,116 @@
+@using CloudHealthOffice.Portal.Services
+@inject ITenantInvitationService Invitations
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.ForwardToInbox" Class="mr-2" />
+            Invite user
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Invite someone who signs in with another organization's Microsoft account. They must accept
+            the invitation signed in as exactly this address. The link works once and expires after 7 days.
+        </MudText>
+        <MudTextField @bind-Value="_email" Label="Email" Required="true" InputType="InputType.Email" Class="mb-3"
+                      data-testid="invite-email" />
+        <MudTextField @bind-Value="_displayName" Label="Display Name" Class="mb-3" />
+        <MudStack Row="true" Spacing="2" Class="mb-3">
+            <MudTextField @bind-Value="_firstName" Label="First Name" />
+            <MudTextField @bind-Value="_lastName" Label="Last Name" />
+        </MudStack>
+        <MudSelect T="string" Label="Department" @bind-Value="_department" Class="mb-3">
+            <MudSelectItem Value="@("Claims")">Claims</MudSelectItem>
+            <MudSelectItem Value="@("Utilization Management")">Utilization Management</MudSelectItem>
+            <MudSelectItem Value="@("Member Services")">Member Services</MudSelectItem>
+            <MudSelectItem Value="@("Enrollment")">Enrollment</MudSelectItem>
+            <MudSelectItem Value="@("Provider Relations")">Provider Relations</MudSelectItem>
+            <MudSelectItem Value="@("Finance")">Finance</MudSelectItem>
+            <MudSelectItem Value="@("Compliance")">Compliance</MudSelectItem>
+            <MudSelectItem Value="@("Administration")">Administration</MudSelectItem>
+        </MudSelect>
+        <MudSelect T="string" Label="Roles" MultiSelection="true" @bind-SelectedValues="_selectedRoles" Class="mb-3">
+            @foreach (var role in AvailableRoles)
+            {
+                <MudSelectItem T="string" Value="@role">@role</MudSelectItem>
+            }
+        </MudSelect>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2" data-testid="invite-error">@_errorMessage</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="_saving" data-testid="invite-submit">
+            Send invitation
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string? TenantId { get; set; }
+    [Parameter] public List<string> AvailableRoles { get; set; } = new();
+
+    private string _email = string.Empty;
+    private string _displayName = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _department = string.Empty;
+    private IEnumerable<string> _selectedRoles = new List<string>();
+    private string? _errorMessage;
+    private bool _saving;
+
+    private async Task Submit()
+    {
+        _errorMessage = null;
+        if (string.IsNullOrWhiteSpace(_email))
+        {
+            _errorMessage = "Email is required.";
+            return;
+        }
+        if (!_selectedRoles.Any())
+        {
+            _errorMessage = "At least one role must be selected.";
+            return;
+        }
+        if (string.IsNullOrEmpty(TenantId))
+        {
+            _errorMessage = "Tenant context is not available. Please refresh and try again.";
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var result = await Invitations.CreateAsync(TenantId, new InviteUserRequest
+            {
+                Email = _email.Trim(),
+                DisplayName = _displayName,
+                FirstName = _firstName,
+                LastName = _lastName,
+                Department = _department,
+                Roles = _selectedRoles.ToList(),
+            });
+            if (!result.Succeeded)
+            {
+                _errorMessage = result.Error;
+                return;
+            }
+            MudDialog.Close(DialogResult.Ok(result.Value!));
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "The invitation could not be sent. Try again.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

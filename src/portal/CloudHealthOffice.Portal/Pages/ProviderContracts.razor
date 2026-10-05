@@ -5,6 +5,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IUserContextService UserContextService
 
 <PageTitle>Provider Contracts — Cloud Health Office</PageTitle>
 
@@ -110,8 +111,13 @@
     <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterList"
                OnClick="LoadContracts" Disabled="_loading">Apply</MudButton>
     <MudSpacer />
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-               OnClick="OpenCreateForm">New Contract</MudButton>
+    @* Writes need contracts:write; read-only holders (Finance, ComplianceOfficer)
+       would only get 403 from the service, so they see no write actions. *@
+    @if (_canWrite)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateForm" data-testid="new-contract">New Contract</MudButton>
+    }
 </div>
 
 @if (_loading)
@@ -160,30 +166,33 @@
                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary"
                                    OnClick="() => ViewContract(context)" />
                 </MudTooltip>
+                @if (_canWrite)
+                {
                 <MudTooltip Text="Edit">
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" data-testid="edit-contract"
                                    OnClick="() => EditContract(context)" />
                 </MudTooltip>
                 @if (context.Status is "Draft" or "Suspended")
                 {
                     <MudTooltip Text="Activate">
                         <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
-                                       OnClick="() => ActivateContract(context)" />
+                                       data-testid="activate-contract" OnClick="() => ActivateContract(context)" />
                     </MudTooltip>
                 }
                 @if (context.Status == "Active")
                 {
                     <MudTooltip Text="Suspend">
                         <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small" Color="Color.Warning"
-                                       OnClick="() => SuspendContract(context)" />
+                                       data-testid="suspend-contract" OnClick="() => SuspendContract(context)" />
                     </MudTooltip>
                 }
                 @if (context.Status is not "Terminated")
                 {
                     <MudTooltip Text="Terminate">
                         <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
-                                       OnClick="() => TerminateContract(context)" />
+                                       data-testid="terminate-contract" OnClick="() => TerminateContract(context)" />
                     </MudTooltip>
+                }
                 }
             </div>
         </MudTd>
@@ -274,7 +283,9 @@
                                    Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="4">
-                    <MudDatePicker @bind-Date="_editTermination" Label="Termination Date" Variant="Variant.Outlined" />
+                    <MudDatePicker @bind-Date="_editTermination" Label="Termination Date" Variant="Variant.Outlined"
+                                   Disabled="@(!string.IsNullOrEmpty(_editContract.Id))"
+                                   HelperText="@(string.IsNullOrEmpty(_editContract.Id) ? null : "Set by Terminate")" />
                 </MudItem>
                 <MudItem xs="12" md="4">
                     <MudCheckBox @bind-Value="_editContract.AutoRenews" Label="Auto-Renews" />
@@ -381,8 +392,14 @@
     private DateTime? _editSignedDate;
     private bool _showDetail;
     private ProviderContractSummary? _detailContract;
+    private bool _canWrite;
 
-    protected override async Task OnInitializedAsync() => await LoadContracts();
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserContextService.GetCurrentUserAsync();
+        _canWrite = user != null && UserContextService.HasPermission("contracts:write");
+        await LoadContracts();
+    }
 
     private async Task LoadContracts()
     {
@@ -405,8 +422,13 @@
         _showCreateForm = true;
     }
 
-    private void EditContract(ProviderContractSummary contract)
+    private async Task EditContract(ProviderContractSummary contract)
     {
+        // The list masks the TIN; edit the single-record read, which returns
+        // the full TIN to contracts:write holders, so a save does not send the
+        // masked value back.
+        try { contract = await ContractsService.GetContractByIdAsync(contract.Id) ?? contract; }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); return; }
         _editContract = contract;
         _editEffective = contract.EffectiveDate;
         _editTermination = contract.TerminationDate;

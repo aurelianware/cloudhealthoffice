@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FhirService.Services.Identity;
 using FhirService.Services.Clinical;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
@@ -54,7 +55,8 @@ public class SmartScopeEnforcementMiddleware
             "Task",
             "Communication",
             "DocumentReference",
-            "ClaimResponse"
+            "ClaimResponse",
+            "QuestionnaireResponse"
         }.Concat(ClinicalResourceInventory.ResourceTypes),
         StringComparer.OrdinalIgnoreCase);
 
@@ -62,7 +64,9 @@ public class SmartScopeEnforcementMiddleware
     /// Search parameters that name the member a request is about. A patient-scoped
     /// token's binding is enforced against every one of them.
     /// </summary>
-    private static readonly string[] MemberBindingParameters = ["patient", "subject"];
+    /// <c>beneficiary</c> is Coverage's member parameter; it was not checked, so
+    /// a patient token could ask for <c>Coverage?beneficiary=</c> anyone.
+    private static readonly string[] MemberBindingParameters = ["patient", "subject", "beneficiary"];
 
     private readonly RequestDelegate _next;
     private readonly ILogger<SmartScopeEnforcementMiddleware> _logger;
@@ -94,6 +98,16 @@ public class SmartScopeEnforcementMiddleware
             return;
         }
 
+        // A CHO caller (portal, CHO services) holds no SMART scopes and no
+        // patient binding; [FhirAccess] already required its CHO permission.
+        // Only a principal the CHO scheme positively marked skips this: any
+        // other principal, however it got here, is held to SMART rules.
+        if (FhirCallerSchemes.IsCho(context.User))
+        {
+            await _next(context);
+            return;
+        }
+
         var scopes = ParseScopes(context.User);
 
         // What this request actually IS: which resource's scope governs it,
@@ -110,7 +124,10 @@ public class SmartScopeEnforcementMiddleware
         }
 
         var resourceType = interaction.Resource;
-        var patientClaim = context.User.FindFirst("patient")?.Value;
+        // The issuer's mapped patient claim when it has one (CallerIdentityResolver
+        // falls back to `patient`), else the conventional `patient` claim.
+        var patientClaim = (context.Items[AuthenticatedCaller.HttpContextItemKey] as AuthenticatedCaller)?.PatientId
+                           ?? context.User.FindFirst("patient")?.Value;
 
         // ── 1. Scope check ────────────────────────────────────────────────────
         if (!HasRequiredScope(scopes, resourceType, interaction.Access, interaction.Contexts))
@@ -129,7 +146,21 @@ public class SmartScopeEnforcementMiddleware
         }
 
         // ── 2. Patient binding enforcement ───────────────────────────────────
-        if (!string.IsNullOrEmpty(patientClaim) && IsPatientScopedToken(scopes))
+        var bindsToPatient = BindsToPatient(scopes, context.Request);
+
+        // A patient-scoped token with no `patient` claim is bound to nobody,
+        // and treating it as unbound would let it read every member's record.
+        if (string.IsNullOrEmpty(patientClaim) && bindsToPatient)
+        {
+            _logger.LogWarning("Patient-scoped token without a patient claim refused — resource: {Resource}", resourceType);
+            await WriteFhirError(context, 403,
+                OperationOutcome.IssueSeverity.Error,
+                OperationOutcome.IssueType.Forbidden,
+                "A patient-scoped token must carry a patient context.");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(patientClaim) && bindsToPatient)
         {
             var normalizedPatient = StripPrefix("Patient/", patientClaim);
 
@@ -248,7 +279,9 @@ public class SmartScopeEnforcementMiddleware
 
             // Bulk export ASKS for data. POST is the Bulk Data IG's kick-off
             // shape, not evidence of a write.
-            ["$export"] = ("$export", ReadAccess, AllContexts),
+            // A bulk export covers every member in its scope, so a patient-context
+            // token (bound to ONE member) may never start one; backend contexts only.
+            ["$export"] = ("$export", ReadAccess, BackendContexts),
         };
 
     /// <summary>
@@ -318,7 +351,8 @@ public class SmartScopeEnforcementMiddleware
 
         // /fhir/r4/{Resource}/{id}/$operation
         if (segments.Length >= 5 && segments[4].StartsWith('$'))
-            return new FhirInteraction(resource, segments[3], OperationAccess(resource, segments[4], methodAccess), AllContexts);
+            return new FhirInteraction(resource, segments[3], OperationAccess(resource, segments[4], methodAccess),
+                string.Equals(segments[4], "$export", StringComparison.OrdinalIgnoreCase) ? BackendContexts : AllContexts);
 
         // Plain REST: /fhir/r4/{Resource}[/{id}]
         var id = segments.Length >= 4 ? segments[3] : null;
@@ -377,6 +411,37 @@ public class SmartScopeEnforcementMiddleware
     /// A token is patient-scoped when it carries patient/* or patient/{T}.read
     /// but NOT user/* or system/* (those are broader grants).
     /// </summary>
+    /// <summary>
+    /// Whether the patient binding applies to this request.
+    ///
+    /// <list type="bullet">
+    ///   <item>No <c>patient/</c> scope: never (user/system tokens, governed by
+    ///   Provider Access attribution + consent where member data is read).</item>
+    ///   <item>Only patient-context grants (the original rule,
+    ///   <see cref="IsPatientScopedToken"/>): always.</item>
+    ///   <item>A token that ALSO holds a broad <c>user/*.read</c> or
+    ///   <c>system/*.read</c> grant (an EHR launch with patient context): bound
+    ///   on every request EXCEPT a Provider Access read that
+    ///   ProviderAccessAuthorizationFilter governs (a GET of a member-scoped
+    ///   resource, not an operation). Those stay unbound, as before, because the
+    ///   filter itself requires that the calling provider is attributed to the
+    ///   member named in the request AND that the member has an active
+    ///   ProviderAccess consent; a read with no member named is refused. Before,
+    ///   such a token was unbound everywhere, so requests outside that filter
+    ///   (operations, writes) had no member check at all.</item>
+    /// </list>
+    /// This only ever adds binding relative to the original rule; it never
+    /// removes it from a request that was bound before.
+    /// </summary>
+    internal static bool BindsToPatient(HashSet<string> scopes, HttpRequest request)
+    {
+        if (!scopes.Any(s => s.StartsWith("patient/", StringComparison.Ordinal)))
+            return false;
+
+        return IsPatientScopedToken(scopes)
+               || !FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter.Governs(request, scopes);
+    }
+
     private static bool IsPatientScopedToken(HashSet<string> scopes)
     {
         if (scopes.Contains("user/*.read") || scopes.Contains("system/*.read"))

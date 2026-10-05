@@ -33,8 +33,9 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
     public CapitationRunSmokeTests(CapitationApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Tenant-ID", "smoke-test-tenant");
+        // A signed development token for smoke-test-tenant (TenantAdmin); the
+        // service no longer accepts a bare X-Tenant-ID header.
+        _client = factory.CreateTenantClient("smoke-test-tenant");
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -145,11 +146,11 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
 
         _factory.RunService.CreateRunAsync(Arg.Any<CreateCapitationRunRequest>(), Arg.Any<string?>())
             .Returns(pendingRun);
-        _factory.RunService.ExecuteRunAsync("run-smoke-1")
+        _factory.RunService.ExecuteRunAsync("run-smoke-1", Arg.Any<string?>())
             .Returns(completedRun);
         _factory.StatementRepository.GetByRunIdAsync("run-smoke-done")
             .Returns(new List<CapitationStatement> { statement });
-        _factory.RunService.ApproveStatementAsync("stmt-smoke-1")
+        _factory.RunService.ApproveStatementAsync("stmt-smoke-1", Arg.Any<string>())
             .Returns(approvedStatement);
 
         // Step 1: Create run
@@ -375,7 +376,7 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
     [Fact]
     public async Task ExecuteRun_InvalidState_Returns400()
     {
-        _factory.RunService.ExecuteRunAsync("run-already-done")
+        _factory.RunService.ExecuteRunAsync("run-already-done", Arg.Any<string?>())
             .Returns<CapitationRun>(x => throw new InvalidOperationException("Run is in Completed state, expected Pending"));
 
         var response = await _client.PostAsync("/api/v1/capitation/runs/run-already-done/execute", null);
@@ -453,5 +454,18 @@ public class CapitationRunSmokeTests : IClassFixture<CapitationApiFactory>
         Assert.Equal(3, result!.TotalProviders);
         Assert.Equal(4500m, result.TotalNetPayable);
         Assert.Equal(2, result.ByLineOfBusiness.Count);
+    }
+
+    [Fact]
+    public async Task NoCorsGrant_ForBrowserOrigins()
+    {
+        // Called server-to-server only (the portal is Blazor Server).
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/capitation/runs");
+        request.Headers.Add("Origin", "https://evil.example");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await _factory.CreateClient().SendAsync(request);
+
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
     }
 }

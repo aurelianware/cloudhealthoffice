@@ -155,6 +155,18 @@ public class CapitationDisbursement
     /// Error details for failed disbursements
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>The NACHA release that claimed this disbursement (Pending to Releasing).</summary>
+    public string? ReleaseClaimId { get; set; }
+
+    /// <summary>When that release claimed it.</summary>
+    public DateTime? ReleaseClaimedAt { get; set; }
+
+    /// <summary>
+    /// The user (token subject) who released the NACHA file this disbursement
+    /// is in. Never the one who records the bank's answer for that file.
+    /// </summary>
+    public string? ReleasedBy { get; set; }
 }
 
 /// <summary>
@@ -216,7 +228,38 @@ public enum DisbursementStatus
     /// <summary>
     /// Cancelled before settlement
     /// </summary>
-    Cancelled
+    Cancelled,
+
+    /// <summary>
+    /// In a NACHA credit file that could not be sent to the bank (transmission
+    /// not configured or failed). The file is held encrypted for 7 days: a
+    /// platform admin must retrieve it or another approver retry it.
+    /// </summary>
+    AwaitingRetrieval,
+
+    /// <summary>
+    /// Claimed by one NACHA release (<see cref="CapitationDisbursement.ReleaseClaimId"/>)
+    /// and being put in a file: no other release may include it. Moved from
+    /// Pending by a conditional write before the file is built; it ends
+    /// Submitted, AwaitingRetrieval, or back in Pending when nothing was sent.
+    /// One left here (the process stopped mid-send) needs checking with the bank.
+    /// </summary>
+    Releasing,
+
+    /// <summary>
+    /// In a NACHA credit file that may have reached the bank (upload finished,
+    /// rename outcome unknown). Never re-sent, retried or retrieved until a user
+    /// with payments:approve records what the bank says (Submitted, or back to
+    /// AwaitingRetrieval / Pending).
+    /// </summary>
+    DeliveryUnknown,
+
+    /// <summary>
+    /// A Stripe transfer whose outcome is unknown (timeout, network or Stripe
+    /// server error after the request was sent): the transfer may exist. Never
+    /// paid again until someone checks Stripe and records the answer.
+    /// </summary>
+    PaymentUnknown
 }
 
 /// <summary>
@@ -241,7 +284,7 @@ public class InitiateDisbursementRequest
     public decimal? Amount { get; set; }
 
     /// <summary>
-    /// Who is initiating this disbursement
+    /// Ignored on the API: the initiator is always the authenticated caller (token subject).
     /// </summary>
     public string? InitiatedBy { get; set; }
 }
@@ -267,7 +310,7 @@ public class InitiateBatchDisbursementRequest
     public DisbursementMethod? Method { get; set; }
 
     /// <summary>
-    /// Who is initiating
+    /// Ignored on the API: the initiator is always the authenticated caller (token subject).
     /// </summary>
     public string? InitiatedBy { get; set; }
 }
@@ -296,7 +339,22 @@ public class ProcessReturnRequest
 }
 
 /// <summary>
-/// Result of a NACHA credit file generation for provider disbursements
+/// A generated NACHA credit file. Holds full routing and account numbers: it
+/// never leaves the service except to the bank (INachaDispatcher). Not an API type.
+/// </summary>
+public class GeneratedNachaCreditFile
+{
+    public string FileReference { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public string FileContent { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// What an approver gets back for a NACHA credit file: a masked summary and
+/// the transmission receipt. Never the file, never a full routing or account number.
 /// </summary>
 public class NachaCreditFileResult
 {
@@ -311,11 +369,6 @@ public class NachaCreditFileResult
     public string FileName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Raw NACHA file content
-    /// </summary>
-    public string FileContent { get; set; } = string.Empty;
-
-    /// <summary>
     /// Number of credit entries in the file
     /// </summary>
     public int EntryCount { get; set; }
@@ -325,10 +378,60 @@ public class NachaCreditFileResult
     /// </summary>
     public decimal TotalAmount { get; set; }
 
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalCreditAmount { get; set; }
+
     /// <summary>
     /// When the file was generated
     /// </summary>
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Transmitted, AwaitingRetrieval or NotSent.</summary>
+    public string TransmissionStatus { get; set; } = string.Empty;
+
+    /// <summary>Why the file was not delivered (AwaitingRetrieval, NotSent).</summary>
+    public string? TransmissionError { get; set; }
+
+    /// <summary>When a held file is deleted (AwaitingRetrieval).</summary>
+    public DateTime? HeldUntil { get; set; }
+
+    /// <summary>Set when the bank received the file.</summary>
+    public CloudHealthOffice.NachaTransmission.NachaTransmissionReceipt? Receipt { get; set; }
+
+    /// <summary>One line per credit: provider, last 4 and amount.</summary>
+    public List<NachaCreditEntrySummary> Entries { get; set; } = new();
+
+    /// <summary>
+    /// Pending NACHA disbursements left out of the file because something needs
+    /// fixing first (no approved bank account in provider-service, or the
+    /// full-number read was refused or failed). They stay Pending.
+    /// </summary>
+    public List<DisbursementAttentionItem> NeedsAttention { get; set; } = new();
+}
+
+/// <summary>One credit in a NACHA file, masked.</summary>
+public class NachaCreditEntrySummary
+{
+    public string DisbursementId { get; set; } = string.Empty;
+    public string StatementId { get; set; } = string.Empty;
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string? ProviderName { get; set; }
+    public string? RoutingNumberLast4 { get; set; }
+    public string? AccountNumberLast4 { get; set; }
+    public decimal Amount { get; set; }
+    public string? TraceNumber { get; set; }
+}
+
+/// <summary>
+/// A statement or disbursement that could not be paid for a reason someone has
+/// to fix (as opposed to a normal skip such as a provider without EFT).
+/// </summary>
+public class DisbursementAttentionItem
+{
+    public string? StatementId { get; set; }
+    public string? DisbursementId { get; set; }
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -375,4 +478,36 @@ public class BatchDisbursementResult
     /// Generated NACHA credit file (if any disbursements used NACHA)
     /// </summary>
     public NachaCreditFileResult? NachaFile { get; set; }
+
+    /// <summary>Statements not paid for a reason someone has to fix (also counted in Errors).</summary>
+    public List<DisbursementAttentionItem> NeedsAttention { get; set; } = new();
 }
+
+/// <summary>
+/// Disbursements that need a person: Releasing longer than the threshold (the
+/// release stopped mid-send), DeliveryUnknown (resolve-delivery on the held
+/// file), and PaymentUnknown (Stripe transfer outcome unknown); plus held NACHA
+/// files stuck in a retry (Transmitting). Nothing here is recovered automatically.
+/// </summary>
+public class StuckDisbursements
+{
+    public int ReleasingOlderThanMinutes { get; set; }
+    public List<CapitationDisbursement> Releasing { get; set; } = new();
+    public List<CapitationDisbursement> DeliveryUnknown { get; set; } = new();
+    public List<CapitationDisbursement> PaymentUnknown { get; set; } = new();
+    public List<CloudHealthOffice.NachaTransmission.NachaHeldFileView> TransmittingHeldFiles { get; set; } = new();
+}
+
+/// <summary>What a person found out (from the bank, or Stripe) about a stuck disbursement.</summary>
+public class ResolveStuckDisbursementRequest
+{
+    /// <summary>True: the payment went out (Submitted). False: it did not (Releasing back to Pending; Stripe PaymentUnknown to Failed, statement payable again).</summary>
+    public bool? Sent { get; set; }
+
+    /// <summary>What the bank or Stripe said. Required.</summary>
+    public string? Reason { get; set; }
+
+    /// <summary>For a Stripe disbursement that went out: its transfer id, so Stripe events settle it.</summary>
+    public string? StripeTransferId { get; set; }
+}
+

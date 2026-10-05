@@ -1,4 +1,4 @@
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 using ProviderService.Models;
@@ -7,42 +7,27 @@ using Xunit;
 
 namespace CloudHealthOffice.ProviderService.Tests;
 
+[Collection(MongoRunnerFixture.CollectionName)]
 public class MpipRateServiceTests : IAsyncLifetime
 {
     private const string TenantId = "test-tenant";
     private const string ProviderId = "provider-001";
     private const string Period = "2025-2026";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private MpipRateService _service = null!;
 
+    public MpipRateServiceTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions
-        {
-            ConnectionTimeout = TimeSpan.FromSeconds(30)
-        });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase("mpip_test");
+        _database = _mongo.CreateDatabase("mpip_test");
         _service = new MpipRateService(_database, NullLogger<MpipRateService>.Instance);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try
-        {
-            _runner.Dispose();
-        }
-        catch (TypeLoadException)
-        {
-            // EphemeralMongo.Core 2.0.0 references MongoClientBase which was
-            // removed in MongoDB.Driver 3.x.  The TypeLoadException only occurs
-            // during disposal; the MongoDB process is cleaned up by the OS.
-        }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     // ═══════════════════════════════════════════════════════════════════
     // SPECIALIST AUTO-QUALIFY

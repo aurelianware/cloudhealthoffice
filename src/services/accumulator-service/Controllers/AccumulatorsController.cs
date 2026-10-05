@@ -1,5 +1,7 @@
 using AccumulatorService.Models;
 using AccumulatorService.Services;
+using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AccumulatorService.Controllers;
@@ -18,16 +20,19 @@ namespace AccumulatorService.Controllers;
 [ApiController]
 public class AccumulatorsController : ControllerBase
 {
-    public string TenantId { get; set; } = string.Empty;
-
     private readonly IAccumulatorService _svc;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<AccumulatorsController> _logger;
 
-    public AccumulatorsController(IAccumulatorService svc, ILogger<AccumulatorsController> logger)
+    public AccumulatorsController(IAccumulatorService svc, ICurrentActor actor, ILogger<AccumulatorsController> logger)
     {
         _svc = svc;
+        _actor = actor;
         _logger = logger;
     }
+
+    /// <summary>Tenant from the validated token (set by the shared TenantMiddleware).</summary>
+    private string TenantId => HttpContext.GetTenantId();
 
     // ── canonical routes ────────────────────────────────────────────────
 
@@ -55,13 +60,14 @@ public class AccumulatorsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Reason))
             return BadRequest("Reason is required for manual adjustment");
 
-        var result = await _svc.AdjustAsync(TenantId, memberId, request, ct);
+        var actorId = _actor.UserId;
+        var result = await _svc.AdjustAsync(TenantId, memberId, actorId, request, ct);
         _logger.LogInformation(
             "Accumulator adjusted: tenant={TenantId} member={MemberId} adjustmentId={AdjustmentId} actor={ActorId}",
             SanitizeForLog(TenantId),
             SanitizeForLog(memberId),
             SanitizeForLog(result.AdjustmentId),
-            SanitizeForLog(request.ActorId));
+            SanitizeForLog(actorId));
         return Ok(result);
     }
 

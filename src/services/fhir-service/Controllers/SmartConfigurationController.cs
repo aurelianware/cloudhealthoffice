@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using FhirService.Services.Identity;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,6 +13,7 @@ namespace FhirService.Controllers;
 /// https://hl7.org/fhir/smart-app-launch/conformance.html
 /// </summary>
 [Route("fhir/r4")]
+[AllowAnonymous]
 public class SmartConfigurationController : FhirControllerBase
 {
     private readonly IConfiguration _config;

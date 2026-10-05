@@ -7,6 +7,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,8 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-// Shared infrastructure: health checks, CORS, Swagger, tenant middleware,
-// observability. Same opinionated pipeline as claims-service.
+// Shared infrastructure: health checks, CORS, Swagger, observability. Same opinionated pipeline as claims-service.
 builder.Services.AddChoInfrastructure(builder.Configuration, options =>
 {
     options.ServiceName = "Claims Examiner Service";
@@ -24,6 +24,20 @@ builder.Services.AddChoInfrastructure(builder.Configuration, options =>
         "calls Anthropic Claude with NCCI bundling context, and writes an advisory " +
         "recommendation back to claims-service for human work-queue review. Pend-resolution " +
         "only — never auto-applies, never bypasses human review.";
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every inbound caller presents a CHO token; the tenant and the acting user come
+// from that token (UseChoInfrastructure runs UseChoAuthentication). The service
+// exposes no controllers today, so the defaults only guard future endpoints.
+// Outbound: factory-built clients get ChoOutboundTokenHandler. The Kafka consumer
+// has no caller, so calls to claims-service carry a service token minted for the
+// tenant the ClaimPendedEvent names (sent as X-Tenant-ID by ClaimsServiceClient).
+// The handler never attaches CHO tokens to external hosts such as Anthropic.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "claims:read";
+    auth.DefaultWritePermission = "claims:work";
 });
 
 // Anthropic client (typed HttpClient + bound options)
@@ -74,7 +88,8 @@ var app = builder.Build();
 
 app.UseChoObservability();
 
-// Shared middleware pipeline
+// Shared middleware pipeline (includes UseChoAuthentication: authentication,
+// tenant from the token, authorization)
 app.UseChoInfrastructure(builder.Configuration);
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();

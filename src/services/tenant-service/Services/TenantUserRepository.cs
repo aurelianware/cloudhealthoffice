@@ -91,10 +91,49 @@ public class TenantUserRepository : ITenantUserRepository
         user.UpdatedAt = DateTime.UtcNow;
         user.EmailNormalized = user.Email.ToLowerInvariant();
 
-        await _collection.ReplaceOneAsync(u => u.Id == user.Id, user);
+        // Field updates, not a replace: a replace of a copy read earlier would
+        // write back a stale Entra link or invitation state over a concurrent
+        // redemption, link or unlink. The status guard refuses a write from a
+        // copy read on the other side of the Invited boundary (for example, an
+        // admin edit of an Invited user that has just been redeemed).
+        var f = Builders<TenantUser>.Filter;
+        var filter = f.And(
+            f.Eq(u => u.Id, user.Id),
+            user.Status == TenantUserStatus.Invited
+                ? f.Eq(u => u.Status, TenantUserStatus.Invited)
+                : f.Ne(u => u.Status, TenantUserStatus.Invited));
+        var update = Builders<TenantUser>.Update
+            .Set(u => u.Email, user.Email)
+            .Set(u => u.EmailNormalized, user.EmailNormalized)
+            .Set(u => u.DisplayName, user.DisplayName)
+            .Set(u => u.FirstName, user.FirstName)
+            .Set(u => u.LastName, user.LastName)
+            .Set(u => u.Roles, user.Roles)
+            .Set(u => u.Department, user.Department)
+            .Set(u => u.SupervisorId, user.SupervisorId)
+            .Set(u => u.Status, user.Status)
+            .Set(u => u.LastLoginAt, user.LastLoginAt)
+            .Set(u => u.UpdatedAt, user.UpdatedAt)
+            .Set(u => u.UpdatedBy, user.UpdatedBy);
+
+        var result = await _collection.UpdateOneAsync(filter, update);
+        if (result.MatchedCount == 0)
+            throw new UserChangedConcurrentlyException(user.Id);
         _logger.LogInformation("Updated tenant user {UserId}", SanitizeForLog(user.Id));
 
         return user;
+    }
+
+    public async Task<TenantUser?> UnlinkAsync(string tenantId, string userId, string actor)
+    {
+        var update = Builders<TenantUser>.Update
+            .Set(u => u.AzureAdObjectId, string.Empty)
+            .Set(u => u.AzureAdTenantId, string.Empty)
+            .Set(u => u.UpdatedAt, DateTime.UtcNow)
+            .Set(u => u.UpdatedBy, actor);
+        return await _collection.FindOneAndUpdateAsync<TenantUser>(
+            u => u.Id == userId && u.TenantId == tenantId, update,
+            new FindOneAndUpdateOptions<TenantUser> { ReturnDocument = ReturnDocument.After });
     }
 
     public async Task DeleteAsync(string id)

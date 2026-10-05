@@ -1,0 +1,464 @@
+@page "/premium-billing/invoices"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IPremiumBillingService BillingService
+@inject IUserContextService UserContextService
+
+<PageTitle>Premium Invoices — Cloud Health Office</PageTitle>
+
+@* Premium invoices: reads billing:read; record payment and void finance:write;
+   mark sent billing:run. *@
+<PermissionGate Permission="billing:read" RoleName="Finance">
+<PremiumBillingNav Active="invoices" />
+<BillingError Error="_error" OnClose="() => _error = null" />
+
+@if (_aging != null)
+{
+    <MudGrid Spacing="3" Class="mb-4" data-testid="aging">
+        @foreach (var (label, amount, count, color) in AgingBuckets)
+        {
+            <MudItem xs="6" sm="2">
+                <MudPaper Class="pa-3" Style="@($"background: rgba(10,10,10,0.9); border: 1px solid {color}; border-radius: 12px;")">
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">@label (@count)</MudText>
+                    <MudText Typo="Typo.h6" Style="@($"color: {color}; font-family: monospace;")">@amount.ToString("C0")</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@if (_runId != null)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3" data-testid="run-filter">
+        Showing invoices of billing run @(_runNumber ?? _runId)@(_runTruncated ? $" (first {RunInvoiceLimit})" : "").
+        <MudLink Href="/premium-billing/invoices" Class="ml-2">Show all</MudLink>
+    </MudAlert>
+}
+else
+{
+    <div class="d-flex align-center flex-wrap gap-3 mb-4">
+        <div data-testid="invoice-group-filter">
+            <MudTextField @bind-Value="_groupFilter" Label="Group number" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+        </div>
+        <MudSelect T="string" @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined" Dense="true"
+                   Clearable="true" Style="min-width: 180px;" Margin="Margin.Dense">
+            @foreach (var s in InvoiceStatuses)
+            {
+                <MudSelectItem Value="@s">@s</MudSelectItem>
+            }
+        </MudSelect>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search"
+                   OnClick="Search" Disabled="_loading" data-testid="invoice-search">Search</MudButton>
+    </div>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+<MudTable Items="_invoices" Dense="true" Hover="true" T="PremiumInvoice" data-testid="invoices"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Invoice #</MudTh>
+        <MudTh>Sponsor</MudTh>
+        <MudTh>Group</MudTh>
+        <MudTh>Period</MudTh>
+        <MudTh>Due</MudTh>
+        <MudTh>Total</MudTh>
+        <MudTh>Paid</MudTh>
+        <MudTh>Balance</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Invoice #"><span style="font-family: monospace; color: #00ffff;">@context.InvoiceNumber</span></MudTd>
+        <MudTd DataLabel="Sponsor">@context.SponsorName</MudTd>
+        <MudTd DataLabel="Group">@context.GroupNumber</MudTd>
+        <MudTd DataLabel="Period">@context.BillingPeriodStart.ToString("yyyy-MM")</MudTd>
+        <MudTd DataLabel="Due">@context.DueDate.ToString("MM/dd/yyyy")</MudTd>
+        <MudTd DataLabel="Total">@context.TotalAmount.ToString("C2")</MudTd>
+        <MudTd DataLabel="Paid">@context.TotalPaid.ToString("C2")</MudTd>
+        <MudTd DataLabel="Balance"><strong>@context.BalanceDue.ToString("C2")</strong></MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@InvoiceStatusColor(context.Status)">@context.Status</MudChip>
+            @if (context.SponsorSuspension?.State == "Failed")
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">Suspension failed</MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ViewInvoice(context.Id))"
+                       data-testid="@($"invoice-view-{context.Id}")">View</MudButton>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No invoices match</MudText>
+    </NoRecordsContent>
+    <PagerContent><MudTablePager /></PagerContent>
+</MudTable>
+@if (_runId == null && _invoices.Count >= PageSize)
+{
+    <div class="d-flex justify-center gap-2 mt-2">
+        <MudButton Size="Size.Small" Disabled="@(_page <= 1)" OnClick="@(() => GoToPage(_page - 1))">Previous</MudButton>
+        <MudText Typo="Typo.body2" Class="mt-1">Page @_page</MudText>
+        <MudButton Size="Size.Small" OnClick="@(() => GoToPage(_page + 1))">Next</MudButton>
+    </div>
+}
+
+@if (_selected != null)
+{
+    var inv = _selected;
+    <MudPaper Class="pa-4 mt-4" data-testid="invoice-detail"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.25); border-radius: 12px;">
+        <div class="d-flex align-center gap-2 mb-2">
+            <MudText Typo="Typo.h6" Style="color: #00ffff;">@inv.InvoiceNumber</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@InvoiceStatusColor(inv.Status)">@inv.Status</MudChip>
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => _selected = null" />
+        </div>
+        <MudSimpleTable Dense="true" Style="background: transparent;">
+            <tbody>
+                <tr><td>Sponsor</td><td>@inv.SponsorName (@inv.GroupNumber)</td></tr>
+                <tr><td>Period</td><td>@inv.BillingPeriodStart.ToString("MM/dd/yyyy") – @inv.BillingPeriodEnd.ToString("MM/dd/yyyy")</td></tr>
+                <tr><td>Due</td><td>@inv.DueDate.ToString("MM/dd/yyyy")@(inv.GracePeriodExpires is DateTime g ? $" (grace until {g:MM/dd/yyyy}{(inv.GraceType == "AptcThreeMonth" ? ", APTC 3-month" : "")})" : "")</td></tr>
+                <tr><td>Members</td><td>@inv.MemberCount</td></tr>
+                <tr><td>Premium / adjustments</td><td>@inv.SubtotalPremium.ToString("C2") / @inv.TotalAdjustments.ToString("C2")</td></tr>
+                <tr><td>Total / paid / balance</td><td>@inv.TotalAmount.ToString("C2") / @inv.TotalPaid.ToString("C2") / <strong>@inv.BalanceDue.ToString("C2")</strong></td></tr>
+                <tr><td>Last updated</td><td>@inv.LastUpdatedAt.ToLocalTime().ToString("g") by @(inv.LastUpdatedBy ?? inv.CreatedBy ?? "—")</td></tr>
+            </tbody>
+        </MudSimpleTable>
+
+        @if (inv.SponsorSuspension is { } susp)
+        {
+            <MudAlert Severity="@(susp.State == "Failed" ? Severity.Error : Severity.Info)" Dense="true" Class="mt-3" data-testid="invoice-suspension">
+                Sponsor suspension: <strong>@susp.State</strong> after @susp.Attempts attempt(s), last @susp.LastAttemptAt.ToLocalTime().ToString("g")
+                @(susp.LastAttemptBy != null ? $"by {susp.LastAttemptBy}" : "")
+                @if (susp.State == "Failed")
+                {
+                    <span> — HTTP @(susp.LastStatusCode?.ToString() ?? "none"): @susp.LastError. Retried on the next delinquency run.</span>
+                }
+            </MudAlert>
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Members</MudText>
+        <MudSimpleTable Dense="true" Style="background: transparent;">
+            <thead><tr><th>Member</th><th>Plan</th><th>Level</th><th>Effective</th><th>Proration</th><th>Subscriber</th><th>Employer</th><th>Total</th></tr></thead>
+            <tbody>
+                @foreach (var li in inv.LineItems)
+                {
+                    <tr>
+                        <td>@li.MemberName (@li.MemberId)@(li.IsRetroactive ? " — retro" : "")</td>
+                        <td>@li.PlanId</td>
+                        <td>@li.CoverageLevel</td>
+                        <td>@li.EffectiveDate.ToString("MM/dd/yyyy")@(li.TerminationDate is DateTime t ? $" – {t:MM/dd/yyyy}" : "")</td>
+                        <td>@li.ProrationFactor.ToString("0.###")</td>
+                        <td>@li.SubscriberPremium.ToString("C2")</td>
+                        <td>@li.EmployerContribution.ToString("C2")</td>
+                        <td>@li.TotalPremium.ToString("C2")</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        @if (inv.Adjustments.Count > 0)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Adjustments</MudText>
+            <MudSimpleTable Dense="true" Style="background: transparent;">
+                <tbody>
+                    @foreach (var a in inv.Adjustments)
+                    {
+                        <tr><td>@a.Type</td><td>@a.Description</td><td>@a.AdjustmentDate.ToString("MM/dd/yyyy")</td><td>@a.Amount.ToString("C2")</td></tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Payments</MudText>
+        <MudSimpleTable Dense="true" Style="background: transparent;" data-testid="invoice-payments">
+            <tbody>
+                @foreach (var p in inv.Payments)
+                {
+                    <tr><td>@p.PaymentDate.ToString("MM/dd/yyyy")</td><td>@p.PaymentMethod</td><td>@p.ReferenceNumber</td><td>@p.Amount.ToString("C2")</td><td>@(p.RecordedBy ?? "")</td></tr>
+                }
+                @if (inv.Payments.Count == 0)
+                {
+                    <tr><td>No payments recorded</td></tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <div class="d-flex flex-wrap gap-4 mt-4">
+            @if (_canFinance && inv.Status is not ("Voided" or "Paid" or "WriteOff"))
+            {
+                <MudPaper Class="pa-3" Outlined="true" data-testid="record-payment-form" Style="background: transparent; min-width: 320px;">
+                    <MudText Typo="Typo.subtitle2">Record payment</MudText>
+                    <div data-testid="payment-amount">
+                        <MudNumericField T="decimal" @bind-Value="_payAmount" Label="Amount" Format="0.00" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons="true" />
+                    </div>
+                    <div data-testid="payment-date">
+                        <MudTextField @bind-Value="_payDate" Label="Payment date (YYYY-MM-DD)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </div>
+                    <MudSelect T="string" @bind-Value="_payMethod" Label="Method" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem Value="@("ACH")">ACH</MudSelectItem>
+                        <MudSelectItem Value="@("Wire")">Wire</MudSelectItem>
+                        <MudSelectItem Value="@("Check")">Check</MudSelectItem>
+                    </MudSelect>
+                    <div data-testid="payment-reference">
+                        <MudTextField @bind-Value="_payReference" Label="Check / wire / trace number" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" Class="mt-2" OnClick="RecordPayment" Disabled="_busy"
+                               data-testid="record-payment">Record payment</MudButton>
+                </MudPaper>
+            }
+            @if (_canFinance && inv.Status != "Voided")
+            {
+                <MudPaper Class="pa-3" Outlined="true" data-testid="void-form" Style="background: transparent; min-width: 320px;">
+                    <MudText Typo="Typo.subtitle2">Void invoice</MudText>
+                    <div data-testid="void-reason">
+                        <MudTextField @bind-Value="_voidReason" Label="Reason" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </div>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="mt-2" OnClick="VoidInvoice" Disabled="_busy"
+                               data-testid="void-invoice">Void invoice</MudButton>
+                </MudPaper>
+            }
+            @if (_canRun && inv.Status == "Generated")
+            {
+                <div>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="MarkSent" Disabled="_busy"
+                               data-testid="mark-sent">Mark sent to sponsor</MudButton>
+                </div>
+            }
+        </div>
+    </MudPaper>
+}
+</PermissionGate>
+
+@code {
+    [SupplyParameterFromQuery(Name = "run")] public string? RunQuery { get; set; }
+
+    internal const int RunInvoiceLimit = 100;
+    private const int PageSize = 50;
+
+    private static readonly string[] InvoiceStatuses =
+        { "Generated", "Sent", "PartiallyPaid", "Paid", "Overdue", "Delinquent", "Voided", "WriteOff" };
+
+    private List<PremiumInvoice> _invoices = new();
+    private PremiumInvoice? _selected;
+    private PremiumAgingReport? _aging;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _canFinance;
+    private bool _canRun;
+    private Exception? _error;
+    private int _page = 1;
+
+    private string? _groupFilter;
+    private string? _statusFilter;
+    private string? _runId;
+    private string? _runNumber;
+    private bool _runTruncated;
+
+    private decimal _payAmount;
+    private string? _payDate;
+    private string _payMethod = "ACH";
+    private string? _payReference;
+    private string? _voidReason;
+
+    private IEnumerable<(string, decimal, int, string)> AgingBuckets => _aging == null
+        ? Array.Empty<(string, decimal, int, string)>()
+        : new[]
+        {
+            ("Current", _aging.CurrentAmount, _aging.CurrentCount, "#00ff88"),
+            ("30 days", _aging.ThirtyDayAmount, _aging.ThirtyDayCount, "#ffaa00"),
+            ("60 days", _aging.SixtyDayAmount, _aging.SixtyDayCount, "#ff7700"),
+            ("90+ days", _aging.NinetyPlusDayAmount, _aging.NinetyPlusDayCount, "#ff0055"),
+            ("Outstanding", _aging.TotalOutstanding, _aging.TotalCount, "#00ffff"),
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserContextService.GetCurrentUserAsync();
+        _canFinance = UserContextService.HasPermission("finance:write");
+        _canRun = UserContextService.HasPermission("billing:run");
+        if (!UserContextService.HasPermission("billing:read"))
+        {
+            _loading = false;
+            return;
+        }
+
+        _runId = string.IsNullOrWhiteSpace(RunQuery) ? null : RunQuery;
+        try { _aging = await BillingService.GetAgingReportAsync(); }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException) { _error = ex; }
+
+        if (_runId != null) await LoadRunInvoices();
+        else await Search();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _page = Math.Max(1, page);
+        await Load();
+    }
+
+    private async Task Search()
+    {
+        _page = 1;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        try
+        {
+            _invoices = await BillingService.SearchInvoicesAsync(_groupFilter, _statusFilter, page: _page, pageSize: PageSize);
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadRunInvoices()
+    {
+        // The invoice search has no billing-run filter; a run lists its invoice
+        // ids, which are read one by one (capped).
+        _loading = true;
+        try
+        {
+            var run = await BillingService.GetBillingRunAsync(_runId!);
+            if (run == null)
+            {
+                _error = new BillingApiException(404, null, "That billing run no longer exists.");
+                return;
+            }
+            _runNumber = run.BillingRunNumber;
+            _runTruncated = run.InvoiceIds.Count > RunInvoiceLimit;
+            var loaded = new List<PremiumInvoice>();
+            foreach (var id in run.InvoiceIds.Take(RunInvoiceLimit))
+            {
+                var invoice = await BillingService.GetInvoiceAsync(id);
+                if (invoice != null) loaded.Add(invoice);
+            }
+            _invoices = loaded;
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ViewInvoice(string id)
+    {
+        try
+        {
+            _selected = await BillingService.GetInvoiceAsync(id);
+            if (_selected == null)
+            {
+                _error = new BillingApiException(404, null, "That invoice no longer exists.");
+                return;
+            }
+            _payAmount = _selected.BalanceDue;
+            _payDate = DateTime.Today.ToString("yyyy-MM-dd");
+            _payReference = null;
+            _voidReason = null;
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+    }
+
+    private Task RecordPayment()
+    {
+        if (_selected == null) return Task.CompletedTask;
+        if (_payAmount <= 0)
+        {
+            _error = new BillingApiException(400, null, "Enter a payment amount greater than zero.");
+            return Task.CompletedTask;
+        }
+        if (!DateTime.TryParseExact((_payDate ?? "").Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var date))
+        {
+            _error = new BillingApiException(400, null, "Enter the payment date as YYYY-MM-DD.");
+            return Task.CompletedTask;
+        }
+
+        var request = new RecordPremiumPaymentRequest
+        {
+            Amount = _payAmount,
+            PaymentDate = date,
+            PaymentMethod = _payMethod,
+            ReferenceNumber = string.IsNullOrWhiteSpace(_payReference) ? null : _payReference.Trim()
+        };
+        var id = _selected.Id;
+        return Act(async () => Show(await BillingService.RecordPaymentAsync(id, request)));
+    }
+
+    private Task VoidInvoice()
+    {
+        if (_selected == null) return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(_voidReason))
+        {
+            _error = new BillingApiException(400, null, "Enter a reason for voiding the invoice.");
+            return Task.CompletedTask;
+        }
+        var id = _selected.Id;
+        var reason = _voidReason.Trim();
+        return Act(async () => Show(await BillingService.VoidInvoiceAsync(id, reason)));
+    }
+
+    private Task MarkSent()
+    {
+        if (_selected == null) return Task.CompletedTask;
+        var id = _selected.Id;
+        return Act(async () => Show(await BillingService.MarkInvoiceSentAsync(id)));
+    }
+
+    private void Show(PremiumInvoice updated)
+    {
+        _selected = updated;
+        _payAmount = updated.BalanceDue;
+        var i = _invoices.FindIndex(x => x.Id == updated.Id);
+        if (i >= 0) _invoices[i] = updated;
+    }
+
+    private async Task Act(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    internal static Color InvoiceStatusColor(string status) => status switch
+    {
+        "Paid" => Color.Success,
+        "PartiallyPaid" => Color.Info,
+        "Sent" => Color.Primary,
+        "Generated" => Color.Default,
+        "Overdue" => Color.Warning,
+        "Delinquent" => Color.Error,
+        "Voided" or "WriteOff" => Color.Dark,
+        _ => Color.Default
+    };
+}

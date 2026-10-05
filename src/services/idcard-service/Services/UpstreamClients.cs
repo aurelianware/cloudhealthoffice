@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace IdCardService.Services;
 
@@ -24,6 +25,75 @@ internal static class LogSafe
             if (!char.IsControl(c)) sb.Append(c);
         }
         return sb.ToString();
+    }
+}
+
+/// <summary>
+/// Prepares every outbound call to another CHO service: names the tenant in
+/// <c>X-Tenant-ID</c> and makes sure the call carries a CHO token.
+///
+/// <list type="bullet">
+///   <item>A CHO caller (the tenant came from its token): ChoOutboundTokenHandler
+///   forwards that token.</item>
+///   <item>No caller (hosted service, message): ChoOutboundTokenHandler mints a
+///   service token for the <c>X-Tenant-ID</c> named here.</item>
+///   <item>An external caller (a provider JWT on <c>/scan</c>) is authenticated
+///   but holds no CHO token. Its token means nothing to CHO services and is not
+///   forwarded; this service acts as itself, with a service token for the
+///   tenant the signed card names.</item>
+/// </list>
+/// </summary>
+public sealed class UpstreamAuthorization
+{
+    private readonly IHttpContextAccessor _accessor;
+    private readonly IServiceProvider _services;
+
+    public UpstreamAuthorization(IHttpContextAccessor accessor, IServiceProvider services)
+    {
+        _accessor = accessor;
+        _services = services;
+    }
+
+    public async Task PrepareAsync(HttpRequestMessage request, string tenantId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new InvalidOperationException("An outbound CHO call must name a tenant.");
+
+        request.Headers.Remove("X-Tenant-ID");
+        request.Headers.Add("X-Tenant-ID", tenantId);
+
+        var http = _accessor.HttpContext;
+        if (http?.User?.Identity?.IsAuthenticated == true && http.Items["TenantId"] is not string)
+        {
+            var tokens = ChoServiceTokens.Resolve(_services);
+            if (tokens == null)
+            {
+                throw new InvalidOperationException(
+                    "An external caller needs an upstream CHO call, but ChoAuth:ServiceToken is not configured.");
+            }
+            request.Headers.Authorization = new AuthenticationHeaderValue(
+                "Bearer", await tokens.GetTokenAsync(tenantId, ct));
+        }
+    }
+
+    /// <summary>
+    /// A non-success answer other than 404. A refusal (401/403) is a
+    /// configuration fault, never "not found", so it is logged as an error and
+    /// thrown instead of being read as missing data.
+    /// </summary>
+    public static HttpRequestException Failure(ILogger logger, string service, HttpResponseMessage response, string subject)
+    {
+        var status = (int)response.StatusCode;
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            logger.LogError("{Service} refused the call for {Subject} with {Status}; check service authentication",
+                service, LogSafe.Of(subject), status);
+        }
+        else
+        {
+            logger.LogWarning("{Service} responded {Status} for {Subject}", service, status, LogSafe.Of(subject));
+        }
+        return new HttpRequestException($"{service} responded {status}.", null, response.StatusCode);
     }
 }
 
@@ -110,23 +180,22 @@ public class MemberClient : IMemberClient
     private readonly IConfiguration _cfg;
     private readonly ILogger<MemberClient> _logger;
 
-    public MemberClient(IHttpClientFactory http, IConfiguration cfg, ILogger<MemberClient> logger)
+    private readonly UpstreamAuthorization _auth;
+
+    public MemberClient(IHttpClientFactory http, IConfiguration cfg, ILogger<MemberClient> logger, UpstreamAuthorization auth)
     {
-        _http = http; _cfg = cfg; _logger = logger;
+        _http = http; _cfg = cfg; _logger = logger; _auth = auth;
     }
 
     public async Task<MemberDto?> GetAsync(string tenantId, string memberId, CancellationToken ct = default)
     {
         var baseUrl = _cfg["Services:MemberService"] ?? "http://member-service.cloudhealthoffice/api/v1";
-        var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}");
-        req.Headers.Add("X-Tenant-ID", tenantId);
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}");
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("member-service responded {Status} for member {MemberId}", (int)resp.StatusCode, LogSafe.Of(memberId));
-            resp.EnsureSuccessStatusCode();
-        }
+            throw UpstreamAuthorization.Failure(_logger, "member-service", resp, memberId);
         return await resp.Content.ReadFromJsonAsync<MemberDto>(cancellationToken: ct);
     }
 }
@@ -137,23 +206,25 @@ public class CoverageClient : ICoverageClient
     private readonly IConfiguration _cfg;
     private readonly ILogger<CoverageClient> _logger;
 
-    public CoverageClient(IHttpClientFactory http, IConfiguration cfg, ILogger<CoverageClient> logger)
+    private readonly UpstreamAuthorization _auth;
+
+    public CoverageClient(IHttpClientFactory http, IConfiguration cfg, ILogger<CoverageClient> logger, UpstreamAuthorization auth)
     {
-        _http = http; _cfg = cfg; _logger = logger;
+        _http = http; _cfg = cfg; _logger = logger; _auth = auth;
     }
 
     public async Task<CoverageDto?> GetActiveAsync(string tenantId, string memberId, CancellationToken ct = default)
     {
         var baseUrl = _cfg["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
-        var req = new HttpRequestMessage(HttpMethod.Get,
+        using var req = new HttpRequestMessage(HttpMethod.Get,
             $"{baseUrl}/coverage/member/{Uri.EscapeDataString(memberId)}/active");
-        req.Headers.Add("X-Tenant-ID", tenantId);
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
+        // 404 is coverage-service's "no active coverage". Any other failure,
+        // a refusal above all, is not "coverage inactive".
+        if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
-        {
-            _logger.LogDebug("coverage-service returned {Status} for member {MemberId}", (int)resp.StatusCode, LogSafe.Of(memberId));
-            return null;
-        }
+            throw UpstreamAuthorization.Failure(_logger, "coverage-service", resp, memberId);
         var list = await resp.Content.ReadFromJsonAsync<List<CoverageDto>>(cancellationToken: ct);
         return list?.FirstOrDefault(c => c.IsActive);
     }
@@ -165,22 +236,22 @@ public class SponsorClient : ISponsorClient
     private readonly IConfiguration _cfg;
     private readonly ILogger<SponsorClient> _logger;
 
-    public SponsorClient(IHttpClientFactory http, IConfiguration cfg, ILogger<SponsorClient> logger)
+    private readonly UpstreamAuthorization _auth;
+
+    public SponsorClient(IHttpClientFactory http, IConfiguration cfg, ILogger<SponsorClient> logger, UpstreamAuthorization auth)
     {
-        _http = http; _cfg = cfg; _logger = logger;
+        _http = http; _cfg = cfg; _logger = logger; _auth = auth;
     }
 
     public async Task<SponsorDto?> GetAsync(string tenantId, string groupNumber, CancellationToken ct = default)
     {
         var baseUrl = _cfg["Services:SponsorService"] ?? "http://sponsor-service.cloudhealthoffice/api/v1";
-        var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/sponsors/{Uri.EscapeDataString(groupNumber)}");
-        req.Headers.Add("X-Tenant-ID", tenantId);
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/sponsors/{Uri.EscapeDataString(groupNumber)}");
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
+        if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
-        {
-            _logger.LogDebug("sponsor-service returned {Status} for group {Group}", (int)resp.StatusCode, LogSafe.Of(groupNumber));
-            return null;
-        }
+            throw UpstreamAuthorization.Failure(_logger, "sponsor-service", resp, groupNumber);
         return await resp.Content.ReadFromJsonAsync<SponsorDto>(cancellationToken: ct);
     }
 }
@@ -191,22 +262,22 @@ public class BenefitPlanClient : IBenefitPlanClient
     private readonly IConfiguration _cfg;
     private readonly ILogger<BenefitPlanClient> _logger;
 
-    public BenefitPlanClient(IHttpClientFactory http, IConfiguration cfg, ILogger<BenefitPlanClient> logger)
+    private readonly UpstreamAuthorization _auth;
+
+    public BenefitPlanClient(IHttpClientFactory http, IConfiguration cfg, ILogger<BenefitPlanClient> logger, UpstreamAuthorization auth)
     {
-        _http = http; _cfg = cfg; _logger = logger;
+        _http = http; _cfg = cfg; _logger = logger; _auth = auth;
     }
 
     public async Task<BenefitPlanDto?> GetAsync(string tenantId, string planId, CancellationToken ct = default)
     {
         var baseUrl = _cfg["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api/v1";
-        var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/plans/{Uri.EscapeDataString(planId)}");
-        req.Headers.Add("X-Tenant-ID", tenantId);
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/plans/{Uri.EscapeDataString(planId)}");
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
+        if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
-        {
-            _logger.LogDebug("benefit-plan-service returned {Status} for plan {Plan}", (int)resp.StatusCode, LogSafe.Of(planId));
-            return null;
-        }
+            throw UpstreamAuthorization.Failure(_logger, "benefit-plan-service", resp, planId);
         return await resp.Content.ReadFromJsonAsync<BenefitPlanDto>(cancellationToken: ct);
     }
 }
@@ -217,9 +288,11 @@ public class MemberDocumentClient : IMemberDocumentClient
     private readonly IConfiguration _cfg;
     private readonly ILogger<MemberDocumentClient> _logger;
 
-    public MemberDocumentClient(IHttpClientFactory http, IConfiguration cfg, ILogger<MemberDocumentClient> logger)
+    private readonly UpstreamAuthorization _auth;
+
+    public MemberDocumentClient(IHttpClientFactory http, IConfiguration cfg, ILogger<MemberDocumentClient> logger, UpstreamAuthorization auth)
     {
-        _http = http; _cfg = cfg; _logger = logger;
+        _http = http; _cfg = cfg; _logger = logger; _auth = auth;
     }
 
     public Task<string> UploadPdfAsync(string tenantId, string memberId, byte[] pdf,
@@ -254,10 +327,11 @@ public class MemberDocumentClient : IMemberDocumentClient
         form.Add(fileContent, "File", SanitizeFormValue(fileName));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
-        req.Headers.Add("X-Tenant-ID", SanitizeFormValue(tenantId));
+        await _auth.PrepareAsync(req, SanitizeFormValue(tenantId), ct);
 
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+            throw UpstreamAuthorization.Failure(_logger, "member-document-service", resp, memberId);
 
         var doc = await resp.Content.ReadFromJsonAsync<MemberDocumentResponse>(cancellationToken: ct);
         if (doc == null || string.IsNullOrEmpty(doc.Id))
@@ -298,9 +372,11 @@ public class EligibilityClient : IEligibilityClient
     private readonly IConfiguration _cfg;
     private readonly ILogger<EligibilityClient> _logger;
 
-    public EligibilityClient(IHttpClientFactory http, IConfiguration cfg, ILogger<EligibilityClient> logger)
+    private readonly UpstreamAuthorization _auth;
+
+    public EligibilityClient(IHttpClientFactory http, IConfiguration cfg, ILogger<EligibilityClient> logger, UpstreamAuthorization auth)
     {
-        _http = http; _cfg = cfg; _logger = logger;
+        _http = http; _cfg = cfg; _logger = logger; _auth = auth;
     }
 
     public async Task<object?> GetSnapshotAsync(string tenantId, string memberId, string? providerNpi, CancellationToken ct = default)
@@ -320,9 +396,14 @@ public class EligibilityClient : IEligibilityClient
         {
             Content = JsonContent.Create(body)
         };
-        req.Headers.Add("X-Tenant-ID", tenantId);
+        await _auth.PrepareAsync(req, tenantId, ct);
 
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
+        if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            // A refusal is a configuration fault, not "no snapshot available".
+            throw UpstreamAuthorization.Failure(_logger, "eligibility-service", resp, memberId);
+        }
         if (!resp.IsSuccessStatusCode)
         {
             _logger.LogWarning("Eligibility snapshot fetch failed with status {Status}", (int)resp.StatusCode);

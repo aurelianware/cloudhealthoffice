@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
+using System.Net;
+using CloudHealthOffice.Infrastructure.Tenancy;
 
 namespace ClaimsService.Adapters;
 
@@ -11,11 +12,22 @@ namespace ClaimsService.Adapters;
 /// request).
 /// </summary>
 /// <remarks>
-/// Mirrors <c>ProviderService.Adapters.ProviderTenantConfigCache</c> and
-/// <c>BenefitPlanService.Adapters.BenefitPlanTenantConfigCache</c>: 5-minute
-/// TTL, thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>, and
-/// a graceful fallback to <c>"cho"</c> on any HTTP/JSON failure so a flaky
-/// tenant-service never breaks claim reads.
+/// 5-minute TTL, thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>.
+/// The lookup follows <see cref="TenantPlatformLookup"/>, the rule shared with
+/// benefit-plan, provider, eligibility and id-card:
+/// <list type="bullet">
+///   <item>tenant-service answers and names a platform, or names none
+///   (default <c>"cho"</c>): cached.</item>
+///   <item>401/403: logged as an error, not cached, and raised as
+///   <see cref="ClaimTenantConfigUnavailableException"/>. Routing a QNXT or
+///   Facets tenant's claims to the CHO platform because claims-service is not
+///   trusted by tenant-service would silently use the wrong system.</item>
+///   <item>404, 5xx, transport failure or unreadable body: <c>"cho"</c> for this
+///   call only, not cached.</item>
+/// </list>
+/// The request names the tenant in <c>X-Tenant-ID</c>, so from the
+/// adjudication subscription (no HttpContext) the shared outbound handler mints
+/// a service token for that tenant.
 /// </remarks>
 public class ClaimTenantConfigCache
 {
@@ -26,8 +38,9 @@ public class ClaimTenantConfigCache
     private readonly ConcurrentDictionary<string, (string Platform, Dictionary<string, string> Settings, DateTime ExpiresAt)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
-    public const string DefaultPlatform = "cho";
+    public const string DefaultPlatform = TenantPlatformLookup.DefaultPlatform;
     public const string HttpClientName = "ClaimsDefault";
+    public const string PlatformKey = "claimsPlatform";
 
     public ClaimTenantConfigCache(
         IHttpClientFactory httpClientFactory,
@@ -41,8 +54,9 @@ public class ClaimTenantConfigCache
 
     /// <summary>
     /// Resolve <c>(platform, platformSettings)</c> for the given tenant,
-    /// hitting tenant-service on cache miss. Defaults to <c>("cho", new())</c>
-    /// when the tenant has no <c>claimsPlatform</c> config or the call fails.
+    /// hitting tenant-service on cache miss. Throws
+    /// <see cref="ClaimTenantConfigUnavailableException"/> when tenant-service
+    /// refuses the lookup (401/403).
     /// </summary>
     public async Task<(string Platform, Dictionary<string, string> Settings)> GetAsync(
         string tenantId, CancellationToken ct = default)
@@ -52,61 +66,37 @@ public class ClaimTenantConfigCache
             return (cached.Platform, cached.Settings);
         }
 
-        try
-        {
-            var tenantUrl = _configuration["Services:TenantService"]
-                ?? "http://tenant-service.cloudhealthoffice/api/v1";
-            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-            // Encode the tenantId path segment defensively — the value flows
-            // from JWT/header via TenantMiddleware, and a crafted id with '/'
-            // or '?' would otherwise alter the request path or query.
-            var encodedTenantId = Uri.EscapeDataString(tenantId);
-            var response = await httpClient.GetAsync($"{tenantUrl}/tenants/{encodedTenantId}", ct);
+        var result = await TenantPlatformLookup.FetchAsync(
+            _httpClientFactory.CreateClient(HttpClientName), _configuration["Services:TenantService"],
+            tenantId, PlatformKey, _logger, ct);
 
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync(ct);
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
+        if (result.Outcome == TenantPlatformOutcome.Refused)
+            throw new ClaimTenantConfigUnavailableException(tenantId, result.StatusCode!.Value);
 
-                if (root.TryGetProperty("configuration", out var config) &&
-                    config.TryGetProperty("claimsPlatform", out var claimsConfig) &&
-                    claimsConfig.TryGetProperty("platform", out var platformProp))
-                {
-                    var platform = platformProp.GetString() ?? DefaultPlatform;
-                    var settings = new Dictionary<string, string>();
+        if (result.IsCacheable)
+            _cache[tenantId] = (result.Platform, result.Settings, DateTime.UtcNow.Add(CacheDuration));
 
-                    if (claimsConfig.TryGetProperty("platformSettings", out var settingsProp))
-                    {
-                        foreach (var prop in settingsProp.EnumerateObject())
-                        {
-                            settings[prop.Name] = prop.Value.GetString() ?? string.Empty;
-                        }
-                    }
-
-                    _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
-                    return (platform, settings);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to fetch claims tenant config for {TenantId}, using default adapter",
-                SanitizeForLog(tenantId));
-        }
-
-        var defaultSettings = new Dictionary<string, string>();
-        _cache[tenantId] = (DefaultPlatform, defaultSettings, DateTime.UtcNow.Add(CacheDuration));
-        return (DefaultPlatform, defaultSettings);
+        return (result.Platform, result.Settings);
     }
 
     /// <summary>Test seam — drops all cached entries.</summary>
     public void Clear() => _cache.Clear();
+}
 
-    private static string SanitizeForLog(string? value)
+/// <summary>
+/// tenant-service refused claims-service's platform lookup (401/403), so the
+/// tenant's claims platform is unknown. Never answered with the default.
+/// </summary>
+public sealed class ClaimTenantConfigUnavailableException : InvalidOperationException
+{
+    public ClaimTenantConfigUnavailableException(string tenantId, HttpStatusCode statusCode)
+        : base($"tenant-service refused the claims platform lookup ({(int)statusCode}).")
     {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        TenantId = tenantId;
+        StatusCode = statusCode;
     }
+
+    public string TenantId { get; }
+
+    public HttpStatusCode StatusCode { get; }
 }

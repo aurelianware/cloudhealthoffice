@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using CloudHealthOffice.Appeals.Contracts;
 using FhirService.Models;
 using FhirService.Services;
@@ -35,6 +36,7 @@ namespace FhirService.Controllers;
 /// gated on a <c>Task</c> read scope by <c>SmartScopeEnforcementMiddleware</c>.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "appeals:read,rfai:read")]
 public sealed class TaskController : FhirControllerBase
 {
     private readonly IFhirAppealAdapter _appeals;
@@ -70,7 +72,7 @@ public sealed class TaskController : FhirControllerBase
             return await ReadAdditionalInformationAsync(id, ct);
 
         var appeal = await _appeals.GetAppealAsync(id, TenantId, ct);
-        if (appeal is null) return FhirNotFound("Task", id);
+        if (appeal is null || IsOutsidePatientContext(appeal.MemberId)) return FhirNotFound("Task", id);
 
         var task = _mapper.ToAppealTask(appeal);
         return Ok(task);
@@ -90,8 +92,8 @@ public sealed class TaskController : FhirControllerBase
 
         var query = new AppealSearchQuery
         {
-            MemberId = StripPrefix("Patient/", search.Patient)
-                       ?? StripPrefix("Patient/", SmartPatientId),
+            MemberId = StripPrefix("Patient/", AuthorizedMemberId)
+                       ?? StripPrefix("Patient/", search.Patient),
             Status = MapTaskStatusToAppealStatus(search.Status),
             ClaimId = StripPrefix("Claim/", search.Focus),
             AssignedReviewerId = StripPrefix("Practitioner/", search.Owner),
@@ -137,7 +139,8 @@ public sealed class TaskController : FhirControllerBase
         // tenant-scoped and the record's own tenant is re-checked, so a request
         // belonging to another tenant is indistinguishable from one that does
         // not exist.
-        if (request is null || !string.Equals(request.TenantId, TenantId, StringComparison.Ordinal))
+        if (request is null || !string.Equals(request.TenantId, TenantId, StringComparison.Ordinal)
+            || IsOutsidePatientContext(request.MemberId))
             return FhirNotFound("Task", id);
 
         await RecordDeliveryAsync(request, ct);
@@ -147,7 +150,9 @@ public sealed class TaskController : FhirControllerBase
     private async Task<IActionResult> SearchAdditionalInformationAsync(
         AppealTaskSearchParams search, CancellationToken ct)
     {
-        var matches = await FindAdditionalInformationAsync(search, ct);
+        var matches = (await FindAdditionalInformationAsync(search, ct))
+            .Where(r => !IsOutsidePatientContext(r.MemberId))
+            .ToList();
 
         // status is applied to the PROJECTED Task.status, so a caller filters on
         // what they can see rather than on a CHO state name they cannot.

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ArService.Controllers;
 using ArService.Models;
 using ArService.Repositories;
+using ArService.Tests.Support;
 
 namespace ArService.Tests.Controllers;
 
@@ -15,7 +16,7 @@ public class ArBalancesControllerTests
     {
         _balanceRepo = new Mock<IArBalanceRepository>();
         var logger = new Mock<ILogger<ArBalancesController>>();
-        _controller = new ArBalancesController(_balanceRepo.Object, logger.Object);
+        _controller = new ArBalancesController(_balanceRepo.Object, new TestActor(), logger.Object);
     }
 
     private static ArBalance CreateBalance(
@@ -180,7 +181,7 @@ public class ArBalancesControllerTests
         ok.Should().NotBeNull();
         var reconciled = ok!.Value as ArBalance;
         reconciled!.IsReconciled.Should().BeTrue();
-        reconciled.ReconciledBy.Should().Be("finance-user");
+        reconciled.ReconciledBy.Should().Be(TestActor.DefaultUserId);
         reconciled.ReconciledAt.Should().NotBeNull();
         reconciled.ReconciledAt!.Value.Should().BeOnOrAfter(beforeReconcile);
         reconciled.ReconciliationNotes.Should().Be("Month-end close");

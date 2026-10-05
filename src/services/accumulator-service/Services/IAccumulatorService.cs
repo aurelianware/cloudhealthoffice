@@ -26,5 +26,6 @@ public interface IAccumulatorService
 
     Task<ApplyResult> ApplyClaimFinalizedAsync(ClaimFinalizedEvent evt, CancellationToken ct = default);
 
-    Task<AccumulatorAdjustmentResponse> AdjustAsync(string tenantId, string memberId, AccumulatorAdjustmentRequest request, CancellationToken ct = default);
+    /// <param name="actorId">The authenticated user performing the adjustment (from the token).</param>
+    Task<AccumulatorAdjustmentResponse> AdjustAsync(string tenantId, string memberId, string actorId, AccumulatorAdjustmentRequest request, CancellationToken ct = default);
 }

@@ -8,6 +8,15 @@ public interface IPaymentRepository
     Task<Payment?> GetByIdAsync(string id);
     Task<Payment?> GetByCheckNumberAsync(string checkNumber);
     Task<IEnumerable<Payment>> GetByClaimIdAsync(string claimId);
+
+    /// <summary>
+    /// Of <paramref name="claimIds"/>, those that already appear in a payment of
+    /// the current tenant: a payment issued for them (<paramref name="reversal"/>
+    /// false) or a reversal payment recouping them (true). Payment-service's own
+    /// records are authoritative for "already paid", whatever the claim's status
+    /// in claims-service.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> GetClaimIdsWithPaymentAsync(IReadOnlyCollection<string> claimIds, bool reversal);
     Task<IEnumerable<Payment>> SearchAsync(
         DateTime? paymentDateFrom,
         DateTime? paymentDateTo,
@@ -110,6 +119,36 @@ public class PaymentRepository : IPaymentRepository
         }
 
         return results;
+    }
+
+    public async Task<IReadOnlyCollection<string>> GetClaimIdsWithPaymentAsync(IReadOnlyCollection<string> claimIds, bool reversal)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        if (claimIds.Count == 0)
+            return found;
+
+        var tenantId = GetTenantId();
+        foreach (var chunk in claimIds.Distinct(StringComparer.Ordinal).Chunk(500))
+        {
+            var query = new QueryDefinition(@"
+                SELECT VALUE cp.claimId FROM c
+                JOIN cp IN c.claimPayments
+                WHERE c.tenantId = @tenantId
+                AND (c.isReversal = @reversal OR (@reversal = false AND NOT IS_DEFINED(c.isReversal)))
+                AND ARRAY_CONTAINS(@claimIds, cp.claimId)")
+                .WithParameter("@tenantId", tenantId)
+                .WithParameter("@reversal", reversal)
+                .WithParameter("@claimIds", chunk);
+
+            var iterator = _container.GetItemQueryIterator<string>(query);
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                found.UnionWith(response);
+            }
+        }
+
+        return found;
     }
 
     public async Task<IEnumerable<Payment>> SearchAsync(

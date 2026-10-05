@@ -5,7 +5,6 @@
 @inject ITenantContextService TenantContextService
 @inject NavigationManager Navigation
 @inject IUserContextService UserContextService
-@inject HttpClient HttpClient
 @inject ISnackbar Snackbar
 @inject ILogger<MainLayout> Logger
 @inject IConfiguration Configuration
@@ -45,7 +44,7 @@
                     {
                         <MudMenuItem OnClick="@(() => SwitchToTenant(tenant))">
                             <div class="d-flex align-center gap-2">
-                                @if (tenant.AzureTenantId == _currentAzureTenantId)
+                                @if (tenant.TenantId == _currentTenantId)
                                 {
                                     <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small"
                                              Color="Color.Success" />
@@ -183,10 +182,13 @@
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Benefit Plans
                         </MudNavLink>
-                        <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
-                                    Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
-                            Sponsors
-                        </MudNavLink>
+                        @if (_canReadSponsors)
+                        {
+                            <MudNavLink Href="/sponsors" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Business"
+                                        Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
+                                Sponsors
+                            </MudNavLink>
+                        }
                         <MudNavLink Href="/trading-partners" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SwapHoriz"
                                     Style="border-left: 3px solid transparent; transition: all 0.3s ease;">
                             Trading Partners
@@ -258,9 +260,12 @@
                             </MudNavGroup>
                             <MudNavGroup Title="Capitation" Icon="@Icons.Material.Filled.LocalHospital"
                                          Expanded="false" Style="border-left: 3px solid transparent;">
-                                <MudNavLink Href="/capitation/rate-config" Match="NavLinkMatch.Prefix"
-                                    Icon="@Icons.Material.Filled.Settings"
-                                    Style="border-left: 3px solid transparent;">Rate Config</MudNavLink>
+                                @if (_canReadContracts)
+                                {
+                                    <MudNavLink Href="/capitation/rate-config" Match="NavLinkMatch.Prefix"
+                                        Icon="@Icons.Material.Filled.Settings"
+                                        Style="border-left: 3px solid transparent;">Rate Config</MudNavLink>
+                                }
                                 <MudNavLink Href="/capitation/runs" Match="NavLinkMatch.Prefix"
                                     Icon="@Icons.Material.Filled.PlayCircle"
                                     Style="border-left: 3px solid transparent;">Capitation Runs</MudNavLink>
@@ -409,11 +414,15 @@
 @code {
     private bool _drawerOpen = true;
     private string? _tenantName;
-    private string? _currentAzureTenantId;
+    private string? _currentTenantId;
     private bool _isDemo;
     private bool _isImpersonating;
     private bool _isTenantAdmin;
     private bool _isPlatformAdmin;
+    // Sponsors are read through sponsor-service (enrollment:read or billing:read); capitation
+    // rate configs are contract data (contracts:read, the page's gate).
+    private bool _canReadSponsors;
+    private bool _canReadContracts;
     private bool _tenantLoadComplete;
     private List<TenantSubscription> _availableTenants = new();
 
@@ -444,25 +453,9 @@
             var userContext = await UserContextService.GetCurrentUserAsync();
             _isTenantAdmin = userContext != null && UserContextService.HasPermission("users:manage");
             _isPlatformAdmin = userContext != null && UserContextService.HasPermission("platform:admin");
-
-            // If platform admin, reload the tenant list (may include more tenants
-            // than the initial load found via email-based resolution)
-            if (_isPlatformAdmin)
-            {
-                try
-                {
-                    var adminTenants = await TenantContextService.GetAvailableTenantsAsync();
-                    if (adminTenants.Count > _availableTenants.Count)
-                    {
-                        _availableTenants = adminTenants;
-                        StateHasChanged();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Failed to load platform admin tenant list");
-                }
-            }
+            _canReadSponsors = userContext != null
+                && (UserContextService.HasPermission("enrollment:read") || UserContextService.HasPermission("billing:read"));
+            _canReadContracts = userContext != null && UserContextService.HasPermission("contracts:read");
         }
         catch (Exception ex)
         {
@@ -479,17 +472,13 @@
             {
                 _tenantName = tenantContext.TenantName;
                 _isDemo = tenantContext.IsDemo;
-                _currentAzureTenantId = tenantContext.AzureTenantId;
+                _currentTenantId = tenantContext.TenantId;
                 _isImpersonating = TenantContextService.IsImpersonating;
 
-                // Set X-Tenant-ID on the shared HttpClient so the
-                // TenantHttpMessageHandler does not need to call
-                // AuthenticationStateProvider (which is only valid
-                // inside a Razor component DI scope).
-                HttpClient.DefaultRequestHeaders.Remove("X-Tenant-ID");
-                HttpClient.DefaultRequestHeaders.Add("X-Tenant-ID", tenantContext.TenantId);
+                // X-Tenant-ID and the CHO token are added per request by
+                // ChoBearerTokenHandler, from the token's own tenant.
 
-                // Load available tenants for the switcher
+                // Load available tenants for the switcher (from the CHO token service)
                 _availableTenants = await TenantContextService.GetAvailableTenantsAsync();
 
                 StateHasChanged();
@@ -508,10 +497,10 @@
 
     private async Task SwitchToTenant(TenantSubscription tenant)
     {
-        if (tenant.AzureTenantId == _currentAzureTenantId)
+        if (tenant.TenantId == _currentTenantId)
             return; // Already on this tenant
 
-        var success = await TenantContextService.SwitchTenantAsync(tenant.AzureTenantId);
+        var success = await TenantContextService.SwitchTenantAsync(tenant.TenantId);
         if (success)
         {
             var tenantContext = await TenantContextService.GetCurrentTenantContextAsync();
@@ -519,12 +508,8 @@
             {
                 _tenantName = tenantContext.TenantName;
                 _isDemo = tenantContext.IsDemo;
-                _currentAzureTenantId = tenantContext.AzureTenantId;
+                _currentTenantId = tenantContext.TenantId;
                 _isImpersonating = TenantContextService.IsImpersonating;
-
-                // Update the X-Tenant-ID header for all subsequent API calls
-                HttpClient.DefaultRequestHeaders.Remove("X-Tenant-ID");
-                HttpClient.DefaultRequestHeaders.Add("X-Tenant-ID", tenantContext.TenantId);
             }
 
             Snackbar.Add($"Switched to {tenant.OrganizationName}", Severity.Success);

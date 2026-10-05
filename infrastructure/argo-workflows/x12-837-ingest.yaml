@@ -13,7 +13,13 @@
 #   4. publish-to-kafka - Publish to claims-adjudication topic
 #
 # Flow:
-#   SFTP /inbound/claims/*.edi → Parse → Claims Service → Kafka → Adjudication Workflow
+#   SFTP /inbound/claims/*.edi → Parse → Claims Service → Kafka
+#   claims-service adjudicates on submission (ClaimAdjudicationOrchestrator).
+#   The claims-adjudication Argo workflow that consumed the Kafka topic is
+#   retired (docs/security/argo-service-tokens.md); the message is still sent.
+#
+# Authentication: runs as service account wf-837-ingest; publish-claims.sh
+# exchanges its projected token at token-service for a CHO token (claims:work).
 #
 # Trigger:
 #   - Manual: argo submit -n cloudhealthoffice --from workflowtemplate/x12-837-ingest
@@ -35,7 +41,9 @@ metadata:
     workflows.argoproj.io/version: ">= 3.0"
 spec:
   entrypoint: ingest-837-claims
-  serviceAccountName: argo-workflow-sa
+  # CHO workload identity: token-service registration wf-837-ingest
+  # (see cho-workload-identity.yaml and docs/security/argo-service-tokens.md).
+  serviceAccountName: wf-837-ingest
   
   # Workflow-level TTL
   ttlStrategy:
@@ -88,7 +96,17 @@ spec:
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-  
+    - name: cho-workload-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 600
+              path: token
+    - name: cho-workload-lib
+      configMap:
+        name: cho-workload-lib
+
   templates:
     # Main entrypoint
     - name: ingest-837-claims
@@ -117,6 +135,15 @@ spec:
     # Step 1: Fetch 837 files from SFTP
     - name: fetch-from-sftp
       container:
+        env:
+          - name: WF_PARAM_FILE_PATTERN
+            value: "{{workflow.parameters.file-pattern}}"
+          - name: WF_PARAM_SFTP_FOLDER
+            value: "{{workflow.parameters.sftp-folder}}"
+          - name: WF_PARAM_SFTP_HOST
+            value: "{{workflow.parameters.sftp-host}}"
+          - name: WF_PARAM_SFTP_PORT
+            value: "{{workflow.parameters.sftp-port}}"
         image: cloudhealthoffice/sftp-client:latest
         command: ["/bin/sh", "-c"]
         args:
@@ -130,11 +157,14 @@ spec:
             chmod 600 ~/.ssh/id_rsa
             
             # Fetch files
-            sftp -o StrictHostKeyChecking=no -P {{workflow.parameters.sftp-port}} \
-              -i ~/.ssh/id_rsa sftp-user@{{workflow.parameters.sftp-host}} <<EOF
-            cd {{workflow.parameters.sftp-folder}}
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${WF_PARAM_SFTP_FOLDER}" "${WF_PARAM_FILE_PATTERN}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
+            sftp -o StrictHostKeyChecking=no -P "${WF_PARAM_SFTP_PORT}" \
+              -i ~/.ssh/id_rsa sftp-user@"${WF_PARAM_SFTP_HOST}" <<EOF
+            cd ${WF_PARAM_SFTP_FOLDER}
             lcd /work
-            mget {{workflow.parameters.file-pattern}}
+            mget ${WF_PARAM_FILE_PATTERN}
             bye
             EOF
             
@@ -219,6 +249,13 @@ spec:
         volumeMounts:
           - name: work-volume
             mountPath: /work
+          # publish-claims.sh sources /opt/cho/cho-workload.sh for its CHO token.
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
       outputs:
         parameters:
           - name: claims-created
@@ -235,6 +272,13 @@ spec:
           - name: edi-files
             path: /work/files
       container:
+        env:
+          - name: WF_PARAM_ARCHIVE_FOLDER
+            value: "{{workflow.parameters.archive-folder}}"
+          - name: WF_PARAM_SFTP_HOST
+            value: "{{workflow.parameters.sftp-host}}"
+          - name: WF_PARAM_SFTP_PORT
+            value: "{{workflow.parameters.sftp-port}}"
         image: cloudhealthoffice/sftp-client:latest
         command: ["/bin/sh", "-c"]
         args:
@@ -248,11 +292,14 @@ spec:
             chmod 600 ~/.ssh/id_rsa
             
             # Create archive folder with timestamp
-            ARCHIVE_FOLDER="{{workflow.parameters.archive-folder}}/$(date +%Y-%m-%d)"
+            ARCHIVE_FOLDER="${WF_PARAM_ARCHIVE_FOLDER}/$(date +%Y-%m-%d)"
             
             # Move files to archive
-            sftp -o StrictHostKeyChecking=no -P {{workflow.parameters.sftp-port}} \
-              -i ~/.ssh/id_rsa sftp-user@{{workflow.parameters.sftp-host}} <<EOF
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${ARCHIVE_FOLDER}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
+            sftp -o StrictHostKeyChecking=no -P "${WF_PARAM_SFTP_PORT}" \
+              -i ~/.ssh/id_rsa sftp-user@"${WF_PARAM_SFTP_HOST}" <<EOF
             mkdir -p $ARCHIVE_FOLDER
             cd $ARCHIVE_FOLDER
             lcd /work/files

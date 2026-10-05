@@ -72,6 +72,18 @@ public class PersonalRepresentative
     [StringLength(100)]
     public string? ProofOfAuthorityDocumentId { get; set; }
 
+    /// <summary>
+    /// The user who activated the rep after
+    /// <see cref="ProofOfAuthorityDocumentId"/> was found in member-document-service
+    /// (same tenant, linked to every associated member). Null for credential
+    /// types that need no document (<see cref="Services.PersonalRepActivationControls.RequiresProofOfAuthority"/>).
+    /// </summary>
+    [StringLength(200)]
+    public string? ProofOfAuthorityVerifiedBy { get; set; }
+
+    /// <summary>When <see cref="ProofOfAuthorityDocumentId"/> was verified.</summary>
+    public DateTime? ProofOfAuthorityVerifiedAt { get; set; }
+
     // ── Encrypted at rest — never included in Kafka event payload ───────
 
     /// <summary>Encrypted at rest via <see cref="Services.IPersonalRepFieldEncryptor"/>.</summary>
@@ -219,7 +231,8 @@ public enum PersonalRepCredentialType
     HealthcareSurrogate = 4,
 
     /// <summary>
-    /// Court-appointed conservator. In most state probate law, conservators
+    /// Court-appointed conservator. Activation needs the appointing order as
+    /// a proof-of-authority document, as for <see cref="LegalGuardian"/>. In most state probate law, conservators
     /// have financial-decision authority distinct from a
     /// <see cref="LegalGuardian"/>'s personal/healthcare authority. Legal
     /// review on the PR confirms whether Texas Medicaid treats this as

@@ -1,35 +1,32 @@
 using CHO.TerminologyService.Data;
 using CHO.TerminologyService.Models;
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 
 namespace CloudHealthOffice.TerminologyService.Tests;
 
+[Collection(MongoRunnerFixture.CollectionName)]
 public sealed class MongoCodeSystemCatalogRepositoryTests : IAsyncLifetime
 {
     private const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
+    private IMongoDatabase _database = null!;
     private MongoCodeSystemCatalogRepository _repository = null!;
+
+    public MongoCodeSystemCatalogRepositoryTests(MongoRunnerFixture mongo) => _mongo = mongo;
 
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        var database = client.GetDatabase($"code_system_catalog_test_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("code_system_catalog_test");
         _repository = new MongoCodeSystemCatalogRepository(
-            database,
+            _database,
             NullLogger<MongoCodeSystemCatalogRepository>.Instance);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* EphemeralMongo.Core 2.0.0 / MongoDB.Driver 3.x disposal mismatch. */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     [Fact]
     public async Task FindDisplayAsync_ReturnsGlobalDisplay()

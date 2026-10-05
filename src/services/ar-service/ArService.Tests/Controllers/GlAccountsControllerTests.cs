@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ArService.Controllers;
 using ArService.Models;
 using ArService.Repositories;
+using ArService.Tests.Support;
 
 namespace ArService.Tests.Controllers;
 
@@ -15,7 +16,7 @@ public class GlAccountsControllerTests
     {
         _accountRepo = new Mock<IGlAccountRepository>();
         var logger = new Mock<ILogger<GlAccountsController>>();
-        _controller = new GlAccountsController(_accountRepo.Object, logger.Object);
+        _controller = new GlAccountsController(_accountRepo.Object, new TestActor(), logger.Object);
     }
 
     private static GlAccount CreateAccount(

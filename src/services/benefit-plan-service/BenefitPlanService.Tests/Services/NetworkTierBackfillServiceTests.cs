@@ -198,7 +198,7 @@ public sealed class NetworkTierBackfillServiceTests
     {
         private readonly bool _resolves;
         public StubOrganizationLookup(bool resolves) { _resolves = resolves; }
-        public Task<OrganizationLookupResult?> GetOrganizationAsync(string networkId, CancellationToken ct = default)
+        public Task<OrganizationLookupResult?> GetOrganizationAsync(string tenantId, string networkId, CancellationToken ct = default)
         {
             if (!_resolves) return Task.FromResult<OrganizationLookupResult?>(null);
             return Task.FromResult<OrganizationLookupResult?>(new OrganizationLookupResult

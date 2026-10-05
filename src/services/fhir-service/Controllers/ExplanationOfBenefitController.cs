@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using System.Text;
 using FhirService.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -25,6 +26,7 @@ namespace FhirService.Controllers;
 /// </para>
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "claims:read")]
 public class ExplanationOfBenefitController : FhirControllerBase
 {
     /// <summary>
@@ -60,7 +62,29 @@ public class ExplanationOfBenefitController : FhirControllerBase
         => ProxyClaimsServiceAsync(
             "ExplanationOfBenefit",
             $"fhir/ExplanationOfBenefit/{Uri.EscapeDataString(id)}",
-            ct);
+            ct,
+            // claims-service answers for the tenant, not for a patient: a
+            // patient-bound token may only see an EOB whose patient is its own.
+            AuthorizedMemberId is null ? null : body => !IsOutsidePatientContext(EobPatientReference(body)));
+
+    /// <summary>The EOB's <c>patient.reference</c>; null when absent or unreadable.</summary>
+    internal static string? EobPatientReference(string body)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            return doc.RootElement.TryGetProperty("patient", out var patient)
+                   && patient.ValueKind == System.Text.Json.JsonValueKind.Object
+                   && patient.TryGetProperty("reference", out var reference)
+                   && reference.ValueKind == System.Text.Json.JsonValueKind.String
+                ? reference.GetString()
+                : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// GET /fhir/r4/ExplanationOfBenefit?patient=&amp;_id=&amp;_count=&amp;_page=
@@ -90,9 +114,11 @@ public class ExplanationOfBenefitController : FhirControllerBase
         // explicit patient param and surfaces the bound patient id via
         // SmartPatientId. Auto-inject when the caller didn't provide one
         // so patient-app callers don't need to know their own member id.
-        var effectivePatient = !string.IsNullOrEmpty(explicitPatient)
-            ? explicitPatient
-            : SmartPatientId;
+        // A request confined to one member (patient binding, or the member
+        // Provider Access just authorized) is pinned to that member, whatever
+        // else the query says.
+        var effectivePatient = AuthorizedMemberId
+            ?? (string.IsNullOrEmpty(explicitPatient) ? null : explicitPatient);
 
         if (string.IsNullOrEmpty(effectivePatient) && string.IsNullOrEmpty(explicitId))
         {
@@ -168,12 +194,14 @@ public class ExplanationOfBenefitController : FhirControllerBase
     private Task<IActionResult> ProxyClaimsServiceAsync(
         string resourceLabel,
         string path,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, bool>? successBodyAllowed = null)
         => ProxyUpstreamServiceAsync(
             _claimsServiceClient,
             "claims-service",
             resourceLabel,
             path,
             _logger,
-            ct);
+            ct,
+            successBodyAllowed);
 }

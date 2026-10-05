@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
@@ -17,7 +18,6 @@ namespace FhirService.Controllers;
 /// Target: respond within 15 seconds including network time.
 /// </summary>
 [Route("fhir/r4")]
-[Authorize]
 public class PasController : FhirControllerBase
 {
     private readonly IPasAutoAdjudicator _adjudicator;
@@ -54,6 +54,7 @@ public class PasController : FhirControllerBase
     /// Target: respond within 15 seconds per PAS IG 2.1.0 Section 5.2.1.
     /// </summary>
     [HttpPost("Claim/$submit")]
+    [FhirAccess(smart: true, cho: "authorizations:write")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     public async Task<IActionResult> ClaimSubmit([FromBody] Bundle requestBundle)
@@ -194,6 +195,7 @@ public class PasController : FhirControllerBase
     /// its authorization.
     /// </summary>
     [HttpPost("Claim/$inquire")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     public async Task<IActionResult> ClaimInquire([FromBody] Bundle requestBundle)

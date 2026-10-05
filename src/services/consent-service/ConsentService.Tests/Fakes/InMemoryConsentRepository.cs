@@ -143,6 +143,8 @@ public sealed class InMemoryConsentRepository : IConsentRepository, IConsentEven
         EffectiveAt = c.EffectiveAt,
         ExpiresAt = c.ExpiresAt,
         GrantedBy = c.GrantedBy,
+        GrantorType = c.GrantorType,
+        RecordedBy = c.RecordedBy,
         Reason = c.Reason,
         GrantedToName = c.GrantedToName,
         GrantedToContact = c.GrantedToContact,

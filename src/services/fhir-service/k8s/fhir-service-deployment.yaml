@@ -1,4 +1,16 @@
 ---
+# Workload identity for fhir-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:fhir-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fhir-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<FHIR_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -43,8 +55,10 @@ spec:
   template:
     metadata:
       labels:
+        azure.workload.identity/use: "true"
         app: fhir-service
     spec:
+      serviceAccountName: fhir-service-sa
       containers:
         - name: fhir-service
           image: clouhealthoffice.azurecr.io/cloudhealthoffice-fhir-service:latest
@@ -52,11 +66,16 @@ spec:
           ports:
             - containerPort: 8080
           envFrom:
+            # Source=TokenService, token-service URL and Entra scope (shared by all services).
+            - configMapRef:
+                name: cho-service-tokens
             - configMapRef:
                 name: fhir-service-config
             - secretRef:
                 name: fhir-service-secrets
           env:
+            - name: ChoAuth__ServiceToken__ClientId
+              value: "fhir-service"
             - name: MongoDb__ConnectionString
               valueFrom:
                 secretKeyRef:

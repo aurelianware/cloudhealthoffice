@@ -34,10 +34,12 @@ public interface IOrganizationLookupClient
     /// network does not exist or provider-service is unreachable.
     /// Failures are logged at warning and surfaced as null so callers
     /// can apply their own policy (warn-and-continue at write time
-    /// today).
+    /// today). <paramref name="tenantId"/> is sent as <c>X-Tenant-ID</c> so
+    /// a call with no inbound caller (the backfill) carries a service token
+    /// for that tenant.
     /// </summary>
     Task<OrganizationLookupResult?> GetOrganizationAsync(
-        string networkId, CancellationToken ct = default);
+        string tenantId, string networkId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -82,10 +84,20 @@ public class HttpOrganizationLookupClient : IOrganizationLookupClient
     }
 
     public async Task<OrganizationLookupResult?> GetOrganizationAsync(
-        string networkId, CancellationToken ct = default)
+        string tenantId, string networkId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(networkId))
         {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            // Without a tenant the outbound handler cannot mint a service
+            // token, and provider-service would reject the call.
+            _logger.LogWarning(
+                "Network {NetworkId} lookup has no tenant; treating as unresolved",
+                SanitizeForLog(networkId));
             return null;
         }
 
@@ -93,7 +105,11 @@ public class HttpOrganizationLookupClient : IOrganizationLookupClient
         {
             var client = _httpClientFactory.CreateClient(ProviderServiceClientName);
             var encoded = Uri.EscapeDataString(networkId);
-            using var response = await client.GetAsync($"api/v1/networks/{encoded}", ct);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/v1/networks/{encoded}");
+            // Names the tenant for ChoOutboundTokenHandler: with no inbound
+            // caller it mints a service token for this tenant.
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await client.SendAsync(request, ct);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {

@@ -164,6 +164,18 @@ public class Attachment
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// CHO user (token subject) who submitted the attachment. Set from the token, never the request.
+    /// </summary>
+    [StringLength(100)]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// CHO user (token subject) who last changed the attachment, e.g. generated its acknowledgment.
+    /// </summary>
+    [StringLength(100)]
+    public string? LastUpdatedBy { get; set; }
+
+    /// <summary>
     /// Processing status: 'Received', 'Validated', 'Linked', 'Failed'
     /// </summary>
     [Required]

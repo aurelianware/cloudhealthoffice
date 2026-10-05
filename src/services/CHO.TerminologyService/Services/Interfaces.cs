@@ -26,9 +26,10 @@ public interface ITerminologyTranslationService
     Task<CodeLookupResponse> LookupCodeAsync(CodeLookupRequest request, CancellationToken ct = default);
 
     /// <summary>
-    /// Get all loaded map versions (for admin/audit).
+    /// Map versions a tenant may see (for admin/audit): the global maps plus that
+    /// tenant's own override versions. A null tenant returns the global maps only.
     /// </summary>
-    Task<List<MapVersion>> GetMapVersionsAsync(CancellationToken ct = default);
+    Task<List<MapVersion>> GetMapVersionsAsync(string? tenantId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -57,7 +58,7 @@ public interface IConceptMapRepository
     /// <summary>Insert or update a single override entry.</summary>
     Task UpsertOverrideAsync(ConceptMapEntry entry, CancellationToken ct = default);
 
-    /// <summary>Get the active map version for a source→target system pair.</summary>
+    /// <summary>Get the active global map version for a source→target system pair (tenant override versions are never returned).</summary>
     Task<MapVersion?> GetActiveMapVersionAsync(string sourceSystem, string targetSystem, CancellationToken ct = default);
 
     /// <summary>Save a new map version record.</summary>
@@ -66,8 +67,11 @@ public interface IConceptMapRepository
     /// <summary>Deactivate all previous versions for a given map name.</summary>
     Task DeactivatePreviousVersionsAsync(string mapName, string exceptVersionId, CancellationToken ct = default);
 
-    /// <summary>Get all map versions.</summary>
+    /// <summary>Get all map versions, every tenant's included. Internal use only (syndication); never return this to a caller.</summary>
     Task<List<MapVersion>> GetAllMapVersionsAsync(CancellationToken ct = default);
+
+    /// <summary>Global map versions plus the given tenant's override versions; null tenant = global only.</summary>
+    Task<List<MapVersion>> GetMapVersionsVisibleToAsync(string? tenantId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -113,6 +117,9 @@ public class MapLoadOptions
 
     /// <summary>Whether entries should be marked as overrides</summary>
     public bool IsOverride { get; set; } = false;
+
+    /// <summary>Token subject of whoever requested the load; recorded on the map version.</summary>
+    public string? ImportedBy { get; set; }
 }
 
 public class MapLoadResult

@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
@@ -15,7 +18,10 @@ public class EftDraftServiceTests
     private readonly Mock<IBillingRunRepository> _billingRunRepo;
     private readonly Mock<INachaFileService> _nachaService;
     private readonly Mock<IStripeAchService> _stripeService;
-    private readonly Mock<IHttpClientFactory> _httpClientFactory;
+    private readonly Mock<ISponsorBankAccountSource> _bankAccounts;
+    private readonly Mock<ICurrentActor> _actor;
+    private readonly RecordingNachaDispatcher _dispatcher = new();
+    private readonly HttpContextAccessor _httpContextAccessor;
     private readonly EftDraftService _service;
 
     public EftDraftServiceTests()
@@ -25,7 +31,17 @@ public class EftDraftServiceTests
         _billingRunRepo = new Mock<IBillingRunRepository>();
         _nachaService = new Mock<INachaFileService>();
         _stripeService = new Mock<IStripeAchService>();
-        _httpClientFactory = new Mock<IHttpClientFactory>();
+        _bankAccounts = new Mock<ISponsorBankAccountSource>();
+        _actor = new Mock<ICurrentActor>();
+        _actor.SetupGet(a => a.UserId).Returns("approver-1");
+        _actor.SetupGet(a => a.IsAuthenticated).Returns(true);
+        _actor.SetupGet(a => a.TenantId).Returns("tenant-1");
+        _httpContextAccessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
+        // Every Pending draft is free to claim unless a test says otherwise.
+        _draftRepo.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+        _draftRepo.Setup(r => r.TryCancelPendingAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
+        _draftRepo.Setup(r => r.UpdateAsync(It.IsAny<EftDraft>())).ReturnsAsync((EftDraft d) => d);
 
         var configData = new Dictionary<string, string?>
         {
@@ -49,7 +65,10 @@ public class EftDraftServiceTests
             _billingRunRepo.Object,
             _nachaService.Object,
             _stripeService.Object,
-            _httpClientFactory.Object,
+            _bankAccounts.Object,
+            _dispatcher,
+            _actor.Object,
+            _httpContextAccessor,
             configuration,
             logger.Object);
     }
@@ -69,11 +88,11 @@ public class EftDraftServiceTests
         DueDate = DateTime.UtcNow.AddDays(30)
     };
 
+    /// <summary>The bank-account source answering as a system of record would (found / not enrolled).</summary>
     private void SetupSponsorBankAccountResponse(SponsorBankAccount? bankAccount)
     {
-        var handler = new MockHttpMessageHandler(bankAccount);
-        var client = new HttpClient(handler) { BaseAddress = new Uri("http://sponsor-service") };
-        _httpClientFactory.Setup(f => f.CreateClient("SponsorService")).Returns(client);
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bankAccount == null ? SponsorBankAccountLookup.NotEnrolled() : SponsorBankAccountLookup.Found(bankAccount));
     }
 
     #region InitiateDraftAsync
@@ -207,7 +226,7 @@ public class EftDraftServiceTests
             AccountNumberLast4 = "6789"
         });
         _stripeService.Setup(s => s.CreateAchDraftAsync(
-                "cus_123", "pm_123", 1500.00m, It.IsAny<string>(), "GRP001"))
+                "cus_123", "pm_123", 1500.00m, It.IsAny<string>(), "GRP001", It.IsAny<string>()))
             .ReturnsAsync(new StripeAchDraftResult
             {
                 PaymentIntentId = "pi_123",
@@ -243,7 +262,7 @@ public class EftDraftServiceTests
         });
         _stripeService.Setup(s => s.CreateAchDraftAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(),
-                It.IsAny<string>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new StripeAchDraftResult
             {
                 Status = "failed",
@@ -281,7 +300,7 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
             .ReturnsAsync((EftDraft d) => d);
         _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         var result = await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -310,7 +329,7 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
             .ReturnsAsync((EftDraft d) => d);
         _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         var result = await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -345,7 +364,7 @@ public class EftDraftServiceTests
                 foreach (var e in entries)
                     e.TraceNumber = "0910000100001";
             })
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -376,7 +395,7 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
             .ReturnsAsync((EftDraft d) => d);
         _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         var result = await _service.InitiateBatchDraftAsync(new InitiateBatchEftRequest
         {
@@ -403,6 +422,142 @@ public class EftDraftServiceTests
             .WithMessage("No pending NACHA drafts*");
     }
 
+    private EftDraft DeliveryUnknownDraft(string? releasedBy = "releaser-1", string lastUpdatedBy = "releaser-1")
+    {
+        var draft = new EftDraft
+        {
+            Id = "d-du", GroupNumber = "GRP001", Method = EftMethod.Nacha, Amount = 100, Status = EftDraftStatus.DeliveryUnknown,
+            NachaFileReference = "NACHA-DU", TraceNumber = "091000010000001", LastUpdatedBy = lastUpdatedBy, ReleasedBy = releasedBy
+        };
+        _draftRepo.Setup(r => r.GetByStatusAsync(EftDraftStatus.DeliveryUnknown)).ReturnsAsync(new List<EftDraft> { draft });
+        _draftRepo.Setup(r => r.UpdateAsync(It.IsAny<EftDraft>())).ReturnsAsync((EftDraft d) => d);
+        return draft;
+    }
+
+    [Theory]
+    [InlineData(true, EftDraftStatus.Submitted)]
+    [InlineData(false, EftDraftStatus.AwaitingRetrieval)]
+    public async Task ResolveNachaDelivery_RecordsTheBanksAnswer_OnTheFileAndItsDrafts(bool bankReceived, EftDraftStatus expected)
+    {
+        var draft = DeliveryUnknownDraft();
+
+        var result = await _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived, "Bank ops confirmed");
+
+        _dispatcher.Resolutions.Should().ContainSingle(r => r.FileReference == "NACHA-DU" && r.BankReceived == bankReceived
+                                                          && r.Actor.UserId == "approver-1" && !r.Actor.IsService);
+        draft.Status.Should().Be(expected);
+        draft.NachaFileReference.Should().Be("NACHA-DU");
+        result.PaymentsUpdated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_NotReceived_GoesBackToPending()
+    {
+        var draft = DeliveryUnknownDraft();
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        await _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "Bank ops confirmed no file");
+
+        draft.Status.Should().Be(EftDraftStatus.Pending);
+        draft.NachaFileReference.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByTheReleaser_IsRefused()
+    {
+        var draft = DeliveryUnknownDraft(releasedBy: "approver-1", lastUpdatedBy: "approver-1");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        draft.Status.Should().Be(EftDraftStatus.DeliveryUnknown);
+    }
+
+    [Theory]
+    [InlineData("approver-1")]
+    [InlineData("APPROVER-1")]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ChecksTheRecordedReleaser_NotWhoeverLastUpdatedIt(string releasedBy)
+    {
+        // Someone else touched the draft last (e.g. a retry); the releaser is still the releaser.
+        var draft = DeliveryUnknownDraft(releasedBy: releasedBy, lastUpdatedBy: "retrier-9");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        draft.Status.Should().Be(EftDraftStatus.DeliveryUnknown);
+        _draftRepo.Verify(r => r.UpdateAsync(It.IsAny<EftDraft>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_WithoutARecordedReleaser_IsRefused()
+    {
+        var draft = DeliveryUnknownDraft(releasedBy: null, lastUpdatedBy: "someone-else");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        draft.Status.Should().Be(EftDraftStatus.DeliveryUnknown);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByAnotherUser_ClearsTheReleaser()
+    {
+        var draft = DeliveryUnknownDraft(releasedBy: "releaser-1");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        await _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "Bank ops confirmed no file");
+
+        draft.Status.Should().Be(EftDraftStatus.Pending);
+        draft.ReleasedBy.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_WithAServiceToken_IsRefused()
+    {
+        DeliveryUnknownDraft();
+        _actor.SetupGet(a => a.IsService).Returns(true);
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: true, "ok");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        _dispatcher.Resolutions.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.Transmitted, EftDraftStatus.Submitted)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.AwaitingRetrieval, EftDraftStatus.AwaitingRetrieval)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.NotSent, EftDraftStatus.Pending)]
+    // May be at the bank: never back to Pending, where the next release would send it again.
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.DeliveryUnknown, EftDraftStatus.DeliveryUnknown)]
+    public async Task GenerateNachaFile_DraftsAreSubmittedOnlyWhenTheBankHasTheFile(
+        CloudHealthOffice.NachaTransmission.NachaTransmissionStatus outcome, EftDraftStatus expected)
+    {
+        var draft = new EftDraft { Id = "d1", GroupNumber = "GRP001", Method = EftMethod.Nacha, Amount = 100, AccountNumberLast4 = "6789" };
+        _draftRepo.Setup(r => r.GetByStatusAsync(EftDraftStatus.Pending)).ReturnsAsync(new List<EftDraft> { draft });
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), "GRP001", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SponsorBankAccountLookup.Found(new SponsorBankAccount
+            {
+                EftEnabled = true, RoutingNumber = "091000019", AccountNumber = "123456789", AccountNumberLast4 = "6789"
+            }));
+        _nachaService.Setup(s => s.GenerateNachaFile(It.IsAny<List<NachaEntryDetail>>(), It.IsAny<NachaFileOptions>()))
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST", FileContent = "6270910000191234567890..." });
+        _dispatcher.Status = outcome;
+
+        var result = await _service.GenerateNachaFileForPendingDraftsAsync();
+
+        draft.Status.Should().Be(expected);
+        draft.ReleasedBy.Should().Be(expected == EftDraftStatus.Pending ? null : "approver-1",
+            "the releaser is kept with each draft in a file, for the releaser check after the held file expires");
+        if (expected != EftDraftStatus.Submitted) draft.SubmittedAt.Should().BeNull();
+        result.TransmissionStatus.Should().Be(outcome.ToString());
+        result.Entries.Should().ContainSingle(e => e.DraftId == "d1" && e.AccountNumberLast4 == "6789" && e.Amount == 100);
+        _dispatcher.Sent.Should().ContainSingle().Which.TransmittedBy.Should().Be("approver-1");
+        typeof(NachaFileResult).GetProperty("FileContent").Should().BeNull("the API type has no file content");
+    }
+
     [Fact]
     public async Task GenerateNachaFile_SkipsDraftsWithMissingBankDetails()
     {
@@ -414,29 +569,25 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.GetByStatusAsync(EftDraftStatus.Pending)).ReturnsAsync(drafts);
 
         // GRP001 has valid bank, GRP002 has no routing number
-        var handler = new MockHttpMessageHandler(request =>
-        {
-            if (request.RequestUri!.PathAndQuery.Contains("GRP001"))
-                return new SponsorBankAccount
-                {
-                    EftEnabled = true,
-                    RoutingNumber = "091000019",
-                    AccountNumber = "123456789"
-                };
-            return new SponsorBankAccount
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), "GRP001", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SponsorBankAccountLookup.Found(new SponsorBankAccount
+            {
+                EftEnabled = true,
+                RoutingNumber = "091000019",
+                AccountNumber = "123456789"
+            }));
+        _bankAccounts.Setup(b => b.GetAsync(It.IsAny<string>(), "GRP002", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SponsorBankAccountLookup.Found(new SponsorBankAccount
             {
                 EftEnabled = true,
                 RoutingNumber = null,
                 AccountNumber = null
-            };
-        });
-        var client = new HttpClient(handler) { BaseAddress = new Uri("http://sponsor-service") };
-        _httpClientFactory.Setup(f => f.CreateClient("SponsorService")).Returns(client);
+            }));
 
         _nachaService.Setup(s => s.GenerateNachaFile(
                 It.Is<List<NachaEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         await _service.GenerateNachaFileForPendingDraftsAsync();
 
@@ -488,7 +639,7 @@ public class EftDraftServiceTests
         _nachaService.Setup(s => s.GenerateNachaFile(
                 It.Is<List<NachaEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaFileOptions>()))
-            .Returns(new NachaFileResult { FileReference = "NACHA-TEST" });
+            .Returns(new GeneratedNachaFile { FileReference = "NACHA-TEST" });
 
         await _service.GenerateNachaFileForPendingDraftsAsync();
 
@@ -611,6 +762,42 @@ public class EftDraftServiceTests
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
+    [Fact]
+    public async Task InitiateDraftAsync_StripeAch_DraftTakesTheInvoiceBeforeStripe_AndAnUnknownOutcomeKeepsIt()
+    {
+        var invoice = CreateInvoice();
+        _invoiceRepo.Setup(r => r.GetByIdAsync("inv-1")).ReturnsAsync(invoice);
+        SetupSponsorBankAccountResponse(new SponsorBankAccount
+        {
+            EftEnabled = true, PreferredMethod = EftMethod.StripeAch, StripeCustomerId = "cus_123", StripePaymentMethodId = "pm_123",
+        });
+        var order = new List<string>();
+        _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
+            .Callback(() => order.Add("draft"))
+            .ReturnsAsync((EftDraft d) => d);
+        _stripeService.Setup(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Callback(() => order.Add("stripe"))
+            .ThrowsAsync(new HttpRequestException("connection reset"));
+
+        var result = await _service.InitiateDraftAsync(new InitiateEftDraftRequest { InvoiceId = "inv-1", Method = EftMethod.StripeAch });
+
+        order.Should().Equal("draft", "stripe");
+        result.Status.Should().Be(EftDraftStatus.PaymentUnknown);
+        EftDraft.IsActive(result.Status).Should().BeTrue("the debit may exist: the invoice stays taken");
+        _draftRepo.Verify(r => r.UpdateAsync(It.Is<EftDraft>(d => d.Status == EftDraftStatus.PaymentUnknown)), Times.Once);
+    }
+
+    [Fact]
+    public async Task CancelDraftAsync_IsAConditionalWrite()
+    {
+        var draft = new EftDraft { Id = "d1", Status = EftDraftStatus.Pending, Method = EftMethod.Nacha };
+        _draftRepo.Setup(r => r.GetByIdAsync("d1")).ReturnsAsync(draft);
+        _draftRepo.Setup(r => r.TryCancelPendingAsync("d1", "approver-1")).ReturnsAsync(false);
+
+        await FluentActions.Awaiting(() => _service.CancelDraftAsync("d1")).Should().ThrowAsync<InvalidOperationException>();
+        _draftRepo.Verify(r => r.UpdateAsync(It.IsAny<EftDraft>()), Times.Never);
+    }
+
     #endregion
 
     #region CancelDraftAsync
@@ -683,7 +870,8 @@ public class EftDraftServiceTests
             {
                 Handled = true,
                 EventType = "payment_succeeded",
-                PaymentIntentId = "pi_123"
+                PaymentIntentId = "pi_123",
+                TenantId = "tenant-1"
             });
 
         await _service.ProcessStripeWebhookAsync("{}", "sig_test");
@@ -704,36 +892,4 @@ public class EftDraftServiceTests
     }
 
     #endregion
-}
-
-/// <summary>
-/// Mock HTTP handler for simulating sponsor-service responses
-/// </summary>
-internal class MockHttpMessageHandler : HttpMessageHandler
-{
-    private readonly Func<HttpRequestMessage, SponsorBankAccount?> _responseFactory;
-
-    public MockHttpMessageHandler(SponsorBankAccount? fixedResponse)
-        : this(_ => fixedResponse) { }
-
-    public MockHttpMessageHandler(Func<HttpRequestMessage, SponsorBankAccount?> responseFactory)
-    {
-        _responseFactory = responseFactory;
-    }
-
-    protected override Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        var bankAccount = _responseFactory(request);
-        if (bankAccount == null)
-        {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
-        }
-
-        var json = JsonSerializer.Serialize(bankAccount);
-        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
-        });
-    }
 }

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using ClaimsService.Adapters;
@@ -43,7 +44,7 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
 
     public Task InitializeAsync()
     {
-        _client = _factory.CreateClient();
+        _client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-1");
         return Task.CompletedTask;
     }

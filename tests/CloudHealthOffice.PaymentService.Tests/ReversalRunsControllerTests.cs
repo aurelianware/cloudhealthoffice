@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -29,7 +30,8 @@ public class ReversalRunsControllerTests : IClassFixture<PaymentApiFactory>
     public ReversalRunsControllerTests(PaymentApiFactory factory)
     {
         _runService = factory.ReversalRunService;
-        _client = factory.CreateClient();
+        // Development-signed user token (TenantAdmin, subject dev-user) for the X-Tenant-ID tenant.
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
         _runService.ClearReceivedCalls();
     }
@@ -68,9 +70,11 @@ public class ReversalRunsControllerTests : IClassFixture<PaymentApiFactory>
         Assert.Equal(ReversalRunStatus.Pending, created.Status);
 
         // Plumbed through: controller forwards Description to the service.
+        // The creator is the token subject (ChoDevelopmentTokenHandler's
+        // dev-user); the body's CreatedBy ("operator-1") is ignored.
         await _runService.Received(1).CreateReversalRunAsync(
             Arg.Any<ReversalRunCriteria>(),
-            "operator-1",
+            "dev-user",
             "March 2026 reversal cycle");
     }
 

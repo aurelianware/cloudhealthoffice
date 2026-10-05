@@ -1,0 +1,182 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+
+namespace CloudHealthOffice.Infrastructure.Security;
+
+/// <summary>
+/// Who is acting on the current request, read from the validated token and
+/// nothing else. Writes record <see cref="UserId"/> as the actor; request bodies
+/// and headers that claim an actor are ignored.
+/// </summary>
+public interface ICurrentActor
+{
+    bool IsAuthenticated { get; }
+
+    /// <summary>The token subject: a CHO user id, or a service client id.</summary>
+    string UserId { get; }
+
+    string? DisplayName { get; }
+
+    string? Email { get; }
+
+    /// <summary>The tenant from the token.</summary>
+    string TenantId { get; }
+
+    bool IsService { get; }
+
+    IReadOnlyCollection<string> Roles { get; }
+
+    bool HasPermission(string permission);
+}
+
+public sealed class HttpContextCurrentActor : ICurrentActor
+{
+    private readonly IHttpContextAccessor _accessor;
+
+    public HttpContextCurrentActor(IHttpContextAccessor accessor) => _accessor = accessor;
+
+    private ClaimsPrincipal Principal =>
+        _accessor.HttpContext?.User ?? new ClaimsPrincipal(new ClaimsIdentity());
+
+    public bool IsAuthenticated => Principal.Identity?.IsAuthenticated == true;
+
+    public string UserId => Principal.FindFirst(ChoClaimTypes.Subject)?.Value
+        ?? throw new UnauthorizedAccessException("No authenticated actor on this request.");
+
+    public string? DisplayName => Principal.FindFirst(ChoClaimTypes.Name)?.Value;
+
+    public string? Email => Principal.FindFirst(ChoClaimTypes.Email)?.Value;
+
+    public string TenantId => _accessor.HttpContext?.Items["TenantId"] as string
+        ?? throw new UnauthorizedAccessException("No tenant context on this request.");
+
+    public bool IsService => ChoPrincipal.IsService(Principal);
+
+    public IReadOnlyCollection<string> Roles => ChoPrincipal.Roles(Principal);
+
+    public bool HasPermission(string permission) => ChoPrincipal.HasPermission(Principal, permission);
+}
+
+/// <summary>Claim reading rules shared by the actor, the policy handler and tests.</summary>
+public static class ChoPrincipal
+{
+    /// <summary>Set by authentication when the issuer may mint service tokens.</summary>
+    internal const string ServiceIssuerMarker = "cho_service_issuer";
+
+    /// <summary>Set by authentication when the issuer may mint workload identities.</summary>
+    internal const string WorkloadIssuerMarker = "cho_workload_issuer";
+
+    /// <summary>
+    /// Removes issuer markers that arrived inside a token. Authentication calls
+    /// this before it adds the markers its own issuer configuration allows.
+    /// </summary>
+    internal static void RemoveIssuerMarkers(ClaimsPrincipal principal)
+    {
+        foreach (var identity in principal.Identities)
+        {
+            foreach (var claim in identity.Claims
+                         .Where(c => c.Type is ServiceIssuerMarker or WorkloadIssuerMarker)
+                         .ToList())
+            {
+                identity.TryRemoveClaim(claim);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Why a validated token is refused for its issuer's kind, or null when it
+    /// fits: a service issuer's token must carry <see cref="ChoServiceRole"/>,
+    /// a workload issuer's <see cref="ChoWorkloadRole"/>. Neither can ever be
+    /// read as a user token. (A user issuer's token that writes a reserved role
+    /// is accepted but gets nothing from it: no issuer marker is added.)
+    /// </summary>
+    internal static string? IssuerKindRefusal(ChoIssuerKind kind, ClaimsPrincipal principal) => kind switch
+    {
+        ChoIssuerKind.Service when !principal.HasClaim(ChoClaimTypes.Role, ChoServiceRole.Name)
+            => "service_issuer_token_without_service_role",
+        ChoIssuerKind.Workload when !principal.HasClaim(ChoClaimTypes.Role, ChoWorkloadRole.Name)
+            => "workload_issuer_token_without_workload_role",
+        _ => null,
+    };
+
+    public static IReadOnlyCollection<string> Roles(ClaimsPrincipal principal)
+        => principal.FindAll(ChoClaimTypes.Role).Select(c => c.Value).ToArray();
+
+    /// <summary>
+    /// A service identity requires both the reserved role and an issuer trusted
+    /// to mint it. A user-token issuer writing <c>cho.service</c> gets nothing.
+    /// </summary>
+    public static bool IsService(ClaimsPrincipal principal)
+        => principal.HasClaim(ChoClaimTypes.Role, ChoServiceRole.Name)
+           && principal.HasClaim(ServiceIssuerMarker, "true");
+
+    /// <summary>
+    /// A workload identity (an Argo workflow, through token-service) requires
+    /// both the <c>cho.workload</c> role and an issuer trusted to mint it. It is
+    /// never a service: it may do exactly what its <c>permissions</c> list.
+    /// </summary>
+    public static bool IsWorkload(ClaimsPrincipal principal)
+        => principal.HasClaim(ChoClaimTypes.Role, ChoWorkloadRole.Name)
+           && principal.HasClaim(WorkloadIssuerMarker, "true")
+           && !IsService(principal);
+
+    /// <summary>
+    /// The client id of a service or workload token: its <c>sub</c>, when
+    /// <c>azp</c> names the same client. Null for user tokens, for tokens from
+    /// an issuer not trusted to mint the identity they claim, and for tokens
+    /// whose <c>sub</c> and <c>azp</c> disagree. Service and workload client
+    /// ids are kept apart by the <see cref="ChoWorkloadRole.ClientIdPrefix"/>:
+    /// a service token can never present a workload's client id, nor a workload
+    /// token a service's.
+    /// </summary>
+    public static string? ServiceClientId(ClaimsPrincipal principal)
+    {
+        if (principal.Identity?.IsAuthenticated != true)
+            return null;
+
+        var service = IsService(principal);
+        var workload = !service && IsWorkload(principal);
+        if (!service && !workload)
+            return null;
+
+        var subject = principal.FindFirst(ChoClaimTypes.Subject)?.Value;
+        var authorizedParty = principal.FindFirst(ChoClaimTypes.AuthorizedParty)?.Value;
+        if (string.IsNullOrEmpty(subject) || !string.Equals(subject, authorizedParty, StringComparison.Ordinal))
+            return null;
+
+        return ChoWorkloadRole.IsWorkloadClientId(subject) == workload ? subject : null;
+    }
+
+    public static bool HasPermission(ClaimsPrincipal principal, string permission)
+    {
+        if (principal.Identity?.IsAuthenticated != true)
+            return false;
+
+        // A workload holds exactly the permissions token-service listed for it,
+        // never a role's expansion, and never a platform permission (those are
+        // granted only by name to a user; the one platform step a workflow
+        // needs has its own [RequireServiceClient] route).
+        if (IsWorkload(principal))
+        {
+            return !ChoRolePermissions.IsReserved(permission)
+                   && ChoRolePermissions.Satisfies(
+                       principal.FindAll(ChoClaimTypes.Permission).Select(c => c.Value), permission);
+        }
+
+        // Services act on behalf of the platform pipeline; user-level checks
+        // were applied where the work entered the system. That covers tenant
+        // permissions only: platform:* permissions act across tenants and are
+        // granted only by name to a user, so a service token never satisfies
+        // them. A cross-service call that must be allowed names its caller with
+        // [RequireServiceClient] instead.
+        if (IsService(principal))
+            return !ChoRolePermissions.IsReserved(permission);
+
+        var explicitPermissions = principal.FindAll(ChoClaimTypes.Permission).Select(c => c.Value).ToList();
+        var granted = explicitPermissions.Count > 0
+            ? explicitPermissions
+            : ChoRolePermissions.Expand(Roles(principal)).ToList();
+
+        return ChoRolePermissions.Satisfies(granted, permission);
+    }
+}

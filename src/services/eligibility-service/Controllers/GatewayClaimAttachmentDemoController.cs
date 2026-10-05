@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EligibilityService.Controllers;
@@ -8,7 +9,7 @@ namespace EligibilityService.Controllers;
 /// <summary>
 /// Development-only 275 attachment upload against an existing claim
 /// transmission. Disabled outside Development. Tenant is taken from
-/// X-Tenant-ID / the original transmission — never from the multipart body.
+/// the caller's token / the original transmission — never from the multipart body.
 /// </summary>
 [ApiController]
 [Route("api/dev/gateway")]
@@ -53,9 +54,8 @@ public sealed class GatewayClaimAttachmentDemoController : ControllerBase
             return NotFound(new { error = "Transmission not found." });
         }
 
-        var contextTenant = HttpContext.Items["TenantId"]?.ToString();
-        if (!string.IsNullOrWhiteSpace(contextTenant) &&
-            !string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
+        var contextTenant = HttpContext.GetTenantId();
+        if (!string.Equals(contextTenant, transmission.TenantId, StringComparison.Ordinal))
         {
             return BadRequest(new { error = "Tenant does not match the claim transmission." });
         }
@@ -140,7 +140,14 @@ public sealed class GatewayClaimAttachmentDemoController : ControllerBase
             return NotFound();
         }
 
-        var list = await _attachmentTransmissions.ListByClaimTransmissionIdAsync(transmissionId, ct);
+        var transmission = await _transmissions.GetByIdAsync(transmissionId, ct);
+        if (transmission is null ||
+            !string.Equals(transmission.TenantId, HttpContext.GetTenantId(), StringComparison.Ordinal))
+        {
+            return NotFound(new { error = "Transmission not found." });
+        }
+
+        var list = await _attachmentTransmissions.ListByClaimTransmissionIdAsync(transmission.TransmissionId, ct);
         return Ok(list);
     }
 }

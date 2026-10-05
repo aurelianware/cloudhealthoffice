@@ -1,5 +1,6 @@
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EnrollmentImportService.Controllers;
@@ -19,15 +20,18 @@ public class ManualEnrollmentController : ControllerBase
 {
     private readonly IEnrollmentImportService _importService;
     private readonly IEnrollmentValidator _validator;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ManualEnrollmentController> _logger;
 
     public ManualEnrollmentController(
         IEnrollmentImportService importService,
         IEnrollmentValidator validator,
+        ICurrentActor actor,
         ILogger<ManualEnrollmentController> logger)
     {
         _importService = importService;
         _validator = validator;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -35,12 +39,12 @@ public class ManualEnrollmentController : ControllerBase
     [ProducesResponseType(typeof(ImportResult), 200)]
     [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
     public async Task<IActionResult> CreateManual(
-        [FromBody] MemberEnrollment enrollment,
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
-        [FromHeader(Name = "X-Actor-ID")] string? actorId = null)
+        [FromBody] MemberEnrollment enrollment)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-            return BadRequest(new { error = "X-Tenant-ID header is required" });
+        // Tenant and actor come from the validated token. The X-Tenant-ID and
+        // X-Actor-ID headers this action used to read are no longer consulted.
+        var tenantId = _actor.TenantId;
+        var actorId = _actor.UserId;
 
         var validation = _validator.Validate(enrollment);
         if (!validation.IsValid)
@@ -68,11 +72,12 @@ public class ManualEnrollmentController : ControllerBase
         var batchId = $"MANUAL-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}".Substring(0, 40);
         var batch = new Enrollment834
         {
-            FileName = $"manual:{actorId ?? "unknown"}",
+            FileName = $"manual:{actorId}",
             ParsedAt = DateTime.UtcNow,
             TransactionCount = 1,
             BatchId = batchId,
             ManualSource = true,
+            ActorId = actorId,
             Enrollments = new List<MemberEnrollment> { enrollment }
         };
 

@@ -10,7 +10,7 @@ namespace CapitationService.Services;
 /// </summary>
 public interface IStripeTransferClient
 {
-    Task<Transfer> CreateTransferAsync(TransferCreateOptions options);
+    Task<Transfer> CreateTransferAsync(TransferCreateOptions options, RequestOptions requestOptions);
     Task<Transfer> GetTransferAsync(string transferId);
     Task CreateTransferReversalAsync(string transferId);
     Event ConstructWebhookEvent(string json, string signature, string secret);
@@ -18,8 +18,8 @@ public interface IStripeTransferClient
 
 public class StripeTransferClient : IStripeTransferClient
 {
-    public async Task<Transfer> CreateTransferAsync(TransferCreateOptions options)
-        => await new TransferService().CreateAsync(options);
+    public async Task<Transfer> CreateTransferAsync(TransferCreateOptions options, RequestOptions requestOptions)
+        => await new TransferService().CreateAsync(options, requestOptions);
 
     public async Task<Transfer> GetTransferAsync(string transferId)
         => await new TransferService().GetAsync(transferId);
@@ -40,13 +40,19 @@ public class StripeTransferClient : IStripeTransferClient
 public interface IStripeConnectService
 {
     /// <summary>
-    /// Create a Stripe Transfer to a provider's Connected Account
+    /// Create a Stripe Transfer to a provider's Connected Account, with an
+    /// idempotency key derived from <paramref name="disbursementId"/>: a retry
+    /// of the same disbursement never creates a second transfer. Returns
+    /// Status "failed" only when Stripe definitively refused it (no transfer
+    /// was made); any other error is thrown, and the outcome is then unknown.
     /// </summary>
     Task<StripeTransferResult> CreateTransferAsync(
         string stripeConnectedAccountId,
         decimal amount,
         string statementNumber,
-        string providerNpi);
+        string providerNpi,
+        string tenantId,
+        string disbursementId);
 
     /// <summary>
     /// Get the current status of a Transfer
@@ -66,6 +72,36 @@ public interface IStripeConnectService
 
 public class StripeConnectService : IStripeConnectService
 {
+    /// <summary>
+    /// Transfer metadata key carrying the CHO tenant. The Stripe webhook is
+    /// anonymous; this signed value is how an event finds its tenant.
+    /// </summary>
+    public const string TenantMetadataKey = "tenant_id";
+
+    /// <summary>Transfer metadata key carrying the CHO disbursement id.</summary>
+    public const string DisbursementMetadataKey = "disbursement_id";
+
+    /// <summary>
+    /// The Stripe idempotency key for a disbursement's transfer: the same for
+    /// every attempt of that disbursement, so Stripe returns the first
+    /// transfer instead of creating another.
+    /// </summary>
+    public static string TransferIdempotencyKey(string disbursementId) => $"cho-capitation-transfer-{disbursementId}";
+
+    /// <summary>
+    /// True when Stripe answered and refused the request (a card or
+    /// invalid-request error, 4xx other than 409): no transfer was made.
+    /// A 5xx, a 409 (idempotency or lock conflict), or an error without
+    /// Stripe's answer leaves the outcome unknown.
+    /// </summary>
+    public static bool IsDefinitiveRefusal(StripeException ex)
+    {
+        var status = (int)ex.HttpStatusCode;
+        var type = ex.StripeError?.Type;
+        return status is >= 400 and < 500 && status != 409
+            && (type == "card_error" || type == "invalid_request_error");
+    }
+
     private readonly IStripeTransferClient _stripeClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<StripeConnectService> _logger;
@@ -81,14 +117,19 @@ public class StripeConnectService : IStripeConnectService
         _logger = logger;
 
         StripeConfiguration.ApiKey = configuration["Stripe:SecretKey"];
-        _webhookSecret = configuration["Stripe:ConnectWebhookSecret"] ?? configuration["Stripe:WebhookSecret"] ?? string.Empty;
+        // The first secret actually set: appsettings.json carries both keys as "",
+        // and Kubernetes sets only Stripe__WebhookSecret.
+        _webhookSecret = new[] { configuration["Stripe:ConnectWebhookSecret"], configuration["Stripe:WebhookSecret"] }
+            .FirstOrDefault(StripeWebhookSecret.IsUsable) ?? string.Empty;
     }
 
     public async Task<StripeTransferResult> CreateTransferAsync(
         string stripeConnectedAccountId,
         decimal amount,
         string statementNumber,
-        string providerNpi)
+        string providerNpi,
+        string tenantId,
+        string disbursementId)
     {
         var options = new TransferCreateOptions
         {
@@ -99,14 +140,17 @@ public class StripeConnectService : IStripeConnectService
             {
                 { "statement_number", statementNumber },
                 { "provider_npi", providerNpi },
-                { "type", "capitation" }
+                { "type", "capitation" },
+                { TenantMetadataKey, tenantId },
+                { DisbursementMetadataKey, disbursementId }
             },
             Description = $"Capitation payment for {statementNumber}"
         };
+        var requestOptions = new RequestOptions { IdempotencyKey = TransferIdempotencyKey(disbursementId) };
 
         try
         {
-            var transfer = await _stripeClient.CreateTransferAsync(options);
+            var transfer = await _stripeClient.CreateTransferAsync(options, requestOptions);
 
             _logger.LogInformation(
                 "Created Stripe Transfer {TransferId} for statement {StatementNumber}, amount ${Amount:N2}",
@@ -114,9 +158,11 @@ public class StripeConnectService : IStripeConnectService
 
             return MapToResult(transfer);
         }
-        catch (StripeException ex)
+        catch (StripeException ex) when (IsDefinitiveRefusal(ex))
         {
-            _logger.LogError(ex, "Stripe Transfer failed for statement {StatementNumber}",
+            // Stripe said no: no transfer exists. Anything else propagates, since
+            // the transfer may exist (the caller must not make the statement payable again).
+            _logger.LogError(ex, "Stripe Transfer refused for statement {StatementNumber}",
                 statementNumber);
             return new StripeTransferResult
             {
@@ -157,6 +203,11 @@ public class StripeConnectService : IStripeConnectService
 
     public async Task<DisbursementWebhookResult> ProcessWebhookAsync(string json, string stripeSignature)
     {
+        // The webhook endpoint is reachable without a CHO token; the signature is
+        // its only authentication. An empty secret would make any body "valid".
+        if (!StripeWebhookSecret.IsUsable(_webhookSecret))
+            throw new InvalidOperationException("Stripe webhook secret is not configured; webhook rejected");
+
         try
         {
             var stripeEvent = _stripeClient.ConstructWebhookEvent(json, stripeSignature, _webhookSecret);
@@ -205,6 +256,8 @@ public class StripeConnectService : IStripeConnectService
             EventType = "transfer_created",
             TransferId = transfer.Id,
             StatementNumber = statementNumber,
+            TenantId = transfer.Metadata?.GetValueOrDefault(TenantMetadataKey),
+            DisbursementId = transfer.Metadata?.GetValueOrDefault(DisbursementMetadataKey),
             Amount = transfer.Amount / 100m,
             Status = "submitted"
         };
@@ -228,6 +281,8 @@ public class StripeConnectService : IStripeConnectService
             EventType = "transfer_reversed",
             TransferId = transfer.Id,
             StatementNumber = statementNumber,
+            TenantId = transfer.Metadata?.GetValueOrDefault(TenantMetadataKey),
+            DisbursementId = transfer.Metadata?.GetValueOrDefault(DisbursementMetadataKey),
             Amount = transfer.Amount / 100m,
             Status = "returned",
             FailureCode = "TRANSFER_REVERSED",
@@ -249,6 +304,7 @@ public class StripeConnectService : IStripeConnectService
             Handled = true,
             EventType = "payout_paid",
             TransferId = payout.Id,
+            TenantId = payout.Metadata?.GetValueOrDefault(TenantMetadataKey),
             Amount = payout.Amount / 100m,
             Status = "settled"
         });
@@ -268,6 +324,7 @@ public class StripeConnectService : IStripeConnectService
             Handled = true,
             EventType = "payout_failed",
             TransferId = payout.Id,
+            TenantId = payout.Metadata?.GetValueOrDefault(TenantMetadataKey),
             Amount = payout.Amount / 100m,
             Status = "failed",
             FailureCode = payout.FailureCode,
@@ -311,6 +368,13 @@ public class DisbursementWebhookResult
     public string? EventType { get; set; }
     public string? TransferId { get; set; }
     public string? StatementNumber { get; set; }
+
+    /// <summary>The tenant from the signed event's metadata (<see cref="StripeConnectService.TenantMetadataKey"/>).</summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>The CHO disbursement from the signed transfer's metadata (<see cref="StripeConnectService.DisbursementMetadataKey"/>).</summary>
+    public string? DisbursementId { get; set; }
+
     public decimal Amount { get; set; }
     public string? Status { get; set; }
     public string? FailureCode { get; set; }

@@ -2,7 +2,7 @@ using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services.Adjudication;
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,20 +22,21 @@ namespace CloudHealthOffice.ClaimsService.Tests.Repositories;
 ///         version (the projection-metadata bypass).</item>
 /// </list>
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class ClaimRepositoryVersioningTests : IAsyncLifetime
 {
     private const string Tenant = "tenant-claims";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private ClaimRepositoryMongo _repo = null!;
     private DefaultHttpContext _ctx = null!;
 
+    public ClaimRepositoryVersioningTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"claim_repo_test_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("claim_repo_test");
         _ctx = new DefaultHttpContext();
         _ctx.Items["TenantId"] = Tenant;
         var accessor = new HttpContextAccessor { HttpContext = _ctx };
@@ -43,12 +44,7 @@ public class ClaimRepositoryVersioningTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* see ProviderVersionEventPublisherTests note */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     private static Claim Sample(string id = "", string claimNumber = "CN-001") => new()
     {

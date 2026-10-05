@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -59,7 +60,10 @@ public class FlAhcaFixture : IAsyncLifetime
 
     private static HttpClient CreateClient(string baseUrl)
     {
-        var client = new HttpClient
+        // The services take the tenant from a CHO token, not from X-Tenant-ID.
+        // The development handler turns the header into a development-signed
+        // token for that tenant (the services run with Development ChoAuth trust).
+        var client = new HttpClient(new ChoDevelopmentTokenHandler { InnerHandler = new HttpClientHandler() })
         {
             BaseAddress = new Uri(baseUrl),
             Timeout = TimeSpan.FromSeconds(30)

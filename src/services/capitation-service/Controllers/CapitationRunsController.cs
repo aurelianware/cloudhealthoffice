@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace CapitationService.Controllers;
 
@@ -12,15 +13,18 @@ public class CapitationRunsController : ControllerBase
 {
     private readonly ICapitationRunService _runService;
     private readonly ICapitationStatementRepository _statementRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CapitationRunsController> _logger;
 
     public CapitationRunsController(
         ICapitationRunService runService,
         ICapitationStatementRepository statementRepository,
+        ICurrentActor actor,
         ILogger<CapitationRunsController> logger)
     {
         _runService = runService;
         _statementRepository = statementRepository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -37,7 +41,8 @@ public class CapitationRunsController : ControllerBase
 
         try
         {
-            var run = await _runService.CreateRunAsync(request, request.CreatedBy);
+            // The creator is the token subject; a body-supplied CreatedBy is ignored.
+            var run = await _runService.CreateRunAsync(request, _actor.UserId);
             return CreatedAtAction(nameof(GetRunById), new { id = run.Id }, run);
         }
         catch (ArgumentException ex)
@@ -59,7 +64,8 @@ public class CapitationRunsController : ControllerBase
 
         try
         {
-            var run = await _runService.ExecuteRunAsync(id);
+            // The executor is one of the statements' makers (separation of duties).
+            var run = await _runService.ExecuteRunAsync(id, _actor.UserId);
             return Ok(run);
         }
         catch (InvalidOperationException ex)

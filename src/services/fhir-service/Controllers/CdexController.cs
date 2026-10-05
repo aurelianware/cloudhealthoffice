@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Services.Cdex;
 using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Authorization;
@@ -30,7 +31,7 @@ namespace FhirService.Controllers;
 /// is preserved rather than borrowed from.
 /// </summary>
 [Route("fhir/r4")]
-[Authorize]
+[FhirAccess(smart: true, cho: "rfai:write")]
 public sealed class CdexController : FhirControllerBase
 {
     private readonly ICdexAttachmentSubmissionService _submissions;

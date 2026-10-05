@@ -306,6 +306,8 @@ public sealed class InMemoryPersonalRepRepository
         EffectiveTo = r.EffectiveTo,
         ExpiresAt = r.ExpiresAt,
         ProofOfAuthorityDocumentId = r.ProofOfAuthorityDocumentId,
+        ProofOfAuthorityVerifiedBy = r.ProofOfAuthorityVerifiedBy,
+        ProofOfAuthorityVerifiedAt = r.ProofOfAuthorityVerifiedAt,
         FirstName = r.FirstName,
         MiddleName = r.MiddleName,
         LastName = r.LastName,

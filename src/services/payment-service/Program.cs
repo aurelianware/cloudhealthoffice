@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
@@ -9,6 +10,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -17,6 +19,20 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// it. Reads need payments:read; preparing runs (create, cancel) needs
+// payments:run. Releasing money (executing a payment or reversal run, which
+// creates the payments, writes the 835s and finalizes or voids the claims)
+// needs payments:approve from a user who did not create the run (maker-checker,
+// RunSeparationOfDuties); a service token cannot release money. Ledger changes
+// to a payment record (record, post, reconcile) need finance:write.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "payments:read";
+    auth.DefaultWritePermission = "payments:run";
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -29,7 +45,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
 // Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
@@ -41,6 +57,8 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepositoryMongo>();
     builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepositoryMongo>();
     builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
+    builder.Services.AddScoped<IClaimReservationRepository, ClaimReservationRepositoryMongo>();
+    builder.Services.AddScoped<IReservationAuditLog, ReservationAuditLogMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -63,6 +81,8 @@ else
     builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
     builder.Services.AddScoped<IPaymentRunRepository, PaymentRunRepository>();
     builder.Services.AddScoped<IReversalRunRepository, ReversalRunRepository>();
+    builder.Services.AddSingleton<IClaimReservationRepository, ClaimReservationRepositoryCosmos>();
+    builder.Services.AddSingleton<IReservationAuditLog, ReservationAuditLogCosmos>();
     // EraEnvelope persistence on Cosmos-only deployments uses the
     // in-memory fallback. payment-service's canonical store is Mongo;
     // Cosmos paths are dev-only and don't need durable EraEnvelope storage.
@@ -79,14 +99,36 @@ builder.Services.AddScoped<IEraGeneratorService, EraGeneratorService>();
 builder.Services.AddSingleton<IBatchEraGeneratorService, BatchEraGeneratorService>();
 builder.Services.AddSingleton<ICarcRarcMappingService, CarcRarcMappingService>();
 builder.Services.AddScoped<ITradingPartnersClient, TradingPartnersClient>();
+builder.Services.AddScoped<IRunSeparationOfDuties, RunSeparationOfDuties>();
 
-// Add HttpClient for claims service integration
-builder.Services.AddHttpClient("ClaimsService", client =>
+// Stranded claim reservations (a run reserved a claim, then failed or was
+// cancelled without paying it). The hosted job releases only the safe case
+// (run Failed/Cancelled, past PaymentRuns:ReservationGracePeriod, no payment
+// and no 835 in payment-service) as payment-service itself, per tenant, with
+// no outbound calls; everything else is flagged NeedsAttention for a second
+// approver (POST /api/{paymentruns|reversalruns}/{id}/reservations/{claimId}/release).
+builder.Services.Configure<PaymentService.Models.ReservationReconciliationOptions>(
+    builder.Configuration.GetSection(PaymentService.Models.ReservationReconciliationOptions.SectionName));
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IReservationReconciliationService, ReservationReconciliationService>();
+builder.Services.AddSingleton<ReservationReconciliationJob>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ReservationReconciliationJob>());
+
+// Run-execution clients. claims-service (search, read, remittance, void,
+// adjustments) and trading-partner-service are called only while a payment or
+// reversal run is executed (or its finalizes retried), after the caller passed
+// payments:approve and separation of duties. Those calls carry payment-service's
+// own service token for the run's tenant, never the approver's token
+// (FinanceApprover holds no claims permissions): AddRunExecutionServiceToken
+// removes the shared forwarding handler from these clients and mints the token
+// only inside an open RunExecutionGrant. The approver is recorded on the run,
+// payments and 835s. Every other factory client keeps ChoOutboundTokenHandler.
+builder.Services.AddHttpClient(ClaimsServiceClient.HttpClientName, client =>
 {
     var claimsServiceUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";
     client.BaseAddress = new Uri(claimsServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
-});
+}).AddRunExecutionServiceToken();
 
 // 5.10 — typed HttpClient for trading-partner-service NPI lookups
 // during PaymentRun execution. 10s timeout matches credentialing/
@@ -95,11 +137,15 @@ builder.Services.AddHttpClient("ClaimsService", client =>
 // PaymentRun outright.
 builder.Services.AddHttpClient(TradingPartnersClient.HttpClientName, client =>
 {
+    // The cluster Service listens on port 80 (targetPort 8080); the former
+    // default http://trading-partner-service:8080 addressed the container port
+    // through the Service and was refused in the cluster. docker-compose sets
+    // TradingPartnerService__BaseUrl to the container port explicitly.
     var tradingPartnerUrl = builder.Configuration["TradingPartnerService:BaseUrl"]
-        ?? "http://trading-partner-service:8080";
+        ?? TradingPartnersClient.DefaultBaseUrl;
     client.BaseAddress = new Uri(tradingPartnerUrl);
     client.Timeout = TimeSpan.FromSeconds(10);
-});
+}).AddRunExecutionServiceToken();
 
 // Health checks (MongoDB or Cosmos DB, claims-service HTTP)
 var claimsServiceHealthUrl = builder.Configuration["ClaimsService:BaseUrl"] ?? "http://claims-service:8080";
@@ -112,16 +158,8 @@ builder.Services.AddChoHealthChecks(options =>
     options.HttpDependencies["claims-service"] = $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 
-// CORS (for development)
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -143,12 +181,9 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
 
-app.UseCors("AllowAll");
-
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();

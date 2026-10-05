@@ -3,6 +3,7 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using MemberService.HostedServices;
 using MemberService.Middleware;
 using MemberService.Repositories;
@@ -27,6 +28,14 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Manages health plan member data (subscribers and dependents) populated by X12 834 Enrollment transactions. Surfaces FHIR R4 Patient projection."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant comes from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "members:read";
+    auth.DefaultWritePermission = "members:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -286,15 +295,8 @@ if (!builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(accumulato
 RegisterDownstream<IAccumulatorServiceClient, HttpAccumulatorServiceClient, FakeAccumulatorServiceClient>(
     builder, accumulatorBaseUrl);
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -316,9 +318,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

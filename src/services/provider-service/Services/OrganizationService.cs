@@ -82,7 +82,8 @@ public class OrganizationService : IOrganizationService
         candidate.SuspensionReason = null;
         candidate.SupersededAt = null;
         candidate.SupersededByVersionId = null;
-        candidate.CreatedBy = string.IsNullOrEmpty(candidate.CreatedBy) ? actorId : candidate.CreatedBy;
+        // The creator is the acting user, never a caller-supplied value.
+        candidate.CreatedBy = actorId;
         candidate.CreatedDate = DateTime.UtcNow;
         candidate.LastUpdatedDate = DateTime.UtcNow;
         candidate.LastUpdatedBy = actorId;

@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,6 +19,7 @@ namespace FhirService.Controllers;
 /// </para>
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "providers:read")]
 public class EndpointController : FhirControllerBase
 {
     private readonly HttpClient _benefitPlanServiceClient;

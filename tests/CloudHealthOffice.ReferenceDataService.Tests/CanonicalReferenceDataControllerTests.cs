@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.ReferenceData.Domain;
 using CloudHealthOffice.ReferenceData.Persistence;
 using FluentAssertions;
@@ -32,7 +34,7 @@ public sealed class CanonicalReferenceDataControllerTests
     {
         var repository = new InMemoryReferenceDataRepository();
         await repository.ImportAsync([Code()]);
-        var controller = CreateController(repository, new Claim("tenant_id", "tenant-a"));
+        var controller = CreateController(repository, "tenant-a", new Claim("tenant_id", "tenant-a"));
 
         var response = await controller.Get("CPT", "99213", new DateOnly(2026, 8, 14));
 
@@ -64,9 +66,11 @@ public sealed class CanonicalReferenceDataControllerTests
     [Fact]
     public async Task Import_returns_bad_request_for_an_invalid_batch()
     {
+        // A global record needs platform:admin; the batch is refused only for being invalid.
         var controller = CreateController(
             new InMemoryReferenceDataRepository(),
-            new Claim(ClaimTypes.Role, "Administrator"));
+            "tenant-a",
+            new Claim(ChoClaimTypes.Role, ChoRolePermissions.PlatformAdmin));
 
         var response = await controller.Import([Code() with { Checksum = " " }]);
 
@@ -74,7 +78,7 @@ public sealed class CanonicalReferenceDataControllerTests
     }
 
     [Fact]
-    public async Task GroupSid_claim_resolves_tenant_context()
+    public async Task Token_tenant_resolves_tenant_context()
     {
         var repository = new InMemoryReferenceDataRepository();
         await repository.ImportAsync([Code() with
@@ -82,7 +86,8 @@ public sealed class CanonicalReferenceDataControllerTests
             TenantId = "tenant-a",
             ExposureClassification = ExposureClassification.TenantRestricted
         }]);
-        var controller = CreateController(repository, new Claim(ClaimTypes.GroupSid, "tenant-a"));
+        // The shared tenant middleware puts the token's tenant in HttpContext.Items.
+        var controller = CreateController(repository, "tenant-a", new Claim(ChoClaimTypes.TenantId, "tenant-a"));
 
         var response = await controller.Search("CPT", pageSize: 10);
 
@@ -92,17 +97,41 @@ public sealed class CanonicalReferenceDataControllerTests
         result.Items[0].Coding.Display.Should().Be("Licensed display");
     }
 
+    [Fact]
+    public async Task Authenticated_caller_without_token_tenant_cannot_choose_tenant_by_header()
+    {
+        var repository = new InMemoryReferenceDataRepository();
+        await repository.ImportAsync([Code() with
+        {
+            TenantId = "tenant-a",
+            ExposureClassification = ExposureClassification.TenantRestricted
+        }]);
+        // Authenticated, but no tenant from the token: a header must not supply one.
+        var controller = CreateController(repository, tenantId: null, new Claim(ChoClaimTypes.Subject, "user-1"));
+        controller.Request.Headers["X-Tenant-ID"] = "tenant-a";
+
+        var act = () => controller.Search("CPT", pageSize: 10);
+
+        await act.Should().ThrowAsync<TenantContextMissingException>();
+    }
+
     private static CanonicalReferenceDataController CreateController(
         CloudHealthOffice.ReferenceData.Persistence.IReferenceDataRepository repository,
         params Claim[] claims)
+        => CreateController(repository, null, claims);
+
+    private static CanonicalReferenceDataController CreateController(
+        CloudHealthOffice.ReferenceData.Persistence.IReferenceDataRepository repository,
+        string? tenantId,
+        params Claim[] claims)
     {
         var identity = claims.Length == 0 ? new ClaimsIdentity() : new ClaimsIdentity(claims, "test");
+        var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) };
+        if (tenantId != null)
+            httpContext.Items["TenantId"] = tenantId;
         return new CanonicalReferenceDataController(repository)
         {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
-            }
+            ControllerContext = new ControllerContext { HttpContext = httpContext }
         };
     }
 

@@ -19,12 +19,13 @@ extract_section.py (PyMuPDF) ──→ Section text + CPT/HCPCS codes
 LlmAssistedParser (Claude API) ──→ Structured TmppmPaRule JSON
        │
        ▼
-TmppmRuleStore ──→ Cosmos DB (MongoDB API)
+TmppmRuleStore ──→ terminology-service API (/api/v1/tmppm/*, CHO bearer token)
        │
-       ├─ tmppm_pa_rules collection (raw extracted rules)
-       ├─ tmppm_editions collection (version tracking + SHA256)
-       ├─ tmppm_diff_reports collection (month-over-month deltas)
-       └─ concept_map_entries collection (ConceptMapEntry overrides)
+       ├─ PUT rules, PUT editions/{id}, POST diffs   (shared data: platform:admin)
+       └─ POST overrides                             (the token tenant's ConceptMap
+                                                      overrides: settings:manage)
+       terminology-service owns tmppm_pa_rules, tmppm_editions,
+       tmppm_diff_reports and concept_map_entries; nothing else opens them.
                 │
                 ▼
         CRD Server / PriorAuthService (runtime queries)
@@ -34,7 +35,8 @@ TmppmRuleStore ──→ Cosmos DB (MongoDB API)
 
 - .NET 8 SDK
 - Python 3.9+ with PyMuPDF (`pip3 install PyMuPDF`)
-- Access to CHO Cosmos DB (MongoDB API)
+- A CHO bearer token for terminology-service (platform:admin for rules/editions;
+  for `--tenant`, a token for that tenant with settings:manage)
 - Anthropic API key (for LLM-assisted extraction)
 - `kubectl` access to the `cloudhealthoffice` namespace (for secrets)
 
@@ -47,22 +49,23 @@ cd ~/cloudhealthoffice/tools/CloudHealthOffice.TmppmIngestionService
 dotnet restore
 ```
 
-### 2. Set up Cosmos DB connection
+### 2. Point it at terminology-service
 
-Pull the connection string from Kubernetes secrets:
+The tool no longer connects to the database; it calls terminology-service:
 
 ```bash
-export CHO_TMPPM_MONGODB__CONNECTIONSTRING="$(kubectl get secret mongodb-secret -n cloudhealthoffice -o jsonpath='{.data.connectionString}' | base64 -d)"
+export CHO_TMPPM_TERMINOLOGY__BASEURL="http://terminology-service.cloudhealthoffice"
+# A file holding a CHO bearer token. It is re-read before every request, so a
+# refresher can replace it (CHO tokens last 5 minutes). Writes happen at the
+# end of the run, after downloading and parsing.
+export CHO_TMPPM_TERMINOLOGY__ACCESSTOKENFILE=/var/run/secrets/cho/token
 ```
 
-Or set it directly in `Config/appsettings.json`:
-
-```json
-"MongoDB": {
-    "ConnectionString": "your-cosmos-connection-string",
-    "DatabaseName": "cho_terminology"
-}
-```
+Rules, editions and diffs are shared by every tenant: the token needs
+platform:admin. `--tenant <id>` also publishes that tenant's ConceptMap
+overrides: the token must be for that tenant (the request names it in
+X-Tenant-ID and terminology-service refuses a mismatch) with settings:manage.
+Without `--tenant` no overrides are published.
 
 ### 3. Set up Anthropic API key
 
@@ -200,7 +203,7 @@ The pipeline automatically:
 ```
 tools/CloudHealthOffice.TmppmIngestionService/
 ├── Config/
-│   └── appsettings.json              # MongoDB + Anthropic config
+│   └── appsettings.json              # terminology-service URL/token + Anthropic config
 ├── Loaders/
 │   └── TmhpChapterDownloader.cs      # Downloads PDFs, SHA256 tracking
 ├── Models/
@@ -278,11 +281,10 @@ spec:
             image: cho.azurecr.io/tmppm-ingestion:latest
             command: ["dotnet", "TmppmIngestionService.dll", "ingest", "2026", "4", "--tenant", "txmco01"]
             env:
-            - name: CHO_TMPPM_MONGODB__CONNECTIONSTRING
-              valueFrom:
-                secretKeyRef:
-                  name: mongodb-secret
-                  key: connectionString
+            - name: CHO_TMPPM_TERMINOLOGY__BASEURL
+              value: http://terminology-service.cloudhealthoffice
+            - name: CHO_TMPPM_TERMINOLOGY__ACCESSTOKENFILE
+              value: /var/run/secrets/cho/token   # kept fresh by a token refresher
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -295,15 +297,8 @@ spec:
 
 **"Section not found"** — The C# PdfPig parser splits section numbers and titles across lines. Use the Python extractor (`extract_section.py`) which handles this correctly via PyMuPDF.
 
-**Cosmos DB timeout / "Connection refused localhost:27017"** — The connection string isn't set. Verify with:
-```bash
-echo $CHO_TMPPM_MONGODB__CONNECTIONSTRING
-```
-If empty, re-export from Kubernetes:
-```bash
-export CHO_TMPPM_MONGODB__CONNECTIONSTRING="$(kubectl get secret mongodb-secret -n cloudhealthoffice -o jsonpath='{.data.connectionString}' | base64 -d)"
-```
-Or paste it directly into `Config/appsettings.json`.
+**"terminology-service refused ...: 401"** — no token, or it expired (5 minutes). Refresh the token file.
+**"...: 403"** — the token lacks platform:admin (rules/editions/diffs) or settings:manage, or names another tenant than `--tenant`.
 
 **No CPT codes extracted** — Some sections (e.g., bariatric surgery §9.2.8.1) describe clinical criteria without listing specific procedure codes inline. The LLM enrichment step backfills these by identifying the standard CPT codes for the service category.
 

@@ -95,7 +95,24 @@ public sealed class AdminMigrationControllerTests
     }
 
     [Fact]
-    public async Task Run_Resolves_ActorId_From_X_User_Id_Header_When_No_Sub_Claim()
+    public async Task Run_Takes_ActorId_From_Token_Subject_Ignoring_Header_And_Body()
+    {
+        // The actor used to come from X-User-Id (and a body ActorId won over
+        // both). It is now the token subject only.
+        var (controller, service) = Build(enabled: true);
+        controller.HttpContext.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim("sub", "ops@cho")], "Bearer"));
+        controller.HttpContext.Request.Headers["X-User-Id"] = "spoofed-header";
+        service.NextResult = new ClaimMigrationResult { Outcome = "success" };
+
+        await controller.Run(new ClaimMigrationRequest { ActorId = "spoofed-body" }, default);
+
+        service.LastRequest!.ActorId.Should().Be("ops@cho");
+    }
+
+    [Fact]
+    public async Task Run_Ignores_X_User_Id_Header_When_No_Sub_Claim()
     {
         var (controller, service) = Build(enabled: true);
         controller.HttpContext.Request.Headers["X-User-Id"] = "ops@cho";
@@ -103,7 +120,7 @@ public sealed class AdminMigrationControllerTests
 
         await controller.Run(new ClaimMigrationRequest(), default);
 
-        service.LastRequest!.ActorId.Should().Be("ops@cho");
+        service.LastRequest!.ActorId.Should().Be("admin:claims-cosmos-migration");
     }
 
     [Fact]

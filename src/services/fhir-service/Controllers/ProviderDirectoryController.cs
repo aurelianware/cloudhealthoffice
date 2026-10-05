@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FhirService.Mappers;
@@ -23,6 +24,7 @@ namespace FhirService.Controllers;
 /// Port of the TypeScript provider-directory-api.ts (NPPES path).
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "providers:read")]
 public class ProviderDirectoryController : FhirControllerBase
 {
     private readonly HttpClient _httpClient;

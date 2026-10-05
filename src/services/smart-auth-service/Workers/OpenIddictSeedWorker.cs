@@ -1,23 +1,32 @@
 using OpenIddict.Abstractions;
+using SmartAuthService.Controllers;
 using SmartAuthService.Models;
+using SmartAuthService.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace SmartAuthService.Workers;
 
 /// <summary>
-/// Runs on startup and idempotently creates OpenIddict scopes and demo client
-/// registrations.  In production, clients are managed via the admin API or a
-/// migration tool — the seed here registers only the built-in SMART scopes and
-/// two test applications used in integration tests.
+/// Runs on startup and idempotently creates the SMART scopes (every
+/// environment) and, on a Development host only, the demo client
+/// registrations and demo identity bindings for <c>demo-tenant</c>.
+///
+/// Outside Development, clients are registered by a tenant administrator
+/// through <c>/api/admin/smart/clients</c> and identities are bound through
+/// enrolment codes; nothing here grants a tenant to anyone.
 /// </summary>
 public class OpenIddictSeedWorker : IHostedService
 {
+    public const string DemoTenant = "demo-tenant";
+
     private readonly IServiceProvider _sp;
+    private readonly IHostEnvironment _environment;
     private readonly ILogger<OpenIddictSeedWorker> _logger;
 
-    public OpenIddictSeedWorker(IServiceProvider sp, ILogger<OpenIddictSeedWorker> logger)
+    public OpenIddictSeedWorker(IServiceProvider sp, IHostEnvironment environment, ILogger<OpenIddictSeedWorker> logger)
     {
         _sp = sp;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -31,7 +40,11 @@ public class OpenIddictSeedWorker : IHostedService
             {
                 await using var scope = _sp.CreateAsyncScope();
                 await SeedScopesAsync(scope, ct);
-                await SeedClientsAsync(scope, ct);
+                if (_environment.IsDevelopment())
+                {
+                    await SeedDevelopmentClientsAsync(scope, ct);
+                    await SeedDevelopmentBindingsAsync(scope, ct);
+                }
                 return;
             }
             catch (Exception ex) when (attempt < maxRetries && !ct.IsCancellationRequested)
@@ -52,47 +65,7 @@ public class OpenIddictSeedWorker : IHostedService
     {
         var mgr = scope.ServiceProvider.GetRequiredService<IOpenIddictScopeManager>();
 
-        var smartScopes = new[]
-        {
-            (SmartScopes.FhirUser,          "FHIR user identity"),
-            (SmartScopes.Launch,            "EHR launch"),
-            (SmartScopes.LaunchPatient,     "Patient context on launch"),
-            (SmartScopes.LaunchEncounter,   "Encounter context on launch"),
-            (SmartScopes.PatientWildcardRead,    "Read all patient-level resources"),
-            (SmartScopes.UserWildcardRead,       "Read all user-level resources"),
-            (SmartScopes.SystemWildcardRead,     "Read all system-level resources"),
-            (SmartScopes.PatientPatientRead,     "Patient: read Patient"),
-            (SmartScopes.PatientCoverageRead,    "Patient: read Coverage"),
-            (SmartScopes.PatientEobRead,         "Patient: read ExplanationOfBenefit"),
-            (SmartScopes.PatientEncounterRead,   "Patient: read Encounter"),
-            (SmartScopes.PatientClaimRead,       "Patient: read Claim"),
-            (SmartScopes.UserPatientRead,        "User: read Patient"),
-            (SmartScopes.UserCoverageRead,       "User: read Coverage"),
-            (SmartScopes.UserEobRead,            "User: read ExplanationOfBenefit"),
-            (SmartScopes.UserEncounterRead,      "User: read Encounter"),
-            (SmartScopes.UserClaimRead,          "User: read Claim"),
-            (SmartScopes.SystemPatientRead,      "System: read Patient"),
-            (SmartScopes.SystemCoverageRead,     "System: read Coverage"),
-            (SmartScopes.SystemEobRead,          "System: read ExplanationOfBenefit"),
-            (SmartScopes.SystemEncounterRead,    "System: read Encounter"),
-            (SmartScopes.SystemClaimRead,        "System: read Claim"),
-
-            // Writes. Without these the FHIR surface's write operations —
-            // PAS Claim/$submit, CDex $submit-attachment, DTR authoring — are
-            // ungrantable, because a read scope no longer authorizes them.
-            (SmartScopes.UserWildcardWrite,      "Write all user-level resources"),
-            (SmartScopes.SystemWildcardWrite,    "Write all system-level resources"),
-            (SmartScopes.UserClaimWrite,         "User: submit prior authorizations"),
-            (SmartScopes.SystemClaimWrite,       "System: submit prior authorizations"),
-            (SmartScopes.UserTaskWrite,          "User: submit attachments and appeals"),
-            (SmartScopes.SystemTaskWrite,        "System: submit attachments and appeals"),
-            (SmartScopes.UserQuestionnaireWrite, "User: author Questionnaires"),
-            (SmartScopes.SystemQuestionnaireWrite, "System: author Questionnaires"),
-            (SmartScopes.UserQuestionnaireResponseWrite, "User: submit QuestionnaireResponses"),
-            (SmartScopes.SystemQuestionnaireResponseWrite, "System: submit QuestionnaireResponses"),
-        };
-
-        foreach (var (name, display) in smartScopes)
+        foreach (var (name, display) in SmartScopes.Catalog)
         {
             if (await mgr.FindByNameAsync(name, ct) is null)
             {
@@ -108,9 +81,9 @@ public class OpenIddictSeedWorker : IHostedService
         }
     }
 
-    // ── Client registrations ──────────────────────────────────────────────────
+    // ── Development: demo client registrations ────────────────────────────────
 
-    private async Task SeedClientsAsync(AsyncServiceScope scope, CancellationToken ct)
+    private async Task SeedDevelopmentClientsAsync(AsyncServiceScope scope, CancellationToken ct)
     {
         var mgr = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 
@@ -212,5 +185,47 @@ public class OpenIddictSeedWorker : IHostedService
 
             _logger.LogInformation("Seeded client: cho-payer-system");
         }
+    }
+
+    // ── Development: demo identity bindings (demo-tenant) ─────────────────────
+
+    /// <summary>
+    /// Development login users <c>demo-member</c> (member pat-001) and
+    /// <c>demo-provider</c> (provider-001), and the three demo clients, all in
+    /// demo-tenant. Any other development username has no binding and gets no
+    /// token until it redeems an enrolment code.
+    /// </summary>
+    private static async Task SeedDevelopmentBindingsAsync(AsyncServiceScope scope, CancellationToken ct)
+    {
+        var store = scope.ServiceProvider.GetRequiredService<ISmartIdentityStore>();
+        var now = DateTimeOffset.UtcNow;
+        const string seededBy = "development-seed";
+
+        await store.SeedDevelopmentBindingsAsync(
+            members:
+            [
+                new MemberLink
+                {
+                    Id = "dev-member-link", TenantId = DemoTenant,
+                    Issuer = DevelopmentLogin.Issuer, Subject = "demo-member",
+                    MemberId = "pat-001", CreatedBy = seededBy, CreatedAt = now,
+                },
+            ],
+            providers:
+            [
+                new ProviderUserLink
+                {
+                    Id = "dev-provider-link", TenantId = DemoTenant,
+                    Issuer = DevelopmentLogin.Issuer, Subject = "demo-provider",
+                    ProviderId = "provider-001", Npi = "1234567893", CreatedBy = seededBy, CreatedAt = now,
+                },
+            ],
+            clients:
+            [
+                new ClientTenantRegistration { ClientId = "smart-patient-app", TenantId = DemoTenant, Kind = SmartClientKind.PatientApp, DisplayName = "CHO SMART Patient App", CreatedBy = seededBy, CreatedAt = now },
+                new ClientTenantRegistration { ClientId = "cho-ehr-app", TenantId = DemoTenant, Kind = SmartClientKind.ProviderApp, DisplayName = "CHO EHR Application", CreatedBy = seededBy, CreatedAt = now },
+                new ClientTenantRegistration { ClientId = "cho-payer-system", TenantId = DemoTenant, Kind = SmartClientKind.Backend, DisplayName = "CHO Payer System (Backend)", CreatedBy = seededBy, CreatedAt = now },
+            ],
+            ct);
     }
 }

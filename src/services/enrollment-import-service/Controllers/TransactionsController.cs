@@ -1,5 +1,6 @@
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EnrollmentImportService.Controllers;
@@ -13,10 +14,12 @@ namespace EnrollmentImportService.Controllers;
 public class TransactionsController : ControllerBase
 {
     private readonly IEnrollmentTransactionRepository _transactions;
+    private readonly ICurrentActor _actor;
 
-    public TransactionsController(IEnrollmentTransactionRepository transactions)
+    public TransactionsController(IEnrollmentTransactionRepository transactions, ICurrentActor actor)
     {
         _transactions = transactions;
+        _actor = actor;
     }
 
     /// <summary>
@@ -26,12 +29,11 @@ public class TransactionsController : ControllerBase
     [ProducesResponseType(typeof(List<EnrollmentTransaction>), 200)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> ListTransactions(
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
         [FromQuery] string memberId,
         [FromQuery] int limit = 100)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-            return BadRequest("X-Tenant-ID header is required");
+        // Tenant from the validated token, never from X-Tenant-ID.
+        var tenantId = _actor.TenantId;
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest("memberId query parameter is required");
         if (limit < 1 || limit > 500) limit = 100;
@@ -49,11 +51,10 @@ public class TransactionsController : ControllerBase
     [ProducesResponseType(typeof(List<EnrollmentTransaction>), 200)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> ListRecentTransactions(
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
         [FromQuery] int limit = 100)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-            return BadRequest("X-Tenant-ID header is required");
+        // Tenant from the validated token, never from X-Tenant-ID.
+        var tenantId = _actor.TenantId;
         if (limit < 1 || limit > 500) limit = 100;
 
         var list = await _transactions.ListRecentAsync(tenantId, limit);

@@ -180,7 +180,7 @@ public class BenefitPlanServiceVersionTests
         var v1 = await service.PublishVersionAsync(draft.PlanId, draft.VersionId, Tenant, Actor);
 
         v1.PlanName = "Tampered";
-        var act = () => service.UpdatePlanAsync(v1, Tenant);
+        var act = () => service.UpdatePlanAsync(v1, Tenant, Actor);
         await act.Should().ThrowAsync<PlanVersionStateException>()
             .Where(ex => ex.CurrentState == PlanVersionState.Published);
     }
@@ -437,12 +437,86 @@ public class BenefitPlanServiceVersionTests
     {
         var (service, _, _, _) = Build();
 
-        var legacy = await service.CreatePlanAsync(SamplePlan(), Tenant);
+        var legacy = await service.CreatePlanAsync(SamplePlan(), Tenant, Actor);
 
         legacy.VersionState.Should().Be(PlanVersionState.Published);
         legacy.VersionNumber.Should().Be(1);
         legacy.VersionId.Should().NotBeNullOrEmpty();
         legacy.PublishedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CreateDraftAsync_records_the_authenticated_actor_not_a_body_createdBy()
+    {
+        var (service, _, _, _) = Build();
+        var body = SamplePlan();
+        body.CreatedBy = "forged-user";
+
+        var draft = await service.CreateDraftAsync(body, Tenant, Actor);
+
+        draft.CreatedBy.Should().Be(Actor);
+    }
+
+    [Fact]
+    public async Task LegacyCreatePlanAsync_records_the_authenticated_actor_as_creator_and_publisher()
+    {
+        var (service, _, _, _) = Build();
+        var body = SamplePlan();
+        body.CreatedBy = "forged-user";
+        body.PublishedBy = "forged-user";
+        body.TenantId = "other-tenant";
+
+        var legacy = await service.CreatePlanAsync(body, Tenant, Actor);
+
+        legacy.CreatedBy.Should().Be(Actor);
+        legacy.PublishedBy.Should().Be(Actor);
+        legacy.TenantId.Should().Be(Tenant);
+    }
+
+    [Fact]
+    public async Task UpdatePlanAsync_keeps_server_owned_audit_and_version_fields_from_the_stored_draft()
+    {
+        var (service, repo, _, _) = Build();
+        var draft = await service.CreateDraftAsync(SamplePlan(), Tenant, Actor);
+
+        // A full-model PUT body that tries to rewrite who created the plan
+        // and to publish it without going through PublishVersionAsync.
+        var body = SamplePlan();
+        body.Id = draft.Id;
+        body.PlanName = "Renamed draft";
+        body.TenantId = "other-tenant";
+        body.CreatedBy = "forged-user";
+        body.PublishedBy = "forged-user";
+        body.PublishedAt = DateTime.UtcNow;
+        body.VersionState = PlanVersionState.Published;
+        body.VersionId = "forged-version";
+        body.VersionNumber = 99;
+
+        var updated = await service.UpdatePlanAsync(body, Tenant, "editor-2");
+
+        updated.Should().NotBeNull();
+        updated!.PlanName.Should().Be("Renamed draft");
+        updated.TenantId.Should().Be(Tenant);
+        updated.CreatedBy.Should().Be(Actor);
+        updated.PublishedBy.Should().BeNull();
+        updated.PublishedAt.Should().BeNull();
+        updated.VersionState.Should().Be(PlanVersionState.Draft);
+        updated.VersionId.Should().Be(draft.VersionId);
+        updated.VersionNumber.Should().Be(1);
+        repo.Docs.Should().ContainSingle(d => d.Id == draft.Id && d.VersionState == PlanVersionState.Draft);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task Plan_writes_require_an_actor(string actor)
+    {
+        var (service, _, _, _) = Build();
+
+        await FluentActions.Invoking(() => service.CreatePlanAsync(SamplePlan(), Tenant, actor))
+            .Should().ThrowAsync<ArgumentException>();
+        await FluentActions.Invoking(() => service.CreateDraftAsync(SamplePlan(), Tenant, actor))
+            .Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]

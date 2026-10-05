@@ -19,26 +19,27 @@ spec:
       command: [sh, -c]
       args:
       - |
-        echo "Testing mock microservices..."
+        set -euo pipefail
+        echo "Probing service liveness (/health/live needs no token)..."
         
         echo "1. Coverage Service:"
-        curl -s http://coverage-service.cloudhealthoffice/
+        curl --fail --show-error --silent --max-time 10 http://coverage-service.cloudhealthoffice/health/live
         echo ""
         
         echo "2. Provider Service:"
-        curl -s http://provider-service.cloudhealthoffice/
+        curl --fail --show-error --silent --max-time 10 http://provider-service.cloudhealthoffice/health/live
         echo ""
         
         echo "3. Claims Service:"
-        curl -s http://claims-service.cloudhealthoffice/
+        curl --fail --show-error --silent --max-time 10 http://claims-service.cloudhealthoffice/health/live
         echo ""
         
         echo "4. Authorization Service:"
-        curl -s http://authorization-service.cloudhealthoffice/
+        curl --fail --show-error --silent --max-time 10 http://authorization-service.cloudhealthoffice/health/live
         echo ""
         
         echo "5. Benefit Plan Service:"
-        curl -s http://benefit-plan-service.cloudhealthoffice/
+        curl --fail --show-error --silent --max-time 10 http://benefit-plan-service.cloudhealthoffice/health/live
         echo ""
         
-        echo "All services responding!"
+        echo "All services responding (each probe returned 2xx)."

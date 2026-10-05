@@ -102,26 +102,38 @@ public class EftControllerTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task GenerateNachaFile_DraftsHeldByAnotherRelease_Returns409()
+    {
+        _draftService.Setup(s => s.GenerateNachaFileForPendingDraftsAsync())
+            .ThrowsAsync(new NachaReleaseConflictException("already being released"));
+
+        var result = await _controller.GenerateNachaFile();
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
     #endregion
 
-    #region GenerateAndDownloadNachaFile
+    #region No file download
 
     [Fact]
-    public async Task GenerateAndDownloadNachaFile_Success_ReturnsFile()
+    public void NoEndpoint_DownloadsANachaFile_ExceptThePlatformAdminRetrieval()
     {
-        var nachaResult = new NachaFileResult
-        {
-            FileContent = "101 091000019...",
-            FileName = "ACH-2026-03.ach"
-        };
-        _draftService.Setup(s => s.GenerateNachaFileForPendingDraftsAsync())
-            .ReturnsAsync(nachaResult);
+        // The NACHA file goes from the service to the bank; the old
+        // generate-and-download endpoint is gone.
+        var actions = typeof(EftController).GetMethods()
+            .Where(m => m.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute), false).Length > 0)
+            .ToList();
+        actions.Select(a => a.Name).Should().NotContain("GenerateAndDownloadNachaFile");
+        var routes = actions.SelectMany(a => a.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute), false)
+            .Cast<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>().Select(h => h.Template ?? "")).ToList();
+        routes.Should().NotContain(r => r.Contains("download"));
 
-        var result = await _controller.GenerateAndDownloadNachaFile();
-
-        var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
-        fileResult.ContentType.Should().Be("text/plain");
-        fileResult.FileDownloadName.Should().Be("ACH-2026-03.ach");
+        var retrieve = typeof(EftController).GetMethod(nameof(EftController.RetrieveHeldNachaFile))!;
+        retrieve.GetCustomAttributes(typeof(CloudHealthOffice.Infrastructure.Security.RequirePermissionAttribute), false)
+            .Cast<CloudHealthOffice.Infrastructure.Security.RequirePermissionAttribute>()
+            .Single().Permission.Should().Be("platform:admin");
     }
 
     #endregion

@@ -111,7 +111,7 @@
                     </MudTd>
                     <MudTd DataLabel="API Key">
                         <MudText Typo="Typo.body2" Style="font-family: monospace; color: rgba(0, 255, 255, 0.7);">
-                            @(context.ApiKey.Length > 12 ? context.ApiKey[..12] + "..." : context.ApiKey)
+                            @(context.KeyPrefix)...
                         </MudText>
                     </MudTd>
                     <MudTd DataLabel="Usage">
@@ -371,7 +371,7 @@
         {
             try
             {
-                await PricingApiService.DeactivateApiKeyAsync(key.ApiKey);
+                await PricingApiService.DeactivateApiKeyAsync(key.KeyId);
                 Snackbar.Add($"API key for '{key.TenantName}' has been deactivated.", Severity.Success);
                 await LoadApiKeysAsync();
             }

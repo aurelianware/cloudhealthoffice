@@ -153,6 +153,17 @@ const usersData = [
     supervisorId: null,
     recentLogin: false
   },
+  {
+    // Approves and releases the payments Finance prepares (separation of duties)
+    idx: 12,
+    firstName: "Rachel",
+    lastName: "Nguyen",
+    email: "rachel.nguyen@demo.test",
+    role: "FinanceApprover",
+    department: "Finance",
+    supervisorId: null,
+    recentLogin: false
+  },
 
   // Administration
   {

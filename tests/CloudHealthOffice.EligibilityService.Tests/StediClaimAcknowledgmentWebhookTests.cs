@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -15,7 +16,7 @@ public class StediClaimAcknowledgmentWebhookTests : IClassFixture<EligibilityApi
     public StediClaimAcknowledgmentWebhookTests(EligibilityApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
     }
 
@@ -37,7 +38,9 @@ public class StediClaimAcknowledgmentWebhookTests : IClassFixture<EligibilityApi
             Content = new StringContent("{}", Encoding.UTF8, "application/json")
         };
         request.Headers.TryAddWithoutValidation("Authorization", "wrong");
-        var response = await _client.SendAsync(request);
+        // Stedi is an external caller: it presents its webhook credential, never a CHO token.
+        using var stedi = _factory.CreateClient();
+        var response = await stedi.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -61,7 +64,9 @@ public class StediClaimAcknowledgmentWebhookTests : IClassFixture<EligibilityApi
                 Encoding.UTF8, "application/json")
         };
         request.Headers.TryAddWithoutValidation("Authorization", "test-webhook-secret");
-        var response = await _client.SendAsync(request);
+        // Stedi is an external caller: it presents its webhook credential, never a CHO token.
+        using var stedi = _factory.CreateClient();
+        var response = await stedi.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.False(doc.RootElement.GetProperty("ignored").GetBoolean());

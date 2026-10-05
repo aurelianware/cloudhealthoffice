@@ -1,5 +1,6 @@
 using ClaimsService.Models.Migrations;
 using ClaimsService.Services.Migrations;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -13,7 +14,9 @@ namespace ClaimsService.Controllers;
 /// (<c>/tenantId</c>) — capability 5.1b.
 ///
 /// <para>
-/// Authorization is layered: the deployment layer (NetworkPolicy /
+/// Authorization is layered: the route needs <c>platform:admin</c> (the
+/// migration copies every tenant's claims, so no tenant-scoped claims
+/// permission is enough); the deployment layer (NetworkPolicy /
 /// gateway ACL) is the load-bearing control, and the
 /// <see cref="ClaimMigrationOptions.MigrationsEnabled"/> flag is a
 /// defence-in-depth tripwire. When the flag is false the controller
@@ -32,6 +35,7 @@ namespace ClaimsService.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/admin/claims/cosmos-migration")]
+[RequirePermission(ClaimsPermissions.PlatformAdmin)]
 public sealed class AdminMigrationController : ControllerBase
 {
     private readonly IClaimMigrationService _migration;
@@ -89,7 +93,8 @@ public sealed class AdminMigrationController : ControllerBase
             });
         }
 
-        request.ActorId ??= ResolveActorId();
+        // The actor is the authenticated caller, never a body-supplied ActorId.
+        request.ActorId = ResolveActorId();
         request.CorrelationId ??= HttpContext.TraceIdentifier;
 
         _logger.LogInformation(
@@ -141,11 +146,8 @@ public sealed class AdminMigrationController : ControllerBase
 
     private string ResolveActorId()
     {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "admin:claims-cosmos-migration";
+        var sub = HttpContext.User?.FindFirst(ChoClaimTypes.Subject)?.Value;
+        return string.IsNullOrEmpty(sub) ? "admin:claims-cosmos-migration" : sub;
     }
 
     private static string Sanitize(string? value) =>

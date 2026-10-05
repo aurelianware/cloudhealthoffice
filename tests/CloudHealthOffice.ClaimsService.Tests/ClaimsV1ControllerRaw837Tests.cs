@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -36,7 +37,7 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
         _factory = factory;
         _service = factory.SubmissionService;
         _transactions = factory.ImportTransactionRepository;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
         _service.ClearSubstitute();
@@ -168,20 +169,17 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
     }
 
     [Fact]
-    public async Task ListImportTransactions_NoTenantHeader_FallsBackToDefaultTenant()
+    public async Task ListImportTransactions_NoTenantOrToken_Returns401_NoDefaultTenant()
     {
-        // Claims-service's tenant middleware runs in lenient mode
-        // (RequireTenantId=false) — a missing header resolves to
-        // "default-tenant" rather than blocking the request, same as
-        // SearchMemberClaims's existing TryGetTenantId() usage in this
-        // controller. TryGetTenantId() only returns empty when the
-        // middleware itself is configured strict, which this service isn't.
+        // The local tenant middleware used to resolve a missing header to
+        // "default-tenant" and list that tenant's imports. The tenant now
+        // comes only from the token, and there is no default.
         var client = _factory.CreateClient();
 
         var response = await client.GetAsync("/api/v1/claims/import-transactions");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        await _transactions.Received(1).ListRecentAsync("default-tenant", 100);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await _transactions.DidNotReceiveWithAnyArgs().ListRecentAsync(default!, default);
     }
 
     [Fact]

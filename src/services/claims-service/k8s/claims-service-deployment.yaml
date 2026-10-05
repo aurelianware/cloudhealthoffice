@@ -1,3 +1,15 @@
+# Workload identity for claims-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:claims-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claims-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<CLAIMS_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -32,18 +44,26 @@ spec:
   template:
     metadata:
       labels:
+        azure.workload.identity/use: "true"
         app: claims-service
         tier: backend
     spec:
+      serviceAccountName: claims-service-sa
       containers:
       - name: claims-service
         image: clouhealthoffice.azurecr.io/cloudhealthoffice-claims-service:latest
         imagePullPolicy: IfNotPresent
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
         env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "claims-service"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:

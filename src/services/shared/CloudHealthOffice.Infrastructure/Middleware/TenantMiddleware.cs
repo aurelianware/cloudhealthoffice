@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.Security.Claims;
 using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Models;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -9,11 +9,27 @@ using Microsoft.Extensions.Logging;
 namespace CloudHealthOffice.Infrastructure.Middleware;
 
 /// <summary>
-/// Extracts tenant context from JWT claims or HTTP headers for multi-tenant isolation.
-/// Supports both strict (401 on missing) and lenient (default-tenant fallback) modes.
+/// Establishes the tenant a request acts within, from the validated token only.
+///
+/// TENANT IS AUTHORITY. The only statement of tenancy CHO accepts is a tenant
+/// claim inside a token whose signature, issuer, audience and lifetime the
+/// authentication handler has already validated. Specifically:
+///
+///   * A token with no tenant claim is rejected with 401. There is no
+///     "default-tenant" fallback and no header fallback.
+///   * An <c>X-Tenant-ID</c> header is tolerated only as an echo of the token's
+///     tenant. A header that names a different tenant is rejected with 403 and
+///     logged, because the request's own two statements of authority disagree.
+///   * <c>X-Dev-Tenant-ID</c> is never honoured.
+///
+/// Unauthenticated requests are passed through untouched so the authorization
+/// middleware (which runs next) can issue the 401 challenge, or serve an
+/// endpoint explicitly marked <c>[AllowAnonymous]</c>.
 /// </summary>
 public class TenantMiddleware
 {
+    public const string TenantHeaderName = "X-Tenant-ID";
+
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantMiddleware> _logger;
     private readonly TenantMiddlewareOptions _options;
@@ -38,59 +54,51 @@ public class TenantMiddleware
             return;
         }
 
-        var tenantId = ExtractTenantId(context);
-
-        if (string.IsNullOrEmpty(tenantId))
+        if (context.User?.Identity?.IsAuthenticated != true)
         {
-            if (_options.RequireTenantId)
-            {
-                _logger.LogWarning("Missing tenant context for {Path}", SanitizeForLog(context.Request.Path));
-                context.Response.StatusCode = 401;
-                context.Response.ContentType = "application/json";
-                var error = new StandardErrorResponse
-                {
-                    Code = "TENANT_CONTEXT_MISSING",
-                    Message = "Missing tenant context. Provide X-Tenant-ID header or valid JWT with tenant claim.",
-                    TraceId = Activity.Current?.Id ?? context.TraceIdentifier
-                };
-                await context.Response.WriteAsync(JsonSerializer.Serialize(error, JsonOptions));
-                return;
-            }
-
-            tenantId = _options.DefaultTenantId;
-            _logger.LogWarning("No TenantId found, using default: {TenantId}", SanitizeForLog(tenantId));
+            // No identity, so no tenant. Authorization decides whether the
+            // endpoint may be served anonymously; it never gets a tenant.
+            await _next(context);
+            return;
         }
 
-        context.Items["TenantId"] = tenantId;
-        _logger.LogDebug("Tenant context set: {TenantId}", SanitizeForLog(tenantId));
+        var tokenTenant = ResolveTokenTenant(context, _options);
+        var headerTenant = context.Request.Headers.TryGetValue(TenantHeaderName, out var header)
+            ? header.FirstOrDefault()
+            : null;
 
+        if (string.IsNullOrEmpty(tokenTenant))
+        {
+            _logger.LogWarning(
+                "Authenticated request without a tenant claim rejected for {Path}",
+                SanitizeForLog(context.Request.Path));
+            await WriteErrorAsync(context, StatusCodes.Status401Unauthorized, "TENANT_CONTEXT_MISSING",
+                "The access token does not carry a tenant claim.");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(headerTenant) &&
+            !string.Equals(headerTenant, tokenTenant, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Tenant conflict rejected: token asserts {TokenTenant}, {Header} header asserts {HeaderTenant}, subject {Subject}, path {Path}",
+                SanitizeForLog(tokenTenant), TenantHeaderName, SanitizeForLog(headerTenant),
+                SanitizeForLog(context.User.FindFirst(ChoClaimTypes.Subject)?.Value),
+                SanitizeForLog(context.Request.Path));
+            await WriteErrorAsync(context, StatusCodes.Status403Forbidden, "TENANT_CONTEXT_CONFLICT",
+                "The tenant header does not match the tenant in the access token.");
+            return;
+        }
+
+        context.Items["TenantId"] = tokenTenant;
         await _next(context);
     }
 
-    private string? ExtractTenantId(HttpContext context)
+    internal static string? ResolveTokenTenant(HttpContext context, TenantMiddlewareOptions options)
     {
-        // 1. Try JWT claims (production)
-        if (context.User?.Identity?.IsAuthenticated == true)
+        foreach (var claimType in options.TenantClaimTypes)
         {
-            var tenantClaim = context.User.FindFirst("tenant_id")?.Value
-                           ?? context.User.FindFirst("extension_TenantId")?.Value
-                           ?? context.User.FindFirst(ClaimTypes.GroupSid)?.Value;
-
-            if (!string.IsNullOrEmpty(tenantClaim))
-                return tenantClaim;
-        }
-
-        // 2. Fallback to headers (development/testing)
-        if (context.Request.Headers.TryGetValue("X-Tenant-ID", out var headerValue))
-        {
-            var value = headerValue.FirstOrDefault();
-            if (!string.IsNullOrEmpty(value))
-                return value;
-        }
-
-        if (context.Request.Headers.TryGetValue("X-Dev-Tenant-ID", out var devHeaderValue))
-        {
-            var value = devHeaderValue.FirstOrDefault();
+            var value = context.User.FindFirst(claimType)?.Value;
             if (!string.IsNullOrEmpty(value))
                 return value;
         }
@@ -108,6 +116,19 @@ public class TenantMiddleware
         return false;
     }
 
+    private static async Task WriteErrorAsync(HttpContext context, int status, string code, string message)
+    {
+        context.Response.StatusCode = status;
+        context.Response.ContentType = "application/json";
+        var error = new StandardErrorResponse
+        {
+            Code = code,
+            Message = message,
+            TraceId = Activity.Current?.Id ?? context.TraceIdentifier
+        };
+        await context.Response.WriteAsync(JsonSerializer.Serialize(error, JsonOptions));
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -122,7 +143,10 @@ public class TenantMiddleware
 public static class TenantMiddlewareExtensions
 {
     /// <summary>
-    /// Adds <see cref="TenantMiddleware"/> to the application pipeline.
+    /// Adds <see cref="TenantMiddleware"/> to the application pipeline. Must run
+    /// after <c>UseAuthentication()</c>; prefer
+    /// <see cref="ChoAuthenticationExtensions.UseChoAuthentication"/>, which
+    /// orders authentication, tenant resolution and authorization correctly.
     /// </summary>
     public static IApplicationBuilder UseTenantMiddleware(this IApplicationBuilder builder)
         => builder.UseMiddleware<TenantMiddleware>();
@@ -134,26 +158,23 @@ public static class TenantMiddlewareExtensions
 public class TenantMiddlewareOptions
 {
     /// <summary>
-    /// If true, returns 401 when no tenant ID can be resolved. If false, falls back to <see cref="DefaultTenantId"/>.
-    /// Default: false (lenient mode for backward compatibility).
+    /// Token claim types that carry the CHO tenant, in precedence order.
     /// </summary>
-    public bool RequireTenantId { get; set; } = false;
+    public List<string> TenantClaimTypes { get; set; } =
+    [
+        ChoClaimTypes.TenantId,
+        "extension_TenantId"
+    ];
 
     /// <summary>
-    /// Fallback tenant ID when <see cref="RequireTenantId"/> is false and no tenant is found.
-    /// Default: "default-tenant".
-    /// </summary>
-    public string DefaultTenantId { get; set; } = "default-tenant";
-
-    /// <summary>
-    /// Request paths that bypass tenant resolution (e.g., health checks, swagger).
-    /// Default: /health, /ready, /live, /swagger.
+    /// Request paths that bypass tenant resolution and authorization
+    /// (liveness/readiness probes and the Prometheus scrape endpoint).
     /// </summary>
     public List<string> PassthroughPaths { get; set; } =
     [
         "/health",
         "/ready",
         "/live",
-        "/swagger"
+        "/metrics"
     ];
 }

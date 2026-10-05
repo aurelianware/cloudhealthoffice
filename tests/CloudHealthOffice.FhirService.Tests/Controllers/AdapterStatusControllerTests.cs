@@ -34,6 +34,24 @@ public class AdapterStatusControllerTests : IClassFixture<FhirTestWebAppFactory>
     }
 
     [Fact]
+    public async Task AdapterStatus_is_anonymous_so_it_names_no_tenant_and_no_backing_services()
+    {
+        var client = _factory.CreateClient();
+        var body = await client.GetStringAsync("/fhir/r4/adapter-status");
+
+        using var json = JsonDocument.Parse(body);
+        var root = json.RootElement;
+        (root.TryGetProperty("tenantId", out var tenant) && tenant.ValueKind != JsonValueKind.Null)
+            .Should().BeFalse("the anonymous report does not carry the configured tenant id");
+        foreach (var resource in root.GetProperty("resources").EnumerateArray())
+        {
+            (resource.TryGetProperty("source", out var source) && source.ValueKind != JsonValueKind.Null)
+                .Should().BeFalse("the anonymous report does not name backing services");
+        }
+        body.Should().NotContain("-service").And.NotContain("Adapter\"");
+    }
+
+    [Fact]
     public async Task Metadata_carries_adapter_label_headers()
     {
         var client = _factory.CreateClient();

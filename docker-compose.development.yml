@@ -185,6 +185,7 @@ services:
     environment:
       <<: *common-env
       ClaimsService__BaseUrl: http://claims-service:8080
+      TradingPartnerService__BaseUrl: http://trading-partner-service:8080
     depends_on:
       mongodb:
         condition: service_healthy
@@ -494,6 +495,8 @@ services:
       Services__PaymentService: http://payment-service:8080/api
       Services__EligibilityService: http://eligibility-service:8080/api
       Services__TenantService: http://tenant-service:8080/api
+      Services__TokenService: ${PORTAL_TOKEN_SERVICE_URL:-http://token-service:8080}
+      TokenService__Scope: ${PORTAL_TOKEN_SERVICE_SCOPE:-api://cfada1ac-f251-48ea-9330-39212aa4c862/Cho.Token}
       Services__CoverageService: http://coverage-service:8080/api
       Services__RfaiService: http://rfai-service:8080/api
       Services__AppealsService: http://appeals-service:8080/api

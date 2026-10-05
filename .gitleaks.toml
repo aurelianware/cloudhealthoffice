@@ -104,4 +104,16 @@ useDefault = true
     '''mapX12\d+To\w+''',
     # Stripe price IDs are public identifiers, not secrets
     '''price_[a-zA-Z0-9]+''',
+    # The CHO development signing key: base64 of
+    # "CHO-development-only-signing-key-do-not-use-2026". Public by design
+    # (ChoDevelopmentAuth.SymmetricKey); every service refuses symmetric keys
+    # on hosts other than Development/Testing.
+    '''^Q0hPLWRldmVsb3BtZW50LW9ubHktc2lnbmluZy1rZXktZG8tbm90LXVzZS0yMDI2$''',
+    # Synthetic Pricing API keys in tests (sequential hex digits)
+    '''^cho_0123456789abcdef0123456789abcdef$''',
+    '''^cho_fedcba9876543210fedcba9876543210$''',
+    # Synthetic Stripe webhook secret in tenant-service tests
+    '''^whsec_test_0123456789abcdef$''',
+    # A .NET type name the generic-api-key rule picks up after a "key" parameter
+    '''^X509Certificate2$''',
   ]

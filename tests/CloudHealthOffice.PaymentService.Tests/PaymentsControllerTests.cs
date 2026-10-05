@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -30,7 +31,8 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         _factory = factory;
         _repo = factory.PaymentRepository;
         _eraGenerator = factory.EraGeneratorService;
-        _client = factory.CreateClient();
+        // Development-signed user token (TenantAdmin, subject dev-user) for the X-Tenant-ID tenant.
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
     }
 
@@ -271,7 +273,9 @@ public class PaymentsControllerTests : IClassFixture<PaymentApiFactory>
         Assert.NotNull(updated);
         Assert.Equal(PaymentStatus.Posted, updated.Status);
         Assert.NotNull(updated.PostedAt);
-        Assert.Equal("admin@test.com", updated.PostedBy);
+        // The poster is the token subject (ChoDevelopmentTokenHandler's dev-user);
+        // the body's PostedBy is ignored.
+        Assert.Equal("dev-user", updated.PostedBy);
     }
 
     [Fact]

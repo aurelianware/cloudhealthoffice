@@ -1,3 +1,4 @@
+using CloudHealthOffice.PaymentService.Tests.Security;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Http;
@@ -34,6 +35,8 @@ public class PaymentRunBatchedEndToEndTests
     private readonly StubHttpHandler _claimsHandler = new();
     private readonly IHttpClientFactory _httpFactory = Substitute.For<IHttpClientFactory>();
     private readonly IConfiguration _configuration;
+    private readonly TestActor _actor = TestActor.Approver();
+    private readonly InMemoryClaimReservationRepository _reservations = new();
 
     public PaymentRunBatchedEndToEndTests()
     {
@@ -73,7 +76,10 @@ public class PaymentRunBatchedEndToEndTests
         _tpClient,
         _httpFactory,
         NullLogger<PaymentRunService>.Instance,
-        _configuration);
+        _configuration,
+        _actor,
+        _actor.SeparationOfDuties(),
+        _reservations);
 
     [Fact]
     public async Task EndToEnd_50ClaimsAcross3Partners_ProducesThreeEnvelopesAndFinalizesAll()
@@ -249,31 +255,5 @@ public class PaymentRunBatchedEndToEndTests
         Assert.Contains("CAS*PR*1*200.00~", envelope.EdiContent); // header CAS for paid
         Assert.Contains("CAS*CO*236*0.00*M86~", envelope.EdiContent); // line CAS for denied (suggested CARC + RARC)
         Assert.Equal(2, envelope.ClaimCount);
-    }
-
-    // ── Test infrastructure ────────────────────────────────────────────
-
-    private class InMemoryPaymentRepository : IPaymentRepository
-    {
-        private readonly List<Payment> _items = new();
-        public Task<Payment?> GetByIdAsync(string id) => Task.FromResult<Payment?>(_items.FirstOrDefault(p => p.Id == id));
-        public Task<Payment?> GetByCheckNumberAsync(string checkNumber) => Task.FromResult<Payment?>(_items.FirstOrDefault(p => p.CheckNumber == checkNumber));
-        public Task<IEnumerable<Payment>> GetByClaimIdAsync(string claimId) => Task.FromResult<IEnumerable<Payment>>(_items.Where(p => p.ClaimPayments.Any(cp => cp.ClaimId == claimId)).ToList());
-        public Task<IEnumerable<Payment>> SearchAsync(DateTime? paymentDateFrom, DateTime? paymentDateTo, string? payerId, PaymentStatus? status, int page = 1, int pageSize = 50) => Task.FromResult<IEnumerable<Payment>>(_items.ToList());
-        public Task<PaymentsSummary> GetPaymentsSummaryAsync(DateTime from, DateTime to) => Task.FromResult(new PaymentsSummary());
-        public Task<Payment> CreateAsync(Payment payment) { _items.Add(payment); return Task.FromResult(payment); }
-        public Task<Payment> UpdateAsync(Payment payment) { _items.RemoveAll(p => p.Id == payment.Id); _items.Add(payment); return Task.FromResult(payment); }
-        public Task DeleteAsync(string id) { _items.RemoveAll(p => p.Id == id); return Task.CompletedTask; }
-    }
-
-    private class InMemoryPaymentRunRepository : IPaymentRunRepository
-    {
-        private readonly List<PaymentRun> _items = new();
-        public Task<PaymentRun?> GetByIdAsync(string id) => Task.FromResult<PaymentRun?>(_items.FirstOrDefault(r => r.Id == id));
-        public Task<PaymentRun?> GetByPaymentRunNumberAsync(string paymentRunNumber) => Task.FromResult<PaymentRun?>(_items.FirstOrDefault(r => r.PaymentRunNumber == paymentRunNumber));
-        public Task<IEnumerable<PaymentRun>> SearchAsync(DateTime from, DateTime to, PaymentRunStatus? status = null) => Task.FromResult<IEnumerable<PaymentRun>>(_items.ToList());
-        public Task<PaymentRun> CreateAsync(PaymentRun run) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(run); return Task.FromResult(run); }
-        public Task<PaymentRun> UpdateAsync(PaymentRun run) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(run); return Task.FromResult(run); }
-        public Task DeleteAsync(string id) { _items.RemoveAll(r => r.Id == id); return Task.CompletedTask; }
     }
 }

@@ -118,7 +118,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped",
             result.SuccessCount, result.FailedCount, result.SkippedCount);
 
-        await RecordRunAsync(tenantId, result);
+        await RecordRunAsync(tenantId, enrollment.ActorId, result);
 
         return result;
     }
@@ -130,7 +130,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// moment of the API call. Failure here must not fail the import itself;
     /// same posture as <see cref="RecordTransactionAsync"/>.
     /// </summary>
-    private async Task RecordRunAsync(string tenantId, ImportResult result)
+    private async Task RecordRunAsync(string tenantId, string? actorId, ImportResult result)
     {
         try
         {
@@ -139,6 +139,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 TenantId = tenantId,
                 BatchId = result.BatchId,
                 FileName = result.FileName,
+                ActorId = actorId,
                 StartedAt = result.StartedAt,
                 CompletedAt = result.CompletedAt,
                 SuccessCount = result.SuccessCount,
@@ -225,6 +226,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             MaintenanceType = memberEnrollment.MaintenanceType,
             MaintenanceReason = memberEnrollment.MaintenanceReason,
             Source = batch.ManualSource ? "manual" : "edi834",
+            ActorId = batch.ActorId,
             CorrelationId = batch.FileName,
             Payload = payload,
             RawSegment = rawSegment

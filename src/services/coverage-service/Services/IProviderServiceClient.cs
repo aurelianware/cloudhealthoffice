@@ -15,8 +15,13 @@ namespace CoverageService.Services;
 /// </summary>
 public interface IProviderServiceClient
 {
-    /// <summary>Look up a provider by NPI. Returns null on 404.</summary>
-    Task<ProviderDto?> GetByNpiAsync(string npi, CancellationToken ct = default);
+    /// <summary>
+    /// Look up a provider by NPI in <paramref name="tenantId"/>. Returns null on
+    /// 404 (or when provider-service is unreachable); throws
+    /// <see cref="ProviderDirectoryUnavailableException"/> when it refuses or fails. The tenant is sent as <c>X-Tenant-ID</c>, so a call with no inbound
+    /// caller (the panel reconciliation job) carries a service token for it.
+    /// </summary>
+    Task<ProviderDto?> GetByNpiAsync(string tenantId, string npi, CancellationToken ct = default);
 }
 
 /// <summary>

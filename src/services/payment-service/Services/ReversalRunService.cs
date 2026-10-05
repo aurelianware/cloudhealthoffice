@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using PaymentService.Models;
 using PaymentService.Repositories;
 using System.Net;
@@ -24,6 +25,14 @@ public interface IReversalRunService
 {
     Task<ReversalRun> CreateReversalRunAsync(ReversalRunCriteria criteria, string? createdBy = null, string? description = null);
     Task<ReversalRun> ExecuteReversalRunAsync(string reversalRunId);
+
+    /// <summary>
+    /// Retries the claims-service void for the predecessor claims an executed
+    /// reversal run recouped but claims-service has not voided
+    /// (<see cref="ReversalRun.PendingVoidClaimIds"/>). Idempotent in
+    /// claims-service (AlreadyVoided is 200); creates no reversal payment.
+    /// </summary>
+    Task<ReversalRun> RetryVoidsAsync(string reversalRunId);
     Task<ReversalRun> GetReversalRunAsync(string reversalRunId);
     Task<IEnumerable<ReversalRun>> GetReversalRunsAsync(DateTime? from = null, DateTime? to = null);
     Task CancelReversalRunAsync(string reversalRunId);
@@ -36,9 +45,12 @@ public class ReversalRunService : IReversalRunService
     private readonly IBatchEraGeneratorService _batchEraGenerator;
     private readonly IEraEnvelopeRepository _envelopeRepository;
     private readonly ITradingPartnersClient _tradingPartnersClient;
-    private readonly HttpClient _claimsServiceClient;
+    private readonly IClaimsServiceClient _claimsService;
     private readonly ILogger<ReversalRunService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
+    private readonly IRunSeparationOfDuties _separationOfDuties;
+    private readonly IClaimReservationRepository _reservations;
 
     public ReversalRunService(
         IPaymentRepository paymentRepository,
@@ -48,14 +60,20 @@ public class ReversalRunService : IReversalRunService
         ITradingPartnersClient tradingPartnersClient,
         IHttpClientFactory httpClientFactory,
         ILogger<ReversalRunService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ICurrentActor actor,
+        IRunSeparationOfDuties separationOfDuties,
+        IClaimReservationRepository reservations)
     {
+        _reservations = reservations;
         _paymentRepository = paymentRepository;
         _reversalRunRepository = reversalRunRepository;
         _batchEraGenerator = batchEraGenerator;
         _envelopeRepository = envelopeRepository;
         _tradingPartnersClient = tradingPartnersClient;
-        _claimsServiceClient = httpClientFactory.CreateClient("ClaimsService");
+        _claimsService = new ClaimsServiceClient(httpClientFactory);
+        _actor = actor;
+        _separationOfDuties = separationOfDuties;
         _logger = logger;
         _configuration = configuration;
     }
@@ -85,11 +103,26 @@ public class ReversalRunService : IReversalRunService
             throw new InvalidOperationException($"Reversal run {reversalRunId} not found");
 
         if (run.Status != ReversalRunStatus.Pending)
-            throw new InvalidOperationException($"Reversal run {reversalRunId} is not in Pending status");
+            throw new RunConflictException($"Reversal run {reversalRunId} is not in Pending status");
 
+        // Executing recoups payments and voids claims: a user other than the
+        // run's creator, never a service token (SeparationOfDutiesException -> 403).
+        var approver = _separationOfDuties.EnsureMayRelease(
+            "reversal run", run.ReversalRunNumber, run.CreatedBy);
+
+        // Approved: claims-service and trading-partner calls for this run carry
+        // payment-service's service token for the run's tenant; the approver is
+        // recorded on the run, the reversal payments, the 835s and the void reason.
+        using var grant = RunExecutionGrant.Open(run.TenantId, run.Id, approver);
+
+        // Pending -> Running in one conditional write; a second executor gets 409.
+        var startedAt = DateTime.UtcNow;
+        if (!await _reversalRunRepository.TryStartAsync(run.Id, approver, startedAt))
+            throw new RunConflictException(
+                $"Reversal run {reversalRunId} is already being executed or has been executed");
         run.Status = ReversalRunStatus.Running;
-        run.ExecutionStartedAt = DateTime.UtcNow;
-        await _reversalRunRepository.UpdateAsync(run);
+        run.ExecutedBy = approver;
+        run.ExecutionStartedAt = startedAt;
 
         try
         {
@@ -97,7 +130,7 @@ public class ReversalRunService : IReversalRunService
             //          claims-service. The 5.12a list endpoint already
             //          supports the filter shape we need (status +
             //          createdBy + date range + pagination).
-            var adjustments = await FetchPendingReversalAdjustmentsAsync(run.Criteria);
+            var adjustments = await FetchPendingReversalAdjustmentsAsync(run.TenantId, run.Criteria);
 
             _logger.LogInformation(
                 "Reversal run {ReversalRunNumber} found {Count} PendingReversal adjustments",
@@ -123,7 +156,7 @@ public class ReversalRunService : IReversalRunService
             foreach (var adj in adjustments)
             {
                 if (predecessors.ContainsKey(adj.PredecessorClaimId)) continue;
-                var pred = await FetchClaimAsync(adj.PredecessorClaimId);
+                var pred = await FetchClaimAsync(run.TenantId, adj.PredecessorClaimId);
                 if (pred is null)
                 {
                     run.Warnings.Add($"Predecessor claim {adj.PredecessorClaimId} not found; adjustment {adj.Id} skipped");
@@ -165,14 +198,45 @@ public class ReversalRunService : IReversalRunService
                 environment,
                 run.Warnings);
 
+            // Step 3b — never reverse a claim twice. payment-service's own
+            //           records are authoritative: a predecessor that already
+            //           has a reversal payment (its void may have failed, so
+            //           its adjustment is still PendingReversal) gets no new
+            //           reversal payment; a pending void is retried instead.
+            var alreadyReversed = new HashSet<string>(
+                await _paymentRepository.GetClaimIdsWithPaymentAsync(
+                    predecessors.Keys.ToList(), reversal: true) ?? Array.Empty<string>(),
+                StringComparer.Ordinal);
+            var reversedThisRun = new HashSet<string>(StringComparer.Ordinal);
+
             // Step 4 — construct one reversal Payment per adjustment;
             //          group by trading partner for envelope generation.
             var eraInputs = new List<EraPaymentInput>();
-            var adjustmentsToVoid = new List<(ClaimAdjustmentDto Adjustment, ClaimDto Predecessor)>();
+            var adjustmentsToVoid = new List<(ClaimAdjustmentDto Adjustment, ClaimDto Predecessor, Payment Payment)>();
+            var issuedPayments = new List<Payment>();
             foreach (var adj in adjustments)
             {
                 if (!predecessors.TryGetValue(adj.PredecessorClaimId, out var pred))
                     continue;
+
+                if (alreadyReversed.Contains(pred.Id))
+                {
+                    run.AlreadyReversedClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) already has a reversal payment in payment-service; not reversed again");
+                    _logger.LogWarning(
+                        "Predecessor {ClaimId} already reversed in payment-service; adjustment {AdjustmentId} not reversed again by {ReversalRunNumber}",
+                        SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), run.ReversalRunNumber);
+                    await RetryPendingVoidForClaimAsync(pred.Id, adj, run);
+                    continue;
+                }
+
+                if (!reversedThisRun.Add(pred.Id))
+                {
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} appears in more than one adjustment; adjustment {adj.Id} not reversed again");
+                    continue;
+                }
 
                 var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
                 string? tradingPartnerId = null;
@@ -182,9 +246,39 @@ public class ReversalRunService : IReversalRunService
                     tradingPartnerId = partner.TradingPartnerId;
                 }
 
-                var checkNumber = $"R-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
-                var payment = await BuildReversalPaymentAsync(pred, run, tradingPartnerId, checkNumber);
+                // No trading partner, no reversal 835: not recouped. The
+                // adjustment stays PendingReversal for a later run.
+                if (string.IsNullOrEmpty(tradingPartnerId))
+                {
+                    run.NeedsTradingPartnerClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) not reversed: provider NPI {providerNpi} has no trading partner, so no reversal 835 can be sent");
+                    continue;
+                }
 
+                // One reversal per claim, even across concurrent runs.
+                var reservedNow = await _reservations.TryReserveAsync(new ClaimReservation
+                {
+                    TenantId = run.TenantId,
+                    Kind = ClaimReservationKind.Reversal,
+                    ClaimId = pred.Id,
+                    RunId = run.Id,
+                    RunNumber = run.ReversalRunNumber,
+                    ReservedBy = approver,
+                    ReservedAt = DateTime.UtcNow,
+                });
+                if (!reservedNow)
+                {
+                    run.AlreadyReversedClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) is already reserved for reversal by another run; not reversed again");
+                    continue;
+                }
+
+                var checkNumber = $"R-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
+                var payment = await BuildReversalPaymentAsync(pred, run, tradingPartnerId, checkNumber, approver);
+
+                issuedPayments.Add(payment);
                 run.PaymentIds.Add(payment.Id);
                 run.TotalReversalAmount += payment.TotalPaymentAmount;
 
@@ -196,12 +290,20 @@ public class ReversalRunService : IReversalRunService
                         Payment = payment,
                         IsReversal = true,
                     });
-                    adjustmentsToVoid.Add((adj, pred));
+                    adjustmentsToVoid.Add((adj, pred, payment));
                 }
                 else
                 {
                     run.Warnings.Add(
                         $"Reversal payment {payment.CheckNumber} for adjustment {adj.Id} skipped from envelope — no trading partner resolved");
+                    // Recouped all the same: never reversed again; the void
+                    // waits for an operator (POST /api/reversalruns/{id}/void).
+                    foreach (var cp in payment.ClaimPayments)
+                        cp.FinalizeError = "No trading partner resolved; no reversal 835 emitted; not voided";
+                    run.PendingVoidClaimIds.Add(pred.Id);
+                    run.Errors.Add(
+                        $"Predecessor {pred.Id} recouped by {payment.CheckNumber} but not voided: no trading partner resolved, no reversal 835 emitted");
+                    await SavePaymentStatusAsync(payment);
                 }
             }
 
@@ -226,12 +328,20 @@ public class ReversalRunService : IReversalRunService
                     TotalPaymentAmount = env.TotalPaymentAmount,
                     ControlNumber = env.ControlNumber,
                     ClaimIds = env.ClaimIds.ToList(),
+                    CreatedBy = approver,
                 });
                 run.EraEnvelopeIds.Add(record.Id);
                 foreach (var claimId in env.ClaimIds)
                 {
                     claimToEnvelopeId[claimId] = record.Id;
                 }
+            }
+
+            foreach (var payment in issuedPayments)
+            {
+                payment.EraEnvelopeId = payment.ClaimPayments
+                    .Select(cp => claimToEnvelopeId.TryGetValue(cp.ClaimId, out var envId) ? envId : null)
+                    .FirstOrDefault(id => id != null);
             }
 
             // Step 6 — call the 5.12b void endpoint per adjustment.
@@ -266,6 +376,50 @@ public class ReversalRunService : IReversalRunService
         }
     }
 
+    public async Task<ReversalRun> RetryVoidsAsync(string reversalRunId)
+    {
+        var run = await _reversalRunRepository.GetByIdAsync(reversalRunId);
+        if (run == null)
+            throw new InvalidOperationException($"Reversal run {reversalRunId} not found");
+
+        if (run.Status is not (ReversalRunStatus.Completed or ReversalRunStatus.Failed))
+            throw new InvalidOperationException(
+                $"Reversal run {reversalRunId} has not been executed; only an executed run's voids can be retried");
+
+        if (string.IsNullOrWhiteSpace(run.ExecutedBy))
+            throw new InvalidOperationException(
+                $"Reversal run {reversalRunId} records no approver; its voids cannot be retried");
+
+        using var grant = RunExecutionGrant.Open(run.TenantId, run.Id, run.ExecutedBy);
+
+        var voided = 0;
+        var stillPending = new List<string>();
+        foreach (var paymentId in run.PaymentIds)
+        {
+            var payment = await _paymentRepository.GetByIdAsync(paymentId);
+            if (payment == null || !payment.IsReversal)
+                continue;
+
+            var attempted = false;
+            foreach (var cp in payment.ClaimPayments.Where(cp => cp.FinalizedAt == null))
+            {
+                attempted = true;
+                if (await TryVoidAsync(cp, run, adjustmentId: null))
+                    voided++;
+                else
+                    stillPending.Add(cp.ClaimId);
+            }
+            if (attempted)
+                await SavePaymentStatusAsync(payment);
+        }
+
+        run.PendingVoidClaimIds = stillPending.Distinct(StringComparer.Ordinal).ToList();
+        run.Warnings.Add(
+            $"Voids retried by {_actor.UserId} at {DateTime.UtcNow:O}: {voided} claim(s) voided, " +
+            $"{run.PendingVoidClaimIds.Count} still pending; no reversal payment was created");
+        return await _reversalRunRepository.UpdateAsync(run);
+    }
+
     public async Task<ReversalRun> GetReversalRunAsync(string reversalRunId)
     {
         var run = await _reversalRunRepository.GetByIdAsync(reversalRunId);
@@ -291,12 +445,14 @@ public class ReversalRunService : IReversalRunService
             throw new InvalidOperationException("Cannot cancel a running reversal run");
 
         run.Status = ReversalRunStatus.Cancelled;
+        run.CancelledBy = _actor.UserId;
+        run.CancelledAt = DateTime.UtcNow;
         await _reversalRunRepository.UpdateAsync(run);
     }
 
     // ── Private helpers ────────────────────────────────────────────────
 
-    private async Task<List<ClaimAdjustmentDto>> FetchPendingReversalAdjustmentsAsync(ReversalRunCriteria criteria)
+    private async Task<List<ClaimAdjustmentDto>> FetchPendingReversalAdjustmentsAsync(string tenantId, ReversalRunCriteria criteria)
     {
         // Explicit-override path — operator hand-curated batch.
         if (criteria.AdjustmentIds is { Count: > 0 } explicitIds)
@@ -304,7 +460,7 @@ public class ReversalRunService : IReversalRunService
             var explicitMatches = new List<ClaimAdjustmentDto>();
             foreach (var id in explicitIds)
             {
-                var single = await FetchAdjustmentAsync(id);
+                var single = await FetchAdjustmentAsync(tenantId, id);
                 if (single != null && single.Status == ClaimAdjustmentDtoStatus.PendingReversal)
                     explicitMatches.Add(single);
             }
@@ -335,8 +491,7 @@ public class ReversalRunService : IReversalRunService
             if (criteria.AdjustmentDateTo.HasValue)
                 query.Add($"createdTo={criteria.AdjustmentDateTo.Value:O}");
 
-            var url = "/api/v1/adjustments?" + string.Join("&", query);
-            var response = await _claimsServiceClient.GetAsync(url);
+            var response = await _claimsService.ListAdjustmentsAsync(tenantId, string.Join("&", query));
             if (!response.IsSuccessStatusCode)
                 throw new InvalidOperationException(
                     $"claims-service GET /api/v1/adjustments returned {response.StatusCode}");
@@ -359,9 +514,9 @@ public class ReversalRunService : IReversalRunService
         return collected;
     }
 
-    private async Task<ClaimAdjustmentDto?> FetchAdjustmentAsync(string adjustmentId)
+    private async Task<ClaimAdjustmentDto?> FetchAdjustmentAsync(string tenantId, string adjustmentId)
     {
-        var response = await _claimsServiceClient.GetAsync($"/api/v1/adjustments/{adjustmentId}");
+        var response = await _claimsService.GetAdjustmentAsync(tenantId, adjustmentId);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         if (!response.IsSuccessStatusCode)
@@ -370,9 +525,9 @@ public class ReversalRunService : IReversalRunService
         return await response.Content.ReadFromJsonAsync<ClaimAdjustmentDto>();
     }
 
-    private async Task<ClaimDto?> FetchClaimAsync(string claimId)
+    private async Task<ClaimDto?> FetchClaimAsync(string tenantId, string claimId)
     {
-        var response = await _claimsServiceClient.GetAsync($"/api/claims/{claimId}");
+        var response = await _claimsService.GetClaimAsync(tenantId, claimId);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         if (!response.IsSuccessStatusCode)
@@ -431,7 +586,8 @@ public class ReversalRunService : IReversalRunService
         ClaimDto pred,
         ReversalRun run,
         string? tradingPartnerId,
-        string checkNumber)
+        string checkNumber,
+        string approver)
     {
         var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
         var originalApproved = pred.ApprovedAmount ?? pred.TotalChargeAmount;
@@ -461,7 +617,12 @@ public class ReversalRunService : IReversalRunService
             PayeeName = pred.ProviderName ?? providerNpi ?? "Provider",
             PayeeNPI = providerNpi,
             TradingPartnerId = tradingPartnerId,
-            Status = PaymentStatus.Posted,
+            // Recouped, not yet voided in claims-service; Posted once voided.
+            Status = PaymentStatus.PaidPendingFinalize,
+            PostedBy = approver,
+            PostedAt = DateTime.UtcNow,
+            RunId = run.Id,
+            RunNumber = run.ReversalRunNumber,
             IsReversal = true,
             ClaimPayments = new List<ClaimPayment>
             {
@@ -507,51 +668,112 @@ public class ReversalRunService : IReversalRunService
     }
 
     private async Task VoidPredecessorsAsync(
-        List<(ClaimAdjustmentDto Adjustment, ClaimDto Predecessor)> adjustmentsToVoid,
+        List<(ClaimAdjustmentDto Adjustment, ClaimDto Predecessor, Payment Payment)> adjustmentsToVoid,
         ReversalRun run,
         IReadOnlyDictionary<string, string> claimToEnvelopeId)
     {
-        foreach (var (adj, pred) in adjustmentsToVoid)
+        foreach (var (adj, pred, payment) in adjustmentsToVoid)
         {
             // Pull the envelope id we persisted for this claim so warning
             // messages and structured logs let operators trace which
-            // reversal envelope contained the claim being voided. The map
-            // is keyed by ClaimId; absence (rare — claim filtered out of
-            // envelope emission upstream) falls back to "<none>".
+            // reversal envelope contained the claim being voided.
             var envelopeId = claimToEnvelopeId.TryGetValue(pred.Id, out var envId) ? envId : "<none>";
-            try
-            {
-                var body = new ClaimVoidPostBody
-                {
-                    Reason = $"Reversed by ReversalRun {run.ReversalRunNumber} (adjustment {adj.Id})",
-                    ReversalRunId = run.Id,
-                };
-                var response = await _claimsServiceClient.PostAsJsonAsync(
-                    $"/api/claims/{pred.Id}/void", body);
-                if (response.IsSuccessStatusCode)
-                {
-                    run.AdjustmentIds.Add(adj.Id);
-                }
-                else
-                {
-                    var bodyText = await response.Content.ReadAsStringAsync();
-                    run.Warnings.Add(
-                        $"Void of predecessor {pred.Id} for adjustment {adj.Id} (envelope {envelopeId}) returned {(int)response.StatusCode}");
-                    _logger.LogWarning(
-                        "Void of predecessor {ClaimId} for adjustment {AdjustmentId} (envelope {EnvelopeId}) returned {Status}: {Body}",
-                        SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), SanitizeForLog(envelopeId),
-                        response.StatusCode, SanitizeForLog(bodyText));
-                }
-            }
-            catch (Exception ex)
+            var cp = payment.ClaimPayments.First(c => c.ClaimId == pred.Id);
+            if (!await TryVoidAsync(cp, run, adj.Id))
             {
                 run.Warnings.Add(
-                    $"Void of predecessor {pred.Id} for adjustment {adj.Id} (envelope {envelopeId}) threw: {ex.Message}");
-                _logger.LogError(ex,
-                    "Void of predecessor {ClaimId} for adjustment {AdjustmentId} (envelope {EnvelopeId}) threw",
-                    SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), SanitizeForLog(envelopeId));
+                    $"Void of predecessor {pred.Id} for adjustment {adj.Id} (envelope {envelopeId}) failed: {cp.FinalizeError}");
+                run.Errors.Add(
+                    $"Predecessor {pred.Id} recouped by {payment.CheckNumber} but claims-service did not void it ({cp.FinalizeError}); " +
+                    $"reversal payment is PaidPendingFinalize; retry with POST /api/reversalruns/{run.Id}/void");
+                run.PendingVoidClaimIds.Add(pred.Id);
+            }
+            await SavePaymentStatusAsync(payment);
+        }
+    }
+
+    /// <summary>
+    /// A later reversal run selected an adjustment whose predecessor an earlier
+    /// run already recouped. If that reversal's void is pending and its 835 was
+    /// emitted, void now (idempotent in claims-service); never a new reversal.
+    /// </summary>
+    private async Task RetryPendingVoidForClaimAsync(string claimId, ClaimAdjustmentDto adj, ReversalRun run)
+    {
+        var payments = await _paymentRepository.GetByClaimIdAsync(claimId) ?? Enumerable.Empty<Payment>();
+        foreach (var payment in payments.Where(p => p.IsReversal && !string.IsNullOrEmpty(p.EraEnvelopeId)))
+        {
+            var cp = payment.ClaimPayments.FirstOrDefault(c => c.ClaimId == claimId && c.FinalizedAt == null);
+            if (cp == null)
+                continue;
+
+            var ok = await TryVoidAsync(cp, run, adj.Id, payment.RunId);
+            await SavePaymentStatusAsync(payment);
+            run.Warnings.Add(ok
+                ? $"Predecessor {claimId}: pending void from reversal run {payment.RunNumber} completed"
+                : $"Predecessor {claimId}: pending void from reversal run {payment.RunNumber} failed again: {cp.FinalizeError}");
+
+            if (ok && !string.IsNullOrEmpty(payment.RunId) && payment.RunId != run.Id)
+            {
+                var original = await _reversalRunRepository.GetByIdAsync(payment.RunId);
+                if (original != null && original.PendingVoidClaimIds.Remove(claimId))
+                {
+                    original.Warnings.Add($"Predecessor {claimId} voided by reversal run {run.ReversalRunNumber} at {DateTime.UtcNow:O}");
+                    await _reversalRunRepository.UpdateAsync(original);
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// One POST /api/claims/{id}/void. claims-service has no actor field it
+    /// would trust from a caller; the approver goes into the void reason (its
+    /// audit trail) and the call itself carries payment-service's service token.
+    /// </summary>
+    private async Task<bool> TryVoidAsync(ClaimPayment cp, ReversalRun run, string? adjustmentId, string? reversalRunId = null)
+    {
+        try
+        {
+            var reason = adjustmentId != null
+                ? $"Reversed by ReversalRun {run.ReversalRunNumber} (adjustment {adjustmentId}); released by {run.ExecutedBy}"
+                : $"Reversed by ReversalRun {run.ReversalRunNumber}; released by {run.ExecutedBy}";
+            var body = new ClaimVoidPostBody
+            {
+                Reason = reason,
+                ReversalRunId = reversalRunId ?? run.Id,
+            };
+            var tenantId = RunExecutionGrant.Current?.TenantId ?? run.TenantId;
+            using var response = await _claimsService.VoidClaimAsync(tenantId, cp.ClaimId, body);
+            if (response.IsSuccessStatusCode)
+            {
+                cp.FinalizedAt = DateTime.UtcNow;
+                cp.FinalizeError = null;
+                if (adjustmentId != null)
+                    run.AdjustmentIds.Add(adjustmentId);
+                return true;
+            }
+
+            var bodyText = await response.Content.ReadAsStringAsync();
+            cp.FinalizeError = $"claims-service returned {(int)response.StatusCode}";
+            _logger.LogWarning(
+                "Void of predecessor {ClaimId} (adjustment {AdjustmentId}) returned {Status}: {Body}",
+                SanitizeForLog(cp.ClaimId), SanitizeForLog(adjustmentId), response.StatusCode, SanitizeForLog(bodyText));
+            return false;
+        }
+        catch (Exception ex)
+        {
+            cp.FinalizeError = $"void call threw: {ex.Message}";
+            _logger.LogError(ex, "Void of predecessor {ClaimId} (adjustment {AdjustmentId}) threw",
+                SanitizeForLog(cp.ClaimId), SanitizeForLog(adjustmentId));
+            return false;
+        }
+    }
+
+    private async Task SavePaymentStatusAsync(Payment payment)
+    {
+        payment.Status = payment.ClaimPayments.All(cp => cp.FinalizedAt != null)
+            ? PaymentStatus.Posted
+            : PaymentStatus.PaidPendingFinalize;
+        await _paymentRepository.UpdateAsync(payment);
     }
 
     private static string SanitizeForLog(string? value)

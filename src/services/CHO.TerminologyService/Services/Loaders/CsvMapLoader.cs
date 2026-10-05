@@ -33,7 +33,7 @@ public class CsvMapLoader : IMapLoader
         var result = new MapLoadResult();
         var entries = new List<ConceptMapEntry>();
 
-        var mapVersionId = $"{options.MapName}-{options.Version}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var mapVersionId = MapVersionIds.For(options);
 
         try
         {
@@ -126,7 +126,10 @@ public class CsvMapLoader : IMapLoader
                     TargetSystem = options.TargetSystem,
                     ImportedAt = DateTime.UtcNow,
                     IsActive = true,
-                    EntryCount = entries.Count
+                    EntryCount = entries.Count,
+                    // Override versions belong to their tenant; everything else is global.
+                    TenantId = options.IsOverride ? options.TenantId : null,
+                    ImportedBy = options.ImportedBy
                 };
 
                 if (!options.IsOverride)

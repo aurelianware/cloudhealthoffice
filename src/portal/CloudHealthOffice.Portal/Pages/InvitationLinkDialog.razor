@@ -1,0 +1,54 @@
+@using CloudHealthOffice.Portal.Services
+@inject IJSRuntime JS
+
+@* Shows an invitation link once. It cannot be retrieved again; resending issues a new one. *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Link" Class="mr-2" />
+            Invitation link for @Email
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            Copy this link and send it to @Email yourself (Cloud Health Office does not email it).
+            It is shown only now, works once, and expires on @ExpiresAt.ToLocalTime().ToString("MMM dd, yyyy HH:mm").
+            They must sign in as @Email to accept it.
+        </MudAlert>
+        <MudTextField T="string" Value="@Link" ReadOnly="true" Label="Invitation link" Variant="Variant.Outlined"
+                      data-testid="invite-link" />
+        @if (_copied)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Success">Copied.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="Copy" data-testid="invite-copy">Copy link</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Done</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string Link { get; set; } = string.Empty;
+    [Parameter] public string Email { get; set; } = string.Empty;
+    [Parameter] public DateTime ExpiresAt { get; set; }
+
+    private bool _copied;
+
+    private async Task Copy()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Link);
+            _copied = true;
+        }
+        catch (JSException)
+        {
+            // Clipboard not available; the link can still be selected and copied by hand.
+        }
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+}

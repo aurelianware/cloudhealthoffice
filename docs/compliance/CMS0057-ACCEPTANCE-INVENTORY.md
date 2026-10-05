@@ -82,7 +82,7 @@ FHIR / PAS $submit
   (throws; no fake SOAP). Replaces the PR #1143 `IAuthorizationAdapter`.
 - `Backends/AuthorizationBackendSelector.cs` — routes by
   `Cms0057:Authorization:OperatingMode`; no silent fallback.
-- `GET /api/authorizations/backend-status` reports the active mode/backend.
+- `GET /api/authorizations/backend-status` reports the active mode/backend to an authenticated CHO caller (anonymous callers get `status` only).
 
 The acceptance suite exercises the **real** `ChoAuthorizationBackend` against an
 in-memory repository *fixture* (test-only), so the production domain workflow —

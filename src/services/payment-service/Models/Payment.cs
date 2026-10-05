@@ -130,9 +130,14 @@ public class Payment
     public DateTime? ReconciledAt { get; set; }
 
     /// <summary>
-    /// User/system that posted the payment
+    /// User/system that posted the payment (token subject; never from a request body)
     /// </summary>
     public string? PostedBy { get; set; }
+
+    /// <summary>
+    /// User/system that reconciled the payment (token subject)
+    /// </summary>
+    public string? ReconciledBy { get; set; }
 
     /// <summary>
     /// Notes about payment or exceptions
@@ -155,6 +160,21 @@ public class Payment
     /// sets true.
     /// </summary>
     public bool IsReversal { get; set; } = false;
+
+    /// <summary>
+    /// The payment or reversal run that issued this payment (null for payments
+    /// recorded by hand). With <see cref="IsReversal"/> it tells which run kind.
+    /// </summary>
+    [StringLength(100)]
+    public string? RunId { get; set; }
+
+    /// <summary>The issuing run's number; sent to claims-service as the 835 control number on finalize.</summary>
+    [StringLength(50)]
+    public string? RunNumber { get; set; }
+
+    /// <summary>The 835 envelope this payment was emitted in (null when no trading partner resolved).</summary>
+    [StringLength(100)]
+    public string? EraEnvelopeId { get; set; }
 }
 
 /// <summary>
@@ -241,6 +261,19 @@ public class ClaimPayment
     /// </summary>
     [StringLength(10)]
     public string? RenderingProviderNPI { get; set; }
+
+    /// <summary>
+    /// When claims-service confirmed this claim's lifecycle step for the
+    /// issuing run: finalized as paid (payment run) or voided (reversal run).
+    /// Null while the step is pending: the payment exists and the claim is
+    /// paid (or recouped) as far as payment-service is concerned, but
+    /// claims-service has not recorded it yet. Retried idempotently, never by
+    /// issuing a new payment.
+    /// </summary>
+    public DateTime? FinalizedAt { get; set; }
+
+    /// <summary>Why the last finalize (or void) attempt for this claim did not succeed.</summary>
+    public string? FinalizeError { get; set; }
 }
 
 /// <summary>
@@ -432,7 +465,11 @@ public enum PaymentStatus
     Validated,      // Payment validated against claims
     Posted,         // Posted to patient accounts
     Reconciled,     // Reconciled with bank deposit
-    Exception       // Requires manual review
+    Exception,      // Requires manual review
+    // Issued by a payment run (or recouped by a reversal run) but claims-service
+    // has not yet finalized (or voided) every claim in it. The claims are never
+    // selected for payment again; the finalize is retried without a new payment.
+    PaidPendingFinalize
 }
 
 /// <summary>

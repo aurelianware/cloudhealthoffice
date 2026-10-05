@@ -24,6 +24,7 @@
 #   5022  RFAI                5023  FHIR                5024  Smart Auth
 #   5025  Risk Adjustment     5026  Encounter
 #   5027  Encounter Submission  5028  Claims Examiner (AI)
+#   5030  Token Service
 #   5080  Terminology
 #   27017 MongoDB             6379  Redis
 
@@ -186,6 +187,23 @@ services:
         condition: service_healthy
     profiles: [core]
 
+  # Exchanges the portal user's Entra ID access token for a short-lived CHO
+  # token (docs/security/portal-token-service.md). Development signs with the
+  # development key as cho-portal-dev, which local services already trust.
+  # Set TokenService__PlatformTenantId to your directory id to try platform admin.
+  token-service:
+    build:
+      context: .
+      dockerfile: src/services/token-service/Dockerfile
+    ports:
+      - "5030:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Services__TenantService=http://tenant-service:8080
+    depends_on:
+      - tenant-service
+    profiles: [core]
+
   reference-data-service:
     build:
       context: .
@@ -214,6 +232,7 @@ services:
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=PaymentDB
       - ClaimsService__BaseUrl=http://claims-service:8080
+      - TradingPartnerService__BaseUrl=http://trading-partner-service:8080
     depends_on:
       mongo:
         condition: service_healthy
@@ -330,6 +349,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - MongoDb__ConnectionString=mongodb://mongo:27017
       - MongoDb__DatabaseName=SmartAuthDB
+      # Must equal fhir-service's SmartAuth__Issuer above: tokens, discovery
+      # and JWKS metadata all name this issuer, whatever Host a request uses.
+      - SmartAuth__Issuer=http://smart-auth-service:8080
     depends_on:
       mongo:
         condition: service_healthy

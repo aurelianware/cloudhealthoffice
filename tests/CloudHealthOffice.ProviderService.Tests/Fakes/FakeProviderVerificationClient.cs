@@ -12,6 +12,7 @@ public sealed class FakeProviderVerificationClient : IProviderVerificationClient
 {
     public Dictionary<string, VerificationResult> Canned { get; } = new();
     public List<IReadOnlyList<string>> Calls { get; } = new();
+    public List<string> CallTenants { get; } = new();
 
     /// <summary>
     /// When true, <see cref="VerifyBatchAsync"/> returns no records (a
@@ -20,8 +21,9 @@ public sealed class FakeProviderVerificationClient : IProviderVerificationClient
     public bool SimulateOutage { get; set; }
 
     public Task<IReadOnlyList<VerificationResult>> VerifyBatchAsync(
-        IReadOnlyList<string> npis, CancellationToken ct = default)
+        string tenantId, IReadOnlyList<string> npis, CancellationToken ct = default)
     {
+        CallTenants.Add(tenantId);
         Calls.Add(npis.ToList());
         if (SimulateOutage)
         {

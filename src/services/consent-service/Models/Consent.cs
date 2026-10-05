@@ -75,15 +75,41 @@ public class Consent
     public DateTime? ExpiresAt { get; set; }
 
     /// <summary>
-    /// Name or identifier of the person granting the authorization.
+    /// Identifier of the party who CONSENTED: under 45 CFR 164.508 the
+    /// individual (the member) or their personal representative. Supplied in
+    /// the create request and checked against <see cref="GrantorType"/>; for
+    /// <see cref="ConsentGrantorType.Member"/> it must equal
+    /// <see cref="MemberId"/>. It is NOT the user who keyed the record in;
+    /// that is <see cref="RecordedBy"/>.
+    ///
+    /// A record with no <see cref="GrantorType"/> predates this split. Its
+    /// value may be a body-supplied grantor or the recording user, so treat it
+    /// as unverified.
     /// TODO(feature-5.18-followup): when feature 5.8 Personal Representative
     /// delegation lands, this may become a structured reference rather than
     /// a free string. Keeping as <c>string(200)</c> until the delegation model
-    /// exists — no relationship shim in this PR.
+    /// exists.
     /// </summary>
     [Required]
     [StringLength(200)]
     public string GrantedBy { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Who <see cref="GrantedBy"/> is: the member themself or a personal
+    /// representative. Required on every new consent. <c>null</c> only on
+    /// records written before the field existed; their consenting party is
+    /// unknown and is not inferred.
+    /// </summary>
+    public ConsentGrantorType? GrantorType { get; set; }
+
+    /// <summary>
+    /// The authenticated user who RECORDED the consent: the CHO token subject
+    /// (<c>ICurrentActor.UserId</c>) at creation, never a request-body value.
+    /// <c>null</c> only on records written before the field existed; for those
+    /// the genesis audit event's <c>ActorId</c> is the recorder.
+    /// </summary>
+    [StringLength(200)]
+    public string? RecordedBy { get; set; }
 
     // ── Encrypted at rest — never included in Kafka event payload ───────
 
@@ -202,6 +228,22 @@ public enum ConsentStatus
     Active = 2,
     Revoked = 3,
     Expired = 4
+}
+
+/// <summary>
+/// Who gave a consent: the individual, or a personal representative acting
+/// for them (45 CFR 164.508(c)(1)(vi), 164.502(g)).
+/// </summary>
+public enum ConsentGrantorType
+{
+    /// <summary>The member themself; <see cref="Consent.GrantedBy"/> is the member id.</summary>
+    Member = 1,
+
+    /// <summary>
+    /// A personal representative acting for the member;
+    /// <see cref="Consent.GrantedBy"/> identifies the representative.
+    /// </summary>
+    PersonalRepresentative = 2
 }
 
 /// <summary>

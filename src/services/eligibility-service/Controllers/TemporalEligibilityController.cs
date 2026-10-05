@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Middleware;
 using EligibilityService.Models;
 using EligibilityService.Services;
 
@@ -25,7 +26,7 @@ public class TemporalEligibilityController : ControllerBase
         _logger = logger;
     }
 
-    private string TenantId => HttpContext.Items["TenantId"]?.ToString() ?? string.Empty;
+    private string TenantId => HttpContext.GetTenantId();
 
     [HttpGet]
     [ProducesResponseType(typeof(TemporalEligibilityResult), StatusCodes.Status200OK)]

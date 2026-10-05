@@ -57,9 +57,9 @@ public sealed class NetworkTierBackfillRequest
     public List<NetworkTierBackfillMapping> Mappings { get; set; } = new();
 
     /// <summary>
-    /// Optional actor id (audit log only). Resolved from the request
-    /// principal at the controller boundary; defaults to a synthetic
-    /// label when no principal is available.
+    /// Actor id (audit log only). The controller overwrites it with the
+    /// authenticated token subject; a value supplied in the request body
+    /// is ignored.
     /// </summary>
     public string? ActorId { get; set; }
 
@@ -231,7 +231,7 @@ public sealed class NetworkTierBackfillService : INetworkTierBackfillService
                 continue;
             }
 
-            var organization = await _organizationLookup.GetOrganizationAsync(mapping.NetworkId, ct);
+            var organization = await _organizationLookup.GetOrganizationAsync(tenantId, mapping.NetworkId, ct);
             if (organization is null)
             {
                 RecordOutcome(tenantId, "unresolved", mapping, result, detail: "Organization not resolvable in provider-service.");

@@ -29,7 +29,12 @@ public sealed class RecordingPersonalRepEventPublisher : IPersonalRepEventPublis
             ToStatus: toStatus,
             AssociatedMemberIds: associatedMemberIds.ToList(),
             Actor: actor,
-            CorrelationId: correlationId));
+            CorrelationId: correlationId)
+        {
+            // The wire payload the real publisher would send.
+            Event = PersonalRepEventPublisher.BuildStatusChangedEvent(
+                rep, fromStatus, toStatus, associatedMemberIds, actor, correlationId)
+        });
         return Task.CompletedTask;
     }
 
@@ -59,7 +64,10 @@ public sealed class RecordingPersonalRepEventPublisher : IPersonalRepEventPublis
         PersonalRepStatus ToStatus,
         List<string> AssociatedMemberIds,
         string Actor,
-        string? CorrelationId);
+        string? CorrelationId)
+    {
+        public PersonalRepStatusChangedEventPayload? Event { get; init; }
+    }
 
     public sealed record AssociationCall(
         string PersonalRepId,

@@ -172,8 +172,17 @@ public class PlanDocumentLink
     [JsonPropertyName("displayName")]
     public string DisplayName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Null when the stored location failed the document location rule
+    /// (see <see cref="LocationBlocked"/>); render no link in that case.
+    /// </summary>
     [JsonPropertyName("location")]
-    public string Location { get; set; } = string.Empty;
+    public string? Location { get; set; } = string.Empty;
+
+    /// <summary>True when the stored location was withheld on read.</summary>
+    [JsonPropertyName("locationBlocked")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LocationBlocked { get; set; }
 
     [JsonPropertyName("contentType")]
     public string? ContentType { get; set; }

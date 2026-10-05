@@ -63,7 +63,11 @@ public sealed class PostgresCanonicalReferenceDataTests
                 AND to_regclass('public.canonical_reference_data_imports') IS NOT NULL
                 AND to_regclass('public.idx_canonical_reference_lookup') IS NOT NULL
                 AND (SELECT COUNT(*) FROM reference_data_schema_migrations
-                     WHERE migration_id = '20260814_001_canonical_reference_data') = 1;
+                     WHERE migration_id IN ('20260814_001_canonical_reference_data',
+                                            '20261004_002_import_ledger_tenant_scope_and_actor')) = 2
+                AND (SELECT COUNT(*) FROM information_schema.columns
+                     WHERE table_name = 'canonical_reference_data_imports'
+                       AND column_name IN ('tenant_scope', 'imported_by')) = 2;
             """;
         (await command.ExecuteScalarAsync()).Should().Be(true);
     }

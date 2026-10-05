@@ -6,16 +6,21 @@ for the full design write-up.
 
 ## Endpoints
 
-| Method | Route | Description |
-|---|---|---|
-| POST | `/api/v1/id-cards/orders` | Order (issue) a card |
-| GET  | `/api/v1/id-cards/{orderId}` | Order status |
-| POST | `/api/v1/id-cards/{cardId}/revoke` | Revoke an issued card |
-| GET  | `/api/v1/members/{memberId}/id-cards` | Card history |
-| POST | `/api/v1/id-cards/scan` | Scan QR (provider JWT + rate-limited) |
+| Method | Route | Description | Caller needs |
+|---|---|---|---|
+| POST | `/api/v1/id-cards/orders` | Order (issue) a card | CHO token, `members:write` |
+| GET  | `/api/v1/id-cards/{orderId}` | Order status | CHO token, `members:read` |
+| POST | `/api/v1/id-cards/{cardId}/revoke` | Revoke an issued card | CHO token, `members:write` |
+| GET  | `/api/v1/members/{memberId}/id-cards` | Card history | CHO token, `members:read` |
+| POST | `/api/v1/id-cards/scan` | Scan QR (rate-limited) | provider JWT (`ProviderJwt` scheme) |
 
-All endpoints (except `/health/*` and `/swagger/*`) require an `X-Tenant-ID`
-header.
+CHO endpoints use the shared CHO authentication
+(`docs/security/service-auth-rollout-playbook.md`): the tenant and the acting
+user come from the token only. `X-Tenant-ID` is tolerated only as an echo of the
+token tenant. The scan endpoint takes provider JWTs; its tenant is the one in the
+card's signed QR payload. Upstream calls carry the caller's CHO token, or this
+service's own service token (client id `idcard-service`) when there is no CHO
+caller (background work, provider scans).
 
 ## Configuration
 

@@ -21,7 +21,7 @@ public sealed class HttpOrganizationLookupClientTests
             "{\"organizationId\":\"net-1\",\"name\":\"Aetna PPO Florida 2025\",\"effectiveDate\":\"2025-01-01T00:00:00Z\"}");
         var client = BuildClient(handler);
 
-        var result = await client.GetOrganizationAsync("net-1");
+        var result = await client.GetOrganizationAsync("tenant-1", "net-1");
 
         result.Should().NotBeNull();
         result!.OrganizationId.Should().Be("net-1");
@@ -35,7 +35,7 @@ public sealed class HttpOrganizationLookupClientTests
         var handler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
         var client = BuildClient(handler);
 
-        var result = await client.GetOrganizationAsync("missing-network");
+        var result = await client.GetOrganizationAsync("tenant-1", "missing-network");
 
         result.Should().BeNull();
     }
@@ -46,7 +46,7 @@ public sealed class HttpOrganizationLookupClientTests
         var handler = FakeHttpMessageHandler.Status(HttpStatusCode.InternalServerError);
         var client = BuildClient(handler);
 
-        var result = await client.GetOrganizationAsync("flaky-network");
+        var result = await client.GetOrganizationAsync("tenant-1", "flaky-network");
 
         result.Should().BeNull();
     }
@@ -57,7 +57,7 @@ public sealed class HttpOrganizationLookupClientTests
         var handler = FakeHttpMessageHandler.Throw(new HttpRequestException("connection refused"));
         var client = BuildClient(handler);
 
-        var result = await client.GetOrganizationAsync("unreachable");
+        var result = await client.GetOrganizationAsync("tenant-1", "unreachable");
 
         result.Should().BeNull();
     }
@@ -68,7 +68,7 @@ public sealed class HttpOrganizationLookupClientTests
         var handler = FakeHttpMessageHandler.Status(HttpStatusCode.OK);
         var client = BuildClient(handler);
 
-        var result = await client.GetOrganizationAsync(string.Empty);
+        var result = await client.GetOrganizationAsync("tenant-1", string.Empty);
 
         result.Should().BeNull();
         // Short-circuit: no HTTP call issued for an empty id.
@@ -92,7 +92,7 @@ public sealed class HttpOrganizationLookupClientTests
         });
         var client = BuildClient(handler);
 
-        var result = await client.GetOrganizationAsync("net 1");
+        var result = await client.GetOrganizationAsync("tenant-1", "net 1");
 
         result.Should().NotBeNull();
         observedPath.Should().Be("/api/v1/networks/net%201");

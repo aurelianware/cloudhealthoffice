@@ -1,19 +1,33 @@
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
+using TenantService.Security;
 using TenantService.Services;
 
 namespace TenantService.Controllers;
 
+/// <summary>
+/// The role catalogue. It is one collection shared by every tenant (roles are
+/// not stored per tenant), so changing it changes every tenant's catalogue:
+/// writes need <c>roles:manage</c> and <c>platform:tenants</c> and are
+/// audited. Any authenticated caller may read it.
+/// </summary>
 [ApiController]
 [Route("api/v1/roles")]
 public class RolesController : ControllerBase
 {
     private readonly ITenantRoleRepository _roleRepository;
+    private readonly ICurrentActor _actor;
+    private readonly TenantAuditLog _audit;
     private readonly ILogger<RolesController> _logger;
 
-    public RolesController(ITenantRoleRepository roleRepository, ILogger<RolesController> logger)
+    public RolesController(
+        ITenantRoleRepository roleRepository, ICurrentActor actor, TenantAuditLog audit, ILogger<RolesController> logger)
     {
         _roleRepository = roleRepository;
+        _actor = actor;
+        _audit = audit;
         _logger = logger;
     }
 
@@ -21,6 +35,7 @@ public class RolesController : ControllerBase
     /// Get all available roles and their permissions
     /// </summary>
     [HttpGet]
+    [Authorize(Policy = TenantPermissions.MemberPolicy)]
     [ProducesResponseType(typeof(IEnumerable<TenantRole>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<TenantRole>>> GetAllRoles()
     {
@@ -32,6 +47,7 @@ public class RolesController : ControllerBase
     /// Get a specific role by name
     /// </summary>
     [HttpGet("{roleName}")]
+    [Authorize(Policy = TenantPermissions.MemberPolicy)]
     [ProducesResponseType(typeof(TenantRole), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantRole>> GetRole(string roleName)
@@ -47,6 +63,8 @@ public class RolesController : ControllerBase
     /// Create a custom role (non-built-in). Requires roles:manage permission.
     /// </summary>
     [HttpPost]
+    [RequirePermission(TenantPermissions.RolesManage)]
+    [RequirePermission(TenantPermissions.PlatformTenants)]
     [ProducesResponseType(typeof(TenantRole), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TenantRole>> CreateRole([FromBody] CreateRoleRequest request)
@@ -66,10 +84,13 @@ public class RolesController : ControllerBase
             RoleName = request.RoleName,
             Description = request.Description ?? string.Empty,
             Permissions = request.Permissions,
-            IsBuiltIn = false
+            IsBuiltIn = false,
+            CreatedBy = _actor.UserId,
+            UpdatedBy = _actor.UserId
         };
 
         var created = await _roleRepository.CreateAsync(role);
+        _audit.Record("create role " + created.RoleName, "*");
         return CreatedAtAction(nameof(GetRole), new { roleName = created.RoleName }, created);
     }
 
@@ -78,6 +99,8 @@ public class RolesController : ControllerBase
     /// Requires roles:manage permission.
     /// </summary>
     [HttpPut("{roleName}")]
+    [RequirePermission(TenantPermissions.RolesManage)]
+    [RequirePermission(TenantPermissions.PlatformTenants)]
     [ProducesResponseType(typeof(TenantRole), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -98,7 +121,9 @@ public class RolesController : ControllerBase
             existing.Permissions = request.Permissions;
         }
 
+        existing.UpdatedBy = _actor.UserId;
         var updated = await _roleRepository.UpdateAsync(existing);
+        _audit.Record("update role " + existing.RoleName, "*");
         return Ok(updated);
     }
 
@@ -107,6 +132,8 @@ public class RolesController : ControllerBase
     /// Requires roles:manage permission.
     /// </summary>
     [HttpDelete("{roleName}")]
+    [RequirePermission(TenantPermissions.RolesManage)]
+    [RequirePermission(TenantPermissions.PlatformTenants)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -120,6 +147,7 @@ public class RolesController : ControllerBase
             return BadRequest(new { error = "Built-in roles cannot be deleted" });
 
         await _roleRepository.DeleteAsync(roleName);
+        _audit.Record("delete role " + roleName, "*");
         return NoContent();
     }
 
@@ -127,10 +155,13 @@ public class RolesController : ControllerBase
     /// Re-seed standard roles (useful after upgrades). Requires roles:manage permission.
     /// </summary>
     [HttpPost("seed")]
+    [RequirePermission(TenantPermissions.RolesManage)]
+    [RequirePermission(TenantPermissions.PlatformTenants)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> SeedRoles()
     {
         await _roleRepository.SeedStandardRolesAsync();
+        _audit.Record("seed roles", "*");
         return Ok(new { message = "Standard roles seeded successfully" });
     }
 }

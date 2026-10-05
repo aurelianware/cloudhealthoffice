@@ -105,7 +105,7 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
             };
         }
 
-        var results = await _verification.VerifyBatchAsync(new[] { head.NPI }, ct);
+        var results = await _verification.VerifyBatchAsync(tenantId, new[] { head.NPI }, ct);
         var match = results.FirstOrDefault(r => r.Npi == head.NPI);
         if (match == null)
         {
@@ -159,7 +159,7 @@ public sealed class ProviderIntegrityProjectionService : IProviderIntegrityProje
             // a duplicated key would crash the whole sweep.
             var npis = page.Select(p => p.NPI).Distinct().ToList();
 
-            var verificationResults = await _verification.VerifyBatchAsync(npis, ct);
+            var verificationResults = await _verification.VerifyBatchAsync(tenantId, npis, ct);
             // GroupBy + First defends against the verification service
             // returning duplicate records per NPI (server contract is
             // one-per-NPI, but we shouldn't crash on contract drift).

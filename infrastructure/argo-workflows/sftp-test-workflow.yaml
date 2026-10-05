@@ -141,11 +141,14 @@ spec:
         parameters:
           - name: filename
       container:
+        env:
+          - name: PARAM_FILENAME
+            value: "{{inputs.parameters.filename}}"
         image: alpine:latest
         command: [sh, -c]
         args:
           - |
-            cat > /work/{{inputs.parameters.filename}} <<'EOF'
+            cat > /work/"${PARAM_FILENAME}" <<'EOF'
             ISA*00*          *00*          *ZZ*CLEARINGHOUSE  *ZZ*HEALTHPLAN     *240204*1430*^*00501*000000001*0*P*:~
             GS*HS*CLEARINGHOUSE*HEALTHPLAN*20240204*1430*1*X*005010X217~
             ST*278*0001*005010X217~
@@ -163,11 +166,11 @@ spec:
             IEA*1*000000001~
             EOF
             
-            echo "Generated test file: /work/{{inputs.parameters.filename}}"
-            cat /work/{{inputs.parameters.filename}}
+            echo "Generated test file: /work/${PARAM_FILENAME}"
+            cat /work/"${PARAM_FILENAME}"
             
             # Verify file was created
-            ls -lh /work/{{inputs.parameters.filename}}
+            ls -lh /work/"${PARAM_FILENAME}"
         volumeMounts:
           - name: work-volume
             mountPath: /work
@@ -184,6 +187,17 @@ spec:
           - name: filename
           - name: remote-path
       container:
+        env:
+          - name: PARAM_FILENAME
+            value: "{{inputs.parameters.filename}}"
+          - name: PARAM_REMOTE_PATH
+            value: "{{inputs.parameters.remote-path}}"
+          - name: PARAM_SFTP_HOST
+            value: "{{inputs.parameters.sftp-host}}"
+          - name: PARAM_SFTP_PORT
+            value: "{{inputs.parameters.sftp-port}}"
+          - name: PARAM_SFTP_USERNAME
+            value: "{{inputs.parameters.sftp-username}}"
         image: alpine:latest
         command: [sh, -c]
         args:
@@ -194,19 +208,22 @@ spec:
             apk add --no-cache sshpass openssh-client
             
             # Extract password from secret (format: username:password:uid:gid:dir)
-            PASSWORD=$(grep "^{{inputs.parameters.sftp-username}}:" /credentials/users.conf | cut -d: -f2)
+            PASSWORD=$(grep "^${PARAM_SFTP_USERNAME}:" /credentials/users.conf | cut -d: -f2)
             
             echo "Uploading file to SFTP server..."
-            echo "Host: {{inputs.parameters.sftp-host}}:{{inputs.parameters.sftp-port}}"
-            echo "User: {{inputs.parameters.sftp-username}}"
-            echo "Remote path: {{inputs.parameters.remote-path}}"
+            echo "Host: ${PARAM_SFTP_HOST}:${PARAM_SFTP_PORT}"
+            echo "User: ${PARAM_SFTP_USERNAME}"
+            echo "Remote path: ${PARAM_REMOTE_PATH}"
             
             # Create directory structure on SFTP server
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${PARAM_FILENAME}" "${PARAM_REMOTE_PATH}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
             sshpass -p "$PASSWORD" sftp -o StrictHostKeyChecking=no \
-              -P {{inputs.parameters.sftp-port}} \
-              {{inputs.parameters.sftp-username}}@{{inputs.parameters.sftp-host}} <<SFTP_EOF
+              -P "${PARAM_SFTP_PORT}" \
+              "${PARAM_SFTP_USERNAME}"@"${PARAM_SFTP_HOST}" <<SFTP_EOF
             mkdir 278
-            put /work/{{inputs.parameters.filename}} {{inputs.parameters.remote-path}}
+            put /work/${PARAM_FILENAME} ${PARAM_REMOTE_PATH}
             ls -l 278/
             bye
             SFTP_EOF
@@ -230,6 +247,15 @@ spec:
           - name: sftp-username
           - name: remote-path
       container:
+        env:
+          - name: PARAM_REMOTE_PATH
+            value: "{{inputs.parameters.remote-path}}"
+          - name: PARAM_SFTP_HOST
+            value: "{{inputs.parameters.sftp-host}}"
+          - name: PARAM_SFTP_PORT
+            value: "{{inputs.parameters.sftp-port}}"
+          - name: PARAM_SFTP_USERNAME
+            value: "{{inputs.parameters.sftp-username}}"
         image: alpine:latest
         command: [sh, -c]
         args:
@@ -238,14 +264,17 @@ spec:
             
             apk add --no-cache sshpass openssh-client
             
-            PASSWORD=$(grep "^{{inputs.parameters.sftp-username}}:" /credentials/users.conf | cut -d: -f2)
+            PASSWORD=$(grep "^${PARAM_SFTP_USERNAME}:" /credentials/users.conf | cut -d: -f2)
             
             echo "Verifying file exists on SFTP..."
             
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${PARAM_REMOTE_PATH}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
             sshpass -p "$PASSWORD" sftp -o StrictHostKeyChecking=no \
-              -P {{inputs.parameters.sftp-port}} \
-              {{inputs.parameters.sftp-username}}@{{inputs.parameters.sftp-host}} <<SFTP_EOF
-            ls -l {{inputs.parameters.remote-path}}
+              -P "${PARAM_SFTP_PORT}" \
+              "${PARAM_SFTP_USERNAME}"@"${PARAM_SFTP_HOST}" <<SFTP_EOF
+            ls -l ${PARAM_REMOTE_PATH}
             bye
             SFTP_EOF
             
@@ -272,6 +301,17 @@ spec:
           - name: remote-path
           - name: local-filename
       container:
+        env:
+          - name: PARAM_LOCAL_FILENAME
+            value: "{{inputs.parameters.local-filename}}"
+          - name: PARAM_REMOTE_PATH
+            value: "{{inputs.parameters.remote-path}}"
+          - name: PARAM_SFTP_HOST
+            value: "{{inputs.parameters.sftp-host}}"
+          - name: PARAM_SFTP_PORT
+            value: "{{inputs.parameters.sftp-port}}"
+          - name: PARAM_SFTP_USERNAME
+            value: "{{inputs.parameters.sftp-username}}"
         image: alpine:latest
         command: [sh, -c]
         args:
@@ -280,23 +320,26 @@ spec:
             
             apk add --no-cache sshpass openssh-client
             
-            PASSWORD=$(grep "^{{inputs.parameters.sftp-username}}:" /credentials/users.conf | cut -d: -f2)
+            PASSWORD=$(grep "^${PARAM_SFTP_USERNAME}:" /credentials/users.conf | cut -d: -f2)
             
             echo "Downloading file from SFTP..."
             
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${PARAM_REMOTE_PATH}" "${PARAM_LOCAL_FILENAME}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
             sshpass -p "$PASSWORD" sftp -o StrictHostKeyChecking=no \
-              -P {{inputs.parameters.sftp-port}} \
-              {{inputs.parameters.sftp-username}}@{{inputs.parameters.sftp-host}} <<SFTP_EOF
-            get {{inputs.parameters.remote-path}} /work/{{inputs.parameters.local-filename}}
+              -P "${PARAM_SFTP_PORT}" \
+              "${PARAM_SFTP_USERNAME}"@"${PARAM_SFTP_HOST}" <<SFTP_EOF
+            get ${PARAM_REMOTE_PATH} /work/${PARAM_LOCAL_FILENAME}
             bye
             SFTP_EOF
             
             echo "Downloaded file:"
-            ls -lh /work/{{inputs.parameters.local-filename}}
+            ls -lh /work/"${PARAM_LOCAL_FILENAME}"
             
             echo ""
             echo "File contents:"
-            cat /work/{{inputs.parameters.local-filename}}
+            cat /work/"${PARAM_LOCAL_FILENAME}"
         volumeMounts:
           - name: work-volume
             mountPath: /work
@@ -313,6 +356,11 @@ spec:
           - name: original-filename
           - name: downloaded-filename
       container:
+        env:
+          - name: PARAM_DOWNLOADED_FILENAME
+            value: "{{inputs.parameters.downloaded-filename}}"
+          - name: PARAM_ORIGINAL_FILENAME
+            value: "{{inputs.parameters.original-filename}}"
         image: alpine:latest
         command: [sh, -c]
         args:
@@ -321,8 +369,8 @@ spec:
             
             echo "Verifying file integrity..."
             
-            ORIGINAL_HASH=$(sha256sum /work/{{inputs.parameters.original-filename}} | awk '{print $1}')
-            DOWNLOADED_HASH=$(sha256sum /work/{{inputs.parameters.downloaded-filename}} | awk '{print $1}')
+            ORIGINAL_HASH=$(sha256sum /work/"${PARAM_ORIGINAL_FILENAME}" | awk '{print $1}')
+            DOWNLOADED_HASH=$(sha256sum /work/"${PARAM_DOWNLOADED_FILENAME}" | awk '{print $1}')
             
             echo "Original SHA256:   $ORIGINAL_HASH"
             echo "Downloaded SHA256: $DOWNLOADED_HASH"

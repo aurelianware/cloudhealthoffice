@@ -32,10 +32,9 @@ public sealed class ClaimMigrationRequest
     public int? BatchSize { get; set; }
 
     /// <summary>
-    /// Optional actor id for the audit log line emitted when the run
-    /// starts and completes. Resolved at the controller boundary from
-    /// the request principal when not supplied; defaults to a synthetic
-    /// label when no principal is available.
+    /// Actor id for the audit log line emitted when the run starts and
+    /// completes. Always set by the controller from the token subject; a
+    /// body-supplied value is ignored.
     /// </summary>
     public string? ActorId { get; set; }
 

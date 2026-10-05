@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using CloudHealthOffice.Infrastructure.Security;
 using IdCardService.Adapters;
 using IdCardService.Models;
 using IdCardService.Repositories;
@@ -27,7 +28,9 @@ public class OrderToDocumentFlowTests : IClassFixture<OrderToDocumentFlowTests.F
     public OrderToDocumentFlowTests(Factory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        // ChoDevelopmentTokenHandler turns X-Tenant-ID into a signed development
+        // token for that tenant; the service takes the tenant from the token.
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", TestFixtures.TenantId);
     }
 
@@ -165,6 +168,15 @@ public class OrderToDocumentFlowTests : IClassFixture<OrderToDocumentFlowTests.F
         Assert.NotNull(scanBody.EligibilitySnapshot);
     }
 
+    private sealed class StubTenantService : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { tenantId = TestFixtures.TenantId, configuration = new { } })
+            });
+    }
+
     public class Factory : WebApplicationFactory<Program>
     {
         public IMemberClient Member { get; private set; } = Substitute.For<IMemberClient>();
@@ -217,6 +229,10 @@ public class OrderToDocumentFlowTests : IClassFixture<OrderToDocumentFlowTests.F
                 Replace(Plans);
                 Replace(Documents);
                 Replace(Eligibility);
+
+                // tenant-service answers with no id-card platform configured.
+                services.AddHttpClient(IdCardAdapterFactory.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => new StubTenantService());
             });
         }
     }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ArService.Controllers;
 using ArService.Models;
 using ArService.Repositories;
+using ArService.Tests.Support;
 
 namespace ArService.Tests.Controllers;
 
@@ -17,7 +18,7 @@ public class ArAdjustmentsControllerTests
         _adjustmentRepo = new Mock<IArAdjustmentRepository>();
         _balanceRepo = new Mock<IArBalanceRepository>();
         var logger = new Mock<ILogger<ArAdjustmentsController>>();
-        _controller = new ArAdjustmentsController(_adjustmentRepo.Object, _balanceRepo.Object, logger.Object);
+        _controller = new ArAdjustmentsController(_adjustmentRepo.Object, _balanceRepo.Object, new TestActor(), logger.Object);
     }
 
     private static ArAdjustment CreateAdjustment(
@@ -186,7 +187,7 @@ public class ArAdjustmentsControllerTests
         ok.Should().NotBeNull();
         var approved = ok!.Value as ArAdjustment;
         approved!.Status.Should().Be(ArAdjustmentStatus.Approved);
-        approved.AuthorizedBy.Should().Be("supervisor");
+        approved.AuthorizedBy.Should().Be(TestActor.DefaultUserId);
         approved.AuthorizedAt.Should().NotBeNull();
         approved.AuthorizedAt!.Value.Should().BeOnOrAfter(before);
         approved.LastUpdatedAt.Should().BeOnOrAfter(before);
@@ -381,7 +382,7 @@ public class ArAdjustmentsControllerTests
             b.PostingEntries[0].SourceReferenceId == "adj-1" &&
             b.PostingEntries[0].DebitAmount == 2500.00m &&
             b.PostingEntries[0].CreditAmount == 0m &&
-            b.PostingEntries[0].PostedBy == "supervisor"
+            b.PostingEntries[0].PostedBy == TestActor.DefaultUserId
         )), Times.Once);
     }
 
@@ -513,7 +514,7 @@ public class ArAdjustmentsControllerTests
             new ApproveAdjustmentRequest { AuthorizedBy = "cfo" });
         var approved = (approveResult.Result as OkObjectResult)!.Value as ArAdjustment;
         approved!.Status.Should().Be(ArAdjustmentStatus.Approved);
-        approved.AuthorizedBy.Should().Be("cfo");
+        approved.AuthorizedBy.Should().Be(TestActor.DefaultUserId);
 
         // Step 3: Post
         _adjustmentRepo.Setup(r => r.GetByIdAsync(approved.Id)).ReturnsAsync(approved);

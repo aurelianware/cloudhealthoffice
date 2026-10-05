@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ArService.Controllers;
 
@@ -10,13 +11,16 @@ namespace ArService.Controllers;
 public class ArBalancesController : ControllerBase
 {
     private readonly IArBalanceRepository _balanceRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ArBalancesController> _logger;
 
     public ArBalancesController(
         IArBalanceRepository balanceRepository,
+        ICurrentActor actor,
         ILogger<ArBalancesController> logger)
     {
         _balanceRepository = balanceRepository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -76,12 +80,7 @@ public class ArBalancesController : ControllerBase
         if (balance.IsReconciled)
             return BadRequest(new { error = "Balance is already reconciled. Un-reconcile first to re-reconcile." });
 
-        // Resolve who reconciled: explicit body → authenticated user → "system"
-        var reconciledBy = request?.ReconciledBy;
-        if (string.IsNullOrWhiteSpace(reconciledBy))
-            reconciledBy = User?.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(reconciledBy))
-            reconciledBy = "system";
+        var reconciledBy = _actor.UserId;
 
         balance.IsReconciled = true;
         balance.ReconciledAt = DateTime.UtcNow;
@@ -131,6 +130,7 @@ public class ArBalancesController : ControllerBase
 
 public class ReconcileRequest
 {
+    // Ignored: the reconciler is always the authenticated user (ICurrentActor).
     public string ReconciledBy { get; set; } = string.Empty;
     public string? Notes { get; set; }
 }

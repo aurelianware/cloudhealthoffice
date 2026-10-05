@@ -3,6 +3,7 @@ using BenefitPlanService.Middleware;
 using BenefitPlanService.Models.Estimate;
 using BenefitPlanService.Services;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BenefitPlanService.Controllers;
@@ -22,9 +23,9 @@ namespace BenefitPlanService.Controllers;
 /// </para>
 ///
 /// <para>
-/// Tenant context is taken from the authenticated request (JWT claim or
-/// <c>X-Tenant-ID</c> header via <see cref="TenantMiddleware"/>); a tenant id
-/// in the request body can never override it.
+/// Tenant context is taken from the validated CHO token (shared
+/// <c>TenantMiddleware</c>); a tenant id in a header or the request body can
+/// never override it.
 /// </para>
 /// </summary>
 [ApiController]
@@ -50,6 +51,8 @@ public class EstimateController : ControllerBase
     /// Read-only: no financial state is created or modified.
     /// </summary>
     [HttpPost("estimate")]
+    // Read-only calculation: examiners (claims:work) and benefit readers may run it.
+    [RequirePermission("claims:work,benefits:read")]
     [ProducesResponseType(typeof(PaymentEstimateResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaymentEstimateResponse>> Estimate(

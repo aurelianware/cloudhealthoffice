@@ -217,7 +217,10 @@ public sealed class PendedAuthorizationRfaiCoordinator : IPendedAuthorizationRfa
             ReviewDecision = authorization.ReviewDecision,
             ReasonCode = authorization.DenialReasonCode,
             ReasonDescription = authorization.PendReason,
-            RequestedBy = authorization.ReviewerName ?? authorization.LastUpdatedBy,
+            // The actor who recorded the decision (token subject). ReviewerName
+            // is body-supplied 278 contact text, so it is only a fallback for
+            // records written before the actor was stamped.
+            RequestedBy = authorization.LastUpdatedBy ?? authorization.ReviewerName,
             DueDate = dueDate,
             // Free text SUPPLEMENTS the coded items above; it never replaces them.
             Notes = authorization.FollowUpAction,

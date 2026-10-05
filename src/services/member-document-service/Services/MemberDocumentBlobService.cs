@@ -10,6 +10,7 @@ public interface IMemberDocumentBlobService
     Task<Stream> DownloadAsync(string container, string blobPath, CancellationToken ct = default);
     Task SetTagsAsync(string container, string blobPath, IDictionary<string, string> tags, CancellationToken ct = default);
     Task<long> GetBlobSizeAsync(string container, string blobPath, CancellationToken ct = default);
+    Task DeleteIfExistsAsync(string container, string blobPath, CancellationToken ct = default);
     Uri GetBlobUri(string container, string blobPath);
     Uri? GenerateUploadSasUri(string container, string blobPath, string contentType, DateTimeOffset expiresAtUtc);
 }
@@ -63,11 +64,24 @@ public class MemberDocumentBlobService : IMemberDocumentBlobService
         return props.Value.ContentLength;
     }
 
+    public async Task DeleteIfExistsAsync(string container, string blobPath, CancellationToken ct = default)
+    {
+        var blobClient = _blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobPath);
+        await blobClient.DeleteIfExistsAsync(cancellationToken: ct);
+    }
+
     public Uri GetBlobUri(string container, string blobPath)
     {
         return _blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobPath).Uri;
     }
 
+    /// <summary>
+    /// A write-only SAS for exactly one blob (the upload's staging blob), HTTPS
+    /// only, valid until <paramref name="expiresAtUtc"/>. The caller has already
+    /// passed the members:write check and the tenant-scoped record exists. The
+    /// staging blob is never served: finalize validates it and copies it to the
+    /// document's real path, which no SAS covers.
+    /// </summary>
     public Uri? GenerateUploadSasUri(string container, string blobPath, string contentType, DateTimeOffset expiresAtUtc)
     {
         var blobClient = _blobServiceClient.GetBlobContainerClient(container).GetBlobClient(blobPath);
@@ -82,6 +96,7 @@ public class MemberDocumentBlobService : IMemberDocumentBlobService
             BlobName = blobPath,
             Resource = "b",
             ExpiresOn = expiresAtUtc,
+            Protocol = SasProtocol.Https,
             ContentType = contentType
         };
 

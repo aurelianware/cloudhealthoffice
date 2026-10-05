@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -19,7 +20,8 @@ public class EraEnvelopesControllerTests : IClassFixture<PaymentApiFactory>
     public EraEnvelopesControllerTests(PaymentApiFactory factory)
     {
         _repository = factory.EraEnvelopeRepository;
-        _client = factory.CreateClient();
+        // Development-signed user token (TenantAdmin, subject dev-user) for the X-Tenant-ID tenant.
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
     }
 

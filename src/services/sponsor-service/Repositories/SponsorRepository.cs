@@ -144,6 +144,45 @@ public class SponsorRepository : ISponsorRepository
         return response.Resource;
     }
 
+    public async Task<bool> UpdateStatusAsync(string tenantId, string id, SponsorStatusChange change)
+    {
+        // Read with the ETag and replace only if nobody wrote in between, so
+        // the replace carries every other field exactly as stored.
+        ItemResponse<Sponsor> current;
+        try
+        {
+            current = await _container.ReadItemAsync<Sponsor>(id, new PartitionKey(tenantId));
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        var sponsor = current.Resource;
+        if (sponsor.Status != change.From)
+            return false;
+
+        sponsor.Status = change.To;
+        sponsor.StatusReason = change.Reason;
+        sponsor.StatusChangedBy = change.ChangedBy;
+        sponsor.StatusChangedDate = change.ChangedAt;
+        sponsor.LastUpdatedBy = change.ChangedBy;
+        sponsor.LastUpdatedDate = change.ChangedAt;
+        sponsor.StatusHistory ??= new List<SponsorStatusChange>();
+        sponsor.StatusHistory.Add(change);
+
+        try
+        {
+            await _container.ReplaceItemAsync(sponsor, sponsor.Id, new PartitionKey(tenantId),
+                new ItemRequestOptions { IfMatchEtag = current.ETag });
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            return false;
+        }
+    }
+
     public async Task DeleteAsync(string tenantId, string id)
     {
         await _container.DeleteItemAsync<Sponsor>(
@@ -203,6 +242,16 @@ public interface ISponsorRepository
         string? continuationToken = null);
     Task<Sponsor> CreateAsync(Sponsor sponsor);
     Task<Sponsor> UpdateAsync(Sponsor sponsor);
+
+    /// <summary>
+    /// Applies a status change and nothing else: Status, StatusReason,
+    /// StatusChangedBy, StatusChangedDate, LastUpdatedBy, LastUpdatedDate and an
+    /// appended StatusHistory entry. Applied only while the stored status still
+    /// equals <see cref="SponsorStatusChange.From"/>; returns false (nothing
+    /// written) when the sponsor is gone or its status changed meanwhile.
+    /// </summary>
+    Task<bool> UpdateStatusAsync(string tenantId, string id, SponsorStatusChange change);
+
     Task DeleteAsync(string tenantId, string id);
     Task<bool> ExistsAsync(string tenantId, string groupNumber);
     Task<int> GetCountAsync(string tenantId, SponsorStatus? status = null);

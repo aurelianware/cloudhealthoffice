@@ -55,6 +55,35 @@ public class PaymentRepositoryMongo : IPaymentRepository
         return await _collection.Find(filter).ToListAsync();
     }
 
+    public async Task<IReadOnlyCollection<string>> GetClaimIdsWithPaymentAsync(IReadOnlyCollection<string> claimIds, bool reversal)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        if (claimIds.Count == 0)
+            return found;
+
+        var tenantId = GetTenantId();
+        foreach (var chunk in claimIds.Distinct(StringComparer.Ordinal).Chunk(500))
+        {
+            var wanted = new HashSet<string>(chunk, StringComparer.Ordinal);
+            var filter = Builders<Payment>.Filter.And(
+                Builders<Payment>.Filter.Eq(x => x.TenantId, tenantId),
+                // Documents written before IsReversal existed count as payments.
+                reversal
+                    ? Builders<Payment>.Filter.Eq(x => x.IsReversal, true)
+                    : Builders<Payment>.Filter.Ne(x => x.IsReversal, true),
+                Builders<Payment>.Filter.ElemMatch(x => x.ClaimPayments,
+                    Builders<ClaimPayment>.Filter.In(cp => cp.ClaimId, chunk)));
+            var payments = await _collection.Find(filter)
+                .Project(Builders<Payment>.Projection.Include(x => x.ClaimPayments))
+                .As<Payment>()
+                .ToListAsync();
+            foreach (var payment in payments)
+                found.UnionWith(payment.ClaimPayments.Select(cp => cp.ClaimId).Where(wanted.Contains));
+        }
+
+        return found;
+    }
+
     public async Task<IEnumerable<Payment>> SearchAsync(
         DateTime? paymentDateFrom,
         DateTime? paymentDateTo,

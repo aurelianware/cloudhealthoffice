@@ -80,6 +80,54 @@ public static class SmartScopes
         UserQuestionnaireResponseWrite, SystemQuestionnaireResponseWrite,
     ];
 
+    /// <summary>Every SMART scope this server seeds, with its display name.</summary>
+    public static readonly IReadOnlyList<(string Name, string Display)> Catalog =
+    [
+        (FhirUser,          "FHIR user identity"),
+        (Launch,            "EHR launch"),
+        (LaunchPatient,     "Patient context on launch"),
+        (LaunchEncounter,   "Encounter context on launch"),
+        (PatientWildcardRead,    "Read all patient-level resources"),
+        (UserWildcardRead,       "Read all user-level resources"),
+        (SystemWildcardRead,     "Read all system-level resources"),
+        (PatientPatientRead,     "Patient: read Patient"),
+        (PatientCoverageRead,    "Patient: read Coverage"),
+        (PatientEobRead,         "Patient: read ExplanationOfBenefit"),
+        (PatientEncounterRead,   "Patient: read Encounter"),
+        (PatientClaimRead,       "Patient: read Claim"),
+        (UserPatientRead,        "User: read Patient"),
+        (UserCoverageRead,       "User: read Coverage"),
+        (UserEobRead,            "User: read ExplanationOfBenefit"),
+        (UserEncounterRead,      "User: read Encounter"),
+        (UserClaimRead,          "User: read Claim"),
+        (SystemPatientRead,      "System: read Patient"),
+        (SystemCoverageRead,     "System: read Coverage"),
+        (SystemEobRead,          "System: read ExplanationOfBenefit"),
+        (SystemEncounterRead,    "System: read Encounter"),
+        (SystemClaimRead,        "System: read Claim"),
+
+        // Writes. Without these the FHIR surface's write operations —
+        // PAS Claim/$submit, CDex $submit-attachment, DTR authoring — are
+        // ungrantable, because a read scope no longer authorizes them.
+        (UserWildcardWrite,      "Write all user-level resources"),
+        (SystemWildcardWrite,    "Write all system-level resources"),
+        (UserClaimWrite,         "User: submit prior authorizations"),
+        (SystemClaimWrite,       "System: submit prior authorizations"),
+        (UserTaskWrite,          "User: submit attachments and appeals"),
+        (SystemTaskWrite,        "System: submit attachments and appeals"),
+        (UserQuestionnaireWrite, "User: author Questionnaires"),
+        (SystemQuestionnaireWrite, "System: author Questionnaires"),
+        (UserQuestionnaireResponseWrite, "User: submit QuestionnaireResponses"),
+        (SystemQuestionnaireResponseWrite, "System: submit QuestionnaireResponses"),
+    ];
+
+    /// <summary>Scopes a client registration may name: the catalog plus <c>openid</c>.</summary>
+    public static readonly IReadOnlySet<string> Registered =
+        new HashSet<string>(Catalog.Select(c => c.Name).Append(OpenId).Append(OfflineAccess), StringComparer.Ordinal);
+
+    /// <summary>Requests a refresh token. Each refresh re-checks the identity's binding.</summary>
+    public const string OfflineAccess = "offline_access";
+
     /// <summary>
     /// Returns all scopes that grant read access to a given FHIR resource type
     /// for a given level (patient / user / system).

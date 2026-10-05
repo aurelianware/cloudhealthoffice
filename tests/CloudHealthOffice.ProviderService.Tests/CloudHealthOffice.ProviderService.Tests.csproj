@@ -18,7 +18,7 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <PackageReference Include="EphemeralMongo7" />
+    <PackageReference Include="EphemeralMongo" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\provider-service\provider-service.csproj" />
@@ -26,5 +26,9 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

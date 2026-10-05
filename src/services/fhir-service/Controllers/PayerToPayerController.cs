@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models.PayerToPayer;
 using FhirService.Services.PayerToPayer;
 using Hl7.Fhir.Model;
@@ -24,6 +25,7 @@ namespace FhirService.Controllers;
 /// <see cref="PayerToPayerMemberMatchController"/>) are separate surfaces.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: null)]
 public sealed class PayerToPayerController : FhirControllerBase
 {
     private readonly IPayerToPayerExchangeService _exchange;

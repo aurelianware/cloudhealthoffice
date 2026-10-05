@@ -81,10 +81,25 @@ public class BillingRun
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// User who created the billing run
+    /// Who created the billing run: the token subject (a user id, or the
+    /// client id of the service that scheduled it). Never taken from a body.
     /// </summary>
     [StringLength(100)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>True when <see cref="CreatedBy"/> is a service identity (a scheduler), not a user.</summary>
+    public bool CreatedByIsService { get; set; }
+
+    /// <summary>Who executed the run (token subject); null until executed.</summary>
+    [StringLength(100)]
+    public string? ExecutedBy { get; set; }
+
+    /// <summary>True when <see cref="ExecutedBy"/> is a service identity, not a user.</summary>
+    public bool ExecutedByIsService { get; set; }
+
+    /// <summary>Who cancelled the run (token subject).</summary>
+    [StringLength(100)]
+    public string? CancelledBy { get; set; }
 
     /// <summary>
     /// Execution started timestamp
@@ -170,6 +185,8 @@ public class CreateBillingRunRequest
 
     public BillingRunCriteria Criteria { get; set; } = new();
 
+    // Ignored from the body: the controller sets the creator from the token.
+    [JsonIgnore]
     public string? CreatedBy { get; set; }
 
     public string? Description { get; set; }

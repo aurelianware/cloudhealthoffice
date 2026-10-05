@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ArService.Controllers;
 
@@ -10,13 +11,16 @@ namespace ArService.Controllers;
 public class GlAccountsController : ControllerBase
 {
     private readonly IGlAccountRepository _accountRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<GlAccountsController> _logger;
 
     public GlAccountsController(
         IGlAccountRepository accountRepository,
+        ICurrentActor actor,
         ILogger<GlAccountsController> logger)
     {
         _accountRepository = accountRepository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -58,6 +62,9 @@ public class GlAccountsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<GlAccount>> CreateAccount([FromBody] GlAccount account)
     {
+        account.CreatedBy = _actor.UserId;
+        account.LastUpdatedBy = null;
+
         _logger.LogInformation("Creating GL account {AccountNumber} ({AccountName})",
             SanitizeForLog(account.AccountNumber), SanitizeForLog(account.AccountName));
 
@@ -81,6 +88,7 @@ public class GlAccountsController : ControllerBase
         account.TenantId = existing.TenantId;
         account.CreatedAt = existing.CreatedAt;
         account.CreatedBy = existing.CreatedBy;
+        account.LastUpdatedBy = _actor.UserId;
 
         var updated = await _accountRepository.UpdateAsync(account);
         return Ok(updated);
@@ -99,6 +107,7 @@ public class GlAccountsController : ControllerBase
             return NotFound(new { error = $"GL account {id} not found" });
 
         account.Status = GlAccountStatus.Inactive;
+        account.LastUpdatedBy = _actor.UserId;
         _logger.LogInformation("Deactivated GL account {AccountNumber}", account.AccountNumber);
 
         var updated = await _accountRepository.UpdateAsync(account);
@@ -118,6 +127,7 @@ public class GlAccountsController : ControllerBase
             return NotFound(new { error = $"GL account {id} not found" });
 
         account.Status = GlAccountStatus.Active;
+        account.LastUpdatedBy = _actor.UserId;
         _logger.LogInformation("Activated GL account {AccountNumber}", account.AccountNumber);
 
         var updated = await _accountRepository.UpdateAsync(account);

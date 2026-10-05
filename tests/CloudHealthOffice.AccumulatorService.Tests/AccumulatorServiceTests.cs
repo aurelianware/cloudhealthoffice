@@ -248,12 +248,11 @@ public class AccumulatorServiceTests
             AdjustmentId = "adj-42",
             PlanYearStart = new DateTime(2026, 1, 1),
             PlanYearEnd = new DateTime(2026, 12, 31),
-            ActorId = "ops-user@cho",
             Reason = "Out-of-system payment posted manually",
             DeductibleDelta = 200m
         };
-        var first = await sut.AdjustAsync("t1", "m-100", req);
-        var second = await sut.AdjustAsync("t1", "m-100", req);
+        var first = await sut.AdjustAsync("t1", "m-100", "ops-user@cho", req);
+        var second = await sut.AdjustAsync("t1", "m-100", "ops-user@cho", req);
 
         Assert.Equal("adj-42", first.AdjustmentId);
         Assert.Equal("adj-42", second.AdjustmentId);
@@ -273,12 +272,11 @@ public class AccumulatorServiceTests
         {
             PlanYearStart = new DateTime(2026, 1, 1),
             PlanYearEnd = new DateTime(2026, 12, 31),
-            ActorId = "ops-user@cho",
             Reason = "Correct mis-keyed claim CLM-99 (applied under wrong member)",
             DeductibleDelta = -100m,
             OopDelta = -100m
         };
-        var result = await sut.AdjustAsync(Tenant, Member, req);
+        var result = await sut.AdjustAsync(Tenant, Member, "ops-user@cho", req);
 
         Assert.False(string.IsNullOrWhiteSpace(result.AdjustmentId));
         Assert.Equal(0m, result.Snapshot.IndividualDeductibleUsed); // floored at 0
@@ -290,6 +288,7 @@ public class AccumulatorServiceTests
 
         var adjusted = pub.Adjusted.Single();
         Assert.Equal("ManualAdjustment", adjusted.AdjustmentSource);
+        Assert.Equal("ops-user@cho", adjusted.ActorId);
         Assert.Equal(req.Reason, adjusted.Reason);
     }
 

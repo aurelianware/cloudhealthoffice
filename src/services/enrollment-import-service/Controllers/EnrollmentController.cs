@@ -1,6 +1,8 @@
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Services;
 using EnrollmentImportService.Services.Edi;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EnrollmentImportService.Controllers;
@@ -13,6 +15,7 @@ public class EnrollmentController : ControllerBase
     private readonly IEnrollment834EdiParser _ediParser;
     private readonly IPlanCodeGapReportService _gapReportService;
     private readonly IEnrollmentImportRunRepository _importRuns;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<EnrollmentController> _logger;
 
     public EnrollmentController(
@@ -20,28 +23,32 @@ public class EnrollmentController : ControllerBase
         IEnrollment834EdiParser ediParser,
         IPlanCodeGapReportService gapReportService,
         IEnrollmentImportRunRepository importRuns,
+        ICurrentActor actor,
         ILogger<EnrollmentController> logger)
     {
         _importService = importService;
         _ediParser = ediParser;
         _gapReportService = gapReportService;
         _importRuns = importRuns;
+        _actor = actor;
         _logger = logger;
     }
 
+    // Tenant from the validated token (shared TenantMiddleware via UseChoAuthentication).
+    // X-Tenant-ID is only accepted when it agrees with the token, and is never read here.
+    private string TenantId => _actor.TenantId;
+
     [HttpPost("import")]
     public async Task<ActionResult<ImportResult>> ImportEnrollment(
-        [FromBody] Enrollment834 enrollment,
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId)
+        [FromBody] Enrollment834 enrollment)
     {
-        if (string.IsNullOrEmpty(tenantId))
-        {
-            return BadRequest("X-Tenant-ID header is required");
-        }
+        var tenantId = TenantId;
 
         _logger.LogInformation("Importing 834 file {FileName} for tenant {TenantId} with {Count} enrollments",
             SanitizeForLog(enrollment.FileName), SanitizeForLog(tenantId), enrollment.TransactionCount);
 
+        // The importing user is the token subject; nothing in the body can claim it.
+        enrollment.ActorId = _actor.UserId;
         var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
 
         return Ok(result);
@@ -55,13 +62,9 @@ public class EnrollmentController : ControllerBase
     [HttpPost("import/raw834")]
     [RequestSizeLimit(20_000_000)]
     public async Task<ActionResult<ImportResult>> ImportRaw834(
-        [FromForm] IFormFile file,
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId)
+        [FromForm] IFormFile file)
     {
-        if (string.IsNullOrEmpty(tenantId))
-        {
-            return BadRequest("X-Tenant-ID header is required");
-        }
+        var tenantId = TenantId;
 
         if (file is null || file.Length == 0)
         {
@@ -89,6 +92,8 @@ public class EnrollmentController : ControllerBase
         _logger.LogInformation("Parsed uploaded 834 file {FileName} for tenant {TenantId} with {Count} enrollments",
             SanitizeForLog(enrollment.FileName), SanitizeForLog(tenantId), enrollment.TransactionCount);
 
+        // The importing user is the token subject; nothing in the body can claim it.
+        enrollment.ActorId = _actor.UserId;
         var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
 
         return Ok(result);
@@ -102,15 +107,13 @@ public class EnrollmentController : ControllerBase
     /// partner's test file while filling in the gaps before go-live.
     /// </summary>
     [HttpPost("plan-code-gap-report")]
+    // Read-only: resolves plan codes and writes nothing.
+    [RequirePermission("enrollment:read")]
     public async Task<ActionResult<PlanCodeGapReport>> PlanCodeGapReport(
         [FromBody] Enrollment834 enrollment,
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
         CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(tenantId))
-        {
-            return BadRequest("X-Tenant-ID header is required");
-        }
+        var tenantId = TenantId;
 
         var report = await _gapReportService.BuildReportAsync(enrollment, tenantId, ct);
         return Ok(report);
@@ -118,16 +121,13 @@ public class EnrollmentController : ControllerBase
 
     /// <summary>Same as <see cref="PlanCodeGapReport"/>, but for a raw X12 834 file upload.</summary>
     [HttpPost("plan-code-gap-report/raw834")]
+    [RequirePermission("enrollment:read")]
     [RequestSizeLimit(20_000_000)]
     public async Task<ActionResult<PlanCodeGapReport>> PlanCodeGapReportRaw834(
         [FromForm] IFormFile file,
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
         CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(tenantId))
-        {
-            return BadRequest("X-Tenant-ID header is required");
-        }
+        var tenantId = TenantId;
 
         if (file is null || file.Length == 0)
         {
@@ -168,20 +168,18 @@ public class EnrollmentController : ControllerBase
     [ProducesResponseType(typeof(List<EnrollmentImportRun>), 200)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> ListImportRuns(
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
         [FromQuery] int limit = 100)
     {
-        if (string.IsNullOrEmpty(tenantId))
-        {
-            return BadRequest("X-Tenant-ID header is required");
-        }
+        var tenantId = TenantId;
         if (limit < 1 || limit > 500) limit = 100;
 
         var runs = await _importRuns.ListRecentAsync(tenantId, limit);
         return Ok(runs);
     }
 
+    /// <summary>Static liveness echo; returns no tenant data.</summary>
     [HttpGet("health")]
+    [AllowAnonymous]
     public IActionResult Health()
     {
         return Ok(new { status = "healthy", service = "enrollment-import" });

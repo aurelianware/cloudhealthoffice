@@ -1,6 +1,6 @@
 using ClaimsService.Models;
 using ClaimsService.Repositories;
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using FluentAssertions;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -9,8 +9,13 @@ using NSubstitute;
 
 namespace CloudHealthOffice.ClaimsService.Tests.Repositories;
 
+[Collection(MongoRunnerFixture.CollectionName)]
 public class MassAdjudicationRunRepositoryTests
 {
+    private readonly MongoRunnerFixture _mongo;
+
+    public MassAdjudicationRunRepositoryTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     [Fact]
     public async Task SaveAsync_generates_server_side_ids_for_claim_results()
     {
@@ -370,11 +375,9 @@ public class MassAdjudicationRunRepositoryTests
     [Fact]
     public async Task ListClaimResultsAsync_mongo_payment_status_excludes_missing_payment_delta_from_scored_filters()
     {
-        var runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
+        var database = _mongo.CreateDatabase("mass_run_repo_test");
         try
         {
-            var client = new MongoClient(runner.ConnectionString);
-            var database = client.GetDatabase($"mass_run_repo_test_{Guid.NewGuid():N}");
             var repo = new MassAdjudicationRunRepositoryMongo(database);
 
             var summary = CreateSummary();
@@ -451,8 +454,7 @@ public class MassAdjudicationRunRepositoryTests
         }
         finally
         {
-            try { runner.Dispose(); }
-            catch (TypeLoadException) { /* see ProviderVersionEventPublisherTests note */ }
+            await _mongo.DropDatabaseAsync(database);
         }
     }
 

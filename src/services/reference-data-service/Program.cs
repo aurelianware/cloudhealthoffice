@@ -1,13 +1,12 @@
 using Microsoft.Azure.Cosmos;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Identity.Web;
 using ReferenceDataService.Repositories;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using ReferenceDataService.Repositories.Canonical;
 using ReferenceDataService.Migrations;
 
@@ -81,22 +80,15 @@ else
     builder.Services.AddSingleton<IComplianceConfigRepository, InMemoryComplianceConfigRepository>();
 }
 
-// Azure AD Authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(options =>
-    {
-        builder.Configuration.Bind("AzureAd", options);
-        options.TokenValidationParameters.ValidateIssuer = true;
-        options.TokenValidationParameters.ValidateAudience = true;
-        options.TokenValidationParameters.ValidateLifetime = true;
-    },
-    options => { builder.Configuration.Bind("AzureAd", options); });
-
-// Authorization policies
-builder.Services.AddAuthorization(options =>
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+// Reads need reference-data:read (service tokens satisfy it); writes to tenant-scoped data
+// (compliance config, a tenant's own canonical codes) need settings:manage. Writing global
+// code sets shared by every tenant needs platform:admin, checked in the import action.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
-    options.AddPolicy("AdminPolicy", policy =>
-        policy.RequireRole("Administrator"));
+    auth.DefaultReadPermission = "reference-data:read";
+    auth.DefaultWritePermission = "settings:manage";
 });
 
 // Add memory cache for hot code lookups
@@ -114,23 +106,18 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddChoHealthChecks()
     .AddNpgSql(postgresConnection, name: "postgres", tags: new[] { "ready", "db" }, timeout: TimeSpan.FromSeconds(10));
 
-// Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
 
-await using (var scope = app.Services.CreateAsyncScope())
+// The schema migration needs PostgreSQL. In-process pipeline tests, which substitute the
+// repositories, turn it off with ReferenceData:ApplySchemaMigrationsOnStartup=false.
+if (builder.Configuration.GetValue("ReferenceData:ApplySchemaMigrationsOnStartup", true))
 {
+    await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<ReferenceDataSchemaMigrator>().ApplyAsync();
 }
 
@@ -146,11 +133,9 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
 
-// Authentication MUST come before authorization
-app.UseAuthentication();
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();

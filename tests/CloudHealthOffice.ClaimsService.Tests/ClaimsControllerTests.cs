@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -25,7 +26,7 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
         _massRunRepo = factory.MassAdjudicationRunRepository;
         _ackService = factory.AcknowledgmentService;
         _submissionService = factory.SubmissionService;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
     }
 
@@ -396,19 +397,19 @@ public class ClaimsControllerTests : IClassFixture<ClaimsApiFactory>
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task MissingTenantHeader_FallsBackToDefaultTenant()
+    public async Task MissingTenantHeader_WithoutToken_Returns401()
     {
-        // TenantMiddleware falls back to "default-tenant" when no header is present.
-        // Verify the request passes through (no 4xx from middleware).
+        // Previously the local tenant middleware fell back to "default-tenant"
+        // and served the request. There is no default tenant any more: a
+        // caller with no token (and so no tenant) is rejected.
         var clientNoTenant = _factory.CreateClient();
-        // No X-Tenant-ID header added
+        // No X-Tenant-ID header and no token
 
         _repo.GetByIdAsync("any-id").Returns((Claim?)null);
 
         var response = await clientNoTenant.GetAsync("/api/claims/any-id");
 
-        // 404 means the middleware did NOT reject the request — it passed through
-        // to the controller which returned 404 for a nonexistent claim.
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await _repo.DidNotReceive().GetByIdAsync("any-id");
     }
 }

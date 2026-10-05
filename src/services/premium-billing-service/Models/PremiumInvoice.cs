@@ -169,6 +169,14 @@ public class PremiumInvoice
     public string? LastUpdatedBy { get; set; }
 
     /// <summary>
+    /// Outcome of suspending the sponsor in sponsor-service when this invoice
+    /// went delinquent. Null for invoices marked delinquent before this was
+    /// recorded (outcome unknown). A Failed suspension is retried on every
+    /// delinquency run until it succeeds.
+    /// </summary>
+    public SponsorSuspensionRecord? SponsorSuspension { get; set; }
+
+    /// <summary>
     /// Recalculate computed totals from line items, adjustments, and payments
     /// </summary>
     public void RecalculateTotals()
@@ -336,6 +344,42 @@ public class InvoicePayment
     /// Date payment was received/posted
     /// </summary>
     public DateTime ReceivedDate { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Who recorded the payment (token subject, or "stripe-webhook").</summary>
+    [StringLength(200)]
+    public string? RecordedBy { get; set; }
+}
+
+public enum SponsorSuspensionState
+{
+    Suspended,
+    Failed
+}
+
+/// <summary>
+/// What happened when premium billing asked sponsor-service to suspend the
+/// sponsor of a delinquent invoice.
+/// </summary>
+public class SponsorSuspensionRecord
+{
+    public SponsorSuspensionState State { get; set; }
+
+    public int Attempts { get; set; }
+
+    public DateTime LastAttemptAt { get; set; }
+
+    /// <summary>HTTP status sponsor-service answered with, when there was one.</summary>
+    public int? LastStatusCode { get; set; }
+
+    /// <summary>Why the last attempt failed; null once suspended.</summary>
+    [StringLength(1000)]
+    public string? LastError { get; set; }
+
+    /// <summary>Who ran the delinquency processing that made the last attempt.</summary>
+    [StringLength(200)]
+    public string? LastAttemptBy { get; set; }
+
+    public DateTime? SuspendedAt { get; set; }
 }
 
 public enum InvoiceStatus

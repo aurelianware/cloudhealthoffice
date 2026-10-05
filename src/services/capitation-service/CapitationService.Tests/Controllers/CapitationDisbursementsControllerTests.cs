@@ -1,3 +1,4 @@
+using CapitationService.Tests.Support;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ public class CapitationDisbursementsControllerTests
     {
         _disbursementService = new Mock<ICapitationDisbursementService>();
         var logger = new Mock<ILogger<CapitationDisbursementsController>>();
-        _controller = new CapitationDisbursementsController(_disbursementService.Object, logger.Object);
+        _controller = new CapitationDisbursementsController(_disbursementService.Object, new TestActor(), logger.Object);
     }
 
     private static CapitationDisbursement CreateDisbursement(
@@ -100,7 +101,7 @@ public class CapitationDisbursementsControllerTests
             EntryCount = 5,
             TotalAmount = 25000m
         };
-        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync()).ReturnsAsync(nachaResult);
+        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync(TestActor.DefaultUserId)).ReturnsAsync(nachaResult);
 
         var result = await _controller.GenerateNachaCreditFile();
 
@@ -112,12 +113,34 @@ public class CapitationDisbursementsControllerTests
     [Fact]
     public async Task GenerateNachaCreditFile_NoPending_ReturnsBadRequest()
     {
-        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync())
+        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync(TestActor.DefaultUserId))
             .ThrowsAsync(new InvalidOperationException("No pending NACHA disbursements"));
 
         var result = await _controller.GenerateNachaCreditFile();
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task GenerateNachaCreditFile_HeldByAnotherRelease_Returns409()
+    {
+        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync(TestActor.DefaultUserId))
+            .ThrowsAsync(new PaymentReleaseConflictException("already being released"));
+
+        var result = await _controller.GenerateNachaCreditFile();
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task InitiateDisbursement_StatementAlreadyBeingPaid_Returns409()
+    {
+        _disbursementService.Setup(s => s.InitiateDisbursementAsync(It.IsAny<InitiateDisbursementRequest>()))
+            .ThrowsAsync(new PaymentReleaseConflictException("already being paid"));
+
+        var result = await _controller.InitiateDisbursement(new InitiateDisbursementRequest { StatementId = "s-1" });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
     }
 
     #endregion

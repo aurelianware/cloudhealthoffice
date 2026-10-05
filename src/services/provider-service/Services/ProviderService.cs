@@ -113,10 +113,14 @@ public class ProviderVersioningService : IProviderVersioningService
         draft.TerminationReason = null;
         // Status mirrors VersionState — drafts are Pending in the legacy enum.
         draft.Status = ProviderStatus.Pending;
-        draft.CreatedBy = string.IsNullOrEmpty(draft.CreatedBy) ? actorId : draft.CreatedBy;
+        // Genesis draft: the creator is the acting user, never a caller-supplied value.
+        draft.CreatedBy = actorId;
         draft.CreatedDate = DateTime.UtcNow;
         draft.LastUpdatedDate = DateTime.UtcNow;
         draft.LastUpdatedBy = actorId;
+        // A bank account is never set by a provider write; the controller turns
+        // a body account into a pending change that a second user must approve.
+        draft.BankAccount = null;
 
         return await _repository.CreateDraftAsync(draft);
     }
@@ -157,6 +161,13 @@ public class ProviderVersioningService : IProviderVersioningService
             throw new ProviderVersionStateException(providerId, versionId, draft.VersionState,
                 $"Draft version number {draft.VersionNumber} does not match the expected next number {expectedNumber}. Re-amend from the latest version and retry.");
         }
+
+        // A version never brings its own bank account: changing where a
+        // provider is paid goes through IProviderBankAccountChangeService
+        // (proposed, then approved by a second user). The new head keeps the
+        // account the chain head already carries (set before dual control),
+        // and a brand-new provider starts with none.
+        draft.BankAccount = predecessor?.BankAccount;
 
         var now = DateTime.UtcNow;
         draft.VersionState = ProviderVersionState.Active;

@@ -1,6 +1,8 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using ProviderService.Models;
+using ProviderService.Security;
 using ProviderService.Services;
 
 namespace ProviderService.Controllers;
@@ -20,17 +22,14 @@ namespace ProviderService.Controllers;
 ///     <see cref="IntegrityProjectionOptions.AdminBackfillEnabled"/>
 ///     defaults to <c>false</c>. The controller returns
 ///     <see cref="StatusCodes.Status503ServiceUnavailable"/> until an
-///     operator explicitly opts in via configuration. Provider-service
-///     does not yet configure authentication
-///     (<c>Program.cs</c> calls <c>UseAuthorization()</c> with no
-///     <c>AddAuthentication()</c>) — without this guard a misconfigured
-///     gateway / NetworkPolicy could expose a route that triggers
-///     large cross-service work.
+///     operator explicitly opts in via configuration.
 ///   </item>
 ///   <item>
-///     Even with the flag enabled, the deployment layer
-///     (NetworkPolicy, gateway ACL, mTLS) is the load-bearing
-///     authorization. The flag is a tripwire, not authn.
+///     The caller needs a CHO token holding <c>settings:manage</c>
+///     (TenantAdmin). The backfill runs in the token's tenant only; the
+///     optional <c>tenantId</c> query parameter is accepted as an echo of
+///     that tenant and a different value is refused with 403. To cover
+///     several tenants an operator runs it once per tenant token.
 ///   </item>
 /// </list>
 ///
@@ -69,11 +68,12 @@ public sealed class IntegrityProjectionAdminController : ControllerBase
     /// data-quality refresh.
     /// </summary>
     [HttpPost("backfill-integrity-projection")]
+    [RequirePermission("settings:manage")]
     [ProducesResponseType(typeof(IntegrityProjectionTenantSweepResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<IntegrityProjectionTenantSweepResult>> BackfillIntegrityProjection(
-        [FromQuery] string tenantId,
+        [FromQuery] string? tenantId,
         [FromQuery] int? maxProviders,
         CancellationToken ct)
     {
@@ -95,10 +95,17 @@ public sealed class IntegrityProjectionAdminController : ControllerBase
                 });
         }
 
-        if (string.IsNullOrWhiteSpace(tenantId))
+        // The tenant is the token's. A query tenant is only an echo of it.
+        var tokenTenant = this.TokenTenantId();
+        if (!string.IsNullOrEmpty(tenantId) && !string.Equals(tenantId, tokenTenant, StringComparison.Ordinal))
         {
-            return BadRequest(new { error = "tenantId query parameter is required" });
+            _logger.LogWarning(
+                "integrity projection backfill refused: query tenant {QueryTenant} does not match the authenticated tenant {TokenTenant}",
+                Sanitize(tenantId), Sanitize(tokenTenant));
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "The tenantId query parameter does not match the authenticated tenant." });
         }
+        tenantId = tokenTenant;
 
         _logger.LogInformation(
             "integrity projection backfill triggered for tenant={Tenant} maxProviders={Max}",
@@ -111,7 +118,7 @@ public sealed class IntegrityProjectionAdminController : ControllerBase
                 DueBefore = DateTimeOffset.UtcNow.AddYears(100), // force "every row is due"
                 IncludeNeverVerified = true,
                 MaxProviders = maxProviders,
-                ActorId = "admin:backfill-integrity-projection",
+                ActorId = this.TokenActorId(),
             },
             ct);
 

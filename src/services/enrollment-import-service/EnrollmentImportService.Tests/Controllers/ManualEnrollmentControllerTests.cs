@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
+using EnrollmentImportService.Tests.Support;
+
 namespace EnrollmentImportService.Tests.Controllers;
 
 public class ManualEnrollmentControllerTests
@@ -17,6 +19,7 @@ public class ManualEnrollmentControllerTests
         var ctl = new ManualEnrollmentController(
             svc.Object,
             new EnrollmentValidator(),
+            new TestActor(tenantId: "t1"),
             NullLogger<ManualEnrollmentController>.Instance);
         return (ctl, svc);
     }
@@ -35,7 +38,7 @@ public class ManualEnrollmentControllerTests
     public async Task CreateManual_ValidPayload_DefaultsEventId_AndImports()
     {
         var (ctl, svc) = Build();
-        var resp = await ctl.CreateManual(Valid(), "t1", "actor1");
+        var resp = await ctl.CreateManual(Valid());
 
         resp.Should().BeOfType<OkObjectResult>();
         svc.Verify(s => s.ImportEnrollmentAsync(
@@ -53,7 +56,7 @@ public class ManualEnrollmentControllerTests
         var enrollment = Valid();
         enrollment.EventId = "client-supplied-key";
 
-        await ctl.CreateManual(enrollment, "t1");
+        await ctl.CreateManual(enrollment);
 
         svc.Verify(s => s.ImportEnrollmentAsync(
             It.Is<Enrollment834>(b => b.Enrollments[0].EventId == "client-supplied-key"),
@@ -61,18 +64,10 @@ public class ManualEnrollmentControllerTests
     }
 
     [Fact]
-    public async Task CreateManual_MissingTenant_ReturnsBadRequest()
-    {
-        var (ctl, _) = Build();
-        var resp = await ctl.CreateManual(Valid(), tenantId: "");
-        resp.Should().BeOfType<BadRequestObjectResult>();
-    }
-
-    [Fact]
     public async Task CreateManual_InvalidPayload_ReturnsValidationProblemWithFieldKeys()
     {
         var (ctl, _) = Build();
-        var resp = await ctl.CreateManual(new MemberEnrollment(), "t1");
+        var resp = await ctl.CreateManual(new MemberEnrollment());
         var bad = resp.Should().BeOfType<BadRequestObjectResult>().Subject;
         var problem = bad.Value.Should().BeOfType<ValidationProblemDetails>().Subject;
         problem.Errors.Keys.Should().Contain("subscriberId");

@@ -59,7 +59,7 @@
                     <MudAlert Severity="Severity.Success" Class="mb-3">
                         Card issued: @_result.CardId
                     </MudAlert>
-                    <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(_result.DocumentId!)" Target="_blank">
+                    <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(_result.DocumentId!)" Target="_blank" download rel="noopener">
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
                             Download PDF
                         </MudButton>

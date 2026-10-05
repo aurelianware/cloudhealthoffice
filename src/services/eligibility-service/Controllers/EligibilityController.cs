@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using EligibilityService.Middleware;
+using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using EligibilityService.Models;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
@@ -16,7 +17,8 @@ public class EligibilityController : ControllerBase
     private readonly IEdi271Generator _edi271Generator;
     private readonly ILogger<EligibilityController> _logger;
 
-    public string TenantId { get; set; } = string.Empty;
+    /// <summary>The tenant from the caller's validated token.</summary>
+    private string TenantId => HttpContext.GetTenantId();
 
     public EligibilityController(
         IEligibilityService eligibilityService,
@@ -36,6 +38,7 @@ public class EligibilityController : ControllerBase
     /// Submit 270 Eligibility Inquiry - Real-time eligibility check
     /// </summary>
     [HttpPost("inquiry")]
+    [RequirePermission("eligibility:check")]
     public async Task<ActionResult<EligibilityResponse>> SubmitInquiry([FromBody] EligibilityInquiry inquiry)
     {
         try
@@ -155,6 +158,7 @@ public class EligibilityController : ControllerBase
     /// Validate authorization requirement for a service
     /// </summary>
     [HttpPost("validate-auth")]
+    [RequirePermission("eligibility:check")]
     public async Task<ActionResult<AuthRequirementResponse>> ValidateAuthRequirement(
         [FromBody] AuthRequirementRequest request)
     {
@@ -182,6 +186,7 @@ public class EligibilityController : ControllerBase
     /// Content-Type: text/plain; body = raw X12 270 EDI string.
     /// </summary>
     [HttpPost("270")]
+    [RequirePermission("eligibility:check")]
     [Consumes("text/plain")]
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

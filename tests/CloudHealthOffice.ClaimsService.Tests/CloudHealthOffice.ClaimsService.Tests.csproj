@@ -14,11 +14,11 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
-    <!-- 5.1 — Mongo-backed coverage for the claim-version chain. EphemeralMongo7
+    <!-- 5.1 — Mongo-backed coverage for the claim-version chain. EphemeralMongo
          spins up an in-memory mongod for the version chain, event publisher,
          and index initializer tests; FluentAssertions matches the Provider /
          BenefitPlan test ergonomics for the new test files. -->
-    <PackageReference Include="EphemeralMongo7" />
+    <PackageReference Include="EphemeralMongo" />
     <PackageReference Include="FluentAssertions" />
   </ItemGroup>
   <ItemGroup>
@@ -28,5 +28,9 @@
   <ItemGroup>
     <!-- Implicit usings — match Provider/BP test project ergonomics. -->
     <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

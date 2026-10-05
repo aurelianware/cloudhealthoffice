@@ -6,8 +6,15 @@ namespace ReferenceDataService.Migrations;
 
 public sealed class ReferenceDataSchemaMigrator
 {
-    private const string MigrationId = "20260814_001_canonical_reference_data";
-    private const string ResourceSuffix = $"Migrations.{MigrationId}.sql";
+    /// <summary>
+    /// Forward-only migrations, applied in order. Each is an embedded
+    /// <c>Migrations/{id}.sql</c> recorded in <c>reference_data_schema_migrations</c>.
+    /// </summary>
+    public static readonly IReadOnlyList<string> MigrationIds =
+    [
+        "20260814_001_canonical_reference_data",
+        "20261004_002_import_ledger_tenant_scope_and_actor",
+    ];
     private readonly ReferenceDataContext _context;
     private readonly ILogger<ReferenceDataSchemaMigrator> _logger;
 
@@ -36,32 +43,33 @@ public sealed class ReferenceDataSchemaMigrator
             );
             """, cancellationToken);
 
-        await using var check = connection.CreateCommand();
-        check.Transaction = transaction;
-        check.CommandText = "SELECT EXISTS (SELECT 1 FROM reference_data_schema_migrations WHERE migration_id = @id);";
-        var parameter = check.CreateParameter();
-        parameter.ParameterName = "id";
-        parameter.Value = MigrationId;
-        check.Parameters.Add(parameter);
-        if ((bool)(await check.ExecuteScalarAsync(cancellationToken) ?? false))
+        foreach (var migrationId in MigrationIds)
         {
-            await transaction.CommitAsync(cancellationToken);
-            return;
+            await using var check = connection.CreateCommand();
+            check.Transaction = transaction;
+            check.CommandText = "SELECT EXISTS (SELECT 1 FROM reference_data_schema_migrations WHERE migration_id = @id);";
+            var parameter = check.CreateParameter();
+            parameter.ParameterName = "id";
+            parameter.Value = migrationId;
+            check.Parameters.Add(parameter);
+            if ((bool)(await check.ExecuteScalarAsync(cancellationToken) ?? false))
+                continue;
+
+            _logger.LogInformation("Applying reference data schema migration {MigrationId}", migrationId);
+            await ExecuteAsync(connection, transaction, ReadMigrationSql(migrationId), cancellationToken);
+
+            await using var record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText = "INSERT INTO reference_data_schema_migrations (migration_id) VALUES (@id);";
+            var recordParameter = record.CreateParameter();
+            recordParameter.ParameterName = "id";
+            recordParameter.Value = migrationId;
+            record.Parameters.Add(recordParameter);
+            await record.ExecuteNonQueryAsync(cancellationToken);
+            _logger.LogInformation("Applied reference data schema migration {MigrationId}", migrationId);
         }
 
-        _logger.LogInformation("Applying reference data schema migration {MigrationId}", MigrationId);
-        await ExecuteAsync(connection, transaction, ReadMigrationSql(), cancellationToken);
-
-        await using var record = connection.CreateCommand();
-        record.Transaction = transaction;
-        record.CommandText = "INSERT INTO reference_data_schema_migrations (migration_id) VALUES (@id);";
-        var recordParameter = record.CreateParameter();
-        recordParameter.ParameterName = "id";
-        recordParameter.Value = MigrationId;
-        record.Parameters.Add(recordParameter);
-        await record.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        _logger.LogInformation("Applied reference data schema migration {MigrationId}", MigrationId);
     }
 
     private static async Task ExecuteAsync(
@@ -76,13 +84,14 @@ public sealed class ReferenceDataSchemaMigrator
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static string ReadMigrationSql()
+    internal static string ReadMigrationSql(string migrationId)
     {
+        var resourceSuffix = $"Migrations.{migrationId}.sql";
         var assembly = typeof(ReferenceDataSchemaMigrator).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
-            .SingleOrDefault(name => name.EndsWith(ResourceSuffix, StringComparison.Ordinal));
+            .SingleOrDefault(name => name.EndsWith(resourceSuffix, StringComparison.Ordinal));
         if (resourceName is null)
-            throw new InvalidOperationException($"Embedded migration resource '{ResourceSuffix}' was not found.");
+            throw new InvalidOperationException($"Embedded migration resource '{resourceSuffix}' was not found.");
 
         using var stream = assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"Embedded migration resource '{resourceName}' could not be opened.");

@@ -11,6 +11,7 @@ using CloudHealthOffice.ClaimsScrubEngine.Services;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.OperatingMode;
 using CloudHealthOffice.PriorAuthRuleEngine.Abstractions;
 using CloudHealthOffice.PriorAuthRuleEngine.Domain;
@@ -44,7 +45,15 @@ namespace BenefitPlanService.Controllers;
 ///     → POST /api/v1/adjudication/adjudicate
 ///     → Calls both engines and returns a merged result
 ///
-/// All endpoints expect X-Tenant-ID header (set by TenantMiddleware).
+/// Every endpoint requires a CHO token; the tenant comes from the token
+/// (shared TenantMiddleware). Permissions:
+///   - pure calculations that persist nothing (resolve-rates, ncci-check,
+///     scrub-check, validate-provider-enrollment) — claims:work or benefits:read;
+///   - adjudicate / calculate-benefits — claims:work, because in the default
+///     Production execution mode they write accumulator updates;
+///   - reverse-claim — the service default write permission (settings:manage);
+///     claims-service calls it with a service token;
+///   - GET provider-integrity — the default read permission (benefits:read).
 /// </summary>
 [ApiController]
 [Route("api/v1/adjudication")]
@@ -125,6 +134,8 @@ public class AdjudicationController : ControllerBase
     /// workflow steps with a single HTTP round-trip.
     /// </summary>
     [HttpPost("adjudicate")]
+    // Writes accumulator updates in Production execution mode, so a benefits reader alone may not call it.
+    [RequirePermission("claims:work")]
     [ProducesResponseType(typeof(AdjudicationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AdjudicationResponse>> Adjudicate(
@@ -695,6 +706,8 @@ public class AdjudicationController : ControllerBase
     /// Calls the BenefitCalculationEngine with Redis-backed accumulators.
     /// </summary>
     [HttpPost("calculate-benefits")]
+    // Writes accumulator updates in Production execution mode, so a benefits reader alone may not call it.
+    [RequirePermission("claims:work")]
     [ProducesResponseType(typeof(BenefitResolutionResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BenefitResolutionResult>> CalculateBenefits(
@@ -809,6 +822,7 @@ public class AdjudicationController : ControllerBase
     /// Looks up provider contracts, fee schedules, and applies modifier adjustments.
     /// </summary>
     [HttpPost("resolve-rates")]
+    [RequirePermission("claims:work,benefits:read")]
     [ProducesResponseType(typeof(PricingResultSet), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PricingResultSet>> ResolveRates(
@@ -836,6 +850,7 @@ public class AdjudicationController : ControllerBase
     /// Returns the scrub result indicating whether the claim passed.
     /// </summary>
     [HttpPost("ncci-check")]
+    [RequirePermission("claims:work,benefits:read")]
     [ProducesResponseType(typeof(NcciScrubResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<NcciScrubResult>> NcciCheck(
@@ -865,6 +880,7 @@ public class AdjudicationController : ControllerBase
     /// Returns the validation result with routing decision.
     /// </summary>
     [HttpPost("scrub-check")]
+    [RequirePermission("claims:work,benefits:read")]
     [ProducesResponseType(typeof(ClaimsScrubResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ClaimsScrubResponse>> ScrubCheck(
@@ -888,6 +904,7 @@ public class AdjudicationController : ControllerBase
     // ═══════════════════════════════════════════════════════════════════
 
     [HttpPost("validate-provider-enrollment")]
+    [RequirePermission("claims:work,benefits:read")]
     [ProducesResponseType(typeof(BenefitPlanService.Models.ProviderEnrollmentValidationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BenefitPlanService.Models.ProviderEnrollmentValidationResponse>> ValidateProviderEnrollment(

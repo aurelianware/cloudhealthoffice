@@ -8,6 +8,25 @@ namespace CloudHealthOffice.Infrastructure.Tests;
 public class HealthCheckExtensionsTests
 {
     [Fact]
+    public async Task HealthResponse_IsTheOverallStatusOnly_NoCheckNamesOrDescriptions()
+    {
+        var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        var report = new HealthReport(new Dictionary<string, HealthReportEntry>
+        {
+            ["tenant-service"] = new(HealthStatus.Degraded, "http://tenant-service.cloudhealthoffice/health returned 500",
+                TimeSpan.FromMilliseconds(3), null, null),
+            ["payer-directory"] = new(HealthStatus.Healthy, "tenant acme-health loaded", TimeSpan.Zero, null, null),
+        }, TimeSpan.FromMilliseconds(5));
+
+        await HealthCheckExtensions.WriteHealthCheckResponse(context, report);
+
+        context.Response.Body.Position = 0;
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
+        body.Should().Be("{\"status\":\"Degraded\"}");
+    }
+
+    [Fact]
     public void AddChoHealthChecks_WithNoOptions_RegistersSelfCheck()
     {
         var services = new ServiceCollection();

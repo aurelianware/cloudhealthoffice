@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using FhirService.Formatters;
 using FhirService.Middleware;
 using FhirService.Models;
@@ -169,15 +170,17 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbKey             = builder.Configuration["CosmosDb:Key"];
 });
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddCors(options => options.AddPolicy("AllowAll",
-    p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// CORS: browser SMART apps call this service. Allowlist only
+// (Cors:AllowedOrigins, default Portal:BaseUrl), no credentials,
+// closed when unconfigured outside Development. See ChoCors.
+builder.Services.AddChoBrowserCors(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment()) { app.UseSwagger(); app.UseSwaggerUI(); }
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseChoBrowserCors();
 app.UseAuthentication();
 app.UseMiddleware<SmartScopeEnforcementMiddleware>();
 app.UseMiddleware<TenantMiddleware>();

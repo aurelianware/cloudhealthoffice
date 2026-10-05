@@ -1,18 +1,31 @@
 using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
-using RfaiService.Middleware;
 using RfaiService.Repositories;
 using RfaiService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
+
+// ── Authentication ───────────────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// that token. RFAI cases point at submitted clinical documentation (PHI), so
+// nothing here is anonymous. Callers: fhir-service (CDex Task and
+// $submit-attachment, with the CHO caller's token or its own service token for
+// SMART callers), authorization-service (A4 requests) and attachment-service
+// (275 correlation).
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "rfai:read";
+    auth.DefaultWritePermission = "rfai:write";
+});
 
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
@@ -81,11 +94,8 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbEndpoint = builder.Configuration["CosmosDb:Endpoint"];
     options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -105,9 +115,8 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
-app.UseTenantMiddleware();
-app.UseAuthorization();
+// Token authentication, tenant from the token, then permission policies.
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

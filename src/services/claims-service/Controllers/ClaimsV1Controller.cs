@@ -6,6 +6,7 @@ using ClaimsService.Fhir;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaimsService.Controllers;
@@ -46,6 +47,7 @@ public class ClaimsV1Controller : ControllerBase
     private readonly IClaimSubmissionService _submissionService;
     private readonly IExplanationOfBenefitProjector _eobProjector;
     private readonly IClaimImportTransactionRepository _importTransactions;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ClaimsV1Controller> _logger;
     private readonly int _raw837MaxConcurrency;
 
@@ -55,12 +57,14 @@ public class ClaimsV1Controller : ControllerBase
         IExplanationOfBenefitProjector eobProjector,
         IClaimImportTransactionRepository importTransactions,
         IConfiguration configuration,
+        ICurrentActor actor,
         ILogger<ClaimsV1Controller> logger)
     {
         _adapterFactory = adapterFactory;
         _submissionService = submissionService;
         _eobProjector = eobProjector;
         _importTransactions = importTransactions;
+        _actor = actor;
         _logger = logger;
         _raw837MaxConcurrency = Math.Clamp(
             configuration.GetValue("ClaimsImport:Raw837MaxConcurrency", 32),
@@ -97,6 +101,9 @@ public class ClaimsV1Controller : ControllerBase
 
         var actorId = ResolveActorId();
         var correlationId = ResolveCorrelationId();
+
+        // Lifecycle, adjudication and audit fields on the body are server-owned.
+        ClaimSubmissionInput.ResetServerOwnedFields(claim, actorId);
 
         var result = await _submissionService.SubmitAsync(
             claim, tenantId, actorId, correlationId, ct);
@@ -239,14 +246,9 @@ public class ClaimsV1Controller : ControllerBase
     /// </summary>
     [HttpGet("import-transactions")]
     [ProducesResponseType(typeof(List<ClaimImportTransaction>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ListImportTransactions([FromQuery] int limit = 100)
     {
-        var tenantId = TryGetTenantId();
-        if (string.IsNullOrWhiteSpace(tenantId))
-        {
-            return BadRequest(new { error = "X-Tenant-ID header is required" });
-        }
+        var tenantId = GetTenantId();
         if (limit < 1 || limit > 500) limit = 100;
 
         var transactions = await _importTransactions.ListRecentAsync(tenantId, limit);
@@ -278,7 +280,7 @@ public class ClaimsV1Controller : ControllerBase
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest(new { error = "memberId is required" });
 
-        var tenantId = TryGetTenantId();
+        var tenantId = GetTenantId();
 
         _logger.LogInformation(
             "v1 claims member search: member={Member}, status={Status}, type={Type}, amount=[{Min},{Max}]",
@@ -364,20 +366,8 @@ public class ClaimsV1Controller : ControllerBase
         return tenantId;
     }
 
-    private string TryGetTenantId() =>
-        HttpContext?.Items["TenantId"]?.ToString() ?? string.Empty;
-
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) &&
-            !string.IsNullOrEmpty(header.ToString()))
-        {
-            return header.ToString();
-        }
-        return "system";
-    }
+    /// <summary>The acting user or service, from the validated token only.</summary>
+    private string ResolveActorId() => _actor.UserId;
 
     private string? ResolveCorrelationId()
     {

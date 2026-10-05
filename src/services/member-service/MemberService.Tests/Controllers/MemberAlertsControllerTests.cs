@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using MemberService.Controllers;
 using MemberService.Models;
 using MemberService.Services;
@@ -16,7 +17,7 @@ public class MemberAlertsControllerTests
     private static (MemberAlertsController ctl,
                     InMemoryMemberRepository members,
                     InMemoryMemberAlertRepository alerts,
-                    InMemoryMemberEventRepository events) Build()
+                    InMemoryMemberEventRepository events) Build(string role = ChoRolePermissions.TenantAdmin)
     {
         var members = new InMemoryMemberRepository();
         members.Members.Add(new Member
@@ -38,8 +39,98 @@ public class MemberAlertsControllerTests
         var ctl = new MemberAlertsController(members, alerts, publisher, projector);
         var http = new DefaultHttpContext();
         http.Items["TenantId"] = Tenant;
+        // The signed-in caller (alert writes check the alert type's permission in the action).
+        http.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [
+                new System.Security.Claims.Claim(ChoClaimTypes.Subject, "user-1"),
+                new System.Security.Claims.Claim(ChoClaimTypes.TenantId, Tenant),
+                new System.Security.Claims.Claim(ChoClaimTypes.Role, role),
+            ], "Bearer"));
         ctl.ControllerContext = new ControllerContext { HttpContext = http };
         return (ctl, members, alerts, events);
+    }
+
+    [Fact]
+    public async Task CreateLitigationHold_WithMembersWriteOnly_Is403AndStoresNothing()
+    {
+        // EnrollmentSpecialist holds members:write but not records:legal-hold.
+        var (ctl, _, alerts, events) = Build(ChoRolePermissions.EnrollmentSpecialist);
+
+        var result = await ctl.CreateAlert(MemberId, Req(MemberAlertType.LitigationHold), CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        alerts.Alerts.Should().BeEmpty();
+        events.All.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateOtherAlertType_WithMembersWrite_IsCreated()
+    {
+        var (ctl, _, alerts, _) = Build(ChoRolePermissions.EnrollmentSpecialist);
+
+        var result = await ctl.CreateAlert(MemberId, Req(MemberAlertType.LanguageRequirement, MemberAlertSeverity.Info), CancellationToken.None);
+
+        result.Should().BeOfType<CreatedAtActionResult>();
+        alerts.Alerts.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task CreateLitigationHold_WithLegalHoldPermission_IsCreated()
+    {
+        // ComplianceOfficer holds records:legal-hold (and no members:write).
+        var (ctl, _, alerts, _) = Build(ChoRolePermissions.ComplianceOfficer);
+
+        var result = await ctl.CreateAlert(MemberId, Req(MemberAlertType.LitigationHold), CancellationToken.None);
+
+        result.Should().BeOfType<CreatedAtActionResult>();
+        alerts.Alerts.Should().ContainSingle(a => a.AlertType == MemberAlertType.LitigationHold);
+    }
+
+    [Fact]
+    public async Task CreateOtherAlertType_WithLegalHoldPermissionOnly_Is403()
+    {
+        var (ctl, _, alerts, _) = Build(ChoRolePermissions.ComplianceOfficer);
+
+        var result = await ctl.CreateAlert(MemberId, Req(MemberAlertType.LanguageRequirement, MemberAlertSeverity.Info), CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        alerts.Alerts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EndLitigationHold_WithMembersWriteOnly_Is403AndHoldStays()
+    {
+        var (admin, _, alerts, _) = Build(ChoRolePermissions.ComplianceOfficer);
+        var created = (MemberAlert)((CreatedAtActionResult)await admin.CreateAlert(
+            MemberId, Req(MemberAlertType.LitigationHold), CancellationToken.None)).Value!;
+        var (ctl, _, _, _) = Build(ChoRolePermissions.EnrollmentSpecialist);
+        UseRepository(ctl, alerts);
+
+        var result = await ctl.EndAlert(MemberId, created.Id, null, CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        alerts.Alerts.Single().EndDate.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EndLitigationHold_WithLegalHoldPermission_EndsIt()
+    {
+        var (ctl, _, alerts, _) = Build(ChoRolePermissions.ComplianceOfficer);
+        var created = (MemberAlert)((CreatedAtActionResult)await ctl.CreateAlert(
+            MemberId, Req(MemberAlertType.LitigationHold), CancellationToken.None)).Value!;
+
+        var result = await ctl.EndAlert(MemberId, created.Id, null, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        alerts.Alerts.Single().EndDate.Should().NotBeNull();
+    }
+
+    /// <summary>Points a controller at another controller's alert store (same tenant and member).</summary>
+    private static void UseRepository(MemberAlertsController ctl, InMemoryMemberAlertRepository alerts)
+    {
+        var field = typeof(MemberAlertsController).GetField("_alerts",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        field.SetValue(ctl, alerts);
     }
 
     private static CreateMemberAlertRequest Req(

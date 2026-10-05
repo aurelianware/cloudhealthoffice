@@ -4,6 +4,7 @@ using PersonalRepresentativeService.Middleware;
 using PersonalRepresentativeService.Models;
 using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 // TODO(review-workflow-followup): multi-step approval workflows (legal
@@ -21,17 +22,37 @@ namespace PersonalRepresentativeService.Controllers;
 /// are never hard-deleted; the lifecycle is Draft → Active → Inactive, with
 /// an append-only audit trail on every transition. Associations to members
 /// are symmetric pairs written atomically.
+///
+/// Identity: the tenant and the acting user come from the validated CHO
+/// token only (<see cref="ICurrentActor"/>). Who established, activated,
+/// associated, removed or revoked a representative is the token subject,
+/// never a body field. Reads need <c>members:read</c>, writes
+/// <c>members:write</c> (defaults set in Program.cs).
 /// </summary>
 [ApiController]
 [Route("api/v1/personal-representatives")]
 public class PersonalRepresentativesController : ControllerBase
 {
+    /// <summary>A member added to a representative that is not a Draft was refused.</summary>
+    public static readonly EventId MemberAdditionRefusedAuditEvent = new(4702, "PersonalRepMemberAdditionRefused");
+
+    /// <summary>
+    /// An association that the activating user did not approve (written
+    /// concurrently with activation) was withdrawn.
+    /// </summary>
+    public static readonly EventId UnapprovedAssociationWithdrawnAuditEvent = new(4703, "PersonalRepUnapprovedAssociationWithdrawn");
+
     private string TenantId => HttpContext.GetTenantId();
+
+    /// <summary>The token subject. Every write records this as its actor.</summary>
+    private string Actor => _currentActor.UserId;
 
     private readonly IPersonalRepRepository _reps;
     private readonly IPersonalRepEventRepository _events;
     private readonly IPersonalRepFieldEncryptor _encryptor;
     private readonly IPersonalRepEventPublisher _publisher;
+    private readonly ICurrentActor _currentActor;
+    private readonly IPersonalRepActivationControls _activationControls;
     private readonly ILogger<PersonalRepresentativesController>? _logger;
 
     public PersonalRepresentativesController(
@@ -39,8 +60,12 @@ public class PersonalRepresentativesController : ControllerBase
         IPersonalRepEventRepository events,
         IPersonalRepFieldEncryptor encryptor,
         IPersonalRepEventPublisher publisher,
+        ICurrentActor currentActor,
+        IPersonalRepActivationControls activationControls,
         ILogger<PersonalRepresentativesController>? logger = null)
     {
+        _currentActor = currentActor;
+        _activationControls = activationControls;
         _reps = reps;
         _events = events;
         _encryptor = encryptor;
@@ -57,7 +82,7 @@ public class PersonalRepresentativesController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
 
         var rep = new PersonalRepresentative
         {
@@ -127,10 +152,24 @@ public class PersonalRepresentativesController : ControllerBase
         return Ok(new PersonalRepHistoryResponse { Items = events.ToList() });
     }
 
+    /// <summary>
+    /// Draft → Active. Checked by <see cref="IPersonalRepActivationControls"/>
+    /// before anything is written: a user (not a service) other than the
+    /// creator activates (unless the tenant turned the second-person rule off),
+    /// and guardians, conservators, healthcare powers of attorney and surrogates need a
+    /// proof-of-authority document in member-document-service that belongs to
+    /// this tenant and is linked to the representative's members. Who verified
+    /// the document and when is stored on the representative and on the audit
+    /// and Kafka events.
+    /// </summary>
     [HttpPost("{repId}/activate")]
     [ProducesResponseType(typeof(PersonalRepresentative), 200)]
+    [ProducesResponseType(typeof(ProblemDetails), 400)]
+    [ProducesResponseType(typeof(ProblemDetails), 403)]
     [ProducesResponseType(404)]
     [ProducesResponseType(typeof(ProblemDetails), 409)]
+    [ProducesResponseType(typeof(ProblemDetails), 422)]
+    [ProducesResponseType(typeof(ProblemDetails), 503)]
     public async Task<IActionResult> Activate(
         [FromRoute] string repId,
         [FromBody] ActivatePersonalRepRequest? request,
@@ -156,16 +195,47 @@ public class PersonalRepresentativesController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        // Every member the representative will cover: associations that have
+        // not ended, including future-dated ones (which would otherwise start
+        // covering their member later without ever being checked).
+        var approvedMemberIds = NotEnded(await _reps.ListAssociationsForRepAsync(TenantId, repId, ct: ct))
+            .Select(a => a.MemberId).Distinct().ToList();
+
+        var decision = await _activationControls.EvaluateAsync(
+            rep, request?.ProofOfAuthorityDocumentId, approvedMemberIds, ct);
+        if (!decision.Allowed)
+        {
+            return StatusCode(decision.StatusCode, new ProblemDetails
+            {
+                Status = decision.StatusCode,
+                Title = decision.Title,
+                Detail = decision.Detail
+            });
+        }
+
+        var actor = Actor;
         var from = rep.Status;
+        var now = DateTime.UtcNow;
         rep.Status = PersonalRepStatus.Active;
         rep.ActivatedBy = actor;
-        rep.ActivatedAt = DateTime.UtcNow;
+        rep.ActivatedAt = now;
         if (!rep.EffectiveFrom.HasValue)
             rep.EffectiveFrom = rep.ActivatedAt;
+        if (decision.VerifiedDocumentId != null)
+        {
+            rep.ProofOfAuthorityDocumentId = decision.VerifiedDocumentId;
+            rep.ProofOfAuthorityVerifiedBy = actor;
+            rep.ProofOfAuthorityVerifiedAt = now;
+        }
 
         var auditEvent = BuildRepEvent(rep, PersonalRepEventType.PersonalRepActivated,
             fromStatus: from, toStatus: PersonalRepStatus.Active, actor, request?.EventId, memberId: null);
+        auditEvent.Payload!["proofOfAuthorityDocumentId"] = rep.ProofOfAuthorityDocumentId;
+        auditEvent.Payload["proofOfAuthorityVerifiedBy"] = rep.ProofOfAuthorityVerifiedBy;
+        auditEvent.Payload["proofOfAuthorityVerifiedAt"] = rep.ProofOfAuthorityVerifiedAt?.ToString("o");
+        auditEvent.Payload["createdBy"] = rep.CreatedBy;
+        auditEvent.Payload["secondPersonOverride"] = decision.SecondPersonOverridden;
+        auditEvent.Payload["approvedMemberIds"] = new JsonArray(approvedMemberIds.Select(m => (JsonNode?)m).ToArray());
 
         PersonalRepresentative updated;
         try
@@ -177,7 +247,22 @@ public class PersonalRepresentativesController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var memberIds = (await _reps.ListAssociationsForRepAsync(TenantId, repId, activeOnly: true, ct: ct))
+        // A member added while this activation was being checked was not
+        // approved by the activating user: withdraw it. (AddAssociation
+        // re-reads the rep after writing and withdraws its own pair when the
+        // rep is no longer a Draft, which covers the other interleaving.)
+        var afterActivation = NotEnded(await _reps.ListAssociationsForRepAsync(TenantId, repId, ct: ct));
+        foreach (var unapproved in afterActivation
+                     .Where(a => !approvedMemberIds.Contains(a.MemberId))
+                     .GroupBy(a => a.PairId).Select(g => g.First()))
+        {
+            await WithdrawAssociationAsync(updated, unapproved,
+                "member added while the representative was being activated; not approved by the activating user",
+                publishRemoval: true, ct);
+        }
+
+        var memberIds = afterActivation
+            .Where(a => approvedMemberIds.Contains(a.MemberId) && a.EffectiveFrom <= DateTime.UtcNow)
             .Select(a => a.MemberId).Distinct().ToList();
 
         await _publisher.PublishStatusChangedAsync(
@@ -198,6 +283,18 @@ public class PersonalRepresentativesController : ControllerBase
         [FromBody] RevokePersonalRepRequest? request,
         CancellationToken ct)
     {
+        // Only the system records a lapse (read-time expiry observation); a
+        // caller claiming "Expired" would misstate why authority ended.
+        if (request?.ReasonCode == PersonalRepInactivationReasonCode.Expired)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = 400,
+                Title = "Invalid revocation reason",
+                Detail = "ReasonCode Expired is recorded by the system when ExpiresAt passes; choose the reason the authority ended."
+            });
+        }
+
         var rep = await _reps.GetByIdAsync(TenantId, repId, ct);
         if (rep == null) return NotFound();
 
@@ -218,7 +315,7 @@ public class PersonalRepresentativesController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var from = rep.Status;
         rep.Status = PersonalRepStatus.Inactive;
         rep.InactivatedBy = actor;
@@ -250,6 +347,14 @@ public class PersonalRepresentativesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Adds a member to a Draft representative. Members are added only while
+    /// the representative is a Draft, so every member it covers passes the
+    /// activation controls (second person, proof of authority linked to that
+    /// member, user token, tenant override): an Active or Inactive
+    /// representative answers 409. To cover another member, establish a new
+    /// representative for that member and have it activated.
+    /// </summary>
     [HttpPost("{repId}/associations")]
     [ProducesResponseType(typeof(PersonalRepAssociation), 201)]
     [ProducesResponseType(404)]
@@ -264,6 +369,16 @@ public class PersonalRepresentativesController : ControllerBase
         var rep = await _reps.GetByIdAsync(TenantId, repId, ct);
         if (rep == null) return NotFound();
 
+        if (rep.ObservedStatus() != PersonalRepStatus.Draft)
+        {
+            _logger?.LogWarning(MemberAdditionRefusedAuditEvent,
+                "AUDIT member addition refused: user {UserId} tried to add member {MemberId} to {Status} personal " +
+                "representative {PersonalRepId} ({CredentialType}) in tenant {TenantId}",
+                LogSanitizer.SafeForLog(Actor), LogSanitizer.SafeForLog(request.MemberId), rep.ObservedStatus(),
+                LogSanitizer.SafeForLog(repId), rep.CredentialType, LogSanitizer.SafeForLog(TenantId));
+            return MemberAdditionConflict(repId, rep.ObservedStatus());
+        }
+
         var existing = await _reps.FindActiveAssociationAsync(TenantId, repId, request.MemberId, ct);
         if (existing != null) return Conflict(new ProblemDetails
         {
@@ -272,7 +387,7 @@ public class PersonalRepresentativesController : ControllerBase
             Detail = $"Rep {repId} already has an active association with member {request.MemberId}."
         });
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var pairId = Guid.NewGuid().ToString();
         var now = DateTime.UtcNow;
 
@@ -315,6 +430,18 @@ public class PersonalRepresentativesController : ControllerBase
         };
 
         await _reps.AddAssociationPairAsync(forward, inverse, auditEvent, ct);
+
+        // Activated (or revoked) between the check above and the write: this
+        // member was not part of what the activating user approved.
+        var after = await _reps.GetByIdAsync(TenantId, repId, ct);
+        if (after == null || after.Status != PersonalRepStatus.Draft)
+        {
+            await WithdrawAssociationAsync(after ?? rep, forward,
+                "representative left Draft while the member was being added",
+                publishRemoval: false, ct);
+            return MemberAdditionConflict(repId, after?.Status ?? rep.Status);
+        }
+
         await _publisher.PublishAssociationChangedAsync(
             rep, forward, PersonalRepEventType.PersonalRepAssociationAdded,
             actor, HttpContext.TraceIdentifier, ct);
@@ -338,7 +465,7 @@ public class PersonalRepresentativesController : ControllerBase
         var existing = await _reps.FindActiveAssociationAsync(TenantId, repId, memberId, ct);
         if (existing == null) return NotFound();
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
 
         var auditEvent = BuildRepEvent(rep, PersonalRepEventType.PersonalRepAssociationRemoved,
             fromStatus: null, toStatus: null, actor, request?.EventId, memberId);
@@ -355,6 +482,64 @@ public class PersonalRepresentativesController : ControllerBase
             actor, HttpContext.TraceIdentifier, ct);
 
         return NoContent();
+    }
+
+    /// <summary>Associations that have not ended (current or future-dated).</summary>
+    private static IEnumerable<PersonalRepAssociation> NotEnded(IEnumerable<PersonalRepAssociation> rows)
+    {
+        var now = DateTime.UtcNow;
+        return rows.Where(a => !a.IsDeleted && (a.EffectiveTo == null || a.EffectiveTo > now)).ToList();
+    }
+
+    private IActionResult MemberAdditionConflict(string repId, PersonalRepStatus status)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = 409,
+            Title = "Members can be added only to a Draft representative",
+            Detail = $"Personal representative {repId} is {status}. Every member a representative covers is approved " +
+                     "when a second user activates it, with the proof of authority checked against that member. " +
+                     "To cover another member, establish a new representative for that member and have it activated.",
+            Type = "https://cloudhealthoffice.com/problems/personal-rep-transition"
+        };
+        problem.Extensions["representativeStatus"] = status.ToString();
+        return Conflict(problem);
+    }
+
+    /// <summary>
+    /// Ends an association pair that nobody approved, with an audit event and
+    /// an audit warning. Recorded as the system: it is a control taking access
+    /// away, not a user's decision.
+    /// </summary>
+    private async Task WithdrawAssociationAsync(
+        PersonalRepresentative rep, PersonalRepAssociation association, string reason, bool publishRemoval,
+        CancellationToken ct)
+    {
+        const string actor = "System";
+        var auditEvent = BuildRepEvent(rep, PersonalRepEventType.PersonalRepAssociationRemoved,
+            fromStatus: null, toStatus: null, actor, eventId: null, association.MemberId);
+        auditEvent.Payload = new JsonObject
+        {
+            ["memberId"] = association.MemberId,
+            ["pairId"] = association.PairId,
+            ["credentialType"] = association.CredentialType.ToString(),
+            ["addedBy"] = association.CreatedBy,
+            ["withdrawnReason"] = reason
+        };
+
+        await _reps.RemoveAssociationPairAsync(TenantId, association.PairId, actor, auditEvent, ct);
+        if (publishRemoval)
+        {
+            await _publisher.PublishAssociationChangedAsync(
+                rep, association, PersonalRepEventType.PersonalRepAssociationRemoved,
+                actor, HttpContext.TraceIdentifier, ct);
+        }
+
+        _logger?.LogWarning(UnapprovedAssociationWithdrawnAuditEvent,
+            "AUDIT unapproved association withdrawn: member {MemberId} (added by {AddedBy}) removed from personal " +
+            "representative {PersonalRepId} in tenant {TenantId}: {Reason}",
+            LogSanitizer.SafeForLog(association.MemberId), LogSanitizer.SafeForLog(association.CreatedBy),
+            LogSanitizer.SafeForLog(rep.Id), LogSanitizer.SafeForLog(TenantId), reason);
     }
 
     /// <summary>
@@ -440,6 +625,8 @@ public class PersonalRepresentativesController : ControllerBase
             EffectiveTo = rep.EffectiveTo,
             ExpiresAt = rep.ExpiresAt,
             ProofOfAuthorityDocumentId = rep.ProofOfAuthorityDocumentId,
+            ProofOfAuthorityVerifiedBy = rep.ProofOfAuthorityVerifiedBy,
+            ProofOfAuthorityVerifiedAt = rep.ProofOfAuthorityVerifiedAt,
             FirstName = await _encryptor.DecryptAsync(rep.FirstName, ct),
             MiddleName = await _encryptor.DecryptAsync(rep.MiddleName, ct),
             LastName = await _encryptor.DecryptAsync(rep.LastName, ct),
@@ -519,6 +706,15 @@ public class CreatePersonalRepRequest
 
 public class ActivatePersonalRepRequest
 {
+    /// <summary>
+    /// The member-document-service id of the guardianship order, power of
+    /// attorney or surrogate designation. Required (here or on the
+    /// representative) for LegalGuardian, Conservator, HealthcarePowerOfAttorney
+    /// and HealthcareSurrogate; replaces the id recorded at creation.
+    /// </summary>
+    [StringLength(100)]
+    public string? ProofOfAuthorityDocumentId { get; set; }
+
     public string? EventId { get; set; }
 }
 

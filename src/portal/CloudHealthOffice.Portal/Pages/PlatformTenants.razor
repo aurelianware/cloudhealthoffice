@@ -406,7 +406,7 @@
 
         if (confirm != true) return;
 
-        var success = await TenantContextService.SwitchTenantAsync(tenant.AzureTenantId);
+        var success = await TenantContextService.SwitchTenantAsync(tenant.TenantId);
         if (success)
         {
             Snackbar.Add($"Switched to {tenant.OrganizationName}", Severity.Success);

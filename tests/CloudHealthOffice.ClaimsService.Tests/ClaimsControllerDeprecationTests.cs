@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
@@ -32,7 +33,7 @@ public class ClaimsControllerDeprecationTests : IClassFixture<ClaimsApiFactory>
     {
         _factory = factory;
         _service = factory.SubmissionService;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
         _service.ClearSubstitute();

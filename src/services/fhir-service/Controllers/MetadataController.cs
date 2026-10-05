@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using FhirService.Services;
 using FhirService.Services.Cdex;
 using FhirService.Services.Clinical;
@@ -11,6 +12,7 @@ namespace FhirService.Controllers;
 /// Advertises supported resources, interactions, and search parameters.
 /// </summary>
 [Route("fhir/r4")]
+[AllowAnonymous]
 public class MetadataController : FhirControllerBase
 {
     private readonly IConfiguration _config;

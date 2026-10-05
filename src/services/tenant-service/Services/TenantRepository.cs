@@ -83,6 +83,19 @@ public class TenantRepository : ITenantRepository
         return await _collection.Find(filter).FirstOrDefaultAsync();
     }
 
+    public async Task<bool> TryActivatePendingAsync(string tenantId, string actor)
+    {
+        var now = DateTime.UtcNow;
+        var result = await _collection.UpdateOneAsync(
+            t => t.TenantId == tenantId && t.Status == "pending",
+            Builders<Tenant>.Update
+                .Set(t => t.Status, "active")
+                .Set(t => t.ActivatedAt, now)
+                .Set(t => t.UpdatedAt, now)
+                .Set(t => t.UpdatedBy, actor));
+        return result.ModifiedCount == 1;
+    }
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))

@@ -1,0 +1,18 @@
+@* A sponsor bank account as the masked reads return it: last 4 only. *@
+
+@if (Account != null)
+{
+    <MudSimpleTable Dense="true" Style="background: transparent;" Class="mt-2">
+        <tbody>
+            <tr><th scope="row">Holder</th><td>@(Account.AccountHolderName ?? "—")</td></tr>
+            <tr><th scope="row">Type</th><td>@(Account.AccountType ?? "—")</td></tr>
+            <tr><th scope="row">Routing</th><td style="font-family: monospace;" data-testid="masked-routing">@BankNumberMask.Masked(Account.RoutingNumberLast4)</td></tr>
+            <tr><th scope="row">Account</th><td style="font-family: monospace;" data-testid="masked-account">@BankNumberMask.Masked(Account.AccountNumberLast4)</td></tr>
+            <tr><th scope="row">Auto-debit</th><td>@(Account.EftEnabled ? $"Enrolled ({Account.PreferredMethod ?? "default method"})" : "Not enrolled")</td></tr>
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    [Parameter] public SponsorBankAccountMasked? Account { get; set; }
+}

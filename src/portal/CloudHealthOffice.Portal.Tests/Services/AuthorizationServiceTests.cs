@@ -2,7 +2,6 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Identity.Web;
 using CloudHealthOffice.Portal.Services;
 
 namespace CloudHealthOffice.Portal.Tests.Services;
@@ -10,7 +9,6 @@ namespace CloudHealthOffice.Portal.Tests.Services;
 public class AuthorizationServiceTests
 {
     private readonly Mock<ILogger<AuthorizationService>> _logger = new();
-    private readonly Mock<ITokenAcquisition> _tokenAcquisition = new();
     private readonly IConfiguration _configuration;
 
     public AuthorizationServiceTests()
@@ -21,18 +19,12 @@ public class AuthorizationServiceTests
                 ["Services:AuthorizationService"] = "http://localhost:5003"
             })
             .Build();
-
-        _tokenAcquisition
-            .Setup(t => t.GetAccessTokenForUserAsync(It.IsAny<IEnumerable<string>>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<System.Security.Claims.ClaimsPrincipal?>(),
-                It.IsAny<TokenAcquisitionOptions?>()))
-            .ReturnsAsync("fake-token");
     }
 
     private AuthorizationService CreateService(HttpClient? httpClient = null)
     {
         httpClient ??= new HttpClient(new FakeHandler(HttpStatusCode.InternalServerError));
-        return new AuthorizationService(httpClient, _configuration, _logger.Object, _tokenAcquisition.Object);
+        return new AuthorizationService(httpClient, _configuration, _logger.Object);
     }
 
     // ── GetAuthorizationsAsync ──

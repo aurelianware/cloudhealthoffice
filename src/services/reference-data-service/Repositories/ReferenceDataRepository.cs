@@ -353,12 +353,14 @@ public class ReferenceDataContext : DbContext
             entity.ToTable("canonical_reference_data_imports");
             entity.HasKey(x => x.ImportKey);
             entity.Property(x => x.ImportKey).HasColumnName("import_key").HasMaxLength(600);
+            entity.Property(x => x.TenantScope).HasColumnName("tenant_scope").HasMaxLength(200).IsRequired();
             entity.Property(x => x.SourceId).HasColumnName("source_id").HasMaxLength(200).IsRequired();
             entity.Property(x => x.SourceVersion).HasColumnName("source_version").HasMaxLength(100).IsRequired();
             entity.Property(x => x.Checksum).HasColumnName("checksum").HasMaxLength(200).IsRequired();
             entity.Property(x => x.ImportedAt).HasColumnName("imported_at");
             entity.Property(x => x.RecordCount).HasColumnName("record_count");
-            entity.HasIndex(x => new { x.SourceId, x.SourceVersion, x.Checksum }).IsUnique();
+            entity.Property(x => x.ImportedBy).HasColumnName("imported_by").HasMaxLength(200);
+            entity.HasIndex(x => new { x.TenantScope, x.SourceId, x.SourceVersion, x.Checksum }).IsUnique();
         });
     }
 }

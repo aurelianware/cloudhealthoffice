@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using ClaimsService.Adapters;
 using ClaimsService.EDI.Florida;
 using ClaimsService.HostedServices;
@@ -32,6 +33,14 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // Trust the development token issuers. AddChoAuthentication reads
+        // ChoAuth while Program builds its services, so the settings go in
+        // through UseSetting rather than ConfigureAppConfiguration.
+        foreach (var (key, value) in ChoDevelopmentAuth.Configuration())
+        {
+            builder.UseSetting(key, value);
+        }
 
         // 5.5 — force the no-op messaging backend so the orchestrator's
         // SubscriptionHostedService starts a subscription that never
@@ -165,6 +174,17 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             // (ClaimSubmissionServiceTests) instantiate it directly.
             services.AddSingleton(SubmissionService);
         });
+    }
+
+    /// <summary>
+    /// A client that sends a development token for <paramref name="tenantId"/>
+    /// with the given subject and roles (TenantAdmin when none are given).
+    /// </summary>
+    public HttpClient CreateTenantClient(string tenantId, string subject = "dev-user", params string[] roles)
+    {
+        var client = CreateDefaultClient(new ChoDevelopmentTokenHandler(subject, roles));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantId);
+        return client;
     }
 
     private static IClaimAdapter CreateChoStubAdapter()

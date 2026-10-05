@@ -1,6 +1,7 @@
 using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -33,21 +34,26 @@ public sealed class NetworkTierBackfillAdminController : ControllerBase
 {
     private readonly INetworkTierBackfillService _backfill;
     private readonly IOptionsMonitor<NetworkTierBackfillOptions> _options;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<NetworkTierBackfillAdminController> _logger;
 
     public NetworkTierBackfillAdminController(
         INetworkTierBackfillService backfill,
         IOptionsMonitor<NetworkTierBackfillOptions> options,
+        ICurrentActor actor,
         ILogger<NetworkTierBackfillAdminController> logger)
     {
         _backfill = backfill;
         _options = options;
+        _actor = actor;
         _logger = logger;
     }
 
     /// <summary>
     /// Apply operator-supplied <c>(planId, tierName) → networkId</c>
-    /// mappings to the supplied tenant. The endpoint is idempotent:
+    /// mappings to the caller's tenant (from the token). The optional
+    /// <c>tenantId</c> query parameter is accepted only as an echo of the
+    /// token tenant; it never selects the tenant. The endpoint is idempotent:
     /// reruns skip tiers that already have a <c>NetworkId</c> and
     /// only patch newly-mapped pairs.
     /// </summary>
@@ -56,7 +62,7 @@ public sealed class NetworkTierBackfillAdminController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<NetworkTierBackfillResult>> BackfillNetworkTiers(
-        [FromQuery] string tenantId,
+        [FromQuery] string? tenantId,
         [FromBody] NetworkTierBackfillRequest request,
         CancellationToken ct)
     {
@@ -78,19 +84,19 @@ public sealed class NetworkTierBackfillAdminController : ControllerBase
                 });
         }
 
-        if (string.IsNullOrWhiteSpace(tenantId))
+        var contextTenantId = HttpContext.GetTenantId();
+        if (string.IsNullOrEmpty(contextTenantId))
         {
-            return BadRequest(new { error = "tenantId query parameter is required" });
+            return BadRequest(new { error = "tenant_required", message = "Tenant context is required." });
         }
 
-        var contextTenantId = HttpContext.GetTenantId();
-        if (!string.IsNullOrEmpty(contextTenantId)
+        if (!string.IsNullOrWhiteSpace(tenantId)
             && !string.Equals(contextTenantId, tenantId, StringComparison.Ordinal))
         {
             return BadRequest(new
             {
                 error = "tenant_mismatch",
-                message = "tenantId query parameter does not match the X-Tenant-ID header.",
+                message = "tenantId query parameter does not match the tenant in the access token.",
             });
         }
 
@@ -109,24 +115,16 @@ public sealed class NetworkTierBackfillAdminController : ControllerBase
             });
         }
 
-        request.ActorId ??= ResolveActorId();
+        // The operator is the authenticated caller; a body actorId is ignored.
+        request.ActorId = _actor.UserId;
         request.CorrelationId ??= HttpContext.TraceIdentifier;
 
         _logger.LogInformation(
             "network-tier backfill triggered tenant={Tenant} mappings={Mappings} actor={Actor}",
-            Sanitize(tenantId), request.Mappings.Count, Sanitize(request.ActorId));
+            Sanitize(contextTenantId), request.Mappings.Count, Sanitize(request.ActorId));
 
-        var result = await _backfill.RunTenantAsync(tenantId, request, ct);
+        var result = await _backfill.RunTenantAsync(contextTenantId, request, ct);
         return Ok(result);
-    }
-
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "admin:backfill-network-tiers";
     }
 
     private static string Sanitize(string? value) =>

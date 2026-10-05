@@ -219,7 +219,11 @@ public class EligibilityServiceImpl : IEligibilityService
         try
         {
             var memberUrl = _configuration["Services:MemberService"] ?? "http://member-service.cloudhealthoffice/api";
-            var response = await _httpClient.GetAsync($"{memberUrl}/members/{subscriberId}?tenantId={tenantId}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{memberUrl}/members/{subscriberId}?tenantId={tenantId}");
+            // Names the tenant for ChoOutboundTokenHandler, so a check with no
+            // inbound caller carries a service token for it.
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await _httpClient.SendAsync(request);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -248,7 +252,9 @@ public class EligibilityServiceImpl : IEligibilityService
                 url += $"&serviceType={serviceType}";
             }
 
-            var response = await _httpClient.GetAsync(url);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await _httpClient.SendAsync(request);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -287,8 +293,10 @@ public class EligibilityServiceImpl : IEligibilityService
         try
         {
             var benefitUrl = _configuration["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api";
-            var response = await _httpClient.GetAsync(
+            using var request = new HttpRequestMessage(HttpMethod.Get,
                 $"{benefitUrl}/benefit-plans/{benefitPlanId}/accumulation/{subscriberId}?tenantId={tenantId}");
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            var response = await _httpClient.SendAsync(request);
             
             if (!response.IsSuccessStatusCode)
             {

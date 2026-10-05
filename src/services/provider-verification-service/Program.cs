@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 // TODO(refactor): consider converting this Program to top-level statements for
 // consistency with the rest of the service fleet (out of scope for A.7.4).
@@ -28,7 +29,23 @@ public class Program
         builder.Services.Configure<ScoringWeights>(
             builder.Configuration.GetSection(ScoringWeights.SectionName));
 
+        // ── Authentication ───────────────────────────────────────
+        // Every caller needs a CHO token; the tenant comes from the token.
+        // These endpoints are minimal APIs, which the default-permission
+        // convention (MVC only) does not reach, so each one names its
+        // permission below. The defaults apply to any controller added later.
+        builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+        {
+            auth.DefaultReadPermission = ProviderVerificationPermissions.Read;
+            auth.DefaultWritePermission = ProviderVerificationPermissions.Credential;
+        });
+
         // ── Data Source Adapters ─────────────────────────────────
+        // External data sources never receive a CHO token: their clients drop
+        // ChoOutboundTokenHandler entirely (WithoutChoTokens), so even a
+        // misconfigured base URL that looks internal cannot leak one. Their
+        // credentials (SAM.gov API key, FSMB client secret) come from
+        // configuration / Key Vault only and are never logged.
         // Tier 1: NPPES (free, no auth)
         builder.Services.AddHttpClient<INppesAdapter, NppesHttpAdapter>(client =>
         {
@@ -38,6 +55,7 @@ public class Program
             client.DefaultRequestHeaders.Add("Accept", "application/json");
             client.Timeout = TimeSpan.FromSeconds(30);
         })
+        .WithoutChoTokens()
         .AddStandardResilienceHandler(); // Polly retry + circuit breaker via MS.Ext.Http.Resilience
 
         // Tier 1: NLM Taxonomy Crosswalk (free, no auth)
@@ -107,6 +125,8 @@ public class Program
 
         app.UseChoObservability();
 
+        app.UseChoAuthentication();
+
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();
@@ -155,6 +175,7 @@ public class Program
                 ? Results.NotFound(new { error = "NPI not found", npi })
                 : Results.Ok(result);
         })
+        .RequireAuthorization(new RequirePermissionAttribute(ProviderVerificationPermissions.Read))
         .WithName("VerifyProvider")
         .WithSummary("Full multi-source provider verification")
         .WithDescription(
@@ -176,6 +197,7 @@ public class Program
                 ? Results.NotFound(new { error = "NPI not found in NPPES", npi })
                 : Results.Ok(result);
         })
+        .RequireAuthorization(new RequirePermissionAttribute(ProviderVerificationPermissions.Read))
         .WithName("NppesLookup")
         .WithSummary("Direct NPPES NPI lookup")
         .Produces<NppesProviderData>()
@@ -190,6 +212,7 @@ public class Program
             var results = await nppes.SearchAsync(criteria, ct);
             return Results.Ok(new { count = results.Count, results });
         })
+        .RequireAuthorization(new RequirePermissionAttribute(ProviderVerificationPermissions.Read))
         .WithName("NppesSearch")
         .WithSummary("Search NPPES by name, location, taxonomy");
 
@@ -216,6 +239,7 @@ public class Program
                 verifiedAt = result.LastVerifiedAt
             });
         })
+        .RequireAuthorization(new RequirePermissionAttribute(ProviderVerificationPermissions.Read))
         .WithName("IntegrityScore")
         .WithSummary("Lightweight integrity score for claims adjudication pre-check");
 
@@ -261,6 +285,11 @@ public class Program
                 results
             });
         })
+        // Batch verification computes and returns scores; it persists nothing
+        // and changes no credentialing state, so it needs providers:write, not
+        // providers:credential. provider-service's integrity worker calls it
+        // with a service token for the tenant it names in X-Tenant-ID.
+        .RequireAuthorization(new RequirePermissionAttribute(ProviderVerificationPermissions.Write))
         .WithName("BatchVerify")
         .WithSummary("Batch verify multiple providers")
         .WithDescription("Accepts up to 100 NPIs per request. " +

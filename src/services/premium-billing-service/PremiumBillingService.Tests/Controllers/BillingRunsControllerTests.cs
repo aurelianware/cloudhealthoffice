@@ -15,7 +15,9 @@ public class BillingRunsControllerTests
     {
         _billingService = new Mock<IPremiumBillingService>();
         var logger = new Mock<ILogger<BillingRunsController>>();
-        _controller = new BillingRunsController(_billingService.Object, logger.Object);
+        var actor = new Mock<CloudHealthOffice.Infrastructure.Security.ICurrentActor>();
+        actor.SetupGet(a => a.UserId).Returns("admin");
+        _controller = new BillingRunsController(_billingService.Object, actor.Object, logger.Object);
     }
 
     #region CreateBillingRun

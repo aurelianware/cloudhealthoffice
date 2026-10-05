@@ -6,6 +6,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject ITenantService TenantService
+@inject IChoTokenProvider TokenProvider
 @inject ILogger<Index> Logger
 @inject IWebHostEnvironment HostEnvironment
 @inject IConfiguration Configuration
@@ -65,13 +66,12 @@
                 Logger.LogInformation("Dev mode: auto-provisioning subscription for Azure Tenant {TenantId}", azureTenantId);
                 try
                 {
-                    await TenantService.CreateTenantAsync(new CreateTenantRequest
+                    // The same self-service signup as /signup (tenant-service, through
+                    // the token service); the directory comes from the Entra token.
+                    await TokenProvider.SignupAsync(new ChoSignupRequest
                     {
-                        AzureTenantId = azureTenantId,
                         OrganizationName = userEmail?.Split('@').LastOrDefault() ?? "Dev Tenant",
-                        AdminEmail = userEmail ?? "",
-                        Tier = "enterprise",
-                        IsDemo = false
+                        Tier = "professional",
                     });
                     subscription = await TenantService.GetSubscriptionByAzureTenantIdAsync(azureTenantId);
                 }

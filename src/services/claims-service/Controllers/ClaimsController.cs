@@ -5,6 +5,7 @@ using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ClaimsService.Controllers;
 
@@ -25,6 +26,7 @@ public class ClaimsController : ControllerBase
     private readonly IClaimFinalizationService _finalizationService;
     private readonly IClaimDiagnosisMetadataEnricher _diagnosisMetadataEnricher;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ClaimsController> _logger;
 
     public ClaimsController(
@@ -40,6 +42,7 @@ public class ClaimsController : ControllerBase
         IClaimFinalizationService finalizationService,
         IClaimDiagnosisMetadataEnricher diagnosisMetadataEnricher,
         IConfiguration configuration,
+        ICurrentActor actor,
         ILogger<ClaimsController> logger)
     {
         _claimRepository = claimRepository;
@@ -54,6 +57,7 @@ public class ClaimsController : ControllerBase
         _finalizationService = finalizationService;
         _diagnosisMetadataEnricher = diagnosisMetadataEnricher;
         _configuration = configuration;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -114,8 +118,13 @@ public class ClaimsController : ControllerBase
         // loss-less per SubmitClaimAsync_round_trips_AdapterClaim_losslessly,
         // so the canonical submission service can do its work and we map
         // the response back to domain shape for the legacy 201 contract.
+        // The body is a full domain Claim; lifecycle, adjudication and audit
+        // fields on it are server-owned and never taken from the caller.
+        var submission = AdapterClaim.From(claim);
+        ClaimSubmissionInput.ResetServerOwnedFields(submission, actorId);
+
         var result = await _submissionService.SubmitAsync(
-            AdapterClaim.From(claim), tenantId, actorId, correlationId, ct);
+            submission, tenantId, actorId, correlationId, ct);
 
         if (!result.Success)
         {
@@ -156,17 +165,8 @@ public class ClaimsController : ControllerBase
         };
     }
 
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) &&
-            !string.IsNullOrEmpty(header.ToString()))
-        {
-            return header.ToString();
-        }
-        return "system";
-    }
+    /// <summary>The acting user or service, from the validated token only.</summary>
+    private string ResolveActorId() => _actor.UserId;
 
     private string? ResolveCorrelationId()
     {
@@ -461,6 +461,13 @@ public class ClaimsController : ControllerBase
         [FromBody] ClaimStatusUpdate statusUpdate,
         CancellationToken ct = default)
     {
+        // Voiding is claims:void everywhere; the generic status endpoint must
+        // not be a way around the dedicated void actions.
+        if (statusUpdate.Status == ClaimStatus.Voided && !_actor.HasPermission(ClaimsPermissions.Void))
+        {
+            return Forbid();
+        }
+
         _logger.LogInformation(
             "Updating claim {Id} status to {Status}",
             SanitizeForLog(id), statusUpdate.Status);
@@ -908,10 +915,14 @@ public class ClaimsController : ControllerBase
             return BadRequest($"Claim {id} has no AI examination to mark agreement on");
         }
 
+        // The examiner is the authenticated caller; a body-supplied
+        // ExaminerUserId is ignored.
+        var examinerUserId = ResolveActorId();
         claim.AiExamination.ExaminerAgreement = request.Agreement;
         claim.AiExamination.ExaminerActedAt = DateTime.UtcNow;
-        claim.AiExamination.ExaminerUserId = request.ExaminerUserId;
+        claim.AiExamination.ExaminerUserId = examinerUserId;
         claim.LastUpdatedDate = DateTime.UtcNow;
+        claim.LastUpdatedBy = examinerUserId;
 
         var updated = await _claimRepository.UpdateAsync(claim);
 
@@ -920,7 +931,7 @@ public class ClaimsController : ControllerBase
         // A null return means there was no audit row to update (recommendation may
         // have been written before the audit collection existed) — log and continue.
         var auditUpdated = await _auditRepository.SetExaminerAgreementAsync(
-            id, GetTenantId(), request.Agreement, request.ExaminerUserId, request.Notes);
+            id, GetTenantId(), request.Agreement, examinerUserId, request.Notes);
 
         if (auditUpdated is null)
         {
@@ -931,7 +942,7 @@ public class ClaimsController : ControllerBase
 
         _logger.LogInformation(
             "Examiner {User} marked claim {Id} as {Agreement} (recommended {Disposition})",
-            SanitizeForLog(request.ExaminerUserId), SanitizeForLog(id),
+            SanitizeForLog(examinerUserId), SanitizeForLog(id),
             request.Agreement, claim.AiExamination.RecommendedDisposition);
 
         return Ok(updated);
@@ -1090,6 +1101,7 @@ public class ClaimsController : ControllerBase
     /// (the Adjudicated → Paid surface from 5.10).</para>
     /// </summary>
     [HttpPost("{id}/void")]
+    [RequirePermission(ClaimsPermissions.Void)]
     [ProducesResponseType(typeof(Claim), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -1158,9 +1170,9 @@ public class ClaimsController : ControllerBase
         return Ok(updated);
     }
 
-    private string? TryGetActorId() =>
-        HttpContext?.User?.Identity?.Name
-        ?? HttpContext?.Request?.Headers["X-User-Id"].FirstOrDefault();
+    // Identity.Name is the display name claim, and X-User-Id is caller-supplied;
+    // the actor is the token subject.
+    private string? TryGetActorId() => ResolveActorId();
 
     private string? TryGetCorrelationId() =>
         HttpContext?.Request?.Headers["X-Correlation-Id"].FirstOrDefault()
@@ -1228,6 +1240,7 @@ public class ClaimsController : ControllerBase
     /// Delete claim (soft delete - set status to Voided)
     /// </summary>
     [HttpDelete("{id}")]
+    [RequirePermission(ClaimsPermissions.Void)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> VoidClaim(string id)
@@ -1242,6 +1255,7 @@ public class ClaimsController : ControllerBase
 
         claim.Status = ClaimStatus.Voided;
         claim.LastUpdatedDate = DateTime.UtcNow;
+        claim.LastUpdatedBy = ResolveActorId();
 
         var updated = await _claimRepository.UpdateAsync(claim);
 
@@ -1390,6 +1404,7 @@ public class ClaimsController : ControllerBase
     /// Assign a pended claim to an examiner
     /// </summary>
     [HttpPost("work-queue/{claimId}/assign")]
+    [RequirePermission(ClaimsPermissions.WorkQueueAssign)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> AssignClaim(string claimId, [FromBody] AssignClaimRequest request)
@@ -1404,9 +1419,12 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
-    /// Override a pended claim (supervisor action)
+    /// Override a pended claim (supervisor action). This is a single-step
+    /// approval: there is no separate override request record, so the
+    /// approver is simply the authenticated supervisor.
     /// </summary>
     [HttpPost("work-queue/{claimId}/override")]
+    [RequirePermission(ClaimsPermissions.OverrideApprove)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> OverrideClaim(string claimId, [FromBody] OverrideClaimRequest request)
@@ -1450,7 +1468,11 @@ public class ClaimsController : ControllerBase
             return Conflict($"Claim {claimId} is {claim.Status}, not Pended");
         }
 
+        // The examiner is the authenticated caller; a body-supplied
+        // ExaminerUserId is ignored.
+        var examinerUserId = ResolveActorId();
         var actedAt = DateTime.UtcNow;
+        claim.LastUpdatedBy = examinerUserId;
         claim.Status = disposition;
         claim.VersionState = ClaimRepository.MapStatusToVersionState(disposition);
         claim.AdjudicatedDate = actedAt;
@@ -1472,12 +1494,11 @@ public class ClaimsController : ControllerBase
 
             claim.AiExamination.ExaminerAgreement = request.AiExaminerAgreement;
             claim.AiExamination.ExaminerActedAt = actedAt;
-            claim.AiExamination.ExaminerUserId = request.ExaminerUserId;
+            claim.AiExamination.ExaminerUserId = examinerUserId;
         }
 
         var updated = await _claimRepository.UpdateAsync(claim);
 
-        var examinerUserId = request.ExaminerUserId ?? "portal-examiner";
         var correlationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier;
         await _versionEventPublisher.PublishVersionResolvedAsync(
             updated,
@@ -1493,7 +1514,7 @@ public class ClaimsController : ControllerBase
                 claimId,
                 GetTenantId(),
                 request.AiExaminerAgreement,
-                request.ExaminerUserId ?? "portal-examiner",
+                examinerUserId,
                 request.Reason);
 
             if (auditUpdated is null)
@@ -1508,7 +1529,7 @@ public class ClaimsController : ControllerBase
 
         _logger.LogInformation(
             "Examiner {User} resolved pended claim {ClaimId} as {Disposition}: {Reason}",
-            SanitizeForLog(request.ExaminerUserId),
+            SanitizeForLog(examinerUserId),
             SanitizeForLog(claimId),
             disposition,
             SanitizeForLog(request.Reason));
@@ -1601,6 +1622,8 @@ public class ResolvePendedClaimRequest
     public string Disposition { get; set; } = string.Empty;
     public string? Reason { get; set; }
     public string? AiExaminerAgreement { get; set; }
+
+    /// <summary>Ignored: the examiner is the authenticated caller.</summary>
     public string? ExaminerUserId { get; set; }
 }
 
@@ -1638,7 +1661,7 @@ public class AiExaminerAgreementRequest
     /// <summary>Accepted | Modified | Overridden.</summary>
     public string Agreement { get; set; } = string.Empty;
 
-    /// <summary>User who acted on the claim.</summary>
+    /// <summary>Ignored: the examiner is the authenticated caller.</summary>
     public string ExaminerUserId { get; set; } = string.Empty;
 
     /// <summary>Optional free-text note (e.g., why the examiner overrode the AI).</summary>

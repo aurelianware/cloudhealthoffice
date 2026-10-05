@@ -19,11 +19,18 @@ namespace ProviderService.Services;
 public interface IProviderVerificationClient
 {
     /// <summary>
-    /// Calls <c>POST /api/v1/providers/verify/batch</c>. The verification
-    /// service caps batch size at 100 NPIs; pass at most that many. Empty
-    /// or null inputs surface an empty result (no HTTP call).
+    /// Calls <c>POST /api/v1/providers/verify/batch</c> for
+    /// <paramref name="tenantId"/>. The verification service caps batch size
+    /// at 100 NPIs; pass at most that many. Empty or null inputs surface an
+    /// empty result (no HTTP call).
     /// </summary>
+    /// <remarks>
+    /// The request names the tenant in <c>X-Tenant-ID</c> so
+    /// <c>ChoOutboundTokenHandler</c> can mint a service token for it when
+    /// there is no inbound caller (the hosted integrity-projection worker).
+    /// </remarks>
     Task<IReadOnlyList<VerificationResult>> VerifyBatchAsync(
+        string tenantId,
         IReadOnlyList<string> npis,
         CancellationToken ct = default);
 }
@@ -31,6 +38,7 @@ public interface IProviderVerificationClient
 public sealed class HttpProviderVerificationClient : IProviderVerificationClient
 {
     public const string HttpClientName = "provider-verification";
+    private const string TenantHeaderName = "X-Tenant-ID";
 
     private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web)
     {
@@ -50,9 +58,14 @@ public sealed class HttpProviderVerificationClient : IProviderVerificationClient
     }
 
     public async Task<IReadOnlyList<VerificationResult>> VerifyBatchAsync(
+        string tenantId,
         IReadOnlyList<string> npis,
         CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            throw new ArgumentException("A tenant is required for a verification call.", nameof(tenantId));
+        }
         if (npis is null || npis.Count == 0)
         {
             return Array.Empty<VerificationResult>();
@@ -67,8 +80,23 @@ public sealed class HttpProviderVerificationClient : IProviderVerificationClient
         try
         {
             var payload = new BatchRequest { Npis = npis.ToList() };
-            using var response = await _http.PostAsJsonAsync(
-                "api/v1/providers/verify/batch", payload, _json, ct);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/providers/verify/batch")
+            {
+                Content = JsonContent.Create(payload, options: _json),
+            };
+            request.Headers.Add(TenantHeaderName, tenantId);
+            using var response = await _http.SendAsync(request, ct);
+            if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                // Not an outage: provider-verification-service does not accept
+                // this service's credentials. Cached scores stay put, but the
+                // misconfiguration must be visible.
+                _logger.LogError(
+                    "provider-verification-service refused the verification batch for tenant {TenantId} with {StatusCode}; " +
+                    "integrity projections are not being refreshed",
+                    tenantId.Replace("\r", string.Empty).Replace("\n", string.Empty), (int)response.StatusCode);
+                return Array.Empty<VerificationResult>();
+            }
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(

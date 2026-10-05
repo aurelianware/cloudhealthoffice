@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using RiskAdjustmentService.Models;
 using RiskAdjustmentService.Repositories;
@@ -9,6 +10,10 @@ using ServiceHccCategory = RiskAdjustmentService.Models.HccCategory;
 
 namespace RiskAdjustmentService.Controllers;
 
+/// <summary>
+/// Risk scores carry diagnosis codes (PHI). The tenant and the acting user come
+/// from the CHO token only; every action names its permission.
+/// </summary>
 [ApiController]
 [Route("api/risk-adjustment")]
 [Produces("application/json")]
@@ -16,15 +21,18 @@ public class RiskAdjustmentController : ControllerBase
 {
     private readonly IRiskScoreRepository _riskScoreRepository;
     private readonly EngineRiskAdjustmentEngine _riskEngine;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<RiskAdjustmentController> _logger;
 
     public RiskAdjustmentController(
         IRiskScoreRepository riskScoreRepository,
         EngineRiskAdjustmentEngine riskEngine,
+        ICurrentActor actor,
         ILogger<RiskAdjustmentController> logger)
     {
         _riskScoreRepository = riskScoreRepository;
         _riskEngine = riskEngine;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -34,6 +42,7 @@ public class RiskAdjustmentController : ControllerBase
     /// Get risk score for a specific member and measurement year.
     /// Returns the composite RAF score along with HCC category breakdown.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Read)]
     [HttpGet("members/{memberId}/scores/{measurementYear}")]
     [ProducesResponseType(typeof(MemberRiskScore), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -54,6 +63,7 @@ public class RiskAdjustmentController : ControllerBase
     /// <summary>
     /// Get the per-member score summary (lighter response without full HCC detail).
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Read)]
     [HttpGet("members/{memberId}/scores/{measurementYear}/summary")]
     [ProducesResponseType(typeof(MemberScoreResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -94,6 +104,7 @@ public class RiskAdjustmentController : ControllerBase
     /// <summary>
     /// Get all risk scores for a member across all measurement years (trend).
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Read)]
     [HttpGet("members/{memberId}/scores")]
     [ProducesResponseType(typeof(MemberScoreTrend), StatusCodes.Status200OK)]
     public async Task<ActionResult<MemberScoreTrend>> GetMemberScoreTrend(string memberId)
@@ -125,7 +136,10 @@ public class RiskAdjustmentController : ControllerBase
 
     /// <summary>
     /// Create or update a member's risk score for a measurement year.
+    /// The body's tenantId, createdBy and lastUpdatedBy are ignored: the tenant
+    /// and the actor come from the token.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Write)]
     [HttpPut("members/{memberId}/scores/{measurementYear}")]
     [ProducesResponseType(typeof(MemberRiskScore), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MemberRiskScore), StatusCodes.Status201Created)]
@@ -144,6 +158,7 @@ public class RiskAdjustmentController : ControllerBase
         if ((score.HccCategories?.Count ?? 0) == 0 && score.RiskScore == 0 && score.DemographicFactor == 0)
             return BadRequest("Risk score must have at least a demographic factor or HCC categories");
 
+        var actor = _actor.UserId;
         var existing = await _riskScoreRepository.GetByMemberAndYearAsync(memberId, measurementYear);
 
         if (existing != null)
@@ -151,6 +166,7 @@ public class RiskAdjustmentController : ControllerBase
             score.Id = existing.Id;
             score.CreatedDate = existing.CreatedDate;
             score.CreatedBy = existing.CreatedBy;
+            score.LastUpdatedBy = actor;
             score.LastUpdatedDate = DateTime.UtcNow;
 
             var updated = await _riskScoreRepository.UpdateAsync(score);
@@ -158,6 +174,8 @@ public class RiskAdjustmentController : ControllerBase
         }
 
         score.Id = Guid.NewGuid().ToString();
+        score.CreatedBy = actor;
+        score.LastUpdatedBy = actor;
         score.CreatedDate = DateTime.UtcNow;
         score.LastUpdatedDate = DateTime.UtcNow;
 
@@ -173,6 +191,7 @@ public class RiskAdjustmentController : ControllerBase
     /// Provide AgeAsOfPaymentYear, Gender, and DiagnosisCodes in the request body
     /// to invoke full CMS-HCC v28 / HHS-HCC scoring. The result is persisted and returned.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Write)]
     [HttpPost("scores/calculate")]
     [ProducesResponseType(typeof(MemberRiskScore), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -198,6 +217,7 @@ public class RiskAdjustmentController : ControllerBase
             DiagnosisCodes     = [.. request.DiagnosisCodes]
         };
 
+        var actor = _actor.UserId;
         var engineResult = _riskEngine.ComputeRiskScore(engineInput);
 
         var suppressedSet = engineResult.SuppressedHccs.ToHashSet();
@@ -256,6 +276,7 @@ public class RiskAdjustmentController : ControllerBase
             existing.Status           = ScoreStatus.Calculated;
             existing.CalculatedDate   = DateTime.UtcNow;
             existing.LastUpdatedDate  = DateTime.UtcNow;
+            existing.LastUpdatedBy    = actor;
 
             var updated = await _riskScoreRepository.UpdateAsync(existing);
             return Ok(updated);
@@ -280,7 +301,9 @@ public class RiskAdjustmentController : ControllerBase
             Status            = ScoreStatus.Calculated,
             CalculatedDate    = DateTime.UtcNow,
             CreatedDate       = DateTime.UtcNow,
-            LastUpdatedDate   = DateTime.UtcNow
+            LastUpdatedDate   = DateTime.UtcNow,
+            CreatedBy         = actor,
+            LastUpdatedBy     = actor
         };
 
         var created = await _riskScoreRepository.CreateAsync(score);
@@ -306,6 +329,7 @@ public class RiskAdjustmentController : ControllerBase
     /// Get all risk scores for a measurement year (paginated).
     /// Returns per-member scores ordered by risk score descending.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Read)]
     [HttpGet("measurement-years/{measurementYear}/scores")]
     [ProducesResponseType(typeof(IEnumerable<MemberRiskScore>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<MemberRiskScore>>> GetMeasurementYearScores(
@@ -327,6 +351,7 @@ public class RiskAdjustmentController : ControllerBase
     /// Get summary statistics for a measurement year.
     /// Returns aggregate metrics: average/min/max RAF, member counts, top HCC categories.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Read)]
     [HttpGet("measurement-years/{measurementYear}/summary")]
     [ProducesResponseType(typeof(MeasurementYearSummary), StatusCodes.Status200OK)]
     public async Task<ActionResult<MeasurementYearSummary>> GetMeasurementYearSummary(
@@ -347,6 +372,7 @@ public class RiskAdjustmentController : ControllerBase
     /// <summary>
     /// Search risk scores across members with filters.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Read)]
     [HttpGet("scores/search")]
     [ProducesResponseType(typeof(IEnumerable<MemberRiskScore>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<MemberRiskScore>>> SearchScores(
@@ -372,6 +398,7 @@ public class RiskAdjustmentController : ControllerBase
     /// <summary>
     /// Batch update score status for multiple members (e.g., mark as Submitted).
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Write)]
     [HttpPost("scores/batch-status")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -384,6 +411,7 @@ public class RiskAdjustmentController : ControllerBase
         if (request.MemberIds.Count == 0)
             return BadRequest("At least one member ID is required");
 
+        var actor = _actor.UserId;
         int updated = 0;
         int notFound = 0;
 
@@ -400,6 +428,7 @@ public class RiskAdjustmentController : ControllerBase
 
             score.Status = request.Status;
             score.LastUpdatedDate = DateTime.UtcNow;
+            score.LastUpdatedBy = actor;
 
             if (request.Status == ScoreStatus.Submitted)
             {
@@ -423,6 +452,7 @@ public class RiskAdjustmentController : ControllerBase
     /// <summary>
     /// Get risk score by document ID.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Read)]
     [HttpGet("scores/{id}")]
     [ProducesResponseType(typeof(MemberRiskScore), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -438,6 +468,7 @@ public class RiskAdjustmentController : ControllerBase
     /// <summary>
     /// Delete a risk score record.
     /// </summary>
+    [RequirePermission(RiskAdjustmentPermissions.Write)]
     [HttpDelete("scores/{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -450,6 +481,7 @@ public class RiskAdjustmentController : ControllerBase
             return NotFound($"Risk score {id} not found");
 
         await _riskScoreRepository.DeleteAsync(id);
+        _logger.LogInformation("AUDIT risk score {Id} deleted by {Actor}", SanitizeForLog(id), SanitizeForLog(_actor.UserId));
         return NoContent();
     }
 

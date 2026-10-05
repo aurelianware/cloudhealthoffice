@@ -8,7 +8,9 @@
 
 <PageTitle>Capitation Rate Config — Cloud Health Office</PageTitle>
 
-<PermissionGate Permission="contracts:read,billing:read" RoleName="Finance">
+@* contracts:read only: the rate configs are contract data, and a role with
+   billing:read alone (FinanceApprover) cannot load them. *@
+<PermissionGate Permission="contracts:read" RoleName="Finance">
 <MudText Typo="Typo.h4" Class="mb-1" Style="color: #00ffff; font-weight: 700; letter-spacing: -0.5px;">
     <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" Style="vertical-align: middle;" />
     Capitation Rate Config

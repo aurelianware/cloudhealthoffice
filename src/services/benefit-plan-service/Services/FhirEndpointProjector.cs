@@ -28,6 +28,19 @@ internal sealed class FhirEndpointProjector : IFhirEndpointProjector
     /// </summary>
     public const string InternalReferencePrefix = "documentreference/";
 
+    private readonly PlanDocumentLocationPolicy _locationPolicy;
+
+    /// <summary>No allowed document hosts: no external Endpoint is projected.</summary>
+    public FhirEndpointProjector()
+        : this(PlanDocumentLocationPolicy.Empty)
+    {
+    }
+
+    public FhirEndpointProjector(PlanDocumentLocationPolicy locationPolicy)
+    {
+        _locationPolicy = locationPolicy ?? throw new ArgumentNullException(nameof(locationPolicy));
+    }
+
     public JsonObject? Project(BenefitPlan plan, PlanDocumentReference document)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -157,14 +170,16 @@ internal sealed class FhirEndpointProjector : IFhirEndpointProjector
     /// <see cref="PlanDocumentValidation.ValidateLocation(string?, string)"/>
     /// at the producer boundary.
     /// </summary>
-    private static bool IsDocumentProjectable(PlanDocumentReference document)
+    private bool IsDocumentProjectable(PlanDocumentReference document)
     {
         if (string.IsNullOrWhiteSpace(document.Location)) return false;
         if (document.Location.StartsWith(InternalReferencePrefix, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-        return true;
+        // A stored location that fails the document location rule (written
+        // before the rule existed) is never published as Endpoint.address.
+        return _locationPolicy.IsAllowed(document.Location);
     }
 
     // ── status (Decision 5) ─────────────────────────────────────────────

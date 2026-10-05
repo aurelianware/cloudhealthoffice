@@ -2,6 +2,7 @@ using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderEligibilityApi.Contracts;
 using ProviderEligibilityApi.Eligibility;
@@ -10,14 +11,20 @@ using ProviderEligibilityApi.Security;
 namespace ProviderEligibilityApi.Controllers;
 
 /// <summary>
-/// Outbound (CHO → payer) eligibility for provider applications. Every request
-/// is authenticated and tenant-bound by <see cref="ProviderApiAuthenticationMiddleware"/>.
+/// Outbound (CHO → payer) eligibility for provider applications and CHO
+/// callers. Both actions admit a provider API client (its key's bound tenant)
+/// or a CHO token holding <c>eligibility:check</c> (the token's tenant); see
+/// <see cref="ProviderEligibilityAuth"/>. The tenant is the one the shared
+/// tenant middleware took from the credential, never one the request names.
 /// Logs carry tenant, client, payer, outcome and timing only — never member
-/// identifiers, names, dates of birth or payer response text.
+/// identifiers, names, dates of birth or payer response text. Responses are
+/// marked no-store: coverage answers are PHI and must not sit in caches.
 /// </summary>
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
+[ProviderEligibilityCaller]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class ProviderEligibilityController : ControllerBase
 {
     private const int MaxPayerResults = 25;
@@ -29,6 +36,7 @@ public sealed class ProviderEligibilityController : ControllerBase
     private readonly IPayerReferenceService _payers;
     private readonly PayerDirectoryReadiness _directory;
     private readonly TimeProvider _time;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ProviderEligibilityController> _logger;
 
     public ProviderEligibilityController(
@@ -36,12 +44,14 @@ public sealed class ProviderEligibilityController : ControllerBase
         IPayerReferenceService payers,
         PayerDirectoryReadiness directory,
         TimeProvider time,
+        ICurrentActor actor,
         ILogger<ProviderEligibilityController> logger)
     {
         _resolver = resolver;
         _payers = payers;
         _directory = directory;
         _time = time;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -63,8 +73,8 @@ public sealed class ProviderEligibilityController : ControllerBase
             return BadRequest(new ValidationErrorResponse { Fields = errors });
         }
 
-        var tenantId = (string)HttpContext.Items[ProviderApiAuthenticationMiddleware.TenantItemKey]!;
-        var client = (string)HttpContext.Items[ProviderApiAuthenticationMiddleware.ClientItemKey]!;
+        var tenantId = _actor.TenantId;
+        var client = ProviderEligibilityAuth.CallerLabel(User);
 
         if (!await _directory.IsReadyAsync(ct))
         {

@@ -347,12 +347,16 @@ spec:
               if [ -f "$file" ]; then
                 filename=$(basename "$file")
                 timestamp=$(date +%Y%m%d%H%M%S)
-                s3_path="s3://{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-prefix}}/${filename%.edi}-${timestamp}.edi"
+                s3_path="s3://${PARAM_S3_BUCKET}/${PARAM_S3_PREFIX}/${filename%.edi}-${timestamp}.edi"
                 aws s3 cp "$file" "$s3_path" --sse AES256
                 echo "Uploaded: $s3_path"
               fi
             done
         env:
+          - name: PARAM_S3_BUCKET
+            value: "{{inputs.parameters.s3-bucket}}"
+          - name: PARAM_S3_PREFIX
+            value: "{{inputs.parameters.s3-prefix}}"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -468,7 +472,7 @@ spec:
             with open('/data/manifest.json') as f:
                 manifest = json.load(f)
             
-            host = "{{inputs.parameters.sftp-host}}"
+            host = os.environ["PARAM_SFTP_HOST"]
             username = os.environ.get('SFTP_USERNAME')
             password = os.environ.get('SFTP_PASSWORD')
             
@@ -487,6 +491,8 @@ spec:
                 sftp.close()
                 transport.close()
         env:
+          - name: PARAM_SFTP_HOST
+            value: "{{inputs.parameters.sftp-host}}"
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:

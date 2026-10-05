@@ -52,12 +52,31 @@ public class MemberDocumentRepositoryMongo : IMemberDocumentRepository
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Replaces the document only if it is still at the version that was read
+    /// (a document saved before versioning has no Version field and counts as
+    /// version 0). Otherwise nothing is written and
+    /// <see cref="MemberDocumentConcurrencyException"/> is thrown.
+    /// </summary>
     public async Task<MemberDocument> UpdateAsync(MemberDocument document)
     {
+        var expected = document.Version;
+        var versionFilter = expected == 0
+            ? Builders<MemberDocument>.Filter.Eq(x => x.Version, 0)
+              | Builders<MemberDocument>.Filter.Exists(x => x.Version, false)
+            : Builders<MemberDocument>.Filter.Eq(x => x.Version, expected);
         var filter = Builders<MemberDocument>.Filter.Eq(x => x.Id, document.Id)
-                     & Builders<MemberDocument>.Filter.Eq(x => x.TenantId, document.TenantId);
+                     & Builders<MemberDocument>.Filter.Eq(x => x.TenantId, document.TenantId)
+                     & versionFilter;
 
-        await _collection.ReplaceOneAsync(filter, document);
+        document.Version = expected + 1;
+        var result = await _collection.ReplaceOneAsync(filter, document);
+        if (result.MatchedCount == 0)
+        {
+            document.Version = expected;
+            throw new MemberDocumentConcurrencyException(document.Id);
+        }
+
         return document;
     }
 }

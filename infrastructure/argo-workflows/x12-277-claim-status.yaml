@@ -185,6 +185,9 @@ spec:
           - name: parsed-inquiries
             path: /data/output/inquiries.json
       container:
+        env:
+          - name: PARAM_CLAIM_INQUIRY
+            value: "{{inputs.parameters.claim-inquiry}}"
         image: python:3.11-slim
         command: ["python", "-c"]
         args:
@@ -192,7 +195,7 @@ spec:
             import json
             import os
             
-            inquiry_data = json.loads('''{{inputs.parameters.claim-inquiry}}''')
+            inquiry_data = json.loads(os.environ["PARAM_CLAIM_INQUIRY"])
             
             os.makedirs('/data/output', exist_ok=True)
             
@@ -234,6 +237,9 @@ spec:
             valueFrom:
               path: /data/output/summary.json
       container:
+        env:
+          - name: PARAM_CLAIMS_SERVICE_ENDPOINT
+            value: "{{inputs.parameters.claims-service-endpoint}}"
         image: curlimages/curl:latest
         command: ["/bin/sh"]
         args:
@@ -241,7 +247,7 @@ spec:
           - |
             set -e
             
-            CLAIMS_API="{{inputs.parameters.claims-service-endpoint}}"
+            CLAIMS_API="${PARAM_CLAIMS_SERVICE_ENDPOINT}"
             
             # Read inquiries
             INQUIRIES=$(cat /data/input/inquiries.json)
@@ -293,6 +299,11 @@ spec:
           - name: edi-output
             path: /data/output
       container:
+        env:
+          - name: PARAM_RECEIVER_ID
+            value: "{{inputs.parameters.receiver-id}}"
+          - name: PARAM_SENDER_ID
+            value: "{{inputs.parameters.sender-id}}"
         image: ghcr.io/aurelianware/cloudhealthoffice-x12-encoder:latest
         command: ["/bin/sh"]
         args:
@@ -302,8 +313,8 @@ spec:
             
             echo "Generating 277 claim status response"
             
-            SENDER_ID="{{inputs.parameters.sender-id}}"
-            RECEIVER_ID="{{inputs.parameters.receiver-id}}"
+            SENDER_ID="${PARAM_SENDER_ID}"
+            RECEIVER_ID="${PARAM_RECEIVER_ID}"
             
             # Generate 277 EDI using Python encoder
             python /app/generate_277.py \
@@ -343,10 +354,13 @@ spec:
             SFTP_USER="${SFTP_USER:-cho-edi}"
             SFTP_PASS="${SFTP_PASSWORD}"
             
-            echo "Uploading 277 to SFTP: {{inputs.parameters.sftp-folder}}"
+            echo "Uploading 277 to SFTP: ${PARAM_SFTP_FOLDER}"
             
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${PARAM_SFTP_FOLDER}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
             sshpass -p "$SFTP_PASS" sftp -o StrictHostKeyChecking=no $SFTP_USER@$SFTP_HOST <<EOF
-            cd {{inputs.parameters.sftp-folder}}
+            cd ${PARAM_SFTP_FOLDER}
             lcd /data/input
             mput *.edi
             bye
@@ -354,6 +368,8 @@ spec:
             
             echo "Upload complete"
         env:
+          - name: PARAM_SFTP_FOLDER
+            value: "{{inputs.parameters.sftp-folder}}"
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -378,8 +394,8 @@ spec:
         source: |
           set -e
           
-          CONTAINER="{{inputs.parameters.container}}"
-          BLOB_PATH="{{inputs.parameters.blob-path}}"
+          CONTAINER="${PARAM_CONTAINER}"
+          BLOB_PATH="${PARAM_BLOB_PATH}"
           
           echo "Uploading to Azure Blob: $CONTAINER/$BLOB_PATH"
           
@@ -398,6 +414,10 @@ spec:
           
           echo "Upload complete"
         env:
+          - name: PARAM_BLOB_PATH
+            value: "{{inputs.parameters.blob-path}}"
+          - name: PARAM_CONTAINER
+            value: "{{inputs.parameters.container}}"
           - name: AZURE_STORAGE_ACCOUNT
             valueFrom:
               secretKeyRef:
@@ -424,8 +444,8 @@ spec:
         source: |
           set -e
           
-          TOPIC="{{inputs.parameters.topic}}"
-          MESSAGE='{{inputs.parameters.message}}'
+          TOPIC="${PARAM_TOPIC}"
+          MESSAGE="${PARAM_MESSAGE}"
           
           echo "Publishing to Kafka topic: $TOPIC"
           
@@ -436,6 +456,10 @@ spec:
           
           echo "Published to Kafka"
         env:
+          - name: PARAM_MESSAGE
+            value: "{{inputs.parameters.message}}"
+          - name: PARAM_TOPIC
+            value: "{{inputs.parameters.topic}}"
           - name: KAFKA_BOOTSTRAP_SERVERS
             valueFrom:
               secretKeyRef:

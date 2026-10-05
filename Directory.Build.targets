@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Test assemblies opt in to the "Testing" host environment: every project
+    whose name ends in "Tests" compiles tests/Shared/ChoTestingMarker.cs, a
+    module initializer that sets CHO_TESTING=1 for the test process. A
+    Testing host refuses to start without it (ChoTestingEnvironment), so a
+    deployed service can never run as Testing by accident.
+  -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('Tests')) And '$(Language)' == 'C#'">
+    <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/ChoTestingMarker.cs"
+             Link="Shared/ChoTestingMarker.cs" Visible="false" />
+  </ItemGroup>
+</Project>

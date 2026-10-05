@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ArService.Controllers;
 
@@ -10,13 +11,16 @@ namespace ArService.Controllers;
 public class CashPostingController : ControllerBase
 {
     private readonly ICashPostingRepository _cashPostingRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CashPostingController> _logger;
 
     public CashPostingController(
         ICashPostingRepository cashPostingRepository,
+        ICurrentActor actor,
         ILogger<CashPostingController> logger)
     {
         _cashPostingRepository = cashPostingRepository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -62,6 +66,7 @@ public class CashPostingController : ControllerBase
         // Auto-generate posting number
         posting.PostingNumber = $"CP-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
         posting.Status = CashPostingStatus.Pending;
+        posting.CreatedBy = _actor.UserId;
 
         _logger.LogInformation("Creating cash posting {PostingNumber} for payer {PayerName}",
             SanitizeForLog(posting.PostingNumber), SanitizeForLog(posting.PayerName));

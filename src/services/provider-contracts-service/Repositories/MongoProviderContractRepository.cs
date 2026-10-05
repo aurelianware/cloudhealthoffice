@@ -1,23 +1,29 @@
+using CloudHealthOffice.Infrastructure.Security;
 using MongoDB.Driver;
 using ProviderContractsService.Models;
 
 namespace ProviderContractsService.Repositories;
 
+/// <summary>
+/// Every query is scoped to the tenant in the caller's CHO token, and every
+/// write records the token subject as the actor (CreatedBy / LastUpdatedBy).
+/// Tenant and actor values supplied in a request body are overwritten.
+/// </summary>
 public class MongoProviderContractRepository : IProviderContractRepository
 {
     private static bool _indexesCreated;
     private static readonly object _indexLock = new();
     private readonly IMongoCollection<ProviderContract> _collection;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<MongoProviderContractRepository> _logger;
 
     public MongoProviderContractRepository(
         IMongoDatabase database,
-        IHttpContextAccessor httpContextAccessor,
+        ICurrentActor actor,
         ILogger<MongoProviderContractRepository> logger)
     {
         _collection = database.GetCollection<ProviderContract>("provider_contracts");
-        _httpContextAccessor = httpContextAccessor;
+        _actor = actor;
         _logger = logger;
 
         EnsureIndexes();
@@ -48,13 +54,8 @@ public class MongoProviderContractRepository : IProviderContractRepository
         _collection.Indexes.CreateMany(models);
     }
 
-    private string GetTenantId()
-    {
-        var tenantId = _httpContextAccessor.HttpContext?.Items["TenantId"]?.ToString();
-        if (string.IsNullOrEmpty(tenantId))
-            throw new InvalidOperationException("TenantId not found in request context");
-        return tenantId;
-    }
+    // The tenant from the validated CHO token; throws when there is none.
+    private string GetTenantId() => _actor.TenantId;
 
     public async Task<ProviderContract?> GetByIdAsync(string id)
     {
@@ -113,6 +114,8 @@ public class MongoProviderContractRepository : IProviderContractRepository
         contract.TenantId = GetTenantId();
         contract.CreatedAt = DateTime.UtcNow;
         contract.LastUpdatedAt = DateTime.UtcNow;
+        contract.CreatedBy = _actor.UserId;
+        contract.LastUpdatedBy = _actor.UserId;
         await _collection.InsertOneAsync(contract);
         _logger.LogInformation("Created provider contract {ContractNumber} for provider {NPI}",
             SanitizeForLog(contract.ContractNumber), SanitizeForLog(contract.ProviderNPI));
@@ -121,10 +124,15 @@ public class MongoProviderContractRepository : IProviderContractRepository
 
     public async Task<ProviderContract> UpdateAsync(ProviderContract contract)
     {
+        // Only ever replaces a contract in the caller's tenant, whatever the
+        // object says.
+        var tenantId = GetTenantId();
+        contract.TenantId = tenantId;
         contract.LastUpdatedAt = DateTime.UtcNow;
+        contract.LastUpdatedBy = _actor.UserId;
         var filter = Builders<ProviderContract>.Filter.And(
             Builders<ProviderContract>.Filter.Eq(x => x.Id, contract.Id),
-            Builders<ProviderContract>.Filter.Eq(x => x.TenantId, contract.TenantId));
+            Builders<ProviderContract>.Filter.Eq(x => x.TenantId, tenantId));
         await _collection.ReplaceOneAsync(filter, contract);
         _logger.LogInformation("Updated provider contract {ContractNumber}", SanitizeForLog(contract.ContractNumber));
         return contract;

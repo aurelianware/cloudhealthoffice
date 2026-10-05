@@ -1,20 +1,61 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using TenantService.Models;
+using TenantService.Security;
 using TenantService.Services;
 
 namespace TenantService.Controllers;
 
+/// <summary>
+/// A tenant's users. Every action needs <c>users:manage</c> in the route's
+/// tenant (<see cref="RouteTenantFilter"/>; <c>platform:tenants</c> may act on
+/// any tenant and is audited). token-service reads the roles stored here, so
+/// granting <c>PlatformAdmin</c> or <c>cho.service</c> additionally needs
+/// <c>platform:tenants</c>.
+/// </summary>
 [ApiController]
 [Route("api/v1/tenants/{tenantId}/users")]
+[RequirePermission(TenantPermissions.UsersManage)]
 public class UsersController : ControllerBase
 {
     private readonly ITenantUserService _userService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(ITenantUserService userService, ILogger<UsersController> logger)
+    public UsersController(ITenantUserService userService, ICurrentActor actor, ILogger<UsersController> logger)
     {
         _userService = userService;
+        _actor = actor;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 403 when <paramref name="roles"/> adds a platform-only role the user does
+    /// not already hold and the caller cannot grant it. Keeping or removing
+    /// such a role is allowed, so an edit to an existing platform administrator
+    /// still goes through.
+    /// </summary>
+    private async Task<ObjectResult?> PlatformRoleRefusedAsync(
+        IEnumerable<string>? roles, string tenantId, string? existingUserId = null)
+    {
+        static bool PlatformOnly(string? r) => TenantPermissions.PlatformOnlyRoles.Contains(r?.Trim() ?? string.Empty);
+
+        if (roles == null || !roles.Any(PlatformOnly) || _actor.HasPermission(TenantPermissions.PlatformTenants))
+            return null;
+
+        if (existingUserId != null)
+        {
+            var existing = await _userService.GetUserAsync(existingUserId);
+            var held = existing != null && existing.TenantId == tenantId
+                ? new HashSet<string>(existing.Roles ?? new List<string>(), StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (roles.Where(PlatformOnly).All(r => held.Contains(r.Trim())))
+                return null;
+        }
+
+        _logger.LogWarning("Refused to grant a platform-only role (caller {Subject})", TenantAuditLog.Sanitize(_actor.UserId));
+        return StatusCode(StatusCodes.Status403Forbidden,
+            new { error = "Granting PlatformAdmin or cho.service needs platform:tenants." });
     }
 
     /// <summary>
@@ -26,6 +67,7 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantUser>> CreateUser(string tenantId, [FromBody] CreateTenantUserRequest request)
     {
+        if (await PlatformRoleRefusedAsync(request.Roles, tenantId) is { } refused) return refused;
         try
         {
             var user = await _userService.CreateUserAsync(tenantId, request);
@@ -34,6 +76,10 @@ public class UsersController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { error = ex.Message });
+        }
+        catch (UserChangedConcurrentlyException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -88,6 +134,7 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<TenantUser>> UpdateUser(
         string tenantId, string userId, [FromBody] UpdateTenantUserRequest request)
     {
+        if (await PlatformRoleRefusedAsync(request.Roles, tenantId, userId) is { } refused) return refused;
         try
         {
             var user = await _userService.UpdateUserAsync(tenantId, userId, request);
@@ -96,6 +143,10 @@ public class UsersController : ControllerBase
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { error = ex.Message });
+        }
+        catch (UserChangedConcurrentlyException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -104,7 +155,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Partial update of user details (e.g. backfill Azure AD OID).
+    /// Partial update of user details. The Entra link is not settable here.
     /// </summary>
     [HttpPatch("{userId}")]
     [ProducesResponseType(typeof(TenantUser), StatusCodes.Status200OK)]
@@ -113,6 +164,7 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<TenantUser>> PatchUser(
         string tenantId, string userId, [FromBody] UpdateTenantUserRequest request)
     {
+        if (await PlatformRoleRefusedAsync(request.Roles, tenantId, userId) is { } refused) return refused;
         try
         {
             var user = await _userService.UpdateUserAsync(tenantId, userId, request);
@@ -122,9 +174,38 @@ public class UsersController : ControllerBase
         {
             return NotFound(new { error = ex.Message });
         }
+        catch (UserChangedConcurrentlyException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Clears the user's Entra link (for example, when an employee leaves or a
+    /// guest's account must be replaced). Audited. The user keeps its status;
+    /// disable it as well to keep the person out, because someone from the
+    /// tenant's own directory is linked again by email on their next sign-in.
+    /// </summary>
+    [HttpPost("{userId}/unlink")]
+    [ProducesResponseType(typeof(TenantUser), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TenantUser>> UnlinkUser(string tenantId, string userId, [FromServices] TenantAuditLog audit)
+    {
+        try
+        {
+            var (user, previousOid, previousTid) = await _userService.UnlinkUserAsync(tenantId, userId);
+            audit.Record(
+                $"unlink user {userId} (was oid {(previousOid.Length > 0 ? previousOid : "-")} tid {(previousTid.Length > 0 ? previousTid : "-")})",
+                tenantId);
+            return Ok(user);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
         }
     }
 

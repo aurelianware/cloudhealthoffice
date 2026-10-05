@@ -116,6 +116,13 @@ public class CapitationRun
     public string? CreatedBy { get; set; }
 
     /// <summary>
+    /// User who executed the run (token subject). With <see cref="CreatedBy"/>,
+    /// one of the run's makers: neither may approve or release its statements.
+    /// </summary>
+    [StringLength(200)]
+    public string? ExecutedBy { get; set; }
+
+    /// <summary>
     /// Execution started timestamp
     /// </summary>
     public DateTime? ExecutionStartedAt { get; set; }
@@ -139,6 +146,38 @@ public class CapitationRun
     /// Warning messages during execution
     /// </summary>
     public List<string> Warnings { get; set; } = new();
+
+    /// <summary>
+    /// True when at least one member's capitation could not be calculated (for
+    /// example the member's risk score could not be read). Those members are
+    /// listed in <see cref="MembersNeedingAttention"/> and their statements are
+    /// on hold; no default score was paid in their place.
+    /// </summary>
+    public bool RequiresAttention { get; set; }
+
+    /// <summary>Members whose capitation this run could not calculate, and why.</summary>
+    public List<CapitationMemberIssue> MembersNeedingAttention { get; set; } = new();
+}
+
+/// <summary>
+/// A member whose capitation line could not be calculated. The member is left
+/// off the statement (never paid at a default score) and the statement is put
+/// on hold until someone resolves it.
+/// </summary>
+public class CapitationMemberIssue
+{
+    public string MemberId { get; set; } = string.Empty;
+    public string? CoverageId { get; set; }
+    public string ProviderNPI { get; set; } = string.Empty;
+    public string? StatementId { get; set; }
+
+    /// <summary>Machine-readable reason, e.g. <see cref="RiskScoreUnavailable"/>.</summary>
+    public string Reason { get; set; } = string.Empty;
+
+    /// <summary>What failed, e.g. "risk-adjustment-service answered 403".</summary>
+    public string Detail { get; set; } = string.Empty;
+
+    public const string RiskScoreUnavailable = "RiskScoreUnavailable";
 }
 
 /// <summary>
@@ -281,7 +320,8 @@ public class CreateCapitationRunRequest
     public CapitationRunCriteria Criteria { get; set; } = new();
 
     /// <summary>
-    /// Who is creating the run
+    /// Ignored: the creator is always the authenticated caller (token subject).
+    /// Kept so existing clients that still send it are not rejected.
     /// </summary>
     public string? CreatedBy { get; set; }
 

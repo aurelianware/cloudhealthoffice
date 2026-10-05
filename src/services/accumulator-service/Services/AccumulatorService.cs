@@ -175,8 +175,11 @@ public class AccumulatorService : IAccumulatorService
         return new ApplyResult(ApplyOutcome.Applied, snapshot, auditEvent.Id, null);
     }
 
-    public async Task<AccumulatorAdjustmentResponse> AdjustAsync(string tenantId, string memberId, AccumulatorAdjustmentRequest request, CancellationToken ct = default)
+    public async Task<AccumulatorAdjustmentResponse> AdjustAsync(string tenantId, string memberId, string actorId, AccumulatorAdjustmentRequest request, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(actorId))
+            throw new ArgumentException("An authenticated actor is required for a manual adjustment.", nameof(actorId));
+
         // Idempotent replay on client-supplied AdjustmentId: if we've seen this
         // adjustmentId before, return the existing snapshot rather than applying
         // the delta again. Before this check the duplicate index violation would
@@ -237,7 +240,7 @@ public class AccumulatorService : IAccumulatorService
             PlanYearEnd = snapshot.PlanYearEnd,
             EventType = "ManualAdjustment",
             SourceReference = adjustmentId,
-            ActorId = request.ActorId,
+            ActorId = actorId,
             Reason = request.Reason,
             DeductibleDelta = request.DeductibleDelta,
             OopDelta = request.OopDelta,
@@ -262,7 +265,7 @@ public class AccumulatorService : IAccumulatorService
             PlanYearEnd = snapshot.PlanYearEnd,
             AdjustmentSource = "ManualAdjustment",
             SourceReference = adjustmentId,
-            ActorId = request.ActorId,
+            ActorId = actorId,
             Reason = request.Reason,
             DeductibleDelta = request.DeductibleDelta,
             OopDelta = request.OopDelta,

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace CapitationService.Controllers;
 
@@ -10,13 +11,16 @@ namespace CapitationService.Controllers;
 public class CapitationContractsController : ControllerBase
 {
     private readonly ICapitationContractRepository _contractRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CapitationContractsController> _logger;
 
     public CapitationContractsController(
         ICapitationContractRepository contractRepository,
+        ICurrentActor actor,
         ILogger<CapitationContractsController> logger)
     {
         _contractRepository = contractRepository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -86,7 +90,14 @@ public class CapitationContractsController : ControllerBase
         _logger.LogInformation("Creating capitation rate config for contract {ContractId}, provider {NPI}",
             contract.ContractId, SanitizeForLog(contract.ProviderNPI));
 
+        // Server-owned fields: status starts at Draft, the actor and timestamps
+        // come from the token and the clock (the repository stamps the tenant).
+        var now = DateTime.UtcNow;
         contract.Status = CapitationRateConfigStatus.Draft;
+        contract.CreatedBy = _actor.UserId;
+        contract.LastUpdatedBy = _actor.UserId;
+        contract.CreatedAt = now;
+        contract.LastUpdatedAt = now;
         var created = await _contractRepository.CreateAsync(contract);
 
         return CreatedAtAction(nameof(GetContractById), new { id = created.Id }, created);
@@ -108,6 +119,10 @@ public class CapitationContractsController : ControllerBase
         contract.TenantId = existing.TenantId;
         contract.CreatedAt = existing.CreatedAt;
         contract.CreatedBy = existing.CreatedBy;
+        // Status changes only through activate/terminate.
+        contract.Status = existing.Status;
+        contract.LastUpdatedBy = _actor.UserId;
+        contract.LastUpdatedAt = DateTime.UtcNow;
 
         var updated = await _contractRepository.UpdateAsync(contract);
         return Ok(updated);
@@ -129,6 +144,8 @@ public class CapitationContractsController : ControllerBase
             return BadRequest(new { error = $"Can only activate Draft or Suspended contracts, current: {contract.Status}" });
 
         contract.Status = CapitationRateConfigStatus.Active;
+        contract.LastUpdatedBy = _actor.UserId;
+        contract.LastUpdatedAt = DateTime.UtcNow;
         _logger.LogInformation("Activated capitation contract {ContractNumber}", contract.ContractNumber);
 
         var updated = await _contractRepository.UpdateAsync(contract);
@@ -152,6 +169,8 @@ public class CapitationContractsController : ControllerBase
 
         contract.Status = CapitationRateConfigStatus.Terminated;
         contract.TerminationDate = request.TerminationDate ?? DateTime.UtcNow;
+        contract.LastUpdatedBy = _actor.UserId;
+        contract.LastUpdatedAt = DateTime.UtcNow;
         _logger.LogInformation("Terminated capitation contract {ContractNumber}: {Reason}",
             contract.ContractNumber, SanitizeForLog(request.Reason));
 

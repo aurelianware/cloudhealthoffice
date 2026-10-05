@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ArService.Models;
 using ArService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace ArService.Controllers;
 
@@ -11,15 +12,18 @@ public class ArAdjustmentsController : ControllerBase
 {
     private readonly IArAdjustmentRepository _adjustmentRepository;
     private readonly IArBalanceRepository _balanceRepository;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<ArAdjustmentsController> _logger;
 
     public ArAdjustmentsController(
         IArAdjustmentRepository adjustmentRepository,
         IArBalanceRepository balanceRepository,
+        ICurrentActor actor,
         ILogger<ArAdjustmentsController> logger)
     {
         _adjustmentRepository = adjustmentRepository;
         _balanceRepository = balanceRepository;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -68,6 +72,9 @@ public class ArAdjustmentsController : ControllerBase
         // Auto-generate adjustment number
         adjustment.AdjustmentNumber = $"ADJ-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
         adjustment.Status = ArAdjustmentStatus.Pending;
+        adjustment.CreatedBy = _actor.UserId;
+        adjustment.AuthorizedBy = null;
+        adjustment.AuthorizedAt = null;
 
         _logger.LogInformation("Creating AR adjustment {AdjustmentNumber}, type={Type}, amount={Amount}",
             SanitizeForLog(adjustment.AdjustmentNumber), adjustment.AdjustmentType, adjustment.Amount);
@@ -92,11 +99,7 @@ public class ArAdjustmentsController : ControllerBase
         if (adjustment.Status != ArAdjustmentStatus.Pending)
             return BadRequest(new { error = $"Can only approve Pending adjustments, current: {adjustment.Status}" });
 
-        var authorizedBy = request?.AuthorizedBy;
-        if (string.IsNullOrWhiteSpace(authorizedBy))
-            authorizedBy = User?.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(authorizedBy))
-            authorizedBy = "system";
+        var authorizedBy = _actor.UserId;
 
         adjustment.Status = ArAdjustmentStatus.Approved;
         adjustment.AuthorizedBy = authorizedBy;
@@ -166,7 +169,7 @@ public class ArAdjustmentsController : ControllerBase
             DebitAmount = adjustment.Direction == ArAdjustmentDirection.Debit ? adjustment.Amount : 0,
             CreditAmount = adjustment.Direction == ArAdjustmentDirection.Credit ? adjustment.Amount : 0,
             PostedAt = DateTime.UtcNow,
-            PostedBy = adjustment.AuthorizedBy,
+            PostedBy = _actor.UserId,
             Memo = adjustment.Narrative
         };
 
@@ -216,7 +219,7 @@ public class ArAdjustmentsController : ControllerBase
                 DebitAmount = adjustment.Direction == ArAdjustmentDirection.Credit ? adjustment.Amount : 0,
                 CreditAmount = adjustment.Direction == ArAdjustmentDirection.Debit ? adjustment.Amount : 0,
                 PostedAt = DateTime.UtcNow,
-                PostedBy = adjustment.AuthorizedBy,
+                PostedBy = _actor.UserId,
                 Memo = $"Reversal of {adjustment.AdjustmentNumber}"
             };
 
@@ -248,6 +251,7 @@ public class ArAdjustmentsController : ControllerBase
 
 public class ApproveAdjustmentRequest
 {
+    // Ignored: the approver is always the authenticated user (ICurrentActor).
     public string AuthorizedBy { get; set; } = string.Empty;
 }
 

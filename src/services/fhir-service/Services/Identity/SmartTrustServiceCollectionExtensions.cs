@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -45,16 +46,17 @@ public static class SmartTrustServiceCollectionExtensions
             client.DefaultRequestHeaders.Add("Accept", "application/json");
         });
 
-        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+        // Its own scheme name: "Bearer" is the CHO scheme (AddChoAuthentication),
+        // and the FhirCaller selector routes each token to one of the two.
+        services.AddAuthentication().AddJwtBearer(FhirCallerSchemes.Smart);
 
         // Configured through DI so the key ring is injected rather than
         // captured — the handler needs it inside a synchronous callback that
         // runs long after registration.
-        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+        services.AddOptions<JwtBearerOptions>(FhirCallerSchemes.Smart)
             .Configure<TrustedIssuerRegistry, SmartSigningKeyRing>(
                 (jwt, registry, keyRing) => Configure(jwt, registry, keyRing, environment));
 
-        services.AddAuthorization();
         return services;
     }
 
@@ -83,6 +85,26 @@ public static class SmartTrustServiceCollectionExtensions
                     .GetRequiredService<CallerIdentityResolver>();
 
                 var caller = resolver.Resolve(context.Principal);
+
+                // The tenant a SMART caller acts in comes from its token only:
+                // the issuer's mapped tenant claim, the conventional tenant_id
+                // claim, or (when the issuer is confined to exactly one tenant)
+                // that tenant. Never a header. A token naming two different
+                // tenants is refused.
+                var tenant = SmartTenant.Resolve(context.Principal!, caller, registryService);
+                if (tenant.Conflict)
+                {
+                    context.Fail("The token names two different tenants.");
+                    return Task.CompletedTask;
+                }
+
+                // Marks the principal as SMART, so CHO permissions can never be
+                // satisfied by it and SMART scope enforcement always applies.
+                FhirCallerSchemes.Mark(context.Principal, FhirCallerSchemes.SmartMarker,
+                    tenant.ClaimToAdd is { } add
+                        ? [new System.Security.Claims.Claim(ChoClaimTypes.TenantId, add)]
+                        : null);
+
                 if (caller == null)
                 {
                     // The principal validated, but its issuer is not one this
@@ -117,6 +139,8 @@ public static class SmartTrustServiceCollectionExtensions
                 context.HttpContext.Items[AuthenticatedCaller.HttpContextItemKey] = caller;
                 return Task.CompletedTask;
             },
+
+            OnChallenge = FhirCallerSchemes.WriteChallengeAsync,
 
             OnAuthenticationFailed = context =>
             {

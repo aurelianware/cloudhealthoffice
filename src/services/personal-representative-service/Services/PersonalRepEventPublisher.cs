@@ -253,7 +253,9 @@ public sealed class PersonalRepEventPublisher : IPersonalRepEventPublisher, IHos
         AssociatedMemberIds = associatedMemberIds.ToList(),
         Actor = actor,
         CorrelationId = correlationId,
-        InactivationReasonCode = rep.InactivationReasonCode?.ToString()
+        InactivationReasonCode = rep.InactivationReasonCode?.ToString(),
+        ProofOfAuthorityVerifiedBy = rep.ProofOfAuthorityVerifiedBy,
+        ProofOfAuthorityVerifiedAt = rep.ProofOfAuthorityVerifiedAt
     };
 
     internal static PersonalRepAssociationChangedEventPayload BuildAssociationChangedEvent(
@@ -306,6 +308,16 @@ public sealed record PersonalRepStatusChangedEventPayload
     public string Actor { get; init; } = string.Empty;
     public string? CorrelationId { get; init; }
     public string? InactivationReasonCode { get; init; }
+
+    /// <summary>
+    /// The user who verified the proof-of-authority document at activation
+    /// (null for credential types that need none). The document id and its
+    /// content are not on the event.
+    /// </summary>
+    public string? ProofOfAuthorityVerifiedBy { get; init; }
+
+    /// <summary>When the proof-of-authority document was verified.</summary>
+    public DateTime? ProofOfAuthorityVerifiedAt { get; init; }
 }
 
 /// <summary>

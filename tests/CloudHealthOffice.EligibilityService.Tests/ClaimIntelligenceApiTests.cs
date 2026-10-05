@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -13,7 +14,7 @@ public class ClaimIntelligenceApiTests : IClassFixture<EligibilityApiFactory>
     public ClaimIntelligenceApiTests(EligibilityApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
     }
 
@@ -62,18 +63,41 @@ public class ClaimIntelligenceApiTests : IClassFixture<EligibilityApiFactory>
     public async Task Get_OtherTenantHeader_IsNotFound()
     {
         await SubmitAsync("CLM-INTEL-ISO");
-        using var other = _factory.CreateClient();
+        using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
         var response = await other.GetAsync("/api/claims/CLM-INTEL-ISO/intelligence");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
-    public async Task Get_MissingTenant_IsBadRequest()
+    public async Task Get_MissingTenant_IsUnauthorized()
     {
+        // No token means no tenant: the request is refused before the controller runs.
         using var anonymous = _factory.CreateClient();
         var response = await anonymous.GetAsync("/api/claims/CLM-INTEL-ISO/intelligence");
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_ClaimsExaminer_CanRead()
+    {
+        await SubmitAsync("CLM-INTEL-EXAM");
+        using var examiner = _factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("examiner-1", ChoRolePermissions.ClaimsExaminer));
+        examiner.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
+        var response = await examiner.GetAsync("/api/claims/CLM-INTEL-EXAM/intelligence");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_RoleWithoutClaimsRead_IsForbidden()
+    {
+        await SubmitAsync("CLM-INTEL-ENROLL");
+        using var enrollment = _factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("enroll-1", ChoRolePermissions.EnrollmentSpecialist));
+        enrollment.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
+        var response = await enrollment.GetAsync("/api/claims/CLM-INTEL-ENROLL/intelligence");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

@@ -1,3 +1,28 @@
+# smart-auth-service: SMART on FHIR authorization server.
+#
+# Before deploying, replace the placeholders:
+#   <SMART_AUTH_MANAGED_IDENTITY_CLIENT_ID>  user-assigned managed identity with
+#       "Key Vault Secrets User" on <KEY_VAULT_NAME>, federated to
+#       system:serviceaccount:cloudhealthoffice:smart-auth-service-sa
+#   <KEY_VAULT_NAME>
+# and, to turn on the member/provider sign-in, the External ID values below
+# (<EXTERNAL_ID_DOMAIN>, <EXTERNAL_ID_TENANT_ID>, <EXTERNAL_ID_CLIENT_ID>).
+#
+# Key Vault holds (every secret is read into configuration, "--" = ":"):
+#   SmartAuth--SigningCertificates--0--Pfx      certificate (PKCS#12, RSA 2048+), required
+#   SmartAuth--EncryptionCertificates--0--Pfx   certificate (PKCS#12, RSA 2048+), required
+#   SmartAuth--ExternalLogin--ClientSecret      secret, when ExternalLogin is enabled
+#   ChoAuth--Issuers--0--PublicKeyPem           secret (token-service public key)
+# Without the two certificates the service refuses to start outside
+# Development. Rotation: docs/security/smart-auth-tenancy.md.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: smart-auth-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<SMART_AUTH_MANAGED_IDENTITY_CLIENT_ID>"
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -7,24 +32,56 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   SmartAuth__FhirBaseUrl: "https://api.cloudhealthoffice.com/fhir/r4"
+  # Required; HTTPS outside Development. The token `iss`, discovery and JWKS
+  # metadata use exactly this value (never the request Host / X-Forwarded-*).
+  # It must equal fhir-service SmartAuth:Issuer (or its TrustedIssuers entry)
+  # and the Ingress host below.
   SmartAuth__Issuer: "https://auth.cloudhealthoffice.com"
   SmartAuth__AccessTokenLifetimeMinutes: "60"
   SmartAuth__RefreshTokenLifetimeDays: "7"
   SmartAuth__LaunchContextTtlMinutes: "5"
   SmartAuth__DevMode: "false"
+  SmartAuth__EnrolmentCodeTtlHours: "72"
+  # TLS ends at the ingress, so pods see plain HTTP; OpenIddict refuses that
+  # unless the ingress's X-Forwarded-Proto says the client used HTTPS. Only
+  # requests from these CIDRs (the ingress-nginx controller pods' network:
+  # the AKS pod CIDR, or the node subnet with Azure CNI) are trusted. With
+  # none listed every /connect/* request is refused.
+  SmartAuth__TrustedProxyNetworks__0: "<INGRESS_POD_CIDR>"
+  # Configuration from Key Vault (certificates, client secret; see the header).
+  SecretProvider__Provider: "AzureKeyVault"
+  SecretProvider__AzureKeyVaultUri: "https://<KEY_VAULT_NAME>.vault.azure.net/"
+  # Rotation (docs/security/smart-auth-tenancy.md): add the next certificate as
+  # SmartAuth--SigningCertificates--1--Pfx with Standby, wait for resource
+  # servers to pick it up, then move Standby to the old one, then remove it.
+  # SmartAuth__SigningCertificates__1__Standby: "true"
+  #
+  # Member/provider sign-in through Microsoft Entra External ID. Leave Enabled
+  # "false" until the External ID tenant and app registration exist; when
+  # enabled, every value is required and the client secret must be in Key
+  # Vault (SmartAuth--ExternalLogin--ClientSecret). The redirect URI to
+  # register is SmartAuth__Issuer + CallbackPath:
+  #   https://auth.cloudhealthoffice.com/signin-oidc
+  SmartAuth__ExternalLogin__Enabled: "false"
+  SmartAuth__ExternalLogin__Authority: "https://<EXTERNAL_ID_DOMAIN>.ciamlogin.com/<EXTERNAL_ID_TENANT_ID>/v2.0"
+  SmartAuth__ExternalLogin__ExpectedIssuer: "https://<EXTERNAL_ID_TENANT_ID>.ciamlogin.com/<EXTERNAL_ID_TENANT_ID>/v2.0"
+  SmartAuth__ExternalLogin__ClientId: "<EXTERNAL_ID_CLIENT_ID>"
+  SmartAuth__ExternalLogin__DisplayName: "Cloud Health Office ID"
+  SmartAuth__ExternalLogin__CallbackPath: "/signin-oidc"
+  # The admin API (/api/admin/smart/*) and POST /launch take CHO tokens, so the
+  # service refuses to start without ChoAuth trust. Supply it from Key Vault /
+  # the Secret below, as for every CHO service (docs/security/portal-token-service.md):
+  #   ChoAuth__Audience=cho-api
+  #   ChoAuth__Issuers__0__Issuer=cho-token-service
+  #   ChoAuth__Issuers__0__PublicKeyPem=<token-service public key>
+  # See docs/security/smart-auth-tenancy.md.
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: smart-auth-service-secrets
-  namespace: cloudhealthoffice
-type: Opaque
-stringData:
-  MongoDb__ConnectionString: "mongodb://admin:CHANGE_ME@mongodb:27017/CloudHealthOffice"
-  MongoDb__DatabaseName: "CloudHealthOffice"
-  # Production: signing/encryption certificates from Azure Key Vault
-  # Sprint 3: mount KeyVault secrets here
+# The smart-auth-service-secrets Secret is not part of this manifest, so
+# applying it never overwrites real credentials. Create it once per cluster
+# (or from Key Vault through the CSI driver):
+#   kubectl -n cloudhealthoffice create secret generic smart-auth-service-secrets \
+#     --from-literal=MongoDb__ConnectionString='<connection string>' \
+#     --from-literal=MongoDb__DatabaseName=CloudHealthOffice
 
 ---
 apiVersion: apps/v1
@@ -45,7 +102,9 @@ spec:
     metadata:
       labels:
         app: smart-auth-service
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: smart-auth-service-sa
       containers:
         - name: smart-auth-service
           image: clouhealthoffice.azurecr.io/cloudhealthoffice-smart-auth-service:latest
@@ -124,9 +183,9 @@ metadata:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     # Larger body size for token endpoint form posts
     nginx.ingress.kubernetes.io/proxy-body-size: "1m"
-    # Required for OAuth2 cookie handling
-    nginx.ingress.kubernetes.io/proxy-cookie-path: "/ /"
-    nginx.ingress.kubernetes.io/proxy-cookie-domain: ".cloudhealthoffice.com"
+    # No cookie domain/path rewriting: the sign-in session cookie stays
+    # host-only on auth.cloudhealthoffice.com, never shared with other
+    # *.cloudhealthoffice.com hosts.
 spec:
   ingressClassName: nginx
   tls:

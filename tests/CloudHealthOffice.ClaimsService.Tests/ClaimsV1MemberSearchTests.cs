@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Text.Json;
 using ClaimsService.Adapters;
@@ -26,7 +27,7 @@ public class ClaimsV1MemberSearchTests : IClassFixture<ClaimsApiFactory>
     {
         _factory = factory;
         _adapter = factory.ClaimAdapter;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
         // Reset the shared adapter substitute between tests since the

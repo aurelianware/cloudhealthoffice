@@ -1,0 +1,254 @@
+# token-service: exchanges a portal user's Entra ID access token for a short-lived
+# CHO user token. See docs/security/portal-token-service.md.
+#
+# Before deploying, replace the placeholders:
+#   <TOKEN_SERVICE_MANAGED_IDENTITY_CLIENT_ID>  user-assigned managed identity with the
+#       Key Vault "Key Vault Crypto User" role on the signing key (sign + get), federated
+#       to system:serviceaccount:cloudhealthoffice:token-service-sa
+#   <KEY_VAULT_NAME>, <KEY_VERSION>, <CHO_PLATFORM_ENTRA_TENANT_ID>
+#   <AKS_OIDC_ISSUER_URL>  the cluster's service-account issuer, exactly as in a
+#       projected token's iss (az aks show -g <rg> -n <cluster> --query oidcIssuerProfile.issuerUrl -o tsv)
+#   <TENANT_...>  the tenants each Argo workflow may act for (ConfigMap token-service-workloads)
+#   <TOKEN_SERVICE_SVC_APP_ID>  the "CHO token-service (service tokens)" Entra app registration
+#       whose access tokens services present at POST /v1/token/service
+#   <..._MANAGED_IDENTITY_OBJECT_ID>  each service's managed identity object (principal) id
+#       (ConfigMap token-service-service-clients)
+# token-service needs no service-token secret: it signs its own tenant-service
+# token with the Key Vault key, under the service issuer cho-token-service-svc.
+# Argo workload tokens: docs/security/argo-service-tokens.md.
+# Service tokens: docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: token-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<TOKEN_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: token-service-config
+  namespace: cloudhealthoffice
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  # Use a versioned key id. Services trust exactly this key's public half, so a new
+  # version must be rolled out as described in docs/security/portal-token-service.md
+  # ("Key rotation"). Do not enable Key Vault auto-rotation on this key.
+  TokenSigning__KeyVaultKeyId: "https://<KEY_VAULT_NAME>.vault.azure.net/keys/cho-token-signing/<KEY_VERSION>"
+  TokenSigning__Issuer: "cho-token-service"
+  TokenSigning__Audience: "cho-api"
+  TokenService__PlatformTenantId: "<CHO_PLATFORM_ENTRA_TENANT_ID>"
+  Services__TenantService: "http://tenant-service"
+  # Argo workflows: POST /v1/token/workload. Projected service-account tokens
+  # are validated against the cluster's OIDC issuer (discovery + JWKS). Issued
+  # tokens are signed with the TokenSigning key under the issuer cho-workload,
+  # which every CHO service trusts with AllowWorkloadIdentity.
+  WorkloadTokens__Enabled: "true"
+  WorkloadTokens__KubernetesIssuer: "<AKS_OIDC_ISSUER_URL>"
+  WorkloadTokens__Audience: "cho-token-service"
+  WorkloadTokens__Issuer: "cho-workload"
+  WorkloadTokens__TokenLifetime: "00:05:00"
+  WorkloadTokens__RegistrationsFile: "/etc/cho/workloads/registrations.json"
+  # CHO services: POST /v1/token/service. A service presents an app-only Entra
+  # token from its workload identity (managed identity) for the service-token
+  # app; the token's oid selects exactly one registered client id. Issued
+  # tokens (cho.service, 5 minutes) are signed with the TokenSigning key under
+  # cho-token-service-svc, which every service trusts as Kind=Service.
+  ServiceTokens__Enabled: "true"
+  ServiceTokens__EntraTenantId: "<CHO_PLATFORM_ENTRA_TENANT_ID>"
+  ServiceTokens__Audiences__0: "api://<TOKEN_SERVICE_SVC_APP_ID>"
+  ServiceTokens__Audiences__1: "<TOKEN_SERVICE_SVC_APP_ID>"
+  ServiceTokens__RequiredAppRole: "Cho.ServiceToken"
+  ServiceTokens__Issuer: "cho-token-service-svc"
+  ServiceTokens__TokenLifetime: "00:05:00"
+  ServiceTokens__ServiceClientsFile: "/etc/cho/service-clients/service-clients.json"
+---
+# Which Kubernetes service account may obtain which CHO workload token.
+# One entry per workflow (infrastructure/argo-workflows/cho-workload-identity.yaml).
+# Client ids start with wf-. Permissions are exact (no wildcards, no platform:*);
+# token-service refuses to start otherwise. A workload token carries exactly these
+# permissions, including those the called service needs for the calls it makes on
+# the caller's behalf (the caller's token is forwarded). To keep the tenant lists
+# private, serve this file from a Key Vault secret (CSI driver) instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: token-service-workloads
+  namespace: cloudhealthoffice
+data:
+  registrations.json: |
+    [
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-enrollment-import", "clientId": "wf-enrollment-import",
+        "allowedTenants": ["<TENANT_WITH_834_FEED>"],
+        "permissions": ["enrollment:process", "enrollment:read", "members:read", "members:write", "coverage:write", "benefits:read"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-837-ingest", "clientId": "wf-837-ingest",
+        "allowedTenants": ["<TENANT_WITH_837_FEED>"],
+        "permissions": ["claims:work"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-tenant-onboarding", "clientId": "wf-tenant-onboarding",
+        "allowedTenants": ["*"],
+        "permissions": ["settings:manage"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-277-rfai", "clientId": "wf-277-rfai",
+        "allowedTenants": ["<TENANT_WITH_RFAI>"],
+        "permissions": ["claims:read"]
+      },
+      {
+        "namespace": "cho-workflows", "serviceAccount": "wf-278-ingest", "clientId": "wf-278-ingest",
+        "allowedTenants": ["<TENANT_WITH_278_INTAKE>"],
+        "permissions": ["authorizations:write"]
+      }
+    ]
+---
+# Which managed identity is which CHO service (POST /v1/token/service). One
+# entry per service: its client id and the object (principal) id of its
+# user-assigned managed identity (az identity show -g <rg> -n <service>-identity
+# --query principalId). Exact ids only; token-service refuses to start on a
+# duplicate, a wildcard or a placeholder. Optionally add "appId" (the identity's
+# client id) to pin it as well.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: token-service-service-clients
+  namespace: cloudhealthoffice
+data:
+  service-clients.json: |
+    [
+      { "clientId": "accumulator-service", "objectId": "<ACCUMULATOR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "appeals-service", "objectId": "<APPEALS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "ar-service", "objectId": "<AR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "attachment-service", "objectId": "<ATTACHMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "authorization-service", "objectId": "<AUTHORIZATION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "benefit-plan-service", "objectId": "<BENEFIT_PLAN_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "capitation-service", "objectId": "<CAPITATION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "claims-examiner-service", "objectId": "<CLAIMS_EXAMINER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "claims-service", "objectId": "<CLAIMS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "consent-service", "objectId": "<CONSENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "coverage-service", "objectId": "<COVERAGE_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "eligibility-service", "objectId": "<ELIGIBILITY_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "encounter-service", "objectId": "<ENCOUNTER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "encounter-submission-service", "objectId": "<ENCOUNTER_SUBMISSION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "enrollment-import-service", "objectId": "<ENROLLMENT_IMPORT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "ffs-service", "objectId": "<FFS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "fhir-service", "objectId": "<FHIR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "idcard-service", "objectId": "<IDCARD_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "member-document-service", "objectId": "<MEMBER_DOCUMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "member-service", "objectId": "<MEMBER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "payment-service", "objectId": "<PAYMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "personal-representative-service", "objectId": "<PERSONAL_REPRESENTATIVE_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "premium-billing-service", "objectId": "<PREMIUM_BILLING_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "pricing-api", "objectId": "<PRICING_API_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-contracts-service", "objectId": "<PROVIDER_CONTRACTS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-eligibility-api", "objectId": "<PROVIDER_ELIGIBILITY_API_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-service", "objectId": "<PROVIDER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-verification-service", "objectId": "<PROVIDER_VERIFICATION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "reference-data-service", "objectId": "<REFERENCE_DATA_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "rfai-service", "objectId": "<RFAI_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "risk-adjustment-service", "objectId": "<RISK_ADJUSTMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "sponsor-service", "objectId": "<SPONSOR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "tenant-service", "objectId": "<TENANT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "terminology-service", "objectId": "<TERMINOLOGY_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "trading-partner-service", "objectId": "<TRADING_PARTNER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" }
+    ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: token-service
+  namespace: cloudhealthoffice
+  labels:
+    app: token-service
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: token-service
+  template:
+    metadata:
+      labels:
+        app: token-service
+        tier: backend
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: token-service-sa
+      containers:
+      - name: token-service
+        image: clouhealthoffice.azurecr.io/cloudhealthoffice-token-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: token-service-config
+        # No ChoAuth__ServiceToken__PrivateKeyPem: a local service-token key is
+        # refused outside Development/Testing. token-service signs its own
+        # tenant-service token under cho-token-service-svc (ServiceTokens).
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: workloads
+          mountPath: /etc/cho/workloads
+          readOnly: true
+        - name: service-clients
+          mountPath: /etc/cho/service-clients
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: workloads
+        configMap:
+          name: token-service-workloads
+      - name: service-clients
+        configMap:
+          name: token-service-service-clients
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: token-service
+  namespace: cloudhealthoffice
+  labels:
+    app: token-service
+spec:
+  type: ClusterIP
+  selector:
+    app: token-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP

@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EligibilityService.Controllers;
@@ -7,6 +8,7 @@ namespace EligibilityService.Controllers;
 /// <summary>
 /// Development-only 277CA injection and read surface. Feeds the same
 /// <see cref="IClaimAcknowledgmentProcessor"/> used by the Stedi adapter.
+/// A transmission belonging to another tenant is reported as not found.
 /// </summary>
 [ApiController]
 [Route("api/dev/gateway")]
@@ -40,7 +42,7 @@ public sealed class GatewayClaimAcknowledgmentDemoController : ControllerBase
             return NotFound();
         }
 
-        var transmission = await _transmissions.GetByIdAsync(transmissionId, ct);
+        var transmission = await GetTransmissionForTenantAsync(transmissionId, ct);
         if (transmission is null)
         {
             return NotFound(new { error = "Transmission not found." });
@@ -78,7 +80,7 @@ public sealed class GatewayClaimAcknowledgmentDemoController : ControllerBase
             return NotFound();
         }
 
-        var transmission = await _transmissions.GetByIdAsync(transmissionId, ct);
+        var transmission = await GetTransmissionForTenantAsync(transmissionId, ct);
         return transmission is null ? NotFound() : Ok(transmission);
     }
 
@@ -97,7 +99,23 @@ public sealed class GatewayClaimAcknowledgmentDemoController : ControllerBase
             return BadRequest(new { error = "transmissionId is required." });
         }
 
-        var list = await _acknowledgments.ListByTransmissionIdAsync(transmissionId, ct);
+        var transmission = await GetTransmissionForTenantAsync(transmissionId, ct);
+        if (transmission is null)
+        {
+            return NotFound(new { error = "Transmission not found." });
+        }
+
+        var list = await _acknowledgments.ListByTransmissionIdAsync(transmission.TransmissionId, ct);
         return Ok(list);
+    }
+
+    /// <summary>The transmission, if it belongs to the caller's token tenant.</summary>
+    private async Task<ClaimTransmissionRecord?> GetTransmissionForTenantAsync(string transmissionId, CancellationToken ct)
+    {
+        var transmission = await _transmissions.GetByIdAsync(transmissionId, ct);
+        return transmission is not null
+               && string.Equals(transmission.TenantId, HttpContext.GetTenantId(), StringComparison.Ordinal)
+            ? transmission
+            : null;
     }
 }

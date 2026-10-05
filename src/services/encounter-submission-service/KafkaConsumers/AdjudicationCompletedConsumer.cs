@@ -160,6 +160,16 @@ public class AdjudicationCompletedConsumer : BackgroundService
         AdjudicationCompletedMessage message,
         IEncounterSubmissionService service)
     {
+        // Gate 0: a message without a tenant is an error, never a record in an
+        // empty tenant (and claims/reference-data calls could not be authenticated).
+        if (string.IsNullOrWhiteSpace(message.TenantId))
+        {
+            _logger.LogError(
+                "Skipping adjudication-completed message for claim {ClaimId}: no tenant on the message",
+                message.ClaimId);
+            return;
+        }
+
         // Gate 1: claim must be Approved or Paid
         if (!EligibleStatuses.Contains(message.Status))
         {

@@ -1,3 +1,4 @@
+using CapitationService.Tests.Support;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using CapitationService.Controllers;
@@ -28,6 +29,7 @@ public class CapitationStatementsControllerTests
             _statementRepo.Object,
             _contractRepo.Object,
             _eraService.Object,
+            new TestActor(),
             logger.Object);
     }
 
@@ -105,7 +107,7 @@ public class CapitationStatementsControllerTests
     {
         var stmt = CreateStatement();
         stmt.Status = CapitationStatementStatus.Approved;
-        _runService.Setup(s => s.ApproveStatementAsync("stmt-1")).ReturnsAsync(stmt);
+        _runService.Setup(s => s.ApproveStatementAsync("stmt-1", TestActor.DefaultUserId)).ReturnsAsync(stmt);
 
         var result = await _controller.ApproveStatement("stmt-1");
 
@@ -115,9 +117,24 @@ public class CapitationStatementsControllerTests
     }
 
     [Fact]
+    public async Task ApproveStatement_ByItsMaker_Returns403Problem()
+    {
+        _runService.Setup(s => s.ApproveStatementAsync("stmt-1", TestActor.DefaultUserId))
+            .ThrowsAsync(new SeparationOfDutiesException("Separation of duties: you prepared capitation statement X"));
+
+        var result = await _controller.ApproveStatement("stmt-1");
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(403);
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be("Separation of duties");
+        details.Detail.Should().Contain("you prepared capitation statement X");
+    }
+
+    [Fact]
     public async Task ApproveStatement_InvalidState_ReturnsBadRequest()
     {
-        _runService.Setup(s => s.ApproveStatementAsync("stmt-1"))
+        _runService.Setup(s => s.ApproveStatementAsync("stmt-1", TestActor.DefaultUserId))
             .ThrowsAsync(new InvalidOperationException("already paid"));
 
         var result = await _controller.ApproveStatement("stmt-1");
@@ -130,7 +147,7 @@ public class CapitationStatementsControllerTests
     {
         var stmt = CreateStatement();
         stmt.Status = CapitationStatementStatus.Voided;
-        _runService.Setup(s => s.VoidStatementAsync("stmt-1", "duplicate")).ReturnsAsync(stmt);
+        _runService.Setup(s => s.VoidStatementAsync("stmt-1", "duplicate", TestActor.DefaultUserId)).ReturnsAsync(stmt);
 
         var result = await _controller.VoidStatement("stmt-1", new ReasonRequest { Reason = "duplicate" });
 
@@ -144,7 +161,7 @@ public class CapitationStatementsControllerTests
     {
         var stmt = CreateStatement();
         stmt.Status = CapitationStatementStatus.OnHold;
-        _runService.Setup(s => s.HoldStatementAsync("stmt-1", "under review")).ReturnsAsync(stmt);
+        _runService.Setup(s => s.HoldStatementAsync("stmt-1", "under review", TestActor.DefaultUserId)).ReturnsAsync(stmt);
 
         var result = await _controller.HoldStatement("stmt-1", new ReasonRequest { Reason = "under review" });
 
@@ -270,7 +287,7 @@ public class CapitationStatementsControllerTests
     [Fact]
     public async Task HoldStatement_InvalidState_ReturnsBadRequest()
     {
-        _runService.Setup(s => s.HoldStatementAsync("stmt-1", "reason"))
+        _runService.Setup(s => s.HoldStatementAsync("stmt-1", "reason", TestActor.DefaultUserId))
             .ThrowsAsync(new InvalidOperationException("Cannot hold Paid"));
 
         var result = await _controller.HoldStatement("stmt-1", new ReasonRequest { Reason = "reason" });
@@ -281,7 +298,7 @@ public class CapitationStatementsControllerTests
     [Fact]
     public async Task VoidStatement_InvalidState_ReturnsBadRequest()
     {
-        _runService.Setup(s => s.VoidStatementAsync("stmt-1", "reason"))
+        _runService.Setup(s => s.VoidStatementAsync("stmt-1", "reason", TestActor.DefaultUserId))
             .ThrowsAsync(new InvalidOperationException("Cannot void Paid"));
 
         var result = await _controller.VoidStatement("stmt-1", new ReasonRequest { Reason = "reason" });

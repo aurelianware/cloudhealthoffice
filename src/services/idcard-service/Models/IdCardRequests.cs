@@ -12,7 +12,8 @@ public class CreateIdCardOrderRequest
     public IdCardDeliveryChannel Channel { get; set; } = IdCardDeliveryChannel.Digital;
 
     public string? LanguageCode { get; set; }
-    public string? RequestedBy { get; set; }
+
+    // No RequestedBy: the requester is always the token subject.
 }
 
 public class IdCardOrderResponse

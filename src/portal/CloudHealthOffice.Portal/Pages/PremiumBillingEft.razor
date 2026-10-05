@@ -1,0 +1,411 @@
+@page "/premium-billing/eft"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject IPremiumBillingService BillingService
+@inject IUserContextService UserContextService
+
+<PageTitle>Premium Auto-Debit — Cloud Health Office</PageTitle>
+
+@* Sponsor auto-debit (EFT/ACH). Draft reads: billing:read or payments:read.
+   Releasing debits (drafts, batches, NACHA files): payments:approve
+   (FinanceApprover), and never by the user who created or executed the
+   invoice's billing run (403 "Separation of duties"). NACHA files go from
+   premium-billing-service straight to the bank: this page shows the masked
+   summary and the receipt, and never receives the file. *@
+<PermissionGate Permission="billing:read,payments:read" RoleName="Finance or FinanceApprover">
+<PremiumBillingNav Active="eft" />
+<BillingError Error="_error" OnClose="() => _error = null" />
+
+<MudGrid Spacing="3" Class="mb-2">
+    @if (_canReadRuns)
+    {
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-3" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Completed billing runs</MudText>
+                <MudSimpleTable Dense="true" Style="background: transparent;" data-testid="eft-runs">
+                    <tbody>
+                        @foreach (var run in _runs)
+                        {
+                            <tr style="@(run.Id == _run?.Id ? "background: rgba(0,255,255,0.08);" : "")">
+                                <td style="font-family: monospace;">@run.BillingRunNumber</td>
+                                <td>@run.BillingPeriod.ToString("yyyy-MM")</td>
+                                <td>@run.TotalInvoices invoices</td>
+                                <td>@run.TotalPremiumAmount.ToString("C2")</td>
+                                <td>
+                                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => SelectRun(run))"
+                                               data-testid="@($"eft-run-{run.Id}")">Drafts</MudButton>
+                                </td>
+                            </tr>
+                        }
+                        @if (_runs.Count == 0)
+                        {
+                            <tr><td>No completed billing runs</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+    }
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-3" Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Drafts for one invoice</MudText>
+            <div data-testid="eft-invoice-lookup">
+                <MudTextField @bind-Value="_lookupInvoiceId" Label="Invoice id" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </div>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mt-2" OnClick="LookupInvoice"
+                       data-testid="eft-invoice-lookup-go">Show drafts</MudButton>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@if (_canRelease)
+{
+    <MudPaper Class="pa-4 my-4" data-testid="eft-release"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,170,0,0.4); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Style="color: #ffaa00; font-weight: 600;">Release sponsor debits</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3" Style="color: rgba(255,255,255,0.6);">
+            Releasing pulls money from sponsor bank accounts. It needs payments:approve and must be done by someone other
+            than the user who created or executed the billing run. Only sponsors with an approved bank account are debited;
+            the rest are listed under "Needs attention".
+        </MudText>
+        <div class="d-flex flex-wrap gap-3 align-center">
+            <MudSelect T="string" @bind-Value="_method" Label="Method" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       Dense="true" Style="min-width: 220px;">
+                <MudSelectItem Value="@SponsorPreferred">Sponsor's preferred method</MudSelectItem>
+                <MudSelectItem Value="@("Nacha")">NACHA file</MudSelectItem>
+                <MudSelectItem Value="@("StripeAch")">Stripe ACH</MudSelectItem>
+            </MudSelect>
+            @if (_run != null)
+            {
+                @if (OwnRun)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" data-testid="eft-sod-hint">
+                        You created or executed @_run.BillingRunNumber, so you cannot release its debits (separation of duties).
+                        Another FinanceApprover must release them.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="ReleaseRun" Disabled="_busy"
+                               data-testid="eft-release-run">Release debits for @_run.BillingRunNumber</MudButton>
+                }
+            }
+            <div data-testid="eft-release-invoice-id">
+                <MudTextField @bind-Value="_releaseInvoiceId" Label="Invoice id" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </div>
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="ReleaseInvoice" Disabled="_busy"
+                       data-testid="eft-release-invoice">Release one invoice</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="GenerateNacha" Disabled="_busy" data-testid="eft-generate-nacha">Send NACHA file to the bank</MudButton>
+        </div>
+    </MudPaper>
+}
+
+@if (_batch != null)
+{
+    <MudAlert Severity="@(_batch.Errors > 0 ? Severity.Warning : Severity.Success)" Class="mb-3" data-testid="eft-batch-result">
+        Released @_batch.DraftsInitiated of @_batch.TotalInvoices invoice(s) for @_batch.TotalAmount.ToString("C2");
+        @_batch.Skipped skipped (paid, voided or not enrolled in auto-debit), @_batch.Errors error(s).
+        @if (_batch.ErrorMessages.Count > 0)
+        {
+            <ul>@foreach (var m in _batch.ErrorMessages) { <li>@m</li> }</ul>
+        }
+    </MudAlert>
+}
+@if (_nacha != null)
+{
+    <NachaFileSummary Result="_nacha" TestId="eft-nacha-result" PartyHeader="Sponsor" />
+}
+<NachaAwaitingRetrieval Items="_held" TestId="eft-awaiting-retrieval" CanApprove="_canRelease" UserId="@_userId"
+                        Busy="_busy" OnRetry="RetryNacha" />
+@if (_released != null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-3" data-testid="eft-single-result">
+        Draft for invoice @_released.InvoiceNumber: @_released.Amount.ToString("C2") by @_released.Method, @_released.Status.
+    </MudAlert>
+}
+
+@if (_attention.Count > 0)
+{
+    <MudPaper Class="pa-3 mb-4" data-testid="eft-needs-attention"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,0,85,0.4); border-radius: 12px;">
+        <MudText Typo="Typo.subtitle1" Style="color: #ff0055; font-weight: 600;">Needs attention — not debited</MudText>
+        <MudSimpleTable Dense="true" Style="background: transparent;">
+            <thead><tr><th>Sponsor group</th><th>Invoice / draft</th><th>Reason</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var item in _attention)
+                {
+                    <tr>
+                        <td>@item.GroupNumber</td>
+                        <td style="font-family: monospace;">@(item.InvoiceId ?? item.DraftId)</td>
+                        <td>@item.Reason</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(item.GroupNumber))
+                            {
+                                <MudLink Href="@($"/premium-billing/sponsor-bank-accounts?group={Uri.EscapeDataString(item.GroupNumber)}")">Bank account</MudLink>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
+<MudText Typo="Typo.h6" Class="mb-2">@(_draftsTitle ?? "Drafts")</MudText>
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+<MudTable Items="_drafts" Dense="true" Hover="true" T="EftDraft" data-testid="eft-drafts"
+          Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+    <HeaderContent>
+        <MudTh>Invoice</MudTh>
+        <MudTh>Group</MudTh>
+        <MudTh>Amount</MudTh>
+        <MudTh>Method</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Account</MudTh>
+        <MudTh>Created</MudTh>
+        <MudTh>Released by</MudTh>
+        <MudTh>Settlement / return</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.InvoiceNumber</MudTd>
+        <MudTd>@context.GroupNumber</MudTd>
+        <MudTd>@context.Amount.ToString("C2")</MudTd>
+        <MudTd>@context.Method</MudTd>
+        <MudTd><MudChip T="string" Size="Size.Small" Color="@DraftStatusColor(context.Status)">@context.Status</MudChip></MudTd>
+        <MudTd style="font-family: monospace;">acct @BankNumberMask.Masked(context.AccountNumberLast4) / rtn @BankNumberMask.Masked(context.RoutingNumberLast4)</MudTd>
+        <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+        <MudTd>@(context.InitiatedBy ?? "—")</MudTd>
+        <MudTd>
+            @if (context.ReturnCode != null)
+            {
+                <span style="color: #ff0055;">@context.ReturnCode @context.ReturnReason</span>
+            }
+            else if (context.SettledAt != null)
+            {
+                <span>Settled @context.SettledAt.Value.ToLocalTime().ToString("d")</span>
+            }
+            else if (context.ExpectedSettlementDate != null)
+            {
+                <span>Expected @context.ExpectedSettlementDate.Value.ToString("d")</span>
+            }
+            @if (!string.IsNullOrEmpty(context.ErrorMessage))
+            {
+                <div style="color: #ff0055;">@context.ErrorMessage</div>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">
+            @(_draftsTitle == null ? "Choose a billing run or an invoice to see its drafts" : "No drafts")
+        </MudText>
+    </NoRecordsContent>
+    <PagerContent><MudTablePager /></PagerContent>
+</MudTable>
+</PermissionGate>
+
+@code {
+    [SupplyParameterFromQuery(Name = "run")] public string? RunQuery { get; set; }
+
+    private const string SponsorPreferred = "";
+
+    private List<BillingRun> _runs = new();
+    private BillingRun? _run;
+    private List<EftDraft> _drafts = new();
+    private string? _draftsTitle;
+    private List<EftAttentionItem> _attention = new();
+    private BatchEftResult? _batch;
+    private NachaFileResult? _nacha;
+    private List<NachaHeldFile> _held = new();
+    private EftDraft? _released;
+
+    private bool _loading;
+    private bool _busy;
+    private bool _canReadRuns;
+    private bool _canRelease;
+    private string? _userId;
+    private Exception? _error;
+
+    private string _method = SponsorPreferred;
+    private string? _lookupInvoiceId;
+    private string? _releaseInvoiceId;
+
+    /// <summary>The service refuses the run's creator or executor (maker-checker).</summary>
+    private bool OwnRun => _run != null && !string.IsNullOrEmpty(_userId) &&
+                           (string.Equals(_run.CreatedBy, _userId, StringComparison.Ordinal) ||
+                            string.Equals(_run.ExecutedBy, _userId, StringComparison.Ordinal));
+
+    private string? Method => string.IsNullOrEmpty(_method) ? null : _method;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserContextService.GetCurrentUserAsync();
+        _userId = user?.UserId;
+        _canReadRuns = UserContextService.HasPermission("billing:read");
+        _canRelease = UserContextService.HasPermission("payments:approve");
+        if (!_canReadRuns && !UserContextService.HasPermission("payments:read")) return;
+
+        await LoadHeld();
+
+        if (_canReadRuns)
+        {
+            try
+            {
+                _runs = (await BillingService.GetBillingRunsAsync())
+                    .Where(r => r.Status == "Completed")
+                    .OrderByDescending(r => r.BillingPeriod).ThenByDescending(r => r.CreatedAt).ToList();
+                if (!string.IsNullOrWhiteSpace(RunQuery))
+                {
+                    var run = _runs.FirstOrDefault(r => r.Id == RunQuery) ?? await BillingService.GetBillingRunAsync(RunQuery);
+                    if (run != null) await SelectRun(run);
+                }
+            }
+            catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+            {
+                _error = ex;
+            }
+        }
+    }
+
+    private async Task SelectRun(BillingRun run)
+    {
+        _run = run;
+        _draftsTitle = $"Drafts for {run.BillingRunNumber}";
+        // Run warnings include sponsors that could not be invoiced or debited.
+        await LoadDrafts(run.InvoiceIds);
+    }
+
+    private async Task LookupInvoice()
+    {
+        if (string.IsNullOrWhiteSpace(_lookupInvoiceId)) return;
+        _run = null;
+        _draftsTitle = $"Drafts for invoice {_lookupInvoiceId.Trim()}";
+        await LoadDrafts(new[] { _lookupInvoiceId.Trim() });
+    }
+
+    private async Task LoadDrafts(IEnumerable<string> invoiceIds)
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _drafts = await BillingService.GetDraftsForInvoicesAsync(invoiceIds);
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+            _drafts = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task ReleaseRun()
+    {
+        if (_run == null) return Task.CompletedTask;
+        var run = _run;
+        return Act(async () =>
+        {
+            _batch = await BillingService.InitiateBatchDraftsAsync(new InitiateBatchEftRequest
+            {
+                BillingRunId = run.Id,
+                Method = Method
+            });
+            _attention = _batch.NeedsAttention.ToList();
+            if (_batch.NachaFile != null)
+            {
+                _nacha = _batch.NachaFile;
+                _attention.AddRange(_batch.NachaFile.NeedsAttention);
+                await LoadHeld();
+            }
+            await LoadDrafts(run.InvoiceIds);
+        });
+    }
+
+    private Task ReleaseInvoice()
+    {
+        if (string.IsNullOrWhiteSpace(_releaseInvoiceId))
+        {
+            _error = new BillingApiException(400, null, "Enter the invoice id to release.");
+            return Task.CompletedTask;
+        }
+        var invoiceId = _releaseInvoiceId.Trim();
+        return Act(async () =>
+        {
+            _released = await BillingService.InitiateDraftAsync(new InitiateEftDraftRequest
+            {
+                InvoiceId = invoiceId,
+                Method = Method
+            });
+            _draftsTitle = $"Drafts for invoice {invoiceId}";
+            await LoadDrafts(new[] { invoiceId });
+        });
+    }
+
+    private Task GenerateNacha() => Act(async () =>
+    {
+        _nacha = await BillingService.GenerateNachaFileAsync();
+        _attention = _nacha.NeedsAttention.ToList();
+        await LoadHeld();
+        if (_run != null) await LoadDrafts(_run.InvoiceIds);
+    });
+
+    /// <summary>A second approver re-sends a file that did not reach the bank.</summary>
+    private Task RetryNacha(string fileReference) => Act(async () =>
+    {
+        _nacha = await BillingService.RetryNachaTransmissionAsync(fileReference);
+        await LoadHeld();
+        if (_run != null) await LoadDrafts(_run.InvoiceIds);
+    });
+
+    private async Task LoadHeld()
+    {
+        try
+        {
+            _held = await BillingService.GetHeldNachaFilesAsync();
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            // The list is a convenience; the release itself reports its own outcome.
+            _held = new();
+        }
+    }
+
+    private async Task Act(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        _batch = null;
+        _nacha = null;
+        _released = null;
+        _attention = new();
+        try
+        {
+            await action();
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static Color DraftStatusColor(string status) => status switch
+    {
+        "Settled" => Color.Success,
+        "Submitted" or "Processing" => Color.Info,
+        "Pending" => Color.Default,
+        "AwaitingRetrieval" or "Releasing" => Color.Warning,
+        "Returned" or "Failed" or "DeliveryUnknown" => Color.Error,
+        "Cancelled" => Color.Dark,
+        _ => Color.Default
+    };
+}

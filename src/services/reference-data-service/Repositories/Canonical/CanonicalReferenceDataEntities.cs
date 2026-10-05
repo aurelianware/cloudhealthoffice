@@ -28,9 +28,15 @@ public sealed class CanonicalReferenceCodeEntity
 public sealed class CanonicalReferenceDataImportEntity
 {
     public string ImportKey { get; set; } = string.Empty;
+
+    /// <summary>The importing tenant, or <c>global</c> for global data.</summary>
+    public string TenantScope { get; set; } = string.Empty;
     public string SourceId { get; set; } = string.Empty;
     public string SourceVersion { get; set; } = string.Empty;
     public string Checksum { get; set; } = string.Empty;
     public DateTimeOffset ImportedAt { get; set; }
     public int RecordCount { get; set; }
+
+    /// <summary>Who imported the batch: the token subject. Never read from the request body.</summary>
+    public string? ImportedBy { get; set; }
 }

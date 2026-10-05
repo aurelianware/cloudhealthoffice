@@ -1,5 +1,6 @@
 using EnrollmentImportService.Models;
 using EnrollmentImportService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EnrollmentImportService.Controllers;
@@ -12,10 +13,12 @@ namespace EnrollmentImportService.Controllers;
 public class EnrollmentEventsController : ControllerBase
 {
     private readonly IEnrollmentEventRepository _repository;
+    private readonly ICurrentActor _actor;
 
-    public EnrollmentEventsController(IEnrollmentEventRepository repository)
+    public EnrollmentEventsController(IEnrollmentEventRepository repository, ICurrentActor actor)
     {
         _repository = repository;
+        _actor = actor;
     }
 
     /// <summary>
@@ -28,7 +31,6 @@ public class EnrollmentEventsController : ControllerBase
     [ProducesResponseType(400)]
     public async Task<IActionResult> List(
         string memberId,
-        [FromHeader(Name = "X-Tenant-ID")] string tenantId,
         [FromQuery] string? type = null,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
@@ -36,8 +38,8 @@ public class EnrollmentEventsController : ControllerBase
         [FromQuery] string? continuationToken = null,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-            return BadRequest(new { error = "X-Tenant-ID header is required" });
+        // Tenant from the validated token, never from X-Tenant-ID.
+        var tenantId = _actor.TenantId;
         if (string.IsNullOrWhiteSpace(memberId))
             return BadRequest(new { error = "memberId is required" });
 

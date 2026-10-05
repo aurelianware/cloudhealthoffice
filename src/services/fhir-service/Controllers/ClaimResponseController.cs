@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
 using Hl7.Fhir.Model;
@@ -17,6 +18,7 @@ namespace FhirService.Controllers;
 /// that produced it.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "appeals:read")]
 public sealed class ClaimResponseController : FhirControllerBase
 {
     private readonly IFhirAppealAdapter _appeals;
@@ -46,7 +48,7 @@ public sealed class ClaimResponseController : FhirControllerBase
 
         var appealId = id[..^"-response".Length];
         var appeal = await _appeals.GetAppealAsync(appealId, TenantId, ct);
-        if (appeal is null) return FhirNotFound("ClaimResponse", id);
+        if (appeal is null || IsOutsidePatientContext(appeal.MemberId)) return FhirNotFound("ClaimResponse", id);
 
         var claimResponse = _mapper.ToAppealClaimResponse(appeal);
         return claimResponse is null
@@ -64,8 +66,8 @@ public sealed class ClaimResponseController : FhirControllerBase
 
         var query = new AppealSearchQuery
         {
-            MemberId = StripPrefix("Patient/", search.Patient)
-                       ?? StripPrefix("Patient/", SmartPatientId),
+            MemberId = StripPrefix("Patient/", AuthorizedMemberId)
+                       ?? StripPrefix("Patient/", search.Patient),
             ClaimId = StripPrefix("Claim/", search.Request),
             Page = search.Page,
             PageSize = search.Count

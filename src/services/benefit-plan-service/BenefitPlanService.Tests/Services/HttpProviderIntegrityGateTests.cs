@@ -31,6 +31,7 @@ namespace BenefitPlanService.Tests.Services;
 public sealed class HttpProviderIntegrityGateTests
 {
     private const string Npi = "1234567890";
+    private const string Tenant = "tenant-gate";
 
     [Fact]
     public async Task CheckAsync_DefaultPath_FreshProjection_UsesCachedProjection_NoVerificationCall()
@@ -40,7 +41,7 @@ public sealed class HttpProviderIntegrityGateTests
         var verificationHandler = FakeHttpMessageHandler.Json("{}");
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.Passed.Should().BeTrue();
         result.IntegrityScore.Should().Be(92);
@@ -86,6 +87,37 @@ public sealed class HttpProviderIntegrityGateTests
         verificationHandler.RequestCount.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task CheckAsync_WithoutTenant_IsRefusedBeforeAnyCall(string? tenant)
+    {
+        var providerHandler = FakeHttpMessageHandler.Json("{}");
+        var verificationHandler = FakeHttpMessageHandler.Json("{}");
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var act = () => gate.CheckAsync(Npi, tenant!, forceRefresh: true);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        providerHandler.RequestCount.Should().Be(0);
+        verificationHandler.RequestCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CheckAsync_CachesPerTenant()
+    {
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 70, rating: "Advisory", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Json("{}");
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        await gate.CheckAsync(Npi, "tenant-a");
+        await gate.CheckAsync(Npi, "tenant-b");
+
+        providerHandler.RequestCount.Should().Be(2, "one tenant's result is never served to another");
+    }
+
     [Fact]
     public async Task CheckAsync_CacheHit_DoesNotIssueAnyHttpCalls()
     {
@@ -94,8 +126,8 @@ public sealed class HttpProviderIntegrityGateTests
         var verificationHandler = FakeHttpMessageHandler.Json("{}");
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        await gate.CheckAsync(Npi);
-        await gate.CheckAsync(Npi);
+        await gate.CheckAsync(Npi, Tenant);
+        await gate.CheckAsync(Npi, Tenant);
 
         providerHandler.RequestCount.Should().Be(1);
         verificationHandler.RequestCount.Should().Be(0);
@@ -111,7 +143,7 @@ public sealed class HttpProviderIntegrityGateTests
             VerificationJson(compositeScore: 88, rating: "Clear", status: "Verified"));
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.IntegrityScore.Should().Be(88, "the live verification result wins on stale fallback");
         result.Rating.Should().Be("Clear");
@@ -127,7 +159,7 @@ public sealed class HttpProviderIntegrityGateTests
             VerificationJson(compositeScore: 75, rating: "Advisory", status: "VerifiedWithWarnings"));
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.IntegrityScore.Should().Be(75);
         result.Rating.Should().Be("Advisory");
@@ -143,7 +175,7 @@ public sealed class HttpProviderIntegrityGateTests
             VerificationJsonRaw(compositeScore: 88, ratingToken: "1", statusToken: "1"));
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.Passed.Should().BeTrue();
         result.IntegrityScore.Should().Be(88);
@@ -159,7 +191,7 @@ public sealed class HttpProviderIntegrityGateTests
             VerificationJson(compositeScore: 60, rating: "Caution", status: "Verified"));
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.Rating.Should().Be("Caution");
         verificationHandler.RequestCount.Should().Be(1);
@@ -174,7 +206,7 @@ public sealed class HttpProviderIntegrityGateTests
             VerificationJson(compositeScore: 30, rating: "Alert", status: "VerifiedWithWarnings"));
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi, forceRefresh: true);
+        var result = await gate.CheckAsync(Npi, Tenant, forceRefresh: true);
 
         result.IntegrityScore.Should().Be(30, "force-refresh ignores the cached projection");
         result.Rating.Should().Be("Alert");
@@ -189,7 +221,7 @@ public sealed class HttpProviderIntegrityGateTests
         var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.Passed.Should().BeFalse("adjudication must never silently pay a claim it could not verify");
         result.IsExcluded.Should().BeFalse("unavailable is not the same as a confirmed exclusion finding");
@@ -209,8 +241,8 @@ public sealed class HttpProviderIntegrityGateTests
         var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        await gate.CheckAsync(Npi);
-        await gate.CheckAsync(Npi);
+        await gate.CheckAsync(Npi, Tenant);
+        await gate.CheckAsync(Npi, Tenant);
 
         providerHandler.RequestCount.Should().Be(2,
             "an unavailable result is not cached, so the second call retries provider-service");
@@ -226,7 +258,7 @@ public sealed class HttpProviderIntegrityGateTests
             VerificationJson(compositeScore: 40, rating: "Caution", status: "Failed"));
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.Passed.Should().BeFalse();
         result.IsExcluded.Should().BeFalse("a Failed verification status is not a confirmed exclusion finding");
@@ -242,7 +274,7 @@ public sealed class HttpProviderIntegrityGateTests
             VerificationJson(compositeScore: 55, rating: "Caution", status: "ManualReviewRequired"));
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.Passed.Should().BeFalse();
         result.IsExcluded.Should().BeFalse();
@@ -258,7 +290,7 @@ public sealed class HttpProviderIntegrityGateTests
         var verificationHandler = FakeHttpMessageHandler.Status(HttpStatusCode.InternalServerError);
         var gate = BuildGate(providerHandler, verificationHandler);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.Passed.Should().BeFalse();
         result.IsExcluded.Should().BeTrue();
@@ -280,7 +312,7 @@ public sealed class HttpProviderIntegrityGateTests
         };
         var gate = BuildGate(providerHandler, verificationHandler, options);
 
-        var result = await gate.CheckAsync(Npi);
+        var result = await gate.CheckAsync(Npi, Tenant);
 
         result.IntegrityScore.Should().Be(85, "threshold=0 disables the stale-fallback path");
         verificationHandler.RequestCount.Should().Be(0);

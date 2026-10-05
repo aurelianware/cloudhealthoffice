@@ -1,6 +1,9 @@
 using System.Net;
 using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
@@ -21,12 +24,59 @@ public class PremiumBillingServiceTests
         _httpClientFactory = new Mock<IHttpClientFactory>();
         var logger = new Mock<ILogger<PremiumBillingService.Services.PremiumBillingService>>();
 
+        _actor = new Mock<ICurrentActor>();
+        _actor.SetupGet(a => a.UserId).Returns("admin");
+        _actor.SetupGet(a => a.IsAuthenticated).Returns(true);
+
         _service = new PremiumBillingService.Services.PremiumBillingService(
             _billingRunRepo.Object,
             _invoiceRepo.Object,
-            _httpClientFactory.Object,
+            new SponsorServiceClient(_httpClientFactory.Object, NullLogger<SponsorServiceClient>.Instance),
+            new CoverageServiceClient(_httpClientFactory.Object, NullLogger<CoverageServiceClient>.Instance),
+            _actor.Object,
             logger.Object);
     }
+
+    private const string Tenant = "tenant-1";
+    private readonly Mock<ICurrentActor> _actor;
+
+    /// <summary>sponsor-service's GET /api/v1/sponsors body: { sponsors, continuationToken, totalCount }.</summary>
+    internal static string SponsorPage(IEnumerable<SponsorDto> sponsors, string? continuationToken = null) =>
+        JsonSerializer.Serialize(new
+        {
+            sponsors = sponsors.Select(s => new
+            {
+                groupNumber = s.GroupNumber,
+                employerName = s.EmployerName,
+                status = "Active",
+                lineOfBusiness = s.LineOfBusiness.ToString(),
+                billingInfo = new { billingDay = s.BillingDay, gracePeriodDays = s.GracePeriodDays, paymentMethod = s.PaymentMethod }
+            }),
+            continuationToken,
+            totalCount = sponsors.Count()
+        });
+
+    /// <summary>coverage-service's GET /api/v1/coverage body: { coverage, continuationToken, totalCount }.</summary>
+    internal static string CoveragePage(IEnumerable<CoverageDto> coverages, string? continuationToken = null) =>
+        JsonSerializer.Serialize(new
+        {
+            coverage = coverages.Select(c => new
+            {
+                id = c.CoverageId,
+                memberId = c.MemberId,
+                groupNumber = c.GroupNumber,
+                planId = c.PlanId,
+                coverageLevel = c.CoverageLevel,
+                insuranceLineCode = c.InsuranceLineCode,
+                effectiveDate = c.EffectiveDate,
+                terminationDate = c.TerminationDate,
+                monthlyPremium = c.MonthlyPremium,
+                employerContribution = c.EmployerContribution,
+                status = "Active"
+            }),
+            continuationToken,
+            totalCount = coverages.Count()
+        });
 
     private static HttpClient CreateMockHttpClient(HttpMessageHandler handler)
     {
@@ -117,6 +167,7 @@ public class PremiumBillingServiceTests
         var billingRun = new BillingRun
         {
             Id = "br-1",
+            TenantId = Tenant,
             BillingRunNumber = "BR-2026-03-ABCD",
             Status = BillingRunStatus.Pending,
             BillingPeriod = new DateTime(2026, 3, 1),
@@ -149,12 +200,12 @@ public class PremiumBillingServiceTests
         var sponsorHandler = new BillingMockHttpMessageHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(JsonSerializer.Serialize(sponsors))
+                Content = new StringContent(SponsorPage(sponsors))
             });
         var coverageHandler = new BillingMockHttpMessageHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(JsonSerializer.Serialize(coverages))
+                Content = new StringContent(CoveragePage(coverages))
             });
 
         _httpClientFactory.Setup(f => f.CreateClient("SponsorService"))
@@ -185,6 +236,7 @@ public class PremiumBillingServiceTests
         var billingRun = new BillingRun
         {
             Id = "br-1",
+            TenantId = Tenant,
             Status = BillingRunStatus.Pending,
             BillingPeriod = new DateTime(2026, 3, 1),
             Criteria = new BillingRunCriteria()
@@ -211,6 +263,7 @@ public class PremiumBillingServiceTests
         var billingRun = new BillingRun
         {
             Id = "br-1",
+            TenantId = Tenant,
             Status = BillingRunStatus.Pending,
             BillingPeriod = new DateTime(2026, 3, 1),
             Criteria = new BillingRunCriteria()
@@ -229,7 +282,7 @@ public class PremiumBillingServiceTests
         var sponsorHandler = new BillingMockHttpMessageHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(JsonSerializer.Serialize(sponsors))
+                Content = new StringContent(SponsorPage(sponsors))
             });
 
         // Coverage fetch fails for GRP001 but succeeds for GRP002
@@ -242,12 +295,12 @@ public class PremiumBillingServiceTests
                 // Returns empty list (FetchCoveragesByGroupAsync catches exceptions and returns empty)
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("[]")
+                    Content = new StringContent(CoveragePage(new List<CoverageDto>()))
                 };
             }
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(JsonSerializer.Serialize(new List<CoverageDto>
+                Content = new StringContent(CoveragePage(new List<CoverageDto>
                 {
                     new()
                     {
@@ -288,6 +341,7 @@ public class PremiumBillingServiceTests
         var billingRun = new BillingRun
         {
             Id = "br-1",
+            TenantId = Tenant,
             Status = BillingRunStatus.Pending,
             BillingPeriod = new DateTime(2026, 3, 1),
             Criteria = new BillingRunCriteria { GroupNumbers = new List<string> { "GRP001" } }
@@ -306,13 +360,13 @@ public class PremiumBillingServiceTests
         var sponsorHandler = new BillingMockHttpMessageHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(JsonSerializer.Serialize(allSponsors))
+                Content = new StringContent(SponsorPage(allSponsors))
             });
 
         var coverageHandler = new BillingMockHttpMessageHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(JsonSerializer.Serialize(new List<CoverageDto>
+                Content = new StringContent(CoveragePage(new List<CoverageDto>
                 {
                     new()
                     {
@@ -679,6 +733,7 @@ public class PremiumBillingServiceTests
         var invoice = new PremiumInvoice
         {
             Id = "inv-1",
+            TenantId = Tenant,
             InvoiceNumber = "INV-001",
             GroupNumber = "GRP001",
             Status = InvoiceStatus.Sent,
@@ -699,7 +754,7 @@ public class PremiumBillingServiceTests
 
         var result = await _service.ProcessDelinquenciesAsync();
 
-        result.Should().Be(1);
+        result.DelinquentCount.Should().Be(1);
         _invoiceRepo.Verify(r => r.UpdateAsync(It.Is<PremiumInvoice>(inv =>
             inv.Status == InvoiceStatus.Delinquent)), Times.Once);
     }
@@ -711,6 +766,7 @@ public class PremiumBillingServiceTests
         var invoice = new PremiumInvoice
         {
             Id = "inv-1",
+            TenantId = Tenant,
             InvoiceNumber = "INV-001",
             GroupNumber = "GRP001",
             Status = InvoiceStatus.Sent,
@@ -725,7 +781,7 @@ public class PremiumBillingServiceTests
 
         var result = await _service.ProcessDelinquenciesAsync();
 
-        result.Should().Be(0);
+        result.DelinquentCount.Should().Be(0);
         _invoiceRepo.Verify(r => r.UpdateAsync(It.Is<PremiumInvoice>(inv =>
             inv.Status == InvoiceStatus.Overdue)), Times.Once);
     }
@@ -747,7 +803,7 @@ public class PremiumBillingServiceTests
 
         var result = await _service.ProcessDelinquenciesAsync();
 
-        result.Should().Be(0);
+        result.DelinquentCount.Should().Be(0);
         _invoiceRepo.Verify(r => r.UpdateAsync(It.IsAny<PremiumInvoice>()), Times.Never);
     }
 
@@ -758,7 +814,7 @@ public class PremiumBillingServiceTests
 
         var result = await _service.ProcessDelinquenciesAsync();
 
-        result.Should().Be(0);
+        result.DelinquentCount.Should().Be(0);
     }
 
     [Fact]
@@ -768,6 +824,7 @@ public class PremiumBillingServiceTests
         var invoice = new PremiumInvoice
         {
             Id = "inv-1",
+            TenantId = Tenant,
             InvoiceNumber = "INV-001",
             GroupNumber = "GRP001",
             Status = InvoiceStatus.Sent,
@@ -788,7 +845,7 @@ public class PremiumBillingServiceTests
 
         var result = await _service.ProcessDelinquenciesAsync();
 
-        result.Should().Be(1); // Still counted even though suspension failed
+        result.DelinquentCount.Should().Be(1); // Still counted even though suspension failed
     }
 
     #endregion

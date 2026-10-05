@@ -22,6 +22,9 @@ public class EnrollmentImportRun
 
     public string? FileName { get; set; }
 
+    /// <summary>The user (token subject) who ran the import.</summary>
+    public string? ActorId { get; set; }
+
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 

@@ -10,15 +10,18 @@ The full `eligibility-service` is a different product surface (CHO as payer).
 
 ## API
 
-All `/api/v1` requests need both headers:
+Every `/api/v1` request authenticates one of two ways. The tenant always comes from
+the credential, never from a header, the query string or the body.
 
-| Header | Value |
-| --- | --- |
-| `X-Api-Key` | The client credential issued to the calling application |
-| `X-Tenant-ID` | A tenant on that client's allow-list |
+| Caller | Credential | Tenant | Permission |
+| --- | --- | --- | --- |
+| Provider application (CloudDentalOffice) | `X-Api-Key`: the key issued to it (`ProviderApiKey` scheme) | The one tenant the key is bound to (`ProviderApi:Clients:N:TenantId`) | Any configured key |
+| CHO caller | `Authorization: Bearer <CHO token>` | The token's `tenant_id` | `eligibility:check` |
 
-A credential only works for the tenants listed for it in `ProviderApi:Clients`. The
-tenant is never read from the query string or body.
+`X-Tenant-ID` is optional and only an echo: a value that differs from the credential's
+tenant is refused with 403. A request carrying both an API key and a bearer token is
+refused with 401. A provider application acting for several tenants holds one key per
+tenant. Responses are sent with `Cache-Control: no-store`.
 
 ### `POST /api/v1/eligibility/check`
 
@@ -59,7 +62,8 @@ practice can link each insurance plan to a routable payer. Returns `id`, `name`,
 
 | Setting | Notes |
 | --- | --- |
-| `ProviderApi:Clients:N:Name` / `ApiKey` / `Tenants:M` | One entry per calling application. Missing or incomplete clients fail closed (503) |
+| `ProviderApi:Clients:N:Name` / `ApiKey` / `TenantId` | One entry per credential, bound to one tenant. Missing or incomplete clients fail closed (503); a key configured for two clients authenticates neither. The former `Tenants` list is not read |
+| `ChoAuth` | CHO token trust for internal callers; startup fails without issuers. See `docs/security/portal-token-service.md` ("How services trust the issuer"). Development trust is in `appsettings.Development.json` |
 | `HealthcareTransactions:DefaultGateway` | `Stedi` by default. `Mock` only in Development; outside Development the service refuses to start on Mock (an unset value counts as Mock) |
 | `HealthcareTransactions:Gateways:Stedi:ApiKey` | From Key Vault. Missing key → 502 `Configuration`, never a mock answer |
 | `HealthcareTransactions:Gateways:Stedi:Environment` | `test` or `production`, matching the key's mode |
@@ -75,9 +79,12 @@ Container Apps environment shared with CloudDentalOffice, with **internal-only i
 
 ```sh
 az keyvault secret set --vault-name cho-kv --name provider-eligibility-stedi-api-key --value "<stedi key>"
-CHO_PROVIDER_ELIGIBILITY_TENANT_IDS=<cdo tenant id> ./scripts/deploy-provider-eligibility-container-app.sh preview
-CHO_PROVIDER_ELIGIBILITY_TENANT_IDS=<cdo tenant id> ./scripts/deploy-provider-eligibility-container-app.sh deploy
+CHO_PROVIDER_ELIGIBILITY_TENANT_ID=<cdo tenant id> ./scripts/deploy-provider-eligibility-container-app.sh preview
+CHO_PROVIDER_ELIGIBILITY_TENANT_ID=<cdo tenant id> ./scripts/deploy-provider-eligibility-container-app.sh deploy
 ```
+
+The Container App also needs `ChoAuth__*` settings (CHO issuer public keys); without
+them the service refuses to start.
 
 Set `CHO_PROVIDER_ELIGIBILITY_STEDI_ENV=production` only with a production Stedi key.
 Test-mode keys return Stedi's mock responses and cannot check real patients.
@@ -87,7 +94,7 @@ Test-mode keys return Stedi's mock responses and cannot check real patients.
 ```sh
 dotnet run --project src/services/provider-eligibility-api
 curl -s localhost:5000/api/v1/eligibility/check \
-  -H 'X-Api-Key: local-development-only' -H 'X-Tenant-ID: local-tenant' \
+  -H 'X-Api-Key: local-development-only' \
   -H 'Content-Type: application/json' -d @request.json
 ```
 

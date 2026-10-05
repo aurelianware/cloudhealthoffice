@@ -1,0 +1,94 @@
+@using CloudHealthOffice.Portal.Services
+
+@* A NACHA file as the service reports it after sending it to the bank:
+   transmission status, receipt, and one masked line per entry. The portal
+   never receives the file or a full routing or account number. *@
+<MudPaper Class="pa-3 mb-3" data-testid="@TestId"
+          Style="@($"background: rgba(10,10,10,0.9); border: 1px solid {BorderColor}; border-radius: 12px;")">
+    <div class="d-flex flex-wrap align-center gap-2 mb-2">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">NACHA file @Result.FileReference</MudText>
+        <MudChip T="string" Size="Size.Small" Color="@StatusColor" data-testid="@($"{TestId}-status")">@StatusText</MudChip>
+    </div>
+    <MudText Typo="Typo.body2" Class="mb-2" data-testid="@($"{TestId}-totals")">
+        @Result.EntryCount entr@(Result.EntryCount == 1 ? "y" : "ies"),
+        @if (Result.TotalDebitAmount > 0) { <span>debits @Result.TotalDebitAmount.ToString("C2")</span> }
+        @if (Result.TotalDebitAmount > 0 && Result.TotalCreditAmount > 0) { <span>, </span> }
+        @if (Result.TotalCreditAmount > 0) { <span>credits @Result.TotalCreditAmount.ToString("C2")</span> }
+        @if (Result.TotalDebitAmount == 0 && Result.TotalCreditAmount == 0) { <span>total @Result.TotalAmount.ToString("C2")</span> }
+    </MudText>
+
+    @if (Result.Receipt is { } receipt)
+    {
+        <MudSimpleTable Dense="true" Style="background: transparent;" Class="mb-2" data-testid="@($"{TestId}-receipt")">
+            <tbody>
+                <tr><td>Delivered to</td><td style="font-family: monospace;">@receipt.Destination/@receipt.RemoteFileName</td></tr>
+                <tr><td>At</td><td>@receipt.TransmittedAt.ToLocalTime().ToString("g") by @receipt.TransmittedBy</td></tr>
+                <tr><td>Size</td><td>@receipt.ByteSize bytes</td></tr>
+                <tr><td>SHA-256</td><td style="font-family: monospace; word-break: break-all;">@receipt.Sha256</td></tr>
+            </tbody>
+        </MudSimpleTable>
+    }
+    else if (!string.IsNullOrEmpty(Result.TransmissionError))
+    {
+        <MudAlert Severity="@(Result.TransmissionStatus is "NotSent" or "DeliveryUnknown" ? Severity.Error : Severity.Warning)" Dense="true" Class="mb-2"
+                  data-testid="@($"{TestId}-error")">
+            @Result.TransmissionError
+            @if (Result.TransmissionStatus == "AwaitingRetrieval")
+            {
+                <div>The file is held encrypted@(Result.HeldUntil is { } until ? $" until {until.ToLocalTime():g}" : "").
+                    A platform admin must retrieve it, or another approver must retry it.</div>
+            }
+            else if (Result.TransmissionStatus == "NotSent")
+            {
+                <div>Nothing was sent; the payments stay Pending for the next release.</div>
+            }
+            else if (Result.TransmissionStatus == "DeliveryUnknown")
+            {
+                <div>The file may already be at the bank. Do not send it again or deliver it by hand: verify with the bank, then
+                    another approver records whether the bank received it.</div>
+            }
+        </MudAlert>
+    }
+
+    @if (Result.Entries.Count > 0)
+    {
+        <MudSimpleTable Dense="true" Style="background: transparent;" data-testid="@($"{TestId}-entries")">
+            <thead><tr><th>@PartyHeader</th><th>Account</th><th>Amount</th><th>Trace</th></tr></thead>
+            <tbody>
+                @foreach (var e in Result.Entries)
+                {
+                    <tr>
+                        <td>@(e.GroupNumber ?? e.ProviderNPI) @(e.AccountHolderName ?? e.ProviderName)</td>
+                        <td style="font-family: monospace;">acct @BankNumberMask.Masked(e.AccountNumberLast4)</td>
+                        <td>@e.Amount.ToString("C2")</td>
+                        <td style="font-family: monospace;">@e.TraceNumber</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public NachaFileResult Result { get; set; } = new();
+    [Parameter] public string TestId { get; set; } = "nacha-result";
+    [Parameter] public string PartyHeader { get; set; } = "Sponsor";
+
+    private string StatusText => Result.TransmissionStatus switch
+    {
+        "Transmitted" => "Sent to the bank",
+        "AwaitingRetrieval" => "Awaiting retrieval",
+        "NotSent" => "Not sent",
+        "DeliveryUnknown" => "Delivery unknown",
+        var other => other
+    };
+
+    private Color StatusColor => Result.TransmissionStatus switch
+    {
+        "Transmitted" => Color.Success,
+        "AwaitingRetrieval" => Color.Warning,
+        _ => Color.Error
+    };
+
+    private string BorderColor => Result.TransmissionStatus == "Transmitted" ? "rgba(0,255,136,0.35)" : "rgba(255,170,0,0.4)";
+}

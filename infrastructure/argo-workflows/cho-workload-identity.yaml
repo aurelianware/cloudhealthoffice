@@ -1,0 +1,241 @@
+# CHO workload identity for Argo workflows.
+# See docs/security/argo-service-tokens.md.
+#
+# Each workflow that calls CHO services runs under its own Kubernetes service
+# account. A step that calls a CHO service mounts
+#   - a projected service-account token (audience cho-token-service, 10 min),
+#   - the shared helper below (ConfigMap cho-workload-lib),
+# and exchanges the projected token at token-service POST /v1/token/workload for
+# a 5-minute CHO workload token. token-service maps the service account to its
+# registered client id, allowed tenants and permissions
+# (src/services/token-service/k8s/token-service-deployment.yaml,
+# ConfigMap token-service-workloads). Nothing in this file is a credential.
+#
+# Workflow pod spec fragment (copy into spec.volumes of a workflow):
+#
+#   volumes:
+#     - name: cho-workload-token
+#       projected:
+#         sources:
+#           - serviceAccountToken:
+#               audience: cho-token-service
+#               expirationSeconds: 600
+#               path: token
+#     - name: cho-workload-lib
+#       configMap:
+#         name: cho-workload-lib
+#
+# and into the calling step's volumeMounts:
+#
+#   - name: cho-workload-token
+#     mountPath: /var/run/secrets/cho
+#     readOnly: true
+#   - name: cho-workload-lib
+#     mountPath: /opt/cho
+#     readOnly: true
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cho-workload-lib
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: cho-workload-lib
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: cloudhealthoffice
+data:
+  cho-workload.sh: |
+    # CHO workload token helper for Argo workflow steps. POSIX sh; needs curl
+    # (7.55+, for -H @file), sed, grep and date. Source it, then:
+    #
+    #   . /opt/cho/cho-workload.sh
+    #   cho_curl "$TENANT_ID" POST "http://claims-service.cloudhealthoffice/api/claims" \
+    #     -H "Content-Type: application/json" -d @claim.json
+    #
+    # cho_curl obtains (and reuses until a minute before expiry) a CHO workload
+    # token for the tenant, then runs curl with "Authorization: Bearer <token>"
+    # and "X-Tenant-ID: <tenant>". It only sends the token to in-cluster CHO
+    # service URLs (http://<service>[.<namespace>[.svc[.cluster.local]]][:port]/...).
+    # Tokens are kept in a private temporary directory, never on a command line
+    # and never in a workflow output parameter. A cho_curl inside $(...) runs in
+    # a subshell and cannot update the cache, so in a loop call
+    # `cho_token "$TENANT" || exit 1` in the main shell first.
+    #
+    # Settings: CHO_TOKEN_SERVICE_URL (default http://token-service.cloudhealthoffice)
+    #           CHO_SA_TOKEN_FILE     (default /var/run/secrets/cho/token)
+
+    CHO_TOKEN_SERVICE_URL="${CHO_TOKEN_SERVICE_URL:-http://token-service.cloudhealthoffice}"
+    CHO_SA_TOKEN_FILE="${CHO_SA_TOKEN_FILE:-/var/run/secrets/cho/token}"
+    _cho_dir=""
+    _cho_tenant=""
+    _cho_expires=0
+
+    _cho_err() { echo "cho-workload: $*" >&2; }
+
+    _cho_valid_tenant() {
+      printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$'
+    }
+
+    _cho_internal_url() {
+      printf '%s' "$1" | grep -Eq '^http://[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)?(\.svc(\.cluster\.local)?)?(:[0-9]{1,5})?(/|$)'
+    }
+
+    # cho_token TENANT: makes sure $CHO_AUTH_HEADERS names a header file with a
+    # valid token for TENANT. Returns non-zero (and prints the refusal) if
+    # token-service refuses.
+    cho_token() {
+      _t="$1"
+      if ! _cho_valid_tenant "$_t"; then _cho_err "invalid tenant id"; return 2; fi
+      _now=$(date +%s)
+      if [ "$_t" = "$_cho_tenant" ] && [ "$_now" -lt $((_cho_expires - 60)) ]; then return 0; fi
+      if [ ! -r "$CHO_SA_TOKEN_FILE" ]; then
+        _cho_err "no projected service-account token at $CHO_SA_TOKEN_FILE (mount the cho-workload-token volume)"
+        return 2
+      fi
+      if [ -z "$_cho_dir" ]; then
+        _cho_dir=$(mktemp -d) || return 2
+        chmod 700 "$_cho_dir"
+      fi
+      printf 'Authorization: Bearer %s\n' "$(cat "$CHO_SA_TOKEN_FILE")" > "$_cho_dir/sa"
+      _code=$(curl -sS -o "$_cho_dir/resp" -w '%{http_code}' -X POST "$CHO_TOKEN_SERVICE_URL/v1/token/workload" \
+        -H @"$_cho_dir/sa" -H 'Content-Type: application/json' --data "{\"tenantId\":\"$_t\"}")
+      _rc=$?
+      rm -f "$_cho_dir/sa"
+      if [ $_rc -ne 0 ] || [ "$_code" != "200" ]; then
+        _cho_err "token-service refused a token for tenant $_t (HTTP $_code): $(cat "$_cho_dir/resp" 2>/dev/null)"
+        rm -f "$_cho_dir/resp"
+        return 1
+      fi
+      _tok=$(sed -n 's/.*"access_token" *: *"\([^"]*\)".*/\1/p' "$_cho_dir/resp")
+      _exp=$(sed -n 's/.*"expires_in" *: *\([0-9]*\).*/\1/p' "$_cho_dir/resp")
+      rm -f "$_cho_dir/resp"
+      if [ -z "$_tok" ]; then _cho_err "token-service answered without a token"; return 1; fi
+      printf 'Authorization: Bearer %s\nX-Tenant-ID: %s\n' "$_tok" "$_t" > "$_cho_dir/auth"
+      _tok=""
+      CHO_AUTH_HEADERS="$_cho_dir/auth"
+      _cho_tenant="$_t"
+      _cho_expires=$((_now + ${_exp:-60}))
+      return 0
+    }
+
+    # cho_curl TENANT METHOD URL [curl options...]: curl with the tenant's CHO
+    # token and X-Tenant-ID. URL must be an in-cluster CHO service.
+    cho_curl() {
+      _t="$1"; _m="$2"; _u="$3"
+      if [ $# -lt 3 ]; then _cho_err "usage: cho_curl TENANT METHOD URL [curl options]"; return 2; fi
+      shift 3
+      if ! _cho_internal_url "$_u"; then _cho_err "refusing to send a CHO token to $_u"; return 2; fi
+      cho_token "$_t" || return $?
+      curl -sS -X "$_m" -H @"$CHO_AUTH_HEADERS" "$@" "$_u"
+    }
+
+    # cho_cleanup: removes the cached tokens (also gone when the pod ends).
+    cho_cleanup() {
+      [ -n "$_cho_dir" ] && rm -rf "$_cho_dir"
+      _cho_dir=""; _cho_tenant=""; _cho_expires=0; CHO_AUTH_HEADERS=""
+    }
+---
+# Executor permissions every workflow pod needs (Argo >= 3.4 emissary executor).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cho-workflow-executor
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtaskresults"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "watch", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "watch"]
+---
+# One service account per workflow. The name is the token-service registration
+# key (system:serviceaccount:cho-workflows:<name>) and, by convention, the CHO
+# client id.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wf-enrollment-import
+  namespace: cho-workflows
+  labels: {app.kubernetes.io/component: workload-identity, app.kubernetes.io/part-of: cloudhealthoffice}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wf-837-ingest
+  namespace: cho-workflows
+  labels: {app.kubernetes.io/component: workload-identity, app.kubernetes.io/part-of: cloudhealthoffice}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wf-tenant-onboarding
+  namespace: cho-workflows
+  labels: {app.kubernetes.io/component: workload-identity, app.kubernetes.io/part-of: cloudhealthoffice}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wf-277-rfai
+  namespace: cho-workflows
+  labels: {app.kubernetes.io/component: workload-identity, app.kubernetes.io/part-of: cloudhealthoffice}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wf-278-ingest
+  namespace: cho-workflows
+  labels: {app.kubernetes.io/component: workload-identity, app.kubernetes.io/part-of: cloudhealthoffice}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cho-workflow-executor
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cho-workflow-executor
+subjects:
+  - {kind: ServiceAccount, name: wf-enrollment-import, namespace: cho-workflows}
+  - {kind: ServiceAccount, name: wf-837-ingest, namespace: cho-workflows}
+  - {kind: ServiceAccount, name: wf-tenant-onboarding, namespace: cho-workflows}
+  - {kind: ServiceAccount, name: wf-277-rfai, namespace: cho-workflows}
+  - {kind: ServiceAccount, name: wf-278-ingest, namespace: cho-workflows}
+---
+# tenant-onboarding's create-k8s-namespace step (a resource template) creates
+# the enterprise tenant's namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: wf-tenant-onboarding-namespaces
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: wf-tenant-onboarding-namespaces
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: wf-tenant-onboarding-namespaces
+subjects:
+  - {kind: ServiceAccount, name: wf-tenant-onboarding, namespace: cho-workflows}

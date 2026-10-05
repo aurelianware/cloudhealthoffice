@@ -1,3 +1,14 @@
+# Workload identity for reference-data-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:reference-data-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: reference-data-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<REFERENCE_DATA_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -88,8 +99,10 @@ spec:
   template:
     metadata:
       labels:
+        azure.workload.identity/use: "true"
         app: reference-data-service
     spec:
+      serviceAccountName: reference-data-service-sa
       containers:
       - name: reference-data-service
         image: ghcr.io/aurelianware/cloudhealthoffice-reference-data-service:latest
@@ -97,10 +110,14 @@ spec:
         - containerPort: 8080
         envFrom:
         - configMapRef:
+            name: cho-service-tokens
+        - configMapRef:
             name: reference-data-service-config
         - secretRef:
             name: reference-data-service-secret
         env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "reference-data-service"
         - name: ConnectionStrings__PostgreSQL
           value: "Host=postgres-0.postgres-service;Port=5432;Database=referencedata;Username=postgres;Password=${POSTGRES_PASSWORD}"
         - name: MongoDb__ConnectionString

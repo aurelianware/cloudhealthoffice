@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -6,7 +7,6 @@ using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using Microsoft.AspNetCore;
 using OpenIddict.Server.AspNetCore;
-using OpenIddict.Validation.AspNetCore;
 using SmartAuthService.Models;
 using SmartAuthService.Services;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -16,30 +16,62 @@ namespace SmartAuthService.Controllers;
 /// <summary>
 /// Handles SMART on FHIR authorization flows.
 ///
-/// Standalone launch:
-///   App → GET /connect/authorize?response_type=code&client_id=...&scope=openid+patient/*.read
-///       → user logs in → code returned → POST /connect/token → access token with patient binding
+/// Every token's <c>tenant_id</c> — and a member token's <c>patient</c> —
+/// comes from the server-side bindings (<see cref="SmartTokenContextResolver"/>):
+/// the signed-in identity's member or provider link, and the client's tenant
+/// registration. A user or client without a binding gets no token. Nothing in
+/// the authorization request, the token request or a header can choose either.
 ///
-/// EHR launch:
-///   EHR → POST /launch → receives launch token
-///   EHR → redirects app to → GET /connect/authorize?...&launch={token}&scope=launch/patient+...
-///       → auth server extracts patient/encounter context → binds to token
+/// Standalone launch (member):
+///   App → GET /connect/authorize?...&amp;scope=openid+launch/patient+patient/*.read
+///       → member signs in → patient = the member id their identity is bound to
+///
+/// EHR launch (provider user):
+///   CHO caller → POST /launch (CHO token; tenant from that token) → launch token
+///   EHR → GET /connect/authorize?...&amp;launch={token}
+///       → provider user signs in → patient/encounter from the launch, which must
+///         be of the provider's tenant and for this client
+///
+/// Backend (client_credentials): tenant = the client's registration.
+///
+/// Consent: before an interactive app gets a code (and, with
+/// <c>offline_access</c>, a refresh token), the signed-in person approves that
+/// app and that scope set on a consent page (<see cref="SmartConsent"/>). The
+/// approval is a permanent OpenIddict authorization for (identity, client,
+/// scopes), so the page is shown once per new scope set; every code and token
+/// is tied to it, and revoking it ends refresh. The person withdraws an
+/// approval on <c>/account/apps</c>, an administrator through
+/// <c>/api/admin/smart/clients/{clientId}/approvals</c>. A code or refresh
+/// token not tied to an approval (issued before consent existed) is refused
+/// with invalid_grant.
 /// </summary>
 [ApiController]
 public class AuthorizationController : ControllerBase
 {
-    private readonly IOpenIddictApplicationManager _applicationManager;
-    private readonly ILaunchContextStore _launchContextStore;
+    private readonly SmartTokenContextResolver _resolver;
+    private readonly SmartAuthAudit _audit;
     private readonly ILogger<AuthorizationController> _logger;
+    private readonly IOpenIddictApplicationManager _applications;
+    private readonly IOpenIddictAuthorizationManager _authorizations;
+    private readonly SmartConsent _consent;
+    private readonly SmartAppApprovals _approvals;
 
     public AuthorizationController(
-        IOpenIddictApplicationManager applicationManager,
-        ILaunchContextStore launchContextStore,
-        ILogger<AuthorizationController> logger)
+        SmartTokenContextResolver resolver,
+        SmartAuthAudit audit,
+        ILogger<AuthorizationController> logger,
+        IOpenIddictApplicationManager applications,
+        IOpenIddictAuthorizationManager authorizations,
+        SmartConsent consent,
+        SmartAppApprovals approvals)
     {
-        _applicationManager = applicationManager;
-        _launchContextStore = launchContextStore;
+        _resolver = resolver;
+        _audit = audit;
         _logger = logger;
+        _applications = applications;
+        _authorizations = authorizations;
+        _consent = consent;
+        _approvals = approvals;
     }
 
     // ── Authorization endpoint ────────────────────────────────────────────────
@@ -47,6 +79,7 @@ public class AuthorizationController : ControllerBase
     [HttpGet("~/connect/authorize")]
     [HttpPost("~/connect/authorize")]
     [IgnoreAntiforgeryToken]
+    [AllowAnonymous]
     public async Task<IActionResult> Authorize(CancellationToken ct)
     {
         var request = HttpContext.GetOpenIddictServerRequest()
@@ -69,146 +102,156 @@ public class AuthorizationController : ControllerBase
                 CookieAuthenticationDefaults.AuthenticationScheme);
         }
 
-        // ── Resolve EHR launch context (if present) ───────────────────────────
-        var launchToken = request.GetParameter("launch")?.ToString();
-        string? boundPatientId = null;
-        string? boundEncounterId = null;
-        string? boundPractitionerId = null;
+        var identity = SmartSession.IdentityOf(cookieAuth.Principal);
+        if (identity is null)
+            return Refuse(null, request.ClientId, "session_has_no_identity");
 
-        if (!string.IsNullOrEmpty(launchToken))
+        var scopes = request.GetScopes();
+
+        // The EHR launch (if any) is consumed by the resolver, atomically and
+        // only for the provider's tenant and this client, after every other
+        // check. A launch token is base64url: one with control characters is
+        // refused before it is echoed into the consent form.
+        var launchToken = request.GetParameter("launch")?.ToString();
+        if (launchToken != null && launchToken.Any(char.IsControl))
+            return Refuse(identity.Value.ToString(), request.ClientId, "launch_malformed");
+
+        // ── Consent ──────────────────────────────────────────────────────────
+        // Nothing is resolved (and no launch consumed) until the person has
+        // approved this client for these scopes.
+        var application = await _applications.FindByClientIdAsync(request.ClientId ?? string.Empty, ct);
+        if (application is null)
+            return Refuse(identity.Value.ToString(), request.ClientId, "client_unknown");
+        var applicationId = (await _applications.GetIdAsync(application, ct))!;
+        var subject = identity.Value.ToString();
+
+        var authorization = request.HasPromptValue(PromptValues.Consent)
+            ? null
+            : await FindConsentAsync(subject, applicationId, scopes, ct);
+        var approvedNow = false;
+        if (authorization is null)
         {
-            // Consume single-use launch token
-            var launchCtx = await _launchContextStore.ConsumeAsync(launchToken, ct);
-            if (launchCtx == null)
+            var decision = Request.HasFormContentType ? Request.Form[SmartConsent.DecisionField].ToString() : null;
+            var proof = Request.HasFormContentType ? Request.Form[SmartConsent.TokenField].ToString() : null;
+            var proven = !string.IsNullOrEmpty(decision)
+                         && _consent.Verify(proof, subject, request.ClientId!, scopes);
+
+            if (proven && decision == SmartConsent.Deny)
+                return Refuse(subject, request.ClientId, "consent_denied", "The user did not approve this app.");
+
+            if (!(proven && decision == SmartConsent.Approve))
             {
-                _logger.LogWarning("EHR launch token not found or expired: {Token}", SanitizeForLog(launchToken));
-                return Forbid(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+                if (request.HasPromptValue(PromptValues.None))
+                {
+                    return ForbidAuthorize(Errors.ConsentRequired, "The user has not approved this app for these scopes.");
+                }
+
+                var displayName = await _applications.GetLocalizedDisplayNameAsync(application, ct)
+                                  ?? request.ClientId!;
+                return SmartSecurityHeaders.Page(Response, SmartConsent.Page(
+                    displayName, scopes, OriginalParameters(),
+                    _consent.Issue(subject, request.ClientId!, scopes)));
             }
 
-            boundPatientId = launchCtx.PatientId;
-            boundEncounterId = launchCtx.EncounterId;
-            boundPractitionerId = launchCtx.PractitionerId;
-
-            _logger.LogInformation(
-                "EHR launch resolved — patient: {PatientId}, encounter: {EncounterId}",
-                SanitizeForLog(boundPatientId), SanitizeForLog(boundEncounterId));
+            approvedNow = true;
         }
 
-        // ── Build the authenticated principal ─────────────────────────────────
-        var userId = cookieAuth.Principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? cookieAuth.Principal.FindFirstValue(ClaimTypes.Name)
-                  ?? "unknown";
+        var resolution = await _resolver.ResolveInteractiveAsync(
+            identity.Value, request.ClientId ?? string.Empty, scopes, launchToken, ct);
+        if (resolution.Context is not { } context)
+            return Refuse(identity.Value.ToString(), request.ClientId, resolution.Refusal!);
 
-        var identity = new ClaimsIdentity(
-            authenticationType: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-            nameType: Claims.Name,
-            roleType: Claims.Role);
+        var principal = SmartTokenContextResolver.CreatePrincipal(context, scopes);
 
-        identity.AddClaim(new Claim(Claims.Subject, userId)
-            .SetDestinations(Destinations.AccessToken, Destinations.IdentityToken));
-
-        identity.AddClaim(new Claim(Claims.Name, userId)
-            .SetDestinations(Destinations.IdentityToken));
-
-        // ── Inject SMART context claims ───────────────────────────────────────
-        // These are included in access tokens only, per SMART App Launch Framework §7.
-        if (boundPatientId != null)
+        // Remember the approval: a permanent authorization for (identity,
+        // client, scopes). Codes and refresh tokens are tied to it.
+        if (approvedNow)
         {
-            identity.AddClaim(new Claim(SmartClaims.Patient, boundPatientId)
-                .SetDestinations(Destinations.AccessToken));
+            authorization = await _authorizations.CreateAsync(
+                principal, subject, applicationId, AuthorizationTypes.Permanent, scopes, ct);
+            _audit.Consented(subject, request.ClientId!, string.Join(" ", scopes));
         }
-        else if (request.HasScope(SmartScopes.LaunchPatient))
+        principal.SetAuthorizationId(await _authorizations.GetIdAsync(authorization!, ct));
+        var name = cookieAuth.Principal.FindFirstValue(ClaimTypes.Name);
+        if (!string.IsNullOrEmpty(name))
         {
-            // Standalone launch with launch/patient scope: use the subject as patient
-            // In production, look up the patient record linked to the authenticated user.
-            // For now we store the user's subject ID as the patient binding.
-            identity.AddClaim(new Claim(SmartClaims.Patient, userId)
-                .SetDestinations(Destinations.AccessToken));
-            _logger.LogInformation("Standalone launch: bound patient={UserId}", SanitizeForLog(userId));
+            ((ClaimsIdentity)principal.Identity!).SetClaim(Claims.Name, name);
+            SmartTokenContextResolver.ApplyDestinations(principal);
         }
-
-        if (boundEncounterId != null)
-        {
-            identity.AddClaim(new Claim(SmartClaims.Encounter, boundEncounterId)
-                .SetDestinations(Destinations.AccessToken));
-        }
-
-        if (boundPractitionerId != null)
-        {
-            identity.AddClaim(new Claim(SmartClaims.FhirUser,
-                    $"Practitioner/{boundPractitionerId}")
-                .SetDestinations(Destinations.AccessToken, Destinations.IdentityToken));
-        }
-
-        var principal = new ClaimsPrincipal(identity);
-        principal.SetScopes(request.GetScopes());
-
-        // Set the FHIR API as the audience for the access token
-        principal.SetResources("fhir-api");
 
         _logger.LogInformation(
-            "Issuing authorization code — subject: {Subject}, scopes: {Scopes}",
-            SanitizeForLog(userId), SanitizeForLog(string.Join(" ", request.GetScopes())));
+            "Issuing authorization code — context: {Context}, tenant: {Tenant}, subject: {Subject}, scopes: {Scopes}",
+            context.Context, SanitizeForLog(context.TenantId), SanitizeForLog(context.Subject),
+            SanitizeForLog(string.Join(" ", scopes)));
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
     // ── Token endpoint ────────────────────────────────────────────────────────
-    // OpenIddict handles authorization_code, refresh_token, and client_credentials
-    // exchanges automatically.  We use passthrough only to add custom claims that
-    // may need refreshing (e.g. updated patient context on refresh grant).
 
     [HttpPost("~/connect/token")]
     [IgnoreAntiforgeryToken]
+    [AllowAnonymous]
     [Produces("application/json")]
     public async Task<IActionResult> Exchange(CancellationToken ct)
     {
         var request = HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("Token request is missing.");
 
-        ClaimsPrincipal principal;
-
         // ── authorization_code or refresh_token ──────────────────────────────
         if (request.IsAuthorizationCodeGrantType() || request.IsRefreshTokenGrantType())
         {
-            // Retrieve the principal stored in the authorization code / refresh token.
-            // OpenIddict has already validated the grant and PKCE verifier at this point.
+            // The principal stored in the code / refresh token. OpenIddict has
+            // already validated the grant, the client and the PKCE verifier.
             var result = await HttpContext.AuthenticateAsync(
                 OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
             if (!result.Succeeded || result.Principal == null)
                 return Forbid(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
-            principal = result.Principal;
+            var principal = result.Principal;
 
-            // Refresh token rotation: ensure the patient claim destination is preserved
-            foreach (var claim in principal.Claims)
+            // Every code and refresh token must rest on the person's approval
+            // (a valid permanent authorization from the consent page). A
+            // refresh token issued before consent existed rests on an ad-hoc
+            // authorization: refused, so that app must ask again. A withdrawn
+            // approval (/account/apps, admin API) ends here too.
+            if (!await _approvals.IsApprovalAsync(principal.GetAuthorizationId(), ct))
             {
-                if (claim.GetDestinations().IsEmpty)
-                    claim.SetDestinations(Destinations.AccessToken);
+                _audit.TokenRefused(principal.GetClaim(Claims.Subject), request.ClientId, "no_consent_authorization");
+                return ForbidGrant(Errors.InvalidGrant, "The user has not approved this app, or withdrew the approval. Authorize again.");
             }
 
+            // The binding the code was issued under must still hold. A revoked
+            // link or deleted client registration ends refresh immediately.
+            var refusal = await _resolver.RevalidateAsync(principal, request.ClientId, ct);
+            if (refusal != null)
+            {
+                _audit.TokenRefused(principal.GetClaim(Claims.Subject), request.ClientId, refusal);
+                return ForbidGrant(Errors.InvalidGrant, "The account or client is no longer bound to this tenant.");
+            }
+
+            SmartTokenContextResolver.ApplyDestinations(principal);
+            _audit.TokenIssued(principal.GetClaim(SmartTokenContextResolver.ContextClaim)!,
+                principal.GetClaim(SmartTokenContextResolver.TenantClaim)!,
+                principal.GetClaim(Claims.Subject)!, request.ClientId!);
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        // ── client_credentials (system/*.read) ───────────────────────────────
+        // ── client_credentials (system/* scopes) ─────────────────────────────
         if (request.IsClientCredentialsGrantType())
         {
-            var app = await _applicationManager.FindByClientIdAsync(request.ClientId!, ct);
-            if (app == null)
-                return Forbid(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            var scopes = request.GetScopes();
+            var resolution = await _resolver.ResolveClientCredentialsAsync(request.ClientId!, scopes, ct);
+            if (resolution.Context is not { } context)
+            {
+                _audit.TokenRefused(null, request.ClientId, resolution.Refusal!);
+                return ForbidGrant(Errors.UnauthorizedClient, "This client is not registered to a tenant.");
+            }
 
-            var identity = new ClaimsIdentity(
+            _audit.TokenIssued(context.Context, context.TenantId, context.Subject, request.ClientId!);
+            return SignIn(SmartTokenContextResolver.CreatePrincipal(context, scopes),
                 OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-
-            identity.AddClaim(new Claim(Claims.Subject, request.ClientId!)
-                .SetDestinations(Destinations.AccessToken));
-
-            principal = new ClaimsPrincipal(identity);
-            principal.SetScopes(request.GetScopes());
-            principal.SetResources("fhir-api");
-
-            return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
         return BadRequest(new { error = Errors.UnsupportedGrantType });
@@ -218,6 +261,7 @@ public class AuthorizationController : ControllerBase
 
     [HttpGet("~/connect/logout")]
     [HttpPost("~/connect/logout")]
+    [AllowAnonymous]
     public async Task<IActionResult> Logout()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -229,7 +273,7 @@ public class AuthorizationController : ControllerBase
 
     // ── UserInfo endpoint ─────────────────────────────────────────────────────
 
-    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [Authorize(Policy = SmartAccessTokenPolicy.Name)]
     [HttpGet("~/connect/userinfo")]
     [HttpPost("~/connect/userinfo")]
     public IActionResult Userinfo()
@@ -249,6 +293,59 @@ public class AuthorizationController : ControllerBase
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>A valid permanent approval of this client covering every requested scope, or null.</summary>
+    private async Task<object?> FindConsentAsync(
+        string subject, string applicationId, ImmutableArray<string> scopes, CancellationToken ct)
+    {
+        await foreach (var authorization in _authorizations.FindAsync(
+                           subject, applicationId, Statuses.Valid, AuthorizationTypes.Permanent, scopes, ct))
+        {
+            return authorization;
+        }
+        return null;
+    }
+
+    /// <summary>The authorization request's own parameters, for the consent form to post back.</summary>
+    private IEnumerable<KeyValuePair<string, string>> OriginalParameters()
+    {
+        var source = Request.HasFormContentType
+            ? Request.Form.Select(p => new KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>(p.Key, p.Value))
+            : Request.Query.Select(p => new KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>(p.Key, p.Value));
+        foreach (var (key, values) in source)
+        {
+            if (key is SmartConsent.DecisionField or SmartConsent.TokenField)
+                continue;
+            foreach (var value in values)
+                yield return new(key, value ?? string.Empty);
+        }
+    }
+
+    /// <summary>No binding, no token: OAuth access_denied back to the client.</summary>
+    private IActionResult Refuse(string? identity, string? clientId, string reason, string? description = null)
+    {
+        _audit.TokenRefused(identity, clientId, reason);
+        return ForbidAuthorize(Errors.AccessDenied, description
+            ?? "This account is not linked to a member or provider of a tenant this app is registered with.");
+    }
+
+    private IActionResult ForbidAuthorize(string error, string description)
+        => Forbid(
+            new AuthenticationProperties(new Dictionary<string, string?>
+            {
+                [OpenIddictServerAspNetCoreConstants.Properties.Error] = error,
+                [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = description,
+            }),
+            OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+
+    private IActionResult ForbidGrant(string error, string description)
+        => Forbid(
+            new AuthenticationProperties(new Dictionary<string, string?>
+            {
+                [OpenIddictServerAspNetCoreConstants.Properties.Error] = error,
+                [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = description,
+            }),
+            OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
     /// <summary>
     /// Replaces control characters (including CR/LF/tab/NUL) with '_' in user-supplied
@@ -270,4 +367,10 @@ public class AuthorizationController : ControllerBase
         }
         return buffer.ToString();
     }
+}
+
+/// <summary>An access token this server issued, validated by OpenIddict's local validation.</summary>
+public static class SmartAccessTokenPolicy
+{
+    public const string Name = "smart-access-token";
 }

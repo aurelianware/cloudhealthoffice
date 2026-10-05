@@ -25,14 +25,64 @@ public interface IReferenceDataRepository
 {
     Task<ReferenceCode?> GetAsync(string codeSystem, string code, DateOnly effectiveDate, string? version = null, string? tenantId = null, CancellationToken ct = default);
     Task<Page<ReferenceCode>> SearchAsync(ReferenceDataQuery query, CancellationToken ct = default);
-    Task<ImportResult> ImportAsync(IReadOnlyList<ReferenceCode> records, CancellationToken ct = default);
+    /// <summary>
+    /// Imports one batch. "Already imported" is decided within the batch's
+    /// scope only (<see cref="ReferenceDataImportScope.Of"/>: its tenant, or
+    /// global): source id, version and checksum for the same scope. One tenant's
+    /// import never suppresses, or reveals, another's.
+    /// <paramref name="importedBy"/> is the acting identity from the caller's
+    /// token, recorded on the import ledger.
+    /// </summary>
+    Task<ImportResult> ImportAsync(IReadOnlyList<ReferenceCode> records, string? importedBy = null, CancellationToken ct = default);
 }
+
+/// <summary>Import scope helpers shared by the repositories.</summary>
+public static class ReferenceDataImportScope
+{
+    /// <summary>The ledger scope of global (cross-tenant) imports.</summary>
+    public const string Global = "global";
+
+    /// <summary>
+    /// The batch's scope: its tenant, or <see cref="Global"/> for global records.
+    /// A batch that carries both (only a platform administrator can send one
+    /// for its own tenant) is scoped by both, e.g. <c>global+tenant-1</c>, so it
+    /// never matches another tenant's import either.
+    /// </summary>
+    public static string Of(IReadOnlyList<ReferenceCode> records)
+    {
+        var scopes = records
+            .Select(record => record.TenantId)
+            .Distinct(StringComparer.Ordinal)
+            .Select(tenant =>
+            {
+                if (tenant is null) return Global;
+                if (string.IsNullOrWhiteSpace(tenant) || tenant.Contains('+') || tenant.Contains('|')
+                    || string.Equals(tenant, Global, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException($"'{tenant}' is not a valid tenant for reference data.", nameof(records));
+                return tenant;
+            })
+            .OrderBy(scope => scope == Global ? 0 : 1)
+            .ThenBy(scope => scope, StringComparer.Ordinal);
+        return string.Join('+', scopes);
+    }
+}
+
+/// <summary>An import ledger entry.</summary>
+public sealed record ReferenceDataImportRecord(
+    string Scope, string SourceId, string SourceVersion, string Checksum, int RecordCount, string? ImportedBy, DateTimeOffset ImportedAt);
 
 /// <summary>Deterministic repository used by tests and local composition roots.</summary>
 public sealed class InMemoryReferenceDataRepository : IReferenceDataRepository
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, ReferenceCode> _records = new(StringComparer.Ordinal);
+    private readonly List<ReferenceDataImportRecord> _imports = new();
+
+    /// <summary>The import ledger (scope, source, checksum, actor).</summary>
+    public IReadOnlyList<ReferenceDataImportRecord> Imports
+    {
+        get { lock (_gate) return _imports.ToList(); }
+    }
 
     public Task<ReferenceCode?> GetAsync(string codeSystem, string code, DateOnly effectiveDate, string? version = null, string? tenantId = null, CancellationToken ct = default)
     {
@@ -81,7 +131,7 @@ public sealed class InMemoryReferenceDataRepository : IReferenceDataRepository
         }
     }
 
-    public Task<ImportResult> ImportAsync(IReadOnlyList<ReferenceCode> records, CancellationToken ct = default)
+    public Task<ImportResult> ImportAsync(IReadOnlyList<ReferenceCode> records, string? importedBy = null, CancellationToken ct = default)
     {
         if (records.Count == 0) return Task.FromResult(new ImportResult(0, false, string.Empty));
         var first = records[0];
@@ -94,12 +144,15 @@ public sealed class InMemoryReferenceDataRepository : IReferenceDataRepository
                 || !string.Equals(record.SourceVersion, first.SourceVersion, StringComparison.Ordinal)))
             throw new ArgumentException("All import records must have the same source ID, source version, and checksum.", nameof(records));
 
+        var scope = ReferenceDataImportScope.Of(records);
         var checksum = first.Checksum;
         lock (_gate)
         {
-            var alreadyImported = _records.Values.Any(x => x.Checksum == checksum && x.SourceId == first.SourceId && x.SourceVersion == first.SourceVersion);
+            var alreadyImported = _imports.Any(x => x.Scope == scope && x.Checksum == checksum
+                && x.SourceId == first.SourceId && x.SourceVersion == first.SourceVersion);
             if (alreadyImported) return Task.FromResult(new ImportResult(0, true, checksum));
             foreach (var record in records) _records[StorageKey(record)] = record;
+            _imports.Add(new ReferenceDataImportRecord(scope, first.SourceId, first.SourceVersion, checksum, records.Count, importedBy, DateTimeOffset.UtcNow));
             return Task.FromResult(new ImportResult(records.Count, false, checksum));
         }
     }

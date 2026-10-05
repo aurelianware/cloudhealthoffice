@@ -361,7 +361,7 @@ operational pressure justifies it.
   `UpdateAdjudicationProjectionAsync` bypass behavior, accumulator
   filter co-existence (legacy ClaimStatus + new ClaimVersionState).
 
-EphemeralMongo7 backs the Mongo-touching tests; the Cosmos repository
+EphemeralMongo (MongoDB 7, one mongod per test collection via `tests/Shared/EphemeralMongo/MongoRunnerFixture.cs`) backs the Mongo-touching tests; the Cosmos repository
 exercises share their behavior with the Mongo backend through the
 common `IClaimRepository` interface.
 

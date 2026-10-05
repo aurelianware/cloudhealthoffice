@@ -93,14 +93,17 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
         return new Page<ReferenceCode>(items.Select(ToDomain).ToList(), total, query.Page, query.PageSize);
     }
 
-    public async Task<ImportResult> ImportAsync(IReadOnlyList<ReferenceCode> records, CancellationToken ct = default)
+    public async Task<ImportResult> ImportAsync(IReadOnlyList<ReferenceCode> records, string? importedBy = null, CancellationToken ct = default)
     {
         if (records.Count == 0)
             return new ImportResult(0, false, string.Empty);
 
         ValidateBatch(records);
+        var scope = ReferenceDataImportScope.Of(records);
         var first = records[0];
-        var importKey = ImportKey(first.SourceId, first.SourceVersion, first.Checksum);
+        // The ledger key includes the scope: one tenant's import never marks
+        // another tenant's (or global) batch as already imported.
+        var importKey = ImportKey(scope, first.SourceId, first.SourceVersion, first.Checksum);
 
         if (await _context.CanonicalReferenceDataImports.AsNoTracking()
                 .AnyAsync(x => x.ImportKey == importKey, ct))
@@ -123,11 +126,13 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
         _context.CanonicalReferenceDataImports.Add(new CanonicalReferenceDataImportEntity
         {
             ImportKey = importKey,
+            TenantScope = scope,
             SourceId = first.SourceId,
             SourceVersion = first.SourceVersion,
             Checksum = first.Checksum,
             ImportedAt = DateTimeOffset.UtcNow,
-            RecordCount = records.Count
+            RecordCount = records.Count,
+            ImportedBy = importedBy
         });
 
         try
@@ -229,8 +234,8 @@ public sealed class CanonicalReferenceDataRepository : CloudHealthOffice.Referen
         record.Coding.Version is null ? string.Empty : Normalize(record.Coding.Version),
         record.EffectiveFrom.ToString("yyyyMMdd"));
 
-    private static string ImportKey(string sourceId, string sourceVersion, string checksum) =>
-        $"{sourceId}|{sourceVersion}|{checksum}";
+    private static string ImportKey(string scope, string sourceId, string sourceVersion, string checksum) =>
+        $"{scope}|{sourceId}|{sourceVersion}|{checksum}";
 
     private static string Normalize(string value) => value.Trim().ToUpperInvariant();
 }

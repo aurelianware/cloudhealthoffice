@@ -5,6 +5,13 @@ using ReferenceDataService.Repositories;
 
 namespace ReferenceDataService.Controllers;
 
+/// <summary>
+/// Legacy code-set lookups (CPT, ICD-10, HCPCS, modifiers, DRG, place of
+/// service, revenue codes). These tables are global: one copy shared by every
+/// tenant, with no tenant column, and loaded by migrations, never through this
+/// API. Every action is a read and needs reference-data:read (the default set
+/// in Program.cs; service tokens satisfy it).
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]

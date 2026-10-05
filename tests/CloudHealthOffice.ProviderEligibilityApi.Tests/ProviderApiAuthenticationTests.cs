@@ -50,13 +50,17 @@ public sealed class ProviderApiAuthenticationTests : IDisposable
     }
 
     [Fact]
-    public async Task Missing_tenant_header_is_rejected()
+    public async Task Missing_tenant_header_acts_for_the_credentials_tenant()
     {
+        // The tenant comes from the credential; X-Tenant-ID is only an echo.
         var client = _factory.CreateAuthorizedClient(tenant: null);
 
         var response = await client.PostAsJsonAsync("/api/v1/eligibility/check", EligibilityTestData.SelfRequest());
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _factory.Gateway.Received(1).CheckEligibilityAsync(
+            Arg.Is<GatewayEligibilityRequest>(r => r.TenantId == ProviderEligibilityApiFactory.PracticeTenant),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -65,11 +69,16 @@ public sealed class ProviderApiAuthenticationTests : IDisposable
         var client = _factory.CreateAuthorizedClient(tenant: null);
 
         var response = await client.PostAsJsonAsync(
-            $"/api/v1/eligibility/check?tenantId={ProviderEligibilityApiFactory.PracticeTenant}",
+            $"/api/v1/eligibility/check?tenantId={ProviderEligibilityApiFactory.OtherTenant}",
             EligibilityTestData.SelfRequest());
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        await _factory.Gateway.DidNotReceiveWithAnyArgs().CheckEligibilityAsync(default!, default);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _factory.Gateway.DidNotReceive().CheckEligibilityAsync(
+            Arg.Is<GatewayEligibilityRequest>(r => r.TenantId != ProviderEligibilityApiFactory.PracticeTenant),
+            Arg.Any<CancellationToken>());
+        await _factory.Gateway.Received(1).CheckEligibilityAsync(
+            Arg.Is<GatewayEligibilityRequest>(r => r.TenantId == ProviderEligibilityApiFactory.PracticeTenant),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -106,7 +115,7 @@ public sealed class ProviderApiAuthenticationTests : IDisposable
         using var factory = new ProviderEligibilityApiFactory(settings: new Dictionary<string, string?>
         {
             ["ProviderApi:Clients:0:ApiKey"] = "",
-            ["ProviderApi:Clients:1:Tenants:0"] = ""
+            ["ProviderApi:Clients:1:TenantId"] = ""
         });
         var client = factory.CreateAuthorizedClient();
 

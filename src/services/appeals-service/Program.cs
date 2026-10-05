@@ -8,6 +8,7 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
@@ -46,6 +47,15 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Claim appeals processing with 275 attachment support. "
                     + "State-machine lifecycle, append-only audit trail, field-level encryption."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come
+// from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "appeals:read";
+    auth.DefaultWritePermission = "appeals:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -155,15 +165,8 @@ builder.Services.AddHostedService<Attachment275ConsumerHostedService>();
 // IMessageBus — registered for future consumers; no-op cost today.
 builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 // Health checks: Mongo / Cosmos via the shared bootstrap, plus the
 // local appeal-encryption-key readiness check.
@@ -194,9 +197,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

@@ -12,8 +12,10 @@ public interface IBenefitPlanService
 {
     Task<IEnumerable<BenefitPlan>> GetPlansAsync(string tenantId, string? payer, string? planType, bool activeOnly);
     Task<BenefitPlan?> GetPlanAsync(string id, string tenantId);
-    Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId);
-    Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId);
+    /// <param name="actorId">The authenticated user creating (and, legacy semantics, publishing) the plan.</param>
+    Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId, string actorId);
+    /// <param name="actorId">The authenticated user editing the draft. Server-owned identity, version and audit fields are kept from the stored row.</param>
+    Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId, string actorId);
     Task<bool> DeletePlanAsync(string id, string tenantId, string actorId);
     Task<Benefit?> AddBenefitAsync(string planId, string tenantId, string actorId, Benefit benefit);
     Task<Benefit?> UpdateBenefitAsync(string planId, string benefitId, string tenantId, string actorId, Benefit benefit);
@@ -119,9 +121,12 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         return _repository.GetByPlanIdAsync(id, tenantId);
     }
 
-    public async Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId)
+    public async Task<BenefitPlan> CreatePlanAsync(BenefitPlan plan, string tenantId, string actorId)
     {
+        RequireActor(actorId);
         plan.TenantId = tenantId;
+        // The actor is the authenticated caller; a body createdBy/publishedBy is ignored.
+        plan.CreatedBy = actorId;
         plan.CreatedAt = DateTime.UtcNow;
         plan.UpdatedAt = DateTime.UtcNow;
 
@@ -133,14 +138,16 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         if (plan.VersionNumber <= 0) plan.VersionNumber = 1;
         plan.VersionState = PlanVersionState.Published;
         plan.PublishedAt = DateTime.UtcNow;
+        plan.PublishedBy = actorId;
 
         _networkTierValidator.Inspect(plan, NetworkTierWriteCaller.CreatePlan);
         _planLimitValidator.Validate(plan, PlanLimitWriteCaller.CreatePlan);
         return await _repository.CreateAsync(plan);
     }
 
-    public async Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId)
+    public async Task<BenefitPlan?> UpdatePlanAsync(BenefitPlan plan, string tenantId, string actorId)
     {
+        RequireActor(actorId);
         var existing = await _repository.GetByIdAsync(plan.Id, tenantId);
         if (existing == null)
         {
@@ -149,6 +156,23 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
 
         plan.TenantId = tenantId;
         plan.UpdatedAt = DateTime.UtcNow;
+
+        // The body is a full model, so everything the server owns is restored
+        // from the stored row: who created/published it (audit) and the
+        // version-chain state. Moving a draft to Published goes through
+        // PublishVersionAsync, never through an edit.
+        plan.CreatedBy = existing.CreatedBy;
+        plan.CreatedAt = existing.CreatedAt;
+        plan.CreatedDate = existing.CreatedDate;
+        plan.PlanId = existing.PlanId;
+        plan.VersionId = existing.VersionId;
+        plan.VersionNumber = existing.VersionNumber;
+        plan.VersionState = existing.VersionState;
+        plan.PredecessorVersionId = existing.PredecessorVersionId;
+        plan.PublishedAt = existing.PublishedAt;
+        plan.PublishedBy = existing.PublishedBy;
+        plan.SupersededAt = existing.SupersededAt;
+        plan.SupersededByVersionId = existing.SupersededByVersionId;
         _networkTierValidator.Inspect(plan, NetworkTierWriteCaller.UpdatePlan);
         _planLimitValidator.Validate(plan, PlanLimitWriteCaller.UpdatePlan);
         // Repository raises PlanVersionStateException for Published/Superseded;
@@ -434,10 +458,18 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         return result;
     }
 
+    private static void RequireActor(string actorId)
+    {
+        if (string.IsNullOrWhiteSpace(actorId))
+            throw new ArgumentException("An authenticated actor is required for a plan write.", nameof(actorId));
+    }
+
     public async Task<BenefitPlan> CreateDraftAsync(BenefitPlan draft, string tenantId, string actorId)
     {
         draft.TenantId = tenantId;
-        draft.CreatedBy = string.IsNullOrEmpty(draft.CreatedBy) ? actorId : draft.CreatedBy;
+        RequireActor(actorId);
+        // The actor is the authenticated caller; a body createdBy is ignored.
+        draft.CreatedBy = actorId;
         draft.CreatedAt = DateTime.UtcNow;
         draft.UpdatedAt = DateTime.UtcNow;
         draft.VersionId = PlanVersionId.NewId();

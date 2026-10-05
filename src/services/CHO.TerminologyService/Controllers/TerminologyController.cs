@@ -1,5 +1,8 @@
 using CHO.TerminologyService.Models;
 using CHO.TerminologyService.Services;
+using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CHO.TerminologyService.Controllers;
@@ -11,6 +14,19 @@ namespace CHO.TerminologyService.Controllers;
 /// Follows the FHIR R4 ConceptMap/$translate operation specification.
 /// 
 /// Also exposes admin endpoints for map management and health checks.
+///
+/// Authentication (CHO tokens, shared layer):
+///   - Every operation needs a CHO token except /health. Reads, including the POST
+///     $translate and $batch-translate operations, need terminology:read; service
+///     tokens satisfy it.
+///   - Global data (NLM/AMA/SNOMED crosswalk maps and the built-in code-system catalog)
+///     is shared by every tenant. Loading a global map needs platform:admin, which
+///     tenant roles and service tokens never hold.
+///   - Per-tenant data (plan overrides: map entries and versions with a TenantId) is
+///     visible only to its tenant. Loading overrides needs settings:manage and always
+///     writes to the token's tenant.
+///   - The tenant is the token's. A tenantId in the query or a request body is a legacy
+///     echo: it must equal the token tenant (403 otherwise) and is never used as the scope.
 /// </summary>
 [ApiController]
 public class TerminologyController : ControllerBase
@@ -29,22 +45,35 @@ public class TerminologyController : ControllerBase
         public const string Hcpcs = "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets";
     }
 
-    private readonly IConfiguration _configuration;
+    /// <summary>Permission needed to load a global map (shared by every tenant).</summary>
+    public const string GlobalWritePermission = "platform:admin";
 
     public TerminologyController(
         ITerminologyTranslationService translationService,
         IEnumerable<IMapLoader> loaders,
-        ILogger<TerminologyController> logger,
-        IConfiguration configuration)
+        ILogger<TerminologyController> logger)
     {
         _translationService = translationService;
         _loaders = loaders;
         _logger = logger;
-        _configuration = configuration;
     }
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
+
+    /// <summary>
+    /// A tenant named by the caller (query or body) is only an echo of the token tenant:
+    /// null when it is absent or matches, otherwise a 403 result.
+    /// </summary>
+    private IActionResult? RejectForeignTenant(string? requestedTenantId, string tokenTenantId)
+    {
+        if (string.IsNullOrEmpty(requestedTenantId)
+            || string.Equals(requestedTenantId, tokenTenantId, StringComparison.Ordinal))
+            return null;
+
+        return StatusCode(StatusCodes.Status403Forbidden,
+            new { error = "tenantId must match the authenticated tenant" });
+    }
 
     // ──────────────────────────────────────────────────────
     // FHIR $translate operation
@@ -56,7 +85,7 @@ public class TerminologyController : ControllerBase
     /// GET /fhir/ConceptMap/$translate?system={system}&amp;code={code}&amp;target={targetSystem}
     /// 
     /// Optional query params:
-    ///   - tenantId: Plan-specific override scope
+    ///   - tenantId: legacy; must equal the token tenant. Plan overrides are always the token tenant's.
     ///   - age: Patient age for context rules
     ///   - gender: Patient gender for context rules
     ///   - state: State code for TMPPM/Medicaid rules
@@ -79,12 +108,16 @@ public class TerminologyController : ControllerBase
             return BadRequest(new { error = "system, code, and target are required parameters" });
         }
 
+        var tenant = HttpContext.GetTenantId();
+        if (RejectForeignTenant(tenantId, tenant) is { } forbidden)
+            return forbidden;
+
         var request = new TranslateRequest
         {
             System = system,
             Code = code,
             TargetSystem = target,
-            TenantId = tenantId,
+            TenantId = tenant,
             Context = (age.HasValue || gender != null || state != null)
                 ? new PatientContext
                 {
@@ -104,6 +137,7 @@ public class TerminologyController : ControllerBase
     /// Used by Da Vinci CRD/PAS servers that send structured requests.
     /// </summary>
     [HttpPost("fhir/ConceptMap/$translate")]
+    [RequirePermission("terminology:read")] // a read, though POSTed
     [ProducesResponseType(typeof(TranslateResponse), 200)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> TranslatePost(
@@ -116,6 +150,11 @@ public class TerminologyController : ControllerBase
             return BadRequest(new { error = "system, code, and targetSystem are required" });
         }
 
+        var tenant = HttpContext.GetTenantId();
+        if (RejectForeignTenant(request.TenantId, tenant) is { } forbidden)
+            return forbidden;
+        request.TenantId = tenant;
+
         var response = await _translationService.TranslateAsync(request, ct);
         return Ok(response);
     }
@@ -125,6 +164,7 @@ public class TerminologyController : ControllerBase
     /// The PAS server sends multiple codes at once during a prior auth request conversion.
     /// </summary>
     [HttpPost("fhir/ConceptMap/$batch-translate")]
+    [RequirePermission("terminology:read")] // a read, though POSTed
     [ProducesResponseType(typeof(List<TranslateResponse>), 200)]
     public async Task<IActionResult> BatchTranslate(
         [FromBody] List<TranslateRequest> requests,
@@ -138,6 +178,16 @@ public class TerminologyController : ControllerBase
         if (requests.Count > 500)
         {
             return BadRequest(new { error = "Maximum 500 codes per batch" });
+        }
+
+        var tenant = HttpContext.GetTenantId();
+        foreach (var request in requests)
+        {
+            if (request is null)
+                return BadRequest(new { error = "Translate requests must not be null" });
+            if (RejectForeignTenant(request.TenantId, tenant) is { } forbidden)
+                return forbidden;
+            request.TenantId = tenant;
         }
 
         var responses = await _translationService.BatchTranslateAsync(requests, ct);
@@ -165,11 +215,15 @@ public class TerminologyController : ControllerBase
             return BadRequest(new { error = "system and code are required parameters" });
         }
 
+        var tenant = HttpContext.GetTenantId();
+        if (RejectForeignTenant(tenantId, tenant) is { } forbidden)
+            return forbidden;
+
         var response = await _translationService.LookupCodeAsync(new CodeLookupRequest
         {
             System = system,
             Code = code,
-            TenantId = tenantId
+            TenantId = tenant
         }, ct);
 
         return Ok(response);
@@ -180,20 +234,26 @@ public class TerminologyController : ControllerBase
     // ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// GET /admin/maps - List all loaded map versions.
+    /// GET /admin/maps - List the map versions the caller's tenant can use:
+    /// the global maps and its own override versions (never another tenant's).
     /// Shows active/inactive versions with entry counts and import timestamps.
     /// </summary>
     [HttpGet("admin/maps")]
     [ProducesResponseType(typeof(List<MapVersion>), 200)]
     public async Task<IActionResult> GetMapVersions(CancellationToken ct = default)
     {
-        var versions = await _translationService.GetMapVersionsAsync(ct);
+        var versions = await _translationService.GetMapVersionsAsync(HttpContext.GetTenantId(), ct);
         return Ok(versions);
     }
 
     /// <summary>
     /// POST /admin/maps/load - Load a crosswalk map file.
     /// Accepts RF2 (NLM SNOMED maps) or CSV (AMA cross maps, plan overrides).
+    ///
+    /// Scope:
+    ///   - isOverride=true: the token tenant's plan overrides. settings:manage (default write).
+    ///   - isOverride=false: a global map every tenant translates with (it also
+    ///     deactivates earlier versions of the same map name). Needs platform:admin.
     /// 
     /// Query params:
     ///   - format: "RF2" or "CSV"
@@ -201,7 +261,7 @@ public class TerminologyController : ControllerBase
     ///   - version: Version string from source
     ///   - sourceSystem: Source coding system URI
     ///   - targetSystem: Target coding system URI
-    ///   - tenantId: (optional) Plan ID for overrides
+    ///   - tenantId: (optional, legacy) must equal the token tenant; overrides always go to the token tenant
     ///   - isOverride: (optional) true if this is a plan override file
     /// </summary>
     [HttpPost("admin/maps/load")]
@@ -218,10 +278,25 @@ public class TerminologyController : ControllerBase
         [FromQuery] bool isOverride = false,
         CancellationToken ct = default)
     {
-        var apiKey = Request.Headers["X-Admin-Key"].FirstOrDefault();
-        var expectedKey = _configuration["TerminologyService:AdminApiKey"];
-        if (!string.IsNullOrEmpty(expectedKey) && apiKey != expectedKey)
-            return Unauthorized(new { error = "Invalid or missing X-Admin-Key header" });
+        // CHO permissions replace the former optional X-Admin-Key check (open when unset).
+        var tenant = HttpContext.GetTenantId();
+        if (RejectForeignTenant(tenantId, tenant) is { } forbidden)
+            return forbidden;
+
+        if (!isOverride)
+        {
+            // Non-override entries are read by every tenant's translations whatever
+            // TenantId they carry, so a non-override load is global and cannot be
+            // scoped to a tenant.
+            if (!string.IsNullOrEmpty(tenantId))
+                return BadRequest(new { error = "Only override maps (isOverride=true) are tenant-scoped; omit tenantId for a global map" });
+
+            if (!ChoPrincipal.HasPermission(User, GlobalWritePermission))
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { error = $"Global maps are shared by every tenant; loading one needs {GlobalWritePermission}" });
+        }
+
+        var actor = User.FindFirst(ChoClaimTypes.Subject)?.Value;
 
         if (Request.Body == null)
         {
@@ -242,14 +317,19 @@ public class TerminologyController : ControllerBase
             Version = version,
             SourceSystem = sourceSystem,
             TargetSystem = targetSystem,
-            TenantId = tenantId,
-            IsOverride = isOverride
+            TenantId = isOverride ? tenant : null,
+            IsOverride = isOverride,
+            ImportedBy = actor
         };
 
         _logger.LogInformation("Loading map: {MapName} v{Version} ({Format}) {Source} → {Target}",
             SanitizeForLog(mapName), SanitizeForLog(version), SanitizeForLog(format), SanitizeForLog(sourceSystem), SanitizeForLog(targetSystem));
 
         var result = await loader.LoadAsync(Request.Body, options, ct);
+        _logger.LogInformation(
+            "AUDIT terminology map load: {MapName} v{Version} ({Scope}) by {Subject} in tenant {TenantId}: success {Success}, {Entries} entries, version {MapVersionId}",
+            SanitizeForLog(mapName), SanitizeForLog(version), isOverride ? "tenant override" : "global",
+            SanitizeForLog(actor), SanitizeForLog(tenant), result.Success, result.EntriesLoaded, SanitizeForLog(result.MapVersionId));
         return Ok(result);
     }
 
@@ -258,15 +338,17 @@ public class TerminologyController : ControllerBase
     // ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// GET /health - Service health check.
-    /// Returns loaded map counts and MongoDB connectivity status.
+    /// GET /health - Service health check. Anonymous: Kubernetes probes and the
+    /// portal's status card call it without a token. It lists global maps only
+    /// (never a tenant's override versions) and no exception text.
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("health")]
     public async Task<IActionResult> Health(CancellationToken ct = default)
     {
         try
         {
-            var versions = await _translationService.GetMapVersionsAsync(ct);
+            var versions = await _translationService.GetMapVersionsAsync(tenantId: null, ct);
             var activeVersions = versions.Where(v => v.IsActive).ToList();
 
             return Ok(new
@@ -292,7 +374,6 @@ public class TerminologyController : ControllerBase
             return StatusCode(503, new
             {
                 status = "unhealthy",
-                error = ex.Message,
                 timestamp = DateTime.UtcNow
             });
         }

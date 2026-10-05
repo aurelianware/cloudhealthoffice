@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
@@ -10,6 +11,7 @@ namespace FhirService.Controllers;
 /// Supports search parameters: _id, name, family, given, birthdate, identifier, gender, _lastUpdated.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "members:read")]
 public class PatientController : FhirControllerBase
 {
     private readonly IFhirDataAdapter _adapter;
@@ -39,6 +41,19 @@ public class PatientController : FhirControllerBase
     {
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
+
+        // A patient-bound token searches its own record only, whatever else
+        // the query says (name, birthdate, identifier...).
+        if (AuthorizedMemberId is { } bound)
+        {
+            if (!string.IsNullOrEmpty(search.Id) && !string.Equals(search.Id, bound, StringComparison.Ordinal))
+            {
+                return Ok(_bundleBuilder.Build(
+                    Array.Empty<Patient>(), 0, search.Page, search.Count,
+                    "Patient", FhirBaseUrl, RawQueryString));
+            }
+            search.Id = bound;
+        }
 
         var (items, total) = await _adapter.SearchPatientsAsync(search, TenantId, ct);
 

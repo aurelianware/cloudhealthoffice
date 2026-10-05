@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using ClaimsService.Models;
@@ -25,7 +26,8 @@ public class AiExaminationEndpointsTests : IClassFixture<ClaimsApiFactory>
     public AiExaminationEndpointsTests(ClaimsApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(
+            new ChoDevelopmentTokenHandler("examiner-1", ChoRolePermissions.TenantAdmin));
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
         // Reset recorded calls between tests. The factory is a class fixture
         // (singleton per test class) so the substitutes carry state across tests;
@@ -176,7 +178,8 @@ public class AiExaminationEndpointsTests : IClassFixture<ClaimsApiFactory>
         var body = new
         {
             agreement = "Overridden",
-            examinerUserId = "examiner-1",
+            // Ignored: the examiner is the token subject ("examiner-1").
+            examinerUserId = "spoofed-examiner",
             notes = "wrong call"
         };
         var resp = await _client.PostAsJsonAsync(

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CapitationService.Models;
 using CapitationService.Repositories;
+using CloudHealthOffice.NachaTransmission;
 
 namespace CapitationService.Services;
 
@@ -24,9 +25,42 @@ public interface ICapitationDisbursementService
     Task<BatchDisbursementResult> InitiateBatchDisbursementAsync(InitiateBatchDisbursementRequest request);
 
     /// <summary>
-    /// Generate a NACHA credit file for all pending NACHA disbursements
+    /// Generate a NACHA credit file for all pending NACHA disbursements and send
+    /// it to the bank. <paramref name="releasedBy"/> is the user releasing the
+    /// file (token subject). Returns the masked summary and receipt, never the file.
     /// </summary>
-    Task<NachaCreditFileResult> GenerateNachaCreditFileAsync();
+    Task<NachaCreditFileResult> GenerateNachaCreditFileAsync(string releasedBy);
+
+    /// <summary>NACHA files of the tenant that were not delivered (no content).</summary>
+    Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync(string tenantId);
+
+    /// <summary>Re-sends a held NACHA file; the actor must not be the user who released it.</summary>
+    Task<NachaCreditFileResult> RetryNachaTransmissionAsync(string tenantId, string fileReference, NachaActor actor);
+
+    /// <summary>A held NACHA file for a platform admin (not the releaser), audited with the reason.</summary>
+    Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string tenantId, string fileReference, NachaActor actor, string reason);
+
+    /// <summary>
+    /// Records what the bank said about a NACHA file whose delivery was unknown
+    /// (payments:approve in the controller; a user, not the releaser). Received:
+    /// its disbursements are Submitted. Not received: they can be retried or
+    /// retrieved again (or, when the held file expired, go back to Pending).
+    /// </summary>
+    Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason);
+
+    /// <summary>
+    /// Disbursements stuck in Releasing (longer than <paramref name="releasingOlderThan"/>),
+    /// DeliveryUnknown or PaymentUnknown, and held files stuck Transmitting. Read only.
+    /// </summary>
+    Task<StuckDisbursements> ListStuckDisbursementsAsync(string tenantId, TimeSpan releasingOlderThan);
+
+    /// <summary>
+    /// Records what a person found out about a stuck disbursement (Releasing past
+    /// the threshold, or PaymentUnknown): sent (Submitted) or not (Pending, or
+    /// Failed with the statement payable again). A user token, a reason, and not
+    /// the user who released it. Audited.
+    /// </summary>
+    Task<CapitationDisbursement> ResolveStuckDisbursementAsync(string id, NachaActor actor, bool sent, string reason, string? stripeTransferId);
 
     /// <summary>
     /// Process an ACH return (bank rejection of credit)
@@ -59,6 +93,15 @@ public interface ICapitationDisbursementService
     Task<CapitationDisbursement> CancelDisbursementAsync(string id);
 }
 
+/// <summary>
+/// The payment is already being released by another request (409): a statement
+/// is paid once, and a disbursement is in at most one NACHA file.
+/// </summary>
+public sealed class PaymentReleaseConflictException : Exception
+{
+    public PaymentReleaseConflictException(string message) : base(message) { }
+}
+
 public class CapitationDisbursementService : ICapitationDisbursementService
 {
     private readonly ICapitationDisbursementRepository _disbursementRepository;
@@ -68,6 +111,10 @@ public class CapitationDisbursementService : ICapitationDisbursementService
     private readonly IStripeConnectService _stripeConnectService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly IPaymentSeparationOfDuties _separationOfDuties;
+    private readonly IProviderBankAccountSource _bankAccounts;
+    private readonly INachaDispatcher _dispatcher;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private readonly ILogger<CapitationDisbursementService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -83,8 +130,16 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         IStripeConnectService stripeConnectService,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        ILogger<CapitationDisbursementService> logger)
+        IPaymentSeparationOfDuties separationOfDuties,
+        IProviderBankAccountSource bankAccounts,
+        INachaDispatcher dispatcher,
+        ILogger<CapitationDisbursementService> logger,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
+        _httpContextAccessor = httpContextAccessor;
+        _separationOfDuties = separationOfDuties;
+        _bankAccounts = bankAccounts;
+        _dispatcher = dispatcher;
         _disbursementRepository = disbursementRepository;
         _statementRepository = statementRepository;
         _runRepository = runRepository;
@@ -97,6 +152,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     public async Task<CapitationDisbursement> InitiateDisbursementAsync(InitiateDisbursementRequest request)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
         var statement = await _statementRepository.GetByIdAsync(request.StatementId)
             ?? throw new InvalidOperationException($"Statement {request.StatementId} not found");
 
@@ -106,10 +163,21 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         if (statement.NetPayable <= 0)
             throw new InvalidOperationException("Statement has no net payable amount");
 
-        // Fetch provider bank account info
-        var bankAccount = await FetchProviderBankAccountAsync(statement.ProviderNPI);
-        if (bankAccount == null || !bankAccount.EftEnabled)
+        // Maker-checker: whoever prepared the statement cannot release its payment.
+        await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, request.InitiatedBy, PaymentAction.Release);
+
+        // The provider's approved account, masked (method, Stripe id, last 4).
+        // Full numbers are read only when a NACHA file is built.
+        var (bankAccount, problem) = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
+        if (bankAccount == null)
+            throw new InvalidOperationException(problem);
+        if (!bankAccount.EftEnabled)
             throw new InvalidOperationException($"EFT not enabled for provider {statement.ProviderNPI}");
+
+        // An override may pay part of the approved amount, never more than it.
+        if (request.Amount is { } requested && (requested <= 0 || requested > statement.NetPayable))
+            throw new InvalidOperationException(
+                $"Disbursement amount must be greater than 0 and at most the approved net payable {statement.NetPayable:N2}");
 
         var amount = request.Amount ?? statement.NetPayable;
         var method = request.Method ?? MapPreferredMethod(bankAccount.PreferredDisbursementMethod);
@@ -128,49 +196,111 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             Status = DisbursementStatus.Pending,
             RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
             AccountNumberLast4 = bankAccount.AccountNumberLast4,
-            InitiatedBy = request.InitiatedBy
+            InitiatedBy = request.InitiatedBy,
+            // A Stripe transfer is released now, by this user; a NACHA credit when its file is released.
+            ReleasedBy = method == DisbursementMethod.StripeConnect ? request.InitiatedBy : null
         };
 
-        // For Stripe Connect, initiate transfer immediately
-        if (method == DisbursementMethod.StripeConnect)
-        {
-            var result = await _stripeConnectService.CreateTransferAsync(
-                bankAccount.StripeConnectedAccountId!,
-                amount,
-                statement.StatementNumber,
-                statement.ProviderNPI);
+        // Approved to PaymentInitiated, as one conditional write, before any money
+        // moves: of two releases of the same statement only one gets past here.
+        if (!await _statementRepository.TryStartPaymentAsync(statement.Id, disbursement.Id))
+            throw new PaymentReleaseConflictException(
+                $"Statement {statement.StatementNumber} is already being paid by another release; nothing was sent.");
+        statement.Status = CapitationStatementStatus.PaymentInitiated;
+        statement.EftDisbursementId = disbursement.Id;
 
-            if (result.Status == "failed")
+        var transferCreated = false;
+        var outcomeUnknown = false;
+        try
+        {
+            // For Stripe Connect, initiate transfer immediately
+            if (method == DisbursementMethod.StripeConnect)
             {
-                disbursement.Status = DisbursementStatus.Failed;
-                disbursement.ErrorMessage = result.ErrorMessage;
+                StripeTransferResult result;
+                try
+                {
+                    // Idempotency key from the disbursement id: Stripe never makes
+                    // two transfers for one disbursement.
+                    result = await _stripeConnectService.CreateTransferAsync(
+                        bankAccount.StripeConnectedAccountId!,
+                        amount,
+                        statement.StatementNumber,
+                        statement.ProviderNPI,
+                        statement.TenantId,
+                        disbursement.Id);
+                }
+                catch (Exception ex)
+                {
+                    // Not a refusal from Stripe (that comes back as "failed"): a
+                    // timeout, network or Stripe server error. The transfer may
+                    // exist, so the statement must never become payable again here.
+                    outcomeUnknown = true;
+                    _logger.LogCritical(ex,
+                        "Stripe transfer for statement {StatementNumber} (disbursement {DisbursementId}, idempotency key {IdempotencyKey}): " +
+                        "outcome unknown ({Error}). Disbursement and statement are PaymentUnknown; check Stripe before anything is paid again",
+                        statement.StatementNumber, disbursement.Id, StripeConnectService.TransferIdempotencyKey(disbursement.Id), ex.GetType().Name);
+                    disbursement.Status = DisbursementStatus.PaymentUnknown;
+                    disbursement.ErrorMessage =
+                        $"The Stripe transfer may have been made ({ex.GetType().Name}). Do not pay this statement again: check Stripe " +
+                        $"(idempotency key {StripeConnectService.TransferIdempotencyKey(disbursement.Id)}), then another user with payments:approve records the answer.";
+                    await _statementRepository.MarkPaymentUnknownAsync(statement.Id, disbursement.Id);
+                    statement.Status = CapitationStatementStatus.PaymentUnknown;
+                    return await _disbursementRepository.CreateAsync(disbursement);
+                }
+
+                if (result.Status == "failed")
+                {
+                    disbursement.Status = DisbursementStatus.Failed;
+                    disbursement.ErrorMessage = result.ErrorMessage;
+                }
+                else
+                {
+                    transferCreated = true;
+                    disbursement.StripeTransferId = result.TransferId;
+                    disbursement.Status = DisbursementStatus.Submitted;
+                    disbursement.SubmittedAt = DateTime.UtcNow;
+                    disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
+                }
+            }
+            // For NACHA, disbursement stays Pending until a NACHA credit file is generated
+            else if (method == DisbursementMethod.NachaCredit)
+            {
+                disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
+            }
+            // For Check, just mark as submitted (manual fulfillment)
+            else
+            {
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt = DateTime.UtcNow;
+            }
+
+            disbursement = await _disbursementRepository.CreateAsync(disbursement);
+
+            // Stripe definitively refused the transfer: nothing was paid, so the
+            // statement is payable again.
+            if (disbursement.Status == DisbursementStatus.Failed)
+            {
+                await _statementRepository.UndoStartPaymentAsync(statement.Id, disbursement.Id);
+                statement.Status = CapitationStatementStatus.Approved;
+                statement.EftDisbursementId = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (transferCreated || outcomeUnknown)
+            {
+                // The money went (or may have gone) to Stripe: the statement must not become payable again.
+                _logger.LogCritical(ex,
+                    "Stripe transfer {TransferId} for statement {StatementNumber} was created (or its outcome is unknown) but disbursement " +
+                    "{DisbursementId} could not be recorded; the statement is not made payable again and needs reconciliation",
+                    disbursement.StripeTransferId, statement.StatementNumber, disbursement.Id);
             }
             else
             {
-                disbursement.StripeTransferId = result.TransferId;
-                disbursement.Status = DisbursementStatus.Submitted;
-                disbursement.SubmittedAt = DateTime.UtcNow;
-                disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
+                await _statementRepository.UndoStartPaymentAsync(statement.Id, disbursement.Id);
             }
+            throw;
         }
-        // For NACHA, disbursement stays Pending until a NACHA credit file is generated
-        else if (method == DisbursementMethod.NachaCredit)
-        {
-            disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-        }
-        // For Check, just mark as submitted (manual fulfillment)
-        else
-        {
-            disbursement.Status = DisbursementStatus.Submitted;
-            disbursement.SubmittedAt = DateTime.UtcNow;
-        }
-
-        disbursement = await _disbursementRepository.CreateAsync(disbursement);
-
-        // Update statement status to PaymentInitiated
-        statement.Status = CapitationStatementStatus.PaymentInitiated;
-        statement.EftDisbursementId = disbursement.Id;
-        await _statementRepository.UpdateAsync(statement);
 
         _logger.LogInformation(
             "Initiated {Method} disbursement {DisbursementId} for statement {StatementNumber}, amount ${Amount:N2}",
@@ -181,6 +311,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     public async Task<BatchDisbursementResult> InitiateBatchDisbursementAsync(InitiateBatchDisbursementRequest request)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
         var result = new BatchDisbursementResult();
         var statementIds = new List<string>(request.StatementIds);
 
@@ -195,8 +327,21 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         var uniqueStatementIds = statementIds.Distinct().ToList();
         result.TotalStatements = uniqueStatementIds.Count;
 
+        // Maker-checker before any money moves: if the releasing user prepared any
+        // statement this batch would pay, the whole batch is refused.
+        foreach (var statementId in uniqueStatementIds)
+        {
+            var candidate = await _statementRepository.GetByIdAsync(statementId);
+            if (candidate is { Status: CapitationStatementStatus.Approved } && candidate.NetPayable > 0)
+                await _separationOfDuties.EnsureActorIsNotMakerAsync(candidate, request.InitiatedBy, PaymentAction.Release);
+        }
+
         var nachaEntries = new List<NachaCreditEntryDetail>();
         var nachaDisbursements = new List<CapitationDisbursement>();
+        // The NACHA disbursements this batch creates are born claimed by it
+        // (Releasing), so a concurrent NACHA release never puts them in a second file.
+        var claimId = NewClaimId();
+        var claimedAt = DateTime.UtcNow;
 
         foreach (var statementId in uniqueStatementIds)
         {
@@ -210,8 +355,14 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     continue;
                 }
 
-                var bankAccount = await FetchProviderBankAccountAsync(statement.ProviderNPI);
-                if (bankAccount == null || !bankAccount.EftEnabled)
+                var (bankAccount, problem) = await FetchProviderBankAccountAsync(statement.TenantId, statement.ProviderNPI);
+                if (bankAccount == null)
+                {
+                    // No approved account (or provider-service did not answer): never a silent skip.
+                    NeedsAttention(result, statement.Id, null, statement.ProviderNPI, problem!);
+                    continue;
+                }
+                if (!bankAccount.EftEnabled)
                 {
                     result.Skipped++;
                     continue;
@@ -228,12 +379,30 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                         Method = DisbursementMethod.StripeConnect,
                         InitiatedBy = request.InitiatedBy
                     });
+                    if (disbursement.Status == DisbursementStatus.PaymentUnknown)
+                    {
+                        // May have been paid: never retried by this batch, reported for checking.
+                        result.DisbursementIds.Add(disbursement.Id);
+                        NeedsAttention(result, statement.Id, disbursement.Id, statement.ProviderNPI, disbursement.ErrorMessage!);
+                        continue;
+                    }
                     result.DisbursementIds.Add(disbursement.Id);
                     result.DisbursementsInitiated++;
                     result.TotalAmount += disbursement.Amount;
                 }
                 else if (method == DisbursementMethod.NachaCredit)
                 {
+                    // The releasing user passed payments:approve and separation of duties
+                    // (above) for every statement in the batch: only now are the full
+                    // numbers read, with capitation-service's own token.
+                    var full = await _bankAccounts.GetForDisbursementAsync(statement.TenantId, statement.ProviderNPI);
+                    if (!full.Found)
+                    {
+                        NeedsAttention(result, statement.Id, null, statement.ProviderNPI, full.Reason!);
+                        continue;
+                    }
+                    var payee = full.Account!;
+
                     // Collect for NACHA batch
                     var disbursement = new CapitationDisbursement
                     {
@@ -243,29 +412,47 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                         ProviderName = statement.ProviderName,
                         Amount = statement.NetPayable,
                         Method = DisbursementMethod.NachaCredit,
-                        Status = DisbursementStatus.Pending,
-                        RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
-                        AccountNumberLast4 = bankAccount.AccountNumberLast4,
+                        Status = DisbursementStatus.Releasing,
+                        ReleaseClaimId = claimId,
+                        ReleaseClaimedAt = claimedAt,
+                        ReleasedBy = request.InitiatedBy,
+                        RoutingNumberLast4 = payee.RoutingNumberLast4 ?? bankAccount.RoutingNumberLast4,
+                        AccountNumberLast4 = payee.AccountNumberLast4 ?? bankAccount.AccountNumberLast4,
                         InitiatedBy = request.InitiatedBy
                     };
-                    disbursement = await _disbursementRepository.CreateAsync(disbursement);
+
+                    // Approved to PaymentInitiated as one conditional write: a statement
+                    // another release is already paying is left out of this file.
+                    if (!await _statementRepository.TryStartPaymentAsync(statement.Id, disbursement.Id))
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Statement {statementId}: already being paid by another release; not included.");
+                        continue;
+                    }
+                    try
+                    {
+                        disbursement = await _disbursementRepository.CreateAsync(disbursement);
+                    }
+                    catch
+                    {
+                        await _statementRepository.UndoStartPaymentAsync(statement.Id, disbursement.Id);
+                        throw;
+                    }
                     nachaDisbursements.Add(disbursement);
 
                     nachaEntries.Add(new NachaCreditEntryDetail
                     {
-                        RoutingNumber = bankAccount.RoutingNumber!,
-                        AccountNumber = bankAccount.AccountNumber!,
-                        AccountType = MapAccountType(bankAccount.AccountType),
+                        RoutingNumber = payee.RoutingNumber!,
+                        AccountNumber = payee.AccountNumber!,
+                        AccountType = MapAccountType(payee.AccountType),
                         Amount = statement.NetPayable,
                         ProviderNpi = statement.ProviderNPI,
-                        IndividualName = bankAccount.AccountHolderName ?? statement.ProviderName,
+                        IndividualName = payee.AccountHolderName ?? statement.ProviderName,
                         IndividualId = statement.ProviderNPI
                     });
 
-                    // Update statement status
                     statement.Status = CapitationStatementStatus.PaymentInitiated;
                     statement.EftDisbursementId = disbursement.Id;
-                    await _statementRepository.UpdateAsync(statement);
 
                     result.DisbursementIds.Add(disbursement.Id);
                     result.DisbursementsInitiated++;
@@ -285,7 +472,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     result.TotalAmount += disbursement.Amount;
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not SeparationOfDutiesException)
             {
                 result.Errors++;
                 result.ErrorMessages.Add($"Statement {statementId}: {ex.Message}");
@@ -293,35 +480,28 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             }
         }
 
-        // Generate NACHA credit file if there are NACHA entries
+        // Build the NACHA credit file and send it straight to the bank. The
+        // disbursements are Submitted only once the bank has it; otherwise they
+        // await retrieval (file held encrypted) or stay Pending (nothing held).
         if (nachaEntries.Count > 0)
         {
-            var nachaOptions = BuildNachaCreditOptionsFromConfig();
-            var nachaResult = _nachaCreditFileService.GenerateNachaCreditFile(nachaEntries, nachaOptions);
-            result.NachaFile = nachaResult;
-
-            // Update NACHA disbursements with file reference, trace numbers, mark as submitted
-            for (int i = 0; i < nachaDisbursements.Count; i++)
-            {
-                var disbursement = nachaDisbursements[i];
-                disbursement.NachaFileReference = nachaResult.FileReference;
-                disbursement.Status = DisbursementStatus.Submitted;
-                disbursement.SubmittedAt = DateTime.UtcNow;
-                disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-                disbursement.TraceNumber = nachaEntries[i].TraceNumber;
-                await _disbursementRepository.UpdateAsync(disbursement);
-            }
+            result.NachaFile = await SendNachaFileAsync(
+                nachaEntries, nachaDisbursements, request.InitiatedBy ?? string.Empty, request.CapitationRunId, claimId);
         }
 
         _logger.LogInformation(
-            "Batch disbursement: {Initiated}/{Total} disbursements initiated, {Skipped} skipped, {Errors} errors, ${Amount:N2} total",
-            result.DisbursementsInitiated, result.TotalStatements, result.Skipped, result.Errors, result.TotalAmount);
+            "Batch disbursement: {Initiated}/{Total} disbursements initiated, {Skipped} skipped, {Errors} errors " +
+            "({NeedsAttention} need attention), ${Amount:N2} total",
+            result.DisbursementsInitiated, result.TotalStatements, result.Skipped, result.Errors, result.NeedsAttention.Count,
+            result.TotalAmount);
 
         return result;
     }
 
-    public async Task<NachaCreditFileResult> GenerateNachaCreditFileAsync()
+    public async Task<NachaCreditFileResult> GenerateNachaCreditFileAsync(string releasedBy)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
         var pendingDisbursements = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.Pending))
             .Where(d => d.Method == DisbursementMethod.NachaCredit)
             .ToList();
@@ -329,58 +509,563 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         if (pendingDisbursements.Count == 0)
             throw new InvalidOperationException("No pending NACHA credit disbursements to process");
 
-        var entries = new List<NachaCreditEntryDetail>();
-        var includedDisbursements = new List<CapitationDisbursement>();
+        // Generating the file is what sends the money. Maker-checker before any of it:
+        // if the releasing user prepared any statement in the file, no file is generated.
+        var checkedStatements = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var statementId in pendingDisbursements.Select(d => d.StatementId).Distinct())
+        {
+            var statement = await _statementRepository.GetByIdAsync(statementId);
+            if (statement != null)
+            {
+                await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, releasedBy, PaymentAction.Release);
+                checkedStatements.Add(statementId);
+            }
+            else
+                _logger.LogWarning("Separation of duties not checked for statement {StatementId}: statement not found", statementId);
+        }
 
+        // Claim the disbursements before anything is built: Pending to Releasing,
+        // one conditional write each. A concurrent release gets none of these, so
+        // the same credit can never be in two files at the bank.
+        var claimId = NewClaimId();
+        var claimedAt = DateTime.UtcNow;
+        var claimed = new List<CapitationDisbursement>();
         foreach (var disbursement in pendingDisbursements)
         {
-            var bankAccount = await FetchProviderBankAccountAsync(disbursement.ProviderNPI);
-            if (bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
-            {
-                _logger.LogWarning("Skipping disbursement {DisbursementId}: missing bank account for provider {NPI}",
-                    disbursement.Id, disbursement.ProviderNPI);
+            if (!await _disbursementRepository.TryClaimForReleaseAsync(disbursement.Id, claimId, claimedAt, releasedBy))
                 continue;
-            }
+            disbursement.Status = DisbursementStatus.Releasing;
+            disbursement.ReleaseClaimId = claimId;
+            disbursement.ReleaseClaimedAt = claimedAt;
+            disbursement.ReleasedBy = releasedBy;
+            claimed.Add(disbursement);
+        }
+        if (claimed.Count == 0)
+            throw new PaymentReleaseConflictException(
+                "The pending NACHA credit disbursements are already being released by another request; nothing was sent.");
 
-            entries.Add(new NachaCreditEntryDetail
+        var entries = new List<NachaCreditEntryDetail>();
+        var includedDisbursements = new List<CapitationDisbursement>();
+        var needsAttention = new List<DisbursementAttentionItem>();
+
+        // Only now, with the release checks passed, are the full numbers read
+        // (capitation-service's own token, never the releasing user's).
+        try
+        {
+            foreach (var disbursement in claimed)
             {
-                RoutingNumber = bankAccount.RoutingNumber,
-                AccountNumber = bankAccount.AccountNumber,
-                AccountType = MapAccountType(bankAccount.AccountType),
-                Amount = disbursement.Amount,
-                ProviderNpi = disbursement.ProviderNPI,
-                IndividualName = bankAccount.AccountHolderName ?? disbursement.ProviderName,
-                IndividualId = disbursement.ProviderNPI
-            });
-            includedDisbursements.Add(disbursement);
+                string? reason = null;
+                ProviderBankAccountDto? payee = null;
+                if (!checkedStatements.Contains(disbursement.StatementId))
+                {
+                    reason = $"Statement {disbursement.StatementId} was not found, so separation of duties cannot be checked. Needs attention.";
+                }
+                else
+                {
+                    var lookup = await _bankAccounts.GetForDisbursementAsync(disbursement.TenantId, disbursement.ProviderNPI);
+                    if (lookup.Found) payee = lookup.Account;
+                    else reason = lookup.Reason;
+                }
+
+                if (payee == null)
+                {
+                    reason ??= "Provider bank details unavailable. Needs attention.";
+                    needsAttention.Add(new DisbursementAttentionItem
+                    {
+                        DisbursementId = disbursement.Id,
+                        StatementId = disbursement.StatementId,
+                        ProviderNPI = disbursement.ProviderNPI,
+                        Reason = reason
+                    });
+                    // Back to Pending, with the reason on the record.
+                    await ReleaseClaimsAsync(new[] { disbursement }, claimId, reason);
+                    _logger.LogWarning("Disbursement {DisbursementId} for provider {NPI} left out of the NACHA file: needs attention",
+                        SanitizeForLog(disbursement.Id), SanitizeForLog(disbursement.ProviderNPI));
+                    continue;
+                }
+
+                // The masked summary shows the last 4 of the account actually paid.
+                disbursement.RoutingNumberLast4 = payee.RoutingNumberLast4 ?? Last4(payee.RoutingNumber) ?? disbursement.RoutingNumberLast4;
+                disbursement.AccountNumberLast4 = payee.AccountNumberLast4 ?? Last4(payee.AccountNumber) ?? disbursement.AccountNumberLast4;
+                entries.Add(new NachaCreditEntryDetail
+                {
+                    RoutingNumber = payee.RoutingNumber!,
+                    AccountNumber = payee.AccountNumber!,
+                    AccountType = MapAccountType(payee.AccountType),
+                    Amount = disbursement.Amount,
+                    ProviderNpi = disbursement.ProviderNPI,
+                    IndividualName = payee.AccountHolderName ?? disbursement.ProviderName,
+                    IndividualId = disbursement.ProviderNPI
+                });
+                includedDisbursements.Add(disbursement);
+            }
+        }
+        catch
+        {
+            // Nothing was built or sent: every disbursement this release still holds goes back.
+            await ReleaseClaimsAsync(claimed.Where(d => d.Status == DisbursementStatus.Releasing), claimId,
+                "The NACHA release failed before a file was built; back to Pending for the next release.");
+            throw;
         }
 
         if (entries.Count == 0)
-            throw new InvalidOperationException("No disbursements with valid bank accounts to include in NACHA credit file");
+            throw new InvalidOperationException(
+                "No disbursements with approved bank accounts to include in NACHA credit file. Needs attention: " +
+                string.Join(" | ", needsAttention.Select(a => $"{a.DisbursementId}: {a.Reason}")));
 
-        var nachaOptions = BuildNachaCreditOptionsFromConfig();
-        var result = _nachaCreditFileService.GenerateNachaCreditFile(entries, nachaOptions);
+        var result = await SendNachaFileAsync(entries, includedDisbursements, releasedBy, runId: null, claimId);
+        result.NeedsAttention = needsAttention;
+        return result;
+    }
 
-        for (int i = 0; i < includedDisbursements.Count; i++)
+    /// <summary>
+    /// Generates the credit file, hands it to the dispatcher (bank SFTP, or
+    /// held encrypted for retrieval), updates the disbursements to match what
+    /// happened, and returns the masked summary. The file content never leaves
+    /// this method.
+    /// </summary>
+    private static string NewClaimId() => Guid.NewGuid().ToString("N");
+
+    /// <summary>Releasing (under this claim) back to Pending: nothing of theirs was sent.</summary>
+    private async Task ReleaseClaimsAsync(IEnumerable<CapitationDisbursement> disbursements, string claimId, string reason)
+    {
+        foreach (var disbursement in disbursements.ToList())
         {
-            var disbursement = includedDisbursements[i];
-            disbursement.NachaFileReference = result.FileReference;
-            disbursement.Status = DisbursementStatus.Submitted;
-            disbursement.SubmittedAt = DateTime.UtcNow;
-            disbursement.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-            disbursement.TraceNumber = entries[i].TraceNumber;
+            try
+            {
+                await _disbursementRepository.ReleaseClaimAsync(disbursement.Id, claimId, reason);
+                disbursement.Status = DisbursementStatus.Pending;
+                disbursement.ReleaseClaimId = null;
+                disbursement.ReleaseClaimedAt = null;
+                disbursement.ReleasedBy = null;
+                disbursement.ErrorMessage = reason;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Disbursement {DisbursementId} could not be released from NACHA release {ClaimId}; it stays Releasing and needs attention",
+                    SanitizeForLog(disbursement.Id), claimId);
+            }
+        }
+    }
+
+    private async Task<NachaCreditFileResult> SendNachaFileAsync(
+        List<NachaCreditEntryDetail> entries, List<CapitationDisbursement> disbursements, string releasedBy, string? runId, string claimId)
+    {
+        // Repositories stamp the token tenant on every disbursement they write or read.
+        var tenants = disbursements.Select(d => d.TenantId).Where(t => !string.IsNullOrEmpty(t)).Distinct().ToList();
+        if (tenants.Count > 1)
+            throw new InvalidOperationException("A NACHA credit file must hold disbursements of exactly one tenant.");
+        var tenantId = tenants.SingleOrDefault() ?? string.Empty;
+
+        GeneratedNachaCreditFile file;
+        NachaFileFacts facts;
+        try
+        {
+            file = _nachaCreditFileService.GenerateNachaCreditFile(entries, BuildNachaCreditOptionsFromConfig());
+            facts = NachaFileFacts.From(file.FileContent);
+        }
+        catch
+        {
+            await ReleaseClaimsAsync(disbursements, claimId,
+                "The NACHA credit file could not be built; nothing was sent. Back to Pending for the next release.");
+            throw;
+        }
+
+        NachaDispatchOutcome outcome;
+        try
+        {
+            outcome = await _dispatcher.DispatchAsync(new NachaTransmissionRequest
+            {
+                TenantId = tenantId,
+                FileReference = file.FileReference,
+                FileName = file.FileName,
+                Content = file.FileContent,
+                RunId = runId,
+                BatchId = file.FileReference,
+                TransmittedBy = releasedBy,
+            });
+        }
+        catch (Exception ex)
+        {
+            // The dispatcher answers every transmission failure with an outcome; an
+            // exception here means it is not known whether the bank got the file.
+            // The disbursements stay Releasing (never back to Pending, which could
+            // pay them again) until someone checks with the bank.
+            _logger.LogCritical(ex,
+                "NACHA credit file {FileReference} (release {ClaimId}): delivery to the bank is unknown; its {Count} disbursements " +
+                "stay Releasing and must be checked with the bank before anything is re-sent",
+                file.FileReference, claimId, disbursements.Count);
+            throw;
+        }
+        finally
+        {
+            file.FileContent = string.Empty;
+        }
+
+        var now = DateTime.UtcNow;
+        var result = new NachaCreditFileResult
+        {
+            FileReference = file.FileReference,
+            FileName = file.FileName,
+            EntryCount = file.EntryCount,
+            TotalAmount = file.TotalAmount,
+            TotalDebitAmount = facts.TotalDebitAmount,
+            TotalCreditAmount = facts.TotalCreditAmount,
+            GeneratedAt = file.GeneratedAt,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        for (int i = 0; i < disbursements.Count; i++)
+        {
+            var disbursement = disbursements[i];
+            // Who released the file, kept with each disbursement: the releaser
+            // check still holds once the held file has expired.
+            disbursement.ReleasedBy = releasedBy;
+            switch (outcome.Status)
+            {
+                case NachaTransmissionStatus.Transmitted:
+                    disbursement.NachaFileReference = file.FileReference;
+                    disbursement.TraceNumber = entries[i].TraceNumber;
+                    disbursement.Status = DisbursementStatus.Submitted;
+                    disbursement.SubmittedAt = now;
+                    disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    disbursement.ErrorMessage = null;
+                    break;
+                case NachaTransmissionStatus.DeliveryUnknown:
+                    // It may be at the bank: never back to Pending (that would pay it again).
+                    disbursement.NachaFileReference = file.FileReference;
+                    disbursement.TraceNumber = entries[i].TraceNumber;
+                    disbursement.Status = DisbursementStatus.DeliveryUnknown;
+                    disbursement.ErrorMessage = DeliveryUnknownMessage(file.FileReference, outcome.Reason);
+                    break;
+                case NachaTransmissionStatus.AwaitingRetrieval:
+                    disbursement.NachaFileReference = file.FileReference;
+                    disbursement.TraceNumber = entries[i].TraceNumber;
+                    disbursement.Status = DisbursementStatus.AwaitingRetrieval;
+                    disbursement.ErrorMessage =
+                        $"NACHA file {file.FileReference} was not delivered to the bank: {outcome.Reason} It is held encrypted for 7 days: " +
+                        "a platform admin must retrieve it, or another user with payments:approve must retry it.";
+                    break;
+                default:
+                    // Nothing was sent or held: back to Pending for the next file.
+                    disbursement.NachaFileReference = null;
+                    disbursement.TraceNumber = null;
+                    disbursement.Status = DisbursementStatus.Pending;
+                    disbursement.ReleaseClaimId = null;
+                    disbursement.ReleaseClaimedAt = null;
+                    disbursement.ReleasedBy = null;
+                    disbursement.ErrorMessage = outcome.Reason;
+                    break;
+            }
             await _disbursementRepository.UpdateAsync(disbursement);
+
+            var summary = Summary(disbursement);
+            summary.ProviderName = entries[i].IndividualName;
+            result.Entries.Add(summary);
         }
 
         return result;
     }
+
+    public Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync(string tenantId)
+        => _dispatcher.ListHeldAsync(tenantId);
+
+    public async Task<NachaCreditFileResult> RetryNachaTransmissionAsync(string tenantId, string fileReference, NachaActor actor)
+    {
+        var disbursements = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.AwaitingRetrieval))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        NachaDispatchOutcome outcome;
+        try
+        {
+            outcome = await _dispatcher.RetryAsync(tenantId, fileReference, actor);
+        }
+        catch (Exception ex) when (ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException)
+        {
+            // The held file is gone: back to Pending, so the next release builds a new file.
+            foreach (var disbursement in disbursements)
+            {
+                disbursement.Status = DisbursementStatus.Pending;
+                disbursement.NachaFileReference = null;
+                disbursement.TraceNumber = null;
+                disbursement.ReleasedBy = null;
+                disbursement.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
+            throw;
+        }
+
+        var held = await _dispatcher.GetHeldAsync(tenantId, fileReference);
+        var result = new NachaCreditFileResult
+        {
+            FileReference = fileReference,
+            FileName = held?.FileName ?? string.Empty,
+            EntryCount = held?.EntryCount ?? disbursements.Count,
+            TotalAmount = disbursements.Sum(d => d.Amount),
+            TotalDebitAmount = held?.TotalDebitAmount ?? 0,
+            TotalCreditAmount = held?.TotalCreditAmount ?? 0,
+            GeneratedAt = held?.CreatedAt ?? DateTime.UtcNow,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        var now = DateTime.UtcNow;
+        foreach (var disbursement in disbursements)
+        {
+            if (outcome.Status == NachaTransmissionStatus.Transmitted)
+            {
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt = now;
+                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                disbursement.ErrorMessage = null;
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
+            else if (outcome.Status == NachaTransmissionStatus.DeliveryUnknown)
+            {
+                disbursement.Status = DisbursementStatus.DeliveryUnknown;
+                disbursement.ErrorMessage = DeliveryUnknownMessage(fileReference, outcome.Reason);
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
+            result.Entries.Add(Summary(disbursement));
+        }
+
+        return result;
+    }
+
+    private static string DeliveryUnknownMessage(string fileReference, string? reason)
+        => $"NACHA file {fileReference} may have reached the bank: {reason} Do not send it again: verify with the bank, then " +
+           "another user with payments:approve records whether the bank received it.";
+
+    public async Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(
+        string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason)
+    {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
+        var disbursements = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.DeliveryUnknown))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        var fileStillHeld = true;
+        try
+        {
+            // Checks the user (not a service, not the releaser), the reason and the
+            // file's state, and records the answer on the held file.
+            await _dispatcher.ResolveDeliveryUnknownAsync(tenantId, fileReference, actor, bankReceived, reason);
+        }
+        catch (Exception ex) when ((ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException) && disbursements.Count > 0)
+        {
+            // The held file is gone (7 days); the disbursements still wait for the answer.
+            // The same checks the dispatcher makes on a held file, from the
+            // releaser recorded on the disbursements.
+            if (actor.IsService)
+                throw new SeparationOfDutiesException(
+                    "Separation of duties: recording whether the bank received a NACHA file needs a user with payments:approve, not a service token");
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("A reason (what the bank said) is required.");
+            if (disbursements.Any(d => string.IsNullOrEmpty(d.ReleasedBy)))
+                throw new SeparationOfDutiesException(
+                    $"Separation of duties: the user who released NACHA file {fileReference} is not recorded, so who may record the bank's " +
+                    "answer cannot be checked. Reconcile it by hand.");
+            if (disbursements.Any(d => string.Equals(d.ReleasedBy, actor.UserId, StringComparison.OrdinalIgnoreCase)))
+                throw new SeparationOfDutiesException(
+                    "Separation of duties: you released this NACHA file, so you cannot record whether the bank received it.");
+            fileStillHeld = false;
+            _logger.LogWarning(
+                "AUDIT NACHA file {FileReference}: held file expired; {User} recorded that the bank {Answer} it (released by {ReleasedBy}): {Reason}",
+                SanitizeForLog(fileReference), SanitizeForLog(actor.UserId), bankReceived ? "received" : "did not receive",
+                SanitizeForLog(string.Join(",", disbursements.Select(d => d.ReleasedBy).Distinct())), SanitizeForLog(reason));
+        }
+
+        var now = DateTime.UtcNow;
+        var status = bankReceived ? DisbursementStatus.Submitted
+            : fileStillHeld ? DisbursementStatus.AwaitingRetrieval : DisbursementStatus.Pending;
+        foreach (var disbursement in disbursements)
+        {
+            disbursement.Status = status;
+            switch (status)
+            {
+                case DisbursementStatus.Submitted:
+                    disbursement.SubmittedAt = now;
+                    disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    disbursement.ErrorMessage = $"The bank confirmed it received NACHA file {fileReference} (recorded by {actor.UserId}).";
+                    break;
+                case DisbursementStatus.AwaitingRetrieval:
+                    disbursement.ErrorMessage =
+                        $"NACHA file {fileReference}: the bank confirmed it did not receive it. It is held encrypted: a platform admin " +
+                        "must retrieve it, or another user with payments:approve must retry it.";
+                    break;
+                default:
+                    disbursement.NachaFileReference = null;
+                    disbursement.TraceNumber = null;
+                    disbursement.ReleaseClaimId = null;
+                    disbursement.ReleaseClaimedAt = null;
+                    disbursement.ReleasedBy = null;
+                    disbursement.ErrorMessage = $"The bank confirmed it did not receive NACHA file {fileReference}, which has expired; back to Pending for the next file.";
+                    break;
+            }
+            await _disbursementRepository.UpdateAsync(disbursement);
+        }
+
+        return new NachaDeliveryResolutionResult
+        {
+            FileReference = fileReference,
+            BankReceived = bankReceived,
+            PaymentStatus = status.ToString(),
+            PaymentsUpdated = disbursements.Count,
+        };
+    }
+
+    public async Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string tenantId, string fileReference, NachaActor actor, string reason)
+    {
+        var file = await _dispatcher.RetrieveAsync(tenantId, fileReference, actor, reason);
+        if (file.FirstRetrieval)
+        {
+            // The platform admin now delivers it by hand: its disbursements count as submitted.
+            var now = DateTime.UtcNow;
+            foreach (var disbursement in (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.AwaitingRetrieval))
+                     .Where(d => d.NachaFileReference == fileReference))
+            {
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt = now;
+                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                disbursement.ErrorMessage = $"NACHA file retrieved by platform admin {actor.UserId} for manual delivery to the bank.";
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
+        }
+        return file;
+    }
+
+    /// <summary>How long a disbursement may be Releasing before it counts as stuck (Payments:StuckReleasingMinutes, default 30, at least 5).</summary>
+    private TimeSpan StuckReleasingAge
+        => TimeSpan.FromMinutes(Math.Max(5, _configuration.GetValue("Payments:StuckReleasingMinutes", 30)));
+
+    public async Task<StuckDisbursements> ListStuckDisbursementsAsync(string tenantId, TimeSpan releasingOlderThan)
+    {
+        var cutoff = DateTime.UtcNow - releasingOlderThan;
+        var held = await _dispatcher.ListHeldAsync(tenantId);
+        return new StuckDisbursements
+        {
+            ReleasingOlderThanMinutes = (int)releasingOlderThan.TotalMinutes,
+            Releasing = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.Releasing))
+                .Where(d => (d.ReleaseClaimedAt ?? d.LastUpdatedAt) <= cutoff).ToList(),
+            DeliveryUnknown = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.DeliveryUnknown)).ToList(),
+            PaymentUnknown = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.PaymentUnknown)).ToList(),
+            TransmittingHeldFiles = held
+                .Where(f => f.Status == NachaHeldFileStatus.Transmitting && (f.LastAttemptAt ?? f.CreatedAt) <= cutoff)
+                .Select(NachaHeldFileView.From).ToList(),
+        };
+    }
+
+    public async Task<CapitationDisbursement> ResolveStuckDisbursementAsync(
+        string id, NachaActor actor, bool sent, string reason, string? stripeTransferId)
+    {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+        if (actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: resolving a stuck payment needs a user with payments:approve, not a service token");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason (what the bank or Stripe said) is required.");
+        reason = SanitizeForLog(reason.Trim());
+        if (reason.Length > 500) reason = reason[..500];
+
+        var disbursement = await _disbursementRepository.GetByIdAsync(id)
+            ?? throw new KeyNotFoundException($"Disbursement {id} not found");
+        if (disbursement.Status is not (DisbursementStatus.Releasing or DisbursementStatus.PaymentUnknown))
+            throw new InvalidOperationException(disbursement.Status == DisbursementStatus.DeliveryUnknown
+                ? $"Disbursement {id} is DeliveryUnknown: record the bank's answer on its NACHA file (resolve-delivery)."
+                : $"Disbursement {id} is {disbursement.Status}, not stuck.");
+        if (disbursement.Status == DisbursementStatus.Releasing
+            && (disbursement.ReleaseClaimedAt ?? disbursement.LastUpdatedAt) > DateTime.UtcNow - StuckReleasingAge)
+            throw new InvalidOperationException(
+                $"Disbursement {id} has been Releasing for less than {(int)StuckReleasingAge.TotalMinutes} minutes; the release may still be running.");
+
+        var releaser = disbursement.ReleasedBy;
+        if (string.IsNullOrEmpty(releaser))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: who released disbursement {id} is not recorded, so who may resolve it cannot be checked. Reconcile it by hand.");
+        if (string.Equals(releaser, actor.UserId, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                "Separation of duties: you released this payment, so you cannot record whether it went out. Another user with payments:approve must.");
+
+        var previous = disbursement.Status;
+        var now = DateTime.UtcNow;
+        if (previous == DisbursementStatus.Releasing && !sent)
+        {
+            // Back to Pending only if it is still held by the same stuck release (conditional write).
+            await _disbursementRepository.ReleaseClaimAsync(disbursement.Id, disbursement.ReleaseClaimId ?? string.Empty,
+                $"Not sent (checked with the bank by {actor.UserId}): {reason}. Back to Pending for the next file.");
+            disbursement = await _disbursementRepository.GetByIdAsync(id) ?? disbursement;
+            if (disbursement.Status != DisbursementStatus.Pending)
+                throw new InvalidOperationException($"Disbursement {id} changed while it was being resolved; it is {disbursement.Status}.");
+        }
+        else
+        {
+            if (previous == DisbursementStatus.PaymentUnknown && sent)
+            {
+                if (disbursement.Method == DisbursementMethod.StripeConnect && string.IsNullOrWhiteSpace(stripeTransferId))
+                    throw new ArgumentException("stripeTransferId (the transfer Stripe made) is required for a Stripe disbursement that went out.");
+                if (!string.IsNullOrWhiteSpace(stripeTransferId))
+                    disbursement.StripeTransferId = stripeTransferId.Trim();
+            }
+            if (previous == DisbursementStatus.PaymentUnknown
+                && !await _statementRepository.ResolvePaymentUnknownAsync(disbursement.StatementId, disbursement.Id, paid: sent))
+                _logger.LogWarning("Statement {StatementId} of disbursement {DisbursementId} was not PaymentUnknown for it; left as it is",
+                    SanitizeForLog(disbursement.StatementId), SanitizeForLog(disbursement.Id));
+
+            if (sent)
+            {
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt = now;
+                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                disbursement.ErrorMessage = $"Sent (confirmed by {actor.UserId}): {reason}";
+            }
+            else
+            {
+                disbursement.Status = DisbursementStatus.Failed;
+                disbursement.ErrorMessage = $"Not sent (confirmed with Stripe by {actor.UserId}): {reason}";
+            }
+            disbursement = await _disbursementRepository.UpdateAsync(disbursement);
+        }
+
+        _logger.LogWarning(
+            "AUDIT stuck capitation disbursement {DisbursementId} (statement {StatementNumber}, {Method}, released by {ReleasedBy}) resolved by {User}: " +
+            "was {Previous}, the payment {Answer}; now {Status}. Reason: {Reason}",
+            disbursement.Id, SanitizeForLog(disbursement.StatementNumber), disbursement.Method, SanitizeForLog(releaser), SanitizeForLog(actor.UserId),
+            previous, sent ? "went out" : "did not go out", disbursement.Status, reason);
+        return disbursement;
+    }
+
+    private static string? Last4(string? number)
+        => string.IsNullOrEmpty(number) ? null : number.Length <= 4 ? number : number[^4..];
+
+    private static NachaCreditEntrySummary Summary(CapitationDisbursement d) => new()
+    {
+        DisbursementId = d.Id,
+        StatementId = d.StatementId,
+        ProviderNPI = d.ProviderNPI,
+        ProviderName = d.ProviderName,
+        RoutingNumberLast4 = d.RoutingNumberLast4,
+        AccountNumberLast4 = d.AccountNumberLast4,
+        Amount = d.Amount,
+        TraceNumber = d.TraceNumber,
+    };
 
     public async Task<CapitationDisbursement> ProcessReturnAsync(ProcessReturnRequest request)
     {
         var disbursement = await _disbursementRepository.GetByIdAsync(request.DisbursementId)
             ?? throw new InvalidOperationException($"Disbursement {request.DisbursementId} not found");
 
-        if (disbursement.Status != DisbursementStatus.Submitted && disbursement.Status != DisbursementStatus.Processing)
+        // A Stripe transfer is settled when it is created, and can still be reversed.
+        var reversible = disbursement.Status is DisbursementStatus.Submitted or DisbursementStatus.Processing
+            || (disbursement.Status == DisbursementStatus.Settled && disbursement.Method == DisbursementMethod.StripeConnect);
+        if (!reversible)
             throw new InvalidOperationException($"Cannot process return for disbursement in {disbursement.Status} state");
 
         disbursement.Status = DisbursementStatus.Returned;
@@ -463,28 +1148,70 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         if (!webhookResult.Handled || string.IsNullOrEmpty(webhookResult.TransferId))
             return;
 
-        // Find the disbursement by Stripe Transfer ID
-        var disbursements = await _disbursementRepository.GetByStripeTransferIdAsync(webhookResult.TransferId);
-        var disbursement = disbursements.FirstOrDefault();
+        // Settlement comes from the transfer events, which carry our metadata: a
+        // transfer to the provider's connected account is the payment (final
+        // unless reversed). Payout events (the connected account paying out to
+        // the provider's bank) carry no CHO metadata, cannot be matched to a
+        // tenant or to the transfers they include without further Stripe calls,
+        // and are acknowledged only (so Stripe stops retrying).
+        if (webhookResult.EventType is "payout_paid" or "payout_failed")
+        {
+            _logger.LogInformation(
+                "Stripe {EventType} event for payout {PayoutId}: payouts are not matched to disbursements (settlement comes from transfer events); acknowledged",
+                SanitizeForLog(webhookResult.EventType), SanitizeForLog(webhookResult.TransferId));
+            return;
+        }
+
+        // The webhook is anonymous (authenticated by the Stripe signature just
+        // verified), so the tenant comes from the signed event: the tenant_id we
+        // wrote into the transfer's metadata. An event without one (a transfer
+        // created before transfers carried it) cannot be matched to a tenant: it
+        // is acknowledged, so Stripe stops retrying, and logged for reconciliation.
+        if (string.IsNullOrEmpty(webhookResult.TenantId))
+        {
+            _logger.LogWarning(
+                "Stripe {EventType} event for {StripeObjectId} carries no tenant_id metadata; acknowledged but not processed. " +
+                "Reconcile the disbursement by hand",
+                SanitizeForLog(webhookResult.EventType), SanitizeForLog(webhookResult.TransferId));
+            return;
+        }
+        var http = _httpContextAccessor?.HttpContext
+            ?? throw new InvalidOperationException("Stripe webhook processed outside a request");
+        if (http.Items["TenantId"] is string existing && !string.Equals(existing, webhookResult.TenantId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Stripe event tenant does not match the request tenant");
+        http.Items["TenantId"] = webhookResult.TenantId;
+
+        // Find the disbursement by Stripe Transfer ID; one whose transfer outcome
+        // was unknown has no transfer id yet, and is found by the disbursement id
+        // the transfer carries.
+        var disbursement = (await _disbursementRepository.GetByStripeTransferIdAsync(webhookResult.TransferId)).FirstOrDefault();
+        if (disbursement == null && !string.IsNullOrEmpty(webhookResult.DisbursementId))
+        {
+            disbursement = await _disbursementRepository.GetByIdAsync(webhookResult.DisbursementId);
+            if (disbursement != null && disbursement.Method != DisbursementMethod.StripeConnect)
+                disbursement = null;
+        }
 
         if (disbursement == null)
         {
-            _logger.LogWarning("No disbursement found for Transfer {TransferId}", webhookResult.TransferId);
+            if (!string.IsNullOrEmpty(webhookResult.DisbursementId))
+                // Our transfer, not recorded yet (the event can arrive before the
+                // disbursement is written): fail, so Stripe delivers it again.
+                throw new InvalidOperationException(
+                    $"Transfer {webhookResult.TransferId} for disbursement {webhookResult.DisbursementId} is not recorded yet; Stripe will retry");
+            _logger.LogWarning("No disbursement found for Transfer {TransferId}", SanitizeForLog(webhookResult.TransferId));
             return;
         }
 
         switch (webhookResult.EventType)
         {
             case "transfer_created":
-                // Transfer created — already in Submitted state, no action needed
+                await SettleFromTransferAsync(disbursement, webhookResult.TransferId);
                 break;
 
-            case "payout_paid":
-                await SettleDisbursementAsync(disbursement.Id);
-                break;
-
-            case "payout_failed":
             case "transfer_reversed":
+                if (disbursement.Status == DisbursementStatus.Returned)
+                    return; // the same event again
                 await ProcessReturnAsync(new ProcessReturnRequest
                 {
                     DisbursementId = disbursement.Id,
@@ -492,6 +1219,40 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     ReturnReason = webhookResult.FailureMessage
                 });
                 break;
+        }
+    }
+
+    /// <summary>
+    /// The transfer exists at Stripe: the provider's connected account has the
+    /// money. A disbursement whose outcome was unknown is now known to be paid.
+    /// The same event delivered again changes nothing.
+    /// </summary>
+    private async Task SettleFromTransferAsync(CapitationDisbursement disbursement, string transferId)
+    {
+        switch (disbursement.Status)
+        {
+            case DisbursementStatus.Settled:
+                return;
+            case DisbursementStatus.PaymentUnknown:
+                disbursement.StripeTransferId = transferId;
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt ??= DateTime.UtcNow;
+                disbursement.ErrorMessage = $"Stripe confirmed transfer {transferId} (transfer.created).";
+                await _statementRepository.ResolvePaymentUnknownAsync(disbursement.StatementId, disbursement.Id, paid: true);
+                await _disbursementRepository.UpdateAsync(disbursement);
+                _logger.LogWarning("Disbursement {DisbursementId}: outcome was unknown; Stripe confirmed transfer {TransferId}",
+                    SanitizeForLog(disbursement.Id), SanitizeForLog(transferId));
+                await SettleDisbursementAsync(disbursement.Id);
+                return;
+            case DisbursementStatus.Submitted:
+            case DisbursementStatus.Processing:
+                await SettleDisbursementAsync(disbursement.Id);
+                return;
+            default:
+                _logger.LogCritical(
+                    "Stripe transfer {TransferId} exists for disbursement {DisbursementId}, which is {Status}; not settled. Reconcile by hand",
+                    SanitizeForLog(transferId), SanitizeForLog(disbursement.Id), disbursement.Status);
+                return;
         }
     }
 
@@ -536,29 +1297,66 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     // --- Private helpers ---
 
-    private async Task<ProviderBankAccountDto?> FetchProviderBankAccountAsync(string providerNpi)
+    /// <summary>
+    /// The provider's approved account, masked (no full numbers): EFT
+    /// enrollment, method, Stripe id and last 4. Null with the reason when
+    /// there is none or provider-service did not answer (needs attention).
+    /// </summary>
+    private async Task<(ProviderBankAccountDto? Account, string? Problem)> FetchProviderBankAccountAsync(string tenantId, string providerNpi)
     {
         try
         {
             var client = _httpClientFactory.CreateClient("ProviderService");
-            var response = await client.GetAsync($"/api/providers/npi/{providerNpi}/bank-account");
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/providers/npi/{Uri.EscapeDataString(providerNpi)}/bank-account");
+            // Names the statement's tenant for ChoOutboundTokenHandler: a
+            // disbursement with no inbound caller still carries a service token
+            // for it (provider-service requires one).
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            using var response = await client.SendAsync(request);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return (null, $"Provider {providerNpi} has no approved bank account in provider-service " +
+                              "(a pending change must be approved by a user with payments:approve). Needs attention.");
             if (!response.IsSuccessStatusCode)
-                return null;
+                return (null, $"provider-service answered {(int)response.StatusCode} {response.StatusCode} to the bank-account " +
+                              $"read for provider {providerNpi}. Needs attention.");
 
-            return await response.Content.ReadFromJsonAsync<ProviderBankAccountDto>(JsonOptions);
+            var account = await response.Content.ReadFromJsonAsync<ProviderBankAccountDto>(JsonOptions);
+            return account == null
+                ? (null, $"provider-service returned no bank account for provider {providerNpi}. Needs attention.")
+                : (account, null);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch bank account for provider {NPI}", providerNpi);
-            return null;
+            _logger.LogWarning("Failed to fetch bank account for provider {NPI}: {Error}", SanitizeForLog(providerNpi), ex.GetType().Name);
+            return (null, $"The bank-account read for provider {providerNpi} from provider-service failed ({ex.GetType().Name}). Needs attention.");
         }
+    }
+
+    private void NeedsAttention(BatchDisbursementResult result, string? statementId, string? disbursementId, string providerNpi, string reason)
+    {
+        result.Errors++;
+        result.ErrorMessages.Add($"Statement {statementId}: {reason}");
+        result.NeedsAttention.Add(new DisbursementAttentionItem
+        {
+            StatementId = statementId,
+            DisbursementId = disbursementId,
+            ProviderNPI = providerNpi,
+            Reason = reason
+        });
+        _logger.LogWarning("Statement {StatementId} for provider {NPI} was not disbursed: needs attention",
+            SanitizeForLog(statementId), SanitizeForLog(providerNpi));
     }
 
     private static void ValidateBankAccountForMethod(ProviderBankAccountDto bankAccount, DisbursementMethod method, string providerNpi)
     {
         if (method == DisbursementMethod.NachaCredit)
         {
-            if (string.IsNullOrEmpty(bankAccount.RoutingNumber) || string.IsNullOrEmpty(bankAccount.AccountNumber))
+            // The masked read shows whether an account is on file (last 4); the
+            // full numbers are read when the NACHA file is generated.
+            var hasRouting = !string.IsNullOrEmpty(bankAccount.RoutingNumberLast4) || !string.IsNullOrEmpty(bankAccount.RoutingNumber);
+            var hasAccount = !string.IsNullOrEmpty(bankAccount.AccountNumberLast4) || !string.IsNullOrEmpty(bankAccount.AccountNumber);
+            if (!hasRouting || !hasAccount)
                 throw new InvalidOperationException(
                     $"NACHA credit requires routing and account numbers for provider {providerNpi}");
         }

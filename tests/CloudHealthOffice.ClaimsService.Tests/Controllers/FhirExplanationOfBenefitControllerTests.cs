@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Text.Json;
 using ClaimsService.Models;
@@ -23,7 +24,7 @@ public class FhirExplanationOfBenefitControllerTests : IClassFixture<ClaimsApiFa
     public FhirExplanationOfBenefitControllerTests(ClaimsApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
 
         // Reset both Returns configurations and received calls between

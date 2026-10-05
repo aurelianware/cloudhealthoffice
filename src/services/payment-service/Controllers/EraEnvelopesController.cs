@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Repositories;
+using PaymentService.Services;
 
 namespace PaymentService.Controllers;
 
@@ -53,7 +54,9 @@ public class EraEnvelopesController : ControllerBase
         var record = await _repository.GetByIdAsync(id);
         if (record == null)
             return NotFound(new { message = $"EraEnvelope {id} not found" });
-        return Content(record.EdiContent, "text/plain");
+        // Stored as generated; the response masks the BPR bank routing and
+        // account numbers (EdiBankNumberMasking).
+        return Content(EdiBankNumberMasking.MaskBpr(record.EdiContent), "text/plain");
     }
 
     /// <summary>

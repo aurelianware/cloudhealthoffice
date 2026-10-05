@@ -61,7 +61,7 @@ public sealed class ClaimDiagnosisMetadataEnricher : IClaimDiagnosisMetadataEnri
                 var normalizedCode = NormalizeCode(diagnosis.Code);
                 if (normalizedCode is not null)
                 {
-                    pendingDescriptions.Add(new PendingDiagnosisDescription(diagnosis, normalizedCode));
+                    pendingDescriptions.Add(new PendingDiagnosisDescription(diagnosis, normalizedCode, claim.TenantId));
                 }
             }
         }
@@ -76,12 +76,14 @@ public sealed class ClaimDiagnosisMetadataEnricher : IClaimDiagnosisMetadataEnri
             return;
         }
 
+        // Descriptions are global code data, looked up once per code; the
+        // tenant of the first claim that needs a code names the call so it
+        // carries a token even outside a request.
         var lookups = pendingDescriptions
-            .Select(x => x.Code)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
-                code => code,
-                code => _descriptionLookup.FindDescriptionAsync(code, ct),
+                group => group.Key,
+                group => _descriptionLookup.FindDescriptionAsync(group.Key, group.First().TenantId, ct),
                 StringComparer.OrdinalIgnoreCase);
 
         await Task.WhenAll(lookups.Values);
@@ -106,12 +108,17 @@ public sealed class ClaimDiagnosisMetadataEnricher : IClaimDiagnosisMetadataEnri
         return code.Trim().ToUpperInvariant();
     }
 
-    private sealed record PendingDiagnosisDescription(DiagnosisCode Diagnosis, string Code);
+    private sealed record PendingDiagnosisDescription(DiagnosisCode Diagnosis, string Code, string? TenantId);
 }
 
 public interface IDiagnosisDescriptionLookup
 {
-    Task<string?> FindDescriptionAsync(string? code, CancellationToken ct = default);
+    /// <summary>
+    /// Display text for an ICD-10 code. <paramref name="tenantId"/> is sent as
+    /// <c>X-Tenant-ID</c> so the shared outbound handler can mint a service
+    /// token when there is no inbound caller.
+    /// </summary>
+    Task<string?> FindDescriptionAsync(string? code, string? tenantId = null, CancellationToken ct = default);
 }
 
 public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
@@ -138,7 +145,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
         _logger = logger;
     }
 
-    public async Task<string?> FindDescriptionAsync(string? code, CancellationToken ct = default)
+    public async Task<string?> FindDescriptionAsync(string? code, string? tenantId = null, CancellationToken ct = default)
     {
         var normalizedCode = NormalizeCode(code);
         if (normalizedCode is null)
@@ -152,7 +159,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             return cached?.Description;
         }
 
-        var terminologyDescription = await TryFindTerminologyDescriptionAsync(normalizedCode, ct);
+        var terminologyDescription = await TryFindTerminologyDescriptionAsync(normalizedCode, tenantId, ct);
         if (!string.IsNullOrWhiteSpace(terminologyDescription))
         {
             Cache(cacheKey, terminologyDescription);
@@ -165,12 +172,12 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             return syntheticDescription;
         }
 
-        var referenceDataDescription = await TryFindReferenceDataDescriptionAsync(normalizedCode, ct);
+        var referenceDataDescription = await TryFindReferenceDataDescriptionAsync(normalizedCode, tenantId, ct);
         Cache(cacheKey, referenceDataDescription);
         return referenceDataDescription;
     }
 
-    private async Task<string?> TryFindTerminologyDescriptionAsync(string code, CancellationToken ct)
+    private async Task<string?> TryFindTerminologyDescriptionAsync(string code, string? tenantId, CancellationToken ct)
     {
         var timeoutMilliseconds = Math.Clamp(
             _configuration.GetValue<int?>("Services:TerminologyDisplayLookupTimeoutMilliseconds") ?? 750,
@@ -183,10 +190,12 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             timeout.CancelAfter(TimeSpan.FromMilliseconds(timeoutMilliseconds));
 
             var client = _httpClientFactory.CreateClient(UpstreamClientNames.TerminologyService);
-            var response = await client.GetFromJsonAsync<TerminologyCodeLookupResponse>(
+            var response = await GetJsonAsync<TerminologyCodeLookupResponse>(
+                client,
                 "fhir/CodeSystem/$lookup" +
                 $"?system={Uri.EscapeDataString(Icd10CmSystem)}" +
                 $"&code={Uri.EscapeDataString(code)}",
+                tenantId,
                 timeout.Token);
 
             return response is { Result: true } && !string.IsNullOrWhiteSpace(response.Display)
@@ -226,7 +235,7 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
         }
     }
 
-    private async Task<string?> TryFindReferenceDataDescriptionAsync(string code, CancellationToken ct)
+    private async Task<string?> TryFindReferenceDataDescriptionAsync(string code, string? tenantId, CancellationToken ct)
     {
         var timeoutMilliseconds = Math.Clamp(
             _configuration.GetValue<int?>("Services:ReferenceDataDisplayLookupTimeoutMilliseconds") ?? 750,
@@ -239,8 +248,10 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
             timeout.CancelAfter(TimeSpan.FromMilliseconds(timeoutMilliseconds));
 
             var client = _httpClientFactory.CreateClient(UpstreamClientNames.ReferenceDataService);
-            var response = await client.GetFromJsonAsync<ReferenceDataValidationResponse>(
+            var response = await GetJsonAsync<ReferenceDataValidationResponse>(
+                client,
                 $"api/ReferenceData/icd10/{Uri.EscapeDataString(code)}/validate",
+                tenantId,
                 timeout.Token);
 
             return string.IsNullOrWhiteSpace(response?.Description)
@@ -278,6 +289,23 @@ public sealed class DiagnosisDescriptionLookup : IDiagnosisDescriptionLookup
                 SanitizeForLog(code));
             return null;
         }
+    }
+
+    /// <summary>
+    /// GET + JSON read, naming the tenant in <c>X-Tenant-ID</c> when one is
+    /// known (same failure semantics as <c>GetFromJsonAsync</c>).
+    /// </summary>
+    private static async Task<T?> GetJsonAsync<T>(HttpClient client, string uri, string? tenantId, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (!string.IsNullOrWhiteSpace(tenantId))
+        {
+            request.Headers.Add("X-Tenant-ID", tenantId);
+        }
+
+        using var response = await client.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>(ct);
     }
 
     private void Cache(string cacheKey, string? description)
