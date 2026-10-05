@@ -84,7 +84,12 @@ is a recognised client. Recognition comes from **issuer configuration only**:
   token-service (the only holder of the `cho-workload` key) can produce a
   `wf-` identity, and only for the Kubernetes service account registered for it.
 - An issuer may not set both `AllowServiceRole` and `AllowWorkloadIdentity`
-  (startup error).
+  (startup error). `Kind` (`User` / `Service` / `Workload`) is the explicit
+  form; it may not contradict either flag, and an issuer name may appear only
+  once.
+- One issuer, one kind of actor: a `cho-workload` token without
+  `cho.workload`, or a `cho-internal` token without `cho.service`, is rejected
+  at authentication (401). Neither can be read as a user token.
 
 Why a dedicated issuer rather than `cho-internal`: the `cho-internal` private key
 is held by every service. A marker set for `cho-internal` tokens would be
@@ -266,10 +271,10 @@ Deleted, as recommended (the services already do this work):
 3. **Every CHO service** that a workflow calls (and, simplest, every service)
    adds a trusted issuer:
    ```json
-   { "Issuer": "cho-workload", "PublicKeyPem": "<token-service public key, same as cho-token-service>", "AllowWorkloadIdentity": true }
+   { "Issuer": "cho-workload", "PublicKeyPem": "<token-service public key, same as cho-token-service>", "Kind": "Workload" }
    ```
    e.g. `ChoAuth__Issuers__2__Issuer=cho-workload`,
-   `ChoAuth__Issuers__2__PublicKeyPem=…`, `ChoAuth__Issuers__2__AllowWorkloadIdentity=true`.
+   `ChoAuth__Issuers__2__PublicKeyPem=…`, `ChoAuth__Issuers__2__Kind=Workload`.
    Never set `AllowServiceRole` on it. When the token-service key rotates
    (`docs/security/portal-token-service.md`, "Rotation"), rotate `cho-workload`
    the same way (for example `cho-workload-2` alongside `cho-token-service-2`).

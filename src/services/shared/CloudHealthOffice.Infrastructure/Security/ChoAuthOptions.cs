@@ -11,8 +11,9 @@ namespace CloudHealthOffice.Infrastructure.Security;
 /// "ChoAuth": {
 ///   "Audience": "cho-api",
 ///   "Issuers": [
-///     { "Issuer": "cho-portal",   "PublicKeyPem": "..." },
-///     { "Issuer": "cho-internal", "PublicKeyPem": "...", "AllowServiceRole": true }
+///     { "Issuer": "cho-token-service", "PublicKeyPem": "...", "Kind": "User" },
+///     { "Issuer": "cho-internal",      "PublicKeyPem": "...", "Kind": "Service" },
+///     { "Issuer": "cho-workload",      "PublicKeyPem": "...", "Kind": "Workload" }
 ///   ],
 ///   "ServiceToken": { "Issuer": "cho-internal", "ClientId": "claims-service", "PrivateKeyPem": "..." }
 /// }
@@ -79,7 +80,22 @@ public sealed class ChoAuthOptions
                 throw new InvalidOperationException(
                     $"{SectionName} issuer '{issuer.Issuer}' sets both AllowServiceRole and AllowWorkloadIdentity. " +
                     "Workload tokens come from their own issuer (token-service's cho-workload).");
+
+            // Kind is the explicit form of the two legacy flags; they must agree.
+            if (issuer.Kind is { } kind
+                && ((issuer.AllowServiceRole && kind != ChoIssuerKind.Service)
+                    || (issuer.AllowWorkloadIdentity && kind != ChoIssuerKind.Workload)))
+            {
+                throw new InvalidOperationException(
+                    $"{SectionName} issuer '{issuer.Issuer}' sets Kind={kind}, which contradicts " +
+                    $"{(issuer.AllowServiceRole ? "AllowServiceRole" : "AllowWorkloadIdentity")}.");
+            }
         }
+
+        var duplicate = Issuers.GroupBy(i => i.Issuer, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate != null)
+            throw new InvalidOperationException(
+                $"{SectionName} issuer '{duplicate.Key}' is configured more than once; each issuer has exactly one kind.");
 
         if (ServiceToken != null)
         {
@@ -94,9 +110,50 @@ public sealed class ChoAuthOptions
     }
 }
 
+/// <summary>
+/// The one kind of token an issuer mints. Each trusted issuer yields exactly
+/// one kind of actor, so a key that can mint one kind can never mint another.
+/// </summary>
+public enum ChoIssuerKind
+{
+    /// <summary>
+    /// User tokens (token-service's user issuer, the portal). Its tokens never
+    /// identify a service or a workload, whatever roles they carry.
+    /// </summary>
+    User,
+
+    /// <summary>
+    /// Service tokens (<c>cho-internal</c>, whose key every service holds).
+    /// Every token must carry <see cref="ChoServiceRole"/> and is only ever a
+    /// service actor; one without it is rejected, never read as a user.
+    /// </summary>
+    Service,
+
+    /// <summary>
+    /// Workload tokens (token-service's <c>cho-workload</c>). Every token must
+    /// carry <see cref="ChoWorkloadRole"/> and is only ever a workload actor.
+    /// </summary>
+    Workload,
+}
+
 /// <summary>An issuer a CHO service accepts tokens from.</summary>
 public sealed class ChoTrustedIssuer
 {
+    /// <summary>
+    /// What this issuer's tokens are: <see cref="ChoIssuerKind.User"/>,
+    /// <see cref="ChoIssuerKind.Service"/> or <see cref="ChoIssuerKind.Workload"/>.
+    /// When unset it follows the legacy flags: <see cref="AllowServiceRole"/>
+    /// means Service, <see cref="AllowWorkloadIdentity"/> means Workload,
+    /// neither means User.
+    /// </summary>
+    public ChoIssuerKind? Kind { get; set; }
+
+    /// <summary>The kind this issuer's tokens are authenticated as.</summary>
+    public ChoIssuerKind EffectiveKind => Kind
+        ?? (AllowServiceRole ? ChoIssuerKind.Service
+            : AllowWorkloadIdentity ? ChoIssuerKind.Workload
+            : ChoIssuerKind.User);
+
     /// <summary>Exact <c>iss</c> value.</summary>
     public string Issuer { get; set; } = string.Empty;
 
@@ -111,7 +168,9 @@ public sealed class ChoTrustedIssuer
 
     /// <summary>
     /// Whether tokens from this issuer may carry the <see cref="ChoServiceRole"/>
-    /// role. Only the internal service-token issuer should set this.
+    /// role. Only the internal service-token issuer should set this. Legacy
+    /// spelling of <c>Kind: Service</c>: every token from such an issuer must
+    /// carry the role, and none is ever a user token.
     /// </summary>
     public bool AllowServiceRole { get; set; }
 

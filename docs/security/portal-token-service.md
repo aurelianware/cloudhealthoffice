@@ -511,8 +511,9 @@ Every CHO service validates tokens through `AddChoAuthentication` and the
 "ChoAuth": {
   "Audience": "cho-api",
   "Issuers": [
-    { "Issuer": "cho-token-service", "PublicKeyPem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----" },
-    { "Issuer": "cho-internal",      "PublicKeyPem": "-----BEGIN PUBLIC KEY-----\n...", "AllowServiceRole": true }
+    { "Issuer": "cho-token-service", "PublicKeyPem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----", "Kind": "User" },
+    { "Issuer": "cho-internal",      "PublicKeyPem": "-----BEGIN PUBLIC KEY-----\n...", "Kind": "Service" },
+    { "Issuer": "cho-workload",      "PublicKeyPem": "<same key as cho-token-service>",   "Kind": "Workload" }
   ],
   "ServiceToken": { "Issuer": "cho-internal", "ClientId": "<service-client-id>", "PrivateKeyPem": "<from Key Vault>" }
 }
@@ -522,8 +523,23 @@ Set the values through Key Vault references or environment variables
 (`ChoAuth__Issuers__0__Issuer=cho-token-service`,
 `ChoAuth__Issuers__0__PublicKeyPem=...`). Never commit them.
 
-- `cho-token-service` must **not** set `AllowServiceRole`. Even then, the shared
-  layer ignores `cho.service` from a user issuer, and token-service never writes it.
+- Each issuer has exactly one `Kind` (`User`, `Service`, `Workload`); the
+  legacy flags `AllowServiceRole` / `AllowWorkloadIdentity` mean `Service` /
+  `Workload`, neither means `User`. User tokens are accepted **only** from a
+  `User` issuer. Every token from a `Service` issuer must carry `cho.service`
+  and every token from a `Workload` issuer `cho.workload`; one without it is
+  rejected (401), never read as a user. Without this, any service (all of
+  them hold the `cho-internal` private key) could mint a `PlatformAdmin` user
+  token by leaving `cho.service` out.
+- `cho-token-service` must be `User` (never `AllowServiceRole`). Even then, the
+  shared layer ignores `cho.service` from a user issuer, and token-service never writes it.
+- Residual risk of the shared `cho-internal` key: any service can still mint a
+  *service* token naming another service (`sub` = `azp` = `capitation-service`)
+  and pass that service's `[RequireServiceClient]`. Closing it needs one key
+  pair per service (a `cho-internal/<client-id>` issuer per caller, each
+  callee trusting the issuers it names in `[RequireServiceClient]`, the
+  client id bound to the issuer rather than read from `sub`), or service
+  tokens obtained from token-service with workload identity.
 - token-service also issues Argo workflow tokens under the issuer `cho-workload`
   (same key, `"AllowWorkloadIdentity": true`). See
   `docs/security/argo-service-tokens.md`.

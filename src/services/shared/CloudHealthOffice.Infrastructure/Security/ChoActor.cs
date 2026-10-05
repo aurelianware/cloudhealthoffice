@@ -83,6 +83,22 @@ public static class ChoPrincipal
         }
     }
 
+    /// <summary>
+    /// Why a validated token is refused for its issuer's kind, or null when it
+    /// fits: a service issuer's token must carry <see cref="ChoServiceRole"/>,
+    /// a workload issuer's <see cref="ChoWorkloadRole"/>. Neither can ever be
+    /// read as a user token. (A user issuer's token that writes a reserved role
+    /// is accepted but gets nothing from it: no issuer marker is added.)
+    /// </summary>
+    internal static string? IssuerKindRefusal(ChoIssuerKind kind, ClaimsPrincipal principal) => kind switch
+    {
+        ChoIssuerKind.Service when !principal.HasClaim(ChoClaimTypes.Role, ChoServiceRole.Name)
+            => "service_issuer_token_without_service_role",
+        ChoIssuerKind.Workload when !principal.HasClaim(ChoClaimTypes.Role, ChoWorkloadRole.Name)
+            => "workload_issuer_token_without_workload_role",
+        _ => null,
+    };
+
     public static IReadOnlyCollection<string> Roles(ClaimsPrincipal principal)
         => principal.FindAll(ChoClaimTypes.Role).Select(c => c.Value).ToArray();
 

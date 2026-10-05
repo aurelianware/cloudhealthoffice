@@ -26,12 +26,13 @@ public static class ChoDevelopmentAuth
             ["ChoAuth:Audience"] = Audience,
             ["ChoAuth:Issuers:0:Issuer"] = UserIssuer,
             ["ChoAuth:Issuers:0:SymmetricKey"] = SymmetricKey,
+            ["ChoAuth:Issuers:0:Kind"] = nameof(ChoIssuerKind.User),
             ["ChoAuth:Issuers:1:Issuer"] = ServiceIssuer,
             ["ChoAuth:Issuers:1:SymmetricKey"] = SymmetricKey,
-            ["ChoAuth:Issuers:1:AllowServiceRole"] = "true",
+            ["ChoAuth:Issuers:1:Kind"] = nameof(ChoIssuerKind.Service),
             ["ChoAuth:Issuers:2:Issuer"] = WorkloadIssuer,
             ["ChoAuth:Issuers:2:SymmetricKey"] = SymmetricKey,
-            ["ChoAuth:Issuers:2:AllowWorkloadIdentity"] = "true",
+            ["ChoAuth:Issuers:2:Kind"] = nameof(ChoIssuerKind.Workload),
         };
 
         if (serviceClientId != null)

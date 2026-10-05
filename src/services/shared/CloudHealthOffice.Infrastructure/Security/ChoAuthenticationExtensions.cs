@@ -133,13 +133,35 @@ public static class ChoAuthenticationExtensions
                         ChoPrincipal.RemoveIssuerMarkers(ctx.Principal);
 
                         var iss = ctx.Principal.FindFirst("iss")?.Value;
-                        if (iss != null && issuersByName.TryGetValue(iss, out var issuer)
-                            && ctx.Principal.Identity is ClaimsIdentity identity)
+                        if (iss == null || !issuersByName.TryGetValue(iss, out var issuer)
+                            || ctx.Principal.Identity is not ClaimsIdentity identity)
                         {
-                            if (issuer.AllowServiceRole)
+                            ctx.Fail("token_issuer_not_configured");
+                            return Task.CompletedTask;
+                        }
+
+                        // One issuer, one kind of actor. A service or workload
+                        // issuer's token that lacks its reserved role is
+                        // rejected: it would otherwise be read as a user token,
+                        // and every service holds the service issuer's key.
+                        var refusal = ChoPrincipal.IssuerKindRefusal(issuer.EffectiveKind, ctx.Principal);
+                        if (refusal != null)
+                        {
+                            ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                                .CreateLogger("CloudHealthOffice.Authentication")
+                                .LogWarning("Bearer token rejected: {Category}", refusal);
+                            ctx.Fail(refusal);
+                            return Task.CompletedTask;
+                        }
+
+                        switch (issuer.EffectiveKind)
+                        {
+                            case ChoIssuerKind.Service:
                                 identity.AddClaim(new Claim(ChoPrincipal.ServiceIssuerMarker, "true"));
-                            if (issuer.AllowWorkloadIdentity)
+                                break;
+                            case ChoIssuerKind.Workload:
                                 identity.AddClaim(new Claim(ChoPrincipal.WorkloadIssuerMarker, "true"));
+                                break;
                         }
                         return Task.CompletedTask;
                     },
