@@ -4,11 +4,11 @@
 {
     <MudSimpleTable Dense="true" Style="background: transparent;" Class="mt-2">
         <tbody>
-            <tr><td>Holder</td><td>@(Account.AccountHolderName ?? "—")</td></tr>
-            <tr><td>Type</td><td>@(Account.AccountType ?? "—")</td></tr>
-            <tr><td>Routing</td><td style="font-family: monospace;" data-testid="masked-routing">@BankNumberMask.Masked(Account.RoutingNumberLast4)</td></tr>
-            <tr><td>Account</td><td style="font-family: monospace;" data-testid="masked-account">@BankNumberMask.Masked(Account.AccountNumberLast4)</td></tr>
-            <tr><td>Auto-debit</td><td>@(Account.EftEnabled ? $"Enrolled ({Account.PreferredMethod ?? "default method"})" : "Not enrolled")</td></tr>
+            <tr><th scope="row">Holder</th><td>@(Account.AccountHolderName ?? "—")</td></tr>
+            <tr><th scope="row">Type</th><td>@(Account.AccountType ?? "—")</td></tr>
+            <tr><th scope="row">Routing</th><td style="font-family: monospace;" data-testid="masked-routing">@BankNumberMask.Masked(Account.RoutingNumberLast4)</td></tr>
+            <tr><th scope="row">Account</th><td style="font-family: monospace;" data-testid="masked-account">@BankNumberMask.Masked(Account.AccountNumberLast4)</td></tr>
+            <tr><th scope="row">Auto-debit</th><td>@(Account.EftEnabled ? $"Enrolled ({Account.PreferredMethod ?? "default method"})" : "Not enrolled")</td></tr>
         </tbody>
     </MudSimpleTable>
 }

@@ -46,7 +46,18 @@ public sealed class PcpPanelReconciliationJob
         var report = new List<PanelOverageReport>();
         foreach (var npi in npisToCheck)
         {
-            var provider = await _providers.GetByNpiAsync(tenantId, npi, ct);
+            ProviderDto? provider;
+            try
+            {
+                provider = await _providers.GetByNpiAsync(tenantId, npi, ct);
+            }
+            catch (ProviderDirectoryUnavailableException ex)
+            {
+                // Not skipped silently: the panel could not be checked.
+                _logger.LogError("PCP panel check skipped for tenant={TenantId} npi={Npi}: provider directory answered {Status}",
+                    tenantId, npi, ex.StatusCode);
+                continue;
+            }
             if (provider == null) continue;
 
             var count = await _assignments.CountOpenByNpiAsync(tenantId, npi);

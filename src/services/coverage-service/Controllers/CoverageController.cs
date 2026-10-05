@@ -445,7 +445,16 @@ public class CoverageController : ControllerBase
             AssignedBy = _actor.UserId
         };
 
-        var result = await _pcpService.AssignAsync(TenantId, memberId, cmd, ct);
+        PcpAssignmentResult result;
+        try
+        {
+            result = await _pcpService.AssignAsync(TenantId, memberId, cmd, ct);
+        }
+        catch (ProviderDirectoryUnavailableException ex)
+        {
+            _logger.LogError("PCP assignment: provider directory unavailable ({Status})", ex.StatusCode);
+            return StatusCode(503, new { Message = "Provider directory is unavailable; the assignment was not made." });
+        }
         if (!result.IsSuccess)
         {
             var err = result.Error!;

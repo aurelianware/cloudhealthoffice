@@ -14,6 +14,18 @@ public sealed class ProviderServiceOptions
 }
 
 /// <summary>
+/// provider-service answered a lookup with an error other than 404: a refused
+/// CHO token or permission, or a server error.
+/// </summary>
+public sealed class ProviderDirectoryUnavailableException : Exception
+{
+    public ProviderDirectoryUnavailableException(string message, int statusCode) : base(message)
+        => StatusCode = statusCode;
+
+    public int StatusCode { get; }
+}
+
+/// <summary>
 /// HTTP-backed <see cref="IProviderServiceClient"/>. When BaseUrl is unset
 /// (typical for local dev / tests) <see cref="GetByNpiAsync"/> returns null —
 /// validation will then fail with PROVIDER_NOT_FOUND, which is the right
@@ -42,14 +54,22 @@ public sealed class HttpProviderServiceClient : IProviderServiceClient
             req.Headers.Add("X-Tenant-ID", tenantId);
             using var resp = await _http.SendAsync(req, ct);
             if (resp.StatusCode == HttpStatusCode.NotFound) return null;
-            resp.EnsureSuccessStatusCode();
+            if (!resp.IsSuccessStatusCode)
+            {
+                // A refusal (401/403: CHO token or permission misconfiguration)
+                // or a provider-service error is not "no such provider": it
+                // must stay visible instead of becoming PROVIDER_NOT_FOUND.
+                throw new ProviderDirectoryUnavailableException(
+                    $"provider-service answered {(int)resp.StatusCode} looking up an NPI", (int)resp.StatusCode);
+            }
             return await resp.Content.ReadFromJsonAsync<ProviderDto>(cancellationToken: ct);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex) when (ex.StatusCode is null)
         {
-            // Network blip / provider-service down — treated as "not found" so
-            // assignment fails with PROVIDER_NOT_FOUND rather than 503-ing the
-            // member-service caller. Operators see this in provider-service health.
+            // Transport failure (provider-service unreachable) — treated as
+            // "not found" so assignment fails with PROVIDER_NOT_FOUND rather
+            // than 503-ing the member-service caller. Operators see this in
+            // provider-service health.
             return null;
         }
     }
