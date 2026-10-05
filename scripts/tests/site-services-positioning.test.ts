@@ -778,6 +778,24 @@ describe('Services & deployment positioning', () => {
       }
     });
 
+    it('keeps small dim text legible and the breadcrumb out of the sticky-nav styles across the series', () => {
+      // #606060 on the series' near-black background is ~3.2:1, below WCAG AA
+      // 4.5:1 for the small metadata, breadcrumb, footer and PHI-warning text.
+      // An unscoped `nav{position:sticky…}` also styles the breadcrumb <nav>,
+      // rendering it as a second sticky bar inside the article header.
+      for (const article of [
+        'insights/cms-0057-f/index.html',
+        'insights/cms-0057-f/caps-vendor-sow-questions.html',
+        'insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html',
+        'insights/cms-0057-f/acceptance-scenarios.html'
+      ]) {
+        const html = read(article);
+        expect(html).toContain('--text-dim:#8a8a8a');
+        expect(html).not.toMatch(/^\s*nav\{/m);
+        expect(html).toMatch(/body>nav\{position:sticky/);
+      }
+    });
+
     it('carries article metadata and parseable structured data', () => {
       expect(sowArticle).toContain(
         '<link rel="canonical" href="https://cloudhealthoffice.com/insights/cms-0057-f/caps-vendor-sow-questions"/>'
