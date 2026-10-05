@@ -46,7 +46,10 @@ public static class EntraAuthentication
             var innerReceived = events.OnMessageReceived;
             events.OnMessageReceived = async ctx =>
             {
-                if (ctx.Request.Path.Equals(Workload.WorkloadTokenEndpoint.Path, StringComparison.OrdinalIgnoreCase))
+                // Likewise the service-token exchange: an app-only workload-identity
+                // token, validated by that endpoint against its own audience.
+                if (ctx.Request.Path.Equals(Workload.WorkloadTokenEndpoint.Path, StringComparison.OrdinalIgnoreCase)
+                    || ctx.Request.Path.Equals(ServiceTokens.ServiceTokenEndpoint.Path, StringComparison.OrdinalIgnoreCase))
                 {
                     ctx.NoResult();
                     return;

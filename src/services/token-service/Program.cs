@@ -5,6 +5,7 @@ using CloudHealthOffice.TokenService;
 using CloudHealthOffice.TokenService.Directory;
 using CloudHealthOffice.TokenService.Entra;
 using CloudHealthOffice.TokenService.Exchange;
+using CloudHealthOffice.TokenService.ServiceTokens;
 using CloudHealthOffice.TokenService.Signing;
 using CloudHealthOffice.TokenService.Workload;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -35,6 +36,12 @@ var workloadOptions = builder.Configuration.GetSection(WorkloadTokenOptions.Sect
 workloadOptions.Validate(signingOptions.Issuer, builder.Environment.IsDevelopment());
 builder.Services.AddWorkloadTokens(workloadOptions, builder.Environment);
 
+// CHO services, by Azure workload identity: POST /v1/token/service.
+var serviceTokenOptions = builder.Configuration.GetSection(ServiceTokenOptions.SectionName).Get<ServiceTokenOptions>()
+                          ?? new ServiceTokenOptions();
+serviceTokenOptions.Validate(signingOptions.Issuer, workloadOptions.Issuer, builder.Environment.IsDevelopment());
+builder.Services.AddServiceTokens(serviceTokenOptions, builder.Environment);
+
 // Entra ID access tokens from the portal (on behalf of a signed-in user).
 builder.Services.AddEntraUserTokenValidation(builder.Configuration, serviceOptions);
 builder.Services.AddAuthorization(authz =>
@@ -45,24 +52,35 @@ builder.Services.AddAuthorization(authz =>
 });
 
 // tenant-service, authenticated as the token-service service identity.
+// Deployed: signed by token-service itself under the service-token issuer
+// (ServiceTokens:Issuer), with its Key Vault key, like every other service's
+// token. Development/Testing may use a local ChoAuth:ServiceToken key instead;
+// a local key is refused anywhere else.
 builder.Services.AddSingleton(sp =>
 {
     var st = builder.Configuration.GetSection("ChoAuth:ServiceToken").Get<ChoServiceTokenOptions>();
     var env = sp.GetRequiredService<IHostEnvironment>();
     var log = sp.GetRequiredService<ILoggerFactory>().CreateLogger("CloudHealthOffice.TokenService");
-    if (st == null || string.IsNullOrWhiteSpace(st.ClientId)
-        || (string.IsNullOrWhiteSpace(st.PrivateKeyPem) && string.IsNullOrWhiteSpace(st.SymmetricKey)))
+    var clientId = string.IsNullOrWhiteSpace(st?.ClientId) ? "token-service" : st!.ClientId;
+    if (st != null && (!string.IsNullOrWhiteSpace(st.PrivateKeyPem) || !string.IsNullOrWhiteSpace(st.SymmetricKey)))
     {
-        // tenant-service does not authenticate callers yet; once it does, these calls fail closed (503).
-        log.LogWarning("ChoAuth:ServiceToken has no key; calls to tenant-service carry no service token.");
-        return new ServiceTokenSource(null, "token-service");
+        if (!ChoTestingEnvironment.AllowsDevelopmentSecrets(env))
+            throw new InvalidOperationException(
+                "ChoAuth:ServiceToken holds a local signing key, which is permitted only on a Development or Testing host. " +
+                "Remove it and enable ServiceTokens: token-service then signs its own service token with its Key Vault key.");
+        return new ServiceTokenSource(
+            ChoTokenIssuer.FromKeys(st.Issuer, ChoDevelopmentAuth.Audience, st.PrivateKeyPem, st.SymmetricKey, st.Lifetime),
+            clientId);
     }
-    if (!string.IsNullOrWhiteSpace(st.SymmetricKey) && !(env.IsDevelopment() || env.IsEnvironment("Testing")))
-        throw new InvalidOperationException(
-            "ChoAuth:ServiceToken uses a symmetric key, which is permitted only on a Development or Testing host.");
-    return new ServiceTokenSource(
-        ChoTokenIssuer.FromKeys(st.Issuer, ChoDevelopmentAuth.Audience, st.PrivateKeyPem, st.SymmetricKey, st.Lifetime),
-        st.ClientId);
+    if (serviceTokenOptions.Enabled)
+    {
+        var issuer = sp.GetRequiredService<ServiceTokenService>();
+        return new ServiceTokenSource((tenant, ct) => new ValueTask<string>(issuer.IssueAsync(clientId, tenant, ct)), clientId);
+    }
+    // tenant-service refuses these calls; token-service then answers 503.
+    log.LogWarning("Neither ServiceTokens nor a development ChoAuth:ServiceToken key is configured; " +
+                   "calls to tenant-service carry no service token.");
+    return new ServiceTokenSource((Func<string, CancellationToken, ValueTask<string>>?)null, clientId);
 });
 builder.Services.AddTransient<TenantServiceTokenHandler>();
 builder.Services.AddHttpClient(HttpTenantDirectory.ClientName, client =>
@@ -98,6 +116,7 @@ app.UseRateLimiter();
 app.MapInvitationRedemption();
 app.MapSignup();
 app.MapWorkloadTokens();
+app.MapServiceTokens();
 
 app.MapPost("/v1/token/exchange", async (HttpContext http, TokenExchangeService exchange, TokenAudit audit) =>
 {

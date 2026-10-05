@@ -62,6 +62,23 @@ public sealed class TokenAudit
             "refused", Clean(identity?.Namespace), Clean(identity?.ServiceAccount), Clean(identity?.PodName),
             Clean(tenantId), Clean(reason));
 
+    /// <summary>A service token issued to a CHO service's managed identity.</summary>
+    public void ServiceIssued(ServiceTokens.EntraWorkloadIdentity identity, string clientId, string tenantId)
+        => _logger.LogInformation(
+            "CHO service token {Outcome}: client={Client} oid={Oid} appid={AppId} tenant={Tenant}",
+            "issued", Clean(clientId), identity.ObjectId, Clean(identity.AppId), Clean(tenantId));
+
+    /// <summary>A refused service-token request. The identity is null when the Entra token itself was refused.</summary>
+    public void ServiceRefused(ServiceTokens.EntraWorkloadIdentity? identity, string? clientId, string? tenantId, string reason)
+        => _logger.LogWarning(
+            "CHO service token {Outcome}: client={Client} oid={Oid} appid={AppId} tenant={Tenant} reason={Reason}",
+            "refused", Clean(clientId), identity?.ObjectId.ToString() ?? "-", Clean(identity?.AppId), Clean(tenantId), Clean(reason));
+
+    public void ServiceUnavailable(ServiceTokens.EntraWorkloadIdentity? identity, string? tenantId, string reason)
+        => _logger.LogError(
+            "CHO service token {Outcome}: oid={Oid} tenant={Tenant} reason={Reason}",
+            "refused", identity?.ObjectId.ToString() ?? "-", Clean(tenantId), Clean(reason));
+
     private static string Clean(string? value)
         => string.IsNullOrEmpty(value) ? "-"
             : value.Length > 200 ? value[..200].Replace("\r", string.Empty).Replace("\n", string.Empty) + "…"

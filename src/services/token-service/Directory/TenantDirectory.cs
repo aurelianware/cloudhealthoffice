@@ -314,31 +314,58 @@ public sealed class TenantServiceTokenHandler : DelegatingHandler
 
     public TenantServiceTokenHandler(ServiceTokenSource source) => _source = source;
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         // Whatever was set before is discarded: only a freshly minted service token goes out.
         request.Headers.Authorization = null;
-        if (_source.Issuer != null
+        if (_source.CanMint
             && request.Options.TryGetValue(TenantScopeKey, out var tenant) && !string.IsNullOrEmpty(tenant))
         {
             request.Headers.Authorization = new AuthenticationHeaderValue(
-                "Bearer", _source.Issuer.IssueServiceToken(_source.ClientId, tenant));
+                "Bearer", await _source.MintAsync(tenant, cancellationToken));
             if (tenant != CrossTenantScope)
                 request.Headers.TryAddWithoutValidation("X-Tenant-ID", tenant);
         }
-        return base.SendAsync(request, cancellationToken);
+        return await base.SendAsync(request, cancellationToken);
     }
 }
 
-/// <summary>The service-token issuer for calls to tenant-service, from <c>ChoAuth:ServiceToken</c>.</summary>
+/// <summary>
+/// token-service's own service token for calls to tenant-service. Deployed,
+/// token-service signs it itself with its Key Vault key under the
+/// service-token issuer (<c>ServiceTokens:Issuer</c>), as it does for every
+/// other service, so it holds no shared key; in Development/Testing it may use
+/// the local <c>ChoAuth:ServiceToken</c> key instead.
+/// </summary>
 public sealed class ServiceTokenSource
 {
+    private readonly Func<string, CancellationToken, ValueTask<string>>? _mint;
+
     public ServiceTokenSource(ChoTokenIssuer? issuer, string clientId)
+        : this(issuer == null ? null : (tenant, _) => ValueTask.FromResult(issuer.IssueServiceToken(clientId, tenant)), clientId)
     {
-        Issuer = issuer;
+    }
+
+    public ServiceTokenSource(Func<string, CancellationToken, ValueTask<string>>? mint, string clientId)
+    {
+        _mint = mint;
         ClientId = clientId;
     }
 
-    public ChoTokenIssuer? Issuer { get; }
     public string ClientId { get; }
+
+    public bool CanMint => _mint != null;
+
+    /// <summary>A service token for <paramref name="tenant"/>; signing failures surface as <see cref="HttpRequestException"/>.</summary>
+    public async ValueTask<string> MintAsync(string tenant, CancellationToken ct)
+    {
+        try
+        {
+            return await _mint!(tenant, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not HttpRequestException)
+        {
+            throw new HttpRequestException("token-service could not sign its service token.", ex);
+        }
+    }
 }

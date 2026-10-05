@@ -9,8 +9,14 @@
 #   <AKS_OIDC_ISSUER_URL>  the cluster's service-account issuer, exactly as in a
 #       projected token's iss (az aks show -g <rg> -n <cluster> --query oidcIssuerProfile.issuerUrl -o tsv)
 #   <TENANT_...>  the tenants each Argo workflow may act for (ConfigMap token-service-workloads)
-# and create the token-service-secrets Secret (internal service-token private key).
+#   <TOKEN_SERVICE_SVC_APP_ID>  the "CHO token-service (service tokens)" Entra app registration
+#       whose access tokens services present at POST /v1/token/service
+#   <..._MANAGED_IDENTITY_OBJECT_ID>  each service's managed identity object (principal) id
+#       (ConfigMap token-service-service-clients)
+# token-service needs no service-token secret: it signs its own tenant-service
+# token with the Key Vault key, under the service issuer cho-token-service-svc.
 # Argo workload tokens: docs/security/argo-service-tokens.md.
+# Service tokens: docs/security/portal-token-service.md ("Service tokens").
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -44,6 +50,19 @@ data:
   WorkloadTokens__Issuer: "cho-workload"
   WorkloadTokens__TokenLifetime: "00:05:00"
   WorkloadTokens__RegistrationsFile: "/etc/cho/workloads/registrations.json"
+  # CHO services: POST /v1/token/service. A service presents an app-only Entra
+  # token from its workload identity (managed identity) for the service-token
+  # app; the token's oid selects exactly one registered client id. Issued
+  # tokens (cho.service, 5 minutes) are signed with the TokenSigning key under
+  # cho-token-service-svc, which every service trusts as Kind=Service.
+  ServiceTokens__Enabled: "true"
+  ServiceTokens__EntraTenantId: "<CHO_PLATFORM_ENTRA_TENANT_ID>"
+  ServiceTokens__Audiences__0: "api://<TOKEN_SERVICE_SVC_APP_ID>"
+  ServiceTokens__Audiences__1: "<TOKEN_SERVICE_SVC_APP_ID>"
+  ServiceTokens__RequiredAppRole: "Cho.ServiceToken"
+  ServiceTokens__Issuer: "cho-token-service-svc"
+  ServiceTokens__TokenLifetime: "00:05:00"
+  ServiceTokens__ServiceClientsFile: "/etc/cho/service-clients/service-clients.json"
 ---
 # Which Kubernetes service account may obtain which CHO workload token.
 # One entry per workflow (infrastructure/argo-workflows/cho-workload-identity.yaml).
@@ -87,6 +106,57 @@ data:
       }
     ]
 ---
+# Which managed identity is which CHO service (POST /v1/token/service). One
+# entry per service: its client id and the object (principal) id of its
+# user-assigned managed identity (az identity show -g <rg> -n <service>-identity
+# --query principalId). Exact ids only; token-service refuses to start on a
+# duplicate, a wildcard or a placeholder. Optionally add "appId" (the identity's
+# client id) to pin it as well.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: token-service-service-clients
+  namespace: cloudhealthoffice
+data:
+  service-clients.json: |
+    [
+      { "clientId": "accumulator-service", "objectId": "<ACCUMULATOR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "appeals-service", "objectId": "<APPEALS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "ar-service", "objectId": "<AR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "attachment-service", "objectId": "<ATTACHMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "authorization-service", "objectId": "<AUTHORIZATION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "benefit-plan-service", "objectId": "<BENEFIT_PLAN_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "capitation-service", "objectId": "<CAPITATION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "claims-examiner-service", "objectId": "<CLAIMS_EXAMINER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "claims-service", "objectId": "<CLAIMS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "consent-service", "objectId": "<CONSENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "coverage-service", "objectId": "<COVERAGE_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "eligibility-service", "objectId": "<ELIGIBILITY_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "encounter-service", "objectId": "<ENCOUNTER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "encounter-submission-service", "objectId": "<ENCOUNTER_SUBMISSION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "enrollment-import-service", "objectId": "<ENROLLMENT_IMPORT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "ffs-service", "objectId": "<FFS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "fhir-service", "objectId": "<FHIR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "idcard-service", "objectId": "<IDCARD_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "member-document-service", "objectId": "<MEMBER_DOCUMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "member-service", "objectId": "<MEMBER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "payment-service", "objectId": "<PAYMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "personal-representative-service", "objectId": "<PERSONAL_REPRESENTATIVE_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "premium-billing-service", "objectId": "<PREMIUM_BILLING_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "pricing-api", "objectId": "<PRICING_API_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-contracts-service", "objectId": "<PROVIDER_CONTRACTS_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-eligibility-api", "objectId": "<PROVIDER_ELIGIBILITY_API_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-service", "objectId": "<PROVIDER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "provider-verification-service", "objectId": "<PROVIDER_VERIFICATION_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "reference-data-service", "objectId": "<REFERENCE_DATA_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "rfai-service", "objectId": "<RFAI_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "risk-adjustment-service", "objectId": "<RISK_ADJUSTMENT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "sponsor-service", "objectId": "<SPONSOR_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "tenant-service", "objectId": "<TENANT_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "terminology-service", "objectId": "<TERMINOLOGY_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" },
+      { "clientId": "trading-partner-service", "objectId": "<TRADING_PARTNER_SERVICE_MANAGED_IDENTITY_OBJECT_ID>" }
+    ]
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -119,14 +189,9 @@ spec:
         envFrom:
         - configMapRef:
             name: token-service-config
-        env:
-        # Private key for the cho-internal service token sent to tenant-service.
-        - name: ChoAuth__ServiceToken__PrivateKeyPem
-          valueFrom:
-            secretKeyRef:
-              name: token-service-secrets
-              key: serviceTokenPrivateKeyPem
-              optional: true
+        # No ChoAuth__ServiceToken__PrivateKeyPem: a local service-token key is
+        # refused outside Development/Testing. token-service signs its own
+        # tenant-service token under cho-token-service-svc (ServiceTokens).
         resources:
           requests:
             cpu: 100m
@@ -158,12 +223,18 @@ spec:
         - name: workloads
           mountPath: /etc/cho/workloads
           readOnly: true
+        - name: service-clients
+          mountPath: /etc/cho/service-clients
+          readOnly: true
       volumes:
       - name: tmp
         emptyDir: {}
       - name: workloads
         configMap:
           name: token-service-workloads
+      - name: service-clients
+        configMap:
+          name: token-service-service-clients
 ---
 apiVersion: v1
 kind: Service

@@ -239,6 +239,13 @@ public sealed class TokenServiceFactory : WebApplicationFactory<Program>
     /// <summary>The CHO token signing key (EC P-256 PEM), generated per factory.</summary>
     public string SigningKeyPem { get; } = ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem();
 
+    /// <summary>
+    /// Whether token-service signs its own tenant-service calls with the local
+    /// development key (ChoAuth:ServiceToken). Off: it signs them under the
+    /// ServiceTokens issuer, as deployed.
+    /// </summary>
+    public bool LocalServiceTokenKey { get; init; } = true;
+
     /// <summary>More host settings (for example the WorkloadTokens section).</summary>
     public IReadOnlyDictionary<string, string?> ExtraSettings { get; init; } = new Dictionary<string, string?>();
 
@@ -252,7 +259,8 @@ public sealed class TokenServiceFactory : WebApplicationFactory<Program>
         builder.UseSetting("TokenSigning:PrivateKeyPem", SigningKeyPem);
         builder.UseSetting("ChoAuth:ServiceToken:Issuer", "cho-internal-dev");
         builder.UseSetting("ChoAuth:ServiceToken:ClientId", "token-service");
-        builder.UseSetting("ChoAuth:ServiceToken:SymmetricKey", Infrastructure.Security.ChoDevelopmentAuth.SymmetricKey);
+        builder.UseSetting("ChoAuth:ServiceToken:SymmetricKey",
+            LocalServiceTokenKey ? Infrastructure.Security.ChoDevelopmentAuth.SymmetricKey : "");
         builder.UseSetting("Services:TenantService", "http://tenant-service");
         builder.UseSetting("TokenService:InvitationRedeemPermitsPerMinute", RedeemPermitsPerMinute.ToString());
         builder.ConfigureLogging(logging =>
