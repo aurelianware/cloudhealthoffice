@@ -464,6 +464,8 @@ public class CapitationDisbursementServiceTests
     [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.Transmitted, DisbursementStatus.Submitted)]
     [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.AwaitingRetrieval, DisbursementStatus.AwaitingRetrieval)]
     [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.NotSent, DisbursementStatus.Pending)]
+    // May be at the bank: never back to Pending, where the next release would pay it again.
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.DeliveryUnknown, DisbursementStatus.DeliveryUnknown)]
     public async Task GenerateNachaCreditFileAsync_SubmittedOnlyWhenTheBankHasTheFile(
         CloudHealthOffice.NachaTransmission.NachaTransmissionStatus outcome, DisbursementStatus expected)
     {

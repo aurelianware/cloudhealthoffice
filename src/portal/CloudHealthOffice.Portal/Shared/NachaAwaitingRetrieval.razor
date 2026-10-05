@@ -12,6 +12,15 @@
             These files did not reach the bank. A platform admin must retrieve the file, or another approver (not the one who
             released it) must retry the transmission. Files are deleted when they expire, and their payments go back to Pending.
         </MudText>
+        @if (Items.Any(IsDeliveryUnknown))
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2" data-testid="@($"{TestId}-delivery-unknown-note")">
+                A file marked "Delivery unknown" may already be at the bank: the upload finished but whether it was put in
+                place could not be confirmed. Do not retry it or deliver it by hand, which could pay twice. Ask the bank whether
+                it received the file; another approver (not the releaser) then records the bank's answer, and only a file the
+                bank did not receive can be retried or retrieved.
+            </MudAlert>
+        }
         <MudSimpleTable Dense="true" Style="background: transparent;">
             <thead><tr><th>File</th><th>Entries</th><th>Amount</th><th>Released by</th><th>Expires</th><th>Reason</th><th></th></tr></thead>
             <tbody>
@@ -23,7 +32,14 @@
                         <td>@((f.TotalDebitAmount + f.TotalCreditAmount).ToString("C2"))</td>
                         <td>@f.ReleasedBy</td>
                         <td>@f.ExpiresAt.ToLocalTime().ToString("g")</td>
-                        <td>@f.Reason</td>
+                        <td>
+                            @if (IsDeliveryUnknown(f))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error"
+                                         data-testid="@($"{TestId}-delivery-unknown-{f.FileReference}")">Delivery unknown: verify with the bank</MudChip>
+                            }
+                            @f.Reason
+                        </td>
                         <td>
                             @if (CanRetry(f))
                             {
@@ -46,6 +62,9 @@
     [Parameter] public string? UserId { get; set; }
     [Parameter] public bool Busy { get; set; }
     [Parameter] public EventCallback<string> OnRetry { get; set; }
+
+    /// <summary>May already be at the bank: never offered for retry or manual delivery.</summary>
+    private static bool IsDeliveryUnknown(NachaHeldFile f) => f.Status == "DeliveryUnknown";
 
     /// <summary>The service refuses the releaser; do not offer it to them.</summary>
     private bool CanRetry(NachaHeldFile f)

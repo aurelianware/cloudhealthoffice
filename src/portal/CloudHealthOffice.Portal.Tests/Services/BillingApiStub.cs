@@ -162,6 +162,14 @@ public static class BillingApiShapes
           "createdAt":"2026-02-16T09:15:00Z","expiresAt":"2026-02-23T09:15:00Z","attempts":0,"lastAttemptBy":null,"retrievalCount":0}]
         """;
 
+    /// <summary>A file whose upload finished but whose rename could not be confirmed: it may be at the bank.</summary>
+    public const string HeldFilesDeliveryUnknown = """
+        [{"fileReference":"NACHA-DU000001","fileName":"ACH-2.ach","status":"DeliveryUnknown",
+          "reason":"The file was uploaded to the bank's SFTP server but renaming it into place failed (SshConnectionException).",
+          "entryCount":1,"totalDebitAmount":450,"totalCreditAmount":0,"byteSize":940,"sha256":"ab","runId":null,"releasedBy":"approver-1",
+          "createdAt":"2026-02-16T09:15:00Z","expiresAt":"2026-02-23T09:15:00Z","attempts":0,"lastAttemptBy":null,"retrievalCount":0}]
+        """;
+
     public const string SeparationOfDuties = """
         {"type":"https://tools.ietf.org/html/rfc9110#section-15.5.4","title":"Separation of duties","status":403,
          "detail":"User maker-2 executed billing run BR-2026-02-001 and cannot release its debits."}

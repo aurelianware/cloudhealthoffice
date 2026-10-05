@@ -420,10 +420,76 @@ public class EftDraftServiceTests
             .WithMessage("No pending NACHA drafts*");
     }
 
+    private EftDraft DeliveryUnknownDraft(string lastUpdatedBy = "releaser-1")
+    {
+        var draft = new EftDraft
+        {
+            Id = "d-du", GroupNumber = "GRP001", Method = EftMethod.Nacha, Amount = 100, Status = EftDraftStatus.DeliveryUnknown,
+            NachaFileReference = "NACHA-DU", TraceNumber = "091000010000001", LastUpdatedBy = lastUpdatedBy
+        };
+        _draftRepo.Setup(r => r.GetByStatusAsync(EftDraftStatus.DeliveryUnknown)).ReturnsAsync(new List<EftDraft> { draft });
+        _draftRepo.Setup(r => r.UpdateAsync(It.IsAny<EftDraft>())).ReturnsAsync((EftDraft d) => d);
+        return draft;
+    }
+
+    [Theory]
+    [InlineData(true, EftDraftStatus.Submitted)]
+    [InlineData(false, EftDraftStatus.AwaitingRetrieval)]
+    public async Task ResolveNachaDelivery_RecordsTheBanksAnswer_OnTheFileAndItsDrafts(bool bankReceived, EftDraftStatus expected)
+    {
+        var draft = DeliveryUnknownDraft();
+
+        var result = await _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived, "Bank ops confirmed");
+
+        _dispatcher.Resolutions.Should().ContainSingle(r => r.FileReference == "NACHA-DU" && r.BankReceived == bankReceived
+                                                          && r.Actor.UserId == "approver-1" && !r.Actor.IsService);
+        draft.Status.Should().Be(expected);
+        draft.NachaFileReference.Should().Be("NACHA-DU");
+        result.PaymentsUpdated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_NotReceived_GoesBackToPending()
+    {
+        var draft = DeliveryUnknownDraft();
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        await _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "Bank ops confirmed no file");
+
+        draft.Status.Should().Be(EftDraftStatus.Pending);
+        draft.NachaFileReference.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByTheReleaser_IsRefused()
+    {
+        var draft = DeliveryUnknownDraft(lastUpdatedBy: "approver-1");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        draft.Status.Should().Be(EftDraftStatus.DeliveryUnknown);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_WithAServiceToken_IsRefused()
+    {
+        DeliveryUnknownDraft();
+        _actor.SetupGet(a => a.IsService).Returns(true);
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: true, "ok");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        _dispatcher.Resolutions.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.Transmitted, EftDraftStatus.Submitted)]
     [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.AwaitingRetrieval, EftDraftStatus.AwaitingRetrieval)]
     [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.NotSent, EftDraftStatus.Pending)]
+    // May be at the bank: never back to Pending, where the next release would send it again.
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.DeliveryUnknown, EftDraftStatus.DeliveryUnknown)]
     public async Task GenerateNachaFile_DraftsAreSubmittedOnlyWhenTheBankHasTheFile(
         CloudHealthOffice.NachaTransmission.NachaTransmissionStatus outcome, EftDraftStatus expected)
     {

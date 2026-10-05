@@ -55,11 +55,21 @@ public sealed class NachaTransmissionReceipt
 /// </summary>
 public sealed class NachaTransmissionException : Exception
 {
-    public NachaTransmissionException(string message, bool notConfigured = false) : base(message)
-        => NotConfigured = notConfigured;
+    public NachaTransmissionException(string message, bool notConfigured = false, bool deliveryUnknown = false) : base(message)
+    {
+        NotConfigured = notConfigured;
+        DeliveryUnknown = deliveryUnknown;
+    }
 
     /// <summary>The tenant has no usable transmission configuration (as opposed to a failed attempt).</summary>
     public bool NotConfigured { get; }
+
+    /// <summary>
+    /// The file may have reached the bank (the upload finished but the rename's
+    /// outcome could not be established, or a file of that name is already in
+    /// the drop). Sending it again could pay twice: verify with the bank first.
+    /// </summary>
+    public bool DeliveryUnknown { get; }
 }
 
 /// <summary>Sends a NACHA file to the tenant's bank.</summary>

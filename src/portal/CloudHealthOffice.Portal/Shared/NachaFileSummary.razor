@@ -30,7 +30,7 @@
     }
     else if (!string.IsNullOrEmpty(Result.TransmissionError))
     {
-        <MudAlert Severity="@(Result.TransmissionStatus == "NotSent" ? Severity.Error : Severity.Warning)" Dense="true" Class="mb-2"
+        <MudAlert Severity="@(Result.TransmissionStatus is "NotSent" or "DeliveryUnknown" ? Severity.Error : Severity.Warning)" Dense="true" Class="mb-2"
                   data-testid="@($"{TestId}-error")">
             @Result.TransmissionError
             @if (Result.TransmissionStatus == "AwaitingRetrieval")
@@ -41,6 +41,11 @@
             else if (Result.TransmissionStatus == "NotSent")
             {
                 <div>Nothing was sent; the payments stay Pending for the next release.</div>
+            }
+            else if (Result.TransmissionStatus == "DeliveryUnknown")
+            {
+                <div>The file may already be at the bank. Do not send it again or deliver it by hand: verify with the bank, then
+                    another approver records whether the bank received it.</div>
             }
         </MudAlert>
     }
@@ -74,6 +79,7 @@
         "Transmitted" => "Sent to the bank",
         "AwaitingRetrieval" => "Awaiting retrieval",
         "NotSent" => "Not sent",
+        "DeliveryUnknown" => "Delivery unknown",
         var other => other
     };
 

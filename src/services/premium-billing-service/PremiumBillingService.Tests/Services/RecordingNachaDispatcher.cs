@@ -39,4 +39,15 @@ public sealed class RecordingNachaDispatcher : INachaDispatcher
 
     public Task<NachaRetrievedFile> RetrieveAsync(string tenantId, string fileReference, NachaActor actor, string reason, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
+
+    /// <summary>Bank answers recorded through the dispatcher; <see cref="ResolveThrows"/> stands in for an expired held file.</summary>
+    public List<(string FileReference, NachaActor Actor, bool BankReceived)> Resolutions { get; } = new();
+    public Exception? ResolveThrows { get; set; }
+
+    public Task<NachaHeldFile> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason, CancellationToken cancellationToken = default)
+    {
+        if (ResolveThrows != null) return Task.FromException<NachaHeldFile>(ResolveThrows);
+        Resolutions.Add((fileReference, actor, bankReceived));
+        return Task.FromResult(new NachaHeldFile { TenantId = tenantId, FileReference = fileReference });
+    }
 }

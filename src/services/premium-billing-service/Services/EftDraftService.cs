@@ -44,6 +44,14 @@ public interface IEftDraftService
     Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string fileReference, string reason);
 
     /// <summary>
+    /// Records what the bank said about a NACHA file whose delivery was unknown
+    /// (payments:approve in the controller; a user, not the releaser). Received:
+    /// its drafts are Submitted. Not received: they can be retried or retrieved
+    /// again (or, when the held file expired, go back to Pending).
+    /// </summary>
+    Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string fileReference, bool bankReceived, string reason);
+
+    /// <summary>
     /// Process an ACH return (bank rejection)
     /// </summary>
     Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request);
@@ -579,6 +587,13 @@ public class EftDraftService : IEftDraftService
                     draft.Status = EftDraftStatus.AwaitingRetrieval;
                     draft.ErrorMessage = AwaitingRetrievalMessage(file.FileReference, outcome.Reason);
                     break;
+                case NachaTransmissionStatus.DeliveryUnknown:
+                    // It may be at the bank: never back to Pending (that would send it again).
+                    draft.NachaFileReference = file.FileReference;
+                    draft.TraceNumber = entries[i].TraceNumber;
+                    draft.Status = EftDraftStatus.DeliveryUnknown;
+                    draft.ErrorMessage = DeliveryUnknownMessage(file.FileReference, outcome.Reason);
+                    break;
                 default:
                     // Nothing was sent or held: the draft goes back to Pending for the next file.
                     draft.NachaFileReference = null;
@@ -598,6 +613,10 @@ public class EftDraftService : IEftDraftService
 
         return result;
     }
+
+    private static string DeliveryUnknownMessage(string fileReference, string? reason)
+        => $"NACHA file {fileReference} may have reached the bank: {reason} Do not send it again: verify with the bank, then " +
+           "another user with payments:approve records whether the bank received it.";
 
     private static string AwaitingRetrievalMessage(string fileReference, string? reason)
         => $"NACHA file {fileReference} was not delivered to the bank: {reason} It is held encrypted for 7 days: " +
@@ -662,10 +681,82 @@ public class EftDraftService : IEftDraftService
                 draft.LastUpdatedBy = ActorId;
                 await _draftRepository.UpdateAsync(draft);
             }
+            else if (outcome.Status == NachaTransmissionStatus.DeliveryUnknown)
+            {
+                draft.Status = EftDraftStatus.DeliveryUnknown;
+                draft.ErrorMessage = DeliveryUnknownMessage(fileReference, outcome.Reason);
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
             result.Entries.Add(Summary(draft));
         }
 
         return result;
+    }
+
+    public async Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string fileReference, bool bankReceived, string reason)
+    {
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: recording whether the bank received a NACHA file needs a user with payments:approve, not a service token");
+
+        var drafts = (await _draftRepository.GetByStatusAsync(EftDraftStatus.DeliveryUnknown))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        var fileStillHeld = true;
+        try
+        {
+            // Checks the user (not a service, not the releaser), the reason and the
+            // file's state, and records the answer on the held file.
+            await _dispatcher.ResolveDeliveryUnknownAsync(_actor.TenantId, fileReference, new NachaActor(ActorId, _actor.IsService), bankReceived, reason);
+        }
+        catch (Exception ex) when ((ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException) && drafts.Count > 0)
+        {
+            // The held file is gone (7 days); the drafts still wait for the answer.
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("A reason (what the bank said) is required.");
+            if (drafts.Any(d => string.Equals(d.LastUpdatedBy, ActorId, StringComparison.OrdinalIgnoreCase)))
+                throw new SeparationOfDutiesException(
+                    "Separation of duties: you released this NACHA file, so you cannot record whether the bank received it.");
+            fileStillHeld = false;
+        }
+
+        var now = DateTime.UtcNow;
+        var status = bankReceived ? EftDraftStatus.Submitted
+            : fileStillHeld ? EftDraftStatus.AwaitingRetrieval : EftDraftStatus.Pending;
+        foreach (var draft in drafts)
+        {
+            draft.Status = status;
+            draft.LastUpdatedBy = ActorId;
+            switch (status)
+            {
+                case EftDraftStatus.Submitted:
+                    draft.SubmittedAt = now;
+                    draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    draft.ErrorMessage = $"The bank confirmed it received NACHA file {fileReference} (recorded by {ActorId}).";
+                    break;
+                case EftDraftStatus.AwaitingRetrieval:
+                    draft.ErrorMessage = AwaitingRetrievalMessage(fileReference, "The bank confirmed it did not receive it.");
+                    break;
+                default:
+                    draft.NachaFileReference = null;
+                    draft.TraceNumber = null;
+                    draft.ReleaseClaimId = null;
+                    draft.ReleaseClaimedAt = null;
+                    draft.ErrorMessage = $"The bank confirmed it did not receive NACHA file {fileReference}, which has expired; back to Pending for the next file.";
+                    break;
+            }
+            await _draftRepository.UpdateAsync(draft);
+        }
+
+        return new NachaDeliveryResolutionResult
+        {
+            FileReference = fileReference,
+            BankReceived = bankReceived,
+            PaymentStatus = status.ToString(),
+            PaymentsUpdated = drafts.Count,
+        };
     }
 
     public async Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string fileReference, string reason)

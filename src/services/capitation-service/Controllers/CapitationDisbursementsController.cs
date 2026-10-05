@@ -155,6 +155,42 @@ public class CapitationDisbursementsController : ControllerBase
     }
 
     /// <summary>
+    /// Record what the bank said about a NACHA file whose delivery was unknown
+    /// (uploaded, but whether it was renamed into place could not be checked).
+    /// Until then it is neither retried nor retrieved. payments:approve, a user
+    /// token, not the user who released it, and a reason (the bank's answer).
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/resolve-delivery")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(NachaDeliveryResolutionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<NachaDeliveryResolutionResult>> ResolveNachaDelivery(string fileReference, [FromBody] ResolveNachaDeliveryRequest request)
+    {
+        if (request?.BankReceived is not { } bankReceived)
+            return BadRequest(new { error = "bankReceived (true or false, as the bank confirmed) is required." });
+        try
+        {
+            return Ok(await _disbursementService.ResolveNachaDeliveryAsync(
+                _actor.TenantId, fileReference, new NachaActor(_actor.UserId, _actor.IsService), bankReceived, request.Reason ?? string.Empty));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
     /// A held NACHA file, for a platform admin to deliver by hand: platform:admin,
     /// a user token, not the user who released it, and a reason. Every retrieval
     /// is recorded and audit-logged. The first retrieval marks its disbursements Submitted.

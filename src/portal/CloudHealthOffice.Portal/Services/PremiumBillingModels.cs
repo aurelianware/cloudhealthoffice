@@ -269,7 +269,7 @@ public class NachaFileResult
     public decimal TotalDebitAmount { get; set; }
     public decimal TotalCreditAmount { get; set; }
     public DateTime GeneratedAt { get; set; }
-    /// <summary>Transmitted, AwaitingRetrieval or NotSent.</summary>
+    /// <summary>Transmitted, AwaitingRetrieval, NotSent or DeliveryUnknown (may be at the bank: never re-send).</summary>
     public string TransmissionStatus { get; set; } = string.Empty;
     public string? TransmissionError { get; set; }
     public DateTime? HeldUntil { get; set; }
@@ -318,7 +318,7 @@ public class NachaHeldFile
 {
     public string FileReference { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
-    /// <summary>AwaitingRetrieval or Transmitting.</summary>
+    /// <summary>AwaitingRetrieval, Transmitting or DeliveryUnknown (may be at the bank: verify, never re-send).</summary>
     public string Status { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
     public int EntryCount { get; set; }

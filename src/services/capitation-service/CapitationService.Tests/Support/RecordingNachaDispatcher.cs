@@ -38,4 +38,6 @@ public sealed class RecordingNachaDispatcher : INachaDispatcher
 
     public Task<NachaRetrievedFile> RetrieveAsync(string tenantId, string fileReference, NachaActor actor, string reason, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
+
+    public Task<NachaHeldFile> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 }

@@ -105,20 +105,55 @@ public sealed class SftpNachaTransmitter : INachaTransmitter
         try
         {
             using var session = _sessions.Connect(parameters);
+            // File names carry the unique file reference: one already there is this
+            // file from an earlier attempt whose outcome was not known.
             if (session.Exists(finalPath))
                 throw new NachaTransmissionException(
-                    $"A file named {fileName} is already in the bank's drop; nothing was overwritten.");
+                    $"A file named {fileName} is already in the bank's drop; nothing was overwritten. It may be this file " +
+                    "from an earlier attempt: verify with the bank whether it was received before sending it again.",
+                    deliveryUnknown: true);
 
             try
             {
                 using (var stream = new MemoryStream(bytes, writable: false))
                     session.Upload(stream, tempPath);
-                session.Rename(tempPath, finalPath);
             }
             catch
             {
                 TryDelete(session, tempPath);
                 throw;
+            }
+
+            try
+            {
+                session.Rename(tempPath, finalPath);
+            }
+            catch (Exception renameError) when (renameError is not OperationCanceledException)
+            {
+                // The whole file is on the server under the temporary name. A failed
+                // rename reply does not say whether the server renamed it (the reply
+                // can be lost after the rename), so look before calling it a failure.
+                switch (ProbeRename(session, tempPath, finalPath))
+                {
+                    case RenameProbe.InPlace:
+                        _logger.LogWarning(
+                            "NACHA file {FileReference} for tenant {TenantId}: the rename reported {Error}, but the file is in place at {Destination}",
+                            request.FileReference, request.TenantId, renameError.GetType().Name, destination);
+                        break;
+                    case RenameProbe.NotRenamed:
+                        TryDelete(session, tempPath);
+                        throw;
+                    default:
+                        _logger.LogError(
+                            "NACHA file {FileReference} for tenant {TenantId}: uploaded to {Destination} but the rename failed ({Error}) " +
+                            "and its outcome could not be checked; delivery is unknown",
+                            request.FileReference, request.TenantId, destination, renameError.GetType().Name);
+                        throw new NachaTransmissionException(
+                            $"The file was uploaded to the bank's SFTP server but renaming it into place failed ({renameError.GetType().Name}) " +
+                            "and the result could not be checked: it may or may not have reached the bank. Verify with the bank " +
+                            "before sending it again.",
+                            deliveryUnknown: true);
+                }
             }
         }
         catch (NachaTransmissionException)
@@ -159,6 +194,29 @@ public sealed class SftpNachaTransmitter : INachaTransmitter
         {
             _logger.LogWarning("The Key Vault secret for the NACHA SFTP {What} could not be read: {Error}", what, ex.GetType().Name);
             throw new NachaTransmissionException($"The Key Vault secret for the SFTP {what} could not be read ({ex.GetType().Name}).");
+        }
+    }
+
+    private enum RenameProbe { InPlace, NotRenamed, Unknown }
+
+    /// <summary>
+    /// After a failed rename: the final name there and the temporary one gone
+    /// means the rename happened; the reverse means it did not; anything else
+    /// (including a connection that no longer answers) is unknown.
+    /// </summary>
+    private static RenameProbe ProbeRename(ISftpSession session, string tempPath, string finalPath)
+    {
+        try
+        {
+            var final = session.Exists(finalPath);
+            var temp = session.Exists(tempPath);
+            if (final && !temp) return RenameProbe.InPlace;
+            if (!final && temp) return RenameProbe.NotRenamed;
+            return RenameProbe.Unknown;
+        }
+        catch
+        {
+            return RenameProbe.Unknown;
         }
     }
 

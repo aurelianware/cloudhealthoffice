@@ -17,7 +17,15 @@ public enum NachaTransmissionStatus
     AwaitingRetrieval,
 
     /// <summary>Not delivered and could not be held: the payments stay Pending.</summary>
-    NotSent
+    NotSent,
+
+    /// <summary>
+    /// It may have reached the bank: the upload finished but whether it was
+    /// renamed into place is not known. Not to be sent again, retried or
+    /// retrieved until someone records what the bank says
+    /// (<see cref="INachaDispatcher.ResolveDeliveryUnknownAsync"/>).
+    /// </summary>
+    DeliveryUnknown
 }
 
 /// <summary>What happened to a file. Never carries the file.</summary>
@@ -101,6 +109,14 @@ public interface INachaDispatcher
     /// retrieval is recorded and logged.
     /// </summary>
     Task<NachaRetrievedFile> RetrieveAsync(string tenantId, string fileReference, NachaActor actor, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records what the bank said about a file whose delivery was unknown: received
+    /// (the file is dropped and counts as Transmitted) or not received (it can be
+    /// retried or retrieved again). A user with payments:approve (checked by the
+    /// caller), never a service and never the releasing user; a reason is required.
+    /// </summary>
+    Task<NachaHeldFile> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason, CancellationToken cancellationToken = default);
 }
 
 public sealed class NachaDispatcher : INachaDispatcher
@@ -111,6 +127,8 @@ public sealed class NachaDispatcher : INachaDispatcher
     public static readonly EventId RetriedEvent = new(4904, "NachaFileRetried");
     public static readonly EventId RetrievedEvent = new(4905, "NachaFileRetrievedByPlatformAdmin");
     public static readonly EventId RefusedEvent = new(4906, "NachaFileAccessRefused");
+    public static readonly EventId DeliveryUnknownEvent = new(4907, "NachaFileDeliveryUnknown");
+    public static readonly EventId DeliveryResolvedEvent = new(4908, "NachaFileDeliveryResolved");
 
     private readonly INachaTransmitter _transmitter;
     private readonly INachaHeldFileStore _store;
@@ -141,6 +159,7 @@ public sealed class NachaDispatcher : INachaDispatcher
     {
         var facts = NachaFileFacts.From(request.Content);
         string reason;
+        var deliveryUnknown = false;
         try
         {
             var receipt = await _transmitter.TransmitAsync(request, cancellationToken);
@@ -154,13 +173,15 @@ public sealed class NachaDispatcher : INachaDispatcher
         catch (NachaTransmissionException ex)
         {
             reason = ex.Message;
+            deliveryUnknown = ex.DeliveryUnknown;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             reason = $"Transmission failed ({ex.GetType().Name}).";
         }
 
-        // Not delivered: hold it encrypted for retrieval or retry.
+        // Not delivered (or not known to be): hold it encrypted. A file that may be
+        // at the bank is held as DeliveryUnknown, never offered for retry or retrieval.
         var heldUntil = Now.Add(_options.Retention);
         try
         {
@@ -180,13 +201,23 @@ public sealed class NachaDispatcher : INachaDispatcher
                 BatchId = request.BatchId,
                 ReleasedBy = request.TransmittedBy,
                 Reason = reason,
-                Status = NachaHeldFileStatus.AwaitingRetrieval,
+                Status = deliveryUnknown ? NachaHeldFileStatus.DeliveryUnknown : NachaHeldFileStatus.AwaitingRetrieval,
                 CreatedAt = Now,
                 ExpiresAt = heldUntil,
             };
             if (!_protector.IsProtected(held.ProtectedContent))
                 throw new FieldProtectionException("The NACHA file could not be encrypted.");
             await _store.SaveAsync(held, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && deliveryUnknown)
+        {
+            // Not held, but it may be at the bank: the payments must not go back to
+            // Pending (the next release would send them again).
+            _logger.LogError(DeliveryUnknownEvent,
+                "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId}: delivery to the bank is unknown ({Reason}) and the " +
+                "file could not be held ({Error}); verify with the bank",
+                Sanitize(request.FileReference), _options.ServiceName, Sanitize(request.TenantId), Sanitize(reason), ex.GetType().Name);
+            return new NachaDispatchOutcome { Status = NachaTransmissionStatus.DeliveryUnknown, Reason = reason };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -199,6 +230,15 @@ public sealed class NachaDispatcher : INachaDispatcher
                 Status = NachaTransmissionStatus.NotSent,
                 Reason = $"{reason} The file could not be held for retrieval ({ex.GetType().Name}); nothing was sent and the payments stay Pending.",
             };
+        }
+
+        if (deliveryUnknown)
+        {
+            _logger.LogError(DeliveryUnknownEvent,
+                "AUDIT NACHA file {FileReference} ({Service}) released by {User} for tenant {TenantId}: delivery to the bank is unknown: {Reason}. " +
+                "Held encrypted until {HeldUntil:o}; not retried or retrieved until the bank's answer is recorded",
+                Sanitize(request.FileReference), _options.ServiceName, Sanitize(request.TransmittedBy), Sanitize(request.TenantId), Sanitize(reason), heldUntil);
+            return new NachaDispatchOutcome { Status = NachaTransmissionStatus.DeliveryUnknown, Reason = reason, HeldUntil = heldUntil };
         }
 
         _logger.LogWarning(HeldEvent,
@@ -225,6 +265,8 @@ public sealed class NachaDispatcher : INachaDispatcher
         if (string.Equals(actor.UserId, held.ReleasedBy, StringComparison.OrdinalIgnoreCase))
             throw Refuse(held, actor, "retry",
                 "Separation of duties: you released this NACHA file, so you cannot retry it. Another user with payments:approve must.");
+        if (held.Status == NachaHeldFileStatus.DeliveryUnknown)
+            throw new NachaHeldFileStateException(DeliveryUnknownMessage(fileReference));
         if (held.Status != NachaHeldFileStatus.AwaitingRetrieval)
             throw new NachaHeldFileStateException($"NACHA file {fileReference} is {held.Status}, not awaiting retrieval.");
 
@@ -250,6 +292,14 @@ public sealed class NachaDispatcher : INachaDispatcher
                 Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(held.ReleasedBy), Sanitize(actor.UserId), receipt.Sha256);
             return new NachaDispatchOutcome { Status = NachaTransmissionStatus.Transmitted, Receipt = receipt };
         }
+        catch (NachaTransmissionException ex) when (ex.DeliveryUnknown)
+        {
+            await _store.MarkDeliveryUnknownAsync(tenantId, fileReference, ex.Message, CancellationToken.None);
+            _logger.LogError(DeliveryUnknownEvent,
+                "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId} retried by {User}: delivery to the bank is unknown: {Reason}",
+                Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(actor.UserId), Sanitize(ex.Message));
+            return new NachaDispatchOutcome { Status = NachaTransmissionStatus.DeliveryUnknown, Reason = ex.Message, HeldUntil = held.ExpiresAt };
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var reason = ex is NachaTransmissionException ? ex.Message : $"Transmission failed ({ex.GetType().Name}).";
@@ -274,6 +324,8 @@ public sealed class NachaDispatcher : INachaDispatcher
             throw new ArgumentException("A reason is required to retrieve a NACHA file.");
         reason = Sanitize(reason.Trim());
         if (reason.Length > 500) reason = reason[..500];
+        if (held.Status == NachaHeldFileStatus.DeliveryUnknown)
+            throw new NachaHeldFileStateException(DeliveryUnknownMessage(fileReference));
         if (held.Status is not (NachaHeldFileStatus.AwaitingRetrieval or NachaHeldFileStatus.Retrieved))
             throw new NachaHeldFileStateException($"NACHA file {fileReference} is {held.Status}; there is nothing to retrieve.");
 
@@ -289,6 +341,38 @@ public sealed class NachaDispatcher : INachaDispatcher
             held.Retrievals.Count + 1, reason, held.Sha256);
         return new NachaRetrievedFile { FileName = held.FileName, Content = content, Record = held, FirstRetrieval = first };
     }
+
+    public async Task<NachaHeldFile> ResolveDeliveryUnknownAsync(
+        string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason, CancellationToken cancellationToken = default)
+    {
+        var held = await LoadAsync(tenantId, fileReference, cancellationToken);
+        if (actor.IsService)
+            throw Refuse(held, actor, "resolve", "Recording the bank's answer needs a user with payments:approve, not a service token.");
+        if (string.Equals(actor.UserId, held.ReleasedBy, StringComparison.OrdinalIgnoreCase))
+            throw Refuse(held, actor, "resolve",
+                "Separation of duties: you released this NACHA file, so you cannot record whether the bank received it. Another user with payments:approve must.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason (what the bank said) is required.");
+        reason = Sanitize(reason.Trim());
+        if (reason.Length > 500) reason = reason[..500];
+        if (held.Status != NachaHeldFileStatus.DeliveryUnknown)
+            throw new NachaHeldFileStateException($"NACHA file {fileReference} is {held.Status}, not awaiting the bank's answer.");
+
+        var resolution = new NachaDeliveryResolution { By = actor.UserId, At = Now, BankReceived = bankReceived, Reason = reason };
+        if (!await _store.ResolveDeliveryUnknownAsync(tenantId, fileReference, resolution, cancellationToken))
+            throw new NachaHeldFileStateException($"NACHA file {fileReference} changed state; try again.");
+
+        _logger.LogWarning(DeliveryResolvedEvent,
+            "AUDIT NACHA file {FileReference} ({Service}) for tenant {TenantId}, released by {ReleasedBy}: {User} recorded that the bank " +
+            "{Answer} it: {Reason}",
+            Sanitize(fileReference), _options.ServiceName, Sanitize(tenantId), Sanitize(held.ReleasedBy), Sanitize(actor.UserId),
+            bankReceived ? "received" : "did not receive", reason);
+        return await _store.GetAsync(tenantId, fileReference, cancellationToken) ?? held;
+    }
+
+    private static string DeliveryUnknownMessage(string fileReference)
+        => $"NACHA file {fileReference} may already be at the bank (delivery unknown). Verify with the bank and record its answer " +
+           "before it is retried or retrieved; sending it again could pay twice.";
 
     private async Task<NachaHeldFile> LoadAsync(string tenantId, string fileReference, CancellationToken cancellationToken)
     {

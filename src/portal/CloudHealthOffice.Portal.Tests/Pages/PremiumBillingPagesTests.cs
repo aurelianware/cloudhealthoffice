@@ -463,6 +463,22 @@ public class PremiumBillingEftPageTests : BillingPageTestBase
     }
 
     [Fact]
+    public void DeliveryUnknown_IsNeverOfferedForRetry_AndSaysToVerifyWithTheBank()
+    {
+        // A second approver could retry an ordinary held file; this one may already be at the bank.
+        SignIn("approver-2", "billing:read", "payments:approve");
+        Api.On("GET", "/api/v1/eft/nacha/held", HttpStatusCode.OK, BillingApiShapes.HeldFilesDeliveryUnknown);
+
+        var cut = RenderComponent<PremiumBillingEft>();
+
+        cut.WaitForAssertion(() => Has(cut, "eft-awaiting-retrieval").Should().BeTrue());
+        Has(cut, "eft-awaiting-retrieval-retry-NACHA-DU000001").Should().BeFalse();
+        cut.Find("[data-testid=eft-awaiting-retrieval-delivery-unknown-NACHA-DU000001]").TextContent.Should().Contain("verify with the bank");
+        cut.Find("[data-testid=eft-awaiting-retrieval-delivery-unknown-note]").TextContent
+            .Should().Contain("Do not retry it or deliver it by hand");
+    }
+
+    [Fact]
     public void TheReleaser_IsNotOfferedTheRetry()
     {
         SignIn("approver-1", "billing:read", "payments:approve");

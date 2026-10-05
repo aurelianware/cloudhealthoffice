@@ -181,6 +181,41 @@ public class EftController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Record what the bank said about a NACHA file whose delivery was unknown
+    /// (uploaded, but whether it was renamed into place could not be checked).
+    /// Until then it is neither retried nor retrieved. payments:approve, a user
+    /// token, not the user who released it, and a reason (the bank's answer).
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/resolve-delivery")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(NachaDeliveryResolutionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<NachaDeliveryResolutionResult>> ResolveNachaDelivery(string fileReference, [FromBody] ResolveNachaDeliveryRequest request)
+    {
+        if (request?.BankReceived is not { } bankReceived)
+            return BadRequest(new { error = "bankReceived (true or false, as the bank confirmed) is required." });
+        try
+        {
+            return Ok(await _eftDraftService.ResolveNachaDeliveryAsync(fileReference, bankReceived, request.Reason ?? string.Empty));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
     private ActionResult? HeldFileProblem(Exception ex) => ex switch
     {
         NachaSeparationOfDutiesException => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden),

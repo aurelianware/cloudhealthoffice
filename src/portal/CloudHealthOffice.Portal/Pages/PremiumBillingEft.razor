@@ -403,8 +403,8 @@
         "Settled" => Color.Success,
         "Submitted" or "Processing" => Color.Info,
         "Pending" => Color.Default,
-        "AwaitingRetrieval" => Color.Warning,
-        "Returned" or "Failed" => Color.Error,
+        "AwaitingRetrieval" or "Releasing" => Color.Warning,
+        "Returned" or "Failed" or "DeliveryUnknown" => Color.Error,
         "Cancelled" => Color.Dark,
         _ => Color.Default
     };

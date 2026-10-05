@@ -41,6 +41,14 @@ public interface ICapitationDisbursementService
     Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string tenantId, string fileReference, NachaActor actor, string reason);
 
     /// <summary>
+    /// Records what the bank said about a NACHA file whose delivery was unknown
+    /// (payments:approve in the controller; a user, not the releaser). Received:
+    /// its disbursements are Submitted. Not received: they can be retried or
+    /// retrieved again (or, when the held file expired, go back to Pending).
+    /// </summary>
+    Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason);
+
+    /// <summary>
     /// Process an ACH return (bank rejection of credit)
     /// </summary>
     Task<CapitationDisbursement> ProcessReturnAsync(ProcessReturnRequest request);
@@ -663,6 +671,13 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
                     disbursement.ErrorMessage = null;
                     break;
+                case NachaTransmissionStatus.DeliveryUnknown:
+                    // It may be at the bank: never back to Pending (that would pay it again).
+                    disbursement.NachaFileReference = file.FileReference;
+                    disbursement.TraceNumber = entries[i].TraceNumber;
+                    disbursement.Status = DisbursementStatus.DeliveryUnknown;
+                    disbursement.ErrorMessage = DeliveryUnknownMessage(file.FileReference, outcome.Reason);
+                    break;
                 case NachaTransmissionStatus.AwaitingRetrieval:
                     disbursement.NachaFileReference = file.FileReference;
                     disbursement.TraceNumber = entries[i].TraceNumber;
@@ -746,10 +761,85 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 disbursement.ErrorMessage = null;
                 await _disbursementRepository.UpdateAsync(disbursement);
             }
+            else if (outcome.Status == NachaTransmissionStatus.DeliveryUnknown)
+            {
+                disbursement.Status = DisbursementStatus.DeliveryUnknown;
+                disbursement.ErrorMessage = DeliveryUnknownMessage(fileReference, outcome.Reason);
+                await _disbursementRepository.UpdateAsync(disbursement);
+            }
             result.Entries.Add(Summary(disbursement));
         }
 
         return result;
+    }
+
+    private static string DeliveryUnknownMessage(string fileReference, string? reason)
+        => $"NACHA file {fileReference} may have reached the bank: {reason} Do not send it again: verify with the bank, then " +
+           "another user with payments:approve records whether the bank received it.";
+
+    public async Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(
+        string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason)
+    {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
+        var disbursements = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.DeliveryUnknown))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        var fileStillHeld = true;
+        try
+        {
+            // Checks the user (not a service, not the releaser), the reason and the
+            // file's state, and records the answer on the held file.
+            await _dispatcher.ResolveDeliveryUnknownAsync(tenantId, fileReference, actor, bankReceived, reason);
+        }
+        catch (Exception ex) when ((ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException) && disbursements.Count > 0)
+        {
+            // The held file is gone (7 days); the disbursements still wait for the answer.
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("A reason (what the bank said) is required.");
+            fileStillHeld = false;
+            _logger.LogWarning(
+                "NACHA file {FileReference}: held file expired; {User} recorded the bank's answer ({Received}) without the releaser check",
+                SanitizeForLog(fileReference), SanitizeForLog(actor.UserId), bankReceived);
+        }
+
+        var now = DateTime.UtcNow;
+        var status = bankReceived ? DisbursementStatus.Submitted
+            : fileStillHeld ? DisbursementStatus.AwaitingRetrieval : DisbursementStatus.Pending;
+        foreach (var disbursement in disbursements)
+        {
+            disbursement.Status = status;
+            switch (status)
+            {
+                case DisbursementStatus.Submitted:
+                    disbursement.SubmittedAt = now;
+                    disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    disbursement.ErrorMessage = $"The bank confirmed it received NACHA file {fileReference} (recorded by {actor.UserId}).";
+                    break;
+                case DisbursementStatus.AwaitingRetrieval:
+                    disbursement.ErrorMessage =
+                        $"NACHA file {fileReference}: the bank confirmed it did not receive it. It is held encrypted: a platform admin " +
+                        "must retrieve it, or another user with payments:approve must retry it.";
+                    break;
+                default:
+                    disbursement.NachaFileReference = null;
+                    disbursement.TraceNumber = null;
+                    disbursement.ReleaseClaimId = null;
+                    disbursement.ReleaseClaimedAt = null;
+                    disbursement.ErrorMessage = $"The bank confirmed it did not receive NACHA file {fileReference}, which has expired; back to Pending for the next file.";
+                    break;
+            }
+            await _disbursementRepository.UpdateAsync(disbursement);
+        }
+
+        return new NachaDeliveryResolutionResult
+        {
+            FileReference = fileReference,
+            BankReceived = bankReceived,
+            PaymentStatus = status.ToString(),
+            PaymentsUpdated = disbursements.Count,
+        };
     }
 
     public async Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string tenantId, string fileReference, NachaActor actor, string reason)

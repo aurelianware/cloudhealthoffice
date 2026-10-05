@@ -40,6 +40,104 @@ public class NachaDispatcherTests
         return _store.All.Single();
     }
 
+    private void BankDeliveryUnknown()
+        => _transmitter.Setup(t => t.TransmitAsync(It.IsAny<NachaTransmissionRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NachaTransmissionException("Uploaded, rename outcome unknown. Verify with the bank.", deliveryUnknown: true));
+
+    private async Task<NachaHeldFile> DeliveryUnknownFile()
+    {
+        BankDeliveryUnknown();
+        var outcome = await Dispatcher().DispatchAsync(Nacha.Request(Nacha.File(), Releaser));
+        outcome.Status.Should().Be(NachaTransmissionStatus.DeliveryUnknown);
+        return _store.All.Single();
+    }
+
+    [Fact]
+    public async Task DeliveryUnknown_IsHeld_ButNeitherRetriedNorRetrieved()
+    {
+        var held = await DeliveryUnknownFile();
+        held.Status.Should().Be(NachaHeldFileStatus.DeliveryUnknown);
+        _transmitter.Invocations.Clear();
+        BankUp();
+
+        var retry = () => Dispatcher().RetryAsync(Nacha.Tenant, held.FileReference, new NachaActor("approver-2", false));
+        var retrieve = () => Dispatcher().RetrieveAsync(Nacha.Tenant, held.FileReference, new NachaActor("platform-admin-1", false), "deliver by hand");
+
+        (await retry.Should().ThrowAsync<NachaHeldFileStateException>()).Which.Message.Should().Contain("Verify with the bank");
+        (await retrieve.Should().ThrowAsync<NachaHeldFileStateException>()).Which.Message.Should().Contain("Verify with the bank");
+        _transmitter.Invocations.Should().BeEmpty("nothing is sent again while it may be at the bank");
+        held.Status.Should().Be(NachaHeldFileStatus.DeliveryUnknown);
+        held.Retrievals.Should().BeEmpty();
+        (await Dispatcher().ListHeldAsync(Nacha.Tenant)).Should().ContainSingle("it stays visible until resolved");
+    }
+
+    [Fact]
+    public async Task DeliveryUnknown_AndNothingCanBeHeld_IsStillNotNotSent()
+    {
+        // NotSent puts the payments back to Pending, and the next release would send them again.
+        BankDeliveryUnknown();
+
+        var outcome = await Dispatcher(protector: new UnconfiguredFieldProtector()).DispatchAsync(Nacha.Request(Nacha.File(), Releaser));
+
+        outcome.Status.Should().Be(NachaTransmissionStatus.DeliveryUnknown);
+    }
+
+    [Fact]
+    public async Task Retry_WhoseOutcomeIsUnknown_LeavesTheFileDeliveryUnknown()
+    {
+        var held = await HeldFile();
+        BankDeliveryUnknown();
+
+        var outcome = await Dispatcher().RetryAsync(Nacha.Tenant, held.FileReference, new NachaActor("approver-2", false));
+
+        outcome.Status.Should().Be(NachaTransmissionStatus.DeliveryUnknown);
+        held.Status.Should().Be(NachaHeldFileStatus.DeliveryUnknown);
+    }
+
+    [Fact]
+    public async Task ResolveDeliveryUnknown_NeedsAnotherUser_AndAReason()
+    {
+        var held = await DeliveryUnknownFile();
+
+        await FluentActions.Awaiting(() => Dispatcher().ResolveDeliveryUnknownAsync(Nacha.Tenant, held.FileReference,
+            new NachaActor(Releaser, false), false, "bank says no")).Should().ThrowAsync<NachaSeparationOfDutiesException>();
+        await FluentActions.Awaiting(() => Dispatcher().ResolveDeliveryUnknownAsync(Nacha.Tenant, held.FileReference,
+            new NachaActor("svc", true), false, "bank says no")).Should().ThrowAsync<NachaSeparationOfDutiesException>();
+        await FluentActions.Awaiting(() => Dispatcher().ResolveDeliveryUnknownAsync(Nacha.Tenant, held.FileReference,
+            new NachaActor("approver-2", false), false, " ")).Should().ThrowAsync<ArgumentException>();
+        held.Status.Should().Be(NachaHeldFileStatus.DeliveryUnknown);
+    }
+
+    [Fact]
+    public async Task ResolveDeliveryUnknown_NotReceived_MakesItRetryable()
+    {
+        var held = await DeliveryUnknownFile();
+        BankUp();
+
+        await Dispatcher().ResolveDeliveryUnknownAsync(Nacha.Tenant, held.FileReference,
+            new NachaActor("approver-2", false), bankReceived: false, "Bank ops (J. Doe) confirmed no file NACHA-ABC12345 today");
+        var outcome = await Dispatcher().RetryAsync(Nacha.Tenant, held.FileReference, new NachaActor("approver-3", false));
+
+        held.DeliveryResolution!.BankReceived.Should().BeFalse();
+        held.DeliveryResolution.By.Should().Be("approver-2");
+        outcome.Status.Should().Be(NachaTransmissionStatus.Transmitted);
+        _log.Entries.Should().Contain(e => e.Event.Id == 4908);
+    }
+
+    [Fact]
+    public async Task ResolveDeliveryUnknown_Received_DropsTheFile()
+    {
+        var held = await DeliveryUnknownFile();
+
+        await Dispatcher().ResolveDeliveryUnknownAsync(Nacha.Tenant, held.FileReference,
+            new NachaActor("approver-2", false), bankReceived: true, "Bank confirmed receipt, batch 0042");
+
+        held.Status.Should().Be(NachaHeldFileStatus.Transmitted);
+        held.ProtectedContent.Should().BeNull();
+        await FluentActions.Awaiting(() => Dispatcher().RetrieveAsync(Nacha.Tenant, held.FileReference,
+            new NachaActor("platform-admin-1", false), "deliver")).Should().ThrowAsync<NachaHeldFileStateException>();
+    }
+
     [Fact]
     public async Task Delivered_ReturnsTheReceipt_AndHoldsNothing()
     {

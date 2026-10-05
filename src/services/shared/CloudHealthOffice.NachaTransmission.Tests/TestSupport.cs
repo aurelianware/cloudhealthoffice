@@ -84,6 +84,14 @@ internal sealed class FakeSftp : ISftpSessionFactory
     public bool FailRename { get; set; }
     public Exception? FailConnect { get; set; }
 
+    /// <summary>The server renames the file, but the reply is lost (the client sees an error).</summary>
+    public bool RenameAppliesThenFails { get; set; }
+
+    /// <summary>After a rename, the connection no longer answers (every call fails).</summary>
+    public bool DeadAfterRename { get; set; }
+
+    private bool _renamed;
+
     public ISftpSession Connect(SftpConnectParameters parameters)
     {
         Connections.Add(parameters);
@@ -96,7 +104,12 @@ internal sealed class FakeSftp : ISftpSessionFactory
         private readonly FakeSftp _server;
         public Session(FakeSftp server) => _server = server;
 
-        public bool Exists(string path) { _server.Operations.Add($"exists {path}"); return _server.Files.ContainsKey(path); }
+        public bool Exists(string path)
+        {
+            _server.Operations.Add($"exists {path}");
+            if (_server.DeadAfterRename && _server._renamed) throw new IOException("connection lost");
+            return _server.Files.ContainsKey(path);
+        }
 
         public void Upload(Stream content, string path)
         {
@@ -109,12 +122,20 @@ internal sealed class FakeSftp : ISftpSessionFactory
         public void Rename(string from, string to)
         {
             _server.Operations.Add($"rename {from} -> {to}");
+            _server._renamed = true;
             if (_server.FailRename) throw new IOException("rename failed for user cho-plan with key " + FakeSecrets.Passphrase);
             _server.Files[to] = _server.Files[from];
             _server.Files.Remove(from);
+            if (_server.RenameAppliesThenFails || _server.DeadAfterRename)
+                throw new IOException("connection reset before the rename reply");
         }
 
-        public void Delete(string path) { _server.Operations.Add($"delete {path}"); _server.Files.Remove(path); }
+        public void Delete(string path)
+        {
+            _server.Operations.Add($"delete {path}");
+            if (_server.DeadAfterRename && _server._renamed) throw new IOException("connection lost");
+            _server.Files.Remove(path);
+        }
 
         public void Dispose() => _server.Operations.Add("close");
     }

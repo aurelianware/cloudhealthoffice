@@ -130,9 +130,51 @@ public class SftpNachaTransmitterTests
 
         var act = () => Transmitter().TransmitAsync(Nacha.Request(Nacha.File()));
 
-        await act.Should().ThrowAsync<NachaTransmissionException>();
+        // The temporary name is still there and the final one is not: certainly not delivered.
+        (await act.Should().ThrowAsync<NachaTransmissionException>()).Which.DeliveryUnknown.Should().BeFalse();
         _sftp.Files.Should().BeEmpty("the temporary file is deleted");
         _sftp.Operations.Should().Contain(o => o.StartsWith("delete "));
+    }
+
+    [Fact]
+    public async Task RenameReplyLost_ButTheFileIsInPlace_IsDelivered()
+    {
+        _sftp.RenameAppliesThenFails = true;
+        var request = Nacha.Request(Nacha.File());
+
+        var receipt = await Transmitter().TransmitAsync(request);
+
+        receipt.RemoteFileName.Should().Be(request.FileName);
+        _sftp.Files.Keys.Should().ContainSingle().Which.Should().EndWith("/" + request.FileName);
+        _sftp.Operations.Should().NotContain(o => o.StartsWith("delete "));
+    }
+
+    [Fact]
+    public async Task RenameFailed_AndTheServerCannotBeAsked_DeliveryIsUnknown()
+    {
+        // The rename went through on the server, then the connection died: the
+        // file is at the bank, and nothing the client can see says so.
+        _sftp.DeadAfterRename = true;
+
+        var act = () => Transmitter().TransmitAsync(Nacha.Request(Nacha.File()));
+
+        var ex = (await act.Should().ThrowAsync<NachaTransmissionException>()).Which;
+        ex.DeliveryUnknown.Should().BeTrue();
+        ex.Message.Should().Contain("Verify with the bank");
+        _sftp.Files.Should().ContainSingle("the file did reach the bank");
+    }
+
+    [Fact]
+    public async Task FileAlreadyInTheDrop_IsNotOverwritten_AndDeliveryIsUnknown()
+    {
+        var request = Nacha.Request(Nacha.File());
+        await Transmitter().TransmitAsync(request);
+
+        var act = () => Transmitter().TransmitAsync(request);
+
+        var ex = (await act.Should().ThrowAsync<NachaTransmissionException>()).Which;
+        ex.DeliveryUnknown.Should().BeTrue("a file of that name is this file from an earlier attempt");
+        _sftp.Files.Should().ContainSingle();
     }
 
     [Fact]

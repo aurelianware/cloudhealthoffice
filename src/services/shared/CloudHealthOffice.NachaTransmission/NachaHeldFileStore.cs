@@ -17,7 +17,23 @@ public enum NachaHeldFileStatus
     Transmitted,
 
     /// <summary>A platform admin retrieved it for manual delivery.</summary>
-    Retrieved
+    Retrieved,
+
+    /// <summary>
+    /// It may have reached the bank (an upload whose rename outcome is unknown).
+    /// Neither retried nor retrieved until someone with payments:approve records
+    /// what the bank says: received (Transmitted) or not (AwaitingRetrieval).
+    /// </summary>
+    DeliveryUnknown
+}
+
+/// <summary>Who settled a delivery-unknown file, with what the bank said.</summary>
+public sealed class NachaDeliveryResolution
+{
+    public string By { get; set; } = string.Empty;
+    public DateTime At { get; set; }
+    public bool BankReceived { get; set; }
+    public string Reason { get; set; } = string.Empty;
 }
 
 /// <summary>One platform-admin retrieval, with the reason they gave.</summary>
@@ -67,6 +83,7 @@ public sealed class NachaHeldFile
     public string? LastAttemptBy { get; set; }
     public NachaTransmissionReceipt? Receipt { get; set; }
     public List<NachaRetrieval> Retrievals { get; set; } = new();
+    public NachaDeliveryResolution? DeliveryResolution { get; set; }
 
     public static string KeyOf(string tenantId, string fileReference) => $"{tenantId}:{fileReference}";
 }
@@ -95,6 +112,15 @@ public interface INachaHeldFileStore
 
     /// <summary>AwaitingRetrieval or Retrieved to Retrieved, recording the retrieval. False in any other state.</summary>
     Task<bool> RecordRetrievalAsync(string tenantId, string fileReference, NachaRetrieval retrieval, CancellationToken cancellationToken = default);
+
+    /// <summary>Transmitting to DeliveryUnknown after a retry whose outcome is unknown.</summary>
+    Task MarkDeliveryUnknownAsync(string tenantId, string fileReference, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// DeliveryUnknown to Transmitted (the bank has it; the file is dropped) or to
+    /// AwaitingRetrieval (the bank does not), recording who said so. False in any other state.
+    /// </summary>
+    Task<bool> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaDeliveryResolution resolution, CancellationToken cancellationToken = default);
 }
 
 public sealed class MongoNachaHeldFileStore : INachaHeldFileStore
@@ -146,7 +172,7 @@ public sealed class MongoNachaHeldFileStore : INachaHeldFileStore
         var filter = f.And(
             f.Eq(x => x.TenantId, tenantId),
             f.Eq(x => x.SourceService, sourceService),
-            f.In(x => x.Status, new[] { NachaHeldFileStatus.AwaitingRetrieval, NachaHeldFileStatus.Transmitting }));
+            f.In(x => x.Status, new[] { NachaHeldFileStatus.AwaitingRetrieval, NachaHeldFileStatus.Transmitting, NachaHeldFileStatus.DeliveryUnknown }));
         var list = await _collection.Find(filter)
             .Project<NachaHeldFile>(Builders<NachaHeldFile>.Projection.Exclude(x => x.ProtectedContent))
             .SortByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
@@ -194,6 +220,27 @@ public sealed class MongoNachaHeldFileStore : INachaHeldFileStore
             .Push(x => x.Retrievals, retrieval), cancellationToken: cancellationToken);
         return result.ModifiedCount == 1;
     }
+
+    public async Task MarkDeliveryUnknownAsync(string tenantId, string fileReference, string reason, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<NachaHeldFile>.Filter.And(Key(tenantId, fileReference),
+            Builders<NachaHeldFile>.Filter.Eq(x => x.Status, NachaHeldFileStatus.Transmitting));
+        await _collection.UpdateOneAsync(filter, Builders<NachaHeldFile>.Update
+            .Set(x => x.Status, NachaHeldFileStatus.DeliveryUnknown)
+            .Set(x => x.Reason, reason), cancellationToken: cancellationToken);
+    }
+
+    public async Task<bool> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaDeliveryResolution resolution, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<NachaHeldFile>.Filter.And(Key(tenantId, fileReference),
+            Builders<NachaHeldFile>.Filter.Eq(x => x.Status, NachaHeldFileStatus.DeliveryUnknown));
+        var update = Builders<NachaHeldFile>.Update.Set(x => x.DeliveryResolution, resolution);
+        update = resolution.BankReceived
+            ? update.Set(x => x.Status, NachaHeldFileStatus.Transmitted).Set(x => x.ProtectedContent, null)
+            : update.Set(x => x.Status, NachaHeldFileStatus.AwaitingRetrieval);
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+        return result.ModifiedCount == 1;
+    }
 }
 
 /// <summary>Development, Testing and tests: held files in memory (lost on restart).</summary>
@@ -218,7 +265,7 @@ public sealed class InMemoryNachaHeldFileStore : INachaHeldFileStore
     public Task<IReadOnlyList<NachaHeldFile>> ListOpenAsync(string tenantId, string sourceService, CancellationToken cancellationToken = default)
         => Task.FromResult<IReadOnlyList<NachaHeldFile>>(_files.Values
             .Where(f => f.TenantId == tenantId && f.SourceService == sourceService
-                        && f.Status is NachaHeldFileStatus.AwaitingRetrieval or NachaHeldFileStatus.Transmitting)
+                        && f.Status is NachaHeldFileStatus.AwaitingRetrieval or NachaHeldFileStatus.Transmitting or NachaHeldFileStatus.DeliveryUnknown)
             .OrderByDescending(f => f.CreatedAt).ToList());
 
     public Task<bool> TryClaimAsync(string tenantId, string fileReference, string by, DateTime at, CancellationToken cancellationToken = default)
@@ -274,6 +321,39 @@ public sealed class InMemoryNachaHeldFileStore : INachaHeldFileStore
             return Task.FromResult(true);
         }
     }
+
+    public Task MarkDeliveryUnknownAsync(string tenantId, string fileReference, string reason, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (_files.TryGetValue(NachaHeldFile.KeyOf(tenantId, fileReference), out var f) && f.Status == NachaHeldFileStatus.Transmitting)
+            {
+                f.Status = NachaHeldFileStatus.DeliveryUnknown;
+                f.Reason = reason;
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaDeliveryResolution resolution, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (!_files.TryGetValue(NachaHeldFile.KeyOf(tenantId, fileReference), out var f) || f.Status != NachaHeldFileStatus.DeliveryUnknown)
+                return Task.FromResult(false);
+            f.DeliveryResolution = resolution;
+            if (resolution.BankReceived)
+            {
+                f.Status = NachaHeldFileStatus.Transmitted;
+                f.ProtectedContent = null;
+            }
+            else
+            {
+                f.Status = NachaHeldFileStatus.AwaitingRetrieval;
+            }
+            return Task.FromResult(true);
+        }
+    }
 }
 
 /// <summary>
@@ -293,4 +373,6 @@ public sealed class UnavailableNachaHeldFileStore : INachaHeldFileStore
     public Task ReleaseClaimAsync(string tenantId, string fileReference, string reason, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task MarkTransmittedAsync(string tenantId, string fileReference, NachaTransmissionReceipt receipt, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task<bool> RecordRetrievalAsync(string tenantId, string fileReference, NachaRetrieval retrieval, CancellationToken cancellationToken = default) => Task.FromResult(false);
+    public Task MarkDeliveryUnknownAsync(string tenantId, string fileReference, string reason, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<bool> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaDeliveryResolution resolution, CancellationToken cancellationToken = default) => Task.FromResult(false);
 }

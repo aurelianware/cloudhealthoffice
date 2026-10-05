@@ -238,7 +238,15 @@ public enum DisbursementStatus
     /// Submitted, AwaitingRetrieval, or back in Pending when nothing was sent.
     /// One left here (the process stopped mid-send) needs checking with the bank.
     /// </summary>
-    Releasing
+    Releasing,
+
+    /// <summary>
+    /// In a NACHA credit file that may have reached the bank (upload finished,
+    /// rename outcome unknown). Never re-sent, retried or retrieved until a user
+    /// with payments:approve records what the bank says (Submitted, or back to
+    /// AwaitingRetrieval / Pending).
+    /// </summary>
+    DeliveryUnknown
 }
 
 /// <summary>

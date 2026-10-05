@@ -43,6 +43,26 @@ public sealed class NachaHeldFileView
     };
 }
 
+/// <summary>
+/// Body recording what the bank said about a file whose delivery was unknown:
+/// whether it received the file, and the evidence (who at the bank, reference).
+/// </summary>
+public sealed class ResolveNachaDeliveryRequest
+{
+    [JsonPropertyName("bankReceived")] public bool? BankReceived { get; set; }
+    [JsonPropertyName("reason")] public string? Reason { get; set; }
+}
+
+/// <summary>What recording the bank's answer changed.</summary>
+public sealed class NachaDeliveryResolutionResult
+{
+    [JsonPropertyName("fileReference")] public string FileReference { get; init; } = string.Empty;
+    [JsonPropertyName("bankReceived")] public bool BankReceived { get; init; }
+    /// <summary>The payments' new status: Submitted (received), AwaitingRetrieval (not received, file still held) or Pending (not received, file expired).</summary>
+    [JsonPropertyName("paymentStatus")] public string PaymentStatus { get; init; } = string.Empty;
+    [JsonPropertyName("paymentsUpdated")] public int PaymentsUpdated { get; init; }
+}
+
 /// <summary>Body of a platform admin's retrieval: why they need the file.</summary>
 public sealed class RetrieveNachaFileRequest
 {
