@@ -151,6 +151,12 @@ public class EftDraft
     /// Error details for failed drafts
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>The NACHA release that claimed this draft (Pending to Releasing).</summary>
+    public string? ReleaseClaimId { get; set; }
+
+    /// <summary>When that release claimed it.</summary>
+    public DateTime? ReleaseClaimedAt { get; set; }
 }
 
 /// <summary>
@@ -214,7 +220,16 @@ public enum EftDraftStatus
     /// configured or failed). The file is held encrypted for 7 days: a
     /// platform admin must retrieve it or another approver retry it.
     /// </summary>
-    AwaitingRetrieval
+    AwaitingRetrieval,
+
+    /// <summary>
+    /// Claimed by one NACHA release (<see cref="EftDraft.ReleaseClaimId"/>) and
+    /// being put in a file: no other release may include it. Moved from Pending
+    /// by a conditional write before the file is built; it ends Submitted,
+    /// AwaitingRetrieval, or back in Pending when nothing was sent. A draft left
+    /// here (the process stopped mid-send) needs checking with the bank.
+    /// </summary>
+    Releasing
 }
 
 /// <summary>

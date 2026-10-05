@@ -88,11 +88,14 @@ public class EftController : ControllerBase
     /// last 4, amount per entry) and the transmission receipt, never the file.
     /// Drafts become Submitted only once the bank has the file; when it cannot
     /// be sent they are AwaitingRetrieval (file held encrypted for 7 days).
+    /// The drafts are claimed (Releasing) before the file is built: a second
+    /// release while one is in progress gets 409, never a second file.
     /// </summary>
     [HttpPost("nacha/generate")]
     [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(NachaFileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<NachaFileResult>> GenerateNachaFile()
     {
         try
@@ -103,6 +106,10 @@ public class EftController : ControllerBase
         catch (SeparationOfDutiesException ex)
         {
             return SeparationOfDuties(ex);
+        }
+        catch (NachaReleaseConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

@@ -139,6 +139,19 @@ public class NachaTransmissionEndToEndTests : IClassFixture<NachaTransmissionEnd
         _factory.Drafts.Setup(r => r.UpdateAsync(It.IsAny<EftDraft>())).ReturnsAsync((EftDraft d) => d);
         _factory.Drafts.Setup(r => r.GetByStatusAsync(It.IsAny<EftDraftStatus>()))
             .ReturnsAsync((EftDraftStatus s) => _drafts.Where(d => d.Status == s).ToList());
+        // The conditional Pending-to-Releasing write, as the repositories do it.
+        _factory.Drafts.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
+            .ReturnsAsync((string id, string claim, DateTime at) =>
+            {
+                lock (_drafts)
+                {
+                    var d = _drafts.SingleOrDefault(x => x.Id == id && x.Status == EftDraftStatus.Pending);
+                    if (d == null) return false;
+                    d.Status = EftDraftStatus.Releasing;
+                    d.ReleaseClaimId = claim;
+                    return true;
+                }
+            });
 
         _factory.SponsorService.Accounts[Group] = new
         {
@@ -207,8 +220,8 @@ public class NachaTransmissionEndToEndTests : IClassFixture<NachaTransmissionEnd
         sent.TenantId.Should().Be(Tenant);
         NachaFileFacts.From(sent.Content).Sha256.Should().Be(receipt.GetProperty("sha256").GetString());
 
-        // Submitted only after the bank had it.
-        _factory.Bank.StatusesSeen.Single().Should().OnlyContain(s => s == EftDraftStatus.Pending);
+        // Submitted only after the bank had it; while it was sent the release held them.
+        _factory.Bank.StatusesSeen.Single().Should().OnlyContain(s => s == EftDraftStatus.Releasing);
         _drafts.Should().ContainSingle().Which.Status.Should().Be(EftDraftStatus.Submitted);
         NoNumbersLogged();
     }
@@ -228,7 +241,7 @@ public class NachaTransmissionEndToEndTests : IClassFixture<NachaTransmissionEnd
         response.StatusCode.Should().Be(HttpStatusCode.OK, body);
         NoNumbersOrFile(body);
         JsonDocument.Parse(body).RootElement.GetProperty("transmissionStatus").GetString().Should().Be("Transmitted");
-        _factory.Bank.StatusesSeen.Single().Should().OnlyContain(s => s == EftDraftStatus.Pending);
+        _factory.Bank.StatusesSeen.Single().Should().OnlyContain(s => s == EftDraftStatus.Releasing);
         _drafts.Single().Status.Should().Be(EftDraftStatus.Submitted);
         _drafts.Single().NachaFileReference.Should().NotBeNullOrEmpty();
     }

@@ -66,6 +66,40 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             .ToListAsync();
     }
 
+    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<EftDraft>.Filter;
+        var filter = f.And(
+            f.Eq(d => d.TenantId, tenantId),
+            f.Eq(d => d.Id, id),
+            f.Eq(d => d.Status, EftDraftStatus.Pending));
+        var update = Builders<EftDraft>.Update
+            .Set(d => d.Status, EftDraftStatus.Releasing)
+            .Set(d => d.ReleaseClaimId, claimId)
+            .Set(d => d.ReleaseClaimedAt, claimedAt)
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow);
+        var result = await _collection.UpdateOneAsync(filter, update);
+        return result.ModifiedCount == 1;
+    }
+
+    public async Task ReleaseClaimAsync(string id, string claimId, string? reason)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<EftDraft>.Filter;
+        var filter = f.And(
+            f.Eq(d => d.TenantId, tenantId),
+            f.Eq(d => d.Id, id),
+            f.Eq(d => d.Status, EftDraftStatus.Releasing),
+            f.Eq(d => d.ReleaseClaimId, claimId));
+        await _collection.UpdateOneAsync(filter, Builders<EftDraft>.Update
+            .Set(d => d.Status, EftDraftStatus.Pending)
+            .Set(d => d.ReleaseClaimId, null)
+            .Set(d => d.ReleaseClaimedAt, null)
+            .Set(d => d.ErrorMessage, reason)
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
+    }
+
     public async Task<IEnumerable<EftDraft>> GetPendingDraftsAsync()
     {
         var tenantId = GetTenantId();

@@ -350,10 +350,14 @@ public class SponsorCallDefectTests
             new() { Id = "d1", TenantId = Tenant, GroupNumber = "GRP001", Method = EftMethod.Nacha, Amount = 100 }
         });
 
+        _drafts.Setup(r => r.TryClaimForReleaseAsync("d1", It.IsAny<string>(), It.IsAny<DateTime>())).ReturnsAsync(true);
+
         var act = () => EftService().GenerateNachaFileForPendingDraftsAsync();
 
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should().Contain("d1").And.Contain("unavailable");
+        // Claimed, then handed back to Pending with the reason: never left held.
+        _drafts.Verify(r => r.ReleaseClaimAsync("d1", It.IsAny<string>(), It.Is<string>(s => s.Contains("unavailable"))), Times.Once);
         _drafts.Verify(r => r.UpdateAsync(It.IsAny<EftDraft>()), Times.Never);
         _eftLog.Entries.Should().Contain(e => e.Level == LogLevel.Error && e.Message.Contains("d1"));
     }

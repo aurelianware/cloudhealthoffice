@@ -102,6 +102,17 @@ public class EftControllerTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task GenerateNachaFile_DraftsHeldByAnotherRelease_Returns409()
+    {
+        _draftService.Setup(s => s.GenerateNachaFileForPendingDraftsAsync())
+            .ThrowsAsync(new NachaReleaseConflictException("already being released"));
+
+        var result = await _controller.GenerateNachaFile();
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
     #endregion
 
     #region No file download

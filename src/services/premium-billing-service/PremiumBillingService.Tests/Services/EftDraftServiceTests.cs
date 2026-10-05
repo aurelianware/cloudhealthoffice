@@ -37,6 +37,9 @@ public class EftDraftServiceTests
         _actor.SetupGet(a => a.IsAuthenticated).Returns(true);
         _actor.SetupGet(a => a.TenantId).Returns("tenant-1");
         _httpContextAccessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
+        // Every Pending draft is free to claim unless a test says otherwise.
+        _draftRepo.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
+            .ReturnsAsync(true);
 
         var configData = new Dictionary<string, string?>
         {

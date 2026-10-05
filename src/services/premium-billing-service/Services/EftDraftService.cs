@@ -74,6 +74,15 @@ public interface IEftDraftService
     Task<EftDraft> CancelDraftAsync(string draftId);
 }
 
+/// <summary>
+/// Every draft this release would send is already being released by another
+/// request (409): two releases never put the same draft in two files.
+/// </summary>
+public sealed class NachaReleaseConflictException : Exception
+{
+    public NachaReleaseConflictException(string message) : base(message) { }
+}
+
 public class EftDraftService : IEftDraftService
 {
     private readonly IEftDraftRepository _draftRepository;
@@ -235,6 +244,10 @@ public class EftDraftService : IEftDraftService
         // Separate NACHA entries (built as batch) from Stripe (initiated individually)
         var nachaEntries = new List<NachaEntryDetail>();
         var nachaDrafts = new List<EftDraft>();
+        // The NACHA drafts this batch creates are born claimed by it (Releasing),
+        // so a concurrent release of Pending drafts never puts them in a second file.
+        var claimId = NewClaimId();
+        var claimedAt = DateTime.UtcNow;
 
         foreach (var invoiceId in uniqueInvoiceIds)
         {
@@ -297,7 +310,9 @@ public class EftDraftService : IEftDraftService
                         GroupNumber = invoice.GroupNumber,
                         Amount = invoice.BalanceDue,
                         Method = EftMethod.Nacha,
-                        Status = EftDraftStatus.Pending,
+                        Status = EftDraftStatus.Releasing,
+                        ReleaseClaimId = claimId,
+                        ReleaseClaimedAt = claimedAt,
                         RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
                         AccountNumberLast4 = bankAccount.AccountNumberLast4,
                         InitiatedBy = request.InitiatedBy
@@ -334,7 +349,7 @@ public class EftDraftService : IEftDraftService
         // (file held encrypted) or stay Pending (nothing held).
         if (nachaEntries.Count > 0)
         {
-            result.NachaFile = await SendNachaFileAsync(nachaEntries, nachaDrafts, request.BillingRunId);
+            result.NachaFile = await SendNachaFileAsync(nachaEntries, nachaDrafts, request.BillingRunId, claimId);
         }
 
         // Mark the billing run so the items needing attention are visible on it.
@@ -358,6 +373,10 @@ public class EftDraftService : IEftDraftService
 
     public async Task<NachaFileResult> GenerateNachaFileForPendingDraftsAsync()
     {
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: releasing sponsor debits needs a user with payments:approve, not a service token");
+
         var pendingDrafts = (await _draftRepository.GetByStatusAsync(EftDraftStatus.Pending))
             .Where(d => d.Method == EftMethod.Nacha)
             .ToList();
@@ -365,48 +384,75 @@ public class EftDraftService : IEftDraftService
         if (pendingDrafts.Count == 0)
             throw new InvalidOperationException("No pending NACHA drafts to process");
 
-        if (_actor.IsService)
-            throw new SeparationOfDutiesException(
-                "Separation of duties: releasing sponsor debits needs a user with payments:approve, not a service token");
+        // Claim the drafts before anything is built: Pending to Releasing, one
+        // conditional write each. A concurrent release gets none of these, so the
+        // same draft can never be in two files at the bank.
+        var claimId = NewClaimId();
+        var claimedAt = DateTime.UtcNow;
+        var claimed = new List<EftDraft>();
+        foreach (var draft in pendingDrafts)
+        {
+            if (!await _draftRepository.TryClaimForReleaseAsync(draft.Id, claimId, claimedAt))
+                continue;
+            draft.Status = EftDraftStatus.Releasing;
+            draft.ReleaseClaimId = claimId;
+            draft.ReleaseClaimedAt = claimedAt;
+            claimed.Add(draft);
+        }
+
+        if (claimed.Count == 0)
+            throw new NachaReleaseConflictException(
+                "The pending NACHA drafts are already being released by another request; nothing was sent.");
 
         var entries = new List<NachaEntryDetail>();
         var includedDrafts = new List<EftDraft>();
         var needsAttention = new List<EftAttentionItem>();
 
-        foreach (var draft in pendingDrafts)
+        try
         {
-            var lookup = await _bankAccounts.GetAsync(draft.TenantId, draft.GroupNumber);
-            var bankAccount = lookup.Account;
-            if (lookup.Status != SponsorBankAccountLookupStatus.Found
-                || bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
+            foreach (var draft in claimed)
             {
-                var reason = lookup.Status switch
+                var lookup = await _bankAccounts.GetAsync(draft.TenantId, draft.GroupNumber);
+                var bankAccount = lookup.Account;
+                if (lookup.Status != SponsorBankAccountLookupStatus.Found
+                    || bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
                 {
-                    SponsorBankAccountLookupStatus.Unavailable => lookup.Reason ?? "Sponsor bank details unavailable",
-                    SponsorBankAccountLookupStatus.NotEnrolled => "Sponsor is no longer enrolled in auto-debit",
-                    _ => "Sponsor bank account is missing routing or account number"
-                };
-                // Left Pending (so it is picked up once fixed) and reported, never silently dropped.
-                _logger.LogError("Draft {DraftId} for group {GroupNumber} left out of the NACHA file and needs attention: {Reason}",
-                    draft.Id, draft.GroupNumber, reason);
-                needsAttention.Add(new EftAttentionItem { DraftId = draft.Id, InvoiceId = draft.InvoiceId, GroupNumber = draft.GroupNumber, Reason = reason });
-                continue;
-            }
+                    var reason = lookup.Status switch
+                    {
+                        SponsorBankAccountLookupStatus.Unavailable => lookup.Reason ?? "Sponsor bank details unavailable",
+                        SponsorBankAccountLookupStatus.NotEnrolled => "Sponsor is no longer enrolled in auto-debit",
+                        _ => "Sponsor bank account is missing routing or account number"
+                    };
+                    // Back to Pending (so it is picked up once fixed) and reported, never silently dropped.
+                    await ReleaseClaimsAsync(new[] { draft }, claimId, reason);
+                    _logger.LogError("Draft {DraftId} for group {GroupNumber} left out of the NACHA file and needs attention: {Reason}",
+                        draft.Id, draft.GroupNumber, reason);
+                    needsAttention.Add(new EftAttentionItem { DraftId = draft.Id, InvoiceId = draft.InvoiceId, GroupNumber = draft.GroupNumber, Reason = reason });
+                    continue;
+                }
 
-            // The masked summary shows the last 4 of the account actually debited.
-            draft.RoutingNumberLast4 = bankAccount.RoutingNumberLast4 ?? Last4(bankAccount.RoutingNumber);
-            draft.AccountNumberLast4 = bankAccount.AccountNumberLast4 ?? Last4(bankAccount.AccountNumber);
-            entries.Add(new NachaEntryDetail
-            {
-                RoutingNumber = bankAccount.RoutingNumber,
-                AccountNumber = bankAccount.AccountNumber,
-                AccountType = bankAccount.AccountType,
-                Amount = draft.Amount,
-                GroupNumber = draft.GroupNumber,
-                IndividualName = bankAccount.AccountHolderName ?? draft.GroupNumber,
-                IndividualId = draft.GroupNumber
-            });
-            includedDrafts.Add(draft);
+                // The masked summary shows the last 4 of the account actually debited.
+                draft.RoutingNumberLast4 = bankAccount.RoutingNumberLast4 ?? Last4(bankAccount.RoutingNumber);
+                draft.AccountNumberLast4 = bankAccount.AccountNumberLast4 ?? Last4(bankAccount.AccountNumber);
+                entries.Add(new NachaEntryDetail
+                {
+                    RoutingNumber = bankAccount.RoutingNumber,
+                    AccountNumber = bankAccount.AccountNumber,
+                    AccountType = bankAccount.AccountType,
+                    Amount = draft.Amount,
+                    GroupNumber = draft.GroupNumber,
+                    IndividualName = bankAccount.AccountHolderName ?? draft.GroupNumber,
+                    IndividualId = draft.GroupNumber
+                });
+                includedDrafts.Add(draft);
+            }
+        }
+        catch
+        {
+            // Nothing was built or sent: every draft this release still holds goes back.
+            await ReleaseClaimsAsync(claimed.Where(d => d.Status == EftDraftStatus.Releasing), claimId,
+                "The NACHA release failed before a file was built; back to Pending for the next release.");
+            throw;
         }
 
         if (entries.Count == 0)
@@ -416,24 +462,59 @@ public class EftDraftService : IEftDraftService
 
         // Only drafts actually in the file change state, and only to what the
         // transmission outcome says.
-        var result = await SendNachaFileAsync(entries, includedDrafts, runId: null);
+        var result = await SendNachaFileAsync(entries, includedDrafts, runId: null, claimId);
         result.NeedsAttention.AddRange(needsAttention);
         return result;
+    }
+
+    private static string NewClaimId() => Guid.NewGuid().ToString("N");
+
+    /// <summary>Releasing (under this claim) back to Pending: nothing of theirs was sent.</summary>
+    private async Task ReleaseClaimsAsync(IEnumerable<EftDraft> drafts, string claimId, string reason)
+    {
+        foreach (var draft in drafts.ToList())
+        {
+            try
+            {
+                await _draftRepository.ReleaseClaimAsync(draft.Id, claimId, reason);
+                draft.Status = EftDraftStatus.Pending;
+                draft.ReleaseClaimId = null;
+                draft.ReleaseClaimedAt = null;
+                draft.ErrorMessage = reason;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Draft {DraftId} could not be released from NACHA release {ClaimId}; it stays Releasing and needs attention",
+                    draft.Id, claimId);
+            }
+        }
     }
 
     /// <summary>
     /// Generates the file, hands it to the dispatcher (bank SFTP, or held
     /// encrypted for retrieval), updates the drafts to match what happened, and
     /// returns the masked summary. The file content never leaves this method.
+    /// The drafts are held by <paramref name="claimId"/> (Releasing) throughout.
     /// </summary>
-    private async Task<NachaFileResult> SendNachaFileAsync(List<NachaEntryDetail> entries, List<EftDraft> drafts, string? runId)
+    private async Task<NachaFileResult> SendNachaFileAsync(List<NachaEntryDetail> entries, List<EftDraft> drafts, string? runId, string claimId)
     {
-        var file = _nachaFileService.GenerateNachaFile(entries, BuildNachaOptionsFromConfig());
-        NachaDispatchOutcome outcome;
+        GeneratedNachaFile file;
         NachaFileFacts facts;
         try
         {
+            file = _nachaFileService.GenerateNachaFile(entries, BuildNachaOptionsFromConfig());
             facts = NachaFileFacts.From(file.FileContent);
+        }
+        catch
+        {
+            await ReleaseClaimsAsync(drafts, claimId,
+                "The NACHA file could not be built; nothing was sent. Back to Pending for the next release.");
+            throw;
+        }
+
+        NachaDispatchOutcome outcome;
+        try
+        {
             outcome = await _dispatcher.DispatchAsync(new NachaTransmissionRequest
             {
                 TenantId = _actor.TenantId,
@@ -444,6 +525,18 @@ public class EftDraftService : IEftDraftService
                 BatchId = file.FileReference,
                 TransmittedBy = ActorId,
             });
+        }
+        catch (Exception ex)
+        {
+            // The dispatcher answers every transmission failure with an outcome; an
+            // exception here means it is not known whether the bank got the file.
+            // The drafts stay Releasing (never back to Pending, which could send
+            // them again) until someone checks with the bank.
+            _logger.LogCritical(ex,
+                "NACHA file {FileReference} (release {ClaimId}): delivery to the bank is unknown; its {Count} drafts stay " +
+                "Releasing and must be checked with the bank before anything is re-sent",
+                file.FileReference, claimId, drafts.Count);
+            throw;
         }
         finally
         {
@@ -487,10 +580,12 @@ public class EftDraftService : IEftDraftService
                     draft.ErrorMessage = AwaitingRetrievalMessage(file.FileReference, outcome.Reason);
                     break;
                 default:
-                    // Nothing was sent or held: the draft stays Pending for the next file.
+                    // Nothing was sent or held: the draft goes back to Pending for the next file.
                     draft.NachaFileReference = null;
                     draft.TraceNumber = null;
                     draft.Status = EftDraftStatus.Pending;
+                    draft.ReleaseClaimId = null;
+                    draft.ReleaseClaimedAt = null;
                     draft.ErrorMessage = outcome.Reason;
                     break;
             }
