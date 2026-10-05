@@ -61,7 +61,9 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Report the active authorization backend (operating mode + backend).
     /// Makes Replace (CHO-native) vs Augment (external core) explicit for demos
-    /// and diligence. No sensitive configuration is exposed.
+    /// and diligence. Anonymous callers get the status only (configured or
+    /// not); the mode, backend key and description go to authenticated CHO
+    /// callers, so the external core a deployment fronts is not advertised.
     /// </summary>
     [AllowAnonymous]
     [HttpGet("backend-status")]
@@ -95,8 +97,12 @@ public class AuthorizationsController : ControllerBase
                           "Configure Cms0057:Authorization to a registered backend.";
         }
 
+        if (User.Identity?.IsAuthenticated != true)
+            return Ok(new { status = configured ? "ok" : "misconfigured" });
+
         return Ok(new
         {
+            status = configured ? "ok" : "misconfigured",
             operatingMode = mode.ToString(),
             backend = backendKey,
             configured,

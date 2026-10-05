@@ -87,25 +87,19 @@ public static class HealthCheckExtensions
         return app;
     }
 
-    private static async Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+    /// <summary>
+    /// The probe paths are anonymous, so the response is the overall status and
+    /// nothing else: no check names, descriptions (dependency URLs, database
+    /// hosts, tenant ids) or timings. The health check service logs each
+    /// failing check with its description for operators.
+    /// </summary>
+    internal static async Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
     {
         context.Response.ContentType = "application/json";
 
-        var result = new
-        {
-            status = report.Status.ToString(),
-            checks = report.Entries.Select(e => new
-            {
-                name = e.Key,
-                status = e.Value.Status.ToString(),
-                description = e.Value.Description,
-                duration = e.Value.Duration.TotalMilliseconds
-            }),
-            totalDuration = report.TotalDuration.TotalMilliseconds
-        };
-
         await context.Response.WriteAsync(
-            JsonSerializer.Serialize(result, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+            JsonSerializer.Serialize(new { status = report.Status.ToString() },
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
     }
 }
 

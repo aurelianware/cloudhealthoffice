@@ -346,6 +346,24 @@ public class AuthorizationAuthenticationTests : IClassFixture<AuthorizationApiFa
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task BackendStatus_Anonymous_IsStatusOnly()
+    {
+        using var client = _factory.CreateClient();
+
+        var body = await client.GetStringAsync("/api/authorizations/backend-status");
+
+        using var json = System.Text.Json.JsonDocument.Parse(body);
+        Assert.Equal(["status"], json.RootElement.EnumerateObject().Select(p => p.Name).ToArray());
+
+        // A CHO caller still sees the mode and backend.
+        using var authenticated = ClientWithToken(_factory.IssueToken(Tenant));
+        using var detail = System.Text.Json.JsonDocument.Parse(
+            await authenticated.GetStringAsync("/api/authorizations/backend-status"));
+        Assert.True(detail.RootElement.TryGetProperty("operatingMode", out _));
+        Assert.True(detail.RootElement.TryGetProperty("backend", out _));
+    }
+
     private static object SubmitBody() => new
     {
         // No tenantId: the tenant comes from the token.
