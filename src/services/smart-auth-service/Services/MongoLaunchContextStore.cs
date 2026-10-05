@@ -16,7 +16,7 @@ namespace SmartAuthService.Services;
 ///   <item>Short-lived: <c>expiresAt</c> is checked on every consume, and a TTL
 ///   index removes expired documents.</item>
 ///   <item>Tenant-scoped: the consume filter includes the tenant and client the
-///   launch was registered for.</item>
+///   launch was registered for, and the practitioner when one was named.</item>
 ///   <item>The launch token is never stored, only its SHA-256, so a read of the
 ///   collection yields nothing that can be presented.</item>
 /// </list>
@@ -56,6 +56,7 @@ public sealed class MongoLaunchContextStore : ILaunchContextStore
             ClientId = request.ClientId,
             PatientId = request.PatientId,
             EncounterId = request.EncounterId,
+            PractitionerId = request.PractitionerId,
             RegisteredBy = registeredBy,
             CreatedAt = now,
             ExpiresAt = now.Add(_ttl),
@@ -65,7 +66,7 @@ public sealed class MongoLaunchContextStore : ILaunchContextStore
     }
 
     public async Task<LaunchContext?> ConsumeAsync(
-        string launchToken, string tenantId, string clientId, CancellationToken ct = default)
+        string launchToken, string tenantId, string clientId, string? providerId = null, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(launchToken)) return null;
         await _indexes.Value;
@@ -73,7 +74,8 @@ public sealed class MongoLaunchContextStore : ILaunchContextStore
         var now = _time.GetUtcNow().UtcDateTime;
         var id = Hash(launchToken);
         var stored = await _launches.FindOneAndDeleteAsync(
-            l => l.Id == id && l.TenantId == tenantId && l.ClientId == clientId && l.ExpiresAt > now,
+            l => l.Id == id && l.TenantId == tenantId && l.ClientId == clientId && l.ExpiresAt > now
+                 && (l.PractitionerId == null || l.PractitionerId == providerId),
             cancellationToken: ct);
 
         return stored == null ? null : new LaunchContext
@@ -83,6 +85,7 @@ public sealed class MongoLaunchContextStore : ILaunchContextStore
             ClientId = stored.ClientId,
             PatientId = stored.PatientId,
             EncounterId = stored.EncounterId,
+            PractitionerId = stored.PractitionerId,
             RegisteredBy = stored.RegisteredBy,
             CreatedAt = new DateTimeOffset(stored.CreatedAt, TimeSpan.Zero),
             ExpiresAt = new DateTimeOffset(stored.ExpiresAt, TimeSpan.Zero),
@@ -100,6 +103,9 @@ public sealed class MongoLaunchContextStore : ILaunchContextStore
         public string ClientId { get; set; } = string.Empty;
         public string? PatientId { get; set; }
         public string? EncounterId { get; set; }
+
+        /// <summary>Null: any provider user of the tenant using the client (legacy launches).</summary>
+        public string? PractitionerId { get; set; }
         public string RegisteredBy { get; set; } = string.Empty;
 
         [BsonDateTimeOptions(Kind = DateTimeKind.Utc)]

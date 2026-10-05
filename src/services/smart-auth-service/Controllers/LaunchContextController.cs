@@ -19,7 +19,14 @@ namespace SmartAuthService.Controllers;
 /// most an echo of the token's (the shared tenant middleware refuses a
 /// mismatch). The client must be registered to the same tenant, and at
 /// authorization the launch is honoured only for a provider user of that
-/// tenant using that client. A member's patient is never taken from a launch.
+/// tenant using that client — and, when the body names a
+/// <c>practitionerId</c>, only for the provider user bound to that provider.
+/// A member's patient is never taken from a launch.
+///
+/// The registering caller is a CHO user or service, not a SMART provider
+/// identity, so the practitioner cannot be read from its token; the EHR names
+/// it. A launch without one can be used by any provider user of the tenant
+/// using that client (who holds the single-use token).
 /// </summary>
 [ApiController]
 [Route("launch")]
@@ -57,8 +64,9 @@ public class LaunchContextController : ControllerBase
         if (string.IsNullOrEmpty(request.PatientId) && string.IsNullOrEmpty(request.EncounterId))
             return BadRequest(new { error = "At least one of patientId or encounterId is required." });
         if ((request.PatientId != null && !SmartIdentifiers.IsFhirId(request.PatientId))
-            || (request.EncounterId != null && !SmartIdentifiers.IsFhirId(request.EncounterId)))
-            return BadRequest(new { error = "patientId and encounterId must be FHIR ids." });
+            || (request.EncounterId != null && !SmartIdentifiers.IsFhirId(request.EncounterId))
+            || (request.PractitionerId != null && !SmartIdentifiers.IsFhirId(request.PractitionerId)))
+            return BadRequest(new { error = "patientId, encounterId and practitionerId must be FHIR ids." });
 
         var tenantId = _actor.TenantId;
         var client = await _identities.FindClientAsync(request.ClientId, ct);
@@ -68,9 +76,10 @@ public class LaunchContextController : ControllerBase
         var token = await _store.RegisterAsync(tenantId, _actor.UserId, request, ct);
 
         _logger.LogInformation(
-            "EHR launch registered — tenant: {Tenant}, actor: {Actor}, client: {ClientId}, patient: {PatientId}, encounter: {EncounterId}",
+            "EHR launch registered — tenant: {Tenant}, actor: {Actor}, client: {ClientId}, patient: {PatientId}, encounter: {EncounterId}, practitioner: {PractitionerId}",
             SmartAuthAudit.Clean(tenantId), SmartAuthAudit.Clean(_actor.UserId), SmartAuthAudit.Clean(request.ClientId),
-            SmartAuthAudit.Clean(request.PatientId), SmartAuthAudit.Clean(request.EncounterId));
+            SmartAuthAudit.Clean(request.PatientId), SmartAuthAudit.Clean(request.EncounterId),
+            SmartAuthAudit.Clean(request.PractitionerId));
 
         // Return the launch token and the ISS (FHIR base URL) the EHR needs
         return Ok(new

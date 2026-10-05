@@ -20,10 +20,11 @@ public interface ILaunchContextStore
     /// <summary>
     /// Atomically retrieve and remove the launch context, provided it is
     /// unexpired AND was registered in <paramref name="tenantId"/> for
-    /// <paramref name="clientId"/>. Null otherwise. A launch presented for the
-    /// wrong tenant or client is left untouched, so it can neither be used
-    /// there nor be burned by someone who merely knows the token.
+    /// <paramref name="clientId"/> AND, when it names a practitioner, for
+    /// <paramref name="providerId"/>. Null otherwise. A launch presented for
+    /// the wrong tenant, client or practitioner is left untouched, so it can
+    /// neither be used there nor be burned by someone who merely knows the token.
     /// </summary>
     Task<LaunchContext?> ConsumeAsync(
-        string launchToken, string tenantId, string clientId, CancellationToken ct = default);
+        string launchToken, string tenantId, string clientId, string? providerId = null, CancellationToken ct = default);
 }

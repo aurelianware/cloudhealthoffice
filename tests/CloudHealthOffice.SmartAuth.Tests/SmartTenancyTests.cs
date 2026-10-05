@@ -228,6 +228,40 @@ public class SmartTenancyTests
     }
 
     [Fact]
+    public async Task LaunchNamingAPractitioner_IsHonouredOnlyForThatProvider()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (ehrApp, _) = await _smart.RegisterClientAsync(tenant, "provider-app", "openid", "launch", "user/*.read");
+        var intended = await _smart.LinkedProviderAsync(tenant, "prov-intended", ValidNpi);
+        var other = await _smart.LinkedProviderAsync(tenant, "prov-other", ValidNpi);
+        var launch = await RegisterLaunchAsync(tenant, ehrApp, "mbr-4242", practitionerId: "prov-intended");
+
+        // Another provider of the same tenant, same app, holding the token: refused.
+        var stolen = await SmartAuthDriver.AuthorizeAsync(other, ehrApp, "openid launch user/*.read", launch: launch);
+        stolen.Code.Should().BeNull();
+        stolen.Error.Should().Be("access_denied");
+
+        // ...and the launch is still there for the provider it was made for.
+        var outcome = await SmartAuthDriver.AuthorizeAsync(intended, ehrApp, "openid launch user/*.read", launch: launch);
+        outcome.Error.Should().BeNull();
+        var (status, body) = await _smart.ExchangeCodeAsync(ehrApp, outcome);
+        status.Should().Be(HttpStatusCode.OK, body.ToString());
+        var token = SmartAuthDriver.Read(body.GetProperty("access_token").GetString()!);
+        SmartAuthDriver.Claim(token, "patient").Should().Be("mbr-4242");
+        SmartAuthDriver.Claim(token, "sub").Should().Be("prov-intended");
+    }
+
+    [Fact]
+    public async Task LaunchRegistration_RefusesAMalformedPractitionerId()
+    {
+        var tenant = SmartAuthDriver.NewTenant();
+        var (ehrApp, _) = await _smart.RegisterClientAsync(tenant, "provider-app", "openid", "launch", "user/*.read");
+        (await _smart.Admin(tenant, ChoRolePermissions.MemberServices)
+                .PostAsJsonAsync("/launch", new { patientId = "p1", clientId = ehrApp, practitionerId = "bad id/../x" }))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task LaunchFromAnotherTenant_IsNotHonoured()
     {
         var tenantA = SmartAuthDriver.NewTenant();
@@ -526,10 +560,10 @@ public class SmartTenancyTests
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private async Task<string> RegisterLaunchAsync(string tenant, string clientId, string patientId)
+    private async Task<string> RegisterLaunchAsync(string tenant, string clientId, string patientId, string? practitionerId = null)
     {
         var resp = await _smart.Admin(tenant, ChoRolePermissions.MemberServices)
-            .PostAsJsonAsync("/launch", new { patientId, clientId });
+            .PostAsJsonAsync("/launch", new { patientId, clientId, practitionerId });
         resp.StatusCode.Should().Be(HttpStatusCode.OK, await resp.Content.ReadAsStringAsync());
         return JsonDocument.Parse(await resp.Content.ReadAsStringAsync()).RootElement.GetProperty("launch").GetString()!;
     }

@@ -16,14 +16,23 @@ public class LaunchContext
     public string? PatientId { get; init; }
     public string? EncounterId { get; init; }
     public string ClientId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The provider id (the provider binding's <c>ProviderId</c>) the launch is
+    /// for, when the registering caller named one. Such a launch is honoured
+    /// only for a provider user bound to exactly that provider.
+    /// </summary>
+    public string? PractitionerId { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset ExpiresAt { get; init; }
 }
 
 /// <summary>
-/// POST /launch request body. There is deliberately no tenant and no
-/// practitioner here: the tenant is the caller's token's, and the
-/// practitioner (fhirUser) is the signed-in provider user's mapping.
+/// POST /launch request body. There is deliberately no tenant here: the
+/// tenant is the caller's token's. The practitioner in the issued token
+/// (fhirUser) is always the signed-in provider user's mapping;
+/// <see cref="PractitionerId"/> only restricts WHO may use the launch.
 /// </summary>
 public class RegisterLaunchRequest
 {
@@ -35,6 +44,14 @@ public class RegisterLaunchRequest
 
     /// <summary>OAuth2 client_id of the SMART application being launched (must belong to the caller's tenant).</summary>
     public required string ClientId { get; init; }
+
+    /// <summary>
+    /// The provider id (as bound by a provider enrolment) of the practitioner
+    /// being launched. When set, only a provider user bound to that provider
+    /// can use the launch; anyone else who obtains the launch token cannot use
+    /// or burn it. EHR integrations should always send it.
+    /// </summary>
+    public string? PractitionerId { get; init; }
 }
 
 /// <summary>POST /launch response.</summary>

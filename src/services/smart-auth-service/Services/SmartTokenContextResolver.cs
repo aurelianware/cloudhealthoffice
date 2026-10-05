@@ -102,8 +102,10 @@ public sealed class SmartTokenContextResolver
             if (hasLaunch)
             {
                 // Atomic, single use, and only a launch of THIS tenant for THIS
-                // client: another tenant's launch is neither usable nor burned.
-                launch = await _launches.ConsumeAsync(launchToken!, provider.TenantId, client.ClientId, ct);
+                // client (and THIS provider, when the launch names one): any
+                // other launch is neither usable nor burned.
+                launch = await _launches.ConsumeAsync(
+                    launchToken!, provider.TenantId, client.ClientId, provider.ProviderId, ct);
                 if (launch == null)
                     return SmartContextResolution.Refuse("launch_unknown_used_expired_or_other_tenant");
             }
@@ -162,6 +164,9 @@ public sealed class SmartTokenContextResolver
                 return SmartContextResolution.Refuse("launch_registered_in_another_tenant");
             if (!string.Equals(launch.ClientId, client.ClientId, StringComparison.Ordinal))
                 return SmartContextResolution.Refuse("launch_registered_for_another_client");
+            if (launch.PractitionerId != null
+                && !string.Equals(launch.PractitionerId, provider.ProviderId, StringComparison.Ordinal))
+                return SmartContextResolution.Refuse("launch_registered_for_another_practitioner");
 
             patient = launch.PatientId;
             encounter = launch.EncounterId;

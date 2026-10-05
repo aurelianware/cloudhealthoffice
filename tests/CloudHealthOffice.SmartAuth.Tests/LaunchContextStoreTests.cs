@@ -102,6 +102,21 @@ public class LaunchContextStoreTests
     }
 
     [Fact]
+    public async Task LaunchForAPractitioner_IsUsableOnlyByThatProvider_AndNotBurnedByAnother()
+    {
+        var store = NewStore();
+        var token = await store.RegisterAsync("tenant-a", "actor",
+            new RegisterLaunchRequest { PatientId = "pat-001", ClientId = "ehr-app", PractitionerId = "prov-1" });
+
+        (await store.ConsumeAsync(token, "tenant-a", "ehr-app", "prov-2")).Should().BeNull();
+        (await store.ConsumeAsync(token, "tenant-a", "ehr-app")).Should().BeNull();
+
+        var context = await store.ConsumeAsync(token, "tenant-a", "ehr-app", "prov-1");
+        context.Should().NotBeNull("another provider's attempt must not burn the launch");
+        context!.PractitionerId.Should().Be("prov-1");
+    }
+
+    [Fact]
     public async Task UnknownToken_ReturnsNull()
         => (await NewStore().ConsumeAsync("nonexistent-token-xyz", "tenant-a", "ehr-app")).Should().BeNull();
 

@@ -81,8 +81,17 @@ issued refresh tokens.
   token's tenant. An `X-Tenant-ID` header is accepted only as an echo of the
   token's tenant. If they differ, the request gets `403`.
 - `clientId` must be a `provider-app` registered to that tenant.
-  `PractitionerId` was removed from the body, because `fhirUser` now comes from
-  the provider's binding.
+- `practitionerId` (optional, but EHR integrations should always send it)
+  names the provider id, as bound by a provider enrolment, the launch is for.
+  It never sets `fhirUser` or `sub` (those come from the signed-in provider's
+  binding); it only restricts who may use the launch: a launch naming a
+  practitioner is consumed only by the provider user bound to that provider
+  id. Anyone else holding the launch token (another provider of the tenant on
+  the same app) is refused and the launch is left in place. The registering
+  caller is a CHO user or service, not a SMART provider identity, so the
+  practitioner cannot be taken from its token. A launch without
+  `practitionerId` keeps the old rule: any provider user of the tenant on that
+  client who holds the single-use token.
 - A launch never sets a member's patient. A member who presents a `launch` is
   refused.
 - Launches are stored in MongoDB (`smart_launch_contexts`), alongside the
@@ -92,8 +101,8 @@ issued refresh tokens.
   expiry is checked on every use, and a TTL index on `expiresAt` deletes
   expired documents.
 - A launch can be used once. It is consumed by a single `findOneAndDelete`
-  filtered on the token hash, the provider's tenant, the client and
-  `expiresAt > now`. However many attempts run at once, only one succeeds.
+  filtered on the token hash, the provider's tenant, the client, the
+  practitioner (when the launch names one) and `expiresAt > now`. However many attempts run at once, only one succeeds.
 - A launch presented for another tenant or client is refused and left in place.
   It cannot be used there, and someone who only knows the token cannot burn it.
   The launch is consumed only after every other check has passed (provider
