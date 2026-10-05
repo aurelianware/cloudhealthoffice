@@ -8,6 +8,8 @@ echo ""
 # Configuration
 NAMESPACE="cho-sftp"
 SECRET_NAME="sftp-users"
+# The Deployment (infrastructure/k8s/sftp-server-deployment.yaml); sftp-service is the Service.
+DEPLOYMENT="sftp-server"
 USERNAME="${1:-cho-edi}"
 
 if [ -z "$USERNAME" ]; then
@@ -24,6 +26,10 @@ NEW_PASSWORD=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-24)
 
 echo "✅ Generated new password (24 chars)"
 echo ""
+
+# Check the Deployment exists before touching the secret, so a wrong name
+# cannot leave the secret changed while the pods keep the old password.
+kubectl -n "${NAMESPACE}" get deployment "${DEPLOYMENT}" -o name > /dev/null
 
 # Never print users.conf (it holds every SFTP user's password) and never put
 # it on a command line (visible to other users via `ps`). The working copy
@@ -63,10 +69,10 @@ echo ""
 
 # Restart SFTP pods to pick up new password
 echo "🔄 Restarting SFTP pods..."
-kubectl -n "${NAMESPACE}" rollout restart deployment/sftp-service
+kubectl -n "${NAMESPACE}" rollout restart deployment/"${DEPLOYMENT}"
 
 echo "⏳ Waiting for pods to be ready..."
-kubectl -n "${NAMESPACE}" rollout status deployment/sftp-service --timeout=60s
+kubectl -n "${NAMESPACE}" rollout status deployment/"${DEPLOYMENT}" --timeout=60s
 
 echo ""
 echo "✅ Password rotation complete!"
