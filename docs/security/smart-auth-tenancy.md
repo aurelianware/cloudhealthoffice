@@ -17,8 +17,8 @@ works as a fallback, and tokens now carry `tenant_id` themselves.
 
 | Caller | Before | Now |
 |---|---|---|
-| **Member** (Patient Access) | Development login: any username with password `Password123!`, enabled by `SmartAuth:DevMode`, which was `true` in the base `appsettings.json`. A standalone `launch/patient` token used the **username** as `patient`. There was no tenant. | Same Development login, but only on a Development host with `DevMode=true` (the base setting is now `false`). A token is issued only if the identity is bound to a member: `patient` and `tenant_id` come from that binding. **No production member IdP exists in the repo** (member-service, sponsor-service and personal-representative-service have placeholder `b2clogin` authorities; the member/provider portals exist only as issue templates). |
-| **Provider user** (Provider Access, EHR launch) | Same Development login. `fhirUser` came from `PractitionerId` in the unauthenticated `POST /launch` body. | Same Development login. A token is issued only if the identity is bound to a provider of one tenant. `sub` and `fhirUser = Practitioner/{providerId}` come from the binding, and so does `npi`. Patient context comes from an EHR launch registered in the same tenant for the same client. |
+| **Member** (Patient Access) | Development login: any username with password `Password123!`, enabled by `SmartAuth:DevMode`, which was `true` in the base `appsettings.json`. A standalone `launch/patient` token used the **username** as `patient`. There was no tenant. | Same Development login, but only on a Development host with `DevMode=true` (the base setting is now `false`). A token is issued only if the identity is bound to a member: `patient` and `tenant_id` come from that binding. **Production:** the external OIDC login (Microsoft Entra External ID, `SmartAuth:ExternalLogin`), disabled until the owner creates the External ID tenant; see "External sign-in" below. |
+| **Provider user** (Provider Access, EHR launch) | Same Development login. `fhirUser` came from `PractitionerId` in the unauthenticated `POST /launch` body. | Same Development login; in production the same external login as members. A token is issued only if the identity is bound to a provider of one tenant. `sub` and `fhirUser = Practitioner/{providerId}` come from the binding, and so does `npi`. Patient context comes from an EHR launch registered in the same tenant for the same client. |
 | **App** (backend, payer-to-payer) | client_credentials for the seeded `cho-payer-system` client. Every environment, including Production, had a hard-coded secret. The token had no tenant. | client_credentials. The token's `tenant_id` is the tenant the client is registered to. Clients are registered by a tenant administrator through the admin API. The demo clients are seeded only on a Development host. |
 | CHO staff | Entra ID through the portal and token-service (CHO tokens, not SMART). | Unchanged. Staff use CHO tokens to call the new admin API and `POST /launch`. |
 
@@ -157,35 +157,101 @@ through a named policy.
   `appsettings.Development.json`, with the well-known symmetric key that is
   refused outside Development and Testing.
 
-## What a production member/provider login must supply
+## External sign-in (production members and provider users)
 
-A production login is an external OIDC sign-in. After it completes, it must set
-the same session that the development login sets. It must:
+`SmartAuth:ExternalLogin` makes smart-auth-service an OpenID Connect relying
+party of one external IdP (Microsoft Entra External ID, see the
+recommendation below). It is driven entirely by configuration and is off by
+default. The login page shows "Sign in with {DisplayName}" when it is
+enabled; the development form stays Development-host + `DevMode` only; with
+neither, the page says no sign-in method is configured.
 
-1. **Validate the ID token in full**: signature from the IdP's published keys,
-   `iss` equal to the configured issuer exactly, `aud` equal to
-   smart-auth-service's client id, `exp`/`nbf`, and `nonce`. Use the
-   authorization code flow with PKCE.
-2. **Produce exactly two session claims**:
-   - `cho_idp_iss` set to the IdP's `iss`;
-   - `ClaimTypes.NameIdentifier` set to an **immutable, non-reassignable**
-     subject. For Entra this is `oid` (or `sub`). It must never be an email
-     address or a username.
-3. **Assert nothing about tenant or member.** smart-auth-service ignores any
-   tenant, member or role claim from the IdP. Tenancy comes only from the
-   bindings, so the IdP cannot widen access.
-4. **Provide assurance suitable for PHI access**: MFA available or required,
-   account recovery that is not weaker than the enrolment code's delivery
-   channel, and a way to disable an account. Disabling it at the IdP stops new
-   tokens, and revoking the binding here stops refresh.
-5. **Use one issuer per user population**, or at least issuers whose subjects
-   never collide, so that (issuer, subject) is globally unique.
+How it meets each requirement of a production login:
 
-The development login must not be extended for production use. The production
-handler goes alongside it, for example
-`AddOpenIdConnect("member-idp", …)` with `OnTokenValidated` mapping the two
-claims and then signing in to the cookie scheme. Its issuer goes into
-configuration. The binding store does not change.
+1. **The ID token is validated in full.** Authorization code flow with PKCE
+   (S256) and a `nonce`; the code is redeemed with the client secret. The
+   signature is checked against the IdP's JWKS (from discovery at
+   `Authority`), RS256 only; `aud` must equal `ClientId`; `exp`/`nbf` with 2
+   minutes skew. `iss` must equal `ExpectedIssuer` **exactly** (ordinal) —
+   checked by the token handler and again in `ExternalLogin.MapSession`,
+   because the ASP.NET handler also accepts whatever issuer the discovery
+   document names.
+2. **The session is exactly the development login's shape**
+   (`SmartSession`): `cho_idp_iss` = the validated `iss`,
+   `ClaimTypes.NameIdentifier` = `oid` (`sub` only if the token has no
+   `oid`; never email or username), and `name` for display. Every other IdP
+   claim — tenant, roles, email, extension attributes — is dropped, and the
+   IdP's tokens are not kept.
+3. **The IdP asserts nothing about tenancy.** An identity with no binding gets
+   no SMART token; it redeems an enrolment code at `/account/link` exactly
+   like a development identity, and the binding records (`ExpectedIssuer`,
+   `oid`).
+4. **Redirects.** The redirect URI sent to the IdP is
+   `{SmartAuth:Issuer}{CallbackPath}` from configuration, never the request's
+   Host or `X-Forwarded-*` (the service trusts no forwarding proxy). The
+   return URL after sign-in must be local; anything else becomes `/`.
+5. **Cookies.** The session cookie and the OIDC correlation and nonce cookies
+   are `HttpOnly`, `SameSite=Lax` (the code comes back on a top-level GET,
+   `response_mode=query`) and, outside Development, `Secure` even though the
+   pod sees plain HTTP behind the TLS-terminating ingress. The Data
+   Protection key ring that protects them is shared by all pods through
+   MongoDB (`smart_dataprotection_keys`), encrypted with the active encryption
+   certificate, so a sign-in that starts on one pod can return to another.
+6. **Failures** (bad token, wrong nonce/state, IdP error, cancel) create no
+   session and return to `/account/login?error=external`; each sign-in and
+   refusal is logged on `CloudHealthOffice.SmartAuth.Audit`.
+7. **Logout** (`/account/logout`) clears the local session only. The IdP
+   session is not ended, so the next external sign-in may not prompt.
+
+Startup fails when `Enabled` is true and `Authority`, `ClientId`,
+`ClientSecret`, `ExpectedIssuer` or `DisplayName` is missing, when
+`Authority` or `ExpectedIssuer` is not HTTPS outside Development, or when
+`CallbackPath` is not a plain path.
+
+### Configuration keys
+
+| Key | Value | Where |
+|---|---|---|
+| `SmartAuth:ExternalLogin:Enabled` | `true` | ConfigMap |
+| `SmartAuth:ExternalLogin:Authority` | `https://{domain}.ciamlogin.com/{tenantId}/v2.0` | ConfigMap |
+| `SmartAuth:ExternalLogin:ExpectedIssuer` | the `issuer` of `{Authority}/.well-known/openid-configuration`, for External ID `https://{tenantId}.ciamlogin.com/{tenantId}/v2.0` | ConfigMap |
+| `SmartAuth:ExternalLogin:ClientId` | the app registration's Application (client) ID | ConfigMap |
+| `SmartAuth:ExternalLogin:ClientSecret` | the client secret | Key Vault secret `SmartAuth--ExternalLogin--ClientSecret` |
+| `SmartAuth:ExternalLogin:DisplayName` | button text, e.g. `Cloud Health Office ID` | ConfigMap |
+| `SmartAuth:ExternalLogin:CallbackPath` | `/signin-oidc` (default) | ConfigMap |
+
+Only a client secret is supported as the app credential. A certificate
+credential (private_key_jwt) is not implemented.
+
+### Owner checklist: Microsoft Entra External ID
+
+1. **Tenant.** Create an External ID tenant (external configuration) for the
+   environment. Note its **tenant ID** and its **`<name>.ciamlogin.com`**
+   domain.
+2. **User flow.** Create a *sign up and sign in* user flow with **Email with
+   password** or **Email one-time passcode**. Collect only **Display Name**
+   (it is for display; identity is `oid`).
+3. **App registration** (in the External ID tenant): supported account types
+   *Accounts in this organizational directory only*; platform **Web**;
+   redirect URI **`https://auth.cloudhealthoffice.com/signin-oidc`**
+   (`{SmartAuth:Issuer}{CallbackPath}`); no front-channel logout URL; leave
+   implicit grant (access and ID tokens) **off**. Add the app to the user
+   flow.
+4. **Token claims.** Nothing to add: the v2.0 ID token carries `oid`, `sub`,
+   `iss`, `aud`, `nonce` and (with `profile`) `name`. Do not rely on optional
+   claims; they are ignored.
+5. **Credential.** Create a client secret (24 months at most, calendar a
+   renewal) and store it in the environment's Key Vault as secret
+   **`SmartAuth--ExternalLogin--ClientSecret`**. Grant the smart-auth managed
+   identity *Key Vault Secrets User*.
+6. **MFA.** Enable MFA for the user flow (email OTP or SMS as second factor)
+   or, with Entra ID P1, a Conditional Access policy *require MFA* for the
+   app; passkeys where available. Configure self-service password reset; it
+   must not be weaker than the enrolment-code delivery.
+7. **Branding.** Company branding for the sign-in pages (optional).
+8. **Configure smart-auth-service** (table above): ConfigMap values,
+   `Enabled: "true"`, restart the deployment. Check that the login page shows
+   the button and a test user can sign in, redeem a code and get a token.
 
 ### Recommendation: Microsoft Entra External ID (CIAM)
 
@@ -257,9 +323,65 @@ The value must be the same everywhere:
 `SmartIssuerTests` checks that the smart-auth and fhir-service appsettings
 values agree.
 
+## Token signing keys
+
+Outside Development and Testing the OpenIddict server's certificates come from
+configuration; startup fails without them. The per-machine development
+certificates are used only on Development/Testing hosts with nothing
+configured. Every pod must use the same certificates: resource servers check
+signatures against the published JWKS, and an authorization code or refresh
+token encrypted by one pod is redeemed by another.
+
+| Key | Content |
+|---|---|
+| `SmartAuth:SigningCertificates:N:Pfx` | base64 PKCS#12 with an RSA (2048+) private key. A Key Vault **certificate** (content type PKCS#12) named `SmartAuth--SigningCertificates--0--Pfx` provides exactly this through the Key Vault configuration provider (`SecretProvider:Provider=AzureKeyVault`). |
+| `SmartAuth:SigningCertificates:N:Path` | instead of `Pfx`: a PFX file, e.g. mounted by the Key Vault CSI driver |
+| `SmartAuth:SigningCertificates:N:Password` | PFX password, if any (none for Key Vault) |
+| `SmartAuth:SigningCertificates:N:Standby` | `true`: published in the JWKS but not used to sign |
+| `SmartAuth:EncryptionCertificates:N:…` | the same, for encrypting codes and refresh tokens (and the Data Protection key ring). A standby encryption certificate still decrypts. |
+
+The first entry not in `Standby` is the active one (OpenIddict on its own would
+sign with whichever expires last). Every signing certificate is published at
+`/.well-known/jwks`. A certificate without a private key, under 2048 bits,
+with a key usage that excludes signing/encryption, expired, or not yet valid
+(while active) is refused at startup; an expired standby certificate is
+skipped. Key Vault configuration is read at startup, so every change below
+takes effect on a rollout restart.
+
+**How fhir-service picks up keys.** fhir-service (both `Demo` and
+`ExternalIssuer` modes) reads smart-auth's JWKS through discovery
+(`SmartSigningKeyRing`): it caches keys for 12 hours, refetches early when a
+token has an unknown `kid` (at most once per 5 minutes per issuer), and stops
+trusting cached keys 24 hours after a failed refresh. So rotate in three
+steps:
+
+1. Create the next certificate in Key Vault as
+   `SmartAuth--SigningCertificates--1--Pfx` and set
+   `SmartAuth__SigningCertificates__1__Standby=true`. Roll out. Both keys are
+   published; the current one still signs.
+2. After at least 12 hours (every fhir-service pod has refreshed), set
+   `SmartAuth__SigningCertificates__0__Standby=true` and remove the standby
+   flag from 1. Roll out. The new certificate signs; tokens signed by the
+   old one still validate.
+3. After the access-token lifetime (`AccessTokenLifetimeMinutes`, 60), remove
+   entry 0 (and its flag). Do not enable Key Vault auto-renewal on these
+   certificates: a new version replaces the published key without overlap.
+
+Encryption certificates rotate the same way, without the 12-hour wait. Keep
+the old one in standby for the refresh-token lifetime
+(`RefreshTokenLifetimeDays`, 7): refresh tokens it encrypted cannot be
+redeemed once it is gone. The Data Protection keys are encrypted with the
+certificate active when they were created; after the old certificate is
+removed, a key it encrypted is skipped (logged as an error) and a new one is
+created, so open sign-in sessions (2 hours) end and people sign in again.
+
 ## Not done
 
-- **No production login.** See above.
+- **Logout does not end the IdP session** (no `end_session` redirect).
+- **Client secret only** for the External ID app registration; no certificate
+  credential.
+- **One external IdP.** A payer that insists on its own member IdP needs a
+  second OIDC scheme (the (issuer, subject) bindings already allow it).
 - **The admin API does not check that a member or provider exists.** A member id
   or provider id is accepted if it is a well-formed FHIR id. The administrator
   issuing the code is responsible for it, and a wrong id only binds the person
