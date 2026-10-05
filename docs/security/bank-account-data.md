@@ -258,8 +258,20 @@ mechanism. A service opts in with a project reference and
 - **`FieldProtection:RejectPlaintext`** (default `false`): when `true`,
   reading a protected field that still holds plaintext fails
   (`FieldProtectionException`, 503) instead of returning it. Turn it on per
-  service once nothing is left in plaintext (provider-service: the migration
-  below exits 0 for every tenant).
+  service once nothing is left in plaintext (the service's
+  `--encrypt-bank-accounts` exits 0 for every tenant). It stays off by
+  default because turning it on before the migration would break reads of
+  existing rows. Outside Development, a service with it off logs a warning
+  at startup (event 4818, category `CloudHealthOffice.FieldProtection`); this
+  applies to every service that calls `AddChoFieldProtection` (sponsor,
+  provider, premium-billing, capitation).
+- **`FieldProtection:RejectUnbound`** (default `false`): when `true`, reading
+  a record field that is still `enc:v1:` (encrypted before record binding)
+  fails (`FieldProtectionException`, 503) instead of decrypting it without
+  the binding, so a ciphertext copied between records is never accepted.
+  Values that are `enc:v1:` by design (held NACHA files, read without a
+  record) are unaffected, and so is the migration. Turn it on together with
+  `RejectPlaintext`, once the migration exits 0 for every tenant.
 - **Key ring:** an Azure Blob, wrapped by a Key Vault key
   (`PersistKeysToAzureBlobStorage` + `ProtectKeysWithAzureKeyVault`), so all
   pods share the same keys. The configuration keys are:

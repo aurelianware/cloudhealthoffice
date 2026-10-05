@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace SponsorService.Tests;
 
@@ -226,5 +227,104 @@ public class FieldProtectionTests
         options.XmlRepository!.GetType().Name.Should().Contain("Blob");
         options.XmlEncryptor!.GetType().Name.Should().Contain("KeyVault");
         services.GetRequiredService<IFieldProtector>().Should().BeOfType<DataProtectionFieldProtector>();
+    }
+    // ── RejectUnbound: enc:v1 record fields ─────────────────────────────
+
+    [Fact]
+    public void RejectUnbound_RefusesV1ThroughTheContextOverload_ButNotBoundOrContextFreeOrPlaintext()
+    {
+        var keys = new EphemeralDataProtectionProvider();
+        var lenient = new DataProtectionFieldProtector(keys, "sponsor-service");
+        var strict = new DataProtectionFieldProtector(keys, "sponsor-service", rejectUnbound: true);
+        var v1 = lenient.Protect("000123456789");
+
+        strict.Invoking(p => p.Unprotect(v1, Here)).Should().Throw<FieldProtectionException>()
+            .Which.Message.Should().Contain("RejectUnbound").And.NotContain("000123456789");
+
+        strict.Unprotect(strict.Protect("000123456789", Here), Here).Should().Be("000123456789");
+        strict.Unprotect(v1).Should().Be("000123456789", "the context-free overload's own format (held files, migrations)");
+        strict.Unprotect("987654321012", Here).Should().Be("987654321012", "plaintext is RejectPlaintext's business");
+        strict.Unprotect(null, Here).Should().BeNull();
+        lenient.Unprotect(v1, Here).Should().Be("000123456789", "off by default");
+    }
+
+    [Fact]
+    public void RejectUnbound_IsReadFromConfiguration_AndOffByDefault()
+    {
+        var dir = TempDir();
+        try
+        {
+            var config = new Dictionary<string, string?> { ["FieldProtection:KeyRing:LocalDirectory"] = dir };
+            var (_, off) = Build("Development", config);
+            var v1 = off.GetRequiredService<IFieldProtector>().Protect("000123456789");
+            off.GetRequiredService<IFieldProtector>().Unprotect(v1, Here).Should().Be("000123456789");
+
+            var (_, on) = Build("Development", new Dictionary<string, string?>(config) { ["FieldProtection:RejectUnbound"] = "true" });
+            on.GetRequiredService<IFieldProtector>().Invoking(p => p.Unprotect(v1, Here))
+                .Should().Throw<FieldProtectionException>();
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    // ── RejectPlaintext off: a startup warning outside Development ──────
+
+    private sealed class Capture : Microsoft.Extensions.Logging.ILoggerProvider, Microsoft.Extensions.Logging.ILogger
+    {
+        public List<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> Entries { get; } = new();
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => this;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (Entries) Entries.Add((logLevel, formatter(state, exception)));
+        }
+        public void Dispose() { }
+    }
+
+    private static async Task<List<string>> StartupWarningsAsync(string environment, Dictionary<string, string?> config)
+    {
+        var capture = new Capture();
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddProvider(capture));
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(config).Build();
+        services.AddChoFieldProtection(configuration, new Env(environment), "sponsor-service");
+        await using var provider = services.BuildServiceProvider();
+        foreach (var hosted in provider.GetServices<IHostedService>())
+            await hosted.StartAsync(CancellationToken.None);
+        return capture.Entries
+            .Where(e => e.Level == Microsoft.Extensions.Logging.LogLevel.Warning && e.Message.Contains("RejectPlaintext"))
+            .Select(e => e.Message).ToList();
+    }
+
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Staging")]
+    public async Task RejectPlaintextOff_OutsideDevelopment_LogsAStartupWarning(string environment)
+    {
+        var warnings = await StartupWarningsAsync(environment, new Dictionary<string, string?>());
+
+        warnings.Should().ContainSingle().Which.Should().Contain("RejectPlaintext is off").And.Contain("sponsor-service");
+    }
+
+    [Fact]
+    public async Task RejectPlaintextOn_OrDevelopment_LogsNoWarning()
+    {
+        (await StartupWarningsAsync("Production", new Dictionary<string, string?> { ["FieldProtection:RejectPlaintext"] = "true" }))
+            .Should().BeEmpty();
+
+        var dir = TempDir();
+        try
+        {
+            (await StartupWarningsAsync("Development", new Dictionary<string, string?> { ["FieldProtection:KeyRing:LocalDirectory"] = dir }))
+                .Should().BeEmpty();
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
     }
 }

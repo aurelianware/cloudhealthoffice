@@ -491,6 +491,26 @@ public class ProviderBankAccountEncryptionAtRestTests : IAsyncLifetime
         (await Providers().GetVersionAsync("v1-row", "v1-row-v1"))!.BankAccount!.TaxId.Should().Be(TaxId);
     }
 
+    [Fact]
+    public async Task RejectUnbound_refuses_v1_on_read_but_the_migration_still_binds_them()
+    {
+        await SeedUnboundV1Async();
+        var strict = new DataProtectionFieldProtector(_keys, ProviderBankAccountProtection.Purpose,
+            rejectPlaintext: true, rejectUnbound: true);
+
+        var before = () => Records(strict).GetAsync(Tenant, "v1-row");
+        (await before.Should().ThrowAsync<FieldProtectionException>()).Which.Message.Should().Contain("RejectUnbound");
+
+        // The operator runs the migration with the service's own (strict) configuration.
+        var counts = await EncryptProviderBankAccounts.MigrateAsync(_database, strict, new[] { Tenant }, "ProviderBankAccounts", false, new StringWriter());
+
+        counts.Failures.Should().Be(0);
+        counts.ProvidersEncrypted.Should().Be(1);
+        counts.RecordsEncrypted.Should().Be(1);
+        (await Records(strict).GetAsync(Tenant, "v1-row"))!.Active!.AccountNumber.Should().Be(Account);
+        (await Providers(strict).GetVersionAsync("v1-row", "v1-row-v1"))!.BankAccount!.TaxId.Should().Be(TaxId);
+    }
+
     // ── store-neutral (Cosmos) migration ───────────────────────────────
 
     /// <summary>Provider rows as a Cosmos container holds them: typed documents with an ETag.</summary>

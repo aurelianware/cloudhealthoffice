@@ -373,9 +373,11 @@ public static partial class EncryptProviderBankAccounts
     {
         if (string.IsNullOrEmpty(value) || FieldCiphertext.IsBound(value)) return null;
         var context = ProviderBankAccountProtection.Context(tenant, recordId, FieldName(field));
-        // enc:v1: is decrypted first; plaintext is taken as stored (never through
-        // Unprotect, which FieldProtection:RejectPlaintext would refuse).
-        var plaintext = FieldCiphertext.IsCiphertext(value) ? protector.Unprotect(value, context)! : value;
+        // enc:v1: is decrypted first, through the context-free overload (its
+        // format; the context overload refuses it under FieldProtection:RejectUnbound);
+        // plaintext is taken as stored (never through Unprotect, which
+        // FieldProtection:RejectPlaintext would refuse).
+        var plaintext = FieldCiphertext.IsCiphertext(value) ? protector.Unprotect(value)! : value;
         return (protector.Protect(plaintext, context)!, plaintext);
     }
 

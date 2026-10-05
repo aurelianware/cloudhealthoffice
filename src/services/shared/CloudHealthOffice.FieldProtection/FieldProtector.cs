@@ -57,7 +57,9 @@ public static class FieldCiphertext
 /// <c>enc:v2:</c> followed by ciphertext bound to the tenant, record and field.
 /// Values without a record (a held file) use the context-free overloads:
 /// <c>enc:v1:</c>. Record fields written before binding existed (<c>enc:v1:</c>)
-/// still decrypt through the context overloads, and values written before
+/// still decrypt through the context overloads (unless
+/// <c>FieldProtection:RejectUnbound</c> is on, in which case that throws
+/// <see cref="FieldProtectionException"/>), and values written before
 /// encryption existed (legacy plaintext) are returned unchanged and reported
 /// through <see cref="IsProtected"/>, unless <c>FieldProtection:RejectPlaintext</c>
 /// is on (set it once <c>--encrypt-bank-accounts</c> has run), in which case
@@ -112,6 +114,10 @@ public sealed class DataProtectionFieldProtector : IFieldProtector
     /// <summary>Root purpose of values bound to a record (<c>enc:v2:</c>).</summary>
     public const string BoundRootPurpose = "CloudHealthOffice.FieldProtection.v2";
 
+    internal const string UnboundRefused =
+        "A protected field holds a value encrypted before record binding (enc:v1), and FieldProtection:RejectUnbound is on. " +
+        "Run the service's --encrypt-bank-accounts command, or fix the record.";
+
     internal const string PlaintextRefused =
         "A protected field holds a value stored before encryption, and FieldProtection:RejectPlaintext is on. " +
         "Run the service's --encrypt-bank-accounts command, or fix the record.";
@@ -119,13 +125,22 @@ public sealed class DataProtectionFieldProtector : IFieldProtector
     private readonly IDataProtector _protector;
     private readonly IDataProtector _boundRoot;
     private readonly bool _rejectPlaintext;
+    private readonly bool _rejectUnbound;
 
-    public DataProtectionFieldProtector(IDataProtectionProvider provider, string purpose, bool rejectPlaintext = false)
+    /// <param name="rejectPlaintext">Refuse legacy plaintext on read (<c>FieldProtection:RejectPlaintext</c>).</param>
+    /// <param name="rejectUnbound">
+    /// Refuse an <c>enc:v1:</c> value read through a context overload, i.e. a
+    /// record field not yet bound to its record (<c>FieldProtection:RejectUnbound</c>).
+    /// The context-free overload still reads <c>enc:v1:</c>: that is its format.
+    /// </param>
+    public DataProtectionFieldProtector(
+        IDataProtectionProvider provider, string purpose, bool rejectPlaintext = false, bool rejectUnbound = false)
     {
         if (string.IsNullOrWhiteSpace(purpose)) throw new ArgumentException("A purpose is required.", nameof(purpose));
         _protector = provider.CreateProtector(RootPurpose, purpose);
         _boundRoot = provider.CreateProtector(BoundRootPurpose, purpose);
         _rejectPlaintext = rejectPlaintext;
+        _rejectUnbound = rejectUnbound;
     }
 
     public string? Protect(string? plaintext)
@@ -152,8 +167,11 @@ public sealed class DataProtectionFieldProtector : IFieldProtector
 
     public string? Unprotect(string? stored, FieldProtectionContext context)
     {
-        if (!FieldCiphertext.IsBound(stored)) return UnprotectUnboundOrPlaintext(stored);
-        return Decrypt(Bound(context), stored![FieldCiphertext.BoundPrefix.Length..]);
+        if (FieldCiphertext.IsBound(stored))
+            return Decrypt(Bound(context), stored![FieldCiphertext.BoundPrefix.Length..]);
+        if (_rejectUnbound && stored != null && stored.StartsWith(FieldCiphertext.UnboundPrefix, StringComparison.Ordinal))
+            throw new FieldProtectionException(UnboundRefused);
+        return UnprotectUnboundOrPlaintext(stored);
     }
 
     public bool IsProtected(string? stored) => FieldCiphertext.IsCiphertext(stored);
