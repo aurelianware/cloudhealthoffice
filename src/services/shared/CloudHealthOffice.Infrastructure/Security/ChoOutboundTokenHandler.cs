@@ -20,11 +20,28 @@ namespace CloudHealthOffice.Infrastructure.Security;
 ///   still takes the tenant only from the token.</item>
 /// </list>
 ///
-/// A call that can satisfy neither is sent without credentials and the callee
-/// rejects it. Nothing falls back to an unauthenticated success.
+/// The service token is never a substitute for a caller who authenticated some
+/// other way (an API key, a provider or SMART token): such a caller holds no
+/// CHO token, and lending it this service's identity would let an external
+/// client act as the service. Inside a request with an authenticated non-CHO
+/// caller, a service token is minted only when the request asks for one with
+/// <see cref="ChoOutboundTokenHandlerExtensions.UseChoServiceToken"/>, after
+/// the calling code has applied that caller's own limits. A request with no
+/// authenticated caller (a signed webhook that verified its own credential)
+/// is treated like background work.
+///
+/// A call that can satisfy none of these is sent without credentials and the
+/// callee rejects it. Nothing falls back to an unauthenticated success.
 /// </summary>
 public sealed class ChoOutboundTokenHandler : DelegatingHandler
 {
+    /// <summary>
+    /// Set on an outbound request (<see cref="ChoOutboundTokenHandlerExtensions.UseChoServiceToken"/>)
+    /// to have it carry this service's own token even though the inbound
+    /// caller authenticated with a non-CHO credential.
+    /// </summary>
+    public static readonly HttpRequestOptionsKey<bool> ServiceTokenRequested = new("cho.service-token-requested");
+
     private readonly IHttpContextAccessor _accessor;
     private readonly IServiceProvider _services;
     private readonly ILogger<ChoOutboundTokenHandler> _logger;
@@ -80,6 +97,19 @@ public sealed class ChoOutboundTokenHandler : DelegatingHandler
             return AuthenticationHeaderValue.Parse(inbound);
         }
 
+        // An authenticated caller without a CHO token (API key, provider JWT,
+        // SMART): never lend it this service's identity unless the calling code
+        // asked for that explicitly on this request.
+        if (http?.User?.Identities.Any(i => i.IsAuthenticated) == true
+            && !(request.Options.TryGetValue(ServiceTokenRequested, out var requested) && requested))
+        {
+            _logger.LogWarning(
+                "Outbound call to {Host} made for a caller without a CHO token; no service token is minted " +
+                "in its place (request one explicitly with UseChoServiceToken). The callee will reject it.",
+                request.RequestUri?.Host);
+            return null;
+        }
+
         var issuer = _services.GetService<ChoTokenIssuer>();
         var options = _services.GetService<ChoAuthOptions>();
         var tenantId = request.Headers.TryGetValues(TenantMiddleware.TenantHeaderName, out var values)
@@ -102,4 +132,15 @@ public static class ChoOutboundTokenHandlerExtensions
     /// <summary>Authenticates calls made through this client to other CHO services.</summary>
     public static IHttpClientBuilder AddChoServiceAuthentication(this IHttpClientBuilder builder)
         => builder.AddHttpMessageHandler<ChoOutboundTokenHandler>();
+
+    /// <summary>
+    /// Asks for this service's own token on <paramref name="request"/> when the
+    /// inbound caller authenticated without a CHO token. Use it only after the
+    /// code has applied that caller's own limits (tenant, scope) itself.
+    /// </summary>
+    public static HttpRequestMessage UseChoServiceToken(this HttpRequestMessage request)
+    {
+        request.Options.Set(ChoOutboundTokenHandler.ServiceTokenRequested, true);
+        return request;
+    }
 }

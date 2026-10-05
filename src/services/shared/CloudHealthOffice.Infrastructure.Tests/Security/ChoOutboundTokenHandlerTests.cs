@@ -257,6 +257,52 @@ public class ChoOutboundTokenHandlerTests
         capture.Last!.Headers.Authorization.Should().BeNull();
     }
 
+    private static DefaultHttpContext ApiKeyContext()
+    {
+        var http = new DefaultHttpContext();
+        http.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("client", "acme")], "ProviderApiKey"));
+        http.Request.Headers["X-Api-Key"] = "k";
+        http.Items["TenantId"] = "tenant-a";
+        return http;
+    }
+
+    [Fact]
+    public async Task ApiKeyCaller_IsNeverGivenTheServiceToken()
+    {
+        var (invoker, capture) = Build(ApiKeyContext(), withServiceToken: true);
+
+        var sent = await SendAsync(invoker, capture, "http://member-service/api/v1/members", tenant: "tenant-a");
+
+        sent.Headers.Authorization.Should().BeNull("an API-key caller holds no CHO token to forward");
+    }
+
+    [Fact]
+    public async Task ApiKeyCaller_GetsTheServiceToken_OnlyWhenTheRequestAsksForIt()
+    {
+        var (invoker, capture) = Build(ApiKeyContext(), withServiceToken: true);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "http://member-service/api/v1/members").UseChoServiceToken();
+        request.Headers.Add("X-Tenant-ID", "tenant-a");
+        await invoker.SendAsync(request, default);
+
+        new JwtSecurityTokenHandler().ReadJwtToken(capture.Last!.Headers.Authorization!.Parameter)
+            .Claims.Single(c => c.Type == "azp").Value.Should().Be("claims-service");
+    }
+
+    [Fact]
+    public async Task AnonymousInboundRequest_IsTreatedLikeBackgroundWork()
+    {
+        // e.g. a signed webhook: no authenticated caller to stand in for.
+        var http = new DefaultHttpContext();
+        http.Request.Headers.Authorization = "webhook-shared-secret";
+        var (invoker, capture) = Build(http, withServiceToken: true);
+
+        var sent = await SendAsync(invoker, capture, "http://member-service/api/v1/members", tenant: "tenant-a");
+
+        sent.Headers.Authorization!.Scheme.Should().Be("Bearer");
+        sent.Headers.Authorization.Parameter.Should().NotBe("webhook-shared-secret");
+    }
+
     [Fact]
     public async Task NoUserAndNoServiceToken_SendsNoCredentials()
     {
