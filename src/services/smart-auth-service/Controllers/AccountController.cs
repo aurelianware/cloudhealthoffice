@@ -100,8 +100,8 @@ public class AccountController : ControllerBase
 
         if (methods.Count == 0)
         {
-            return Content(Page("Cloud Health Office — SMART Login",
-                "<p>No sign-in method is configured for this environment.</p>"), "text/html");
+            return SmartSecurityHeaders.Page(Response, Page("Cloud Health Office — SMART Login",
+                "<p>No sign-in method is configured for this environment.</p>"));
         }
 
         var error = HttpContext.Request.Query["error"].FirstOrDefault() switch
@@ -113,7 +113,7 @@ public class AccountController : ControllerBase
         var title = DevelopmentLoginEnabled && _external is null
             ? "Cloud Health Office — SMART Login (Development)"
             : "Cloud Health Office — SMART Login";
-        return Content(Page(title, error + string.Join("\n", methods)), "text/html");
+        return SmartSecurityHeaders.Page(Response, Page(title, error + string.Join("\n", methods)));
     }
 
     /// <summary>
@@ -181,7 +181,7 @@ public class AccountController : ControllerBase
         if (await SignedInIdentityAsync() is null)
             return Redirect($"/account/login?returnUrl={Uri.EscapeDataString("/account/link")}");
 
-        return Content(Page("Link your account", """
+        return SmartSecurityHeaders.Page(Response, Page("Link your account", """
               <form method="post" action="/account/link">
                 <p><label>Enrolment code<br>
                   <input name="code" type="text" required autocomplete="one-time-code"
@@ -189,7 +189,7 @@ public class AccountController : ControllerBase
                 </label></p>
                 <button type="submit" style="padding:8px 20px">Link</button>
               </form>
-            """), "text/html");
+            """));
     }
 
     /// <summary>

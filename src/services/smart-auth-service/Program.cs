@@ -244,6 +244,9 @@ builder.Services.AddSmartTrustedProxy(builder.Configuration);
 
 var app = builder.Build();
 
+// Anti-framing, nosniff and no-referrer on every response; the login, consent
+// and link pages also get a strict CSP (see SmartSecurityHeaders).
+app.UseSmartSecurityHeaders();
 app.UseForwardedHeaders();
 app.UseChoObservability();
 

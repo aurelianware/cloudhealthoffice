@@ -141,10 +141,9 @@ public class AuthorizationController : ControllerBase
 
                 var displayName = await _applications.GetLocalizedDisplayNameAsync(application, ct)
                                   ?? request.ClientId!;
-                return Content(SmartConsent.Page(
-                        displayName, scopes, OriginalParameters(),
-                        _consent.Issue(subject, request.ClientId!, scopes)),
-                    "text/html");
+                return SmartSecurityHeaders.Page(Response, SmartConsent.Page(
+                    displayName, scopes, OriginalParameters(),
+                    _consent.Issue(subject, request.ClientId!, scopes)));
             }
 
             approvedNow = true;
