@@ -393,7 +393,13 @@ public enum CapitationStatementStatus
     /// <summary>
     /// Statement on hold pending investigation
     /// </summary>
-    OnHold
+    OnHold,
+
+    /// <summary>
+    /// Its payment may have gone out (Stripe transfer outcome unknown): not
+    /// payable until someone checks and records the answer.
+    /// </summary>
+    PaymentUnknown
 }
 
 /// <summary>

@@ -198,7 +198,7 @@ public sealed class PaymentReleaseConcurrencyTests : IAsyncLifetime
         await SeedStatementAsync("s-1", CapitationStatementStatus.Approved);
         var transfers = 0;
         var stripe = new Mock<IStripeConnectService>();
-        stripe.Setup(s => s.CreateTransferAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+        stripe.Setup(s => s.CreateTransferAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Returns(async () =>
             {
                 Interlocked.Increment(ref transfers);
@@ -242,6 +242,93 @@ public sealed class PaymentReleaseConcurrencyTests : IAsyncLifetime
 
         await statements.UndoStartPaymentAsync("s-1", holder);
         var statement = (await statements.GetByIdAsync("s-1"))!;
+        statement.Status.Should().Be(CapitationStatementStatus.Approved);
+        statement.EftDisbursementId.Should().BeNull();
+    }
+
+    private Mock<IStripeConnectService> StripeThat(Func<Task<StripeTransferResult>> answer, List<string>? disbursementIds = null)
+    {
+        var stripe = new Mock<IStripeConnectService>();
+        stripe.Setup(s => s.CreateTransferAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Callback<string, decimal, string, string, string, string>((_, _, _, _, _, id) => disbursementIds?.Add(id))
+            .Returns(answer);
+        return stripe;
+    }
+
+    public static TheoryData<string> UnknownOutcomes() => new() { "http", "timeout", "io", "stripe-5xx" };
+
+    private static Exception UnknownOutcome(string kind) => kind switch
+    {
+        "http" => new HttpRequestException("connection reset after the request was sent"),
+        "timeout" => new TaskCanceledException("Stripe did not answer in time"),
+        "io" => new IOException("broken pipe"),
+        _ => new Stripe.StripeException(System.Net.HttpStatusCode.InternalServerError, new Stripe.StripeError { Type = "api_error" }, "Stripe error"),
+    };
+
+    [Theory]
+    [MemberData(nameof(UnknownOutcomes))]
+    public async Task StripeTransferWhoseOutcomeIsUnknown_LeavesTheStatementNonPayable_AndIsNeverPaidAgain(string kind)
+    {
+        await SeedStatementAsync("s-1", CapitationStatementStatus.Approved);
+        var ids = new List<string>();
+        var stripe = StripeThat(() => throw UnknownOutcome(kind), ids);
+
+        var disbursement = await Approver(new Bank(), stripe.Object, "StripeConnect").InitiateDisbursementAsync(new InitiateDisbursementRequest
+        {
+            StatementId = "s-1", Method = DisbursementMethod.StripeConnect, InitiatedBy = "approver-1",
+        });
+
+        disbursement.Status.Should().Be(DisbursementStatus.PaymentUnknown);
+        ids.Should().ContainSingle().Which.Should().Be(disbursement.Id, "the idempotency key is derived from the disbursement id");
+        var statement = (await Statements(Request()).GetByIdAsync("s-1"))!;
+        statement.Status.Should().Be(CapitationStatementStatus.PaymentUnknown, "the transfer may exist: the statement must not be payable");
+        statement.EftDisbursementId.Should().Be(disbursement.Id);
+        (await DisbursementsAsync()).Should().ContainSingle().Which.Status.Should().Be(DisbursementStatus.PaymentUnknown);
+
+        // Neither a second release nor the batch path pays it again.
+        await FluentActions.Awaiting(() => Approver(new Bank(), stripe.Object, "StripeConnect").InitiateDisbursementAsync(new InitiateDisbursementRequest
+        {
+            StatementId = "s-1", Method = DisbursementMethod.StripeConnect, InitiatedBy = "approver-2",
+        })).Should().ThrowAsync<InvalidOperationException>();
+        var batch = await Approver(new Bank(), stripe.Object, "StripeConnect").InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
+        {
+            StatementIds = new List<string> { "s-1" }, Method = DisbursementMethod.StripeConnect, InitiatedBy = "approver-2",
+        });
+        batch.DisbursementsInitiated.Should().Be(0);
+        stripe.Verify(s => s.CreateTransferAsync(It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        (await Statements(Request()).GetByIdAsync("s-1"))!.Status.Should().Be(CapitationStatementStatus.PaymentUnknown);
+    }
+
+    [Fact]
+    public async Task BatchStripeTransferWhoseOutcomeIsUnknown_IsReportedForChecking_AndTheStatementStaysNonPayable()
+    {
+        await SeedStatementAsync("s-1", CapitationStatementStatus.Approved);
+        var stripe = StripeThat(() => throw new HttpRequestException("reset"));
+
+        var batch = await Approver(new Bank(), stripe.Object, "StripeConnect").InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
+        {
+            StatementIds = new List<string> { "s-1" }, Method = DisbursementMethod.StripeConnect, InitiatedBy = "approver-1",
+        });
+
+        batch.DisbursementsInitiated.Should().Be(0);
+        batch.NeedsAttention.Should().ContainSingle();
+        (await Statements(Request()).GetByIdAsync("s-1"))!.Status.Should().Be(CapitationStatementStatus.PaymentUnknown);
+        (await DisbursementsAsync()).Should().ContainSingle().Which.Status.Should().Be(DisbursementStatus.PaymentUnknown);
+    }
+
+    [Fact]
+    public async Task StripeRefusal_MakesTheStatementPayableAgain()
+    {
+        await SeedStatementAsync("s-1", CapitationStatementStatus.Approved);
+        var stripe = StripeThat(() => Task.FromResult(new StripeTransferResult { Status = "failed", ErrorMessage = "No such destination" }));
+
+        var disbursement = await Approver(new Bank(), stripe.Object, "StripeConnect").InitiateDisbursementAsync(new InitiateDisbursementRequest
+        {
+            StatementId = "s-1", Method = DisbursementMethod.StripeConnect, InitiatedBy = "approver-1",
+        });
+
+        disbursement.Status.Should().Be(DisbursementStatus.Failed);
+        var statement = (await Statements(Request()).GetByIdAsync("s-1"))!;
         statement.Status.Should().Be(CapitationStatementStatus.Approved);
         statement.EftDisbursementId.Should().BeNull();
     }

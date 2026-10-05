@@ -65,10 +65,10 @@ public class StripeConnectServiceTests
     public async Task CreateTransferAsync_Success_ReturnsResult()
     {
         var transfer = CreateFakeTransfer();
-        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>()))
+        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>(), It.IsAny<RequestOptions>()))
             .ReturnsAsync(transfer);
 
-        var result = await _service.CreateTransferAsync("acct_test", 5000.00m, "CAPSTMT-123", "1234567890", "tenant-1");
+        var result = await _service.CreateTransferAsync("acct_test", 5000.00m, "CAPSTMT-123", "1234567890", "tenant-1", "disb-1");
 
         result.TransferId.Should().Be("tr_abc123");
         result.Status.Should().Be("created");
@@ -80,11 +80,11 @@ public class StripeConnectServiceTests
     public async Task CreateTransferAsync_ConvertsAmountToCents()
     {
         TransferCreateOptions? capturedOptions = null;
-        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>()))
-            .Callback<TransferCreateOptions>(o => capturedOptions = o)
+        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>(), It.IsAny<RequestOptions>()))
+            .Callback<TransferCreateOptions, RequestOptions>((o, _) => capturedOptions = o)
             .ReturnsAsync(CreateFakeTransfer());
 
-        await _service.CreateTransferAsync("acct_test", 1234.56m, "STMT-1", "1234567890", "tenant-1");
+        await _service.CreateTransferAsync("acct_test", 1234.56m, "STMT-1", "1234567890", "tenant-1", "disb-1");
 
         capturedOptions.Should().NotBeNull();
         capturedOptions!.Amount.Should().Be(123456); // cents
@@ -96,39 +96,78 @@ public class StripeConnectServiceTests
     public async Task CreateTransferAsync_SetsCapitationMetadata()
     {
         TransferCreateOptions? capturedOptions = null;
-        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>()))
-            .Callback<TransferCreateOptions>(o => capturedOptions = o)
+        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>(), It.IsAny<RequestOptions>()))
+            .Callback<TransferCreateOptions, RequestOptions>((o, _) => capturedOptions = o)
             .ReturnsAsync(CreateFakeTransfer());
 
-        await _service.CreateTransferAsync("acct_test", 100m, "STMT-99", "5551234567", "tenant-1");
+        await _service.CreateTransferAsync("acct_test", 100m, "STMT-99", "5551234567", "tenant-1", "disb-1");
 
         capturedOptions!.Metadata.Should().ContainKey("statement_number").WhoseValue.Should().Be("STMT-99");
         capturedOptions.Metadata.Should().ContainKey("provider_npi").WhoseValue.Should().Be("5551234567");
         capturedOptions.Metadata.Should().ContainKey("type").WhoseValue.Should().Be("capitation");
         // Signed back to us on every transfer event: how the anonymous webhook finds the tenant.
-        capturedOptions.Metadata.Should().ContainKey("tenant_id").WhoseValue.Should().Be("tenant-1");
+        capturedOptions.Metadata.Should().ContainKey("tenant_id").WhoseValue.Should().Be("tenant-1", "disb-1");
     }
 
     [Fact]
     public async Task CreateTransferAsync_StripeError_ReturnsFailedResult()
     {
-        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>()))
-            .ThrowsAsync(new StripeException("Account not connected"));
+        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>(), It.IsAny<RequestOptions>()))
+            .ThrowsAsync(new StripeException(System.Net.HttpStatusCode.BadRequest,
+                new StripeError { Type = "invalid_request_error" }, "Account not connected"));
 
-        var result = await _service.CreateTransferAsync("acct_bad", 100m, "STMT-1", "1234567890", "tenant-1");
+        var result = await _service.CreateTransferAsync("acct_bad", 100m, "STMT-1", "1234567890", "tenant-1", "disb-1");
 
         result.Status.Should().Be("failed");
         result.ErrorMessage.Should().Be("Account not connected");
     }
 
     [Fact]
+    public async Task CreateTransferAsync_IdempotencyKey_IsDerivedFromTheDisbursement_AndTheSameOnRetry()
+    {
+        var keys = new List<string?>();
+        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>(), It.IsAny<RequestOptions>()))
+            .Callback<TransferCreateOptions, RequestOptions>((o, r) => keys.Add(r?.IdempotencyKey))
+            .ReturnsAsync(CreateFakeTransfer());
+
+        await _service.CreateTransferAsync("acct_test", 100m, "STMT-1", "1234567890", "tenant-1", "disb-42");
+        await _service.CreateTransferAsync("acct_test", 100m, "STMT-1", "1234567890", "tenant-1", "disb-42");
+        await _service.CreateTransferAsync("acct_test", 100m, "STMT-1", "1234567890", "tenant-1", "disb-43");
+
+        keys[0].Should().Be(StripeConnectService.TransferIdempotencyKey("disb-42")).And.Contain("disb-42");
+        keys[1].Should().Be(keys[0], "a retry of the same disbursement must reuse the key, so Stripe returns the first transfer");
+        keys[2].Should().NotBe(keys[0]);
+    }
+
+    public static TheoryData<Exception> OutcomeUnknownErrors() => new()
+    {
+        new HttpRequestException("connection reset"),
+        new TaskCanceledException("timeout"),
+        new IOException("broken pipe"),
+        new StripeException(System.Net.HttpStatusCode.InternalServerError, new StripeError { Type = "api_error" }, "server error"),
+        new StripeException(System.Net.HttpStatusCode.Conflict, new StripeError { Type = "idempotency_error" }, "in flight"),
+        new StripeException("no response from Stripe"),
+    };
+
+    [Theory]
+    [MemberData(nameof(OutcomeUnknownErrors))]
+    public async Task CreateTransferAsync_ErrorWithoutAStripeRefusal_IsThrown_NotReportedAsFailed(Exception error)
+    {
+        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>(), It.IsAny<RequestOptions>()))
+            .ThrowsAsync(error);
+
+        await FluentActions.Awaiting(() => _service.CreateTransferAsync("acct_test", 100m, "STMT-1", "1234567890", "tenant-1", "disb-1"))
+            .Should().ThrowAsync<Exception>();
+    }
+
+    [Fact]
     public async Task CreateTransferAsync_ReversedTransfer_ReturnsReversedStatus()
     {
         var transfer = CreateFakeTransfer(reversed: true);
-        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>()))
+        _stripeClient.Setup(c => c.CreateTransferAsync(It.IsAny<TransferCreateOptions>(), It.IsAny<RequestOptions>()))
             .ReturnsAsync(transfer);
 
-        var result = await _service.CreateTransferAsync("acct_test", 100m, "STMT-1", "1234567890", "tenant-1");
+        var result = await _service.CreateTransferAsync("acct_test", 100m, "STMT-1", "1234567890", "tenant-1", "disb-1");
 
         result.Status.Should().Be("reversed");
     }
@@ -207,7 +246,7 @@ public class StripeConnectServiceTests
         result.Handled.Should().BeTrue();
         result.EventType.Should().Be("transfer_created");
         result.TransferId.Should().Be("tr_new");
-        result.TenantId.Should().Be("tenant-1");
+        result.TenantId.Should().Be("tenant-1", "disb-1");
         result.Amount.Should().Be(3000.00m);
         result.Status.Should().Be("submitted");
     }

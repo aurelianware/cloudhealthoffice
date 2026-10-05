@@ -25,6 +25,13 @@ public interface ICapitationStatementRepository
     /// payment did not go out. Does nothing otherwise.
     /// </summary>
     Task UndoStartPaymentAsync(string statementId, string disbursementId);
+
+    /// <summary>
+    /// PaymentInitiated by <paramref name="disbursementId"/> to PaymentUnknown:
+    /// the payment may have gone out, so the statement is not payable until
+    /// someone checks. False when it is not in that state.
+    /// </summary>
+    Task<bool> MarkPaymentUnknownAsync(string statementId, string disbursementId);
 }
 
 public class CapitationStatementRepository : ICapitationStatementRepository
@@ -151,6 +158,12 @@ public class CapitationStatementRepository : ICapitationStatementRepository
         => await TryTransitionAsync(statementId,
             s => s.Status == CapitationStatementStatus.PaymentInitiated && s.EftDisbursementId == disbursementId,
             s => { s.Status = CapitationStatementStatus.Approved; s.EftDisbursementId = null; },
+            attempts: 5);
+
+    public Task<bool> MarkPaymentUnknownAsync(string statementId, string disbursementId)
+        => TryTransitionAsync(statementId,
+            s => s.Status == CapitationStatementStatus.PaymentInitiated && s.EftDisbursementId == disbursementId,
+            s => s.Status = CapitationStatementStatus.PaymentUnknown,
             attempts: 5);
 
     /// <summary>Read, check, replace only the version read (ETag). False when the check fails.</summary>

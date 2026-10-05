@@ -194,17 +194,43 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         statement.EftDisbursementId = disbursement.Id;
 
         var transferCreated = false;
+        var outcomeUnknown = false;
         try
         {
             // For Stripe Connect, initiate transfer immediately
             if (method == DisbursementMethod.StripeConnect)
             {
-                var result = await _stripeConnectService.CreateTransferAsync(
-                    bankAccount.StripeConnectedAccountId!,
-                    amount,
-                    statement.StatementNumber,
-                    statement.ProviderNPI,
-                    statement.TenantId);
+                StripeTransferResult result;
+                try
+                {
+                    // Idempotency key from the disbursement id: Stripe never makes
+                    // two transfers for one disbursement.
+                    result = await _stripeConnectService.CreateTransferAsync(
+                        bankAccount.StripeConnectedAccountId!,
+                        amount,
+                        statement.StatementNumber,
+                        statement.ProviderNPI,
+                        statement.TenantId,
+                        disbursement.Id);
+                }
+                catch (Exception ex)
+                {
+                    // Not a refusal from Stripe (that comes back as "failed"): a
+                    // timeout, network or Stripe server error. The transfer may
+                    // exist, so the statement must never become payable again here.
+                    outcomeUnknown = true;
+                    _logger.LogCritical(ex,
+                        "Stripe transfer for statement {StatementNumber} (disbursement {DisbursementId}, idempotency key {IdempotencyKey}): " +
+                        "outcome unknown ({Error}). Disbursement and statement are PaymentUnknown; check Stripe before anything is paid again",
+                        statement.StatementNumber, disbursement.Id, StripeConnectService.TransferIdempotencyKey(disbursement.Id), ex.GetType().Name);
+                    disbursement.Status = DisbursementStatus.PaymentUnknown;
+                    disbursement.ErrorMessage =
+                        $"The Stripe transfer may have been made ({ex.GetType().Name}). Do not pay this statement again: check Stripe " +
+                        $"(idempotency key {StripeConnectService.TransferIdempotencyKey(disbursement.Id)}), then another user with payments:approve records the answer.";
+                    await _statementRepository.MarkPaymentUnknownAsync(statement.Id, disbursement.Id);
+                    statement.Status = CapitationStatementStatus.PaymentUnknown;
+                    return await _disbursementRepository.CreateAsync(disbursement);
+                }
 
                 if (result.Status == "failed")
                 {
@@ -233,15 +259,24 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             }
 
             disbursement = await _disbursementRepository.CreateAsync(disbursement);
+
+            // Stripe definitively refused the transfer: nothing was paid, so the
+            // statement is payable again.
+            if (disbursement.Status == DisbursementStatus.Failed)
+            {
+                await _statementRepository.UndoStartPaymentAsync(statement.Id, disbursement.Id);
+                statement.Status = CapitationStatementStatus.Approved;
+                statement.EftDisbursementId = null;
+            }
         }
         catch (Exception ex)
         {
-            if (transferCreated)
+            if (transferCreated || outcomeUnknown)
             {
-                // The money went to Stripe: the statement must not become payable again.
+                // The money went (or may have gone) to Stripe: the statement must not become payable again.
                 _logger.LogCritical(ex,
-                    "Stripe transfer {TransferId} for statement {StatementNumber} was created but disbursement {DisbursementId} " +
-                    "could not be recorded; the statement stays PaymentInitiated and needs reconciliation",
+                    "Stripe transfer {TransferId} for statement {StatementNumber} was created (or its outcome is unknown) but disbursement " +
+                    "{DisbursementId} could not be recorded; the statement is not made payable again and needs reconciliation",
                     disbursement.StripeTransferId, statement.StatementNumber, disbursement.Id);
             }
             else
@@ -328,6 +363,13 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                         Method = DisbursementMethod.StripeConnect,
                         InitiatedBy = request.InitiatedBy
                     });
+                    if (disbursement.Status == DisbursementStatus.PaymentUnknown)
+                    {
+                        // May have been paid: never retried by this batch, reported for checking.
+                        result.DisbursementIds.Add(disbursement.Id);
+                        NeedsAttention(result, statement.Id, disbursement.Id, statement.ProviderNPI, disbursement.ErrorMessage!);
+                        continue;
+                    }
                     result.DisbursementIds.Add(disbursement.Id);
                     result.DisbursementsInitiated++;
                     result.TotalAmount += disbursement.Amount;

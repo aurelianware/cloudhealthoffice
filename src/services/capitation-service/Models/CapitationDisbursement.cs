@@ -246,7 +246,14 @@ public enum DisbursementStatus
     /// with payments:approve records what the bank says (Submitted, or back to
     /// AwaitingRetrieval / Pending).
     /// </summary>
-    DeliveryUnknown
+    DeliveryUnknown,
+
+    /// <summary>
+    /// A Stripe transfer whose outcome is unknown (timeout, network or Stripe
+    /// server error after the request was sent): the transfer may exist. Never
+    /// paid again until someone checks Stripe and records the answer.
+    /// </summary>
+    PaymentUnknown
 }
 
 /// <summary>

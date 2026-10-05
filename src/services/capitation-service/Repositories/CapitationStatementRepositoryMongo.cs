@@ -141,6 +141,21 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
             .Set(x => x.LastUpdatedAt, DateTime.UtcNow));
     }
 
+    public async Task<bool> MarkPaymentUnknownAsync(string statementId, string disbursementId)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<CapitationStatement>.Filter;
+        var filter = f.And(
+            f.Eq(x => x.Id, statementId),
+            f.Eq(x => x.TenantId, tenantId),
+            f.Eq(x => x.Status, CapitationStatementStatus.PaymentInitiated),
+            f.Eq(x => x.EftDisbursementId, disbursementId));
+        var result = await _collection.UpdateOneAsync(filter, Builders<CapitationStatement>.Update
+            .Set(x => x.Status, CapitationStatementStatus.PaymentUnknown)
+            .Set(x => x.LastUpdatedAt, DateTime.UtcNow));
+        return result.ModifiedCount == 1;
+    }
+
     public async Task<CapitationStatement> UpdateAsync(CapitationStatement statement)
     {
         statement.LastUpdatedAt = DateTime.UtcNow;

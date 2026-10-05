@@ -10,7 +10,7 @@ namespace CapitationService.Services;
 /// </summary>
 public interface IStripeTransferClient
 {
-    Task<Transfer> CreateTransferAsync(TransferCreateOptions options);
+    Task<Transfer> CreateTransferAsync(TransferCreateOptions options, RequestOptions requestOptions);
     Task<Transfer> GetTransferAsync(string transferId);
     Task CreateTransferReversalAsync(string transferId);
     Event ConstructWebhookEvent(string json, string signature, string secret);
@@ -18,8 +18,8 @@ public interface IStripeTransferClient
 
 public class StripeTransferClient : IStripeTransferClient
 {
-    public async Task<Transfer> CreateTransferAsync(TransferCreateOptions options)
-        => await new TransferService().CreateAsync(options);
+    public async Task<Transfer> CreateTransferAsync(TransferCreateOptions options, RequestOptions requestOptions)
+        => await new TransferService().CreateAsync(options, requestOptions);
 
     public async Task<Transfer> GetTransferAsync(string transferId)
         => await new TransferService().GetAsync(transferId);
@@ -40,14 +40,19 @@ public class StripeTransferClient : IStripeTransferClient
 public interface IStripeConnectService
 {
     /// <summary>
-    /// Create a Stripe Transfer to a provider's Connected Account
+    /// Create a Stripe Transfer to a provider's Connected Account, with an
+    /// idempotency key derived from <paramref name="disbursementId"/>: a retry
+    /// of the same disbursement never creates a second transfer. Returns
+    /// Status "failed" only when Stripe definitively refused it (no transfer
+    /// was made); any other error is thrown, and the outcome is then unknown.
     /// </summary>
     Task<StripeTransferResult> CreateTransferAsync(
         string stripeConnectedAccountId,
         decimal amount,
         string statementNumber,
         string providerNpi,
-        string tenantId);
+        string tenantId,
+        string disbursementId);
 
     /// <summary>
     /// Get the current status of a Transfer
@@ -72,6 +77,30 @@ public class StripeConnectService : IStripeConnectService
     /// anonymous; this signed value is how an event finds its tenant.
     /// </summary>
     public const string TenantMetadataKey = "tenant_id";
+
+    /// <summary>Transfer metadata key carrying the CHO disbursement id.</summary>
+    public const string DisbursementMetadataKey = "disbursement_id";
+
+    /// <summary>
+    /// The Stripe idempotency key for a disbursement's transfer: the same for
+    /// every attempt of that disbursement, so Stripe returns the first
+    /// transfer instead of creating another.
+    /// </summary>
+    public static string TransferIdempotencyKey(string disbursementId) => $"cho-capitation-transfer-{disbursementId}";
+
+    /// <summary>
+    /// True when Stripe answered and refused the request (a card or
+    /// invalid-request error, 4xx other than 409): no transfer was made.
+    /// A 5xx, a 409 (idempotency or lock conflict), or an error without
+    /// Stripe's answer leaves the outcome unknown.
+    /// </summary>
+    public static bool IsDefinitiveRefusal(StripeException ex)
+    {
+        var status = (int)ex.HttpStatusCode;
+        var type = ex.StripeError?.Type;
+        return status is >= 400 and < 500 && status != 409
+            && (type == "card_error" || type == "invalid_request_error");
+    }
 
     private readonly IStripeTransferClient _stripeClient;
     private readonly IConfiguration _configuration;
@@ -99,7 +128,8 @@ public class StripeConnectService : IStripeConnectService
         decimal amount,
         string statementNumber,
         string providerNpi,
-        string tenantId)
+        string tenantId,
+        string disbursementId)
     {
         var options = new TransferCreateOptions
         {
@@ -111,14 +141,16 @@ public class StripeConnectService : IStripeConnectService
                 { "statement_number", statementNumber },
                 { "provider_npi", providerNpi },
                 { "type", "capitation" },
-                { TenantMetadataKey, tenantId }
+                { TenantMetadataKey, tenantId },
+                { DisbursementMetadataKey, disbursementId }
             },
             Description = $"Capitation payment for {statementNumber}"
         };
+        var requestOptions = new RequestOptions { IdempotencyKey = TransferIdempotencyKey(disbursementId) };
 
         try
         {
-            var transfer = await _stripeClient.CreateTransferAsync(options);
+            var transfer = await _stripeClient.CreateTransferAsync(options, requestOptions);
 
             _logger.LogInformation(
                 "Created Stripe Transfer {TransferId} for statement {StatementNumber}, amount ${Amount:N2}",
@@ -126,9 +158,11 @@ public class StripeConnectService : IStripeConnectService
 
             return MapToResult(transfer);
         }
-        catch (StripeException ex)
+        catch (StripeException ex) when (IsDefinitiveRefusal(ex))
         {
-            _logger.LogError(ex, "Stripe Transfer failed for statement {StatementNumber}",
+            // Stripe said no: no transfer exists. Anything else propagates, since
+            // the transfer may exist (the caller must not make the statement payable again).
+            _logger.LogError(ex, "Stripe Transfer refused for statement {StatementNumber}",
                 statementNumber);
             return new StripeTransferResult
             {
