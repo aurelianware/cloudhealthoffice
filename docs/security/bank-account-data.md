@@ -321,7 +321,7 @@ mechanism. A service opts in with a project reference and
   draft, activate, supersede, suspend, terminate); rows never written again
   (superseded versions) need the migration below.
 
-### Re-encrypting existing provider data
+### Re-encrypting existing data (provider-service, sponsor-service)
 
 `provider-service --encrypt-bank-accounts` stores every routing, account and
 tax number in `Providers` (all version rows) and `ProviderBankAccounts`
@@ -357,7 +357,36 @@ dotnet run --project src/services/provider-service -- --encrypt-bank-accounts --
   `CosmosDb:Key` (containers `CosmosDb:ContainerName`, default `Providers`,
   and `CosmosDb:ProviderBankAccountsContainer`, default `ProviderBankAccounts`).
 - When it exits 0 for every tenant, set `FieldProtection__RejectPlaintext=true`
-  on provider-service.
-- sponsor-service has no such command yet: its values are encrypted and bound
-  on the record's next write, so keep `RejectPlaintext` off there until every
-  sponsor and sponsor bank-account record has been written once.
+  and `FieldProtection__RejectUnbound=true` on provider-service.
+
+`sponsor-service --encrypt-bank-accounts` does the same for sponsor-service:
+`BillingInfo.BillingAccountNumber` on sponsor documents (`Sponsors`, bound to
+tenant + sponsor id) and the routing and account numbers in
+`SponsorBankAccounts` (active account, every change's proposed and previous
+account, bound to tenant + group number), plaintext and `enc:v1:` alike:
+
+```
+dotnet sponsor-service.dll --encrypt-bank-accounts [--tenant <id>]... [--dry-run]
+# from a checkout:
+dotnet run --project src/services/sponsor-service -- --encrypt-bank-accounts --dry-run
+```
+
+- Run it with sponsor-service's own configuration (the same `MongoDb`, or
+  `Database:Provider=CosmosDb` with `CosmosDb:Endpoint` / `CosmosDb:Key`, and
+  `FieldProtection` settings and identity as the pods). Mongo collections:
+  `CosmosDb:ContainerName` (default `Sponsors`, as the service) and
+  `MongoDb:SponsorBankAccountsCollection` (default `SponsorBankAccounts`);
+  Cosmos containers `Sponsors` and `CosmosDb:SponsorBankAccountsContainer`.
+- Same options, output, exit codes and `MongoDb:UseTenantScoping` rule as the
+  provider command. It never prints a number, and it only encrypts: it never
+  approves or activates an account.
+- Idempotent and resumable: a sponsor document is changed only if its billing
+  account number is still the value read (Mongo; Cosmos: a patch of that one
+  field on the document's ETag). A bank-account record is saved through the
+  service's own revision-checked save, which bumps its revision: a decision
+  (approve, reject) racing the migration on the same record gets the
+  service's usual conflict and is retried.
+- When it exits 0 for every tenant, set `FieldProtection__RejectPlaintext=true`
+  and `FieldProtection__RejectUnbound=true` on sponsor-service.
+- Both commands decrypt `enc:v1:` values through the context-free path, so
+  they run unchanged with `RejectUnbound` and `RejectPlaintext` already on.

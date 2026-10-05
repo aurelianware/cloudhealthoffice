@@ -16,6 +16,16 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
+// One-off migration (operator CLI): dotnet sponsor-service.dll --encrypt-bank-accounts
+// [--tenant <id>] [--dry-run]. Stores sponsor bank numbers written before encryption,
+// or before record binding (enc:v1), as enc:v2. Mongo or Cosmos, as configured.
+if (args.Contains(SponsorService.Migrations.EncryptSponsorBankAccounts.Switch))
+{
+    Environment.ExitCode = await SponsorService.Migrations.EncryptSponsorBankAccounts.RunAsync(
+        args, builder.Configuration, builder.Environment);
+    return;
+}
+
 builder.Services.AddControllers(options => options.Filters.Add<FieldProtectionExceptionFilter>())
     .AddCloudHealthOfficeJsonOptions()
     // Responses never carry the full billing account number (last 4 only).
