@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using PaymentService.Models;
 using PaymentService.Services;
@@ -285,5 +287,129 @@ public class EraGeneratorServiceTests
         var era = _generator.Generate835(payment, tp);
 
         Assert.Contains("CAS*CO*45*250.00~", era);
+    }
+
+    // ── BPR element positions (005010X221A1) ─────────────────────────────
+    // The pre-existing assertions stopped at BPR04, which is why an
+    // off-by-one from BPR10 onward went unnoticed: the EFT effective date
+    // was landing in BPR10 (Originating Company Identifier), pushing the
+    // receiver DFI qualifier, routing number, account qualifier and account
+    // number each one element to the right and dropping BPR16 entirely.
+
+    [Fact]
+    public void Generate835_AchBpr_PlacesEveryElementAtItsSpecifiedPosition()
+    {
+        var era = _generator.Generate835(CreateTestPayment(), CreateTestTradingPartner());
+
+        var bpr = era.Split('~').First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal));
+        var el = bpr.Split('*');
+
+        Assert.Equal("BPR", el[0]);
+        Assert.Equal("C", el[1]);                    // BPR01 transaction handling
+        Assert.Equal("1250.00", el[2]);              // BPR02 amount
+        Assert.Equal("C", el[3]);                    // BPR03 credit
+        Assert.Equal("ACH", el[4]);                  // BPR04 payment method
+        Assert.Equal("CCP", el[5]);                  // BPR05 payment format
+        Assert.Equal("01", el[6]);                   // BPR06 sender DFI qualifier
+        Assert.Equal("021000021", el[7]);            // BPR07 sender routing
+        Assert.Equal("DA", el[8]);                   // BPR08 sender acct qualifier
+        Assert.Equal("123456789", el[9]);            // BPR09 sender account
+        Assert.Equal("BCBS001", el[10]);             // BPR10 originating company id
+        Assert.Equal(string.Empty, el[11]);          // BPR11 not used
+        Assert.Equal("01", el[12]);                  // BPR12 receiver DFI qualifier
+        Assert.Equal("021000089", el[13]);           // BPR13 receiver routing
+        Assert.Equal("DA", el[14]);                  // BPR14 receiver acct qualifier
+        Assert.Equal("987654321", el[15]);           // BPR15 receiver account
+        Assert.Equal("20260315", el[16]);            // BPR16 EFT effective date
+        Assert.Equal(17, el.Length);
+    }
+
+    [Fact]
+    public void Generate835_AchBpr_DoesNotPutADateInTheOriginatingCompanyIdentifier()
+    {
+        var era = _generator.Generate835(CreateTestPayment(), CreateTestTradingPartner());
+
+        var bpr = era.Split('~').First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal));
+        var bpr10 = bpr.Split('*')[10];
+
+        Assert.False(
+            bpr10.Length == 8 && bpr10.All(char.IsDigit),
+            $"BPR10 must be the originating company identifier, not a date. Got '{bpr10}'.");
+    }
+
+    [Fact]
+    public void Generate835_CheckBpr_CarriesIssueDateInBpr16AndLeavesBankFieldsEmpty()
+    {
+        var payment = CreateTestPayment();
+        payment.PaymentMethod = "CHK";
+
+        var era = _generator.Generate835(payment, CreateTestTradingPartner());
+
+        var el = era.Split('~')
+            .First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal))
+            .Split('*');
+
+        Assert.Equal("CHK", el[4]);
+        foreach (var i in Enumerable.Range(5, 11))   // BPR05..BPR15
+            Assert.Equal(string.Empty, el[i]);
+        Assert.Equal("20260315", el[16]);            // BPR16 issue date
+    }
+
+    [Fact]
+    public void Generate835_NonPayment_EmitsNoFinancialDetail()
+    {
+        // A non-payment remittance carries no money, so BPR01 is "I"
+        // (remittance only) and BPR05-BPR16 are not used at all.
+        var payment = CreateTestPayment();
+        payment.PaymentMethod = "NON";
+        payment.TotalPaymentAmount = 0m;
+        foreach (var claimPay in payment.ClaimPayments) claimPay.PaymentAmount = 0m;
+
+        var era = _generator.Generate835(payment, CreateTestTradingPartner());
+
+        var bpr = era.Split('~').First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal));
+
+        Assert.Equal("BPR*I*0.00*C*NON", bpr);
+    }
+
+    // ── Payer identity is required, never defaulted ──────────────────────
+
+    [Fact]
+    public void Generate835_MissingPayerId_ThrowsRatherThanEmittingAPlaceholder()
+    {
+        var payment = CreateTestPayment();
+        payment.PayerId = null;
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => _generator.Generate835(payment, CreateTestTradingPartner()));
+
+        Assert.Contains("PayerId", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate835_MissingCheckNumber_ThrowsBecauseTrn02IsTheReassociationKey()
+    {
+        var payment = CreateTestPayment();
+        payment.CheckNumber = string.Empty;
+
+        Assert.Throws<InvalidOperationException>(
+            () => _generator.Generate835(payment, CreateTestTradingPartner()));
+    }
+
+    [Fact]
+    public void Generate835_PayerIdentity_IsConsistentAcrossBpr10Trn03AndN1Pr()
+    {
+        var era = _generator.Generate835(CreateTestPayment(), CreateTestTradingPartner());
+
+        var bpr10 = era.Split('~')
+            .First(seg => seg.StartsWith("BPR*", StringComparison.Ordinal)).Split('*')[10];
+        var trn03 = era.Split('~')
+            .First(seg => seg.StartsWith("TRN*", StringComparison.Ordinal)).Split('*')[3];
+        var n1pr = era.Split('~')
+            .First(seg => seg.StartsWith("N1*PR*", StringComparison.Ordinal)).Split('*')[4];
+
+        Assert.Equal("BCBS001", bpr10);
+        Assert.Equal("BCBS001", trn03);
+        Assert.Equal("BCBS001", n1pr);
     }
 }
