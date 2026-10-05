@@ -57,12 +57,26 @@ chmod 600 "$CONFIG_FILE"
 echo "Changed users: ${USERNAME}"
 echo ""
 
-# Update the secret: render it from the file and apply via stdin so the
-# contents never appear in argv.
+# Update the secret: render it from the file and send it via stdin so the
+# contents never appear in argv. `replace`, not client-side `apply`: apply
+# copies the whole object (every user's password) into the
+# kubectl.kubernetes.io/last-applied-configuration annotation, which
+# `kubectl describe` and `get -o yaml` print. replace writes the object as
+# rendered (no annotations), which also drops an annotation an earlier
+# apply-based run left behind.
+LAST_APPLIED="kubectl.kubernetes.io/last-applied-configuration"
 echo "💾 Updating Kubernetes secret..."
 kubectl -n "${NAMESPACE}" create secret generic "${SECRET_NAME}" \
   --from-file=users.conf="$CONFIG_FILE" \
-  --dry-run=client -o yaml | kubectl -n "${NAMESPACE}" apply -f -
+  --dry-run=client -o yaml | kubectl -n "${NAMESPACE}" replace -f - > /dev/null
+
+# Belt and braces: if the annotation is still there, remove it. The check
+# prints only "present", never the annotation's value.
+if [ "$(kubectl -n "${NAMESPACE}" get secret "${SECRET_NAME}" \
+      -o go-template="{{with .metadata.annotations}}{{if index . \"${LAST_APPLIED}\"}}present{{end}}{{end}}")" = "present" ]; then
+  kubectl -n "${NAMESPACE}" annotate secret "${SECRET_NAME}" "${LAST_APPLIED}-" > /dev/null
+  echo "Removed the ${LAST_APPLIED} annotation (it held a copy of the secret)."
+fi
 
 echo "✅ Secret updated successfully"
 echo ""
