@@ -18,7 +18,7 @@ public static class ReleaseClaims
 
     public static void Uncontended(Mock<ICapitationDisbursementRepository> disbursements)
     {
-        disbursements.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
+        disbursements.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()))
             .ReturnsAsync(true);
     }
 

@@ -159,6 +159,12 @@ public class EftDraft
     public DateTime? ReleaseClaimedAt { get; set; }
 
     /// <summary>
+    /// The user (token subject) who released it: claimed it for a NACHA file,
+    /// or initiated the Stripe debit. Never the one who resolves it when it is stuck.
+    /// </summary>
+    public string? ReleasedBy { get; set; }
+
+    /// <summary>
     /// The invoice id while this draft is active (not Settled, Returned, Failed
     /// or Cancelled), otherwise null. Set by the repository on every write: at
     /// most one active draft per invoice (Mongo: unique partial index on
@@ -514,3 +520,34 @@ public class BatchEftResult
     /// <summary>Invoices that were not drafted for a reason someone has to fix (also counted in Errors).</summary>
     public List<EftAttentionItem> NeedsAttention { get; set; } = new();
 }
+
+/// <summary>
+/// Drafts that need a person: Releasing longer than the threshold (the release
+/// stopped mid-send), DeliveryUnknown (resolve-delivery on the held file), and
+/// PaymentUnknown (Stripe outcome unknown); plus held NACHA files stuck in a
+/// retry (Transmitting). Nothing here is recovered automatically.
+/// </summary>
+public class StuckEftDrafts
+{
+    public int ReleasingOlderThanMinutes { get; set; }
+    public List<EftDraft> Releasing { get; set; } = new();
+    public List<EftDraft> DeliveryUnknown { get; set; } = new();
+    public List<EftDraft> PaymentUnknown { get; set; } = new();
+    public List<CloudHealthOffice.NachaTransmission.NachaHeldFileView> TransmittingHeldFiles { get; set; } = new();
+}
+
+/// <summary>
+/// What a person found out (from the bank, or Stripe) about a stuck draft.
+/// </summary>
+public class ResolveStuckDraftRequest
+{
+    /// <summary>True: the debit went out (Submitted). False: it did not (Releasing back to Pending; Stripe PaymentUnknown to Failed).</summary>
+    public bool? Sent { get; set; }
+
+    /// <summary>What the bank or Stripe said. Required.</summary>
+    public string? Reason { get; set; }
+
+    /// <summary>For a Stripe draft that went out: its PaymentIntent id, so Stripe events settle it.</summary>
+    public string? StripePaymentIntentId { get; set; }
+}
+

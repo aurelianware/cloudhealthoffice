@@ -52,6 +52,19 @@ public interface IEftDraftService
     Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string fileReference, bool bankReceived, string reason);
 
     /// <summary>
+    /// Drafts stuck in Releasing (longer than <paramref name="releasingOlderThan"/>),
+    /// DeliveryUnknown or PaymentUnknown, and held files stuck Transmitting. Read only.
+    /// </summary>
+    Task<StuckEftDrafts> ListStuckDraftsAsync(TimeSpan releasingOlderThan);
+
+    /// <summary>
+    /// Records what a person found out about a stuck draft (Releasing past the
+    /// threshold, or PaymentUnknown): sent (Submitted) or not (Pending / Failed).
+    /// A user token, a reason, and not the user who released it. Audited.
+    /// </summary>
+    Task<EftDraft> ResolveStuckDraftAsync(string draftId, bool sent, string reason, string? stripePaymentIntentId);
+
+    /// <summary>
     /// Process an ACH return (bank rejection)
     /// </summary>
     Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request);
@@ -184,6 +197,8 @@ public class EftDraftService : IEftDraftService
             RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
             AccountNumberLast4 = bankAccount.AccountNumberLast4,
             InitiatedBy = request.InitiatedBy,
+            // A Stripe debit is released now, by this user; a NACHA draft when it is claimed for a file.
+            ReleasedBy = method == EftMethod.StripeAch ? ActorId : null,
             ExpectedSettlementDate = method == EftMethod.Nacha ? DateTime.UtcNow.AddBusinessDays(2) : null
         };
 
@@ -339,6 +354,7 @@ public class EftDraftService : IEftDraftService
                         Status = EftDraftStatus.Releasing,
                         ReleaseClaimId = claimId,
                         ReleaseClaimedAt = claimedAt,
+                        ReleasedBy = ActorId,
                         RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
                         AccountNumberLast4 = bankAccount.AccountNumberLast4,
                         InitiatedBy = request.InitiatedBy
@@ -418,11 +434,12 @@ public class EftDraftService : IEftDraftService
         var claimed = new List<EftDraft>();
         foreach (var draft in pendingDrafts)
         {
-            if (!await _draftRepository.TryClaimForReleaseAsync(draft.Id, claimId, claimedAt))
+            if (!await _draftRepository.TryClaimForReleaseAsync(draft.Id, claimId, claimedAt, ActorId))
                 continue;
             draft.Status = EftDraftStatus.Releasing;
             draft.ReleaseClaimId = claimId;
             draft.ReleaseClaimedAt = claimedAt;
+            draft.ReleasedBy = ActorId;
             claimed.Add(draft);
         }
 
@@ -506,6 +523,7 @@ public class EftDraftService : IEftDraftService
                 draft.Status = EftDraftStatus.Pending;
                 draft.ReleaseClaimId = null;
                 draft.ReleaseClaimedAt = null;
+                draft.ReleasedBy = null;
                 draft.ErrorMessage = reason;
             }
             catch (Exception ex)
@@ -619,6 +637,7 @@ public class EftDraftService : IEftDraftService
                     draft.Status = EftDraftStatus.Pending;
                     draft.ReleaseClaimId = null;
                     draft.ReleaseClaimedAt = null;
+                    draft.ReleasedBy = null;
                     draft.ErrorMessage = outcome.Reason;
                     break;
             }
@@ -796,6 +815,98 @@ public class EftDraftService : IEftDraftService
             }
         }
         return file;
+    }
+
+    /// <summary>How long a draft may be Releasing before it counts as stuck (Payments:StuckReleasingMinutes, default 30, at least 5).</summary>
+    private TimeSpan StuckReleasingAge
+        => TimeSpan.FromMinutes(Math.Max(5, _configuration.GetValue("Payments:StuckReleasingMinutes", 30)));
+
+    public async Task<StuckEftDrafts> ListStuckDraftsAsync(TimeSpan releasingOlderThan)
+    {
+        var cutoff = DateTime.UtcNow - releasingOlderThan;
+        var held = await _dispatcher.ListHeldAsync(_actor.TenantId);
+        return new StuckEftDrafts
+        {
+            ReleasingOlderThanMinutes = (int)releasingOlderThan.TotalMinutes,
+            Releasing = (await _draftRepository.GetByStatusAsync(EftDraftStatus.Releasing))
+                .Where(d => (d.ReleaseClaimedAt ?? d.LastUpdatedAt) <= cutoff).ToList(),
+            DeliveryUnknown = (await _draftRepository.GetByStatusAsync(EftDraftStatus.DeliveryUnknown)).ToList(),
+            PaymentUnknown = (await _draftRepository.GetByStatusAsync(EftDraftStatus.PaymentUnknown)).ToList(),
+            TransmittingHeldFiles = held
+                .Where(f => f.Status == NachaHeldFileStatus.Transmitting && (f.LastAttemptAt ?? f.CreatedAt) <= cutoff)
+                .Select(NachaHeldFileView.From).ToList(),
+        };
+    }
+
+    public async Task<EftDraft> ResolveStuckDraftAsync(string draftId, bool sent, string reason, string? stripePaymentIntentId)
+    {
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: resolving a stuck debit needs a user with payments:approve, not a service token");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason (what the bank or Stripe said) is required.");
+        reason = SanitizeForLog(reason.Trim());
+        if (reason.Length > 500) reason = reason[..500];
+
+        var draft = await _draftRepository.GetByIdAsync(draftId)
+            ?? throw new KeyNotFoundException($"Draft {draftId} not found");
+        if (draft.Status is not (EftDraftStatus.Releasing or EftDraftStatus.PaymentUnknown))
+            throw new InvalidOperationException(draft.Status == EftDraftStatus.DeliveryUnknown
+                ? $"Draft {draftId} is DeliveryUnknown: record the bank's answer on its NACHA file (resolve-delivery)."
+                : $"Draft {draftId} is {draft.Status}, not stuck.");
+        if (draft.Status == EftDraftStatus.Releasing && (draft.ReleaseClaimedAt ?? draft.LastUpdatedAt) > DateTime.UtcNow - StuckReleasingAge)
+            throw new InvalidOperationException(
+                $"Draft {draftId} has been Releasing for less than {(int)StuckReleasingAge.TotalMinutes} minutes; the release may still be running.");
+
+        var releaser = draft.ReleasedBy;
+        if (string.IsNullOrEmpty(releaser))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: who released draft {draftId} is not recorded, so who may resolve it cannot be checked. Reconcile it by hand.");
+        if (string.Equals(releaser, ActorId, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                "Separation of duties: you released this debit, so you cannot record whether it went out. Another user with payments:approve must.");
+
+        var previous = draft.Status;
+        var now = DateTime.UtcNow;
+        if (previous == EftDraftStatus.Releasing && !sent)
+        {
+            // Back to Pending only if it is still held by the same stuck release (conditional write).
+            await _draftRepository.ReleaseClaimAsync(draft.Id, draft.ReleaseClaimId ?? string.Empty,
+                $"Not sent (checked with the bank by {ActorId}): {reason}. Back to Pending for the next file.");
+            draft = await _draftRepository.GetByIdAsync(draftId) ?? draft;
+            if (draft.Status != EftDraftStatus.Pending)
+                throw new InvalidOperationException($"Draft {draftId} changed while it was being resolved; it is {draft.Status}.");
+        }
+        else
+        {
+            if (sent)
+            {
+                if (draft.Method == EftMethod.StripeAch && previous == EftDraftStatus.PaymentUnknown)
+                {
+                    if (string.IsNullOrWhiteSpace(stripePaymentIntentId))
+                        throw new ArgumentException("stripePaymentIntentId (the debit Stripe made) is required for a Stripe draft that went out.");
+                    draft.StripePaymentIntentId = stripePaymentIntentId.Trim();
+                }
+                draft.Status = EftDraftStatus.Submitted;
+                draft.SubmittedAt = now;
+                draft.ExpectedSettlementDate = now.AddBusinessDays(draft.Method == EftMethod.StripeAch ? 4 : 2);
+                draft.ErrorMessage = $"Sent (confirmed by {ActorId}): {reason}";
+            }
+            else
+            {
+                draft.Status = EftDraftStatus.Failed;
+                draft.ErrorMessage = $"Not sent (confirmed with Stripe by {ActorId}): {reason}";
+            }
+            draft.LastUpdatedBy = ActorId;
+            draft = await _draftRepository.UpdateAsync(draft);
+        }
+
+        _logger.LogWarning(
+            "AUDIT stuck EFT draft {DraftId} (invoice {InvoiceNumber}, {Method}, released by {ReleasedBy}) resolved by {User}: was {Previous}, " +
+            "the debit {Answer}; now {Status}. Reason: {Reason}",
+            draft.Id, SanitizeForLog(draft.InvoiceNumber), draft.Method, SanitizeForLog(releaser), SanitizeForLog(ActorId), previous,
+            sent ? "went out" : "did not go out", draft.Status, reason);
+        return draft;
     }
 
     private static string? Last4(string? number)

@@ -17,7 +17,7 @@ public interface ICapitationDisbursementRepository
     /// as one conditional write: of two releases racing for the same disbursement
     /// exactly one gets it. False when it is no longer Pending.
     /// </summary>
-    Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt);
+    Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt, string releasedBy);
 
     /// <summary>
     /// Releasing under <paramref name="claimId"/> back to Pending (nothing was sent),
@@ -66,7 +66,7 @@ public class CapitationDisbursementRepository : ICapitationDisbursementRepositor
         }
     }
 
-    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt)
+    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt, string releasedBy)
     {
         var tenantId = GetTenantId();
         ItemResponse<CapitationDisbursement> current;
@@ -86,6 +86,7 @@ public class CapitationDisbursementRepository : ICapitationDisbursementRepositor
         disbursement.Status = DisbursementStatus.Releasing;
         disbursement.ReleaseClaimId = claimId;
         disbursement.ReleaseClaimedAt = claimedAt;
+        disbursement.ReleasedBy = releasedBy;
         disbursement.LastUpdatedAt = DateTime.UtcNow;
         try
         {
@@ -123,6 +124,7 @@ public class CapitationDisbursementRepository : ICapitationDisbursementRepositor
             disbursement.Status = DisbursementStatus.Pending;
             disbursement.ReleaseClaimId = null;
             disbursement.ReleaseClaimedAt = null;
+            disbursement.ReleasedBy = null;
             disbursement.ErrorMessage = reason;
             disbursement.LastUpdatedAt = DateTime.UtcNow;
             try

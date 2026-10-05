@@ -99,7 +99,7 @@ public class ProviderBankAccountEndToEndTests : IClassFixture<ProviderBankAccoun
         _factory.StatementRepository.UpdateAsync(Arg.Any<CapitationStatement>()).Returns(ci => ci.Arg<CapitationStatement>());
         // The conditional release writes, uncontended.
         _factory.StatementRepository.TryStartPaymentAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
-        _factory.DisbursementRepository.TryClaimForReleaseAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>()).Returns(true);
+        _factory.DisbursementRepository.TryClaimForReleaseAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<string>()).Returns(true);
         _factory.DisbursementRepository.CreateAsync(Arg.Any<CapitationDisbursement>()).Returns(ci =>
         {
             var d = ci.Arg<CapitationDisbursement>();

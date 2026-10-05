@@ -28,7 +28,7 @@ public interface IEftDraftRepository
     /// as one conditional write: of two releases racing for the same draft exactly
     /// one gets it. False when the draft is no longer Pending.
     /// </summary>
-    Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt);
+    Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt, string releasedBy);
 
     /// <summary>
     /// Releasing under <paramref name="claimId"/> back to Pending (nothing was sent),
@@ -215,7 +215,7 @@ public class EftDraftRepository : IEftDraftRepository
         return await ExecuteQueryAsync(query);
     }
 
-    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt)
+    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt, string releasedBy)
     {
         var tenantId = GetTenantId();
         ItemResponse<EftDraft> current;
@@ -235,6 +235,7 @@ public class EftDraftRepository : IEftDraftRepository
         draft.Status = EftDraftStatus.Releasing;
         draft.ReleaseClaimId = claimId;
         draft.ReleaseClaimedAt = claimedAt;
+        draft.ReleasedBy = releasedBy;
         draft.LastUpdatedAt = DateTime.UtcNow;
         try
         {
@@ -272,6 +273,7 @@ public class EftDraftRepository : IEftDraftRepository
             draft.Status = EftDraftStatus.Pending;
             draft.ReleaseClaimId = null;
             draft.ReleaseClaimedAt = null;
+            draft.ReleasedBy = null;
             draft.ErrorMessage = reason;
             draft.LastUpdatedAt = DateTime.UtcNow;
             try

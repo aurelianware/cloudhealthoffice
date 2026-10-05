@@ -49,6 +49,20 @@ public interface ICapitationDisbursementService
     Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason);
 
     /// <summary>
+    /// Disbursements stuck in Releasing (longer than <paramref name="releasingOlderThan"/>),
+    /// DeliveryUnknown or PaymentUnknown, and held files stuck Transmitting. Read only.
+    /// </summary>
+    Task<StuckDisbursements> ListStuckDisbursementsAsync(string tenantId, TimeSpan releasingOlderThan);
+
+    /// <summary>
+    /// Records what a person found out about a stuck disbursement (Releasing past
+    /// the threshold, or PaymentUnknown): sent (Submitted) or not (Pending, or
+    /// Failed with the statement payable again). A user token, a reason, and not
+    /// the user who released it. Audited.
+    /// </summary>
+    Task<CapitationDisbursement> ResolveStuckDisbursementAsync(string id, NachaActor actor, bool sent, string reason, string? stripeTransferId);
+
+    /// <summary>
     /// Process an ACH return (bank rejection of credit)
     /// </summary>
     Task<CapitationDisbursement> ProcessReturnAsync(ProcessReturnRequest request);
@@ -182,7 +196,9 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             Status = DisbursementStatus.Pending,
             RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
             AccountNumberLast4 = bankAccount.AccountNumberLast4,
-            InitiatedBy = request.InitiatedBy
+            InitiatedBy = request.InitiatedBy,
+            // A Stripe transfer is released now, by this user; a NACHA credit when its file is released.
+            ReleasedBy = method == DisbursementMethod.StripeConnect ? request.InitiatedBy : null
         };
 
         // Approved to PaymentInitiated, as one conditional write, before any money
@@ -399,6 +415,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                         Status = DisbursementStatus.Releasing,
                         ReleaseClaimId = claimId,
                         ReleaseClaimedAt = claimedAt,
+                        ReleasedBy = request.InitiatedBy,
                         RoutingNumberLast4 = payee.RoutingNumberLast4 ?? bankAccount.RoutingNumberLast4,
                         AccountNumberLast4 = payee.AccountNumberLast4 ?? bankAccount.AccountNumberLast4,
                         InitiatedBy = request.InitiatedBy
@@ -515,11 +532,12 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         var claimed = new List<CapitationDisbursement>();
         foreach (var disbursement in pendingDisbursements)
         {
-            if (!await _disbursementRepository.TryClaimForReleaseAsync(disbursement.Id, claimId, claimedAt))
+            if (!await _disbursementRepository.TryClaimForReleaseAsync(disbursement.Id, claimId, claimedAt, releasedBy))
                 continue;
             disbursement.Status = DisbursementStatus.Releasing;
             disbursement.ReleaseClaimId = claimId;
             disbursement.ReleaseClaimedAt = claimedAt;
+            disbursement.ReleasedBy = releasedBy;
             claimed.Add(disbursement);
         }
         if (claimed.Count == 0)
@@ -619,6 +637,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 disbursement.Status = DisbursementStatus.Pending;
                 disbursement.ReleaseClaimId = null;
                 disbursement.ReleaseClaimedAt = null;
+                disbursement.ReleasedBy = null;
                 disbursement.ErrorMessage = reason;
             }
             catch (Exception ex)
@@ -921,6 +940,106 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             }
         }
         return file;
+    }
+
+    /// <summary>How long a disbursement may be Releasing before it counts as stuck (Payments:StuckReleasingMinutes, default 30, at least 5).</summary>
+    private TimeSpan StuckReleasingAge
+        => TimeSpan.FromMinutes(Math.Max(5, _configuration.GetValue("Payments:StuckReleasingMinutes", 30)));
+
+    public async Task<StuckDisbursements> ListStuckDisbursementsAsync(string tenantId, TimeSpan releasingOlderThan)
+    {
+        var cutoff = DateTime.UtcNow - releasingOlderThan;
+        var held = await _dispatcher.ListHeldAsync(tenantId);
+        return new StuckDisbursements
+        {
+            ReleasingOlderThanMinutes = (int)releasingOlderThan.TotalMinutes,
+            Releasing = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.Releasing))
+                .Where(d => (d.ReleaseClaimedAt ?? d.LastUpdatedAt) <= cutoff).ToList(),
+            DeliveryUnknown = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.DeliveryUnknown)).ToList(),
+            PaymentUnknown = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.PaymentUnknown)).ToList(),
+            TransmittingHeldFiles = held
+                .Where(f => f.Status == NachaHeldFileStatus.Transmitting && (f.LastAttemptAt ?? f.CreatedAt) <= cutoff)
+                .Select(NachaHeldFileView.From).ToList(),
+        };
+    }
+
+    public async Task<CapitationDisbursement> ResolveStuckDisbursementAsync(
+        string id, NachaActor actor, bool sent, string reason, string? stripeTransferId)
+    {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+        if (actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: resolving a stuck payment needs a user with payments:approve, not a service token");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason (what the bank or Stripe said) is required.");
+        reason = SanitizeForLog(reason.Trim());
+        if (reason.Length > 500) reason = reason[..500];
+
+        var disbursement = await _disbursementRepository.GetByIdAsync(id)
+            ?? throw new KeyNotFoundException($"Disbursement {id} not found");
+        if (disbursement.Status is not (DisbursementStatus.Releasing or DisbursementStatus.PaymentUnknown))
+            throw new InvalidOperationException(disbursement.Status == DisbursementStatus.DeliveryUnknown
+                ? $"Disbursement {id} is DeliveryUnknown: record the bank's answer on its NACHA file (resolve-delivery)."
+                : $"Disbursement {id} is {disbursement.Status}, not stuck.");
+        if (disbursement.Status == DisbursementStatus.Releasing
+            && (disbursement.ReleaseClaimedAt ?? disbursement.LastUpdatedAt) > DateTime.UtcNow - StuckReleasingAge)
+            throw new InvalidOperationException(
+                $"Disbursement {id} has been Releasing for less than {(int)StuckReleasingAge.TotalMinutes} minutes; the release may still be running.");
+
+        var releaser = disbursement.ReleasedBy;
+        if (string.IsNullOrEmpty(releaser))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: who released disbursement {id} is not recorded, so who may resolve it cannot be checked. Reconcile it by hand.");
+        if (string.Equals(releaser, actor.UserId, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                "Separation of duties: you released this payment, so you cannot record whether it went out. Another user with payments:approve must.");
+
+        var previous = disbursement.Status;
+        var now = DateTime.UtcNow;
+        if (previous == DisbursementStatus.Releasing && !sent)
+        {
+            // Back to Pending only if it is still held by the same stuck release (conditional write).
+            await _disbursementRepository.ReleaseClaimAsync(disbursement.Id, disbursement.ReleaseClaimId ?? string.Empty,
+                $"Not sent (checked with the bank by {actor.UserId}): {reason}. Back to Pending for the next file.");
+            disbursement = await _disbursementRepository.GetByIdAsync(id) ?? disbursement;
+            if (disbursement.Status != DisbursementStatus.Pending)
+                throw new InvalidOperationException($"Disbursement {id} changed while it was being resolved; it is {disbursement.Status}.");
+        }
+        else
+        {
+            if (previous == DisbursementStatus.PaymentUnknown && sent)
+            {
+                if (disbursement.Method == DisbursementMethod.StripeConnect && string.IsNullOrWhiteSpace(stripeTransferId))
+                    throw new ArgumentException("stripeTransferId (the transfer Stripe made) is required for a Stripe disbursement that went out.");
+                if (!string.IsNullOrWhiteSpace(stripeTransferId))
+                    disbursement.StripeTransferId = stripeTransferId.Trim();
+            }
+            if (previous == DisbursementStatus.PaymentUnknown
+                && !await _statementRepository.ResolvePaymentUnknownAsync(disbursement.StatementId, disbursement.Id, paid: sent))
+                _logger.LogWarning("Statement {StatementId} of disbursement {DisbursementId} was not PaymentUnknown for it; left as it is",
+                    SanitizeForLog(disbursement.StatementId), SanitizeForLog(disbursement.Id));
+
+            if (sent)
+            {
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt = now;
+                disbursement.ExpectedSettlementDate = now.AddBusinessDays(2);
+                disbursement.ErrorMessage = $"Sent (confirmed by {actor.UserId}): {reason}";
+            }
+            else
+            {
+                disbursement.Status = DisbursementStatus.Failed;
+                disbursement.ErrorMessage = $"Not sent (confirmed with Stripe by {actor.UserId}): {reason}";
+            }
+            disbursement = await _disbursementRepository.UpdateAsync(disbursement);
+        }
+
+        _logger.LogWarning(
+            "AUDIT stuck capitation disbursement {DisbursementId} (statement {StatementNumber}, {Method}, released by {ReleasedBy}) resolved by {User}: " +
+            "was {Previous}, the payment {Answer}; now {Status}. Reason: {Reason}",
+            disbursement.Id, SanitizeForLog(disbursement.StatementNumber), disbursement.Method, SanitizeForLog(releaser), SanitizeForLog(actor.UserId),
+            previous, sent ? "went out" : "did not go out", disbursement.Status, reason);
+        return disbursement;
     }
 
     private static string? Last4(string? number)

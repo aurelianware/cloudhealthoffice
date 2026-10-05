@@ -32,6 +32,13 @@ public interface ICapitationStatementRepository
     /// someone checks. False when it is not in that state.
     /// </summary>
     Task<bool> MarkPaymentUnknownAsync(string statementId, string disbursementId);
+
+    /// <summary>
+    /// PaymentUnknown by <paramref name="disbursementId"/>, once someone checked:
+    /// paid goes to PaymentInitiated (settled later); not paid goes back to
+    /// Approved (payable again). False when it is not in that state.
+    /// </summary>
+    Task<bool> ResolvePaymentUnknownAsync(string statementId, string disbursementId, bool paid);
 }
 
 public class CapitationStatementRepository : ICapitationStatementRepository
@@ -164,6 +171,16 @@ public class CapitationStatementRepository : ICapitationStatementRepository
         => TryTransitionAsync(statementId,
             s => s.Status == CapitationStatementStatus.PaymentInitiated && s.EftDisbursementId == disbursementId,
             s => s.Status = CapitationStatementStatus.PaymentUnknown,
+            attempts: 5);
+
+    public Task<bool> ResolvePaymentUnknownAsync(string statementId, string disbursementId, bool paid)
+        => TryTransitionAsync(statementId,
+            s => s.Status == CapitationStatementStatus.PaymentUnknown && s.EftDisbursementId == disbursementId,
+            s =>
+            {
+                s.Status = paid ? CapitationStatementStatus.PaymentInitiated : CapitationStatementStatus.Approved;
+                if (!paid) s.EftDisbursementId = null;
+            },
             attempts: 5);
 
     /// <summary>Read, check, replace only the version read (ETag). False when the check fails.</summary>

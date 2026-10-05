@@ -218,7 +218,7 @@ public sealed class InvoiceDraftGuardTests : IAsyncLifetime
     {
         var repository = Drafts();
         var draft = await repository.CreateAsync(new EftDraft { InvoiceId = "inv-1", GroupNumber = "G", Amount = 10, Status = EftDraftStatus.Pending });
-        (await repository.TryClaimForReleaseAsync(draft.Id, "claim-1", DateTime.UtcNow)).Should().BeTrue();
+        (await repository.TryClaimForReleaseAsync(draft.Id, "claim-1", DateTime.UtcNow, "approver-1")).Should().BeTrue();
 
         (await repository.TryCancelPendingAsync(draft.Id, "approver-2")).Should().BeFalse();
 

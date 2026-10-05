@@ -140,8 +140,8 @@ public class NachaTransmissionEndToEndTests : IClassFixture<NachaTransmissionEnd
         _factory.Drafts.Setup(r => r.GetByStatusAsync(It.IsAny<EftDraftStatus>()))
             .ReturnsAsync((EftDraftStatus s) => _drafts.Where(d => d.Status == s).ToList());
         // The conditional Pending-to-Releasing write, as the repositories do it.
-        _factory.Drafts.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
-            .ReturnsAsync((string id, string claim, DateTime at) =>
+        _factory.Drafts.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()))
+            .ReturnsAsync((string id, string claim, DateTime at, string by) =>
             {
                 lock (_drafts)
                 {
@@ -149,6 +149,7 @@ public class NachaTransmissionEndToEndTests : IClassFixture<NachaTransmissionEnd
                     if (d == null) return false;
                     d.Status = EftDraftStatus.Releasing;
                     d.ReleaseClaimId = claim;
+                    d.ReleasedBy = by;
                     return true;
                 }
             });

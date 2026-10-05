@@ -222,6 +222,60 @@ public class CapitationDisbursementsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Disbursements that need a person, never recovered automatically:
+    /// Releasing longer than <paramref name="releasingOlderThanMinutes"/>
+    /// (default 30, at least 5; the release stopped mid-send), DeliveryUnknown,
+    /// PaymentUnknown, and held NACHA files stuck in a retry (Transmitting).
+    /// </summary>
+    [HttpGet("stuck")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(StuckDisbursements), StatusCodes.Status200OK)]
+    public async Task<ActionResult<StuckDisbursements>> ListStuckDisbursements([FromQuery] int? releasingOlderThanMinutes)
+        => Ok(await _disbursementService.ListStuckDisbursementsAsync(
+            _actor.TenantId, TimeSpan.FromMinutes(Math.Max(5, releasingOlderThanMinutes ?? 30))));
+
+    /// <summary>
+    /// After checking with the bank (or Stripe), record whether a stuck
+    /// disbursement went out: Releasing (past the threshold) goes back to
+    /// Pending (not sent) or to Submitted (sent); a Stripe PaymentUnknown one to
+    /// Failed (statement payable again) or Submitted. payments:approve, a user
+    /// token, a reason, and not the user who released it. Audited.
+    /// </summary>
+    [HttpPost("{id}/resolve-stuck")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CapitationDisbursement>> ResolveStuckDisbursement(string id, [FromBody] ResolveStuckDisbursementRequest request)
+    {
+        if (request?.Sent is not { } sent)
+            return BadRequest(new { error = "sent (true or false, as the bank or Stripe confirmed) is required." });
+        try
+        {
+            return Ok(await _disbursementService.ResolveStuckDisbursementAsync(
+                id, new NachaActor(_actor.UserId, _actor.IsService), sent, request.Reason ?? string.Empty, request.StripeTransferId));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
     private ActionResult? HeldFileProblem(Exception ex) => ex switch
     {
         NachaSeparationOfDutiesException => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden),

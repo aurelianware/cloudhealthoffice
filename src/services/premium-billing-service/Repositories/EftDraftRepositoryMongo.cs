@@ -146,7 +146,7 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             .ToListAsync();
     }
 
-    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt)
+    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt, string releasedBy)
     {
         var tenantId = GetTenantId();
         var f = Builders<EftDraft>.Filter;
@@ -158,6 +158,7 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             .Set(d => d.Status, EftDraftStatus.Releasing)
             .Set(d => d.ReleaseClaimId, claimId)
             .Set(d => d.ReleaseClaimedAt, claimedAt)
+            .Set(d => d.ReleasedBy, releasedBy)
             .Set(d => d.LastUpdatedAt, DateTime.UtcNow);
         var result = await _collection.UpdateOneAsync(filter, update);
         return result.ModifiedCount == 1;
@@ -176,6 +177,7 @@ public class EftDraftRepositoryMongo : IEftDraftRepository
             .Set(d => d.Status, EftDraftStatus.Pending)
             .Set(d => d.ReleaseClaimId, null)
             .Set(d => d.ReleaseClaimedAt, null)
+            .Set(d => d.ReleasedBy, null)
             .Set(d => d.ErrorMessage, reason)
             .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
     }

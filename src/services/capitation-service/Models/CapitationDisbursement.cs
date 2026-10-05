@@ -482,3 +482,32 @@ public class BatchDisbursementResult
     /// <summary>Statements not paid for a reason someone has to fix (also counted in Errors).</summary>
     public List<DisbursementAttentionItem> NeedsAttention { get; set; } = new();
 }
+
+/// <summary>
+/// Disbursements that need a person: Releasing longer than the threshold (the
+/// release stopped mid-send), DeliveryUnknown (resolve-delivery on the held
+/// file), and PaymentUnknown (Stripe transfer outcome unknown); plus held NACHA
+/// files stuck in a retry (Transmitting). Nothing here is recovered automatically.
+/// </summary>
+public class StuckDisbursements
+{
+    public int ReleasingOlderThanMinutes { get; set; }
+    public List<CapitationDisbursement> Releasing { get; set; } = new();
+    public List<CapitationDisbursement> DeliveryUnknown { get; set; } = new();
+    public List<CapitationDisbursement> PaymentUnknown { get; set; } = new();
+    public List<CloudHealthOffice.NachaTransmission.NachaHeldFileView> TransmittingHeldFiles { get; set; } = new();
+}
+
+/// <summary>What a person found out (from the bank, or Stripe) about a stuck disbursement.</summary>
+public class ResolveStuckDisbursementRequest
+{
+    /// <summary>True: the payment went out (Submitted). False: it did not (Releasing back to Pending; Stripe PaymentUnknown to Failed, statement payable again).</summary>
+    public bool? Sent { get; set; }
+
+    /// <summary>What the bank or Stripe said. Required.</summary>
+    public string? Reason { get; set; }
+
+    /// <summary>For a Stripe disbursement that went out: its transfer id, so Stripe events settle it.</summary>
+    public string? StripeTransferId { get; set; }
+}
+

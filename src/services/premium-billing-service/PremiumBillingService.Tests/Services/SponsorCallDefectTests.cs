@@ -350,7 +350,7 @@ public class SponsorCallDefectTests
             new() { Id = "d1", TenantId = Tenant, GroupNumber = "GRP001", Method = EftMethod.Nacha, Amount = 100 }
         });
 
-        _drafts.Setup(r => r.TryClaimForReleaseAsync("d1", It.IsAny<string>(), It.IsAny<DateTime>())).ReturnsAsync(true);
+        _drafts.Setup(r => r.TryClaimForReleaseAsync("d1", It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>())).ReturnsAsync(true);
 
         var act = () => EftService().GenerateNachaFileForPendingDraftsAsync();
 

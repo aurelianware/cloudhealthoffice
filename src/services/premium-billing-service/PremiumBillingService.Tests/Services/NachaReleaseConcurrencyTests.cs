@@ -190,17 +190,20 @@ public sealed class NachaReleaseConcurrencyTests : IAsyncLifetime
         var repository = new EftDraftRepositoryMongo(_database, Request());
 
         var claims = await Task.WhenAll(Enumerable.Range(0, 8)
-            .Select(i => repository.TryClaimForReleaseAsync(id, $"claim-{i}", DateTime.UtcNow)));
+            .Select(i => repository.TryClaimForReleaseAsync(id, $"claim-{i}", DateTime.UtcNow, "approver-1")));
         claims.Count(c => c).Should().Be(1);
         var holder = $"claim-{Array.IndexOf(claims, true)}";
 
         await repository.ReleaseClaimAsync(id, "someone-else", "not mine");
-        (await repository.GetByIdAsync(id))!.Status.Should().Be(EftDraftStatus.Releasing);
+        var claimed = (await repository.GetByIdAsync(id))!;
+        claimed.Status.Should().Be(EftDraftStatus.Releasing);
+        claimed.ReleasedBy.Should().Be("approver-1", "a release that stops mid-send still names its releaser");
 
         await repository.ReleaseClaimAsync(id, holder, "nothing was sent");
         var draft = (await repository.GetByIdAsync(id))!;
         draft.Status.Should().Be(EftDraftStatus.Pending);
         draft.ReleaseClaimId.Should().BeNull();
+        draft.ReleasedBy.Should().BeNull();
         draft.ErrorMessage.Should().Be("nothing was sent");
     }
 }
