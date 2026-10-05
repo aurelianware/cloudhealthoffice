@@ -429,7 +429,7 @@ public class TradingPartnerPipelineAuthTests : IClassFixture<TradingPartnerPipel
     public static IEnumerable<object[]> LiteralCredentialBodies()
     {
         yield return [new Dictionary<string, object?> { ["sftpConfig"] = new { host = "h", username = "u", password = "hunter2" } }];
-        yield return [new Dictionary<string, object?> { ["sftpConfig"] = new { host = "h", privateKey = "-----BEGIN OPENSSH PRIVATE KEY-----" } }];
+        yield return [new Dictionary<string, object?> { ["sftpConfig"] = new { host = "h", privateKey = "literal-key-material" } }];
         yield return [new Dictionary<string, object?> { ["sftpConfig"] = new { host = "h", private_key_passphrase = "p" } }];
         yield return [new Dictionary<string, object?> { ["apiKey"] = "sk-live-123" }];
         yield return [new Dictionary<string, object?> { ["as2Config"] = new { certificate = "pub", privateKeyPem = "-----BEGIN PRIVATE KEY-----" } }];
