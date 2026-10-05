@@ -1,4 +1,4 @@
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
@@ -15,20 +15,21 @@ namespace CloudHealthOffice.ProviderService.Tests.Services;
 /// <see cref="CredentialingEvent.EventId"/>, and cross-tenant
 /// <c>_id</c> collision protection (PR 5.4.5 lesson).
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class CredentialingEventPublisherTests : IAsyncLifetime
 {
     private const string Tenant = "tenant-a";
     private const string ProviderId = "provider-001";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private MongoCredentialingEventPublisher _publisher = null!;
 
+    public CredentialingEventPublisherTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public async Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"credentialing_event_test_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("credentialing_event_test");
         var config = new ConfigurationBuilder().Build();
         _publisher = new MongoCredentialingEventPublisher(
             _database, config, NullLogger<MongoCredentialingEventPublisher>.Instance);
@@ -39,12 +40,7 @@ public class CredentialingEventPublisherTests : IAsyncLifetime
         await indexer.StartAsync(CancellationToken.None);
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* EphemeralMongo / driver mismatch on disposal */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     [Fact]
     public async Task Publish_assigns_monotonic_version_per_provider()

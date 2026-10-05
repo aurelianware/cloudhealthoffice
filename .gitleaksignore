@@ -32,3 +32,8 @@ e8f5b011cc8a1d2bc6981cf5176739765966013b:test-attachment-oauth.sh:generic-api-ke
 # commit on the same branch.
 88ded4b079db7886eabdb9f65b768ad754e59a9c:tests/CloudHealthOffice.ProviderEligibilityApi.Tests/ProviderEligibilityApiFactory.cs:generic-api-key:23
 88ded4b079db7886eabdb9f65b768ad754e59a9c:tests/CloudHealthOffice.ProviderEligibilityApi.Tests/ProviderEligibilityApiFactory.cs:generic-api-key:25
+#
+# A bare OpenSSH PEM header with no key material, used as a literal value
+# that trading-partner-service must refuse in a request body. Refusal is by
+# field name, so the test now uses a plain placeholder.
+cf28912105e19ae3335b54d7c2c17664088a01d7:tests/CloudHealthOffice.TradingPartnerService.Tests/Security/TradingPartnerPipelineAuthTests.cs:private-key:430

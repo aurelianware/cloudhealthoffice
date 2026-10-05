@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -25,7 +26,8 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
     public PaymentRunsControllerTests(PaymentApiFactory factory)
     {
         _runService = factory.PaymentRunService;
-        _client = factory.CreateClient();
+        // Development-signed user token (TenantAdmin, subject dev-user) for the X-Tenant-ID tenant.
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
     }
 
@@ -119,20 +121,12 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
     // ═══════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task CreateAndExecute_AdjudicatedClaims_Returns200WithPayments()
+    public async Task CreateAndExecute_IsRefusedAsSeparationOfDuties_AndCreatesNothing()
     {
-        var pendingRun = CreatePendingRun();
-        var completedRun = CreatePendingRun();
-        completedRun.Status = PaymentRunStatus.Completed;
-        completedRun.TotalClaims = 3;
-        completedRun.TotalPaymentAmount = 7500.00m;
-        completedRun.PaymentIds = new List<string> { "pay-1" };
-
-        _runService.CreatePaymentRunAsync(Arg.Any<PaymentRunCriteria>(), Arg.Any<string?>())
-            .Returns(pendingRun);
-        _runService.ExecutePaymentRunAsync(pendingRun.Id)
-            .Returns(completedRun);
-
+        // The creator would also be the executor: releasing money needs a
+        // second user, so the combined endpoint always answers 403 and
+        // neither creates nor executes a run.
+        _runService.ClearReceivedCalls();
         var request = new CreatePaymentRunRequest
         {
             Criteria = new PaymentRunCriteria { LineOfBusiness = LineOfBusiness.Commercial },
@@ -141,11 +135,10 @@ public class PaymentRunsControllerTests : IClassFixture<PaymentApiFactory>
 
         var response = await _client.PostAsJsonAsync("/api/paymentruns/execute", request, Json);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<PaymentRun>(Json);
-        Assert.NotNull(result);
-        Assert.Equal(PaymentRunStatus.Completed, result.Status);
-        Assert.NotEmpty(result.PaymentIds);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("Separation of duties", await response.Content.ReadAsStringAsync());
+        await _runService.DidNotReceive().CreatePaymentRunAsync(Arg.Any<PaymentRunCriteria>(), Arg.Any<string?>());
+        await _runService.DidNotReceive().ExecutePaymentRunAsync(Arg.Any<string>());
     }
 
     // ═══════════════════════════════════════════════════════════════════

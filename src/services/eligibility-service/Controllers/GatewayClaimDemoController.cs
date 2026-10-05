@@ -1,6 +1,7 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.Gateways.Models;
+using CloudHealthOffice.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EligibilityService.Controllers;
@@ -15,8 +16,6 @@ public sealed class GatewayClaimDemoController : ControllerBase
 {
     private readonly IHealthcareGatewayResolver _resolver;
     private readonly IHostEnvironment _environment;
-
-    public string TenantId { get; set; } = string.Empty;
 
     public GatewayClaimDemoController(
         IHealthcareGatewayResolver resolver,
@@ -37,10 +36,8 @@ public sealed class GatewayClaimDemoController : ControllerBase
             return NotFound();
         }
 
-        if (string.IsNullOrWhiteSpace(request.TenantId))
-        {
-            request.TenantId = TenantId;
-        }
+        // The tenant is the caller's token tenant; a tenantId in the body is ignored.
+        request.TenantId = HttpContext.GetTenantId();
 
         IClaimSubmissionGateway submission;
         try

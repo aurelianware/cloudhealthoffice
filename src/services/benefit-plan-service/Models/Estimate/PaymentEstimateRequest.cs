@@ -20,8 +20,8 @@ namespace BenefitPlanService.Models.Estimate;
 /// </para>
 ///
 /// <para>
-/// The tenant is always taken from the authenticated request context
-/// (JWT claim or <c>X-Tenant-ID</c> header). Any tenant identifier that
+/// The tenant is always taken from the validated CHO token. Any tenant
+/// identifier in a header or that
 /// might appear in the body is ignored — it can never override the
 /// authenticated tenant.
 /// </para>

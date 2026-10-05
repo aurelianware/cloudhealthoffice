@@ -6,10 +6,18 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.PersonAdd)" Class="mr-2" />
-            @(IsEdit ? "Edit User" : "Add User")
+            @(IsEdit ? "Edit User" : "Add User From Your Directory")
         </MudText>
     </TitleContent>
     <DialogContent>
+        @if (!IsEdit)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                Only for people who sign in with your organization's own Microsoft Entra directory: they are
+                linked to this user when they first sign in. People from other organizations cannot sign in
+                as a user added here; invite them instead.
+            </MudAlert>
+        }
         <MudTextField @bind-Value="_email" Label="Email" Required="true" RequiredError="Email is required"
                       InputType="InputType.Email" Disabled="@IsEdit" Class="mb-3" />
         <MudTextField @bind-Value="_displayName" Label="Display Name" Required="true"
@@ -170,6 +178,7 @@
         "EnrollmentSpecialist" => "Enrollment Specialist",
         "UMCoordinator" => "UM Coordinator",
         "ProviderRelations" => "Provider Relations",
+        "FinanceApprover" => "Finance Approver",
         "ComplianceOfficer" => "Compliance Officer",
         "TenantAdmin" => "Tenant Admin",
         _ => role

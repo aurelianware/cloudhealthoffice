@@ -1,5 +1,6 @@
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Stedi;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -12,7 +13,13 @@ namespace EligibilityService.Controllers;
 ///
 /// Stedi authenticates with a configured API-key header (credential set). It
 /// does not HMAC-sign these webhooks.
+///
+/// External caller: Stedi presents no CHO token, so the CHO token requirement
+/// is lifted here and the webhook credential check in <see cref="Receive"/> is
+/// the authentication. Tenant is resolved from the matched original
+/// transmission, never from the payload or a header.
 /// </summary>
+[AllowAnonymous]
 [ApiController]
 [Route("api/integrations/stedi")]
 public sealed class StediClaimResponseWebhookController : ControllerBase

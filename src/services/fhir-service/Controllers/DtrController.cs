@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using Hl7.Fhir.Model;
 using FhirService.Models;
 using FhirService.Services;
@@ -11,7 +12,6 @@ namespace FhirService.Controllers;
 /// FHIR R4 Questionnaire/QuestionnaireResponse CRUD and $questionnaire-package operation.
 /// </summary>
 [Route("fhir/r4")]
-[Authorize]
 public class DtrController : FhirControllerBase
 {
     private readonly IDtrService _dtrService;
@@ -32,6 +32,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>GET /fhir/r4/Questionnaire/{id}</summary>
     [HttpGet("Questionnaire/{id}")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(Questionnaire), 200)]
     [ProducesResponseType(typeof(OperationOutcome), 404)]
     public async Task<IActionResult> GetQuestionnaire(string id, CancellationToken ct)
@@ -42,6 +43,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>GET /fhir/r4/Questionnaire — search</summary>
     [HttpGet("Questionnaire")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(Bundle), 200)]
     public async Task<IActionResult> SearchQuestionnaires(
         [FromQuery] QuestionnaireSearchParams search, CancellationToken ct)
@@ -60,6 +62,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>POST /fhir/r4/Questionnaire — create</summary>
     [HttpPost("Questionnaire")]
+    [FhirAccess(smart: true, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 201)]
@@ -87,6 +90,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>PUT /fhir/r4/Questionnaire/{id} — update</summary>
     [HttpPut("Questionnaire/{id}")]
+    [FhirAccess(smart: true, cho: "settings:manage")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Questionnaire), 200)]
@@ -117,22 +121,35 @@ public class DtrController : FhirControllerBase
 
     /// <summary>GET /fhir/r4/QuestionnaireResponse/{id}</summary>
     [HttpGet("QuestionnaireResponse/{id}")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(QuestionnaireResponse), 200)]
     [ProducesResponseType(typeof(OperationOutcome), 404)]
     public async Task<IActionResult> GetQuestionnaireResponse(string id, CancellationToken ct)
     {
         var qr = await _dtrService.GetResponseAsync(id, TenantId, ct);
-        return qr is null ? FhirNotFound("QuestionnaireResponse", id) : Ok(qr);
+        // QuestionnaireResponses hold clinical answers: a patient-bound token
+        // reads only its own patient's, a user/system token only the member
+        // Provider Access authorized it for; anyone else's is "not found".
+        return qr is null || IsOutsidePatientContext(qr.Subject?.Reference)
+            ? FhirNotFound("QuestionnaireResponse", id)
+            : Ok(qr);
     }
 
     /// <summary>GET /fhir/r4/QuestionnaireResponse — search</summary>
     [HttpGet("QuestionnaireResponse")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [ProducesResponseType(typeof(Bundle), 200)]
     public async Task<IActionResult> SearchQuestionnaireResponses(
         [FromQuery] QuestionnaireResponseSearchParams search, CancellationToken ct)
     {
         search.Count = ClampPageSize(search.Count);
         search.Page = ClampPage(search.Page);
+
+        // Confined to one member: a patient-bound token's own patient (the
+        // middleware has already refused a patient/subject naming someone else),
+        // or the member Provider Access authorized a user/system token for (a
+        // search naming no member never gets here).
+        if (AuthorizedMemberId is { } bound) search.Patient = bound;
 
         var (items, total) = await _dtrService.SearchResponsesAsync(search, TenantId, ct);
 
@@ -145,6 +162,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>POST /fhir/r4/QuestionnaireResponse — submit completed response</summary>
     [HttpPost("QuestionnaireResponse")]
+    [FhirAccess(smart: true, cho: "authorizations:write")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(QuestionnaireResponse), 201)]
@@ -170,6 +188,22 @@ public class DtrController : FhirControllerBase
         if (response.Subject == null || string.IsNullOrEmpty(response.Subject.Reference))
             return FhirBadRequest("QuestionnaireResponse.subject (patient reference) is required");
 
+        if (IsOutsidePatientContext(response.Subject.Reference))
+        {
+            return StatusCode(403, new OperationOutcome
+            {
+                Issue =
+                [
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Forbidden,
+                        Diagnostics = "A patient-context token cannot submit a QuestionnaireResponse for another patient.",
+                    },
+                ],
+            });
+        }
+
         var submitted = await _dtrService.SubmitResponseAsync(response, TenantId, ct);
 
         _logger.LogInformation("Submitted QuestionnaireResponse {Id} for tenant {TenantId}",
@@ -183,6 +217,7 @@ public class DtrController : FhirControllerBase
 
     /// <summary>POST /fhir/r4/Questionnaire/$questionnaire-package</summary>
     [HttpPost("Questionnaire/$questionnaire-package")]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     [Consumes("application/fhir+json", "application/json")]
     [Produces("application/fhir+json")]
     [ProducesResponseType(typeof(Bundle), 200)]

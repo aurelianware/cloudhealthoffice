@@ -1,3 +1,6 @@
+# RETIRED TARGET: claims-adjudication-workflow.yaml was removed (claims-service
+# adjudicates on submission; see docs/security/argo-service-tokens.md). This
+# snippet is kept for reference only and is not applied anywhere.
 # ─────────────────────────────────────────────────────────────────
 # REPLACEMENT for the validate-provider-step template in
 # infrastructure/argo-workflows/claims-adjudication-workflow.yaml

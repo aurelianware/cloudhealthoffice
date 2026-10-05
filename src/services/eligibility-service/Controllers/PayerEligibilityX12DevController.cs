@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.Infrastructure.Responders;
 using EligibilityService.Adapters;
 using EligibilityService.Services;
@@ -40,6 +41,7 @@ public sealed class PayerEligibilityX12DevController : ControllerBase
     /// persist inquiries or mutate accumulators.
     /// </summary>
     [HttpPost("eligibility/x12")]
+    [RequirePermission("eligibility:check")]
     [Consumes("text/plain")]
     [Produces("text/plain")]
     public async Task<IActionResult> RespondX12(CancellationToken ct)

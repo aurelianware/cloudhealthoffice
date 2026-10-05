@@ -57,8 +57,23 @@ public class TradingPartner
     [JsonPropertyName("createdAt")]
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>Token subject of the user who created the record (never from a request body).</summary>
+    [JsonPropertyName("createdBy")]
+    public string? CreatedBy { get; set; }
+
+    [JsonPropertyName("updatedAt")]
+    public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>Token subject of the user who last changed the record (never from a request body).</summary>
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
+
     [JsonPropertyName("lastTestedAt")]
     public DateTime? LastTestedAt { get; set; }
+
+    /// <summary>Token subject of the caller who last started a connection test.</summary>
+    [JsonPropertyName("lastTestedBy")]
+    public string? LastTestedBy { get; set; }
 
     [JsonPropertyName("lastSuccessfulTransmission")]
     public DateTime? LastSuccessfulTransmission { get; set; }
@@ -95,6 +110,21 @@ public class SftpConfig
 
     [JsonPropertyName("paths")]
     public SftpPaths? Paths { get; set; }
+
+    /// <summary>
+    /// Name of the Key Vault secret (read through <c>ISecretProvider</c>) that holds the
+    /// SFTP password. The password itself is never stored here and no response returns
+    /// this reference (see <see cref="TradingPartnerSecrets"/>).
+    /// </summary>
+    [JsonPropertyName("passwordSecretRef")]
+    public string? PasswordSecretRef { get; set; }
+
+    /// <summary>
+    /// Name of the Key Vault secret that holds the SFTP private key. Same rules as
+    /// <see cref="PasswordSecretRef"/>.
+    /// </summary>
+    [JsonPropertyName("privateKeySecretRef")]
+    public string? PrivateKeySecretRef { get; set; }
 }
 
 public class SftpPaths

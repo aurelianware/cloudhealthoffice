@@ -935,18 +935,16 @@ public class AuthorizationService : IAuthorizationService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthorizationService> _logger;
-    private readonly ITokenAcquisition? _tokenAcquisition;
 
+    // The CHO token for these calls is attached by ChoBearerTokenHandler.
     public AuthorizationService(
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<AuthorizationService> logger,
-        ITokenAcquisition? tokenAcquisition = null)
+        ILogger<AuthorizationService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
-        _tokenAcquisition = tokenAcquisition;
     }
 
     public async Task<List<AuthorizationSummary>> GetAuthorizationsAsync(string? memberId = null)
@@ -954,7 +952,6 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
-            await SetBearerTokenAsync();
             var url = string.IsNullOrEmpty(memberId)
                 ? $"{baseUrl}/authorizations/search"
                 : $"{baseUrl}/authorizations/search?memberId={memberId}";
@@ -973,7 +970,6 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
-            await SetBearerTokenAsync();
             return await _httpClient.GetFromJsonAsync<AuthorizationDetails>($"{baseUrl}/authorizations/{authorizationId}");
         }
         catch (HttpRequestException ex)
@@ -988,7 +984,6 @@ public class AuthorizationService : IAuthorizationService
         var baseUrl = _configuration["Services:AuthorizationService"];
         try
         {
-            await SetBearerTokenAsync();
             var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/authorizations", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<SubmitAuthorizationResponse>();
@@ -1000,25 +995,6 @@ public class AuthorizationService : IAuthorizationService
             throw new ServiceUnavailableException("Authorization Service", ex);
         }
     }
-
-    private async Task SetBearerTokenAsync()
-    {
-        if (_tokenAcquisition is null || IsLocalDemoAuth())
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = null;
-            return;
-        }
-
-        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Authorization.ReadWrite" };
-        var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-    }
-
-    private bool IsLocalDemoAuth()
-        => string.Equals(
-            _configuration["Authentication:Mode"],
-            "LocalDemo",
-            StringComparison.OrdinalIgnoreCase);
 
     private class SubmitAuthorizationResponse
     {
@@ -1874,18 +1850,16 @@ public class AttachmentService : IAttachmentService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AttachmentService> _logger;
-    private readonly ITokenAcquisition? _tokenAcquisition;
 
+    // The CHO token for these calls is attached by ChoBearerTokenHandler.
     public AttachmentService(
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<AttachmentService> logger,
-        ITokenAcquisition? tokenAcquisition = null)
+        ILogger<AttachmentService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
-        _tokenAcquisition = tokenAcquisition;
     }
 
     public async Task<List<AttachmentInfo>> GetAttachmentsAsync(string authorizationId)
@@ -1893,7 +1867,6 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
-            await SetBearerTokenAsync();
             var attachments = await _httpClient.GetFromJsonAsync<List<AttachmentInfo>>($"{baseUrl}/attachments/authorization/{authorizationId}");
             return attachments ?? new List<AttachmentInfo>();
         }
@@ -1909,7 +1882,6 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
-            await SetBearerTokenAsync();
             using var content = new MultipartFormDataContent();
             var streamContent = new StreamContent(fileStream);
             streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
@@ -1934,7 +1906,6 @@ public class AttachmentService : IAttachmentService
         var baseUrl = _configuration["Services:AttachmentService"];
         try
         {
-            await SetBearerTokenAsync();
             var response = await _httpClient.GetAsync($"{baseUrl}/attachments/{authorizationId}/{attachmentId}");
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStreamAsync();
@@ -1960,25 +1931,6 @@ public class AttachmentService : IAttachmentService
             throw new ServiceUnavailableException("Attachment Service", ex);
         }
     }
-
-    private async Task SetBearerTokenAsync()
-    {
-        if (_tokenAcquisition is null || IsLocalDemoAuth())
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = null;
-            return;
-        }
-
-        var scopes = new[] { "api://cfada1ac-f251-48ea-9330-39212aa4c862/Attachments.ReadWrite" };
-        var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-    }
-
-    private bool IsLocalDemoAuth()
-        => string.Equals(
-            _configuration["Authentication:Mode"],
-            "LocalDemo",
-            StringComparison.OrdinalIgnoreCase);
 
     private class UploadAttachmentResponse
     {
@@ -2182,16 +2134,28 @@ public class ReferenceDataService : IReferenceDataService
     }
 }
 
+/// <summary>
+/// Subscription records. Writes (and the PlatformTenants listing) go to
+/// tenant-service's platform API (<c>/v1/platform/subscriptions</c>,
+/// platform:tenants) with the user's CHO token; tenant-service is the only
+/// writer of the <c>Tenants</c> collection. Self-service signup goes through
+/// the token service (<see cref="IChoTokenProvider.SignupAsync"/>). The
+/// sign-in reads below still read the collection directly.
+/// </summary>
 public class TenantService : ITenantService
 {
     private readonly IMongoCollection<TenantSubscription> _tenantsCollection;
     private readonly IMongoCollection<BsonDocument> _membersCollection;
     private readonly IMongoCollection<BsonDocument> _tenantUsersCollection;
+    private readonly HttpClient _http;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<TenantService> _logger;
 
-    public TenantService(IMongoClient mongoClient, IConfiguration configuration, ILogger<TenantService> logger)
+    public TenantService(IMongoClient mongoClient, HttpClient http, IConfiguration configuration, ILogger<TenantService> logger)
     {
         _logger = logger;
+        _http = http;
+        _configuration = configuration;
         var databaseName = configuration["MongoDB:DatabaseName"] ?? "CloudHealthOffice";
         var db = mongoClient.GetDatabase(databaseName);
         _tenantsCollection = db.GetCollection<TenantSubscription>(
@@ -2316,102 +2280,100 @@ public class TenantService : ITenantService
         }
     }
 
-    public async Task<string> CreateTenantAsync(CreateTenantRequest request)
+    private string PlatformSubscriptionsUrl =>
+        $"{(_configuration["Services:TenantService"] ?? "http://tenant-service.cloudhealthoffice/api").TrimEnd('/')}/v1/platform/subscriptions";
+
+    private string SubscriptionUrl(string azureTenantId) => $"{PlatformSubscriptionsUrl}/{Uri.EscapeDataString(azureTenantId)}";
+
+    private async Task<HttpResponseMessage> SendPlatformAsync(HttpMethod method, string url, object? body, string what)
     {
+        using var request = new HttpRequestMessage(method, url);
+        if (body != null)
+            request.Content = JsonContent.Create(body);
+        HttpResponseMessage response;
         try
         {
-            var tenantId = $"tenant-{Guid.NewGuid():N}";
-            var now = DateTime.UtcNow;
-
-            // Merge AdminEmail (from signup) into AdminEmails list
-            var adminEmails = request.AdminEmails ?? new List<string>();
-            if (!string.IsNullOrWhiteSpace(request.AdminEmail) && !adminEmails.Contains(request.AdminEmail))
-                adminEmails.Add(request.AdminEmail);
-
-            var tenant = new TenantSubscription
-            {
-                TenantId = tenantId,
-                AzureTenantId = request.AzureTenantId,
-                OrganizationName = request.OrganizationName,
-                SubscriptionStatus = request.SubscriptionStatus,
-                Tier = request.Tier,
-                IsDemo = request.IsDemo,
-                StripeCustomerId = request.StripeCustomerId,
-                StripeSubscriptionId = request.StripeSubscriptionId,
-                TrialEndsAt = request.SubscriptionStatus == "Trial" ? now.AddDays(14) : null,
-                CreatedAt = now,
-                UpdatedAt = now,
-                AdminEmails = adminEmails,
-                Notes = request.Notes
-            };
-
-            _logger.LogInformation("Creating tenant {TenantId} for organization {OrgName} (Azure: {AzureTenantId})",
-                tenantId, request.OrganizationName, request.AzureTenantId);
-
-            await _tenantsCollection.InsertOneAsync(tenant);
-
-            _logger.LogInformation("Successfully created tenant {TenantId} in MongoDB", tenantId);
-            return tenantId;
+            response = await _http.SendAsync(request);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to create tenant for organization {OrgName}", request.OrganizationName);
-            throw;
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Tenant Service");
+            throw new ServiceUnavailableException("Tenant Service", ex);
         }
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            response.Dispose();
+            throw new KeyNotFoundException($"No subscription found ({what}).");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            var status = (int)response.StatusCode;
+            response.Dispose();
+            _logger.LogWarning("Tenant service refused {What}: {Status}", what, status);
+            throw new InvalidOperationException($"tenant-service refused {what} ({status}).");
+        }
+        return response;
+    }
+
+    /// <summary>A subscription created by a platform administrator (PlatformTenants): tenant-service, platform:tenants.</summary>
+    public async Task<string> CreateTenantAsync(CreateTenantRequest request)
+    {
+        // Merge AdminEmail into AdminEmails list
+        var adminEmails = request.AdminEmails ?? new List<string>();
+        if (!string.IsNullOrWhiteSpace(request.AdminEmail) && !adminEmails.Contains(request.AdminEmail))
+            adminEmails.Add(request.AdminEmail);
+
+        using var response = await SendPlatformAsync(HttpMethod.Post, PlatformSubscriptionsUrl, new
+        {
+            azureTenantId = request.AzureTenantId,
+            organizationName = request.OrganizationName,
+            subscriptionStatus = request.SubscriptionStatus,
+            tier = request.Tier,
+            isDemo = request.IsDemo,
+            adminEmails,
+            notes = request.Notes,
+            stripeCustomerId = request.StripeCustomerId,
+            stripeSubscriptionId = request.StripeSubscriptionId,
+        }, "the subscription create");
+
+        var created = await response.Content.ReadFromJsonAsync<TenantSubscription>();
+        if (string.IsNullOrEmpty(created?.TenantId))
+            throw new InvalidOperationException("tenant-service returned no tenant id.");
+        _logger.LogInformation("Created tenant {TenantId} for organization {OrgName}", created.TenantId, request.OrganizationName);
+        return created.TenantId;
     }
 
     public async Task UpdateTenantAsync(string azureTenantId, UpdateTenantRequest request)
     {
-        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        var updates = new List<UpdateDefinition<TenantSubscription>>
+        using var _ = await SendPlatformAsync(HttpMethod.Put, SubscriptionUrl(azureTenantId), new
         {
-            Builders<TenantSubscription>.Update.Set(t => t.UpdatedAt, DateTime.UtcNow)
-        };
-
-        if (request.OrganizationName != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.OrganizationName, request.OrganizationName));
-        if (request.Tier != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Tier, request.Tier));
-        if (request.SubscriptionStatus != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.SubscriptionStatus, request.SubscriptionStatus));
-        if (request.AdminEmails != null)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.AdminEmails, request.AdminEmails));
-        if (request.IsDemo.HasValue)
-            updates.Add(Builders<TenantSubscription>.Update.Set(t => t.IsDemo, request.IsDemo.Value));
-        updates.Add(Builders<TenantSubscription>.Update.Set(t => t.Notes, request.Notes));
-
-        var update = Builders<TenantSubscription>.Update.Combine(updates);
-        var result = await _tenantsCollection.UpdateOneAsync(filter, update);
-        if (result.MatchedCount == 0)
-            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
+            organizationName = request.OrganizationName,
+            tier = request.Tier,
+            subscriptionStatus = request.SubscriptionStatus,
+            adminEmails = request.AdminEmails,
+            isDemo = request.IsDemo,
+            notes = request.Notes,
+        }, "the subscription update");
         _logger.LogInformation("Updated tenant {AzureTenantId}: {OrgName}", azureTenantId, request.OrganizationName);
     }
 
     public async Task DeleteTenantAsync(string azureTenantId)
     {
-        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        var result = await _tenantsCollection.DeleteOneAsync(filter);
-        if (result.DeletedCount == 0)
-            throw new KeyNotFoundException($"Tenant with AzureTenantId '{azureTenantId}' not found.");
+        using var _ = await SendPlatformAsync(HttpMethod.Delete, SubscriptionUrl(azureTenantId), null, "the subscription delete");
         _logger.LogInformation("Deleted tenant {AzureTenantId}", azureTenantId);
     }
 
     public async Task<List<TenantSubscription>> GetAllSubscriptionsAsync()
     {
-        var tenants = await _tenantsCollection
-            .Find(Builders<TenantSubscription>.Filter.Empty)
-            .SortByDescending(t => t.CreatedAt)
-            .ToListAsync();
-        return tenants;
+        using var response = await SendPlatformAsync(HttpMethod.Get, PlatformSubscriptionsUrl, null, "the subscription list");
+        return await response.Content.ReadFromJsonAsync<List<TenantSubscription>>() ?? new List<TenantSubscription>();
     }
 
     public async Task UpdateSubscriptionStatusAsync(string azureTenantId, string status)
     {
-        var filter = Builders<TenantSubscription>.Filter.Eq(t => t.AzureTenantId, azureTenantId);
-        var update = Builders<TenantSubscription>.Update
-            .Set(t => t.SubscriptionStatus, status)
-            .Set(t => t.UpdatedAt, DateTime.UtcNow);
-        await _tenantsCollection.UpdateOneAsync(filter, update);
+        using var _ = await SendPlatformAsync(HttpMethod.Put, $"{SubscriptionUrl(azureTenantId)}/status", new { status },
+            "the subscription status change");
         _logger.LogInformation("Updated subscription status for tenant {TenantId} to {Status}", azureTenantId, status);
     }
 
@@ -3022,6 +2984,7 @@ public class PaymentRunService : IPaymentRunService
 
 public class PremiumBillingService : IPremiumBillingService
 {
+    internal const string ServiceName = "Premium Billing Service";
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PremiumBillingService> _logger;
@@ -3033,111 +2996,134 @@ public class PremiumBillingService : IPremiumBillingService
         _logger = logger;
     }
 
-    public async Task<List<BillingCycle>> GetBillingCyclesAsync(string? sponsorId = null, string? status = null)
+    private string Url(string path) => $"{_configuration["Services:BillingService"]}/v1/{path}";
+
+    private static string Esc(string value) => Uri.EscapeDataString(value);
+
+    private Task<T> SendAsync<T>(HttpMethod method, string path, object? body = null)
+        => BillingApiHttp.SendAsync<T>(_httpClient, _logger, ServiceName, method, Url(path), body);
+
+    // ── Billing runs ──
+
+    public async Task<List<BillingRun>> GetBillingRunsAsync(DateTime? from = null, DateTime? to = null)
     {
-        var baseUrl = _configuration["Services:BillingService"];
+        var query = new List<string>();
+        if (from.HasValue) query.Add($"from={from.Value:yyyy-MM-dd}");
+        if (to.HasValue) query.Add($"to={to.Value:yyyy-MM-dd}");
+        var path = "billing-runs" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        return await SendAsync<List<BillingRun>?>(HttpMethod.Get, path) ?? new();
+    }
+
+    public async Task<BillingRun?> GetBillingRunAsync(string id)
+    {
         try
         {
-            var url = $"{baseUrl}/v1/billing-runs" + (sponsorId != null ? $"?sponsorId={sponsorId}" : "");
-            var result = await _httpClient.GetFromJsonAsync<List<BillingCycle>>(url);
-            return result ?? new();
+            return await SendAsync<BillingRun>(HttpMethod.Get, $"billing-runs/{Esc(id)}");
         }
-        catch (HttpRequestException ex)
+        catch (BillingApiException ex) when (ex.StatusCode == 404)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
+            return null;
         }
     }
 
-    public async Task<BillingCycleDetails?> GetBillingCycleByIdAsync(string cycleId)
+    public Task<BillingRun> CreateBillingRunAsync(CreateBillingRunRequest request)
+        => SendAsync<BillingRun>(HttpMethod.Post, "billing-runs", request);
+
+    public Task<BillingRun> ExecuteBillingRunAsync(string id)
+        => SendAsync<BillingRun>(HttpMethod.Post, $"billing-runs/{Esc(id)}/execute");
+
+    public Task CancelBillingRunAsync(string id)
+        => SendAsync<object?>(HttpMethod.Post, $"billing-runs/{Esc(id)}/cancel");
+
+    // ── Invoices ──
+
+    public async Task<List<PremiumInvoice>> SearchInvoicesAsync(string? groupNumber = null, string? status = null,
+        DateTime? periodFrom = null, DateTime? periodTo = null, int page = 1, int pageSize = 50)
     {
-        var baseUrl = _configuration["Services:BillingService"];
+        var query = new List<string> { $"page={page}", $"pageSize={pageSize}" };
+        if (!string.IsNullOrWhiteSpace(groupNumber)) query.Add($"groupNumber={Esc(groupNumber.Trim())}");
+        if (!string.IsNullOrWhiteSpace(status)) query.Add($"status={Esc(status)}");
+        if (periodFrom.HasValue) query.Add($"periodFrom={periodFrom.Value:yyyy-MM-dd}");
+        if (periodTo.HasValue) query.Add($"periodTo={periodTo.Value:yyyy-MM-dd}");
+        return await SendAsync<List<PremiumInvoice>?>(HttpMethod.Get, "premium-invoices?" + string.Join("&", query)) ?? new();
+    }
+
+    public async Task<PremiumInvoice?> GetInvoiceAsync(string id)
+    {
         try
         {
-            return await _httpClient.GetFromJsonAsync<BillingCycleDetails>($"{baseUrl}/v1/billing-runs/{cycleId}");
+            return await SendAsync<PremiumInvoice>(HttpMethod.Get, $"premium-invoices/{Esc(id)}");
         }
-        catch (HttpRequestException ex)
+        catch (BillingApiException ex) when (ex.StatusCode == 404)
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
+            return null;
         }
     }
 
-    public async Task<string> GenerateInvoiceAsync(CreateInvoiceRequest request)
+    public Task<PremiumInvoice> RecordPaymentAsync(string invoiceId, RecordPremiumPaymentRequest request)
+        => SendAsync<PremiumInvoice>(HttpMethod.Post, $"premium-invoices/{Esc(invoiceId)}/payments", request);
+
+    public Task<PremiumInvoice> VoidInvoiceAsync(string invoiceId, string reason)
+        => SendAsync<PremiumInvoice>(HttpMethod.Post, $"premium-invoices/{Esc(invoiceId)}/void", new { reason });
+
+    public Task<PremiumInvoice> MarkInvoiceSentAsync(string invoiceId)
+        => SendAsync<PremiumInvoice>(HttpMethod.Post, $"premium-invoices/{Esc(invoiceId)}/send");
+
+    public async Task<PremiumAgingReport> GetAgingReportAsync()
+        => await SendAsync<PremiumAgingReport?>(HttpMethod.Get, "premium-invoices/aging-report") ?? new();
+
+    public async Task<DelinquencyRunResult> ProcessDelinquenciesAsync()
     {
-        var baseUrl = _configuration["Services:BillingService"];
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/billing-runs", request);
-            response.EnsureSuccessStatusCode();
-            return (await response.Content.ReadFromJsonAsync<CreateCycleResponse>())?.CycleId ?? string.Empty;
+            return await SendAsync<DelinquencyRunResult?>(HttpMethod.Post, "premium-invoices/process-delinquencies")
+                   ?? new DelinquencyRunResult();
         }
-        catch (HttpRequestException ex)
+        catch (BillingApiException ex) when (ex.StatusCode == 502 && !string.IsNullOrWhiteSpace(ex.Body))
         {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
+            // 502: invoices were marked delinquent but some sponsor suspensions
+            // failed in sponsor-service; the body says which.
+            var result = BillingApiHttp.TryDeserialize<DelinquencyRunResult>(ex.Body!);
+            if (result == null) throw;
+            result.SuspensionsFailed = true;
+            return result;
         }
     }
 
-    public async Task<List<PremiumRate>> GetPremiumRatesAsync(string? planId = null)
+    // ── EFT ──
+
+    public async Task<List<EftDraft>> GetDraftsByInvoiceAsync(string invoiceId)
+        => await SendAsync<List<EftDraft>?>(HttpMethod.Get, $"eft/drafts/invoice/{Esc(invoiceId)}") ?? new();
+
+    public async Task<List<EftDraft>> GetDraftsForInvoicesAsync(IEnumerable<string> invoiceIds)
     {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
+        // premium-billing-service has no "list drafts" endpoint, only drafts
+        // per invoice, so a run's drafts are read invoice by invoice.
+        using var gate = new SemaphoreSlim(4);
+        var tasks = invoiceIds.Distinct().Select(async id =>
         {
-            var url = $"{baseUrl}/v1/premium-invoices" + (planId != null ? $"?planId={planId}" : "");
-            var result = await _httpClient.GetFromJsonAsync<List<PremiumRate>>(url);
-            return result ?? new();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
+            await gate.WaitAsync();
+            try { return await GetDraftsByInvoiceAsync(id); }
+            finally { gate.Release(); }
+        }).ToList();
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(d => d).OrderByDescending(d => d.CreatedAt).ToList();
     }
 
-    public async Task UpdatePremiumRateAsync(string rateId, decimal newRate, DateTime effectiveDate)
-    {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
-        {
-            var response = await _httpClient.PutAsJsonAsync($"{baseUrl}/v1/premium-invoices/{rateId}", new { Rate = newRate, EffectiveDate = effectiveDate });
-            response.EnsureSuccessStatusCode();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
-    }
+    public Task<EftDraft> InitiateDraftAsync(InitiateEftDraftRequest request)
+        => SendAsync<EftDraft>(HttpMethod.Post, "eft/drafts", request);
 
-    public async Task MarkCycleAsPaidAsync(string cycleId, DateTime paidDate)
-    {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/v1/billing-runs/{cycleId}/mark-paid", new { PaidDate = paidDate });
-            response.EnsureSuccessStatusCode();
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
-    }
+    public Task<BatchEftResult> InitiateBatchDraftsAsync(InitiateBatchEftRequest request)
+        => SendAsync<BatchEftResult>(HttpMethod.Post, "eft/drafts/batch", request);
 
-    public async Task<Stream> DownloadInvoiceAsync(string cycleId)
-    {
-        var baseUrl = _configuration["Services:BillingService"];
-        try
-        {
-            return await _httpClient.GetStreamAsync($"{baseUrl}/v1/billing-runs/{cycleId}/invoice");
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Billing Service");
-            throw new ServiceUnavailableException("Billing Service", ex);
-        }
-    }
+    public Task<NachaFileResult> GenerateNachaFileAsync()
+        => SendAsync<NachaFileResult>(HttpMethod.Post, "eft/nacha/generate");
+
+    public Task<List<NachaHeldFile>> GetHeldNachaFilesAsync()
+        => SendAsync<List<NachaHeldFile>>(HttpMethod.Get, "eft/nacha/held");
+
+    public Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference)
+        => SendAsync<NachaFileResult>(HttpMethod.Post, $"eft/nacha/held/{Uri.EscapeDataString(fileReference)}/retry");
 
     public async Task<MemberPremiumSummary?> GetMemberPremiumSummaryAsync(string memberId)
     {
@@ -3155,8 +3141,173 @@ public class PremiumBillingService : IPremiumBillingService
             throw new ServiceUnavailableException("Billing Service", ex);
         }
     }
+}
 
-    private class CreateCycleResponse { public string CycleId { get; set; } = string.Empty; }
+// ── Sponsor bank accounts (sponsor-service) ─────────────────────────────
+
+public class SponsorBankAccountService : ISponsorBankAccountService
+{
+    internal const string ServiceName = "Sponsor Service";
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<SponsorBankAccountService> _logger;
+
+    public SponsorBankAccountService(HttpClient httpClient, IConfiguration configuration, ILogger<SponsorBankAccountService> logger)
+    {
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    private string Url(string groupNumber, string path)
+        => $"{_configuration["Services:SponsorService"]}/sponsors/{Uri.EscapeDataString(groupNumber.Trim())}/{path}";
+
+    private Task<T> SendAsync<T>(HttpMethod method, string groupNumber, string path, object? body = null)
+        => BillingApiHttp.SendAsync<T>(_httpClient, _logger, ServiceName, method, Url(groupNumber, path), body);
+
+    public async Task<SponsorBankAccountView?> GetBankAccountAsync(string groupNumber)
+    {
+        try
+        {
+            return await SendAsync<SponsorBankAccountView>(HttpMethod.Get, groupNumber, "bank-account");
+        }
+        catch (BillingApiException ex) when (ex.StatusCode == 404)
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<SponsorBankAccountChange>> GetChangesAsync(string groupNumber)
+        => await SendAsync<List<SponsorBankAccountChange>?>(HttpMethod.Get, groupNumber, "bank-account-changes") ?? new();
+
+    public Task<SponsorBankAccountChange> ProposeChangeAsync(string groupNumber, ProposeSponsorBankAccountRequest request)
+        => SendAsync<SponsorBankAccountChange>(HttpMethod.Post, groupNumber, "bank-account-changes", request);
+
+    public Task<SponsorBankAccountChange> ApproveChangeAsync(string groupNumber, string changeId, string? reason)
+        => Decide(groupNumber, changeId, "approve", reason);
+
+    public Task<SponsorBankAccountChange> RejectChangeAsync(string groupNumber, string changeId, string? reason)
+        => Decide(groupNumber, changeId, "reject", reason);
+
+    public Task<SponsorBankAccountChange> CancelChangeAsync(string groupNumber, string changeId, string? reason)
+        => Decide(groupNumber, changeId, "cancel", reason);
+
+    private Task<SponsorBankAccountChange> Decide(string groupNumber, string changeId, string action, string? reason)
+        => SendAsync<SponsorBankAccountChange>(HttpMethod.Post, groupNumber,
+            $"bank-account-changes/{Uri.EscapeDataString(changeId)}/{action}",
+            new DecisionBody { Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim() });
+
+    private sealed class DecisionBody
+    {
+        public string? Reason { get; set; }
+    }
+}
+
+/// <summary>
+/// Request/response handling shared by the premium billing and sponsor
+/// bank-account clients: camelCase JSON with string enums, a refusal turned
+/// into <see cref="BillingApiException"/> carrying the service's reason, and
+/// an unreachable service into <see cref="ServiceUnavailableException"/>.
+/// </summary>
+internal static class BillingApiHttp
+{
+    internal static readonly JsonSerializerOptions JsonOptions = CreateOptions();
+
+    private static JsonSerializerOptions CreateOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
+
+    public static async Task<T> SendAsync<T>(HttpClient client, ILogger logger, string serviceName,
+        HttpMethod method, string url, object? body)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            using var request = new HttpRequestMessage(method, url);
+            if (body != null)
+                request.Content = JsonContent.Create(body, body.GetType(), options: JsonOptions);
+            response = await client.SendAsync(request);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Service unavailable: {ServiceName}", serviceName);
+            throw new ServiceUnavailableException(serviceName, ex);
+        }
+
+        using (response)
+        {
+            var text = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                var (title, detail) = ParseError(text);
+                logger.LogWarning("{ServiceName} refused {Method} {Path}: {Status} {Title}",
+                    serviceName, method, OneLine(new Uri(url).AbsolutePath), (int)response.StatusCode, OneLine(title));
+                throw new BillingApiException((int)response.StatusCode, title, detail) { Body = text };
+            }
+
+            if (string.IsNullOrWhiteSpace(text)) return default!;
+            return JsonSerializer.Deserialize<T>(text, JsonOptions)!;
+        }
+    }
+
+    public static T? TryDeserialize<T>(string text) where T : class
+    {
+        try { return JsonSerializer.Deserialize<T>(text, JsonOptions); }
+        catch (JsonException) { return null; }
+    }
+
+    /// <summary>Strips line breaks so a response or path cannot forge log lines.</summary>
+    private static string OneLine(string? value)
+        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
+
+    /// <summary>
+    /// The services refuse with ProblemDetails (<c>title</c>, <c>detail</c>),
+    /// <c>{ error }</c>, <c>{ error, errors: [...] }</c> (bank-account
+    /// validation) or ValidationProblemDetails (<c>errors: { field: [...] }</c>).
+    /// </summary>
+    private static (string? Title, string? Detail) ParseError(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return (null, null);
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return (null, Truncate(text));
+
+            string? Str(string name) =>
+                root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+            var title = Str("title");
+            var detail = Str("detail") ?? Str("error") ?? Str("message");
+            if (root.TryGetProperty("errors", out var errors))
+            {
+                var items = errors.ValueKind switch
+                {
+                    JsonValueKind.Array => errors.EnumerateArray().Select(e => e.ToString()).ToList(),
+                    JsonValueKind.Object => errors.EnumerateObject().SelectMany(p =>
+                        p.Value.ValueKind == JsonValueKind.Array
+                            ? p.Value.EnumerateArray().Select(e => e.ToString())
+                            : new[] { p.Value.ToString() }).ToList(),
+                    _ => new List<string>()
+                };
+                var joined = string.Join(" ", items.Where(s => !string.IsNullOrWhiteSpace(s)));
+                if (joined.Length > 0) detail = string.IsNullOrEmpty(detail) ? joined : $"{detail}: {joined}";
+            }
+            return (title, detail);
+        }
+        catch (JsonException)
+        {
+            return (null, Truncate(text));
+        }
+    }
+
+    private static string Truncate(string text) => text.Length > 300 ? text[..300] : text;
 }
 
 // ── Reporting Service ───────────────────────────────────────────────────
@@ -3599,7 +3750,7 @@ public class PricingApiService : IPricingApiService
             var request = CreateAdminRequest(HttpMethod.Get, $"{BaseUrl}/api/v1/admin/api-keys");
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            var keys = await response.Content.ReadFromJsonAsync<List<PricingApiKey>>();
+            var keys = await ReadDataAsync<List<PricingApiKey>>(response);
             return keys ?? new();
         }
         catch (HttpRequestException ex)
@@ -3617,8 +3768,15 @@ public class PricingApiService : IPricingApiService
             request.Content = JsonContent.Create(new { tenantName, contactEmail, tier });
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            var key = await response.Content.ReadFromJsonAsync<PricingApiKey>();
-            return key ?? new();
+            // The create response is { apiKey, key: { keyId, keyPrefix, ... } }:
+            // the key is shown this once and never again.
+            var created = await ReadDataAsync<PricingApiKeyCreated>(response);
+            if (created?.Key is { } key)
+            {
+                key.ApiKey = created.ApiKey;
+                return key;
+            }
+            return new PricingApiKey { ApiKey = created?.ApiKey ?? "" };
         }
         catch (HttpRequestException ex)
         {
@@ -3627,11 +3785,29 @@ public class PricingApiService : IPricingApiService
         }
     }
 
-    public async Task DeactivateApiKeyAsync(string apiKey)
+    private sealed class PricingApiKeyCreated
+    {
+        public string ApiKey { get; set; } = "";
+        public PricingApiKey? Key { get; set; }
+    }
+
+    /// <summary>Reads the Pricing API's <c>{ success, data }</c> envelope (or a bare body).</summary>
+    private static async Task<T?> ReadDataAsync<T>(HttpResponseMessage response)
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var element = doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("data", out var data)
+            ? data
+            : doc.RootElement;
+        return element.Deserialize<T>(options);
+    }
+
+    public async Task DeactivateApiKeyAsync(string keyId)
     {
         try
         {
-            var request = CreateAdminRequest(HttpMethod.Delete, $"{BaseUrl}/api/v1/admin/api-keys/{Uri.EscapeDataString(apiKey)}");
+            var request = CreateAdminRequest(HttpMethod.Delete, $"{BaseUrl}/api/v1/admin/api-keys/{Uri.EscapeDataString(keyId)}");
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
         }
@@ -3926,6 +4102,26 @@ public class CapitationService : ICapitationService
                 new { StatementIds = statementIds, InitiatedBy = initiatedBy });
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<CapDisbursementBatchResult>() ?? new();
+        }
+        catch (HttpRequestException ex) { _logger.LogError(ex, "Capitation Service unavailable"); throw new ServiceUnavailableException("Capitation Service", ex); }
+    }
+
+    public async Task<List<NachaHeldFile>> GetHeldNachaFilesAsync()
+    {
+        try { return await _httpClient.GetFromJsonAsync<List<NachaHeldFile>>($"{BaseUrl}/v1/capitation/disbursements/nacha/held") ?? new(); }
+        catch (HttpRequestException ex) { _logger.LogError(ex, "Capitation Service unavailable"); throw new ServiceUnavailableException("Capitation Service", ex); }
+    }
+
+    public async Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync(
+                $"{BaseUrl}/v1/capitation/disbursements/nacha/held/{Uri.EscapeDataString(fileReference)}/retry", null);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(
+                    $"Retry refused ({(int)response.StatusCode}): {await response.Content.ReadAsStringAsync()}");
+            return await response.Content.ReadFromJsonAsync<NachaFileResult>() ?? new();
         }
         catch (HttpRequestException ex) { _logger.LogError(ex, "Capitation Service unavailable"); throw new ServiceUnavailableException("Capitation Service", ex); }
     }
@@ -4524,9 +4720,6 @@ public class IdCardService : IIdCardService
     private string IdCardBaseUrl =>
         _configuration["Services:IdCardService"] ?? "http://idcard-service.cloudhealthoffice/api/v1";
 
-    private string MemberDocumentBaseUrl =>
-        _configuration["Services:MemberDocumentService"] ?? "http://member-document-service.cloudhealthoffice";
-
     public async Task<IdCardOrderView> OrderAsync(string memberId, string? languageCode = null, string? requestedBy = null)
     {
         try
@@ -4578,8 +4771,13 @@ public class IdCardService : IIdCardService
         }
     }
 
+    /// <summary>
+    /// A link the browser can follow: the portal's own download endpoint, which
+    /// fetches the document with the signed-in user's CHO token. The browser can
+    /// neither reach member-document-service nor hold a CHO token.
+    /// </summary>
     public string BuildDocumentDownloadUrl(string documentId) =>
-        $"{MemberDocumentBaseUrl}/api/v1/member-documents/{Uri.EscapeDataString(documentId)}/content";
+        CloudHealthOffice.Portal.Infrastructure.MemberDocumentDownloadEndpoint.PathFor(documentId);
 
     public async Task RevokeAsync(string cardId, string reason, string? notes = null)
     {

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using System.Net.Http.Json;
-using System.Text.Json;
+using System.Net;
+using CloudHealthOffice.Infrastructure.Tenancy;
 
 namespace EligibilityService.Adapters;
 
@@ -9,7 +9,12 @@ namespace EligibilityService.Adapters;
 /// Fetches the tenant's EligibilityConfig from the tenant-service and matches
 /// the configured platform to a registered adapter.
 ///
-/// Defaults to "cho" (internal CHO services) when no configuration is found.
+/// The lookup follows <see cref="TenantPlatformLookup"/>, the rule shared with
+/// claims, benefit-plan, provider and id-card: an answer from tenant-service
+/// (a platform, or none, meaning "cho") is cached; a 401/403 is logged as an
+/// error, not cached, and raised as
+/// <see cref="EligibilityTenantConfigUnavailableException"/>; a 404, 5xx or
+/// unreachable tenant-service uses "cho" for that call only, uncached.
 /// </summary>
 public class EligibilityAdapterFactory
 {
@@ -22,6 +27,9 @@ public class EligibilityAdapterFactory
     // Key: tenantId, Value: (platform, settings, expiry)
     private readonly ConcurrentDictionary<string, (string Platform, Dictionary<string, string> Settings, DateTime ExpiresAt)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
+
+    public const string HttpClientName = "EligibilityDefault";
+    public const string PlatformKey = "eligibilityPlatform";
 
     public EligibilityAdapterFactory(
         IEnumerable<IEligibilityAdapter> adapters,
@@ -82,54 +90,37 @@ public class EligibilityAdapterFactory
             return (cached.Platform, cached.Settings);
         }
 
-        try
-        {
-            var tenantUrl = _configuration["Services:TenantService"]
-                ?? "http://tenant-service.cloudhealthoffice/api/v1";
-            var httpClient = _httpClientFactory.CreateClient("EligibilityDefault");
-            var response = await httpClient.GetAsync(
-                $"{tenantUrl}/tenants/{tenantId}", ct);
+        // Naming the tenant (the lookup sets X-Tenant-ID) lets the outbound
+        // token handler mint a service token when there is no caller (the
+        // batch eligibility worker).
+        var result = await TenantPlatformLookup.FetchAsync(
+            _httpClientFactory.CreateClient(HttpClientName), _configuration["Services:TenantService"],
+            tenantId, PlatformKey, _logger, ct);
 
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync(ct);
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
+        if (result.Outcome == TenantPlatformOutcome.Refused)
+            throw new EligibilityTenantConfigUnavailableException(tenantId, result.StatusCode!.Value);
 
-                if (root.TryGetProperty("configuration", out var config) &&
-                    config.TryGetProperty("eligibilityPlatform", out var eligConfig) &&
-                    eligConfig.TryGetProperty("platform", out var platformProp))
-                {
-                    var platform = platformProp.GetString() ?? "cho";
-                    var settings = new Dictionary<string, string>();
+        if (result.IsCacheable)
+            _cache[tenantId] = (result.Platform, result.Settings, DateTime.UtcNow.Add(CacheDuration));
 
-                    if (eligConfig.TryGetProperty("platformSettings", out var settingsProp))
-                    {
-                        foreach (var prop in settingsProp.EnumerateObject())
-                        {
-                            settings[prop.Name] = prop.Value.GetString() ?? string.Empty;
-                        }
-                    }
-
-                    _cache[tenantId] = (platform, settings, DateTime.UtcNow.Add(CacheDuration));
-                    return (platform, settings);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch tenant config for {TenantId}, using default adapter", SanitizeForLog(tenantId));
-        }
-
-        // Default to CHO
-        var defaultSettings = new Dictionary<string, string>();
-        _cache[tenantId] = ("cho", defaultSettings, DateTime.UtcNow.Add(CacheDuration));
-        return ("cho", defaultSettings);
+        return (result.Platform, result.Settings);
     }
+}
 
-    private static string SanitizeForLog(string? value)
+/// <summary>
+/// tenant-service refused eligibility-service's platform lookup (401/403), so
+/// the tenant's eligibility platform is unknown. Never answered with the default.
+/// </summary>
+public sealed class EligibilityTenantConfigUnavailableException : InvalidOperationException
+{
+    public EligibilityTenantConfigUnavailableException(string tenantId, HttpStatusCode statusCode)
+        : base($"tenant-service refused the eligibility platform lookup ({(int)statusCode}).")
     {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
+        TenantId = tenantId;
+        StatusCode = statusCode;
     }
+
+    public string TenantId { get; }
+
+    public HttpStatusCode StatusCode { get; }
 }

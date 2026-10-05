@@ -41,11 +41,19 @@ describe('SFTP Sensor wiring', () => {
     ).map((param: any) => param?.name);
     expect(parameterNames).toEqual(expect.arrayContaining(['sftp-host', 'sftp-folder', 'file-pattern']));
 
-    const paramMapping = (argoWorkflow?.parameters ?? []).find(
-      (mapping: any) => mapping?.dest === 'spec.arguments.parameters.0.value',
-    );
-    expect(paramMapping?.src?.dependencyName).toBe('sftp-275-poll');
-    expect(paramMapping?.src?.dataKey).toBe('metadata.transaction-type');
+    // Folder and pattern come from the poll event's metadata; nothing from
+    // the event may overwrite parameter 0 (the SFTP host).
+    const mappings = argoWorkflow?.parameters ?? [];
+    const mappingTo = (dest: string) => mappings.find((mapping: any) => mapping?.dest === dest);
+    expect(mappingTo('spec.arguments.parameters.0.value')).toBeUndefined();
+    expect(mappingTo('spec.arguments.parameters.1.value')?.src).toEqual({
+      dependencyName: 'sftp-275-poll',
+      dataKey: 'metadata.sftp-folder',
+    });
+    expect(mappingTo('spec.arguments.parameters.2.value')?.src).toEqual({
+      dependencyName: 'sftp-275-poll',
+      dataKey: 'metadata.file-pattern',
+    });
   });
 
   it('submits the 278 workflow with correct parameters', () => {
@@ -63,11 +71,19 @@ describe('SFTP Sensor wiring', () => {
     ).map((param: any) => param?.name);
     expect(parameterNames).toEqual(expect.arrayContaining(['sftp-host', 'sftp-folder', 'file-pattern']));
 
-    const paramMapping = (argoWorkflow?.parameters ?? []).find(
-      (mapping: any) => mapping?.dest === 'spec.arguments.parameters.0.value',
-    );
-    expect(paramMapping?.src?.dependencyName).toBe('sftp-278-poll');
-    expect(paramMapping?.src?.dataKey).toBe('metadata.transaction-type');
+    // Folder and pattern come from the poll event's metadata; nothing from
+    // the event may overwrite parameter 0 (the SFTP host).
+    const mappings = argoWorkflow?.parameters ?? [];
+    const mappingTo = (dest: string) => mappings.find((mapping: any) => mapping?.dest === dest);
+    expect(mappingTo('spec.arguments.parameters.0.value')).toBeUndefined();
+    expect(mappingTo('spec.arguments.parameters.1.value')?.src).toEqual({
+      dependencyName: 'sftp-278-poll',
+      dataKey: 'metadata.sftp-folder',
+    });
+    expect(mappingTo('spec.arguments.parameters.2.value')?.src).toEqual({
+      dependencyName: 'sftp-278-poll',
+      dataKey: 'metadata.file-pattern',
+    });
   });
 
   it('configures retries for ingestion triggers to handle transient failures', () => {

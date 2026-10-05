@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ArService.Controllers;
 using ArService.Models;
 using ArService.Repositories;
+using ArService.Tests.Support;
 
 namespace ArService.Tests.Controllers;
 
@@ -15,7 +16,7 @@ public class ArBatchRulesControllerTests
     {
         _batchRuleRepo = new Mock<IArBatchRuleRepository>();
         var logger = new Mock<ILogger<ArBatchRulesController>>();
-        _controller = new ArBatchRulesController(_batchRuleRepo.Object, logger.Object);
+        _controller = new ArBatchRulesController(_batchRuleRepo.Object, new TestActor(), logger.Object);
     }
 
     private static ArBatchRule CreateRule(

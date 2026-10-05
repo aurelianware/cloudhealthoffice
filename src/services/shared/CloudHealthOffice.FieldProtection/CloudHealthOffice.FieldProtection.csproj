@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Field-level encryption at rest for CHO services (bank routing and account
+    numbers first). Kept out of CloudHealthOffice.Infrastructure on purpose:
+    the Azure key-ring packages would otherwise reach every service that
+    references Infrastructure. A service opts in with a ProjectReference and
+    AddChoFieldProtection (see FieldProtectionServiceCollectionExtensions).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CloudHealthOffice.FieldProtection</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" />
+    <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" />
+    <PackageReference Include="Azure.Identity" />
+  </ItemGroup>
+
+</Project>

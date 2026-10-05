@@ -1,3 +1,5 @@
+using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using RfaiService.Models;
 using RfaiService.Repositories;
@@ -15,10 +17,16 @@ namespace RfaiService.Controllers;
 /// service (authorization-service raising a request, fhir-service projecting or
 /// recording a response, attachment-service correlating a 275).
 ///
-/// TENANCY. The tenant is always the one <c>TenantMiddleware</c> resolved from
-/// the authenticated context or the gateway header. It is never taken from a
-/// route segment or a request body: a body that names a tenant is data, not
-/// authority.
+/// AUTHENTICATION. Every action needs a CHO token (shared
+/// <c>AddChoAuthentication</c>): reads need <c>rfai:read</c>, writes
+/// <c>rfai:write</c>. The tenant is the token's, never a header, query string,
+/// body or route segment; the legacy route that carries a tenant only echoes it
+/// and is refused when it differs. The actor recorded on a write (requested,
+/// submitted, closed by) is the token subject, never a body field.
+///
+/// MINIMUM NECESSARY. Responses never carry where submitted documentation is
+/// stored (<c>storageProvider</c>, <c>storageKey</c>): the case record keeps the
+/// pointer, a reader gets the receipt metadata only.
 /// </summary>
 [ApiController]
 [Route("api/rfai")]
@@ -27,20 +35,26 @@ public class RfaiController : ControllerBase
 {
     private readonly IRfaiRepository _repository;
     private readonly IRfaiCaseService _cases;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<RfaiController> _logger;
 
     public RfaiController(
         IRfaiRepository repository,
         IRfaiCaseService cases,
+        ICurrentActor actor,
         ILogger<RfaiController> logger)
     {
         _repository = repository;
         _cases = cases;
+        _actor = actor;
         _logger = logger;
     }
 
-    private string TenantId =>
-        HttpContext.Items["TenantId"]?.ToString() ?? "default-tenant";
+    /// <summary>The tenant from the validated token. There is no default.</summary>
+    private string TenantId => _actor.TenantId;
+
+    /// <summary>The acting user or service client, from the validated token.</summary>
+    private string Actor => _actor.UserId;
 
     /// <summary>
     /// Create an additional-information request, idempotently.
@@ -72,7 +86,7 @@ public class RfaiController : ControllerBase
             ReasonDescription = request.ReasonDescription,
             DueDate = request.DueDate,
             Notes = request.Notes,
-            RequestedBy = request.RequestedBy,
+            RequestedBy = Actor,
             RequestSource = request.RequestSource ?? RfaiRequestSources.Unknown,
             RequestedItems = request.RequestedItems,
         };
@@ -87,8 +101,8 @@ public class RfaiController : ControllerBase
         // caller learns nothing was created, and can tell a replay from a first
         // delivery without comparing timestamps.
         return result.Created
-            ? CreatedAtAction(nameof(GetCase), new { id = result.Case.Id }, result.Case)
-            : Ok(result.Case);
+            ? CreatedAtAction(nameof(GetCase), new { id = result.Case.Id }, ForResponse(result.Case))
+            : Ok(ForResponse(result.Case));
     }
 
     /// <summary>
@@ -104,7 +118,7 @@ public class RfaiController : ControllerBase
         if (rfaiCase == null)
             return NotFound($"RFAI case {id} not found.");
 
-        return Ok(rfaiCase);
+        return Ok(ForResponse(rfaiCase));
     }
 
     /// <summary>
@@ -124,7 +138,7 @@ public class RfaiController : ControllerBase
         if (rfaiCase == null)
             return NotFound("RFAI case not found.");
 
-        return Ok(rfaiCase);
+        return Ok(ForResponse(rfaiCase));
     }
 
     /// <summary>
@@ -137,13 +151,13 @@ public class RfaiController : ControllerBase
     public async Task<ActionResult<IEnumerable<RfaiCase>>> GetByAuth(string authNumber)
     {
         var cases = await _repository.GetByAuthNumberAsync(TenantId, authNumber);
-        return Ok(cases);
+        return Ok(cases.Select(ForResponse).ToList());
     }
 
     /// <summary>
-    /// Legacy route that carried the tenant in the path. The path tenant is now
-    /// only honoured when it MATCHES the authenticated one — it never selects a
-    /// tenant. Retained so existing callers keep working while they migrate to
+    /// Legacy route that carried the tenant in the path. The path tenant is only
+    /// honoured when it MATCHES the token's tenant (otherwise 403) — it never
+    /// selects a tenant. Retained so existing callers keep working while they migrate to
     /// <c>GET by-auth/{authNumber}</c>.
     /// </summary>
     [HttpGet("by-auth/{tenantId}/{authNumber}")]
@@ -161,7 +175,7 @@ public class RfaiController : ControllerBase
         }
 
         var cases = await _repository.GetByAuthNumberAsync(TenantId, authNumber);
-        return Ok(cases);
+        return Ok(cases.Select(ForResponse).ToList());
     }
 
     /// <summary>
@@ -178,7 +192,7 @@ public class RfaiController : ControllerBase
         if (updated == null)
             return NotFound($"RFAI case {id} not found.");
 
-        return Ok(updated);
+        return Ok(ForResponse(updated));
     }
 
     /// <summary>
@@ -202,8 +216,13 @@ public class RfaiController : ControllerBase
         if (request.Artifacts.Any(a => string.IsNullOrWhiteSpace(a.SubmissionId)))
             return BadRequest("Each artifact must carry a submissionId.");
 
+        // The submitter is the token subject: the CHO user, or fhir-service's
+        // service client for a SMART caller. A body submittedBy is ignored.
+        var actor = Actor;
+        var artifacts = request.Artifacts.Select(a => a with { SubmittedBy = actor }).ToList();
+
         var result = await _cases.RecordResponseAsync(
-            TenantId, id, request.Artifacts, HttpContext.RequestAborted);
+            TenantId, id, artifacts, HttpContext.RequestAborted);
 
         if (result is null)
             return NotFound($"RFAI case {id} not found.");
@@ -231,7 +250,7 @@ public class RfaiController : ControllerBase
             Outcome = result.Outcome.ToString(),
             Recorded = result.Recorded.Count,
             ResumedReview = result.TransitionedToDocsReceived,
-            Case = result.Case,
+            Case = ForResponse(result.Case),
         });
     }
 
@@ -271,6 +290,7 @@ public class RfaiController : ControllerBase
             FileHash = request.FileHash,
             SourceTransaction = request.SourceTransaction,
             Channel = RfaiResponseChannels.X12Attachment275,
+            SubmittedBy = Actor,
         };
 
         var result = await _cases.RecordResponseAsync(
@@ -287,7 +307,7 @@ public class RfaiController : ControllerBase
                 : $"RFAI case {id} is {result.Case.Status} and cannot take a response.");
         }
 
-        return Ok(result.Case);
+        return Ok(ForResponse(result.Case));
     }
 
     /// <summary>Close a case — the payer is done with this cycle.</summary>
@@ -316,14 +336,30 @@ public class RfaiController : ControllerBase
         if (rfaiCase == null)
             return NotFound($"RFAI case {id} not found.");
 
-        if (!transition(rfaiCase, request?.By, request?.Reason, DateTime.UtcNow))
+        if (!transition(rfaiCase, Actor, request?.Reason, DateTime.UtcNow))
             return Conflict($"RFAI case {id} is already {rfaiCase.Status}.");
 
         var updated = await _repository.UpdateAsync(rfaiCase);
 
         _logger.LogInformation("RFAI case {Id} {Verb}", SanitizeForLog(id), verb);
 
-        return Ok(updated);
+        return Ok(ForResponse(updated));
+    }
+
+    /// <summary>
+    /// The case as a caller may see it: everything but where the submitted
+    /// documentation is stored. A copy, so the stored record is never changed.
+    /// </summary>
+    private static RfaiCase ForResponse(RfaiCase rfaiCase)
+    {
+        var copy = JsonSerializer.Deserialize<RfaiCase>(JsonSerializer.Serialize(rfaiCase))!;
+        foreach (var attachment in copy.ReceivedAttachments)
+        {
+            attachment.StorageProvider = null;
+            attachment.StorageKey = null;
+        }
+
+        return copy;
     }
 
     private static string SanitizeForLog(string? value)
@@ -351,7 +387,7 @@ public class CreateRfaiRequest
     public string? ReviewDecision { get; set; }
     public string? ReasonCode { get; set; }
     public string? ReasonDescription { get; set; }
-    public string? RequestedBy { get; set; }
+    // No RequestedBy: the requester is the token subject. A body value is ignored.
     public string? RequestSource { get; set; }
     public DateTime? DueDate { get; set; }
     public List<RequestedItem> RequestedItems { get; set; } = new();
@@ -371,6 +407,7 @@ public class AttachmentReceivedRequest
 
 public class RecordRfaiResponseRequest
 {
+    /// <summary>The artifacts offered. Each one's <c>submittedBy</c> is replaced by the token subject.</summary>
     public List<RfaiResponseArtifact> Artifacts { get; set; } = new();
 }
 
@@ -397,6 +434,6 @@ public class RfaiResponseResult
 
 public class CloseRfaiRequest
 {
-    public string? By { get; set; }
+    // No By: who closed or cancelled is the token subject. A body value is ignored.
     public string? Reason { get; set; }
 }

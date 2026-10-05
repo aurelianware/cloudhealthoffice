@@ -1,144 +1,141 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using MongoDB.Driver;
 using CHO.TmppmIngestionService.Models;
 
 namespace CHO.TmppmIngestionService.Services;
 
 /// <summary>
-/// Persists extracted TMPPM rules to MongoDB as ConceptMapEntry overrides.
-/// Targets the same collection used by CHO.TerminologyService for runtime lookups.
+/// Persists TMPPM rules, editions and diffs, and publishes overrides, through
+/// terminology-service's API (<c>/api/v1/tmppm/*</c>). The tool no longer
+/// connects to terminology-service's database: that service owns it and
+/// authorizes every write.
+/// <list type="bullet">
+///   <item>Rules, editions and diffs are shared by every tenant: the token
+///   must hold platform:admin (a platform administrator's CHO token).</item>
+///   <item>Overrides (<c>--tenant</c>) go to the token's tenant, which must be
+///   the one named: the request carries it in X-Tenant-ID and
+///   terminology-service refuses a mismatch. Needs settings:manage.</item>
+/// </list>
+/// The bearer token comes from <c>Terminology:AccessTokenFile</c> (read again
+/// before every request, so a refresher can replace it; CHO tokens last 5
+/// minutes) or <c>Terminology:AccessToken</c>. Writes happen after the
+/// downloads and parsing, at the end of the run.
 /// </summary>
-public class TmppmRuleStore(IMongoDatabase database, ILogger<TmppmRuleStore> logger)
+public class TmppmRuleStore(HttpClient http, IConfiguration config, ILogger<TmppmRuleStore> logger)
 {
-    private IMongoCollection<TmppmPaRule> Rules =>
-        database.GetCollection<TmppmPaRule>("tmppm_pa_rules");
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    private IMongoCollection<TmppmEdition> Editions =>
-        database.GetCollection<TmppmEdition>("tmppm_editions");
-
-    private IMongoCollection<TmppmDiffReport> Diffs =>
-        database.GetCollection<TmppmDiffReport>("tmppm_diff_reports");
-
-    private IMongoCollection<ConceptMapEntryOverride> ConceptMapOverrides =>
-        database.GetCollection<ConceptMapEntryOverride>("concept_map_entries");
-
-    /// <summary>
-    /// Upsert extracted PA rules. Uses RuleId as the unique key.
-    /// </summary>
-    public async Task<int> UpsertRulesAsync(IEnumerable<TmppmPaRule> rules)
+    private HttpRequestMessage Request(HttpMethod method, string path, object? body = null, string? tenantId = null)
     {
-        var count = 0;
-        var bulkOps = new List<WriteModel<TmppmPaRule>>();
+        var request = new HttpRequestMessage(method, path);
+        if (body is not null)
+            request.Content = JsonContent.Create(body, options: Json);
 
-        foreach (var rule in rules)
-        {
-            var filter = Builders<TmppmPaRule>.Filter.Eq(r => r.RuleId, rule.RuleId);
-            bulkOps.Add(new ReplaceOneModel<TmppmPaRule>(filter, rule) { IsUpsert = true });
-            count++;
-        }
-
-        if (bulkOps.Count > 0)
-        {
-            var result = await Rules.BulkWriteAsync(bulkOps);
-            logger.LogInformation("Upserted {Count} PA rules ({Inserted} new, {Modified} updated)",
-                count, result.InsertedCount, result.ModifiedCount);
-        }
-
-        return count;
+        var token = ReadToken();
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (!string.IsNullOrEmpty(tenantId))
+            request.Headers.Add("X-Tenant-ID", tenantId);
+        return request;
     }
 
-    /// <summary>
-    /// Convert TmppmPaRules to ConceptMapEntry overrides and upsert into the
-    /// terminology service collection. This is how TMPPM rules become queryable
-    /// via the FHIR $translate endpoint and CRD server.
-    /// </summary>
-    public async Task<int> PublishAsConceptMapOverridesAsync(
-        IEnumerable<TmppmPaRule> rules, string mapVersionId, string? tenantId = null)
+    private string? ReadToken()
     {
-        var overrides = new List<ConceptMapEntryOverride>();
+        var file = config["Terminology:AccessTokenFile"];
+        if (!string.IsNullOrWhiteSpace(file))
+            return File.Exists(file) ? File.ReadAllText(file).Trim() : null;
+        return config["Terminology:AccessToken"];
+    }
 
-        foreach (var rule in rules.Where(r => r.ProcedureCodes.Count > 0))
+    private async Task SendAsync(HttpRequestMessage request, string what)
+    {
+        using (request)
+        using (var response = await http.SendAsync(request))
         {
-            foreach (var code in rule.ProcedureCodes)
+            if (!response.IsSuccessStatusCode)
             {
-                var system = rule.CodeSystem == "HCPCS"
-                    ? "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets"
-                    : "http://www.ama-assn.org/go/cpt";
-
-                var overrideEntry = new ConceptMapEntryOverride
-                {
-                    Id = $"tmppm-{rule.State}-{code}-{rule.RuleType}".ToLowerInvariant(),
-                    SourceSystem = system,
-                    SourceCode = code,
-                    SourceDisplay = rule.Category,
-                    TargetSystem = "urn:cho:pa-determination",
-                    TargetCode = rule.AuthRequired ? "auth-required" : "no-auth",
-                    TargetDisplay = rule.AuthRequired
-                        ? $"Prior authorization required — {rule.Category}"
-                        : $"No prior authorization — {rule.Category}",
-                    Equivalence = "equivalent",
-                    MapGroupId = $"tmppm-{rule.State}-{rule.TmppmRef}",
-                    Priority = 1,
-                    Rule = new MapRule
-                    {
-                        RuleType = "StateSpecific",
-                        State = rule.State,
-                        AgeMin = rule.AgeLimit?.MinAge,
-                        AgeMax = rule.AgeLimit?.MaxAge,
-                    },
-                    MapVersionId = mapVersionId,
-                    IsOverride = true,
-                    TenantId = tenantId
-                };
-
-                overrides.Add(overrideEntry);
+                var detail = await response.Content.ReadAsStringAsync();
+                throw new InvalidOperationException(
+                    $"terminology-service refused {what}: {(int)response.StatusCode} {detail}");
             }
         }
+    }
 
-        if (overrides.Count > 0)
-        {
-            var bulkOps = overrides.Select(o =>
-                new ReplaceOneModel<ConceptMapEntryOverride>(
-                    Builders<ConceptMapEntryOverride>.Filter.Eq(e => e.Id, o.Id), o)
-                { IsUpsert = true })
-                .ToList<WriteModel<ConceptMapEntryOverride>>();
+    /// <summary>Upsert extracted PA rules (unique by RuleId). Needs platform:admin.</summary>
+    public async Task<int> UpsertRulesAsync(IEnumerable<TmppmPaRule> rules)
+    {
+        var list = rules.ToList();
+        if (list.Count == 0)
+            return 0;
 
-            var result = await ConceptMapOverrides.BulkWriteAsync(bulkOps);
-            logger.LogInformation("Published {Count} ConceptMapEntry overrides for state {State}",
-                overrides.Count, rules.FirstOrDefault()?.State ?? "?");
-        }
-
-        return overrides.Count;
+        await SendAsync(Request(HttpMethod.Put, "api/v1/tmppm/rules", list), "the rule upsert");
+        logger.LogInformation("Upserted {Count} PA rules", list.Count);
+        return list.Count;
     }
 
     /// <summary>
-    /// Save edition metadata for version tracking.
+    /// Publish rules as ConceptMap overrides for <paramref name="tenantId"/>
+    /// (the token's tenant). Without a tenant nothing is published: an override
+    /// with no tenant was never matched by any translation.
     /// </summary>
+    public async Task<int> PublishAsConceptMapOverridesAsync(
+        IEnumerable<TmppmPaRule> rules, string editionId, string? tenantId = null)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            logger.LogWarning("No --tenant given: no ConceptMap overrides published (overrides belong to a tenant)");
+            return 0;
+        }
+
+        var list = rules.Where(r => r.ProcedureCodes.Count > 0).ToList();
+        if (list.Count == 0)
+            return 0;
+
+        using var request = Request(HttpMethod.Post, "api/v1/tmppm/overrides",
+            new { editionId, rules = list }, tenantId);
+        using var response = await http.SendAsync(request);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"terminology-service refused the override publish for tenant {tenantId}: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<PublishResult>(Json);
+        logger.LogInformation("Published {Count} ConceptMap overrides for tenant {Tenant}", result?.OverridesPublished ?? 0, tenantId);
+        return result?.OverridesPublished ?? 0;
+    }
+
+    /// <summary>Save edition metadata. Needs platform:admin.</summary>
     public async Task SaveEditionAsync(TmppmEdition edition)
     {
-        var filter = Builders<TmppmEdition>.Filter.Eq(e => e.EditionId, edition.EditionId);
-        await Editions.ReplaceOneAsync(filter, edition, new ReplaceOptions { IsUpsert = true });
+        await SendAsync(Request(HttpMethod.Put, $"api/v1/tmppm/editions/{Uri.EscapeDataString(edition.EditionId)}", edition),
+            "the edition save");
         logger.LogInformation("Saved edition {Id} with {Count} chapters", edition.EditionId, edition.Chapters.Count);
     }
 
-    /// <summary>
-    /// Get the most recent edition for change detection.
-    /// </summary>
+    /// <summary>The most recent edition, for change detection; null when none exists.</summary>
     public async Task<TmppmEdition?> GetLatestEditionAsync()
     {
-        return await Editions
-            .Find(Builders<TmppmEdition>.Filter.Empty)
-            .SortByDescending(e => e.EditionId)
-            .FirstOrDefaultAsync();
+        using var request = Request(HttpMethod.Get, "api/v1/tmppm/editions/current");
+        using var response = await http.SendAsync(request);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"terminology-service refused the edition read: {(int)response.StatusCode}");
+        return await response.Content.ReadFromJsonAsync<TmppmEdition>(Json);
     }
 
-    /// <summary>
-    /// Save a diff report.
-    /// </summary>
+    /// <summary>Save a diff report. Needs platform:admin.</summary>
     public async Task SaveDiffReportAsync(TmppmDiffReport diff)
     {
-        await Diffs.InsertOneAsync(diff);
+        await SendAsync(Request(HttpMethod.Post, "api/v1/tmppm/diffs", diff), "the diff save");
         logger.LogInformation("Saved diff report: {From} → {To} ({Added} added, {Modified} modified, {Removed} removed)",
             diff.FromEdition, diff.ToEdition, diff.AddedCount, diff.ModifiedCount, diff.RemovedCount);
     }
+
+    private sealed record PublishResult(string MapVersionId, int OverridesPublished);
 }

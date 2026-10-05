@@ -314,7 +314,7 @@ public class FhirInsurancePlanController : ControllerBase
             ct.ThrowIfCancellationRequested();
             try
             {
-                var org = await _organizationLookup.GetOrganizationAsync(id, ct);
+                var org = await _organizationLookup.GetOrganizationAsync(plan.TenantId, id, ct);
                 if (org is not null) resolved.Add(org);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)

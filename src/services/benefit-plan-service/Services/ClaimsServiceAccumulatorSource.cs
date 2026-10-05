@@ -60,7 +60,11 @@ public class ClaimsServiceAccumulatorSource : IClaimsAccumulatorSource
         HttpResponseMessage response;
         try
         {
-            response = await _http.GetAsync(url, ct);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            // Names the tenant for ChoOutboundTokenHandler: an accumulator
+            // rebuild outside a request still carries a service token for it.
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            response = await _http.SendAsync(request, ct);
         }
         catch (HttpRequestException ex)
         {

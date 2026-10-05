@@ -16,6 +16,13 @@ public interface IEraEnvelopeRepository
     Task<IEnumerable<EraEnvelopeRecord>> GetByReversalRunIdAsync(string reversalRunId);
     Task<IEnumerable<EraEnvelopeRecord>> SearchAsync(string? paymentRunId, string? tradingPartnerId, string? reversalRunId = null);
     Task<EraEnvelopeRecord> CreateAsync(EraEnvelopeRecord record);
+
+    /// <summary>
+    /// Of <paramref name="claimIds"/>, those listed in an 835 envelope in the
+    /// current tenant: reversal envelopes (ReversalRunId set) when
+    /// <paramref name="reversal"/>, payment envelopes otherwise.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> GetClaimIdsWithEnvelopeAsync(IReadOnlyCollection<string> claimIds, bool reversal);
 }
 
 public class EraEnvelopeRepositoryMongo : IEraEnvelopeRepository
@@ -88,6 +95,33 @@ public class EraEnvelopeRepositoryMongo : IEraEnvelopeRepository
             .Find(Builders<EraEnvelopeRecord>.Filter.And(filters))
             .SortByDescending(x => x.GeneratedAt)
             .ToListAsync();
+    }
+
+    public async Task<IReadOnlyCollection<string>> GetClaimIdsWithEnvelopeAsync(IReadOnlyCollection<string> claimIds, bool reversal)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        if (claimIds.Count == 0)
+            return found;
+
+        var tenantId = GetTenantId();
+        var isReversal = Builders<EraEnvelopeRecord>.Filter.And(
+            Builders<EraEnvelopeRecord>.Filter.Ne(x => x.ReversalRunId, null),
+            Builders<EraEnvelopeRecord>.Filter.Ne(x => x.ReversalRunId, string.Empty));
+        foreach (var chunk in claimIds.Distinct(StringComparer.Ordinal).Chunk(500))
+        {
+            var wanted = new HashSet<string>(chunk, StringComparer.Ordinal);
+            var filter = Builders<EraEnvelopeRecord>.Filter.And(
+                Builders<EraEnvelopeRecord>.Filter.Eq(x => x.TenantId, tenantId),
+                Builders<EraEnvelopeRecord>.Filter.AnyIn(x => x.ClaimIds, chunk),
+                reversal ? isReversal : Builders<EraEnvelopeRecord>.Filter.Not(isReversal));
+            var records = await _collection.Find(filter)
+                .Project(Builders<EraEnvelopeRecord>.Projection.Include(x => x.ClaimIds).Include(x => x.ReversalRunId))
+                .As<EraEnvelopeRecord>()
+                .ToListAsync();
+            foreach (var record in records)
+                found.UnionWith(record.ClaimIds.Where(wanted.Contains));
+        }
+        return found;
     }
 
     public async Task<EraEnvelopeRecord> CreateAsync(EraEnvelopeRecord record)
@@ -181,6 +215,21 @@ public class InMemoryEraEnvelopeRepository : IEraEnvelopeRepository
                 .OrderByDescending(r => r.GeneratedAt)
                 .ToList();
             return Task.FromResult<IEnumerable<EraEnvelopeRecord>>(matches);
+        }
+    }
+
+    public Task<IReadOnlyCollection<string>> GetClaimIdsWithEnvelopeAsync(IReadOnlyCollection<string> claimIds, bool reversal)
+    {
+        var tenantId = GetTenantId();
+        var wanted = new HashSet<string>(claimIds, StringComparer.Ordinal);
+        lock (_lock)
+        {
+            IReadOnlyCollection<string> found = _records
+                .Where(r => r.TenantId == tenantId && !string.IsNullOrEmpty(r.ReversalRunId) == reversal)
+                .SelectMany(r => r.ClaimIds)
+                .Where(wanted.Contains)
+                .ToHashSet(StringComparer.Ordinal);
+            return Task.FromResult(found);
         }
     }
 

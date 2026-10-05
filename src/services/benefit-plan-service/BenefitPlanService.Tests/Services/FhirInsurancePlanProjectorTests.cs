@@ -13,7 +13,9 @@ namespace BenefitPlanService.Tests.Services;
 /// </summary>
 public sealed class FhirInsurancePlanProjectorTests
 {
-    private readonly FhirInsurancePlanProjector _projector = new();
+    // Fixtures use example.com document hosts; allow them explicitly.
+    private readonly FhirInsurancePlanProjector _projector =
+        new(new FhirEndpointProjector(new PlanDocumentLocationPolicy(new[] { "example.com" })));
 
     // ── status / version filtering ──────────────────────────────────────
 

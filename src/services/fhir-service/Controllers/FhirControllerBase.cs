@@ -12,8 +12,36 @@ namespace FhirService.Controllers;
 [ApiController]
 public abstract class FhirControllerBase : ControllerBase
 {
+    /// <summary>
+    /// The tenant from the caller's validated token. There is no default: a
+    /// request without one never reaches a controller (the shared
+    /// TenantMiddleware refuses it), and if one did, it fails here rather than
+    /// reading another tenant's data.
+    /// </summary>
     protected string TenantId
-        => HttpContext.GetTenantId() ?? "default";
+        => HttpContext.GetTenantId()
+           ?? throw new InvalidOperationException("No authenticated tenant for this request.");
+
+    /// <summary>
+    /// The acting identity from the validated token (CHO <c>sub</c>, or for a
+    /// SMART caller its subject or client id). Never from a header or body.
+    /// </summary>
+    protected string? AuthenticatedActorId
+    {
+        get
+        {
+            foreach (var claimType in new[]
+                     {
+                         "sub", System.Security.Claims.ClaimTypes.NameIdentifier, "client_id", "azp",
+                     })
+            {
+                var value = User?.FindFirst(claimType)?.Value;
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+            return null;
+        }
+    }
 
     protected string FhirBaseUrl
     {
@@ -36,6 +64,36 @@ public abstract class FhirControllerBase : ControllerBase
     /// </summary>
     protected string? SmartPatientId
         => HttpContext.Items["SmartPatientId"] as string;
+
+    /// <summary>
+    /// The one member this request may read, when it is confined to one:
+    /// the patient a patient-scoped SMART token is bound to, or the member a
+    /// provider/backend SMART token was just authorized for by
+    /// ProviderAccessAuthorizationFilter (attribution + active ProviderAccess
+    /// consent). Null for CHO callers, whose permission governs them, and for
+    /// requests the filter does not govern.
+    /// </summary>
+    protected string? AuthorizedMemberId
+        => SmartPatientId
+           ?? HttpContext.Items[FhirService.Services.ProviderAccess.ProviderAccessAuthorizationFilter.AuthorizedMemberItemKey] as string;
+
+    /// <summary>
+    /// True when a request confined to one member (<see cref="AuthorizedMemberId"/>)
+    /// asks for a resource that belongs to someone else (or to no identifiable
+    /// member). Reads answer 404 then, so the caller cannot even learn that
+    /// another member's resource exists. Always false for CHO callers.
+    /// </summary>
+    protected bool IsOutsidePatientContext(string? memberReference)
+    {
+        var bound = AuthorizedMemberId;
+        if (bound is null) return false;
+        if (string.IsNullOrEmpty(memberReference)) return true;
+
+        var member = memberReference.StartsWith("Patient/", StringComparison.OrdinalIgnoreCase)
+            ? memberReference["Patient/".Length..]
+            : memberReference;
+        return !string.Equals(member, bound, StringComparison.Ordinal);
+    }
 
     /// <summary>SMART scopes approved for this request.</summary>
     protected IReadOnlySet<string> SmartScopes
@@ -142,7 +200,8 @@ public abstract class FhirControllerBase : ControllerBase
         string resourceLabel,
         string path,
         ILogger logger,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, bool>? successBodyAllowed = null)
     {
         ArgumentNullException.ThrowIfNull(upstream);
         ArgumentNullException.ThrowIfNull(logger);
@@ -169,6 +228,19 @@ public abstract class FhirControllerBase : ControllerBase
                     "{Upstream} {Resource} upstream returned {Status} for {Path}",
                     upstreamLabel, resourceLabel, (int)response.StatusCode, loggablePath);
                 return FhirBadGateway($"{resourceLabel} upstream is unavailable.");
+            }
+
+            // A successful body the caller may not see (another member's
+            // resource for a patient-bound token) is answered as not found.
+            if (response.IsSuccessStatusCode && successBodyAllowed != null && !successBodyAllowed(body))
+            {
+                logger.LogWarning(
+                    "{Upstream} {Resource} response withheld: outside the caller's patient context for {Path}",
+                    upstreamLabel, resourceLabel, loggablePath);
+                return StatusCode(404, BuildOutcome(
+                    OperationOutcome.IssueSeverity.Error,
+                    OperationOutcome.IssueType.NotFound,
+                    $"{resourceLabel} not found"));
             }
 
             return new ContentResult

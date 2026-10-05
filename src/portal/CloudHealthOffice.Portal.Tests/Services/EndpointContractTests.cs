@@ -63,7 +63,7 @@ public class EndpointContractTests
             ["Services:AppealsService"] = "http://appeals-service/api",
             ["Services:CapitationService"] = "http://capitation-service/api",
             ["Services:PaymentService"] = "http://payment-service/api",
-            ["Services:BillingService"] = "http://billing-service/api",
+            ["Services:BillingService"] = "http://premium-billing-service/api",
         };
         foreach (var kv in overrides) defaults[kv.Key] = kv.Value;
         return new ConfigurationBuilder().AddInMemoryCollection(defaults).Build();
@@ -241,8 +241,7 @@ public class EndpointContractTests
         });
         var sut = new AuthorizationService(
             new HttpClient(handler) { BaseAddress = new Uri("http://authorization-service") },
-            config, Mock.Of<ILogger<AuthorizationService>>(),
-            Mock.Of<Microsoft.Identity.Web.ITokenAcquisition>());
+            config, Mock.Of<ILogger<AuthorizationService>>());
 
         await sut.GetAuthorizationsAsync();
 
@@ -260,8 +259,7 @@ public class EndpointContractTests
         });
         var sut = new AuthorizationService(
             new HttpClient(handler) { BaseAddress = new Uri("http://authorization-service") },
-            config, Mock.Of<ILogger<AuthorizationService>>(),
-            Mock.Of<Microsoft.Identity.Web.ITokenAcquisition>());
+            config, Mock.Of<ILogger<AuthorizationService>>());
 
         await sut.GetAuthorizationsAsync(memberId: "MBR-007");
 
@@ -279,8 +277,7 @@ public class EndpointContractTests
         });
         var sut = new AuthorizationService(
             new HttpClient(handler) { BaseAddress = new Uri("http://authorization-service") },
-            config, Mock.Of<ILogger<AuthorizationService>>(),
-            Mock.Of<Microsoft.Identity.Web.ITokenAcquisition>());
+            config, Mock.Of<ILogger<AuthorizationService>>());
 
         await sut.GetAuthorizationByIdAsync("AUTH-001");
 

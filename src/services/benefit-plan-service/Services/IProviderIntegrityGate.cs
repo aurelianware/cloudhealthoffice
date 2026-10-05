@@ -25,9 +25,11 @@ public interface IProviderIntegrityGate
     /// </summary>
     /// <param name="npi">Provider NPI.</param>
     /// <param name="tenantId">
-    /// Tenant id to forward to provider-service and
-    /// provider-verification-service. When null, no tenant header is
-    /// forwarded.
+    /// The tenant whose claim or plan is being evaluated (the authenticated
+    /// tenant, or the tenant on the record a background job is processing).
+    /// Required: it is sent as <c>X-Tenant-ID</c> on every call, which is how
+    /// the outbound handler mints a service token when there is no caller to
+    /// forward. Without it provider-verification-service answers 401.
     /// </param>
     /// <param name="forceRefresh">
     /// When <c>true</c> the cached-projection short-circuit is bypassed
@@ -38,7 +40,7 @@ public interface IProviderIntegrityGate
     /// <param name="ct">Cancellation token.</param>
     Task<ProviderIntegrityResult> CheckAsync(
         string npi,
-        string? tenantId = null,
+        string tenantId,
         bool forceRefresh = false,
         CancellationToken ct = default);
 }

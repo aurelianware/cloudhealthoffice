@@ -1,7 +1,5 @@
 using Microsoft.Azure.Cosmos;
 using System.Text.Json;
-using Microsoft.Identity.Web;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
 using AttachmentService;
 using AttachmentService.Repositories;
@@ -12,39 +10,20 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-// Azure AD Authentication (Multi-tenant)
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApi(options =>
-    {
-        builder.Configuration.Bind("AzureAd", options);
-        options.TokenValidationParameters.ValidateIssuer = true;
-        options.TokenValidationParameters.ValidateAudience = true;
-        options.TokenValidationParameters.ValidateLifetime = true;
-    },
-    options => { builder.Configuration.Bind("AzureAd", options); });
-
-// Authorization policies (scope-based for single app registration)
-builder.Services.AddAuthorization(options =>
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come
+// from that token. Attachments are PHI, so nothing here is anonymous.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
-    options.AddPolicy("RequireAuthenticatedUser", policy =>
-        policy.RequireAuthenticatedUser());
-    
-    // Scope-based policies
-    options.AddPolicy("RequireAttachmentUpload", policy =>
-        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Attachments.Upload", "Attachments.ReadWrite"));
-    
-    options.AddPolicy("RequireAttachmentDownload", policy =>
-        policy.RequireClaim("http://schemas.microsoft.com/identity/claims/scope", "Attachments.Download", "Attachments.ReadWrite"));
-    
-    // Role-based policies
-    options.AddPolicy("AttachmentManager", policy =>
-        policy.RequireRole("AttachmentManager", "Administrator"));
+    auth.DefaultReadPermission = "attachments:read";
+    auth.DefaultWritePermission = "attachments:write";
 });
 
 // Add services to the container.
@@ -120,13 +99,21 @@ builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
 if (databaseProvider == ChoDatabaseProvider.CosmosDb)
 {
     builder.Services.AddScoped<IAttachmentRepository, AttachmentRepository>();
-    builder.Services.AddScoped<ITradingPartnerLookup, CosmosTradingPartnerLookup>();
 }
 else
 {
     builder.Services.AddScoped<IAttachmentRepository, AttachmentRepositoryMongo>();
-    builder.Services.AddScoped<ITradingPartnerLookup, MongoTradingPartnerLookup>();
 }
+
+// Trading partners are trading-partner-service's data: read through its API,
+// never from its TradingPartners collection (see HttpTradingPartnerLookup).
+builder.Services.AddHttpClient(HttpTradingPartnerLookup.ClientName, client =>
+{
+    client.BaseAddress = new Uri((builder.Configuration["Services:TradingPartnerService"]
+        ?? HttpTradingPartnerLookup.DefaultBaseUrl).TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddScoped<ITradingPartnerLookup, HttpTradingPartnerLookup>();
 builder.Services.AddSingleton<AcknowledgmentGeneratorService>();
 builder.Services.AddScoped<IAcknowledgmentService, AcknowledgmentService>();
 
@@ -155,9 +142,8 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Authentication and authorization
-app.UseAuthentication();
-app.UseAuthorization();
+// Token authentication, tenant from the token, then permission policies.
+app.UseChoAuthentication();
 
 app.MapControllers();
 

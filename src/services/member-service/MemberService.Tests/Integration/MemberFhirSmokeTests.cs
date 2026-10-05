@@ -97,7 +97,7 @@ public class MemberFhirSmokeTests : IClassFixture<MemberFhirSmokeTests.Factory>
 
     private HttpClient NewClient()
     {
-        var client = _factory.CreateClient();
+        var client = _factory.CreateDefaultClient(new CloudHealthOffice.Infrastructure.Security.ChoDevelopmentTokenHandler());
         client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-int");
         return client;
     }

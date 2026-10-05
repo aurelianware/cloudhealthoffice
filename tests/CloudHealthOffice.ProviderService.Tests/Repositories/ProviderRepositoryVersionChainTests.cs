@@ -1,4 +1,4 @@
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
@@ -12,20 +12,21 @@ namespace CloudHealthOffice.ProviderService.Tests.Repositories;
 /// rejection of writes against non-Draft rows, newest-first listing,
 /// and the activate / supersede atomic transition.
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class ProviderRepositoryVersionChainTests : IAsyncLifetime
 {
     private const string Tenant = "tenant-a";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private ProviderRepositoryMongo _repo = null!;
     private DefaultHttpContext _ctx = null!;
 
+    public ProviderRepositoryVersionChainTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"provider_chain_test_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("provider_chain_test");
         _ctx = new DefaultHttpContext();
         _ctx.Items["TenantId"] = Tenant;
         var accessor = new HttpContextAccessor { HttpContext = _ctx };
@@ -33,12 +34,7 @@ public class ProviderRepositoryVersionChainTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* see MpipRateServiceTests note */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     private static Provider Sample(string id) => new()
     {
@@ -78,6 +74,28 @@ public class ProviderRepositoryVersionChainTests : IAsyncLifetime
         hydrated.VersionId.Should().Be("legacy-1");
         hydrated.VersionNumber.Should().Be(1);
         hydrated.ProviderId.Should().Be("legacy-1");
+    }
+
+    [Fact]
+    public async Task CreateDraftAsync_writes_the_request_tenant_not_a_body_tenant_and_refuses_without_one()
+    {
+        // The request tenant comes from the token; a TenantId on the incoming
+        // Provider must never pick the tenant the row is written to.
+        var draft = Sample("p-forged");
+        draft.TenantId = "tenant-b";
+        draft.VersionState = ProviderVersionState.Draft;
+
+        await _repo.CreateDraftAsync(draft);
+
+        var stored = await _database.GetCollection<Provider>("Providers")
+            .Find(Builders<Provider>.Filter.Eq(p => p.Id, "p-forged")).SingleAsync();
+        stored.TenantId.Should().Be(Tenant);
+
+        // With no request tenant there is nothing to scope to: an error, not
+        // an empty-tenant query.
+        _ctx.Items.Remove("TenantId");
+        var read = () => _repo.GetByIdAsync("p-forged");
+        await read.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]

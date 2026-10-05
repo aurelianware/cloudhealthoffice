@@ -1,0 +1,101 @@
+@page "/invite/{Code}"
+@using Microsoft.AspNetCore.Authorization
+@using CloudHealthOffice.Portal.Services
+@attribute [Authorize]
+@inject IChoTokenProvider TokenProvider
+@inject NavigationManager Navigation
+@inject IConfiguration Configuration
+
+@*
+    Invitation redemption. [Authorize] sends an anonymous visitor through Entra
+    sign-in, and the sign-in returns to this same URL, so the code survives the
+    redirect. The code is never logged here: it is only passed to the token
+    service in a request body. Request-URL logging is held back for this path
+    (Infrastructure/InvitationPathLogging.cs).
+*@
+
+<PageTitle>Accept invitation - Cloud Health Office</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-6" Elevation="3">
+        <MudText Typo="Typo.h5" Class="mb-4">Accept invitation</MudText>
+
+        @if (_result == null)
+        {
+            <div data-testid="invite-working">
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
+                <MudText Typo="Typo.body1">Accepting your invitation…</MudText>
+            </div>
+        }
+        else if (_result.Succeeded)
+        {
+            <MudAlert Severity="Severity.Success" data-testid="invite-success">
+                You have joined @(_result.Token!.TenantName ?? "the organization"). Taking you there…
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error" data-testid="invite-error" data-status="@_result.Status">
+                @Message
+            </MudAlert>
+
+            @if (_result.Status == ChoInvitationStatus.EmailMismatch)
+            {
+                <MudText Typo="Typo.body2" Class="mt-4">
+                    After you sign out, open the invitation link again and sign in as
+                    <strong>@(_result.InvitedEmail ?? "the invited address")</strong>.
+                </MudText>
+                <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary"
+                           Href="@SignOutPath" data-testid="invite-switch-account">
+                    Sign out to switch account
+                </MudButton>
+            }
+            else if (_result.Status == ChoInvitationStatus.AlreadyRedeemed)
+            {
+                <MudButton Class="mt-3" Variant="Variant.Outlined" Color="Color.Primary" Href="/">Go to the portal</MudButton>
+            }
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [Parameter] public string Code { get; set; } = string.Empty;
+
+    private ChoInvitationResult? _result;
+    private bool _started;
+
+    private bool IsLocalDemoAuth()
+        => string.Equals(Configuration["Authentication:Mode"], "LocalDemo", StringComparison.OrdinalIgnoreCase);
+
+    private string SignOutPath => IsLocalDemoAuth() ? "/local-demo/sign-out" : "/MicrosoftIdentity/Account/SignOut";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_started)
+            return;
+        _started = true;
+
+        _result = await TokenProvider.RedeemInvitationAsync(Code);
+
+        if (_result.Succeeded)
+        {
+            // Reload, so the new circuit starts in the invited tenant.
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+    }
+
+    private string Message => _result!.Status switch
+    {
+        ChoInvitationStatus.Expired => "This invitation has expired. Ask your administrator to resend it.",
+        ChoInvitationStatus.Revoked => "This invitation was withdrawn. Contact your administrator if you still need access.",
+        ChoInvitationStatus.AlreadyRedeemed => "This invitation has already been used. If you accepted it, sign in to the portal as usual.",
+        ChoInvitationStatus.EmailMismatch => $"This invitation was sent to {_result.InvitedEmail ?? "a different address"}, but you are signed in with a different account.",
+        ChoInvitationStatus.IdentityInUse => "Your account is already linked to another user in this organization. Ask your administrator for help.",
+        ChoInvitationStatus.NotFound => "This invitation link is not valid. Check that you used the whole link, or ask your administrator for a new one.",
+        ChoInvitationStatus.NoAccess => "Your invitation was accepted, but the organization is not available right now. Contact your administrator.",
+        ChoInvitationStatus.RateLimited => "Too many attempts. Wait a minute, then open the link again.",
+        ChoInvitationStatus.ConsentRequired => "Your sign-in needs to be refreshed. Follow the sign-in prompt, then open the link again.",
+        ChoInvitationStatus.InvalidToken or ChoInvitationStatus.NotAuthenticated => "Your sign-in could not be verified. Sign out, sign in again and open the link again.",
+        _ => "The invitation could not be accepted right now. Try again in a few minutes.",
+    };
+}

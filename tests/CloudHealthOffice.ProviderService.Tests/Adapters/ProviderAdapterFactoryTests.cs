@@ -115,9 +115,135 @@ public class ProviderAdapterFactoryTests
             ItExpr.IsAny<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Cache_names_the_tenant_in_X_Tenant_ID_for_the_outbound_token_handler()
+    {
+        var (factory, handler) = BuildFactory(stubResponse: null);
+
+        await factory.GetAdapterAsync("tenant-header");
+
+        handler.Protected().Verify(
+            "SendAsync",
+            Times.Once(),
+            ItExpr.Is<HttpRequestMessage>(r =>
+                r.Headers.Contains("X-Tenant-ID")
+                && r.Headers.GetValues("X-Tenant-ID").Single() == "tenant-header"),
+            ItExpr.IsAny<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task Tenant_service_refusal_fails_loudly_and_is_not_cached_as_the_default_platform(HttpStatusCode refusal)
+    {
+        // tenant-service rejects provider-service's credentials. That is not
+        // "tenant has no config": a QNXT tenant must not be silently routed to
+        // the CHO directory, and the refusal must not stick for the cache TTL.
+        var responses = new Queue<HttpResponseMessage>(new[]
+        {
+            new HttpResponseMessage(refusal),
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"configuration":{"providerPlatform":{"platform":"qnxt"}}}""",
+                    Encoding.UTF8, "application/json"),
+            },
+        });
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() => responses.Dequeue());
+        var logger = new TestHelpers.ListLogger<ProviderTenantConfigCache>();
+        var factory = BuildFactory(handler, logger);
+
+        var first = () => factory.GetAdapterAsync("tenant-refused");
+
+        await first.Should().ThrowAsync<ProviderTenantConfigUnavailableException>();
+        logger.Entries.Should().Contain(e => e.Level == Microsoft.Extensions.Logging.LogLevel.Error);
+
+        // Once tenant-service accepts the call, the tenant's real platform is used.
+        var adapter = await factory.GetAdapterAsync("tenant-refused");
+        adapter.Platform.Should().Be("qnxt");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task Tenant_service_without_an_answer_uses_cho_for_that_call_only(HttpStatusCode status)
+    {
+        // Shared rule (TenantPlatformLookup): 404, 5xx or an unreachable
+        // tenant-service is not an answer. "cho" serves this call, but the guess
+        // is not cached, so a QNXT tenant is routed correctly as soon as
+        // tenant-service answers instead of after the five-minute TTL.
+        var responses = new Queue<HttpResponseMessage>(new[]
+        {
+            new HttpResponseMessage(status),
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"configuration":{"providerPlatform":{"platform":"qnxt"}}}""",
+                    Encoding.UTF8, "application/json"),
+            },
+        });
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() => responses.Dequeue());
+        var factory = BuildFactory(handler, NullLogger<ProviderTenantConfigCache>.Instance);
+
+        (await factory.GetAdapterAsync("tenant-flaky")).Platform.Should().Be("cho");
+        (await factory.GetAdapterAsync("tenant-flaky")).Platform.Should().Be("qnxt");
+    }
+
+    [Fact]
+    public async Task Tenant_service_unreachable_is_not_cached()
+    {
+        var calls = 0;
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .Returns(() => ++calls == 1
+                ? throw new HttpRequestException("connection refused")
+                : Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"configuration":{"providerPlatform":{"platform":"facets"}}}""",
+                        Encoding.UTF8, "application/json"),
+                }));
+        var factory = BuildFactory(handler, NullLogger<ProviderTenantConfigCache>.Instance);
+
+        (await factory.GetAdapterAsync("tenant-down")).Platform.Should().Be("cho");
+        (await factory.GetAdapterAsync("tenant-down")).Platform.Should().Be("facets");
+    }
+
     // -----------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------
+
+    private static ProviderAdapterFactory BuildFactory(
+        Mock<HttpMessageHandler> handler,
+        Microsoft.Extensions.Logging.ILogger<ProviderTenantConfigCache> logger)
+    {
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory.Setup(f => f.CreateClient(ProviderTenantConfigCache.HttpClientName))
+            .Returns(() => new HttpClient(handler.Object));
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Services:TenantService"] = "http://tenant-service.test/api/v1",
+            })
+            .Build();
+        var cache = new ProviderTenantConfigCache(httpClientFactory.Object, configuration, logger);
+        var adapters = new IProviderAdapter[]
+        {
+            new ChoProviderAdapter(new Fakes.InMemoryProviderRepository(), NullLogger<ChoProviderAdapter>.Instance),
+            new QnxtProviderAdapter(),
+            new FacetsProviderAdapter(),
+            new HealthEdgeProviderAdapter(),
+        };
+        return new ProviderAdapterFactory(adapters, cache, NullLogger<ProviderAdapterFactory>.Instance);
+    }
 
     private static (ProviderAdapterFactory Factory, Mock<HttpMessageHandler> Handler) BuildFactory(
         string? stubResponse = null,

@@ -188,6 +188,9 @@ public class MongoConceptMapRepository : IConceptMapRepository
             .Set(e => e.MapVersionId, entry.MapVersionId)
             .Set(e => e.IsOverride, true)
             .Set(e => e.MapGroupId, entry.MapGroupId)
+            // Without an explicit _id the server assigns an ObjectId, which cannot be read
+            // back into the string Id: every later lookup that matched the override failed.
+            .SetOnInsert(e => e.Id, entry.Id)
             .SetOnInsert(e => e.SourceSystem, entry.SourceSystem)
             .SetOnInsert(e => e.SourceCode, entry.SourceCode)
             .SetOnInsert(e => e.TargetSystem, entry.TargetSystem)
@@ -200,10 +203,14 @@ public class MongoConceptMapRepository : IConceptMapRepository
     public async Task<MapVersion?> GetActiveMapVersionAsync(
         string sourceSystem, string targetSystem, CancellationToken ct = default)
     {
+        // Global versions only: a tenant's override version must never be reported to
+        // another tenant as "the" map behind a translation, nor make syndication think a
+        // global edition is already loaded. (Eq null also matches versions with no field.)
         return await _versions.Find(v =>
             v.SourceSystem == sourceSystem &&
             v.TargetSystem == targetSystem &&
-            v.IsActive)
+            v.IsActive &&
+            v.TenantId == null)
             .SortByDescending(v => v.ImportedAt)
             .FirstOrDefaultAsync(ct);
     }
@@ -228,6 +235,18 @@ public class MongoConceptMapRepository : IConceptMapRepository
     public async Task<List<MapVersion>> GetAllMapVersionsAsync(CancellationToken ct = default)
     {
         return await _versions.Find(_ => true)
+            .SortByDescending(v => v.ImportedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<MapVersion>> GetMapVersionsVisibleToAsync(string? tenantId, CancellationToken ct = default)
+    {
+        var global = Builders<MapVersion>.Filter.Eq(v => v.TenantId, null);
+        var filter = string.IsNullOrEmpty(tenantId)
+            ? global
+            : Builders<MapVersion>.Filter.Or(global, Builders<MapVersion>.Filter.Eq(v => v.TenantId, tenantId));
+
+        return await _versions.Find(filter)
             .SortByDescending(v => v.ImportedAt)
             .ToListAsync(ct);
     }

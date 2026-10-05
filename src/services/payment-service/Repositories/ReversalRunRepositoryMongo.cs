@@ -73,6 +73,52 @@ public class ReversalRunRepositoryMongo : IReversalRunRepository
         return reversalRun;
     }
 
+    public async Task<bool> TryStartAsync(string id, string executedBy, DateTime startedAt)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<ReversalRun>.Filter.And(
+            Builders<ReversalRun>.Filter.Eq(x => x.Id, id),
+            Builders<ReversalRun>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<ReversalRun>.Filter.Eq(x => x.Status, ReversalRunStatus.Pending));
+        var update = Builders<ReversalRun>.Update
+            .Set(x => x.Status, ReversalRunStatus.Running)
+            .Set(x => x.ExecutedBy, executedBy)
+            .Set(x => x.ExecutionStartedAt, startedAt);
+        var result = await _collection.UpdateOneAsync(filter, update);
+        return result.ModifiedCount == 1;
+    }
+
+    public async Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
+    {
+        var tenantId = GetTenantId();
+        var filter = Builders<ReversalRun>.Filter.And(
+            Builders<ReversalRun>.Filter.Eq(x => x.Id, id),
+            Builders<ReversalRun>.Filter.Eq(x => x.TenantId, tenantId));
+
+        var touched = outcomes.TouchedClaimIds;
+        if (touched.Count > 0)
+        {
+            var pulled = await _collection.UpdateOneAsync(filter, Builders<ReversalRun>.Update.PullFilter(
+                x => x.ReservationsNeedingAttention,
+                Builders<ReservationAttention>.Filter.In(a => a.ClaimId, touched)));
+            if (pulled.MatchedCount == 0)
+                return false;
+        }
+
+        var updates = new List<UpdateDefinition<ReversalRun>>();
+        if (outcomes.Released.Count > 0)
+            updates.Add(Builders<ReversalRun>.Update.AddToSetEach(x => x.ReleasedReservationClaimIds, outcomes.Released));
+        if (outcomes.Attention.Count > 0)
+            updates.Add(Builders<ReversalRun>.Update.PushEach(x => x.ReservationsNeedingAttention, outcomes.Attention));
+        if (outcomes.Warnings.Count > 0)
+            updates.Add(Builders<ReversalRun>.Update.PushEach(x => x.Warnings, outcomes.Warnings));
+        if (updates.Count == 0)
+            return true;
+
+        var result = await _collection.UpdateOneAsync(filter, Builders<ReversalRun>.Update.Combine(updates));
+        return result.MatchedCount == 1;
+    }
+
     public async Task<ReversalRun> UpdateAsync(ReversalRun reversalRun)
     {
         var filter = Builders<ReversalRun>.Filter.And(

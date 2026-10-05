@@ -1,24 +1,58 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PaymentService.Models;
 using PaymentService.Services;
 
 namespace PaymentService.Controllers;
 
+/// <summary>
+/// Payment runs. Reads need payments:read; creating and cancelling a run
+/// (preparation) need payments:run (Program.cs defaults). Executing a run
+/// releases money (check numbers, Posted payments, 835 envelopes, claims
+/// finalized as paid), so it needs payments:approve from a user who did not
+/// create the run (maker-checker, RunSeparationOfDuties); a service token is
+/// refused. The tenant and the acting user come from the CHO token. During
+/// execution, claims-service and trading-partner calls carry payment-service's
+/// own service token (RunExecutionGrant), opened only after that check.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
 public class PaymentRunsController : ControllerBase
 {
     private readonly IPaymentRunService _paymentRunService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<PaymentRunsController> _logger;
 
     public PaymentRunsController(
         IPaymentRunService paymentRunService,
+        ICurrentActor actor,
         ILogger<PaymentRunsController> logger)
     {
         _paymentRunService = paymentRunService;
+        _actor = actor;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Release a claim's payment reservation that this run holds but did not pay
+    /// (the run failed, was cancelled, or is stuck), so a later run may pay the
+    /// claim. Needs payments:approve from a user who did not execute the run (a
+    /// service token is refused) and a reason; audited and listed on the run.
+    /// 409 when the claim has a Posted or PaidPendingFinalize payment (not
+    /// unpaid: retry its finalize instead) or the run is still executing.
+    /// </summary>
+    [HttpPost("{id}/reservations/{claimId}/release")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(ReservationReleaseResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<ReservationReleaseResult>> ReleaseReservation(
+        string id, string claimId, [FromBody] ReleaseReservationRequest? request,
+        [FromServices] IReservationReconciliationService reconciliation)
+        => ReservationRelease.HandleAsync(this, reconciliation, Repositories.ClaimReservationKind.Payment, id, claimId, request);
 
     /// <summary>
     /// Create a new payment run (does not execute)
@@ -31,9 +65,10 @@ public class PaymentRunsController : ControllerBase
         _logger.LogInformation("Creating payment run with criteria: LOB={LOB}, Provider={Provider}",
             request.Criteria.LineOfBusiness, SanitizeForLog(request.Criteria.ProviderNPI));
 
+        // The creator is the token subject; request.CreatedBy is never read.
         var paymentRun = await _paymentRunService.CreatePaymentRunAsync(
-            request.Criteria, 
-            request.CreatedBy);
+            request.Criteria,
+            _actor.UserId);
 
         return CreatedAtAction(
             nameof(GetPaymentRunById),
@@ -42,30 +77,34 @@ public class PaymentRunsController : ControllerBase
     }
 
     /// <summary>
-    /// Create and immediately execute a payment run
+    /// Create and immediately execute a payment run. Always refused (403): the
+    /// creator would be the executor, and releasing money needs a second user.
+    /// Create the run with POST /api/paymentruns; a different user with
+    /// payments:approve executes it with POST /api/paymentruns/{id}/execute.
+    /// Nothing is created.
     /// </summary>
     [HttpPost("execute")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(PaymentRun), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PaymentRun>> CreateAndExecutePaymentRun([FromBody] CreatePaymentRunRequest request)
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<PaymentRun> CreateAndExecutePaymentRun([FromBody] CreatePaymentRunRequest request)
     {
-        _logger.LogInformation("Creating and executing payment run");
-
-        var paymentRun = await _paymentRunService.CreatePaymentRunAsync(
-            request.Criteria, 
-            request.CreatedBy);
-
-        var executed = await _paymentRunService.ExecutePaymentRunAsync(paymentRun.Id);
-
-        return Ok(executed);
+        _logger.LogWarning("Refused create-and-execute payment run by {User}: the creator cannot execute",
+            SanitizeForLog(_actor.UserId));
+        return SeparationOfDuties(new SeparationOfDutiesException(
+            "Separation of duties: a payment run cannot be created and executed by the same caller. " +
+            "Create it with POST /api/paymentruns; a different user with payments:approve executes it."));
     }
 
     /// <summary>
     /// Execute an existing payment run
     /// </summary>
     [HttpPost("{id}/execute")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(PaymentRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaymentRun>> ExecutePaymentRun(string id)
     {
@@ -75,6 +114,45 @@ public class PaymentRunsController : ControllerBase
         {
             var paymentRun = await _paymentRunService.ExecutePaymentRunAsync(id);
             return Ok(paymentRun);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDuties(ex);
+        }
+        catch (RunConflictException ex)
+        {
+            return Problem(title: "Run already started", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Retry the claims-service finalize for the claims an executed run paid but
+    /// claims-service did not finalize (<c>PendingFinalizeClaimIds</c>, payments
+    /// <c>PaidPendingFinalize</c>). Creates no payment and reuses each payment's
+    /// check number, which claims-service treats as idempotent. Needs
+    /// payments:run: the money was already released by the run's approver, who
+    /// stays the recorded actor; the calls carry payment-service's service token.
+    /// </summary>
+    [HttpPost("{id}/finalize")]
+    [RequirePermission("payments:run")]
+    [ProducesResponseType(typeof(PaymentRun), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PaymentRun>> RetryFinalize(string id)
+    {
+        _logger.LogInformation("Retrying finalize for payment run {PaymentRunId} by {User}",
+            SanitizeForLog(id), SanitizeForLog(_actor.UserId));
+        try
+        {
+            return Ok(await _paymentRunService.RetryFinalizeAsync(id));
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(ex.Message);
         }
         catch (InvalidOperationException ex)
         {
@@ -134,6 +212,9 @@ public class PaymentRunsController : ControllerBase
         }
     }
 
+    private ObjectResult SeparationOfDuties(SeparationOfDutiesException ex)
+        => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -142,9 +223,40 @@ public class PaymentRunsController : ControllerBase
     }
 }
 
+/// <summary>The manual release, shared by payment runs and reversal runs.</summary>
+internal static class ReservationRelease
+{
+    public static async Task<ActionResult<ReservationReleaseResult>> HandleAsync(
+        ControllerBase controller, IReservationReconciliationService reconciliation,
+        Repositories.ClaimReservationKind kind, string runId, string claimId, ReleaseReservationRequest? request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Reason))
+            return controller.Problem(title: "Reason required",
+                detail: "A reason is required to release a claim reservation.",
+                statusCode: StatusCodes.Status400BadRequest);
+        try
+        {
+            return controller.Ok(await reconciliation.ReleaseManuallyAsync(kind, runId, claimId, request.Reason));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return controller.Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (ReservationNotFoundException ex)
+        {
+            return controller.Problem(title: "Not found", detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (ReservationConflictException ex)
+        {
+            return controller.Problem(title: "Reservation not released", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+    }
+}
+
 public class CreatePaymentRunRequest
 {
     public PaymentRunCriteria Criteria { get; set; } = new();
+    /// <summary>Ignored: the creator is the token subject.</summary>
     public string? CreatedBy { get; set; }
     public string? Description { get; set; }
 }

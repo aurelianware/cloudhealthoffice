@@ -30,7 +30,9 @@ metadata:
     workflows.argoproj.io/version: ">= 3.0"
 spec:
   entrypoint: ingest-278
-  serviceAccountName: argo-workflow-sa
+  # CHO workload identity: token-service registration wf-278-ingest
+  # (see cho-workload-identity.yaml and docs/security/argo-service-tokens.md).
+  serviceAccountName: wf-278-ingest
   
   # Workflow-level TTL
   ttlStrategy:
@@ -62,8 +64,15 @@ spec:
         value: "hipaa-attachments"
       - name: kafka-topic
         value: "edi-278"
+      # In-cluster CHO endpoint that records the 278 outcome (called with a CHO
+      # workload token for tenant-id). No CHO service accepts this payload today,
+      # so it is empty by default and the call is skipped. Only in-cluster CHO
+      # service URLs are accepted; the token is never sent elsewhere.
       - name: claims-backend-api-endpoint
-        value: "https://backend.api.local/claims/process-278"
+        value: ""
+      # CHO tenant the transactions belong to.
+      - name: tenant-id
+        value: ""
   
   volumes:
     - name: work-volume
@@ -75,10 +84,19 @@ spec:
     - name: kafka-credentials
       secret:
         secretName: kafka-sasl-secret
-    - name: backend-credentials
-      secret:
-        secretName: claims-backend-api-secret
+    - name: cho-workload-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: cho-token-service
+              expirationSeconds: 600
+              path: token
+    - name: cho-workload-lib
+      configMap:
+        name: cho-workload-lib
   
+  onExit: exit-handler
+
   templates:
     # Main orchestration template
     - name: ingest-278
@@ -128,6 +146,8 @@ spec:
               parameters:
                 - name: api-endpoint
                   value: "{{workflow.parameters.claims-backend-api-endpoint}}"
+                - name: tenant-id
+                  value: "{{workflow.parameters.tenant-id}}"
           
           # Step 5: Store to Data Lake
           - name: store-data-lake
@@ -286,6 +306,7 @@ spec:
       inputs:
         parameters:
           - name: api-endpoint
+          - name: tenant-id
         artifacts:
           - name: auth-data
             path: /data/input/auth-data.json
@@ -302,6 +323,11 @@ spec:
           factor: 2
           maxDuration: "2m"
       container:
+        env:
+          - name: PARAM_API_ENDPOINT
+            value: "{{inputs.parameters.api-endpoint}}"
+          - name: PARAM_TENANT_ID
+            value: "{{inputs.parameters.tenant-id}}"
         image: curlimages/curl:latest
         command: ["/bin/sh", "-c"]
         args:
@@ -327,12 +353,24 @@ spec:
             EOF
             )
             
-            # Call claims backend API
-            RESPONSE=$(curl -s -w "\n%{http_code}" \
-              -X POST "{{inputs.parameters.api-endpoint}}" \
+            # Call the CHO endpoint with a CHO workload token (wf-278-ingest) for the tenant.
+            API_ENDPOINT="${PARAM_API_ENDPOINT}"
+            TENANT_ID="${PARAM_TENANT_ID}"
+            mkdir -p /data/output
+            if [ -z "$API_ENDPOINT" ]; then
+              echo "No CHO 278 endpoint configured; skipping the backend call"
+              echo '{"httpCode": 0, "skipped": true}' > /data/output/api-response.json
+              exit 0
+            fi
+            if [ -z "$TENANT_ID" ]; then
+              echo "tenant-id is required to call $API_ENDPOINT"
+              exit 1
+            fi
+            . /opt/cho/cho-workload.sh
+            cho_token "$TENANT_ID" || exit 1
+            RESPONSE=$(cho_curl "$TENANT_ID" POST "$API_ENDPOINT" -w "\n%{http_code}" \
               -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $CLAIMS_BACKEND_API_TOKEN" \
-              -d "$REQUEST_BODY")
+              -d "$REQUEST_BODY") || exit 1
             
             HTTP_CODE=$(echo "$RESPONSE" | tail -1)
             BODY=$(echo "$RESPONSE" | head -n -1)
@@ -347,15 +385,15 @@ spec:
             fi
             
             echo "claims backend API call successful"
-        env:
-          - name: CLAIMS_BACKEND_API_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: claims-backend-api-secret
-                key: token
         volumeMounts:
           - name: work-volume
             mountPath: /data
+          - name: cho-workload-token
+            mountPath: /var/run/secrets/cho
+            readOnly: true
+          - name: cho-workload-lib
+            mountPath: /opt/cho
+            readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -382,12 +420,16 @@ spec:
               if [ -f "$file" ]; then
                 filename=$(basename "$file")
                 timestamp=$(date +%Y%m%d%H%M%S)
-                s3_path="s3://{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-prefix}}/${filename%.edi}-${timestamp}.edi"
+                s3_path="s3://${PARAM_S3_BUCKET}/${PARAM_S3_PREFIX}/${filename%.edi}-${timestamp}.edi"
                 aws s3 cp "$file" "$s3_path" --sse AES256
                 echo "Uploaded: $s3_path"
               fi
             done
         env:
+          - name: PARAM_S3_BUCKET
+            value: "{{inputs.parameters.s3-bucket}}"
+          - name: PARAM_S3_PREFIX
+            value: "{{inputs.parameters.s3-prefix}}"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -503,7 +545,7 @@ spec:
             with open('/data/manifest.json') as f:
                 manifest = json.load(f)
             
-            host = "{{inputs.parameters.sftp-host}}"
+            host = os.environ["PARAM_SFTP_HOST"]
             username = os.environ.get('SFTP_USERNAME')
             password = os.environ.get('SFTP_PASSWORD')
             
@@ -522,6 +564,8 @@ spec:
                 sftp.close()
                 transport.close()
         env:
+          - name: PARAM_SFTP_HOST
+            value: "{{inputs.parameters.sftp-host}}"
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:
@@ -571,25 +615,24 @@ spec:
             memory: "128Mi"
             cpu: "100m"
 
-  onExit: exit-handler
 
-  - name: exit-handler
-    steps:
-      - - name: log-completion
-          template: log-template
-          when: "{{workflow.status}} == Succeeded"
-      - - name: handle-failure
-          template: error-handler
-          when: "{{workflow.status}} != Succeeded"
-          arguments:
-            parameters:
-              - name: error-message
-                value: "Workflow failed"
-              - name: failed-step
-                value: "{{workflow.failures}}"
+    - name: exit-handler
+      steps:
+        - - name: log-completion
+            template: log-template
+            when: "{{workflow.status}} == Succeeded"
+        - - name: handle-failure
+            template: error-handler
+            when: "{{workflow.status}} != Succeeded"
+            arguments:
+              parameters:
+                - name: error-message
+                  value: "Workflow failed"
+                - name: failed-step
+                  value: "{{workflow.failures}}"
 
-  - name: log-template
-    container:
-      image: busybox
-      command: ["echo"]
-      args: ["X12 278 ingest workflow completed successfully"]
+    - name: log-template
+      container:
+        image: busybox
+        command: ["echo"]
+        args: ["X12 278 ingest workflow completed successfully"]

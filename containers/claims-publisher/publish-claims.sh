@@ -10,6 +10,16 @@ KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-"cloudhealthoffice-kafka-boot
 KAFKA_TOPIC=${KAFKA_TOPIC:-"claims-adjudication"}
 TENANT_ID=${TENANT_ID:-"default-payer"}
 
+# CHO workload token (Authorization + X-Tenant-ID), from the cho-workload-lib
+# ConfigMap the workflow mounts. See docs/security/argo-service-tokens.md.
+CHO_WORKLOAD_LIB=${CHO_WORKLOAD_LIB:-"/opt/cho/cho-workload.sh"}
+if [ ! -r "$CHO_WORKLOAD_LIB" ]; then
+    echo "CHO workload helper not mounted at $CHO_WORKLOAD_LIB; claims-service requires a CHO token." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+. "$CHO_WORKLOAD_LIB"
+
 echo "Starting claims publisher..."
 echo "Claims directory: $CLAIMS_DIR"
 echo "Claims Service URL: $CLAIMS_SERVICE_URL"
@@ -42,10 +52,15 @@ for claim_file in "$CLAIMS_DIR"/*.json; do
     filename=$(basename "$claim_file")
     echo "Processing: $filename"
     
+    # Obtain or refresh the token in this shell, so the $(...) below reuses it.
+    if ! cho_token "$TENANT_ID"; then
+        echo "  ✗ No CHO token for tenant $TENANT_ID; stopping." >&2
+        exit 1
+    fi
+
     # POST to Claims Service
-    CLAIM_ID=$(curl -s -X POST "$CLAIMS_SERVICE_URL/api/claims" \
+    CLAIM_ID=$(cho_curl "$TENANT_ID" POST "$CLAIMS_SERVICE_URL/api/claims" \
         -H "Content-Type: application/json" \
-        -H "X-Tenant-ID: $TENANT_ID" \
         -d @"$claim_file" | jq -r '.id // empty')
     
     if [ -n "$CLAIM_ID" ]; then

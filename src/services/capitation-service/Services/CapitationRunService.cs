@@ -7,13 +7,13 @@ namespace CapitationService.Services;
 public interface ICapitationRunService
 {
     Task<CapitationRun> CreateRunAsync(CreateCapitationRunRequest request, string? createdBy);
-    Task<CapitationRun> ExecuteRunAsync(string runId);
+    Task<CapitationRun> ExecuteRunAsync(string runId, string? executedBy = null);
     Task<CapitationRun> GetRunAsync(string runId);
     Task<IEnumerable<CapitationRun>> GetRunsAsync(DateTime? from, DateTime? to, LineOfBusiness? lineOfBusiness = null);
     Task CancelRunAsync(string runId);
-    Task<CapitationStatement> ApproveStatementAsync(string statementId);
-    Task<CapitationStatement> VoidStatementAsync(string statementId, string reason);
-    Task<CapitationStatement> HoldStatementAsync(string statementId, string reason);
+    Task<CapitationStatement> ApproveStatementAsync(string statementId, string approvedBy);
+    Task<CapitationStatement> VoidStatementAsync(string statementId, string reason, string voidedBy);
+    Task<CapitationStatement> HoldStatementAsync(string statementId, string reason, string heldBy);
     Task<CapitationPeriodSummary> GetCapitationSummaryAsync(DateTime period);
 }
 
@@ -23,6 +23,7 @@ public class CapitationRunService : ICapitationRunService
     private readonly ICapitationContractRepository _contractRepository;
     private readonly ICapitationStatementRepository _statementRepository;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IPaymentSeparationOfDuties _separationOfDuties;
     private readonly ILogger<CapitationRunService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -35,8 +36,10 @@ public class CapitationRunService : ICapitationRunService
         ICapitationContractRepository contractRepository,
         ICapitationStatementRepository statementRepository,
         IHttpClientFactory httpClientFactory,
+        IPaymentSeparationOfDuties separationOfDuties,
         ILogger<CapitationRunService> logger)
     {
+        _separationOfDuties = separationOfDuties;
         _runRepository = runRepository;
         _contractRepository = contractRepository;
         _statementRepository = statementRepository;
@@ -132,7 +135,7 @@ public class CapitationRunService : ICapitationRunService
         }
     }
 
-    public async Task<CapitationRun> ExecuteRunAsync(string runId)
+    public async Task<CapitationRun> ExecuteRunAsync(string runId, string? executedBy = null)
     {
         var run = await _runRepository.GetByIdAsync(runId)
             ?? throw new InvalidOperationException($"Capitation run {runId} not found");
@@ -142,6 +145,7 @@ public class CapitationRunService : ICapitationRunService
 
         // 1. Mark as running
         run.Status = CapitationRunStatus.Running;
+        run.ExecutedBy = executedBy;
         run.ExecutionStartedAt = DateTime.UtcNow;
         await _runRepository.UpdateAsync(run);
 
@@ -192,9 +196,25 @@ public class CapitationRunService : ICapitationRunService
                 try
                 {
                     var statement = await GenerateStatementForContractAsync(
-                        contract, periodStart, periodEnd, daysInMonth, run.Id);
+                        contract, periodStart, periodEnd, daysInMonth, run, executedBy);
 
                     run.StatementIds.Add(statement.Id);
+                    if (statement.MemberIssues.Any(i => i.Reason == CoverageUnavailable))
+                    {
+                        run.RequiresAttention = true;
+                        run.MembersNeedingAttention.AddRange(statement.MemberIssues);
+                        run.Errors.Add(
+                            $"Statement {statement.StatementNumber} is on hold: the member list for provider {contract.ProviderNPI} " +
+                            $"could not be read ({statement.MemberIssues.First(i => i.Reason == CoverageUnavailable).Detail}).");
+                    }
+                    else if (statement.MemberIssues.Count > 0)
+                    {
+                        run.RequiresAttention = true;
+                        run.MembersNeedingAttention.AddRange(statement.MemberIssues);
+                        run.Errors.Add(
+                            $"Statement {statement.StatementNumber} is on hold: capitation could not be calculated for " +
+                            $"{statement.MemberIssues.Count} member(s) ({string.Join(", ", statement.MemberIssues.Select(i => i.MemberId))}).");
+                    }
                     totalGross += statement.GrossCapitation;
                     totalWithholds += statement.WithholdAmount;
                     totalAdjustments += statement.TotalAdjustments;
@@ -262,21 +282,29 @@ public class CapitationRunService : ICapitationRunService
         await _runRepository.UpdateAsync(run);
     }
 
-    public async Task<CapitationStatement> ApproveStatementAsync(string statementId)
+    public async Task<CapitationStatement> ApproveStatementAsync(string statementId, string approvedBy)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Approve);
+
         var statement = await _statementRepository.GetByIdAsync(statementId)
             ?? throw new InvalidOperationException($"Statement {statementId} not found");
 
         if (statement.Status != CapitationStatementStatus.Generated && statement.Status != CapitationStatementStatus.OnHold)
             throw new InvalidOperationException($"Can only approve statements in Generated or OnHold state, current: {statement.Status}");
 
+        // Maker-checker: whoever prepared the statement cannot approve it.
+        await _separationOfDuties.EnsureActorIsNotMakerAsync(statement, approvedBy, PaymentAction.Approve);
+
         statement.Status = CapitationStatementStatus.Approved;
+        statement.ApprovedBy = approvedBy;
+        statement.ApprovedAt = DateTime.UtcNow;
+        Touch(statement, approvedBy);
         _logger.LogInformation("Approved capitation statement {StatementNumber}", statement.StatementNumber);
 
         return await _statementRepository.UpdateAsync(statement);
     }
 
-    public async Task<CapitationStatement> VoidStatementAsync(string statementId, string reason)
+    public async Task<CapitationStatement> VoidStatementAsync(string statementId, string reason, string voidedBy)
     {
         var statement = await _statementRepository.GetByIdAsync(statementId)
             ?? throw new InvalidOperationException($"Statement {statementId} not found");
@@ -285,6 +313,7 @@ public class CapitationRunService : ICapitationRunService
             throw new InvalidOperationException("Cannot void a paid statement");
 
         statement.Status = CapitationStatementStatus.Voided;
+        Touch(statement, voidedBy);
         statement.Adjustments.Add(new CapitationAdjustment
         {
             Type = CapitationAdjustmentType.Other,
@@ -299,7 +328,7 @@ public class CapitationRunService : ICapitationRunService
         return await _statementRepository.UpdateAsync(statement);
     }
 
-    public async Task<CapitationStatement> HoldStatementAsync(string statementId, string reason)
+    public async Task<CapitationStatement> HoldStatementAsync(string statementId, string reason, string heldBy)
     {
         var statement = await _statementRepository.GetByIdAsync(statementId)
             ?? throw new InvalidOperationException($"Statement {statementId} not found");
@@ -308,6 +337,7 @@ public class CapitationRunService : ICapitationRunService
             throw new InvalidOperationException($"Can only hold statements in Generated or Approved state, current: {statement.Status}");
 
         statement.Status = CapitationStatementStatus.OnHold;
+        Touch(statement, heldBy);
         statement.Adjustments.Add(new CapitationAdjustment
         {
             Type = CapitationAdjustmentType.Other,
@@ -368,10 +398,12 @@ public class CapitationRunService : ICapitationRunService
     // --- Private helper methods ---
 
     private async Task<CapitationStatement> GenerateStatementForContractAsync(
-        CapitationContract contract, DateTime periodStart, DateTime periodEnd, int daysInMonth, string runId)
+        CapitationContract contract, DateTime periodStart, DateTime periodEnd, int daysInMonth,
+        CapitationRun run, string? executedBy)
     {
         // Fetch members assigned to this PCP from coverage-service
-        var coverages = await FetchCoveragesByPcpAsync(contract.ProviderNPI);
+        var coverageFetch = await FetchCoveragesByPcpAsync(run.TenantId, contract.ProviderNPI);
+        var coverages = coverageFetch.Coverages ?? new List<CapitationCoverageDto>();
 
         // Filter to plan IDs covered by this contract (if contract specifies plans)
         if (contract.PlanIds.Count > 0)
@@ -380,15 +412,46 @@ public class CapitationRunService : ICapitationRunService
         var statement = new CapitationStatement
         {
             StatementNumber = $"CAPSTMT-{contract.ProviderNPI}-{periodStart:yyyy-MM}",
-            CapitationRunId = runId,
+            CapitationRunId = run.Id,
             ContractId = contract.Id,
             ContractNumber = contract.ContractNumber,
             ProviderNPI = contract.ProviderNPI,
             ProviderName = contract.ProviderName,
             CapitationPeriodStart = periodStart,
             CapitationPeriodEnd = periodEnd,
-            CreatedBy = "capitation-run"
+            // The statement's makers: who executed the run and who created it.
+            CreatedBy = string.IsNullOrWhiteSpace(executedBy) ? CapitationStatement.SystemCreator : executedBy,
+            RunCreatedBy = run.CreatedBy
         };
+
+        if (coverageFetch.Failure != null)
+        {
+            // The member list is unknown: the statement is held with no lines
+            // (never a zero statement that looks complete) and the run lists it.
+            _logger.LogError(
+                "Capitation run {RunNumber}: member list unavailable for PCP {NPI} ({ContractNumber}): {Failure}. The statement is held",
+                run.RunNumber, contract.ProviderNPI, contract.ContractNumber, coverageFetch.Failure);
+            statement.MemberIssues.Add(new CapitationMemberIssue
+            {
+                MemberId = string.Empty,
+                ProviderNPI = contract.ProviderNPI,
+                StatementId = statement.Id,
+                Reason = CoverageUnavailable,
+                Detail = coverageFetch.Failure
+            });
+            statement.RecalculateTotals();
+            statement.RequiresAttention = true;
+            statement.Status = CapitationStatementStatus.OnHold;
+            statement.Adjustments.Add(new CapitationAdjustment
+            {
+                Type = CapitationAdjustmentType.Other,
+                Description = "Statement held: the PCP's member list could not be read from coverage-service " +
+                              $"({coverageFetch.Failure}); no member was calculated. Re-run when coverage-service answers",
+                Amount = 0,
+                AdjustmentDate = DateTime.UtcNow
+            });
+            return await _statementRepository.CreateAsync(statement);
+        }
 
         foreach (var coverage in coverages)
         {
@@ -404,13 +467,54 @@ public class CapitationRunService : ICapitationRunService
             var rateTier = FindRateTier(contract.RateTiers, memberAge, coverage.Gender, ageSexCategory);
             var basePmpm = rateTier?.BasePMPM ?? 0m;
 
-            // Fetch risk score (or use contract default)
-            var riskScore = contract.RiskAdjusted
-                ? await FetchRiskScoreAsync(coverage.MemberId, periodStart.Year)
-                : contract.DefaultRiskScore;
+            // Risk score. A risk-adjusted contract uses the member's score; the
+            // contract default applies only when the service has no score for
+            // the measurement year (404). Any other failure (401/403, 5xx,
+            // transport, unreadable body) fails this member's line: it is left
+            // off the statement, the statement is held and the run lists it.
+            // Paying a default score instead would quietly change the payment.
+            decimal riskScore;
+            string riskScoreSource;
+            if (contract.RiskAdjusted)
+            {
+                var lookup = await FetchRiskScoreAsync(run.TenantId, coverage.MemberId, periodStart.Year);
+                if (lookup.Failure != null)
+                {
+                    _logger.LogError(
+                        "Capitation run {RunNumber}: risk score unavailable for member {MemberId} (provider {NPI}, year {Year}): {Failure}. " +
+                        "The member is left off the statement and the statement is held",
+                        run.RunNumber, SanitizeForLog(coverage.MemberId), contract.ProviderNPI, periodStart.Year, lookup.Failure);
+                    statement.MemberIssues.Add(new CapitationMemberIssue
+                    {
+                        MemberId = coverage.MemberId,
+                        CoverageId = coverage.CoverageId,
+                        ProviderNPI = contract.ProviderNPI,
+                        StatementId = statement.Id,
+                        Reason = CapitationMemberIssue.RiskScoreUnavailable,
+                        Detail = lookup.Failure
+                    });
+                    continue;
+                }
 
-            if (riskScore <= 0)
+                if (lookup.Score is { } score)
+                {
+                    riskScore = score;
+                    riskScoreSource = RiskScoreSources.Service;
+                }
+                else
+                {
+                    riskScore = contract.DefaultRiskScore;
+                    riskScoreSource = RiskScoreSources.NoScoreForYear;
+                    _logger.LogInformation(
+                        "Capitation run {RunNumber}: no risk score for member {MemberId}, year {Year}; using contract default {Default}",
+                        run.RunNumber, SanitizeForLog(coverage.MemberId), periodStart.Year, contract.DefaultRiskScore);
+                }
+            }
+            else
+            {
                 riskScore = contract.DefaultRiskScore;
+                riskScoreSource = RiskScoreSources.NotRiskAdjusted;
+            }
 
             var adjustedPmpm = Math.Round(basePmpm * riskScore, 2);
 
@@ -439,6 +543,7 @@ public class CapitationRunService : ICapitationRunService
                 Gender = coverage.Gender,
                 BasePMPM = basePmpm,
                 RiskScore = riskScore,
+                RiskScoreSource = riskScoreSource,
                 AdjustedPMPM = adjustedPmpm,
                 ProrationFactor = prorationFactor,
                 GrossAmount = grossAmount,
@@ -473,6 +578,20 @@ public class CapitationRunService : ICapitationRunService
         }
 
         statement.RecalculateTotals();
+
+        if (statement.MemberIssues.Count > 0)
+        {
+            statement.RequiresAttention = true;
+            statement.Status = CapitationStatementStatus.OnHold;
+            statement.Adjustments.Add(new CapitationAdjustment
+            {
+                Type = CapitationAdjustmentType.Other,
+                Description = $"Statement held: capitation could not be calculated for {statement.MemberIssues.Count} member(s) " +
+                              "(risk score unavailable); they are not included in this statement",
+                Amount = 0,
+                AdjustmentDate = DateTime.UtcNow
+            });
+        }
 
         return await _statementRepository.CreateAsync(statement);
     }
@@ -534,42 +653,127 @@ public class CapitationRunService : ICapitationRunService
         return tiers.FirstOrDefault(t => age >= t.AgeFrom && age <= t.AgeTo);
     }
 
-    private async Task<List<CapitationCoverageDto>> FetchCoveragesByPcpAsync(string providerNpi)
+    /// <summary>
+    /// The PCP's assigned members from coverage-service. A successful answer
+    /// (possibly an empty list: the PCP has no members) is returned as is. Any
+    /// failure (401/403, 404, 5xx, transport, an unreadable or missing body) is
+    /// returned as a failure, never as an empty list: an empty list would
+    /// produce a statement that silently pays the PCP nothing.
+    /// </summary>
+    private async Task<CoverageFetch> FetchCoveragesByPcpAsync(string tenantId, string providerNpi)
     {
+        HttpResponseMessage response;
         try
         {
             var client = _httpClientFactory.CreateClient("CoverageService");
-            var response = await client.GetAsync($"/api/v1/coverage/by-pcp/{providerNpi}?status=Active");
-            response.EnsureSuccessStatusCode();
-
-            return await response.Content.ReadFromJsonAsync<List<CapitationCoverageDto>>(JsonOptions) ?? new();
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/v1/coverage/by-pcp/{Uri.EscapeDataString(providerNpi)}?status=Active");
+            // Names the run's tenant for ChoOutboundTokenHandler: a run with no
+            // inbound caller still carries a service token for it.
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            response = await client.SendAsync(request);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch coverages for PCP {NPI}", providerNpi);
-            return new List<CapitationCoverageDto>();
+            _logger.LogError(ex, "Coverage request failed for PCP {NPI}", providerNpi);
+            return CoverageFetch.Failed($"coverage-service unreachable: {ex.GetType().Name}");
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Coverage request for PCP {NPI} answered {Status}", providerNpi, (int)response.StatusCode);
+                return CoverageFetch.Failed($"coverage-service answered {(int)response.StatusCode}");
+            }
+
+            try
+            {
+                var coverages = await response.Content.ReadFromJsonAsync<List<CapitationCoverageDto>>(JsonOptions);
+                return coverages is null
+                    ? CoverageFetch.Failed("coverage-service returned no member list")
+                    : CoverageFetch.Found(coverages);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unreadable coverage response for PCP {NPI}", providerNpi);
+                return CoverageFetch.Failed("coverage-service returned an unreadable member list");
+            }
         }
     }
 
-    private async Task<decimal> FetchRiskScoreAsync(string memberId, int year)
+    private sealed record CoverageFetch(List<CapitationCoverageDto>? Coverages, string? Failure)
     {
+        public static CoverageFetch Found(List<CapitationCoverageDto> coverages) => new(coverages, null);
+        public static CoverageFetch Failed(string failure) => new(null, failure);
+    }
+
+    /// <summary>Reason on a <see cref="CapitationMemberIssue"/> when the PCP's member list could not be read.</summary>
+    public const string CoverageUnavailable = "CoverageUnavailable";
+
+    /// <summary>
+    /// Reads the member's score from risk-adjustment-service's minimum-necessary
+    /// summary endpoint (score and factors, no diagnoses). Returns the score;
+    /// no score (404: none for that measurement year); or a failure for any
+    /// other outcome. A failure is never turned into a default score.
+    /// </summary>
+    private async Task<RiskScoreLookup> FetchRiskScoreAsync(string tenantId, string memberId, int year)
+    {
+        HttpResponseMessage response;
         try
         {
             var client = _httpClientFactory.CreateClient("RiskAdjustmentService");
-            var response = await client.GetAsync($"/api/risk-adjustment/members/{memberId}/scores/{year}");
-
-            if (!response.IsSuccessStatusCode)
-                return 1.0m;
-
-            var scoreDto = await response.Content.ReadFromJsonAsync<RiskScoreDto>(JsonOptions);
-            return scoreDto?.RiskScore ?? 1.0m;
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/risk-adjustment/members/{Uri.EscapeDataString(memberId)}/scores/{year}/summary");
+            // Names the run's tenant for ChoOutboundTokenHandler.
+            request.Headers.Add("X-Tenant-ID", tenantId);
+            response = await client.SendAsync(request);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Risk score not available for member {MemberId}, year {Year}, using default",
-                memberId, year);
-            return 1.0m;
+            _logger.LogError(ex, "Risk score request failed for member {MemberId}, year {Year}",
+                SanitizeForLog(memberId), year);
+            return RiskScoreLookup.Failed($"risk-adjustment-service unreachable: {ex.GetType().Name}");
         }
+
+        using (response)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return RiskScoreLookup.NoScore;
+
+            if (!response.IsSuccessStatusCode)
+                return RiskScoreLookup.Failed($"risk-adjustment-service answered {(int)response.StatusCode}");
+
+            RiskScoreDto? dto;
+            try
+            {
+                dto = await response.Content.ReadFromJsonAsync<RiskScoreDto>(JsonOptions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unreadable risk score response for member {MemberId}, year {Year}",
+                    SanitizeForLog(memberId), year);
+                return RiskScoreLookup.Failed("risk-adjustment-service returned an unreadable score");
+            }
+
+            if (dto?.RiskScore is not { } score || score <= 0)
+                return RiskScoreLookup.Failed("risk-adjustment-service returned no positive risk score");
+
+            return RiskScoreLookup.Found(score);
+        }
+    }
+
+    private sealed record RiskScoreLookup(decimal? Score, string? Failure)
+    {
+        public static readonly RiskScoreLookup NoScore = new(null, null);
+        public static RiskScoreLookup Found(decimal score) => new(score, null);
+        public static RiskScoreLookup Failed(string failure) => new(null, failure);
+    }
+
+    private static void Touch(CapitationStatement statement, string actor)
+    {
+        statement.LastUpdatedBy = actor;
+        statement.LastUpdatedAt = DateTime.UtcNow;
     }
 
     private static string SanitizeForLog(string? value)
@@ -622,14 +826,24 @@ public class CapitationCoverageDto
 }
 
 /// <summary>
-/// DTO for risk score data fetched from risk-adjustment-service
+/// The fields capitation reads from risk-adjustment-service's member score
+/// summary (<c>GET members/{id}/scores/{year}/summary</c>), which carries no
+/// diagnoses. A missing score is not defaulted.
 /// </summary>
 public class RiskScoreDto
 {
     public string MemberId { get; set; } = string.Empty;
-    public int Year { get; set; }
-    public decimal RiskScore { get; set; } = 1.0m;
-    public string? Model { get; set; }
+    public int MeasurementYear { get; set; }
+    public decimal? RiskScore { get; set; }
+    public string? RiskModel { get; set; }
+}
+
+/// <summary>Values of <see cref="CapitationLineItem.RiskScoreSource"/>.</summary>
+public static class RiskScoreSources
+{
+    public const string Service = "risk-adjustment-service";
+    public const string NoScoreForYear = "contract-default:no-score-for-year";
+    public const string NotRiskAdjusted = "contract-default:not-risk-adjusted";
 }
 
 /// <summary>

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -18,7 +19,7 @@ public class PayerEligibilityDevControllerTests : IClassFixture<EligibilityApiFa
 
     public PayerEligibilityDevControllerTests(EligibilityApiFactory factory)
     {
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "untrusted-tenant");
     }
 

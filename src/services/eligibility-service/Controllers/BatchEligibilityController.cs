@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using EligibilityService.Models;
 using EligibilityService.Services;
 
@@ -25,9 +27,11 @@ public class BatchEligibilityController : ControllerBase
         _logger = logger;
     }
 
-    private string TenantId => HttpContext.Items["TenantId"]?.ToString() ?? string.Empty;
+    private string TenantId => HttpContext.GetTenantId();
 
+    // A batch of 270-style checks: it reads eligibility, it changes no member data.
     [HttpPost]
+    [RequirePermission("eligibility:check")]
     [Consumes("text/csv", "application/json")]
     [ProducesResponseType(typeof(BatchEligibilityJob), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

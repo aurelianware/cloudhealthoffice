@@ -212,4 +212,22 @@ public class NachaFileServiceTests
 
         result.FileName.Should().Contain(_defaultOptions.CompanyId);
     }
+
+    [Fact]
+    public void DebitFile_ControlRecords_CarryTheTotalInTheDebitField()
+    {
+        // Batch control (8): debit total at 21-32, credit at 33-44.
+        // File control (9): debit total at 32-43, credit at 44-55.
+        // The file used to put the debit total in the credit field.
+        var result = _service.GenerateNachaFile(new List<NachaEntryDetail> { CreateEntry(amount: 1500m), CreateEntry(amount: 25.5m) }, _defaultOptions);
+
+        var lines = result.FileContent.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        var batch = lines.First(l => l.StartsWith("8"));
+        batch.Substring(20, 12).Should().Be("000000152550");
+        batch.Substring(32, 12).Should().Be("000000000000");
+        var file = lines.First(l => l.StartsWith("9") && !l.All(c => c == '9'));
+        file.Substring(31, 12).Should().Be("000000152550");
+        file.Substring(43, 12).Should().Be("000000000000");
+        CloudHealthOffice.NachaTransmission.NachaFileFacts.From(result.FileContent).TotalDebitAmount.Should().Be(1525.50m);
+    }
 }

@@ -1,0 +1,61 @@
+# Service account for the Argo Events Sensors (rfai-sensor, sftp-sensor).
+#
+# The Sensors and their EventSources run in `cloudhealthoffice`; the Workflows
+# they submit run in `cho-workflows`, where the WorkflowTemplates and the
+# workload service accounts (cho-workload-identity.yaml) live. This account can
+# do exactly one thing: create Workflows in `cho-workflows`. It also reads
+# WorkflowTemplates there, because the Argo `submit` the trigger performs
+# validates the workflowTemplateRef before creating the Workflow. No other
+# namespace, no update/delete, no pods, secrets or configmaps.
+#
+# Note: whoever can create Workflows in cho-workflows can name any service
+# account there, so this binding is as sensitive as the workload accounts it
+# can run as. Keep it bound to the Sensors only.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cho-workflow-sensor
+  namespace: cloudhealthoffice
+  labels:
+    app.kubernetes.io/name: cho-workflow-sensor
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+automountServiceAccountToken: true
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cho-workflow-sensor-submit
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: cho-workflow-sensor-submit
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["create"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflowtemplates"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cho-workflow-sensor-submit
+  namespace: cho-workflows
+  labels:
+    app.kubernetes.io/name: cho-workflow-sensor-submit
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: cloudhealthoffice
+subjects:
+  - kind: ServiceAccount
+    name: cho-workflow-sensor
+    namespace: cloudhealthoffice
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cho-workflow-sensor-submit

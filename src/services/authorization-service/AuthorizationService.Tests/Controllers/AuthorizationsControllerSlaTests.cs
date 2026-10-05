@@ -2,6 +2,7 @@ using AuthorizationService.Backends;
 using AuthorizationService.Controllers;
 using AuthorizationService.Models;
 using AuthorizationService.Repositories;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,7 @@ public class AuthorizationsControllerSlaTests
     private readonly Mock<IAuthorizationRepository> _repositoryMock;
     private readonly Mock<IWebHostEnvironment> _environmentMock;
     private readonly Mock<ILogger<AuthorizationsController>> _loggerMock;
+    private readonly Mock<ICurrentActor> _actorMock;
     private readonly AuthorizationsController _controller;
 
     public AuthorizationsControllerSlaTests()
@@ -23,6 +25,9 @@ public class AuthorizationsControllerSlaTests
         _environmentMock = new Mock<IWebHostEnvironment>();
         _environmentMock.SetupGet(x => x.EnvironmentName).Returns("Test");
         _loggerMock = new Mock<ILogger<AuthorizationsController>>();
+        _actorMock = new Mock<ICurrentActor>();
+        _actorMock.SetupGet(a => a.TenantId).Returns("tenant-1");
+        _actorMock.SetupGet(a => a.UserId).Returns("reviewer-1");
 
         // Default Replace mode: create routes through the CHO-native backend,
         // which delegates to the mocked repository.
@@ -31,7 +36,7 @@ public class AuthorizationsControllerSlaTests
             Options.Create(new AuthorizationBackendOptions()));
 
         _controller = new AuthorizationsController(
-            _repositoryMock.Object, selector, _environmentMock.Object, _loggerMock.Object)
+            _repositoryMock.Object, selector, _environmentMock.Object, _loggerMock.Object, _actorMock.Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -41,7 +46,7 @@ public class AuthorizationsControllerSlaTests
     }
 
     [Fact]
-    public async Task ValidateAuthorization_AllowsAnonymousLocalValidation()
+    public async Task ValidateAuthorization_ExpiredAuthorization_IsInvalid()
     {
         var authorization = CreateApprovedAuth("AUTH-001", expiresOn: new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc));
         _repositoryMock
@@ -60,20 +65,6 @@ public class AuthorizationsControllerSlaTests
     }
 
     [Fact]
-    public async Task ValidateAuthorization_ForbidsAnonymousProductionValidation()
-    {
-        _environmentMock.SetupGet(x => x.EnvironmentName).Returns("Production");
-
-        var result = await _controller.ValidateAuthorization(
-            "AUTH-001",
-            procedureCode: "99201",
-            serviceDate: new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc));
-
-        result.Result.Should().BeOfType<ForbidResult>();
-        _repositoryMock.Verify(r => r.GetByAuthorizationNumberAsync(It.IsAny<string>()), Times.Never);
-    }
-
-    [Fact]
     public async Task GetAtRisk_ReturnsOnlyWarningAndAbove_ByDefault()
     {
         // Arrange: 3 auths — one at None level (recent), one at Warning, one at Critical
@@ -85,7 +76,7 @@ public class AuthorizationsControllerSlaTests
         };
 
         _repositoryMock
-            .Setup(r => r.GetOpenAuthorizationsAsync(null))
+            .Setup(r => r.GetOpenAuthorizationsAsync("tenant-1"))
             .ReturnsAsync(auths);
 
         // Act
@@ -111,7 +102,7 @@ public class AuthorizationsControllerSlaTests
         };
 
         _repositoryMock
-            .Setup(r => r.GetOpenAuthorizationsAsync(null))
+            .Setup(r => r.GetOpenAuthorizationsAsync("tenant-1"))
             .ReturnsAsync(auths);
 
         // Act
@@ -124,8 +115,12 @@ public class AuthorizationsControllerSlaTests
     }
 
     [Fact]
-    public async Task GetAtRisk_FiltersByTenant()
+    public async Task GetAtRisk_UsesTheTokenTenant()
     {
+        // The tenant comes from the token (ICurrentActor), never from a
+        // ?tenantId= query parameter (removed: it allowed cross-tenant reads).
+        _actorMock.SetupGet(a => a.TenantId).Returns("tenant-a");
+
         // Arrange
         var auths = new[]
         {
@@ -138,7 +133,7 @@ public class AuthorizationsControllerSlaTests
 
         // Act
         var result = await _controller.GetAtRiskAuthorizations(
-            minLevel: SlaEscalationLevel.Warning, tenantId: "tenant-a");
+            minLevel: SlaEscalationLevel.Warning);
 
         // Assert
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;

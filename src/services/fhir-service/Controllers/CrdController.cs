@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using System.Diagnostics;
 using FhirService.Models;
 using FhirService.Services;
@@ -81,7 +82,7 @@ public class CrdController : FhirControllerBase
     /// CDS Hooks execution endpoint. Evaluates coverage requirements for the given hook.
     /// </summary>
     [HttpPost("{hookId}")]
-    [Authorize]
+    [FhirAccess(smart: true, cho: "authorizations:read")]
     public async Task<IActionResult> ExecuteHook(
         string hookId,
         [FromBody] CrdHookRequest request,
@@ -111,6 +112,23 @@ public class CrdController : FhirControllerBase
         if (request.Context == null)
         {
             return BadRequest(new { error = "context is required" });
+        }
+
+        // /cds-services sits outside /fhir/r4, so SmartScopeEnforcementMiddleware
+        // never sees it; the SMART rule for a CRD hook is applied here.
+        if (FhirCallerSchemes.IsSmart(User))
+        {
+            var refusal = CrdSmartAccess.Refusal(
+                CallerIdentityResolver.ParseScopes(User),
+                (HttpContext.Items[AuthenticatedCaller.HttpContextItemKey] as AuthenticatedCaller)?.PatientId
+                    ?? User.FindFirst("patient")?.Value,
+                request.Context.PatientId);
+            if (refusal != null)
+            {
+                _logger.LogWarning("CRD hook {HookId} refused for SMART caller: {Reason}",
+                    SanitizeForLog(hookId), refusal);
+                return StatusCode(403, new { error = refusal });
+            }
         }
 
         _logger.LogInformation(

@@ -17,9 +17,10 @@ namespace ProviderService.Models;
 public class Provider
 {
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Multi-tenant partition key (required for Cosmos DB isolation).
+    /// The server sets it from the caller's token on every write, so it is not
+    /// required (and is ignored) in a request body.
     /// </summary>
-    [Required]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
@@ -725,8 +726,22 @@ public enum LineOfBusiness
 /// Mirrors SponsorBankAccount from premium-billing-service but for the credit (payment) side.
 /// Used by capitation-service to disburse NACHA credits or Stripe Connect payouts.
 /// </summary>
-public class ProviderBankAccount
+public class ProviderBankAccount : IValidatableObject
 {
+    /// <summary>
+    /// A request may not carry a value in the stored encrypted form
+    /// (<c>enc:v1:...</c>): it would be stored as is and could never be
+    /// decrypted, blocking the provider's bank-account record.
+    /// </summary>
+    IEnumerable<ValidationResult> IValidatableObject.Validate(ValidationContext validationContext)
+    {
+        foreach (var (name, value) in new[] { (nameof(RoutingNumber), RoutingNumber), (nameof(AccountNumber), AccountNumber), (nameof(TaxId), TaxId) })
+        {
+            if (CloudHealthOffice.FieldProtection.FieldCiphertext.IsCiphertext(value))
+                yield return new ValidationResult($"{name} is not a valid value.", new[] { name });
+        }
+    }
+
     /// <summary>
     /// Whether EFT disbursement is enabled for this provider
     /// </summary>

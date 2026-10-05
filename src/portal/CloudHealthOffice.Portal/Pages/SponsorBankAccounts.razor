@@ -1,0 +1,355 @@
+@page "/premium-billing/sponsor-bank-accounts"
+@attribute [Authorize]
+@using CloudHealthOffice.Portal.Services
+@inject ISponsorBankAccountService BankAccounts
+@inject IUserContextService UserContextService
+
+<PageTitle>Sponsor Bank Accounts — Cloud Health Office</PageTitle>
+
+@* Sponsor bank accounts in sponsor-service, under dual control. Reads are
+   masked to the last 4 (billing:read, payments:read or enrollment:read).
+   Propose / withdraw: billing:run or enrollment:process. Approve / reject:
+   payments:approve, never the proposer (403 "Separation of duties"); a stale
+   approval is 409. *@
+<PermissionGate Permission="billing:read,payments:read,enrollment:read" RoleName="Finance or FinanceApprover">
+<PremiumBillingNav Active="bank-accounts" />
+<BillingError Error="_error" OnClose="() => _error = null" />
+
+@if (_notice != null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-3" ShowCloseIcon="true" CloseIconClicked="() => _notice = null"
+              data-testid="sba-notice">@_notice</MudAlert>
+}
+
+<div class="d-flex align-center gap-3 mb-4">
+    <div data-testid="sba-group">
+        <MudTextField @bind-Value="_groupInput" Label="Sponsor group number" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </div>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="LoadFromInput"
+               Disabled="_busy" data-testid="sba-load">Load</MudButton>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-2" />
+}
+
+@if (_group != null && _notFound)
+{
+    <MudAlert Severity="Severity.Warning" data-testid="sba-not-found">No sponsor with group number @_group.</MudAlert>
+}
+else if (_group != null && _view != null)
+{
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" data-testid="sba-active"
+                      Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,136,0.3); border-radius: 12px;">
+                <MudText Typo="Typo.subtitle1" Style="color: #00ff88; font-weight: 600;">Approved account — group @_view.GroupNumber</MudText>
+                @if (_view.Active == null)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2" data-testid="sba-no-active">
+                        No approved bank account. Auto-debit for this sponsor needs attention: its invoices are not debited
+                        until a change is proposed and approved by a second user.
+                    </MudAlert>
+                }
+                else
+                {
+                    <AccountDetails Account="_view.Active" />
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">
+                        Approved by @(_view.ActiveApprovedBy ?? "—") @(_view.ActiveApprovedAt?.ToLocalTime().ToString("g"))
+                    </MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" data-testid="sba-pending-panel"
+                      Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(255,170,0,0.3); border-radius: 12px;">
+                <MudText Typo="Typo.subtitle1" Style="color: #ffaa00; font-weight: 600;">Pending change</MudText>
+                @if (_view.Pending is not { } pending)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2" Style="color: rgba(255,255,255,0.5);">No change awaiting approval.</MudText>
+                }
+                else
+                {
+                    <div data-testid="sba-pending">
+                        <AccountDetails Account="pending.Proposed" />
+                        @if (pending.NumbersCarriedOver)
+                        {
+                            <MudText Typo="Typo.caption">Numbers unchanged from the approved account (enrollment change only).</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.5);">
+                            Proposed by @pending.RequestedBy @pending.RequestedAt.ToLocalTime().ToString("g")
+                        </MudText>
+                    </div>
+
+                    <div data-testid="sba-decision-reason" class="mt-2">
+                        <MudTextField @bind-Value="_decisionReason" Label="Reason (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        @if (_canApprove && !IsOwnProposal(pending))
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="@(() => Approve(pending))" Disabled="_busy"
+                                       data-testid="sba-approve">Approve</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => Reject(pending))" Disabled="_busy"
+                                       data-testid="sba-reject">Reject</MudButton>
+                        }
+                        @if (_canPropose)
+                        {
+                            <MudButton Variant="Variant.Text" OnClick="@(() => Withdraw(pending))" Disabled="_busy"
+                                       data-testid="sba-cancel">Withdraw</MudButton>
+                        }
+                    </div>
+                    @if (_canApprove && IsOwnProposal(pending))
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2" data-testid="sba-own-proposal">
+                            You proposed this change, so you cannot approve or reject it (separation of duties).
+                            A different user with payments:approve must decide it.
+                        </MudAlert>
+                    }
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (_canPropose)
+    {
+        <MudPaper Class="pa-4 mt-4" data-testid="sba-propose-form"
+                  Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+            <MudText Typo="Typo.subtitle1" Style="color: #00ffff; font-weight: 600;">Propose a change</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(255,255,255,0.6);">
+                The change stays pending until a different user with payments:approve approves it. Leave both numbers empty
+                to keep the approved account's numbers and change only the enrollment. Numbers you type are sent to
+                sponsor-service and never shown again (only the last 4).
+            </MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="4">
+                    <div data-testid="sba-eft-enabled">
+                        <MudCheckBox T="bool" @bind-Checked="_form.EftEnabled" Label="Enrolled in auto-debit" Color="Color.Primary" />
+                    </div>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="string" @bind-Value="_formMethod" Label="Debit method" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem Value="@("Nacha")">NACHA file</MudSelectItem>
+                        <MudSelectItem Value="@("StripeAch")">Stripe ACH</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="string" @bind-Value="_form.AccountType" Label="Account type" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem Value="@("Checking")">Checking</MudSelectItem>
+                        <MudSelectItem Value="@("Savings")">Savings</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <div data-testid="sba-holder">
+                        <MudTextField @bind-Value="_form.AccountHolderName" Label="Account holder" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </div>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <div data-testid="sba-routing">
+                        <MudTextField @bind-Value="_form.RoutingNumber" Label="Routing number (9 digits)" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" InputType="InputType.Password" MaxLength="9" />
+                    </div>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <div data-testid="sba-account">
+                        <MudTextField @bind-Value="_form.AccountNumber" Label="Account number" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" InputType="InputType.Password" MaxLength="17" />
+                    </div>
+                </MudItem>
+            </MudGrid>
+            <div class="d-flex justify-end mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Propose" Disabled="_busy"
+                           data-testid="sba-propose">Propose change</MudButton>
+            </div>
+        </MudPaper>
+    }
+
+    <MudText Typo="Typo.h6" Class="mt-6 mb-2">History</MudText>
+    <MudTable Items="_history" Dense="true" T="SponsorBankAccountChange" data-testid="sba-history"
+              Style="background: rgba(10,10,10,0.9); border: 1px solid rgba(0,255,255,0.15); border-radius: 12px;">
+        <HeaderContent>
+            <MudTh>Requested</MudTh>
+            <MudTh>By</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Account</MudTh>
+            <MudTh>Decided</MudTh>
+            <MudTh>Reason</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.RequestedAt.ToLocalTime().ToString("g")</MudTd>
+            <MudTd>@context.RequestedBy</MudTd>
+            <MudTd>@context.Status</MudTd>
+            <MudTd style="font-family: monospace;">
+                acct @BankNumberMask.Masked(context.Proposed?.AccountNumberLast4) / rtn @BankNumberMask.Masked(context.Proposed?.RoutingNumberLast4)
+            </MudTd>
+            <MudTd>@(context.DecidedBy ?? "—") @(context.DecidedAt?.ToLocalTime().ToString("g"))</MudTd>
+            <MudTd>@context.Reason</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="pa-4" Style="color: rgba(255,255,255,0.4);">No changes yet</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+</PermissionGate>
+
+@code {
+    [SupplyParameterFromQuery(Name = "group")] public string? GroupQuery { get; set; }
+
+    private string? _groupInput;
+    private string? _group;
+    private SponsorBankAccountView? _view;
+    private List<SponsorBankAccountChange> _history = new();
+    private bool _notFound;
+    private bool _loading;
+    private bool _busy;
+    private bool _canPropose;
+    private bool _canApprove;
+    private string? _userId;
+    private Exception? _error;
+    private string? _notice;
+    private string? _decisionReason;
+
+    private ProposeSponsorBankAccountRequest _form = new();
+    private string _formMethod = "Nacha";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserContextService.GetCurrentUserAsync();
+        _userId = user?.UserId;
+        _canPropose = UserContextService.HasPermission("billing:run") || UserContextService.HasPermission("enrollment:process");
+        _canApprove = UserContextService.HasPermission("payments:approve");
+
+        if (!string.IsNullOrWhiteSpace(GroupQuery))
+        {
+            _groupInput = GroupQuery.Trim();
+            await Load(_groupInput);
+        }
+    }
+
+    /// <summary>The service refuses the proposer's own approval; the buttons are not offered to them.</summary>
+    private bool IsOwnProposal(SponsorBankAccountChange change)
+        => !string.IsNullOrEmpty(_userId) && string.Equals(change.RequestedBy, _userId, StringComparison.Ordinal);
+
+    private async Task LoadFromInput()
+    {
+        if (string.IsNullOrWhiteSpace(_groupInput)) return;
+        _notice = null;
+        await Load(_groupInput.Trim());
+    }
+
+    private async Task Load(string group)
+    {
+        _loading = true;
+        _error = null;
+        _group = group;
+        try
+        {
+            _view = await BankAccounts.GetBankAccountAsync(group);
+            _notFound = _view == null;
+            _history = _view == null ? new() : await BankAccounts.GetChangesAsync(group);
+            if (_view != null) ResetForm(_view);
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+            _view = null;
+            _history = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ResetForm(SponsorBankAccountView view)
+    {
+        var basis = view.Active;
+        _form = new ProposeSponsorBankAccountRequest
+        {
+            EftEnabled = basis?.EftEnabled ?? true,
+            AccountType = basis?.AccountType ?? "Checking",
+            AccountHolderName = basis?.AccountHolderName,
+        };
+        _formMethod = basis?.PreferredMethod ?? "Nacha";
+        _decisionReason = null;
+    }
+
+    private Task Propose()
+    {
+        var routing = _form.RoutingNumber?.Trim();
+        var account = _form.AccountNumber?.Trim();
+        if (string.IsNullOrEmpty(routing) != string.IsNullOrEmpty(account))
+        {
+            _error = new BillingApiException(400, null, "Enter both the routing and the account number, or neither to keep the approved ones.");
+            return Task.CompletedTask;
+        }
+        if (string.IsNullOrEmpty(routing) && _view?.Active == null)
+        {
+            _error = new BillingApiException(400, null, "This sponsor has no approved account yet: enter the routing and account numbers.");
+            return Task.CompletedTask;
+        }
+
+        var request = new ProposeSponsorBankAccountRequest
+        {
+            EftEnabled = _form.EftEnabled,
+            PreferredMethod = _formMethod,
+            AccountType = _form.AccountType,
+            AccountHolderName = string.IsNullOrWhiteSpace(_form.AccountHolderName) ? null : _form.AccountHolderName.Trim(),
+            RoutingNumber = string.IsNullOrEmpty(routing) ? null : routing,
+            AccountNumber = string.IsNullOrEmpty(account) ? null : account,
+        };
+        // The typed numbers leave the form whatever the outcome.
+        _form.RoutingNumber = null;
+        _form.AccountNumber = null;
+
+        return Act(async group =>
+        {
+            await BankAccounts.ProposeChangeAsync(group, request);
+            return "Change proposed. It takes effect when a different user with payments:approve approves it.";
+        });
+    }
+
+    private Task Approve(SponsorBankAccountChange change)
+        => Act(async group =>
+        {
+            await BankAccounts.ApproveChangeAsync(group, change.Id, _decisionReason);
+            return "Change approved. It is now the account premium billing debits.";
+        });
+
+    private Task Reject(SponsorBankAccountChange change)
+        => Act(async group =>
+        {
+            await BankAccounts.RejectChangeAsync(group, change.Id, _decisionReason);
+            return "Change rejected. The approved account is unchanged.";
+        });
+
+    private Task Withdraw(SponsorBankAccountChange change)
+        => Act(async group =>
+        {
+            await BankAccounts.CancelChangeAsync(group, change.Id, _decisionReason);
+            return "Change withdrawn. The approved account is unchanged.";
+        });
+
+    private async Task Act(Func<string, Task<string>> action)
+    {
+        if (_group == null) return;
+        _busy = true;
+        _error = null;
+        _notice = null;
+        try
+        {
+            var notice = await action(_group);
+            await Load(_group);
+            _notice = notice;
+        }
+        catch (Exception ex) when (ex is BillingApiException or ServiceUnavailableException)
+        {
+            _error = ex;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

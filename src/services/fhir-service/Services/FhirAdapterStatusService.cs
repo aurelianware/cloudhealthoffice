@@ -6,17 +6,30 @@ namespace FhirService.Services;
 public sealed record FhirAdapterResourceStatus(
     string Resource,
     string Mode,
-    string Source,
+    string? Source,
     string BuyerSafeWording);
 
 public sealed record FhirAdapterStatusReport(
     string ConfiguredMode,
     string EffectiveMode,
     string DataClassification,
-    string TenantId,
+    string? TenantId,
     string BuyerSafeLabel,
     string AttestationNote,
-    IReadOnlyList<FhirAdapterResourceStatus> Resources);
+    IReadOnlyList<FhirAdapterResourceStatus> Resources)
+{
+    /// <summary>
+    /// What the anonymous <c>/fhir/r4/adapter-status</c> shows: the modes and
+    /// labels only, without the configured tenant id or the backing
+    /// implementation of each resource (service names, adapters). The full
+    /// report is part of the authenticated <c>/fhir/r4/compliance-status</c>.
+    /// </summary>
+    public FhirAdapterStatusReport Public() => this with
+    {
+        TenantId = null,
+        Resources = Resources.Select(r => r with { Source = null }).ToList(),
+    };
+}
 
 public interface IFhirAdapterStatusService
 {

@@ -36,8 +36,8 @@ public class CredentialingControllerTests
             NullLogger<CredentialingService>.Instance);
         _controller = new CredentialingController(_service, NullLogger<CredentialingController>.Instance);
 
-        var ctx = new DefaultHttpContext();
-        ctx.Items["TenantId"] = TenantId;
+        // As UseChoAuthentication() leaves it: tenant and subject from the token.
+        var ctx = TestHelpers.TokenHttpContext.For(TenantId);
         _controller.ControllerContext = new ControllerContext { HttpContext = ctx };
     }
 
@@ -51,6 +51,38 @@ public class CredentialingControllerTests
         var created = result.Result as CreatedResult;
         created.Should().NotBeNull();
         created!.Value.Should().BeOfType<CredentialingEvent>();
+    }
+
+    [Fact]
+    public async Task SubmitApplication_records_the_token_subject_not_an_X_User_Id_header()
+    {
+        _controller.HttpContext.Request.Headers["X-User-Id"] = "forged-user";
+
+        var result = await _controller.SubmitApplication(
+            ProviderId,
+            new SubmitApplicationRequest { ApplicationSource = "Manual" },
+            CancellationToken.None);
+
+        var evt = (CredentialingEvent)((CreatedResult)result.Result!).Value!;
+        evt.ActorId.Should().Be(TestHelpers.TokenHttpContext.DefaultUserId);
+    }
+
+    [Fact]
+    public async Task Write_without_a_token_subject_is_refused_even_with_an_X_User_Id_header()
+    {
+        // Without a token there is no actor; a header never stands in for one.
+        var ctx = new DefaultHttpContext();
+        ctx.Items["TenantId"] = TenantId;
+        ctx.Request.Headers["X-User-Id"] = "forged-user";
+        _controller.ControllerContext = new ControllerContext { HttpContext = ctx };
+
+        var act = () => _controller.SubmitApplication(
+            ProviderId,
+            new SubmitApplicationRequest { ApplicationSource = "Manual" },
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        _eventRepository.Store.Should().BeEmpty();
     }
 
     [Fact]

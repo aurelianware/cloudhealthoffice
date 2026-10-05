@@ -4,11 +4,13 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using CloudHealthOffice.PricingApi.Configuration;
 using CloudHealthOffice.PricingApi.Data;
-using CloudHealthOffice.PricingApi.Middleware;
+using CloudHealthOffice.PricingApi.Security;
 using CloudHealthOffice.PricingApi.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication;
 using MongoDB.Driver;
 using Serilog;
 
@@ -53,6 +55,22 @@ try
     builder.Services.AddScoped<IRepricingService, RepricingService>();
     builder.Services.AddSingleton<IFeeScheduleLoaderService, FeeScheduleLoaderService>();
 
+    // ── Authentication ──
+    // CHO callers (the portal, other services) present a CHO token; the tenant
+    // and the actor come from it. Unannotated GETs need a pricing read
+    // permission; every unannotated write needs platform:admin, because each
+    // write here changes global data (Medicare fee schedules) or the keys of
+    // every external customer.
+    builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+    {
+        auth.DefaultReadPermission = PricingApiAuth.PricePermissions;
+        auth.DefaultWritePermission = PricingApiAuth.GlobalWritePermission;
+    });
+
+    // External customers hold no CHO token. They keep their API key, now a
+    // scheme of its own ("PricingApiKey"), bound to its own credential tenant.
+    builder.Services.AddPricingApiCallers();
+
     // ── Controllers + JSON ──
     // PricingApi publishes camelCase properties + camelCase-cased enum names
     // (e.g. "medicareFeeSchedule") and omits null values. The shared helper is
@@ -85,8 +103,10 @@ try
                 **Getting started:**
                 1. Browse available fee schedules at GET /api/v1/fee-schedules (no auth needed)
                 2. Register for a free API key at https://cloudhealthoffice.com/pricing-api
-                3. Look up a code: GET /api/v1/lookup/99213
-                4. Reprice a claim: POST /api/v1/reprice
+                3. Look up a code: GET /api/v1/lookup/99213 (CMS Medicare schedules: no auth needed)
+                4. Reprice a claim: POST /api/v1/reprice (X-API-Key)
+
+                CHO callers use a CHO bearer token instead of an API key.
                 """,
             Contact = new Microsoft.OpenApi.Models.OpenApiContact
             {
@@ -109,6 +129,16 @@ try
             Description = "API key obtained from https://cloudhealthoffice.com/pricing-api"
         });
 
+        c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        {
+            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+            Name = "Authorization",
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            Description = "CHO access token (CHO callers only)"
+        });
+
         c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
         {
             {
@@ -126,31 +156,37 @@ try
     });
 
     // ── Rate Limiting ──
+    // Partitioned by the authenticated caller, never by a raw header: an
+    // API-key customer by its key id, a CHO caller by tenant and subject, and
+    // everyone else (anonymous, or presenting an unknown key) by client
+    // address. A made-up key therefore gets no bucket of its own.
+    // The pipeline authenticates before the limiter runs (see below).
+    builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
     builder.Services.AddRateLimiter(options =>
     {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                context.Request.Headers["X-API-Key"].ToString() ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        {
+            var rateLimit = context.RequestServices
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<RateLimitOptions>>().Value;
+            return RateLimitPartition.GetFixedWindowLimiter(
+                PricingApiAuth.RateLimitPartition(context),
                 _ => new FixedWindowRateLimiterOptions
                 {
-                    PermitLimit = 100,
-                    Window = TimeSpan.FromMinutes(1),
+                    PermitLimit = rateLimit.PermitLimit,
+                    Window = TimeSpan.FromSeconds(rateLimit.WindowSeconds),
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 10
-                }));
-    });
-
-    // ── CORS (allow Swagger UI and partner integrations) ──
-    builder.Services.AddCors(options =>
-    {
-        options.AddPolicy("Default", policy =>
-        {
-            policy.AllowAnyOrigin()  // Tighten in production
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining");
+                    QueueLimit = rateLimit.QueueLimit
+                });
         });
     });
+
+    // ── CORS ──
+    // A public API that partner web apps may call from a browser: an
+    // allowlist (Cors:AllowedOrigins, default the portal origin), no
+    // credentials, closed when unconfigured outside Development.
+    builder.Services.AddChoBrowserCors(builder.Configuration, builder.Environment, policy =>
+        policy.WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining"));
 
     // ── Health Checks ──
     builder.Services.AddHealthChecks();
@@ -163,7 +199,7 @@ try
 
     // ── Middleware Pipeline ──
     app.UseSerilogRequestLogging();
-    app.UseCors("Default");
+    app.UseChoBrowserCors();
 
     if (app.Environment.IsDevelopment())
     {
@@ -175,14 +211,27 @@ try
         });
     }
 
+    // Authenticate first so the limiter partitions by the verified caller.
+    // The result is cached for the request, so the authentication in
+    // UseChoAuthentication does not look the key up again.
+    app.Use(async (context, next) =>
+    {
+        var result = await context.AuthenticateAsync();
+        if (result.Succeeded && result.Principal is not null)
+            context.User = result.Principal;
+        await next();
+    });
     app.UseRateLimiter();
-    app.UseApiKeyAuthentication();
+    app.UseChoAuthentication();
     app.MapControllers();
     app.MapHealthChecks("/health");
 
     // ── Seed demo data on startup (only if database is empty) ──
     using (var scope = app.Services.CreateScope())
     {
+        // Keys stored in plaintext before hashing are hashed here (idempotent).
+        await scope.ServiceProvider.GetRequiredService<IApiKeyRepository>().InitializeAsync();
+
         var loader = scope.ServiceProvider.GetRequiredService<IFeeScheduleLoaderService>();
         if (!await loader.AnySchedulesExistAsync())
         {

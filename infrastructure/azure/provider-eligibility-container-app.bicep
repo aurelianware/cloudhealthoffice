@@ -5,6 +5,11 @@
 // app (estimate-container-app.bicep). Differences: ingress is internal only —
 // the app is reachable from CDO inside the environment, never from the
 // internet — and it needs no database.
+//
+// CloudDentalOffice authenticates with an API key bound to one tenant. The
+// service also requires CHO token trust (ChoAuth issuers) for internal callers
+// and refuses to start without it; supply ChoAuth__* settings as described in
+// docs/security/portal-token-service.md ("How services trust the issuer").
 
 @description('Region of the existing Container Apps environment.')
 param location string = 'westus3'
@@ -39,8 +44,8 @@ param cdoClientName string = 'cloud-dental-office'
 @description('Service credential CloudDentalOffice sends in X-Api-Key.')
 param cdoClientApiKey string
 
-@description('CloudDentalOffice tenant ids this credential may act for.')
-param cdoTenantIds array
+@description('The CloudDentalOffice tenant this credential acts for. One credential per tenant: the tenant comes from the credential, never from a request header.')
+param cdoTenantId string
 
 var appName = 'provider-eligibility'
 var identityName = 'cho-provider-eligibility-identity'
@@ -114,11 +119,6 @@ resource cdoClientApiKeySecretReader 'Microsoft.Authorization/roleAssignments@20
   }
 }
 
-var tenantEnv = [for (tenant, i) in cdoTenantIds: {
-  name: 'ProviderApi__Clients__0__Tenants__${i}'
-  value: tenant
-}]
-
 resource providerEligibility 'Microsoft.App/containerApps@2024-03-01' = {
   name: appName
   location: location
@@ -162,7 +162,7 @@ resource providerEligibility 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'provider-eligibility-api'
           image: providerEligibilityImage
-          env: concat([
+          env: [
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
             { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
             { name: 'HealthcareTransactions__DefaultGateway', value: 'Stedi' }
@@ -170,9 +170,10 @@ resource providerEligibility 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'HealthcareTransactions__Gateways__Stedi__ApiKey', secretRef: 'stedi-api-key' }
             { name: 'ProviderApi__Clients__0__Name', value: cdoClientName }
             { name: 'ProviderApi__Clients__0__ApiKey', secretRef: 'cdo-api-key' }
+            { name: 'ProviderApi__Clients__0__TenantId', value: cdoTenantId }
             { name: 'Observability__EnableConsole', value: 'false' }
             { name: 'Observability__OtlpEndpoint', value: '' }
-          ], tenantEnv)
+          ]
           probes: [
             {
               type: 'Liveness'

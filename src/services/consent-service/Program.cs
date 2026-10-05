@@ -4,8 +4,8 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using ConsentService.HostedServices;
-using ConsentService.Middleware;
 using ConsentService.Repositories;
 using ConsentService.Services;
 using Microsoft.Azure.Cosmos;
@@ -29,6 +29,15 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Records, queries, and revokes HIPAA §164.508 authorization records with field-level encryption and an append-only audit trail."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user (who
+// recorded, activated or revoked a consent) come from that token only.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "consent:read";
+    auth.DefaultWritePermission = "consent:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -127,15 +136,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ConsentEventPublis
 // Kafka facade; kept separate by design.)
 builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 // Health checks: Mongo / Cosmos via the shared bootstrap, plus the
 // local consent-encryption-key readiness check. Local to consent-service
@@ -164,9 +166,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

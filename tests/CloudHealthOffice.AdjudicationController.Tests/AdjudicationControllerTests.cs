@@ -10,6 +10,7 @@ using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using CloudHealthOffice.ClaimsScrubEngine.Models;
@@ -61,6 +62,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         public IProviderIntegrityGate ProviderIntegrityGate { get; } = Substitute.For<IProviderIntegrityGate>();
         public ITerminologyCrosswalkClient TerminologyCrosswalkClient { get; } = Substitute.For<ITerminologyCrosswalkClient>();
         public IPriorAuthRuleEngine PriorAuthEngine { get; } = Substitute.For<IPriorAuthRuleEngine>();
+        public IPaymentEstimateService EstimateService { get; } = Substitute.For<IPaymentEstimateService>();
+        public IBenefitPlanService PlanService { get; } = Substitute.For<IBenefitPlanService>();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -112,6 +115,13 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
                 services.RemoveAll<ITerminologyCrosswalkClient>();
                 services.AddSingleton(TerminologyCrosswalkClient);
 
+                // Plan and estimate services, so the auth pipeline tests can
+                // observe the tenant and actor the controllers pass down.
+                services.RemoveAll<IPaymentEstimateService>();
+                services.AddSingleton(EstimateService);
+                services.RemoveAll<IBenefitPlanService>();
+                services.AddSingleton(PlanService);
+
                 // Stub out Redis connection with a no-op
                 services.AddSingleton(Substitute.For<IConnectionMultiplexer>());
 
@@ -124,7 +134,10 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
 
     private HttpClient CreateClientWithTenant(string? tenantId = TenantId)
     {
-        var client = _factory.CreateClient();
+        // The handler turns X-Tenant-ID into a development-signed token for that
+        // tenant; the server takes the tenant from the token. With no tenant
+        // header the request carries no token at all.
+        var client = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         if (tenantId is not null)
             client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantId);
         return client;
@@ -876,7 +889,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
     [Fact]
     public async Task AnyEndpoint_MissingTenantId_Returns401()
     {
-        // Arrange — no X-Tenant-ID header
+        // Arrange — no X-Tenant-ID header, and therefore no token
         using var client = CreateClientWithTenant(tenantId: null);
         var request = MakeAdjudicationRequest();
 
@@ -895,7 +908,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         var ncciResponse = await client.PostAsJsonAsync("/api/v1/adjudication/ncci-check",
             new NcciScrubRequest { ClaimId = "CLM-X", ServiceLines = [new ClaimServiceLine { LineNumber = 1, ProcedureCode = "99213", Units = 1, ServiceDate = new DateOnly(2026, 1, 15) }] });
 
-        // Assert — TenantMiddleware returns 401 for missing tenant context
+        // Assert — no token → 401
         Assert.Equal(HttpStatusCode.Unauthorized, adjudicateResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, benefitsResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, ratesResponse.StatusCode);
@@ -1166,7 +1179,7 @@ public class AdjudicationControllerReverseClaimTests : IClassFixture<Adjudicatio
 
     private HttpClient CreateClient()
     {
-        var c = _factory.CreateClient();
+        var c = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         c.DefaultRequestHeaders.Add("X-Tenant-ID", TenantId);
         return c;
     }

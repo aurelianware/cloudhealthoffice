@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 
 namespace ProviderContractsService.Models;
 
@@ -16,9 +17,11 @@ public class ProviderContract
     // ── Identity ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Multi-tenant partition key (required for Cosmos DB isolation)
+    /// Multi-tenant partition key. Always set by the server from the caller's
+    /// CHO token; a value in a request body is ignored, so it is not validated
+    /// (a body need not, and the portal does not, name a tenant).
     /// </summary>
-    [Required]
+    [ValidateNever]
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
@@ -28,9 +31,9 @@ public class ProviderContract
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>
-    /// User-facing contract number. Format: CTR-{NPI}-{Year}
+    /// User-facing contract number. Format: CTR-{NPI}-{Year}. Generated on
+    /// create when empty (the portal sends it empty), so it is not required.
     /// </summary>
-    [Required]
     [StringLength(50)]
     public string ContractNumber { get; set; } = string.Empty;
 
@@ -189,12 +192,14 @@ public class ProviderContract
     /// Created by user/system
     /// </summary>
     [StringLength(200)]
+    // Set from the CHO token by the repository; a request body value is ignored.
     public string? CreatedBy { get; set; }
 
     /// <summary>
     /// Last updated by user/system
     /// </summary>
     [StringLength(200)]
+    // Set from the CHO token by the repository; a request body value is ignored.
     public string? LastUpdatedBy { get; set; }
 
     // ── Provider Verification ─────────────────────────────────────────────
@@ -247,6 +252,7 @@ public class ContractAmendment
     /// Who approved the amendment
     /// </summary>
     [StringLength(200)]
+    // The user who recorded the amendment, from the CHO token; a request body value is ignored.
     public string? ApprovedBy { get; set; }
 
     /// <summary>

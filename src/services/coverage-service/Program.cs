@@ -1,12 +1,12 @@
 using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
-using CoverageService.Middleware;
 using CoverageService.Repositories;
 using CoverageService.Services;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -24,6 +24,14 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Links Member → Sponsor → Benefit Plan. Populated by X12 834 HD/COB segments. Critical for 270/271 eligibility."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "coverage:read";
+    auth.DefaultWritePermission = "coverage:write";
 });
 
 // Database Configuration
@@ -102,15 +110,8 @@ builder.Services.AddScoped<IPcpAssignmentService, PcpAssignmentService>();
 builder.Services.AddSingleton<ICareTeamProjector, CareTeamProjector>();
 builder.Services.AddScoped<PcpPanelReconciliationJob>();
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -132,9 +133,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

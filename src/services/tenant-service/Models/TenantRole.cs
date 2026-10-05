@@ -22,6 +22,14 @@ public class TenantRole
 
     [JsonPropertyName("isBuiltIn")]
     public bool IsBuiltIn { get; set; } = false;
+
+    /// <summary>Token subject of the caller that created the role. Never read from a request body.</summary>
+    [JsonPropertyName("createdBy")]
+    public string? CreatedBy { get; set; }
+
+    /// <summary>Token subject of the caller that last changed the role. Never read from a request body.</summary>
+    [JsonPropertyName("updatedBy")]
+    public string? UpdatedBy { get; set; }
 }
 
 /// <summary>
@@ -80,7 +88,8 @@ public static class StandardRoles
             "members:read", "accumulators:read", "providers:read",
             // Supervisor-specific permissions
             "claims:override-approve", "workqueue:assign", "workqueue:reassign",
-            "reports:claims", "claims:void", "claims:adjust"
+            "reports:claims", "claims:void", "claims:adjust",
+            "encounters:read", "encounters:write"
         }
     };
 
@@ -93,7 +102,8 @@ public static class StandardRoles
         {
             "members:read", "members:search", "accumulators:read",
             "eligibility:check", "claims:read", "coverage:read",
-            "authorizations:read"
+            "authorizations:read", "providers:read",
+            "payer-to-payer:initiate"
         }
     };
 
@@ -106,7 +116,8 @@ public static class StandardRoles
         {
             "members:read", "members:write",
             "enrollment:read", "enrollment:process",
-            "coverage:read", "coverage:write"
+            "coverage:read", "coverage:write", "benefits:read", "providers:read",
+            "payer-to-payer:initiate"
         }
     };
 
@@ -121,7 +132,8 @@ public static class StandardRoles
             "appeals:read", "appeals:write",
             "rfai:read", "rfai:write",
             "correspondence:read", "correspondence:write",
-            "members:read", "claims:read"
+            "members:read", "claims:read",
+            "clinical:read"
         }
     };
 
@@ -141,24 +153,41 @@ public static class StandardRoles
     public static readonly TenantRole Finance = new()
     {
         RoleName = "Finance",
-        Description = "Process payments, manage premium billing, financial reporting",
+        Description = "Prepare payment runs, manage premium billing, financial reporting (cannot approve or release payments)",
         IsBuiltIn = true,
         Permissions = new List<string>
         {
-            "payments:read", "payments:run", "payments:approve",
+            "payments:read", "payments:run",
             "billing:read", "billing:run",
-            "reports:financial", "claims:read"
+            "reports:financial", "claims:read", "encounters:read",
+            "risk-adjustment:read", "risk-adjustment:write",
+            "reference-data:read"
+        }
+    };
+
+    public static readonly TenantRole FinanceApprover = new()
+    {
+        RoleName = "FinanceApprover",
+        Description = "Approve and release payments prepared by another user",
+        IsBuiltIn = true,
+        Permissions = new List<string>
+        {
+            "payments:read", "payments:approve",
+            "billing:read",
+            "finance:read", "reports:financial",
+            "reference-data:read"
         }
     };
 
     public static readonly TenantRole ComplianceOfficer = new()
     {
         RoleName = "ComplianceOfficer",
-        Description = "Read-only access to all functions, audit logs, compliance reports",
+        Description = "Read access to all functions, audit logs and compliance reports; sets and releases legal holds",
         IsBuiltIn = true,
         Permissions = new List<string>
         {
-            "*:read", "audit:read", "compliance:read", "reports:compliance"
+            "*:read", "audit:read", "compliance:read", "reports:compliance",
+            "records:legal-hold"
         }
     };
 
@@ -169,7 +198,8 @@ public static class StandardRoles
         IsBuiltIn = true,
         Permissions = new List<string>
         {
-            "compliance:read", "authorizations:read", "audit:read"
+            "compliance:read", "authorizations:read", "audit:read",
+            "reference-data:read"
         }
     };
 
@@ -197,6 +227,7 @@ public static class StandardRoles
         UMCoordinator,
         ProviderRelations,
         Finance,
+        FinanceApprover,
         ComplianceOfficer,
         ComplianceViewer,
         TenantAdmin
@@ -223,28 +254,10 @@ public static class StandardRoles
     }
 
     /// <summary>
-    /// Checks if a granted permission matches the required permission,
-    /// supporting wildcard patterns like "*:read" and "*:*".
+    /// Checks if a granted permission matches the required permission, with
+    /// the shared rules (wildcards such as "*:read" and "*:*" never reach
+    /// platform:* permissions).
     /// </summary>
     private static bool PermissionMatches(string granted, string required)
-    {
-        if (string.Equals(granted, "*:*", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (string.Equals(granted, required, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        var grantedParts = granted.Split(':');
-        var requiredParts = required.Split(':');
-
-        if (grantedParts.Length != 2 || requiredParts.Length != 2)
-            return false;
-
-        var resourceMatch = grantedParts[0] == "*" ||
-            string.Equals(grantedParts[0], requiredParts[0], StringComparison.OrdinalIgnoreCase);
-        var actionMatch = grantedParts[1] == "*" ||
-            string.Equals(grantedParts[1], requiredParts[1], StringComparison.OrdinalIgnoreCase);
-
-        return resourceMatch && actionMatch;
-    }
+        => CloudHealthOffice.Infrastructure.Security.ChoRolePermissions.Matches(granted, required);
 }

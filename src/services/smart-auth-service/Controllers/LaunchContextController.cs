@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using SmartAuthService.Models;
 using SmartAuthService.Services;
@@ -7,66 +8,57 @@ namespace SmartAuthService.Controllers;
 /// <summary>
 /// EHR launch context registration endpoint.
 ///
-/// Before an EHR redirects a provider to a SMART app, it calls POST /launch
-/// to register the patient/encounter context.  The returned launch token is
-/// included in the authorization URL as &amp;launch={token}.
+/// Before an EHR redirects a provider to a SMART application, it registers
+/// the patient/encounter context here and receives a single-use launch token
+/// (TTL SmartAuth:LaunchContextTtlMinutes, default 5 minutes) to put in the
+/// authorization URL as &amp;launch={token}.
 ///
-/// The token is single-use and expires after SmartAuth:LaunchContextTtlMinutes
-/// (default 5 minutes).
+/// The caller authenticates with a CHO token holding <c>members:read</c>
+/// (it is opening a member's record). The launch belongs to that token's
+/// tenant — there is no tenant in the body and an X-Tenant-ID header is at
+/// most an echo of the token's (the shared tenant middleware refuses a
+/// mismatch). The client must be registered to the same tenant, and at
+/// authorization the launch is honoured only for a provider user of that
+/// tenant using that client — and, when the body names a
+/// <c>practitionerId</c>, only for the provider user bound to that provider.
+/// A member's patient is never taken from a launch.
 ///
-/// Security: in production this endpoint must be protected by mutual TLS or a
-/// shared secret so only trusted EHR systems can register launch contexts.
-/// Sprint 2: open for integration testing (restrict via network policy in k8s).
+/// The registering caller is a CHO user or service, not a SMART provider
+/// identity, so the practitioner cannot be read from its token; the EHR names
+/// it, and must: a launch without <c>practitionerId</c> is refused (400), since
+/// any provider user of the tenant holding the token could use it.
+/// <c>SmartAuth:AllowLaunchWithoutPractitioner=true</c> (default false) still
+/// accepts one, with a warning per launch; it is deprecated and will be removed.
 /// </summary>
 [ApiController]
 [Route("launch")]
+[RequirePermission("members:read")]
 public class LaunchContextController : ControllerBase
 {
+    /// <summary>Deprecated escape hatch: accept a launch without practitionerId. Default false.</summary>
+    public const string AllowWithoutPractitionerKey = "SmartAuth:AllowLaunchWithoutPractitioner";
+
     private readonly ILaunchContextStore _store;
+    private readonly ISmartIdentityStore _identities;
+    private readonly ICurrentActor _actor;
     private readonly IConfiguration _config;
     private readonly ILogger<LaunchContextController> _logger;
 
     public LaunchContextController(
         ILaunchContextStore store,
+        ISmartIdentityStore identities,
+        ICurrentActor actor,
         IConfiguration config,
         ILogger<LaunchContextController> logger)
     {
         _store = store;
+        _identities = identities;
+        _actor = actor;
         _config = config;
         _logger = logger;
     }
 
-    /// <summary>
-    /// POST /launch — register an EHR launch context.
-    /// Returns an opaque launch token to embed in the SMART authorization URL.
-    /// </summary>
-    /// <remarks>
-    /// Example request:
-    /// <code>
-    /// POST /launch
-    /// Content-Type: application/json
-    ///
-    /// {
-    ///   "patientId":    "pat-001",
-    ///   "encounterId":  "enc-003",
-    ///   "clientId":     "cho-ehr-app"
-    /// }
-    /// </code>
-    ///
-    /// Example response:
-    /// <code>{ "launch": "abc123..." }</code>
-    ///
-    /// Authorization URL the EHR then uses:
-    /// <code>
-    /// GET /connect/authorize
-    ///   ?response_type=code
-    ///   &amp;client_id=cho-ehr-app
-    ///   &amp;redirect_uri=https://portal.cloudhealthoffice.com/smart/callback
-    ///   &amp;scope=launch/patient launch/encounter openid user/*.read
-    ///   &amp;launch=abc123...
-    ///   &amp;iss=https://api.cloudhealthoffice.com/fhir/r4
-    /// </code>
-    /// </remarks>
+    /// <summary>POST /launch — register an EHR launch context for the caller's tenant.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(RegisterLaunchResponse), 200)]
     [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
@@ -76,23 +68,38 @@ public class LaunchContextController : ControllerBase
     {
         if (string.IsNullOrEmpty(request.PatientId) && string.IsNullOrEmpty(request.EncounterId))
             return BadRequest(new { error = "At least one of patientId or encounterId is required." });
+        if (string.IsNullOrEmpty(request.PractitionerId))
+        {
+            if (!_config.GetValue(AllowWithoutPractitionerKey, false))
+                return BadRequest(new { error = "practitionerId is required: a launch is for one practitioner." });
+            _logger.LogWarning(
+                "EHR launch registered without practitionerId because {Setting}=true (deprecated): any provider user " +
+                "of tenant {Tenant} holding the launch token can use it",
+                AllowWithoutPractitionerKey, SmartAuthAudit.Clean(_actor.TenantId));
+        }
+        if ((request.PatientId != null && !SmartIdentifiers.IsFhirId(request.PatientId))
+            || (request.EncounterId != null && !SmartIdentifiers.IsFhirId(request.EncounterId))
+            || (request.PractitionerId != null && !SmartIdentifiers.IsFhirId(request.PractitionerId)))
+            return BadRequest(new { error = "patientId, encounterId and practitionerId must be FHIR ids." });
 
-        var token = await _store.RegisterAsync(request, ct);
+        var tenantId = _actor.TenantId;
+        var client = await _identities.FindClientAsync(request.ClientId, ct);
+        if (client == null || client.TenantId != tenantId || client.Kind != SmartClientKind.ProviderApp)
+            return BadRequest(new { error = "clientId is not a provider app registered to this tenant." });
+
+        var token = await _store.RegisterAsync(tenantId, _actor.UserId, request, ct);
 
         _logger.LogInformation(
-            "EHR launch registered — client: {ClientId}, patient: {PatientId}, encounter: {EncounterId}",
-            SanitizeForLog(request.ClientId), SanitizeForLog(request.PatientId), SanitizeForLog(request.EncounterId));
-
-        var fhirBase = _config["SmartAuth:FhirBaseUrl"] ?? string.Empty;
+            "EHR launch registered — tenant: {Tenant}, actor: {Actor}, client: {ClientId}, patient: {PatientId}, encounter: {EncounterId}, practitioner: {PractitionerId}",
+            SmartAuthAudit.Clean(tenantId), SmartAuthAudit.Clean(_actor.UserId), SmartAuthAudit.Clean(request.ClientId),
+            SmartAuthAudit.Clean(request.PatientId), SmartAuthAudit.Clean(request.EncounterId),
+            SmartAuthAudit.Clean(request.PractitionerId));
 
         // Return the launch token and the ISS (FHIR base URL) the EHR needs
         return Ok(new
         {
             launch = token,
-            iss = fhirBase
+            iss = _config["SmartAuth:FhirBaseUrl"] ?? string.Empty
         });
     }
-
-    private static string SanitizeForLog(string? value) =>
-        string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 }

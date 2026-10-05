@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace SponsorService.Models;
@@ -102,6 +103,23 @@ public class Sponsor
     public SponsorStatus Status { get; set; } = SponsorStatus.Active;
 
     /// <summary>
+    /// Why the status last changed through the status endpoint
+    /// (PUT /api/v1/sponsors/{groupNumber}/status), e.g. a premium delinquency.
+    /// </summary>
+    [StringLength(500)]
+    public string? StatusReason { get; set; }
+
+    /// <summary>Token subject (user or service) that last changed the status through the status endpoint.</summary>
+    [StringLength(200)]
+    public string? StatusChangedBy { get; set; }
+
+    /// <summary>When the status last changed through the status endpoint (UTC).</summary>
+    public DateTime? StatusChangedDate { get; set; }
+
+    /// <summary>Every change made through the status endpoint, oldest first.</summary>
+    public List<SponsorStatusChange> StatusHistory { get; set; } = new();
+
+    /// <summary>
     /// Line of Business (Commercial, Medicare, Medicaid, Exchange)
     /// Determines regulatory requirements and benefit rules
     /// </summary>
@@ -158,6 +176,19 @@ public class Sponsor
     /// </summary>
     [StringLength(200)]
     public string? LastUpdatedBy { get; set; }
+}
+
+/// <summary>One status change made through the status endpoint.</summary>
+public class SponsorStatusChange
+{
+    public SponsorStatus From { get; set; }
+    public SponsorStatus To { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    /// <summary>Token subject of the caller.</summary>
+    public string ChangedBy { get; set; } = string.Empty;
+    /// <summary>Whether the caller was a service token rather than a user.</summary>
+    public bool ChangedByIsService { get; set; }
+    public DateTime ChangedAt { get; set; }
 }
 
 /// <summary>

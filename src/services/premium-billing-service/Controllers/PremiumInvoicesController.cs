@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
@@ -5,6 +6,11 @@ using PremiumBillingService.Services;
 
 namespace PremiumBillingService.Controllers;
 
+/// <summary>
+/// Premium invoices. Reads need billing:read and writes billing:run (Program.cs
+/// defaults). Ledger changes (payments, voids) and delinquency processing (which
+/// suspends sponsors) need finance:write. Tenant and actor come from the token.
+/// </summary>
 [ApiController]
 [Route("api/v1/premium-invoices")]
 [Produces("application/json")]
@@ -70,6 +76,7 @@ public class PremiumInvoicesController : ControllerBase
     /// Record a payment against an invoice
     /// </summary>
     [HttpPost("{id}/payments")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(PremiumInvoice), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -90,6 +97,7 @@ public class PremiumInvoicesController : ControllerBase
     /// Void an invoice
     /// </summary>
     [HttpPost("{id}/void")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(PremiumInvoice), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PremiumInvoice>> VoidInvoice(string id, [FromBody] VoidInvoiceRequest request)
@@ -150,11 +158,29 @@ public class PremiumInvoicesController : ControllerBase
     /// Process delinquencies: mark invoices past grace period as delinquent and suspend sponsors
     /// </summary>
     [HttpPost("process-delinquencies")]
+    [RequirePermission("finance:write")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult> ProcessDelinquencies()
     {
-        var count = await _billingService.ProcessDelinquenciesAsync();
-        return Ok(new { delinquentCount = count, message = $"{count} invoices marked delinquent" });
+        var result = await _billingService.ProcessDelinquenciesAsync();
+        var body = new
+        {
+            delinquentCount = result.DelinquentCount,
+            sponsorsSuspended = result.SponsorsSuspended,
+            suspensionRetries = result.SuspensionRetries,
+            suspensionFailures = result.SuspensionFailures,
+            message = result.SuspensionFailures.Count == 0
+                ? $"{result.DelinquentCount} invoices marked delinquent"
+                : $"{result.DelinquentCount} invoices marked delinquent; {result.SuspensionFailures.Count} sponsor suspension(s) " +
+                  "FAILED in sponsor-service (recorded on the invoices and retried on the next run)"
+        };
+
+        // A failed suspension is not a success: 502 tells a scheduler or the
+        // portal that sponsor-service did not do what was asked.
+        return result.SuspensionFailures.Count == 0
+            ? Ok(body)
+            : StatusCode(StatusCodes.Status502BadGateway, body);
     }
 }
 

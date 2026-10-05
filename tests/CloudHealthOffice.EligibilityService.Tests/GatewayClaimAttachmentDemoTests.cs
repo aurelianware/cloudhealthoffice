@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -14,7 +15,7 @@ public class GatewayClaimAttachmentDemoTests : IClassFixture<EligibilityApiFacto
     public GatewayClaimAttachmentDemoTests(EligibilityApiFactory factory)
     {
         _factory = factory;
-        _client = factory.CreateClient();
+        _client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-alpha");
     }
 
@@ -88,7 +89,7 @@ public class GatewayClaimAttachmentDemoTests : IClassFixture<EligibilityApiFacto
         using var submitDoc = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
         var transmissionId = submitDoc.RootElement.GetProperty("result").GetProperty("transmissionId").GetString();
 
-        using var other = _factory.CreateClient();
+        using var other = _factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
         other.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-beta");
         using var form = new MultipartFormDataContent();
         form.Add(new ByteArrayContent("%PDF-1.4 synthetic"u8.ToArray()), "file", "note.pdf");

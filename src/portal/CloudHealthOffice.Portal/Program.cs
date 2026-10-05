@@ -21,6 +21,8 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
+// Invitation links carry a secret in the path (/invite/{code}): keep request URLs out of logs.
+builder.Logging.KeepInvitationCodesOutOfLogs();
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
@@ -191,21 +193,20 @@ builder.Services.AddScoped<CircuitHandler, DiagnosticCircuitHandler>();
 
 builder.Services.AddMudServices();
 
-// Add HttpClient for service calls with tenant context
-builder.Services.AddScoped<TenantHttpMessageHandler>();
+// CHO tokens: the signed-in user's Entra token is exchanged at the CHO token
+// service for a CHO token, which is sent to CHO backend services only.
+// The provider takes the user from the Blazor circuit, or from the request in a
+// plain HTTP endpoint (the member document download). See ChoTokenServiceRegistration.
+builder.Services.AddChoUserTokens();
 
 builder.Services.AddHttpClient("default")
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
-    .AddHttpMessageHandler<TenantHttpMessageHandler>()
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
         PooledConnectionLifetime = TimeSpan.FromMinutes(10),
         PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
         MaxConnectionsPerServer = 50
     });
-
-builder.Services.AddScoped(sp =>
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("default"));
 
 // MongoDB client (singleton) — uses camelCase BSON convention to match stored field names
 var camelCasePack = new ConventionPack { new CamelCaseElementNameConvention() };
@@ -281,12 +282,14 @@ builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<ISponsorService, SponsorService>();
 builder.Services.AddScoped<IReferenceDataService, ReferenceDataService>();
 builder.Services.AddScoped<ITenantService, TenantService>();
+builder.Services.AddScoped<ITenantInvitationService, TenantInvitationService>();
 builder.Services.AddScoped<IOperatingModeService, OperatingModeService>();
 builder.Services.AddSingleton<IEmailNotificationService, SmtpEmailNotificationService>();
 builder.Services.AddScoped<ISalesInquiryService, SalesInquiryService>();
 builder.Services.AddScoped<IEdiOperationsService, EdiOperationsService>();
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();
 builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService>();
+builder.Services.AddScoped<ISponsorBankAccountService, SponsorBankAccountService>();
 builder.Services.AddScoped<IReportingService, ReportingService>();
 builder.Services.AddScoped<IWorkQueueService, WorkQueueService>();
 builder.Services.AddScoped<IEnrollmentOperationsService, EnrollmentOperationsService>();
@@ -298,8 +301,8 @@ builder.Services.AddScoped<IProviderContractsService, ProviderContractsService>(
 builder.Services.AddScoped<IArService, ArServiceImpl>();
 builder.Services.AddScoped<ITerminologyService, TerminologyServiceImpl>();
 
-// TMPPM PA Rule query service (direct MongoDB queries for PA Rule Explorer)
-builder.Services.AddSingleton<ITmppmRuleQueryService, TmppmRuleQueryService>();
+// TMPPM PA Rule Explorer: terminology-service's /api/v1/tmppm API with the user's CHO token
+builder.Services.AddScoped<ITmppmRuleQueryService, TmppmRuleQueryService>();
 
 // Add SignalR with tuned timeouts to reduce spurious circuit disconnects
 builder.Services.AddSignalR(options =>
@@ -366,7 +369,6 @@ static string BuildAdminConsentErrorUrl(string? tenantId)
 if (!useLocalDemoAuth)
 {
     builder.Services.AddHostedService<TenantSeedService>();
-    builder.Services.AddHostedService<TmppmIndexService>();
 }
 
 var app = builder.Build();
@@ -474,6 +476,10 @@ static string NormalizeLocalDemoRedirect(string? redirectUri, HttpRequest reques
 // Health endpoint - anonymous access for Kubernetes probes
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithMetadata(new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute());
+
+// Member document downloads: the browser's link for a document. Signed-in users
+// only; the document is fetched with the user's CHO token (GET, no side effects).
+app.MapMemberDocumentDownload();
 
 app.MapControllers();
 app.MapRazorPages();

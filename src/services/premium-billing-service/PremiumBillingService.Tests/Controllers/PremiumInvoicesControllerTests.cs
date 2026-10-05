@@ -245,7 +245,7 @@ public class PremiumInvoicesControllerTests
     public async Task ProcessDelinquencies_Returns200WithCount()
     {
         _billingService.Setup(s => s.ProcessDelinquenciesAsync())
-            .ReturnsAsync(3);
+            .ReturnsAsync(new DelinquencyRunResult { DelinquentCount = 3 });
 
         var result = await _controller.ProcessDelinquencies();
 

@@ -225,8 +225,19 @@ public class CrdService : ICrdService
                 tenantId,
             }).ToList();
 
-            var response = await _terminologyClient.PostAsJsonAsync(
-                "fhir/ConceptMap/$batch-translate", requests, ct);
+            // terminology-service takes the tenant from the token. The call names the
+            // tenant in X-Tenant-ID like every CHO-to-CHO call: a CHO caller's token is
+            // forwarded (the header must agree with it), a SMART caller's is swapped
+            // for fhir-service's service token for this tenant
+            // (SmartCallerOutboundHandler), and with no caller the shared handler
+            // mints that service token from this header.
+            using var batchRequest = new HttpRequestMessage(HttpMethod.Post, "fhir/ConceptMap/$batch-translate")
+            {
+                Content = JsonContent.Create(requests),
+            };
+            batchRequest.Headers.Add(
+                CloudHealthOffice.Infrastructure.Middleware.TenantMiddleware.TenantHeaderName, tenantId);
+            var response = await _terminologyClient.SendAsync(batchRequest, ct);
 
             if (response.IsSuccessStatusCode)
             {

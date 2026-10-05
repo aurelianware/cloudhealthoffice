@@ -3,6 +3,18 @@
 #   kubectl create secret generic anthropic-secret \
 #     --from-literal=apiKey=YOUR_KEY \
 #     -n cloudhealthoffice
+# Workload identity for claims-examiner-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:claims-examiner-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claims-examiner-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<CLAIMS_EXAMINER_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -34,9 +46,11 @@ spec:
   template:
     metadata:
       labels:
+        azure.workload.identity/use: "true"
         app: claims-examiner-service
         tier: backend
     spec:
+      serviceAccountName: claims-examiner-service-sa
       # Prefer the Spot user pool so KEDA scale-to-zero actually releases
       # nodes. Falls back to other pools if Spot is unavailable (the
       # nodeSelector uses a soft label via nodeAffinity, but the toleration
@@ -61,11 +75,17 @@ spec:
       - name: claims-examiner-service
         image: clouhealthoffice.azurecr.io/cloudhealthoffice-claims-examiner-service:latest
         imagePullPolicy: Always
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
         env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "claims-examiner-service"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:

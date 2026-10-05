@@ -12,6 +12,33 @@ public interface ICapitationStatementRepository
     Task<IEnumerable<CapitationStatement>> GetUnpaidStatementsAsync();
     Task<CapitationStatement> CreateAsync(CapitationStatement statement);
     Task<CapitationStatement> UpdateAsync(CapitationStatement statement);
+
+    /// <summary>
+    /// Approved to PaymentInitiated naming <paramref name="disbursementId"/>, as one
+    /// conditional write before any money moves: of two releases of the same
+    /// statement exactly one gets it. False when it is no longer Approved.
+    /// </summary>
+    Task<bool> TryStartPaymentAsync(string statementId, string disbursementId);
+
+    /// <summary>
+    /// PaymentInitiated by <paramref name="disbursementId"/> back to Approved: that
+    /// payment did not go out. Does nothing otherwise.
+    /// </summary>
+    Task UndoStartPaymentAsync(string statementId, string disbursementId);
+
+    /// <summary>
+    /// PaymentInitiated by <paramref name="disbursementId"/> to PaymentUnknown:
+    /// the payment may have gone out, so the statement is not payable until
+    /// someone checks. False when it is not in that state.
+    /// </summary>
+    Task<bool> MarkPaymentUnknownAsync(string statementId, string disbursementId);
+
+    /// <summary>
+    /// PaymentUnknown by <paramref name="disbursementId"/>, once someone checked:
+    /// paid goes to PaymentInitiated (settled later); not paid goes back to
+    /// Approved (payable again). False when it is not in that state.
+    /// </summary>
+    Task<bool> ResolvePaymentUnknownAsync(string statementId, string disbursementId, bool paid);
 }
 
 public class CapitationStatementRepository : ICapitationStatementRepository
@@ -127,6 +154,69 @@ public class CapitationStatementRepository : ICapitationStatementRepository
         _logger.LogInformation("Created capitation statement {StatementNumber} for provider {NPI}",
             statement.StatementNumber, statement.ProviderNPI);
         return response.Resource;
+    }
+
+    public Task<bool> TryStartPaymentAsync(string statementId, string disbursementId)
+        => TryTransitionAsync(statementId,
+            s => s.Status == CapitationStatementStatus.Approved,
+            s => { s.Status = CapitationStatementStatus.PaymentInitiated; s.EftDisbursementId = disbursementId; });
+
+    public async Task UndoStartPaymentAsync(string statementId, string disbursementId)
+        => await TryTransitionAsync(statementId,
+            s => s.Status == CapitationStatementStatus.PaymentInitiated && s.EftDisbursementId == disbursementId,
+            s => { s.Status = CapitationStatementStatus.Approved; s.EftDisbursementId = null; },
+            attempts: 5);
+
+    public Task<bool> MarkPaymentUnknownAsync(string statementId, string disbursementId)
+        => TryTransitionAsync(statementId,
+            s => s.Status == CapitationStatementStatus.PaymentInitiated && s.EftDisbursementId == disbursementId,
+            s => s.Status = CapitationStatementStatus.PaymentUnknown,
+            attempts: 5);
+
+    public Task<bool> ResolvePaymentUnknownAsync(string statementId, string disbursementId, bool paid)
+        => TryTransitionAsync(statementId,
+            s => s.Status == CapitationStatementStatus.PaymentUnknown && s.EftDisbursementId == disbursementId,
+            s =>
+            {
+                s.Status = paid ? CapitationStatementStatus.PaymentInitiated : CapitationStatementStatus.Approved;
+                if (!paid) s.EftDisbursementId = null;
+            },
+            attempts: 5);
+
+    /// <summary>Read, check, replace only the version read (ETag). False when the check fails.</summary>
+    private async Task<bool> TryTransitionAsync(
+        string statementId, Func<CapitationStatement, bool> allowed, Action<CapitationStatement> apply, int attempts = 1)
+    {
+        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            ItemResponse<CapitationStatement> current;
+            try
+            {
+                current = await _container.ReadItemAsync<CapitationStatement>(statementId, new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            var statement = current.Resource;
+            if (!allowed(statement))
+                return false;
+            apply(statement);
+            statement.LastUpdatedAt = DateTime.UtcNow;
+            try
+            {
+                await _container.ReplaceItemAsync(statement, statementId, new PartitionKey(tenantId),
+                    new ItemRequestOptions { IfMatchEtag = current.ETag });
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Changed since the read: the check is made again on the next read.
+            }
+        }
+        return false;
     }
 
     public async Task<CapitationStatement> UpdateAsync(CapitationStatement statement)

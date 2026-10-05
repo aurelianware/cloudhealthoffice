@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using ArService.Controllers;
 using ArService.Models;
 using ArService.Repositories;
+using ArService.Tests.Support;
 
 namespace ArService.Tests.Controllers;
 
@@ -20,7 +21,7 @@ public class MoneyGuardTests
     {
         // If applications sum to MORE than the receipt amount, cash reconciliation breaks
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -41,7 +42,7 @@ public class MoneyGuardTests
     {
         // Even one penny over is an error — no tolerance
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 100.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -59,7 +60,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_ExactAmount_Succeeds()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 5000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -84,7 +85,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_PartialAmount_SetsPartiallyApplied()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 10000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -106,7 +107,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_NegativeApplicationAmount_ReturnsBadRequest()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -124,7 +125,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_AlreadyApplied_ReturnsBadRequest()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Applied);
         repo.Setup(r => r.GetByIdAsync("cp-1")).ReturnsAsync(posting);
@@ -139,7 +140,7 @@ public class MoneyGuardTests
     {
         // Can't void cash that's already been applied to balances
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Applied);
         repo.Setup(r => r.GetByIdAsync("cp-1")).ReturnsAsync(posting);
@@ -158,7 +159,7 @@ public class MoneyGuardTests
     {
         var adjRepo = new Mock<IArAdjustmentRepository>();
         var balRepo = new Mock<IArBalanceRepository>();
-        var controller = new ArAdjustmentsController(adjRepo.Object, balRepo.Object, Mock.Of<ILogger<ArAdjustmentsController>>());
+        var controller = new ArAdjustmentsController(adjRepo.Object, balRepo.Object, new TestActor(), Mock.Of<ILogger<ArAdjustmentsController>>());
 
         var adjustment = CreateAdjustment(amount: -500.00m);
 
@@ -172,7 +173,7 @@ public class MoneyGuardTests
     {
         var adjRepo = new Mock<IArAdjustmentRepository>();
         var balRepo = new Mock<IArBalanceRepository>();
-        var controller = new ArAdjustmentsController(adjRepo.Object, balRepo.Object, Mock.Of<ILogger<ArAdjustmentsController>>());
+        var controller = new ArAdjustmentsController(adjRepo.Object, balRepo.Object, new TestActor(), Mock.Of<ILogger<ArAdjustmentsController>>());
 
         var adjustment = CreateAdjustment(amount: 0m);
 
@@ -186,7 +187,7 @@ public class MoneyGuardTests
     {
         var adjRepo = new Mock<IArAdjustmentRepository>();
         var balRepo = new Mock<IArBalanceRepository>();
-        var controller = new ArAdjustmentsController(adjRepo.Object, balRepo.Object, Mock.Of<ILogger<ArAdjustmentsController>>());
+        var controller = new ArAdjustmentsController(adjRepo.Object, balRepo.Object, new TestActor(), Mock.Of<ILogger<ArAdjustmentsController>>());
 
         var adjustment = CreateAdjustment(amount: 1500.00m);
         adjRepo.Setup(r => r.CreateAsync(It.IsAny<ArAdjustment>())).ReturnsAsync((ArAdjustment a) => a);
@@ -204,7 +205,7 @@ public class MoneyGuardTests
     public async Task ReconcileBalance_AlreadyReconciled_ReturnsBadRequest()
     {
         var repo = new Mock<IArBalanceRepository>();
-        var controller = new ArBalancesController(repo.Object, Mock.Of<ILogger<ArBalancesController>>());
+        var controller = new ArBalancesController(repo.Object, new TestActor(), Mock.Of<ILogger<ArBalancesController>>());
 
         var balance = CreateBalance(isReconciled: true);
         repo.Setup(r => r.GetByIdAsync("bal-1")).ReturnsAsync(balance);
@@ -218,7 +219,7 @@ public class MoneyGuardTests
     public async Task ReconcileBalance_NotYetReconciled_Succeeds()
     {
         var repo = new Mock<IArBalanceRepository>();
-        var controller = new ArBalancesController(repo.Object, Mock.Of<ILogger<ArBalancesController>>());
+        var controller = new ArBalancesController(repo.Object, new TestActor(), Mock.Of<ILogger<ArBalancesController>>());
 
         var balance = CreateBalance(isReconciled: false);
         repo.Setup(r => r.GetByIdAsync("bal-1")).ReturnsAsync(balance);
@@ -230,7 +231,7 @@ public class MoneyGuardTests
         ok.Should().NotBeNull();
         var updated = (ok!.Value as ArBalance)!;
         updated.IsReconciled.Should().BeTrue();
-        updated.ReconciledBy.Should().Be("auditor");
+        updated.ReconciledBy.Should().Be(TestActor.DefaultUserId);
     }
 
     #endregion

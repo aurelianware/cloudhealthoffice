@@ -78,10 +78,10 @@ public class IngestionPipeline(
         await store.UpsertRulesAsync(allRules);
         await store.SaveEditionAsync(edition);
 
-        // Step 6: Publish to ConceptMap
-        var mapVersionId = $"tmppm-{result.EditionId}";
+        // Step 6: Publish to ConceptMap (the token tenant's overrides; terminology-service
+        // names the version and entries after the tenant)
         result.ConceptMapOverridesPublished = await store.PublishAsConceptMapOverridesAsync(
-            allRules, mapVersionId, tenantId);
+            allRules, result.EditionId, tenantId);
 
         logger.LogInformation("═══ Pipeline Complete: {Rules} rules, {Overrides} ConceptMap overrides ═══",
             result.RulesExtracted, result.ConceptMapOverridesPublished);

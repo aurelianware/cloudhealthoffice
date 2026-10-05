@@ -12,8 +12,6 @@
     <PackageReference Include="System.Security.Cryptography.Xml" />
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.Azure.Cosmos" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
-    <PackageReference Include="Microsoft.Identity.Web" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="MongoDB.Driver" />
   </ItemGroup>

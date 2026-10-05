@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos;
 using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
+using PremiumBillingService.Clients;
 using PremiumBillingService.Middleware;
 using PremiumBillingService.Repositories;
 using PremiumBillingService.Services;
@@ -9,14 +10,35 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.FieldProtection;
+using CloudHealthOffice.NachaTransmission;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
+// The anonymous Stripe webhook is authenticated only by its signature: with
+// Stripe configured, a missing webhook secret is a startup error (outside
+// Development/Testing). See StripeWebhookSecret.
+StripeWebhookSecret.EnsureConfigured(builder.Configuration, builder.Environment);
+
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// it. Reads need billing:read, writes billing:run. Actions that move money or
+// change a sponsor's status are annotated with stricter permissions in the
+// controllers (finance:write for ledger changes and delinquency suspension,
+// payments:approve for releasing debits to the bank). The Stripe webhook is
+// anonymous and authenticated by its Stripe signature.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "billing:read";
+    auth.DefaultWritePermission = "billing:run";
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -30,7 +52,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from HttpContext.Items)
 builder.Services.AddHttpContextAccessor();
 
 // Database Configuration — MongoDB when MongoDb:ConnectionString is present, Cosmos DB otherwise
@@ -71,16 +93,44 @@ builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService.Service
 builder.Services.AddSingleton<INachaFileService, NachaFileService>();
 builder.Services.AddScoped<IStripeAchService, StripeAchService>();
 builder.Services.AddScoped<IEftDraftService, EftDraftService>();
+builder.Services.AddScoped<ISponsorServiceClient, SponsorServiceClient>();
+builder.Services.AddScoped<ICoverageServiceClient, CoverageServiceClient>();
+// Sponsor bank details come from sponsor-service's service-only full read of
+// the active approved account (dual control there), fetched with this
+// service's own token after the releasing user passed payments:approve and
+// maker-checker. No approved account or a refusal is an item needing
+// attention; "not enrolled" is a normal skip. See HttpSponsorBankAccountSource.
+builder.Services.AddScoped<ISponsorBankAccountSource, HttpSponsorBankAccountSource>();
 
-// Add HttpClients for service-to-service communication
-builder.Services.AddHttpClient("CoverageService", client =>
+// NACHA debit files go from this service straight to the tenant's bank (SFTP
+// settings from tenant-service paymentControls.nachaTransmission, credentials
+// from Key Vault, pinned host key). No person receives the file. One that
+// cannot be sent is held encrypted (FieldProtection key ring) for 7 days for a
+// platform admin's retrieval or another approver's retry.
+builder.Services.AddChoFieldProtection(builder.Configuration, builder.Environment, "premium-billing-service");
+builder.Services.AddChoNachaTransmission(builder.Configuration, builder.Environment, "premium-billing-service", databaseProvider);
+
+// HttpClients for service-to-service communication. AddChoAuthentication puts
+// ChoOutboundTokenHandler on every factory client: a caller's token is
+// forwarded, and with no caller a service token is minted for the tenant the
+// request names in X-Tenant-ID (the clients always set it from the record).
+builder.Services.AddHttpClient(CoverageServiceClient.HttpClientName, client =>
 {
     var coverageServiceUrl = builder.Configuration["CoverageService:BaseUrl"] ?? "http://coverage-service:8080";
     client.BaseAddress = new Uri(coverageServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-builder.Services.AddHttpClient("SponsorService", client =>
+builder.Services.AddHttpClient(SponsorServiceClient.HttpClientName, client =>
+{
+    var sponsorServiceUrl = builder.Configuration["SponsorService:BaseUrl"] ?? "http://sponsor-service:8080";
+    client.BaseAddress = new Uri(sponsorServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// sponsor-service's full bank-account read: HttpSponsorBankAccountSource sets
+// premium-billing-service's own service token on every request.
+builder.Services.AddHttpClient(HttpSponsorBankAccountSource.HttpClientName, client =>
 {
     var sponsorServiceUrl = builder.Configuration["SponsorService:BaseUrl"] ?? "http://sponsor-service:8080";
     client.BaseAddress = new Uri(sponsorServiceUrl);
@@ -96,16 +146,8 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
-// CORS (for development)
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -127,14 +169,13 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
 
-app.UseCors("AllowAll");
-
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();
 
 app.Run();
+
+public partial class Program { }

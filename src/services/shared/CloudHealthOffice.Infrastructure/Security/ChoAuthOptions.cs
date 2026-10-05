@@ -1,0 +1,341 @@
+using System.Security.Cryptography;
+using Microsoft.IdentityModel.Tokens;
+
+namespace CloudHealthOffice.Infrastructure.Security;
+
+/// <summary>
+/// Token trust for a CHO backend service, bound from the <c>ChoAuth</c>
+/// configuration section.
+///
+/// <code>
+/// "ChoAuth": {
+///   "Audience": "cho-api",
+///   "Issuers": [
+///     { "Issuer": "cho-token-service", "PublicKeyPem": "...", "Kind": "User" },
+///     { "Issuer": "cho-token-service-svc", "PublicKeyPem": "...", "Kind": "Service" },
+///     { "Issuer": "cho-workload",      "PublicKeyPem": "...", "Kind": "Workload" }
+///   ],
+///   "ServiceToken": { "Source": "TokenService", "ClientId": "claims-service",
+///                     "TokenServiceUrl": "http://token-service", "EntraScope": "api://&lt;app id&gt;/.default" }
+/// }
+/// </code>
+///
+/// Which hosts receive this service's outbound CHO tokens is configured under
+/// <c>ChoAuth:Outbound</c> (<see cref="ChoOutboundOptions"/>, read by
+/// <see cref="ChoOutboundHosts"/>).
+/// </summary>
+public sealed class ChoAuthOptions
+{
+    public const string SectionName = "ChoAuth";
+
+    /// <summary>The audience every CHO access token must carry.</summary>
+    public string Audience { get; set; } = "cho-api";
+
+    /// <summary>Issuers whose tokens this service accepts.</summary>
+    public List<ChoTrustedIssuer> Issuers { get; set; } = new();
+
+    /// <summary>
+    /// How this service obtains a token for its own outbound calls when no user
+    /// token is available to forward (message consumers, scheduled jobs).
+    /// </summary>
+    public ChoServiceTokenOptions? ServiceToken { get; set; }
+
+    /// <summary>Clock skew tolerated on token lifetime checks.</summary>
+    public TimeSpan ClockSkew { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Fails startup on a configuration that would accept forged or
+    /// unaudienced tokens. Symmetric keys are a development convenience and are
+    /// refused on any other host.
+    /// </summary>
+    public void Validate(bool allowSymmetricKeys)
+    {
+        if (string.IsNullOrWhiteSpace(Audience))
+            throw new InvalidOperationException($"{SectionName}:Audience is required.");
+
+        if (Issuers.Count == 0)
+            throw new InvalidOperationException(
+                $"{SectionName}:Issuers is empty. Every CHO service requires authenticated callers; " +
+                "configure at least one trusted issuer.");
+
+        foreach (var issuer in Issuers)
+        {
+            if (string.IsNullOrWhiteSpace(issuer.Issuer))
+                throw new InvalidOperationException($"{SectionName}:Issuers entry is missing 'Issuer'.");
+
+            var sources = (string.IsNullOrWhiteSpace(issuer.PublicKeyPem) ? 0 : 1)
+                        + (string.IsNullOrWhiteSpace(issuer.Authority) ? 0 : 1)
+                        + (string.IsNullOrWhiteSpace(issuer.SymmetricKey) ? 0 : 1);
+            if (sources != 1)
+                throw new InvalidOperationException(
+                    $"{SectionName} issuer '{issuer.Issuer}' must set exactly one of PublicKeyPem, Authority or SymmetricKey.");
+
+            if (!string.IsNullOrWhiteSpace(issuer.SymmetricKey) && !allowSymmetricKeys)
+                throw new InvalidOperationException(
+                    $"{SectionName} issuer '{issuer.Issuer}' uses a symmetric key, which is permitted only on a Development host. " +
+                    "Use an asymmetric key (PublicKeyPem) or an OIDC Authority.");
+
+            // Every service holds the service-token key, so an issuer that may
+            // mint service tokens must not also mint workload identities.
+            if (issuer.AllowServiceRole && issuer.AllowWorkloadIdentity)
+                throw new InvalidOperationException(
+                    $"{SectionName} issuer '{issuer.Issuer}' sets both AllowServiceRole and AllowWorkloadIdentity. " +
+                    "Workload tokens come from their own issuer (token-service's cho-workload).");
+
+            // Kind is the explicit form of the two legacy flags; they must agree.
+            if (issuer.Kind is { } kind
+                && ((issuer.AllowServiceRole && kind != ChoIssuerKind.Service)
+                    || (issuer.AllowWorkloadIdentity && kind != ChoIssuerKind.Workload)))
+            {
+                throw new InvalidOperationException(
+                    $"{SectionName} issuer '{issuer.Issuer}' sets Kind={kind}, which contradicts " +
+                    $"{(issuer.AllowServiceRole ? "AllowServiceRole" : "AllowWorkloadIdentity")}.");
+            }
+        }
+
+        var duplicate = Issuers.GroupBy(i => i.Issuer, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate != null)
+            throw new InvalidOperationException(
+                $"{SectionName} issuer '{duplicate.Key}' is configured more than once; each issuer has exactly one kind.");
+
+        // allowSymmetricKeys is "a Development or Testing host": the only hosts
+        // on which a service may hold a service-token signing key at all.
+        ServiceToken?.Validate(allowLocalKey: allowSymmetricKeys);
+    }
+}
+
+/// <summary>
+/// The one kind of token an issuer mints. Each trusted issuer yields exactly
+/// one kind of actor, so a key that can mint one kind can never mint another.
+/// </summary>
+public enum ChoIssuerKind
+{
+    /// <summary>
+    /// User tokens (token-service's user issuer, the portal). Its tokens never
+    /// identify a service or a workload, whatever roles they carry.
+    /// </summary>
+    User,
+
+    /// <summary>
+    /// Service tokens: token-service's <c>cho-token-service-svc</c> in deployed
+    /// environments (issued per service after a workload-identity check), the
+    /// locally signed <c>cho-internal-dev</c> in Development/Testing.
+    /// Every token must carry <see cref="ChoServiceRole"/> and is only ever a
+    /// service actor; one without it is rejected, never read as a user.
+    /// </summary>
+    Service,
+
+    /// <summary>
+    /// Workload tokens (token-service's <c>cho-workload</c>). Every token must
+    /// carry <see cref="ChoWorkloadRole"/> and is only ever a workload actor.
+    /// </summary>
+    Workload,
+}
+
+/// <summary>An issuer a CHO service accepts tokens from.</summary>
+public sealed class ChoTrustedIssuer
+{
+    /// <summary>
+    /// What this issuer's tokens are: <see cref="ChoIssuerKind.User"/>,
+    /// <see cref="ChoIssuerKind.Service"/> or <see cref="ChoIssuerKind.Workload"/>.
+    /// When unset it follows the legacy flags: <see cref="AllowServiceRole"/>
+    /// means Service, <see cref="AllowWorkloadIdentity"/> means Workload,
+    /// neither means User.
+    /// </summary>
+    public ChoIssuerKind? Kind { get; set; }
+
+    /// <summary>The kind this issuer's tokens are authenticated as.</summary>
+    public ChoIssuerKind EffectiveKind => Kind
+        ?? (AllowServiceRole ? ChoIssuerKind.Service
+            : AllowWorkloadIdentity ? ChoIssuerKind.Workload
+            : ChoIssuerKind.User);
+
+    /// <summary>Exact <c>iss</c> value.</summary>
+    public string Issuer { get; set; } = string.Empty;
+
+    /// <summary>PEM-encoded RSA or EC public key that verifies this issuer's tokens.</summary>
+    public string? PublicKeyPem { get; set; }
+
+    /// <summary>OIDC authority whose discovery document supplies the signing keys.</summary>
+    public string? Authority { get; set; }
+
+    /// <summary>Base64 HMAC key. Development hosts only.</summary>
+    public string? SymmetricKey { get; set; }
+
+    /// <summary>
+    /// Whether tokens from this issuer may carry the <see cref="ChoServiceRole"/>
+    /// role. Only the internal service-token issuer should set this. Legacy
+    /// spelling of <c>Kind: Service</c>: every token from such an issuer must
+    /// carry the role, and none is ever a user token.
+    /// </summary>
+    public bool AllowServiceRole { get; set; }
+
+    /// <summary>
+    /// Whether tokens from this issuer that carry the <see cref="ChoWorkloadRole"/>
+    /// role identify a Kubernetes workload (for <see cref="RequireServiceClientAttribute"/>).
+    /// Only token-service's workload issuer (<c>cho-workload</c>), whose key only
+    /// token-service holds, should set this. It cannot be combined with
+    /// <see cref="AllowServiceRole"/>.
+    /// </summary>
+    public bool AllowWorkloadIdentity { get; set; }
+
+    internal IEnumerable<SecurityKey> StaticKeys()
+    {
+        if (!string.IsNullOrWhiteSpace(SymmetricKey))
+            return [new SymmetricSecurityKey(Convert.FromBase64String(SymmetricKey))];
+
+        if (!string.IsNullOrWhiteSpace(PublicKeyPem))
+            return [ChoKeys.PublicKeyFromPem(PublicKeyPem)];
+
+        return [];
+    }
+}
+
+/// <summary>
+/// How this service obtains its own service tokens (<see cref="IChoServiceTokenSource"/>).
+///
+/// <code>
+/// // Deployed: token-service issues them; this service holds no signing key.
+/// "ServiceToken": { "Source": "TokenService", "ClientId": "claims-service",
+///                   "TokenServiceUrl": "http://token-service", "EntraScope": "api://&lt;token-service app&gt;/.default" }
+/// // Development / Testing only: signed locally with the development key.
+/// "ServiceToken": { "Source": "LocalKey", "Issuer": "cho-internal-dev", "ClientId": "claims-service", "SymmetricKey": "..." }
+/// </code>
+/// </summary>
+public sealed class ChoServiceTokenOptions
+{
+    /// <summary>
+    /// Where tokens come from. When unset: <see cref="ChoServiceTokenSourceKind.TokenService"/>
+    /// if <see cref="TokenServiceUrl"/> is set, otherwise <see cref="ChoServiceTokenSourceKind.LocalKey"/>.
+    /// </summary>
+    public ChoServiceTokenSourceKind? Source { get; set; }
+
+    /// <summary>The source in force.</summary>
+    public ChoServiceTokenSourceKind EffectiveSource => Source
+        ?? (string.IsNullOrWhiteSpace(TokenServiceUrl) ? ChoServiceTokenSourceKind.LocalKey : ChoServiceTokenSourceKind.TokenService);
+
+    /// <summary>token-service's base URL (in cluster: <c>http://token-service</c>). TokenService source only.</summary>
+    public string? TokenServiceUrl { get; set; }
+
+    /// <summary>
+    /// The Entra scope of token-service's service-token API, <c>api://&lt;app id&gt;/.default</c>.
+    /// The workload identity's access token for it is what token-service exchanges. TokenService source only.
+    /// </summary>
+    public string? EntraScope { get; set; }
+
+    /// <summary>
+    /// Client id of the user-assigned managed identity, when the pod's
+    /// workload-identity environment (<c>AZURE_CLIENT_ID</c>) should not decide. TokenService source only.
+    /// </summary>
+    public string? ManagedIdentityClientId { get; set; }
+
+    /// <summary>How long before expiry a cached token is replaced. TokenService source only.</summary>
+    public TimeSpan RefreshBefore { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>Issuer name written into locally minted tokens; must be trusted by callees. LocalKey source only.</summary>
+    public string Issuer { get; set; } = "cho-internal";
+
+    /// <summary>This service's identity (becomes <c>sub</c> and <c>azp</c>).</summary>
+    public string ClientId { get; set; } = string.Empty;
+
+    /// <summary>PEM private key (RSA or EC). Load it from Key Vault, never from source.</summary>
+    public string? PrivateKeyPem { get; set; }
+
+    /// <summary>Base64 HMAC key. Development hosts only.</summary>
+    public string? SymmetricKey { get; set; }
+
+    /// <summary>Lifetime of a locally minted token. LocalKey source only.</summary>
+    public TimeSpan Lifetime { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Fails startup on a service-token configuration that is incomplete, or
+    /// that would hold a signing key on a deployed host. A local key (the old
+    /// shared <c>cho-internal</c> key, with which any service could mint a
+    /// token naming any other) is refused outside Development and Testing.
+    /// </summary>
+    public void Validate(bool allowLocalKey)
+    {
+        const string section = ChoAuthOptions.SectionName + ":ServiceToken";
+        if (string.IsNullOrWhiteSpace(ClientId))
+            throw new InvalidOperationException($"{section} requires ClientId.");
+
+        var hasKey = !string.IsNullOrWhiteSpace(PrivateKeyPem) || !string.IsNullOrWhiteSpace(SymmetricKey);
+        switch (EffectiveSource)
+        {
+            case ChoServiceTokenSourceKind.LocalKey:
+                if (!allowLocalKey)
+                    throw new InvalidOperationException(
+                        $"{section}: Source=LocalKey (a signing key held by this service) is permitted only on a Development " +
+                        "or Testing host. Set Source=TokenService, TokenServiceUrl and EntraScope so token-service issues this " +
+                        "service's tokens (docs/security/portal-token-service.md, \"Service tokens\").");
+                if (string.IsNullOrWhiteSpace(Issuer))
+                    throw new InvalidOperationException($"{section} requires Issuer.");
+                if (string.IsNullOrWhiteSpace(PrivateKeyPem) == string.IsNullOrWhiteSpace(SymmetricKey))
+                    throw new InvalidOperationException($"{section} must set exactly one of PrivateKeyPem or SymmetricKey.");
+                break;
+
+            case ChoServiceTokenSourceKind.TokenService:
+                if (hasKey)
+                    throw new InvalidOperationException(
+                        $"{section}: Source=TokenService takes no PrivateKeyPem or SymmetricKey; remove the key from this service.");
+                if (!Uri.TryCreate(TokenServiceUrl, UriKind.Absolute, out var url)
+                    || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
+                    throw new InvalidOperationException($"{section}:TokenServiceUrl must be an absolute http(s) URL.");
+                if (string.IsNullOrWhiteSpace(EntraScope) || !EntraScope.EndsWith("/.default", StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        $"{section}:EntraScope must be token-service's application scope, api://<app id>/.default.");
+                if (RefreshBefore < TimeSpan.Zero || RefreshBefore > TimeSpan.FromMinutes(5))
+                    throw new InvalidOperationException($"{section}:RefreshBefore must be between 0 and 5 minutes.");
+                break;
+
+            default:
+                throw new InvalidOperationException($"{section}:Source must be LocalKey or TokenService.");
+        }
+    }
+}
+
+internal static class ChoKeys
+{
+    internal static SecurityKey PublicKeyFromPem(string pem)
+    {
+        if (TryImportEc(pem, out var ec))
+            return new ECDsaSecurityKey(ec);
+
+        var rsa = RSA.Create();
+        rsa.ImportFromPem(pem);
+        return new RsaSecurityKey(rsa);
+    }
+
+    internal static SigningCredentials SigningCredentialsFrom(string? privateKeyPem, string? symmetricKey)
+    {
+        if (!string.IsNullOrWhiteSpace(symmetricKey))
+            return new SigningCredentials(
+                new SymmetricSecurityKey(Convert.FromBase64String(symmetricKey)), SecurityAlgorithms.HmacSha256);
+
+        if (string.IsNullOrWhiteSpace(privateKeyPem))
+            throw new InvalidOperationException("A signing key is required.");
+
+        if (TryImportEc(privateKeyPem, out var ec))
+            return new SigningCredentials(new ECDsaSecurityKey(ec), SecurityAlgorithms.EcdsaSha256);
+
+        var rsa = RSA.Create();
+        rsa.ImportFromPem(privateKeyPem);
+        return new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256);
+    }
+
+    private static bool TryImportEc(string pem, out ECDsa ec)
+    {
+        ec = ECDsa.Create();
+        try
+        {
+            ec.ImportFromPem(pem);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or CryptographicException)
+        {
+            ec.Dispose();
+            ec = null!;
+            return false;
+        }
+    }
+}

@@ -4,6 +4,7 @@ using AppealsService.Middleware;
 using AppealsService.Models;
 using AppealsService.Repositories;
 using AppealsService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AppealsService.Controllers;
@@ -30,6 +31,11 @@ namespace AppealsService.Controllers;
 /// Idempotent same-status requests (e.g. submit when already Submitted)
 /// short-circuit at the controller layer — the state machine itself
 /// rejects X→X as illegal; the controller handles UX idempotency.
+///
+/// Identity: the tenant and the acting user come from the validated CHO
+/// token only (<see cref="ICurrentActor"/>). Request bodies never name the
+/// actor. Reads need <c>appeals:read</c>, writes <c>appeals:write</c>
+/// (defaults set in Program.cs).
 /// </summary>
 [ApiController]
 [Route("api/appeals")]
@@ -43,19 +49,25 @@ public class AppealsController : ControllerBase
     private readonly IAppealFieldEncryptor _encryptor;
     private readonly IAppealEventPublisher _publisher;
     private readonly ILogger<AppealsController> _logger;
+    private readonly ICurrentActor _currentActor;
+
+    /// <summary>The token subject. Every write records this as its actor.</summary>
+    private string Actor => _currentActor.UserId;
 
     public AppealsController(
         IAppealRepository appeals,
         IAppealEventRepository events,
         IAppealFieldEncryptor encryptor,
         IAppealEventPublisher publisher,
-        ILogger<AppealsController> logger)
+        ILogger<AppealsController> logger,
+        ICurrentActor currentActor)
     {
         _appeals = appeals;
         _events = events;
         _encryptor = encryptor;
         _publisher = publisher;
         _logger = logger;
+        _currentActor = currentActor;
     }
 
     // ── Create / Read ───────────────────────────────────────────────────
@@ -67,7 +79,7 @@ public class AppealsController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var now = DateTime.UtcNow;
 
         var appeal = new Appeal
@@ -91,7 +103,7 @@ public class AppealsController : ControllerBase
             Source = request.Source,
             SubmittedDate = now,
             TargetResponseDate = request.TargetResponseDate ?? now.AddDays(request.IsUrgent ? 30 : 60),
-            SubmittedBy = request.SubmittedBy,
+            SubmittedBy = actor,
             IsUrgent = request.IsUrgent,
             ServiceDate = request.ServiceDate,
             DiagnosisCodes = request.DiagnosisCodes ?? new(),
@@ -257,7 +269,7 @@ public class AppealsController : ControllerBase
 
         if (!string.IsNullOrEmpty(request.Description))
         {
-            var actor = User.Identity?.Name ?? "System";
+            var actor = Actor;
             var note = new AppealNote
             {
                 CreatedBy = actor,
@@ -352,10 +364,10 @@ public class AppealsController : ControllerBase
         var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
         if (appeal == null) return NotFound();
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var note = new AppealNote
         {
-            CreatedBy = string.IsNullOrEmpty(request.CreatedBy) ? actor : request.CreatedBy,
+            CreatedBy = actor,
             NoteText = await _encryptor.EncryptAsync(request.NoteText, ct) ?? string.Empty,
             IsInternal = request.IsInternal
         };
@@ -389,7 +401,7 @@ public class AppealsController : ControllerBase
         var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
         if (appeal == null) return NotFound();
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var now = DateTime.UtcNow;
 
         var attachment = new AppealAttachment
@@ -442,7 +454,7 @@ public class AppealsController : ControllerBase
         if (attachment == null) return NotFound();
 
         var acknowledged = request?.AcknowledgmentReceived ?? true;
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
 
         var auditEvent = BuildEvent(appeal, AppealEventType.AppealAttachmentAcknowledged,
             fromStatus: null, toStatus: null, actor, request?.EventId);
@@ -482,7 +494,7 @@ public class AppealsController : ControllerBase
             return Ok(await DecryptForResponseAsync(appeal, ct));
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var previous = appeal.AssignedReviewerId;
 
         appeal.AssignedReviewerId = request.AssignedReviewerId;
@@ -553,7 +565,7 @@ public class AppealsController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var from = appeal.Status;
         appeal.Status = to;
         appeal.UpdatedAt = DateTime.UtcNow;
@@ -604,7 +616,7 @@ public class AppealsController : ControllerBase
             return Conflict(problem);
         }
 
-        var actor = User.Identity?.Name ?? "System";
+        var actor = Actor;
         var from = appeal.Status;
         var now = DateTime.UtcNow;
 
@@ -625,7 +637,7 @@ public class AppealsController : ControllerBase
                 ApprovedAmount = decision.ApprovedAmount,
                 DecisionReason = await _encryptor.EncryptAsync(decision.DecisionReason, ct),
                 ReviewerNotes = await _encryptor.EncryptAsync(decision.ReviewerNotes, ct),
-                DecisionMaker = string.IsNullOrEmpty(decision.DecisionMaker) ? actor : decision.DecisionMaker,
+                DecisionMaker = actor,
                 DecisionDate = now
             };
             appeal.DecisionDate = now;
@@ -925,8 +937,7 @@ public class CreateAppealRequest
 
     public DateTime? TargetResponseDate { get; set; }
 
-    [StringLength(100)]
-    public string? SubmittedBy { get; set; }
+    // No SubmittedBy: the submitter is the token's user (ICurrentActor.UserId).
 
     public bool IsUrgent { get; set; }
     public DateTime? ServiceDate { get; set; }
@@ -963,8 +974,7 @@ public class AppealDecisionInput
     [StringLength(8000)]
     public string? ReviewerNotes { get; set; }
 
-    [StringLength(100)]
-    public string? DecisionMaker { get; set; }
+    // No DecisionMaker: the decision maker is the token's user (ICurrentActor.UserId).
 }
 
 public class WithdrawRequest
@@ -990,8 +1000,7 @@ public class AddNoteRequest
     [Required] [StringLength(8000)]
     public string NoteText { get; set; } = string.Empty;
 
-    [StringLength(200)]
-    public string? CreatedBy { get; set; }
+    // No CreatedBy: the note author is the token's user (ICurrentActor.UserId).
 
     public bool IsInternal { get; set; } = true;
 

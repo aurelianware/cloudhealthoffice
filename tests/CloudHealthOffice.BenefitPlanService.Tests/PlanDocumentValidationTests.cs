@@ -12,6 +12,9 @@ public class PlanDocumentValidationTests
     // but wrong length.
     private const string Sha1Base64 = "2jmj7l5rSw0yVb/vlWAYkK/YBwk=";
 
+    // Document hosts the fixtures below use; the default allowlist is empty.
+    private static readonly string[] ExampleHosts = { "example.com" };
+
     [Fact]
     public void ValidateHash_accepts_null()
     {
@@ -69,7 +72,7 @@ public class PlanDocumentValidationTests
         };
 
         var ex = Assert.Throws<ArgumentException>(
-            () => PlanDocumentValidation.ValidateDocuments(docs));
+            () => PlanDocumentValidation.ValidateDocuments(docs, ExampleHosts));
         Assert.Equal("documents[1].contentHashSha256", ex.ParamName);
     }
 
@@ -84,7 +87,7 @@ public class PlanDocumentValidationTests
     [Fact]
     public void ValidateLocation_accepts_https_url()
     {
-        PlanDocumentValidation.ValidateLocation("https://example.com/sbc.pdf", "location");
+        PlanDocumentValidation.ValidateLocation("https://example.com/sbc.pdf", "location", ExampleHosts);
     }
 
     [Fact]
@@ -137,7 +140,7 @@ public class PlanDocumentValidationTests
         };
 
         var ex = Assert.Throws<ArgumentException>(
-            () => PlanDocumentValidation.ValidateDocuments(docs));
+            () => PlanDocumentValidation.ValidateDocuments(docs, ExampleHosts));
         Assert.Equal("documents[1].location", ex.ParamName);
     }
 }

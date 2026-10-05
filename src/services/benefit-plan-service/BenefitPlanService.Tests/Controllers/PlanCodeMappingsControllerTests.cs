@@ -9,9 +9,10 @@ namespace BenefitPlanService.Tests.Controllers;
 public sealed class PlanCodeMappingsControllerTests
 {
     private static PlanCodeMappingsController Build(
-        InMemoryEnrollment834PlanCodeMappingRepository repo, string? tenantId = "tenant-a")
+        InMemoryEnrollment834PlanCodeMappingRepository repo, string? tenantId = "tenant-a", string actor = "test-user")
     {
-        var controller = new PlanCodeMappingsController(repo, NullLogger<PlanCodeMappingsController>.Instance);
+        var controller = new PlanCodeMappingsController(
+            repo, new FakeCurrentActor(actor), NullLogger<PlanCodeMappingsController>.Instance);
         var httpContext = new DefaultHttpContext();
         if (tenantId is not null)
         {
@@ -60,6 +61,30 @@ public sealed class PlanCodeMappingsControllerTests
         var ok = resolved.Should().BeOfType<OkObjectResult>().Subject;
         var response = ok.Value.Should().BeOfType<PlanCodeMappingResponse>().Subject;
         response.PlanId.Should().Be("plan-guid-123");
+    }
+
+    [Fact]
+    public async Task Create_RecordsTokenSubjectAsCreatedBy_NotDisplayName()
+    {
+        var repo = new InMemoryEnrollment834PlanCodeMappingRepository();
+        var controller = Build(repo, actor: "user-sub-42");
+        // A display name in the principal must not be what the audit records.
+        controller.ControllerContext.HttpContext.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "Display Name") }, "test"));
+
+        await controller.Create(new CreatePlanCodeMappingRequest
+        {
+            GroupNumber = "GRP0001", InsuranceLineCode = "HLT", ExternalPlanCode = "PPO2026", PlanId = "p1"
+        }, default);
+        await controller.CreateBulk(new List<CreatePlanCodeMappingRequest>
+        {
+            new() { GroupNumber = "GRP0002", InsuranceLineCode = "HLT", ExternalPlanCode = "B", PlanId = "p2" }
+        }, default);
+
+        var stored = await repo.ListAsync("tenant-a", null, default);
+        stored.Should().HaveCount(2);
+        stored.Should().OnlyContain(m => m.CreatedBy == "user-sub-42");
     }
 
     [Fact]

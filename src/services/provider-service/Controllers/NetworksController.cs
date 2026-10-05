@@ -1,7 +1,9 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Adapters;
 using ProviderService.Models;
 using ProviderService.Repositories;
+using ProviderService.Security;
 using ProviderService.Services;
 
 namespace ProviderService.Controllers;
@@ -11,12 +13,22 @@ namespace ProviderService.Controllers;
 /// <see cref="Organization"/> entity from capability 5.3). Reads route
 /// through <see cref="IOrganizationAdapter"/> per tenant config; writes
 /// go directly to <see cref="IOrganizationService"/> on the CHO store.
+///
+/// <para>
+/// Network writes need networks:write. Network reads accept networks:read or
+/// providers:read: claims-service checks roster membership during
+/// adjudication with a claims examiner's token, and examiners hold
+/// providers:read but not networks:read. Tenant and actor come from the token.
+/// </para>
 /// </summary>
 [ApiController]
 [Route("api/v1/networks")]
 [Produces("application/json")]
 public class NetworksController : ControllerBase
 {
+    private const string NetworkRead = "networks:read,providers:read";
+    private const string NetworkWrite = "networks:write";
+
     private readonly IOrganizationService _service;
     private readonly OrganizationAdapterFactory _adapterFactory;
     private readonly INetworkRosterService _rosterService;
@@ -34,14 +46,14 @@ public class NetworksController : ControllerBase
         _logger = logger;
     }
 
-    private string TenantId =>
-        HttpContext.Items["TenantId"]?.ToString()
-            ?? throw new InvalidOperationException("TenantId not found in request context");
+    /// <summary>The tenant from the validated token; never a header, query or body value.</summary>
+    private string TenantId => this.TokenTenantId();
 
     /// <summary>
     /// Paginated list of networks. Filters are AND-combined.
     /// </summary>
     [HttpGet]
+    [RequirePermission(NetworkRead)]
     [ProducesResponseType(typeof(NetworkListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<NetworkListResponse>> List(
         [FromQuery] NetworkType? networkType = null,
@@ -80,6 +92,7 @@ public class NetworksController : ControllerBase
 
     /// <summary>Get a single network by id.</summary>
     [HttpGet("{id}")]
+    [RequirePermission(NetworkRead)]
     [ProducesResponseType(typeof(Organization), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Organization>> GetById(string id)
@@ -102,6 +115,7 @@ public class NetworksController : ControllerBase
 
     /// <summary>Get child networks for a parent (partOf hierarchy traversal).</summary>
     [HttpGet("{id}/children")]
+    [RequirePermission(NetworkRead)]
     [ProducesResponseType(typeof(IEnumerable<Organization>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<Organization>>> GetChildren(string id)
     {
@@ -125,6 +139,7 @@ public class NetworksController : ControllerBase
     /// tenant as the network.
     /// </summary>
     [HttpGet("{id}/roster")]
+    [RequirePermission(NetworkRead)]
     [ProducesResponseType(typeof(NetworkRosterResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -177,6 +192,7 @@ public class NetworksController : ControllerBase
     /// stable across the active/inactive distinction.
     /// </summary>
     [HttpGet("{id}/members/{npi}")]
+    [RequirePermission(NetworkRead)]
     [ProducesResponseType(typeof(NetworkMembershipResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -216,6 +232,7 @@ public class NetworksController : ControllerBase
 
     /// <summary>Create a new network. Activates v1 in one shot.</summary>
     [HttpPost]
+    [RequirePermission(NetworkWrite)]
     [ProducesResponseType(typeof(Organization), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<Organization>> Create([FromBody] Organization organization)
@@ -242,6 +259,7 @@ public class NetworksController : ControllerBase
     /// </para>
     /// </summary>
     [HttpPut("{id}")]
+    [RequirePermission(NetworkWrite)]
     [ProducesResponseType(typeof(Organization), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -273,6 +291,7 @@ public class NetworksController : ControllerBase
 
     /// <summary>Soft-delete the network by terminating the current head version.</summary>
     [HttpDelete("{id}")]
+    [RequirePermission(NetworkWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(string id, [FromQuery] string? reason = null)
@@ -288,14 +307,11 @@ public class NetworksController : ControllerBase
         }
     }
 
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "system";
-    }
+    /// <summary>
+    /// The acting user is the token subject. An <c>X-User-Id</c> header or a
+    /// body field never names the actor.
+    /// </summary>
+    private string ResolveActorId() => this.TokenActorId();
 
     private static string SanitizeForLog(string? value)
     {

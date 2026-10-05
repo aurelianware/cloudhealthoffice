@@ -1,0 +1,33 @@
+# How every CHO service obtains its own service tokens (ChoAuth:ServiceToken)
+# for background calls: from token-service, by Azure workload identity. Mounted
+# with envFrom by each service Deployment, which also sets its own
+# ChoAuth__ServiceToken__ClientId and runs as its own workload-identity service
+# account (<service>-sa, label azure.workload.identity/use: "true").
+#
+# Services hold no service-token signing key: ChoAuth__ServiceToken__PrivateKeyPem /
+# SymmetricKey (Source=LocalKey) are refused at startup outside Development/Testing.
+# See docs/security/portal-token-service.md ("Service tokens").
+#
+# Replace before deploying:
+#   <TOKEN_SERVICE_SVC_APP_ID>  client id of the "CHO token-service (service tokens)" Entra
+#       app registration that token-service validates as ServiceTokens:Audiences
+#   <TOKEN_SERVICE_PUBLIC_KEY_PEM>  token-service's public signing key (az keyvault key download
+#       ... -e PEM, the same key as the cho-token-service issuer), on one line with \n escapes
+#
+# Callee trust: every service must also trust token-service's service issuer.
+# The entry below uses list index 9 so it does not collide with the issuers
+# supplied elsewhere (indexes 0..n from Key Vault); .NET binds sparse indexes
+# in order. Remove the cho-internal entry from those issuers once every
+# service has switched (migration step 4).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cho-service-tokens
+  namespace: cloudhealthoffice
+data:
+  ChoAuth__ServiceToken__Source: "TokenService"
+  ChoAuth__ServiceToken__TokenServiceUrl: "http://token-service"
+  ChoAuth__ServiceToken__EntraScope: "api://<TOKEN_SERVICE_SVC_APP_ID>/.default"
+  ChoAuth__Issuers__9__Issuer: "cho-token-service-svc"
+  ChoAuth__Issuers__9__Kind: "Service"
+  ChoAuth__Issuers__9__PublicKeyPem: "<TOKEN_SERVICE_PUBLIC_KEY_PEM>"

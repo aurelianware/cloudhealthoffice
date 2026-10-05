@@ -1,4 +1,3 @@
-using AccumulatorService.Middleware;
 using CloudHealthOffice.Infrastructure.Extensions;
 using AccumulatorService.Repositories;
 using AccumulatorService.Services;
@@ -6,6 +5,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.Azure.Cosmos;
 using MongoDB.Driver;
 
@@ -14,10 +14,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers(options =>
+builder.Services.AddControllers().AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from it.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
 {
-    options.Filters.Add<TenantActionFilter>();
-}).AddCloudHealthOfficeJsonOptions();
+    auth.DefaultReadPermission = "accumulators:read";
+    auth.DefaultWritePermission = "accumulators:write";
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -67,7 +72,8 @@ builder.Services.AddSingleton<IAccumulatorEventPublisher>(sp => sp.GetRequiredSe
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KafkaAccumulatorEventPublisher>());
 builder.Services.AddHostedService<ClaimFinalizedConsumer>();
 
-builder.Services.AddCors(o => o.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -89,9 +95,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Accumulator Service API v1"));
 }
 
-app.UseCors("AllowAll");
-app.UseTenantMiddleware();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

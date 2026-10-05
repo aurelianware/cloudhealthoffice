@@ -1,12 +1,12 @@
 using Microsoft.OpenApi.Models;
 using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
-using ProviderContractsService.Middleware;
 using ProviderContractsService.Repositories;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -15,6 +15,17 @@ builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// it, never from a header, the query string or the body. Reads need
+// contracts:read, writes contracts:write (ProviderRelations holds both;
+// Finance reads).
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "contracts:read";
+    auth.DefaultWritePermission = "contracts:write";
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -28,7 +39,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (the repository reads the token's tenant and actor)
 builder.Services.AddHttpContextAccessor();
 
 // Database Configuration — MongoDB
@@ -50,16 +61,8 @@ builder.Services.AddChoHealthChecks(options =>
     options.MongoDbConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 });
 
-// CORS (for development)
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -80,9 +83,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
-app.UseTenantMiddleware();
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

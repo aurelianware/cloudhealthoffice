@@ -53,8 +53,13 @@
     <PackageVersion Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
     <PackageVersion Include="Azure.Core" Version="1.44.1" />
     <PackageVersion Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.4.0" />
+    <!-- Field encryption key ring (CloudHealthOffice.FieldProtection): Azure.Core 1.44.1
+         and Azure.Storage.Blobs 12.23.0 floors, so no Azure.Core 1.55 is pulled in. -->
+    <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.0" />
+    <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.4.0" />
     <PackageVersion Include="Azure.Identity" Version="1.13.2" />
     <PackageVersion Include="Azure.Messaging.ServiceBus" Version="7.17.5" />
+    <PackageVersion Include="Azure.Security.KeyVault.Keys" Version="4.7.0" />
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.7.0" />
     <PackageVersion Include="Azure.Storage.Blobs" Version="12.29.2" />
     <PackageVersion Include="Blazored.LocalStorage" Version="4.5.0" />
@@ -62,11 +67,12 @@
     <PackageVersion Include="Confluent.Kafka" Version="2.8.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
-    <PackageVersion Include="EphemeralMongo7" Version="2.0.0" />
+    <PackageVersion Include="EphemeralMongo" Version="3.2.0" />
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
     <PackageVersion Include="Hl7.Fhir.R4" Version="5.10.2" />
     <PackageVersion Include="MessagePack" Version="2.5.301" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.25" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.25" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.25" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="8.0.25" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.0" />
@@ -94,6 +100,7 @@
     <PackageVersion Include="Microsoft.Identity.Web" Version="4.3.0" />
     <PackageVersion Include="Microsoft.Identity.Web.UI" Version="4.3.0" />
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="7.1.2" />
+    <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.16.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="MongoDB.Driver" Version="3.12.0" />
     <PackageVersion Include="MongoDB.Driver.Core.Extensions.DiagnosticSources" Version="1.5.0" />
@@ -133,7 +140,7 @@
     <PackageVersion Include="Svg.Skia" Version="1.0.0.18" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.9.0" />
     <PackageVersion Include="System.Formats.Asn1" Version="9.0.20" />
-    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
     <PackageVersion Include="System.Net.Http" Version="4.3.4" />
     <PackageVersion Include="System.Net.Http.Json" Version="8.0.0" />
     <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />

@@ -49,14 +49,17 @@ public class MemberDocumentService : IMemberDocumentService
         }
     }
 
-    public async Task ToggleLegalHoldAsync(string documentId, bool legalHold)
+    public async Task ToggleLegalHoldAsync(string documentId, bool legalHold, string reason)
     {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason is required to place or release a legal hold.", nameof(reason));
+
         var baseUrl = GetBaseUrl();
         try
         {
             var response = await _httpClient.PutAsJsonAsync(
                 $"{baseUrl}/api/v1/member-documents/{Uri.EscapeDataString(documentId)}/legal-hold",
-                new { legalHold });
+                new { legalHold, reason = reason.Trim() });
             response.EnsureSuccessStatusCode();
         }
         catch (HttpRequestException ex)
@@ -83,8 +86,52 @@ public class MemberDocumentService : IMemberDocumentService
         }
     }
 
+    public async Task<MemberDocumentContent> OpenDocumentContentAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        var baseUrl = GetBaseUrl();
+        HttpResponseMessage? response = null;
+        try
+        {
+            // Headers only: the body is streamed on to the browser, never buffered here.
+            response = await _httpClient.GetAsync(
+                $"{baseUrl}/api/v1/member-documents/{Uri.EscapeDataString(documentId)}/content",
+                HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var status = response.StatusCode;
+                response.Dispose();
+                return new MemberDocumentContent(status);
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var headers = response.Content.Headers;
+            return new MemberDocumentContent(
+                response.StatusCode,
+                stream,
+                headers.ContentType?.MediaType,
+                headers.ContentDisposition?.FileNameStar ?? headers.ContentDisposition?.FileName?.Trim('"'),
+                owner: response);
+        }
+        catch (ChoTokenUnavailableException)
+        {
+            response?.Dispose();
+            throw; // no CHO token, nothing was sent: the caller maps the status
+        }
+        catch (HttpRequestException ex)
+        {
+            response?.Dispose();
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Member Document Service");
+            throw new ServiceUnavailableException("Member Document Service", ex);
+        }
+    }
+
     public async Task<string> UploadDocumentAsync(MemberDocumentUploadRequest request, Stream fileStream)
     {
+        // Refused here, with a message the UI can show, instead of a 415 from the service.
+        var contentType = MemberDocumentContentTypes.Resolve(request.FileName, request.ContentType)
+            ?? throw new UnsupportedDocumentTypeException(request.FileName);
+
         var baseUrl = GetBaseUrl();
 
         try
@@ -103,11 +150,6 @@ public class MemberDocumentService : IMemberDocumentService
             if (!string.IsNullOrWhiteSpace(request.RetentionPolicyId))
             {
                 content.Add(new StringContent(request.RetentionPolicyId), "RetentionPolicyId");
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.UploadedBy))
-            {
-                content.Add(new StringContent(request.UploadedBy), "UploadedBy");
             }
 
             if (!string.IsNullOrWhiteSpace(request.StateCode))
@@ -131,7 +173,7 @@ public class MemberDocumentService : IMemberDocumentService
             }
 
             var streamContent = new StreamContent(fileStream);
-            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(request.ContentType);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
             content.Add(streamContent, "file", request.FileName);
 
             var response = await _httpClient.PostAsync($"{baseUrl}/api/v1/member-documents", content);

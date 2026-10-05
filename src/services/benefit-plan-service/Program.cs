@@ -22,6 +22,7 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Caching;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.OperatingMode;
 using CloudHealthOffice.ProviderEnrollmentService.Configuration;
 using CloudHealthOffice.ProviderEnrollmentService.Gates;
@@ -151,7 +152,9 @@ builder.Services.AddHttpContextAccessor();
 // Tenant-driven routing: each tenant can be configured to read benefit plans
 // from CHO (default) or one of QNXT / Facets / HealthEdge once those adapters
 // are implemented. The factory consults tenant-service config (cached 5 min by
-// BenefitPlanTenantConfigCache) and falls back to "cho" on any failure.
+// BenefitPlanTenantConfigCache). A 401/403 from tenant-service fails the
+// request; 404, 5xx or an unreachable tenant-service use "cho" for that call
+// only (see TenantPlatformLookup).
 //
 // All adapters and the factory are scoped because ChoBenefitPlanAdapter wraps
 // scoped business services (IBenefitPlanService / IBenefitViewService). The
@@ -394,7 +397,19 @@ builder.Services.AddHttpClient<ITerminologyCrosswalkClient, HttpTerminologyCross
 });
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
-builder.Services.AddControllers()
+// ── Plan document locations ──────────────────────────────────────────────────
+// Plan document links are rendered by the portal, so a location must be an
+// https URL on an operator-allowed host (BenefitPlan:AllowedDocumentHosts,
+// empty by default) or an internal documentreference/{id}. Enforced on write
+// (400) and on read (bad stored values are withheld by the result filter).
+builder.Services.Configure<PlanDocumentLocationOptions>(
+    builder.Configuration.GetSection(PlanDocumentLocationOptions.SectionName));
+builder.Services.AddSingleton(sp => new PlanDocumentLocationPolicy(
+    sp.GetRequiredService<IOptions<PlanDocumentLocationOptions>>(),
+    sp.GetRequiredService<ILogger<PlanDocumentLocationPolicy>>()));
+builder.Services.AddScoped<PlanDocumentLocationResultFilter>();
+
+builder.Services.AddControllers(o => o.Filters.AddService<PlanDocumentLocationResultFilter>())
     .AddCloudHealthOfficeJsonOptions()
     // Register BenefitJsonConverter here (not via [JsonConverter] on Benefit) so
     // that WithoutSelf() can reliably strip it from a copy, avoiding the
@@ -402,6 +417,17 @@ builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new BenefitJsonConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// ── Authentication ────────────────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from it.
+// Plan configuration writes are an administrative act (settings:manage); the
+// pure calculation endpoints (estimate, rate/NCCI/scrub checks) are annotated
+// on the controller with claims:work,benefits:read.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "benefits:read";
+    auth.DefaultWritePermission = "settings:manage";
+});
 
 var claimsServiceHealthUrl = builder.Configuration["Services:ClaimsServiceUrl"]
     ?? "http://claims-service";
@@ -417,8 +443,8 @@ builder.Services.AddChoHealthChecks(options =>
             $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
 });
 
-builder.Services.AddCors(options => options.AddPolicy("AllowAll",
-    policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -431,11 +457,12 @@ app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingM
 if (!estimateOnly)
 {
     app.UseHttpsRedirection();
-    app.UseCors("AllowAll");
 }
+// External estimate-only deployments additionally require the shared X-Api-Key
+// (EstimateApiSecurityMiddleware); it runs before, and in addition to, CHO
+// token authentication.
 app.UseMiddleware<EstimateApiSecurityMiddleware>();
-app.UseMiddleware<TenantMiddleware>();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 app.Run();

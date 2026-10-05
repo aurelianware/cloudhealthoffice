@@ -95,12 +95,12 @@ spec:
                 echo "📦 Installing dependencies..."
                 apk add --no-cache sshpass openssh-client curl jq coreutils
                 
-                # Use default password if secret doesn't exist
-                # Use defaults if secrets not mounted
+                # No default password: without the sftp-credentials secret
+                # the job fails instead of trying a well-known value.
                 SFTP_USER="${SFTP_USER:-cho-edi}"
                 if [ -z "${SFTP_PASS}" ]; then
-                  echo "⚠️  SFTP_PASS not set, using default (UPDATE IN PRODUCTION!)"
-                  SFTP_PASS="changeme"
+                  echo "❌ SFTP_PASS is not set. Create the sftp-credentials secret (see the end of this file) and re-run."
+                  exit 1
                 fi
                 
                 echo ""
@@ -264,19 +264,13 @@ spec:
                 mountPath: /config
                 readOnly: true
 ---
-# Secret for SFTP credentials (create separately)
+# Secret for SFTP credentials: create it separately, never from this file
+# (a Secret here with a literal password would overwrite the real one on
+# every apply):
 # kubectl create secret generic sftp-credentials \
 #   --from-literal=password='YOUR_SECURE_PASSWORD' \
+#   --from-literal=username='cho-edi' \
 #   -n cho-workflows
-apiVersion: v1
-kind: Secret
-metadata:
-  name: sftp-credentials
-  namespace: cho-workflows
-type: Opaque
-stringData:
-  password: "changeme"  # UPDATE THIS IN PRODUCTION!
-  username: "cho-edi"
 ---
 # Optional: ConfigMap for clearinghouse-specific settings
 apiVersion: v1

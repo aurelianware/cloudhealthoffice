@@ -63,8 +63,22 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
                 "Communication",
                 "DocumentReference",
                 "ClaimResponse",
+                // DTR answers about one member (subject = Patient). It was
+                // missing here, so a user/ or system/ token with no patient/
+                // scope read any member's responses in the tenant.
+                "QuestionnaireResponse",
             }.Concat(ClinicalResourceInventory.ResourceTypes),
             StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <c>HttpContext.Items</c> key under which an ALLOWED Provider Access
+    /// decision records the member it authorized (bare id, no
+    /// <c>Patient/</c> prefix). Controllers pin the read to it
+    /// (<c>FhirControllerBase.AuthorizedMemberId</c>): authorization for one
+    /// member must never return another member's resource, whether by id or
+    /// through a search parameter the controller does not read.
+    /// </summary>
+    public const string AuthorizedMemberItemKey = "ProviderAccessMemberId";
 
     /// <summary>
     /// Query parameters that name the member a request is about, across the
@@ -107,35 +121,17 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
         // PayerToPayerExchange purpose — and must not be re-judged against a
         // Provider Access panel, where the operation name would be mistaken for
         // a member id.
-        if (!HttpMethods.IsGet(http.Request.Method))
-        {
-            await next();
-            return;
-        }
-
-        var resourceType = ParseResourceType(http.Request.Path);
-        if (resourceType is null || !GovernedResources.Contains(resourceType))
-        {
-            await next();
-            return;
-        }
-
-        var pathId = ParseResourceId(http.Request.Path);
-        if (pathId is not null && pathId.StartsWith('$'))
-        {
-            await next();
-            return;
-        }
-
         var scopes = http.Items["SmartScopes"] as HashSet<string> ?? new HashSet<string>();
 
         // Patient Access (the member reading their own record) is governed by the
         // patient binding SMART already enforced, not by Provider Access consent.
-        if (!IsProviderShapedCall(scopes))
+        if (!Governs(http.Request, scopes))
         {
             await next();
             return;
         }
+
+        var resourceType = ParseResourceType(http.Request.Path)!;
 
         var tenantId = http.GetTenantId() ?? string.Empty;
         var providerId = ResolveCallerId(http);
@@ -158,6 +154,7 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
             return;
         }
 
+        http.Items[AuthorizedMemberItemKey] = memberId;
         await next();
     }
 
@@ -196,7 +193,32 @@ public sealed class ProviderAccessAuthorizationFilter : IAsyncActionFilter
     /// is the caller's authorization shape, established by the token — not a
     /// route-name check and not a per-controller opt-in.
     /// </summary>
-    private static bool IsProviderShapedCall(HashSet<string> scopes)
+    /// <summary>
+    /// Whether this filter decides the request: a GET (Provider Access is a
+    /// read API; operations have their own authorization) of a governed,
+    /// member-scoped resource (not a <c>$operation</c>), by a provider-shaped
+    /// caller. SmartScopeEnforcementMiddleware uses the same definition to
+    /// decide which requests of a token carrying both patient/ and user/
+    /// scopes it leaves to attribution + consent rather than the patient
+    /// binding, so the two can never disagree about who governs a request.
+    /// </summary>
+    public static bool Governs(HttpRequest request, IReadOnlySet<string> scopes)
+    {
+        if (!HttpMethods.IsGet(request.Method))
+            return false;
+
+        var resourceType = ParseResourceType(request.Path);
+        if (resourceType is null || !GovernedResources.Contains(resourceType))
+            return false;
+
+        var pathId = ParseResourceId(request.Path);
+        if (pathId is not null && pathId.StartsWith('$'))
+            return false;
+
+        return IsProviderShapedCall(scopes);
+    }
+
+    public static bool IsProviderShapedCall(IReadOnlySet<string> scopes)
         => scopes.Any(s => s.StartsWith("user/", StringComparison.Ordinal)
                         || s.StartsWith("system/", StringComparison.Ordinal));
 

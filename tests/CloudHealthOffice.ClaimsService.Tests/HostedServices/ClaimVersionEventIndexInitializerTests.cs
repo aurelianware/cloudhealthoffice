@@ -1,6 +1,6 @@
 using ClaimsService.HostedServices;
 using ClaimsService.Models;
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,25 +17,21 @@ namespace CloudHealthOffice.ClaimsService.Tests.HostedServices;
 /// duplicates. These tests pin the indexes by name so a careless rename
 /// caught at test time, not in production.
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class ClaimVersionEventIndexInitializerTests : IAsyncLifetime
 {
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
+
+    public ClaimVersionEventIndexInitializerTests(MongoRunnerFixture mongo) => _mongo = mongo;
 
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"claim_index_test_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("claim_index_test");
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* see ProviderVersionEventPublisherTests note */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     [Fact]
     public async Task StartAsync_creates_both_unique_indexes()

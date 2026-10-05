@@ -94,7 +94,7 @@ public class PcpAssignmentServiceTests
     public async Task ProviderNotFound_FailsFirst()
     {
         var (svc, _, _, providers, _) = Build();
-        providers.Setup(p => p.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync((ProviderDto?)null);
+        providers.Setup(p => p.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync((ProviderDto?)null);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
         result.IsSuccess.Should().BeFalse();
@@ -108,7 +108,7 @@ public class PcpAssignmentServiceTests
         var p = HappyProvider();
         p.Status = ProviderStatusDto.Terminated;
         p.CredentialingStatus = CredentialingStatusDto.Pending; // would also fail
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
         result.Error!.Code.Should().Be(PcpValidationCodes.ProviderInactive);
@@ -121,7 +121,7 @@ public class PcpAssignmentServiceTests
         var p = HappyProvider();
         p.CredentialingStatus = CredentialingStatusDto.Pending;
         p.NetworkParticipations.Clear(); // would also fail NoNetworkParticipation
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
         result.Error!.Code.Should().Be(PcpValidationCodes.ProviderNotCredentialed);
@@ -133,7 +133,7 @@ public class PcpAssignmentServiceTests
         var (svc, _, _, providers, _) = Build();
         var p = HappyProvider();
         p.NetworkParticipations[0].LineOfBusiness = LineOfBusiness.Medicare; // member is Commercial
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
         result.Error!.Code.Should().Be(PcpValidationCodes.NoNetworkParticipation);
@@ -146,7 +146,7 @@ public class PcpAssignmentServiceTests
         var p = HappyProvider();
         p.NetworkParticipations[0].PanelAccepted = false;
         p.NetworkParticipations[0].AcceptingNewPatients = true; // panel-specific override
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
         result.Error!.Code.Should().Be(PcpValidationCodes.NotAcceptingPatients);
@@ -158,7 +158,7 @@ public class PcpAssignmentServiceTests
         var (svc, _, _, providers, _) = Build();
         var p = HappyProvider(minAge: 100); // age would also fail
         p.NetworkParticipations[0].AcceptedLobs = new List<LineOfBusiness> { LineOfBusiness.Medicaid };
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd(dob: new DateTime(1990, 1, 1)));
         result.Error!.Code.Should().Be(PcpValidationCodes.LobNotAccepted);
@@ -169,7 +169,7 @@ public class PcpAssignmentServiceTests
     {
         var (svc, _, _, providers, _) = Build();
         var p = HappyProvider(maxAge: 21);
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd(dob: new DateTime(1980, 1, 1)));
         result.Error!.Code.Should().Be(PcpValidationCodes.AgeOutOfRange);
@@ -180,7 +180,7 @@ public class PcpAssignmentServiceTests
     {
         var (svc, _, _, providers, panel) = Build();
         var p = HappyProvider(panelLimit: 1000);
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
         panel.Setup(x => x.CurrentPanelCountAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(1000);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
@@ -192,7 +192,7 @@ public class PcpAssignmentServiceTests
     {
         var (svc, coverage, assignments, providers, panel) = Build();
         var p = HappyProvider(panelLimit: 100);
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(p);
         panel.Setup(x => x.CurrentPanelCountAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(50);
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd(dob: new DateTime(1980, 1, 1)));
@@ -214,7 +214,7 @@ public class PcpAssignmentServiceTests
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
         result.Error!.Code.Should().Be(PcpValidationCodes.NoActiveCoverage);
-        providers.Verify(p => p.GetByNpiAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        providers.Verify(p => p.GetByNpiAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class PcpAssignmentServiceTests
             EffectiveDate = DateTime.UtcNow.Date
         });
         result.Error!.Code.Should().Be(PcpValidationCodes.InvalidNpi);
-        providers.Verify(p => p.GetByNpiAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        providers.Verify(p => p.GetByNpiAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── PR #656 cleanup: denormalization scope + AdminAssigned mapping ──
@@ -271,7 +271,7 @@ public class PcpAssignmentServiceTests
         coverageRepo.Setup(c => c.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
         assignments.Setup(a => a.AddAsync(It.IsAny<PcpAssignment>())).ReturnsAsync((PcpAssignment a) => a);
         assignments.Setup(a => a.EndOpenAssignmentsAsync(Tenant, Member, It.IsAny<DateTime>())).ReturnsAsync(0);
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
 
         var svc = new PcpAssignmentService(
             coverageRepo.Object, assignments.Object, providers.Object, panel.Object,
@@ -296,7 +296,7 @@ public class PcpAssignmentServiceTests
         // service falls back to stamping the active row — preserving legacy
         // behavior for tenants that haven't backfilled InsuranceLineCode.
         var (svc, coverage, _, providers, _) = Build();
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
 
         var result = await svc.AssignAsync(Tenant, Member, Cmd());
 
@@ -329,7 +329,7 @@ public class PcpAssignmentServiceTests
         coverageRepo.Setup(c => c.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
         assignments.Setup(a => a.AddAsync(It.IsAny<PcpAssignment>())).ReturnsAsync((PcpAssignment a) => a);
         assignments.Setup(a => a.EndOpenAssignmentsAsync(Tenant, Member, It.IsAny<DateTime>())).ReturnsAsync(0);
-        providers.Setup(x => x.GetByNpiAsync(Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
+        providers.Setup(x => x.GetByNpiAsync(Tenant, Npi, It.IsAny<CancellationToken>())).ReturnsAsync(HappyProvider());
 
         var svc = new PcpAssignmentService(
             coverageRepo.Object, assignments.Object, providers.Object, panel.Object,

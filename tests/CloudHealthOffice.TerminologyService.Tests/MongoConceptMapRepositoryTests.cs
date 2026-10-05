@@ -1,37 +1,33 @@
 using CHO.TerminologyService.Data;
 using CHO.TerminologyService.Models;
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 
 namespace CloudHealthOffice.TerminologyService.Tests;
 
+[Collection(MongoRunnerFixture.CollectionName)]
 public sealed class MongoConceptMapRepositoryTests : IAsyncLifetime
 {
     private const string Icd10CmSystem = "http://hl7.org/fhir/sid/icd-10-cm";
     private const string SnomedSystem = "http://snomed.info/sct";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private MongoConceptMapRepository _repository = null!;
 
+    public MongoConceptMapRepositoryTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase($"terminology_repo_test_{Guid.NewGuid():N}");
+        _database = _mongo.CreateDatabase("terminology_repo_test");
         _repository = new MongoConceptMapRepository(
             _database,
             NullLogger<MongoConceptMapRepository>.Instance);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* EphemeralMongo.Core 2.0.0 / MongoDB.Driver 3.x disposal mismatch. */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     [Fact]
     public async Task FindDisplaysByCodeAsync_ReturnsActiveEntriesAndTenantOverrideFirst()
@@ -94,6 +90,22 @@ public sealed class MongoConceptMapRepositoryTests : IAsyncLifetime
 
         var result = Assert.Single(results);
         Assert.Equal("active", result.Id);
+    }
+
+    [Fact]
+    public async Task UpsertOverrideAsync_NewOverride_IsReadableByItsTenantOnly()
+    {
+        await _repository.UpsertOverrideAsync(Entry(
+            "plan-overrides-1:44054006:E11.65:2", mapVersionId: "plan-overrides-1",
+            isOverride: true, tenantId: "tenant-a", targetDisplay: "Tenant A display"));
+
+        var forTenantA = await _repository.FindBySourceCodeAsync(SnomedSystem, "44054006", Icd10CmSystem, "tenant-a");
+        var forTenantB = await _repository.FindBySourceCodeAsync(SnomedSystem, "44054006", Icd10CmSystem, "tenant-b");
+
+        var entry = Assert.Single(forTenantA);
+        Assert.Equal("plan-overrides-1:44054006:E11.65:2", entry.Id);
+        Assert.Equal("Tenant A display", entry.TargetDisplay);
+        Assert.Empty(forTenantB);
     }
 
     private static ConceptMapEntry Entry(

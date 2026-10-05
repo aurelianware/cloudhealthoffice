@@ -1,4 +1,6 @@
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.PricingApi.Security;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace CloudHealthOffice.PricingApi.Data;
@@ -19,18 +21,31 @@ public interface IFeeScheduleRepository
     Task UpsertScheduleInfoAsync(FeeScheduleInfo info);
 }
 
+/// <summary>
+/// API keys, addressed by their hash (authentication) or their key id (admin
+/// actions). Nothing here takes or stores a key in plaintext.
+/// </summary>
 public interface IApiKeyRepository
 {
-    Task<ApiKeyRecord?> GetByKeyAsync(string apiKey);
-    Task IncrementUsageAsync(string apiKey, int lineCount);
+    /// <summary>
+    /// Run once at startup: hashes keys stored in plaintext before hashing
+    /// existed, and creates the indexes. Idempotent.
+    /// </summary>
+    Task InitializeAsync(CancellationToken ct = default);
+
+    Task<ApiKeyRecord?> GetByHashAsync(string keyHash);
+    Task<ApiKeyRecord?> GetByIdAsync(string keyId);
+    Task IncrementUsageAsync(string keyId, int lineCount);
     Task<ApiKeyRecord> CreateAsync(ApiKeyRecord record);
     Task ResetMonthlyUsageAsync();
+    Task<List<ApiKeyRecord>> ListAsync();
+    Task DeactivateAsync(string keyId, string deactivatedBy, DateTimeOffset deactivatedAt);
 }
 
 public interface IUsageRepository
 {
     Task RecordUsageAsync(UsageRecord record);
-    Task<List<UsageRecord>> GetUsageAsync(string apiKey, DateTimeOffset from, DateTimeOffset to);
+    Task<List<UsageRecord>> GetUsageAsync(string keyId, DateTimeOffset from, DateTimeOffset to);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -142,24 +157,133 @@ public class MongoFeeScheduleRepository : IFeeScheduleRepository
 
 public class MongoApiKeyRepository : IApiKeyRepository
 {
-    private readonly IMongoCollection<ApiKeyRecord> _collection;
+    public const string KeysCollection = "api_keys";
+    public const string UsageCollection = "usage_records";
 
-    public MongoApiKeyRepository(IMongoDatabase database)
+    /// <summary>Field that held the plaintext key before keys were hashed.</summary>
+    internal const string LegacyKeyField = "ApiKey";
+
+    private readonly IMongoDatabase _database;
+    private readonly IMongoCollection<ApiKeyRecord> _collection;
+    private readonly ILogger<MongoApiKeyRepository> _logger;
+
+    public MongoApiKeyRepository(IMongoDatabase database, ILogger<MongoApiKeyRepository> logger)
     {
-        _collection = database.GetCollection<ApiKeyRecord>("api_keys");
-        _collection.Indexes.CreateOne(
-            new CreateIndexModel<ApiKeyRecord>(
-                Builders<ApiKeyRecord>.IndexKeys.Ascending(k => k.ApiKey),
-                new CreateIndexOptions { Unique = true }));
+        _database = database;
+        _collection = database.GetCollection<ApiKeyRecord>(KeysCollection);
+        _logger = logger;
     }
 
-    public async Task<ApiKeyRecord?> GetByKeyAsync(string apiKey)
-        => await _collection.Find(k => k.ApiKey == apiKey).FirstOrDefaultAsync();
+    /// <summary>
+    /// Hashes keys stored in plaintext (field <c>ApiKey</c>) before keys were
+    /// hashed: sets <c>KeyHash</c>, <c>KeyPrefix</c> and a <c>KeyId</c>, and
+    /// removes the plaintext. Usage records that carried the plaintext key get
+    /// the key id instead. Each key is updated with a compare-and-set on its
+    /// plaintext value, so two replicas starting together cannot double-migrate.
+    /// Runs on every start; with nothing left in plaintext it only checks indexes.
+    /// </summary>
+    public async Task InitializeAsync(CancellationToken ct = default)
+    {
+        var keys = _database.GetCollection<BsonDocument>(KeysCollection);
+        var usage = _database.GetCollection<BsonDocument>(UsageCollection);
 
-    public async Task IncrementUsageAsync(string apiKey, int lineCount)
+        // The old unique index on the plaintext field would refuse every
+        // migrated record after the first (a missing field indexes as null).
+        await DropIndexesOnAsync(keys, LegacyKeyField, ct);
+        await DropIndexesOnAsync(usage, LegacyKeyField, ct);
+
+        var legacy = await keys.Find(Builders<BsonDocument>.Filter.Exists(LegacyKeyField)).ToListAsync(ct);
+        var migrated = 0;
+        var usageMigrated = 0L;
+        foreach (var doc in legacy)
+        {
+            var plaintext = doc[LegacyKeyField];
+            if (!plaintext.IsString || string.IsNullOrEmpty(plaintext.AsString))
+            {
+                // Nothing usable to hash: keep the record, without any key material, inactive.
+                await keys.UpdateOneAsync(
+                    Builders<BsonDocument>.Filter.And(
+                        Builders<BsonDocument>.Filter.Eq("_id", doc["_id"]),
+                        Builders<BsonDocument>.Filter.Eq(LegacyKeyField, plaintext)),
+                    Builders<BsonDocument>.Update.Unset(LegacyKeyField).Set("IsActive", false),
+                    cancellationToken: ct);
+                continue;
+            }
+
+            var key = plaintext.AsString;
+            var keyId = doc.TryGetValue("KeyId", out var existingId) && existingId.IsString
+                ? existingId.AsString
+                : ApiKeyHashing.NewKeyId();
+
+            var result = await keys.UpdateOneAsync(
+                Builders<BsonDocument>.Filter.And(
+                    Builders<BsonDocument>.Filter.Eq("_id", doc["_id"]),
+                    Builders<BsonDocument>.Filter.Eq(LegacyKeyField, key)),
+                Builders<BsonDocument>.Update
+                    .Set("KeyId", keyId)
+                    .Set("KeyHash", ApiKeyHashing.Hash(key))
+                    .Set("KeyPrefix", ApiKeyHashing.Prefix(key))
+                    .Unset(LegacyKeyField),
+                cancellationToken: ct);
+            if (result.ModifiedCount == 0)
+                continue; // another replica got there first
+
+            migrated++;
+            var usageResult = await usage.UpdateManyAsync(
+                Builders<BsonDocument>.Filter.Eq(LegacyKeyField, key),
+                Builders<BsonDocument>.Update.Set("KeyId", keyId).Unset(LegacyKeyField),
+                cancellationToken: ct);
+            usageMigrated += usageResult.ModifiedCount;
+        }
+
+        // Usage rows naming a key that no longer exists still must not keep it.
+        var orphaned = await usage.UpdateManyAsync(
+            Builders<BsonDocument>.Filter.Exists(LegacyKeyField),
+            Builders<BsonDocument>.Update.Set("KeyId", "unknown").Unset(LegacyKeyField),
+            cancellationToken: ct);
+
+        await _collection.Indexes.CreateManyAsync(new[]
+        {
+            new CreateIndexModel<ApiKeyRecord>(
+                Builders<ApiKeyRecord>.IndexKeys.Ascending(k => k.KeyHash),
+                new CreateIndexOptions { Unique = true, Sparse = true, Name = "KeyHash_unique" }),
+            new CreateIndexModel<ApiKeyRecord>(
+                Builders<ApiKeyRecord>.IndexKeys.Ascending(k => k.KeyId),
+                new CreateIndexOptions { Unique = true, Sparse = true, Name = "KeyId_unique" }),
+        }, ct);
+        await _database.GetCollection<UsageRecord>(UsageCollection).Indexes.CreateOneAsync(
+            new CreateIndexModel<UsageRecord>(
+                Builders<UsageRecord>.IndexKeys.Ascending(u => u.KeyId).Descending(u => u.Timestamp)),
+            cancellationToken: ct);
+
+        if (migrated > 0 || orphaned.ModifiedCount > 0)
+        {
+            _logger.LogWarning(
+                "AUDIT pricing api-key migration: hashed {Keys} plaintext keys, re-keyed {Usage} usage records, cleared {Orphaned} usage records naming unknown keys",
+                migrated, usageMigrated, orphaned.ModifiedCount);
+        }
+    }
+
+    private static async Task DropIndexesOnAsync(IMongoCollection<BsonDocument> collection, string field, CancellationToken ct)
+    {
+        using var cursor = await collection.Indexes.ListAsync(ct);
+        foreach (var index in await cursor.ToListAsync(ct))
+        {
+            if (index.TryGetValue("key", out var key) && key.AsBsonDocument.Contains(field))
+                await collection.Indexes.DropOneAsync(index["name"].AsString, ct);
+        }
+    }
+
+    public async Task<ApiKeyRecord?> GetByHashAsync(string keyHash)
+        => await _collection.Find(k => k.KeyHash == keyHash).FirstOrDefaultAsync();
+
+    public async Task<ApiKeyRecord?> GetByIdAsync(string keyId)
+        => await _collection.Find(k => k.KeyId == keyId).FirstOrDefaultAsync();
+
+    public async Task IncrementUsageAsync(string keyId, int lineCount)
     {
         var update = Builders<ApiKeyRecord>.Update.Inc(k => k.CurrentMonthUsage, lineCount);
-        await _collection.UpdateOneAsync(k => k.ApiKey == apiKey, update);
+        await _collection.UpdateOneAsync(k => k.KeyId == keyId, update);
     }
 
     public async Task<ApiKeyRecord> CreateAsync(ApiKeyRecord record)
@@ -173,28 +297,37 @@ public class MongoApiKeyRepository : IApiKeyRepository
         var update = Builders<ApiKeyRecord>.Update.Set(k => k.CurrentMonthUsage, 0);
         await _collection.UpdateManyAsync(_ => true, update);
     }
+
+    public async Task<List<ApiKeyRecord>> ListAsync()
+        => await _collection.Find(_ => true).ToListAsync();
+
+    public async Task DeactivateAsync(string keyId, string deactivatedBy, DateTimeOffset deactivatedAt)
+    {
+        var update = Builders<ApiKeyRecord>.Update
+            .Set(k => k.IsActive, false)
+            .Set(k => k.DeactivatedBy, deactivatedBy)
+            .Set(k => k.DeactivatedAt, deactivatedAt);
+        await _collection.UpdateOneAsync(k => k.KeyId == keyId, update);
+    }
 }
 
 public class MongoUsageRepository : IUsageRepository
 {
     private readonly IMongoCollection<UsageRecord> _collection;
 
+    // Indexes are created by MongoApiKeyRepository.InitializeAsync, after the
+    // plaintext-key migration.
     public MongoUsageRepository(IMongoDatabase database)
     {
-        _collection = database.GetCollection<UsageRecord>("usage_records");
-        _collection.Indexes.CreateOne(
-            new CreateIndexModel<UsageRecord>(
-                Builders<UsageRecord>.IndexKeys
-                    .Ascending(u => u.ApiKey)
-                    .Descending(u => u.Timestamp)));
+        _collection = database.GetCollection<UsageRecord>(MongoApiKeyRepository.UsageCollection);
     }
 
     public async Task RecordUsageAsync(UsageRecord record)
         => await _collection.InsertOneAsync(record);
 
-    public async Task<List<UsageRecord>> GetUsageAsync(string apiKey, DateTimeOffset from, DateTimeOffset to)
+    public async Task<List<UsageRecord>> GetUsageAsync(string keyId, DateTimeOffset from, DateTimeOffset to)
         => await _collection
-            .Find(u => u.ApiKey == apiKey && u.Timestamp >= from && u.Timestamp <= to)
+            .Find(u => u.KeyId == keyId && u.Timestamp >= from && u.Timestamp <= to)
             .SortByDescending(u => u.Timestamp)
             .ToListAsync();
 }

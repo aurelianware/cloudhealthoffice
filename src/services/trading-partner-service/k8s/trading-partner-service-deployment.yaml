@@ -1,3 +1,15 @@
+# Workload identity for trading-partner-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:trading-partner-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: trading-partner-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<TRADING_PARTNER_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,16 +26,24 @@ spec:
   template:
     metadata:
       labels:
+        azure.workload.identity/use: "true"
         app: trading-partner-service
     spec:
+      serviceAccountName: trading-partner-service-sa
       containers:
       - name: trading-partner-service
         image: ghcr.io/aurelianware/cloudhealthoffice-trading-partner-service:latest
         imagePullPolicy: Always
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
         ports:
         - containerPort: 8080
           name: http
         env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "trading-partner-service"
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
         - name: COSMOS_ENDPOINT
@@ -40,24 +60,6 @@ spec:
           value: "CloudHealthOffice"
         - name: COSMOS_CONTAINER_TRADING_PARTNERS
           value: "TradingPartners"
-        - name: AzureAd__ClientId
-          value: ""
-          valueFrom:
-            secretKeyRef:
-              name: azure-ad-config
-              key: ClientId
-        - name: AzureAd__TenantId
-          value: ""
-          valueFrom:
-            secretKeyRef:
-              name: azure-ad-config
-              key: TenantId
-        - name: AzureAd__Audience
-          value: ""
-          valueFrom:
-            secretKeyRef:
-              name: azure-ad-config
-              key: Audience
         - name: MongoDb__ConnectionString
           valueFrom:
             secretKeyRef:

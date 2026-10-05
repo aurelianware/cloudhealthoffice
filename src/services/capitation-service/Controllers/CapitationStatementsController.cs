@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace CapitationService.Controllers;
 
@@ -14,6 +15,7 @@ public class CapitationStatementsController : ControllerBase
     private readonly ICapitationStatementRepository _statementRepository;
     private readonly ICapitationContractRepository _contractRepository;
     private readonly ICapitationEraService _eraService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CapitationStatementsController> _logger;
 
     public CapitationStatementsController(
@@ -21,8 +23,10 @@ public class CapitationStatementsController : ControllerBase
         ICapitationStatementRepository statementRepository,
         ICapitationContractRepository contractRepository,
         ICapitationEraService eraService,
+        ICurrentActor actor,
         ILogger<CapitationStatementsController> logger)
     {
+        _actor = actor;
         _runService = runService;
         _statementRepository = statementRepository;
         _contractRepository = contractRepository;
@@ -85,14 +89,20 @@ public class CapitationStatementsController : ControllerBase
     /// Approve a capitation statement for payment
     /// </summary>
     [HttpPut("{id}/approve")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(CapitationStatement), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<CapitationStatement>> ApproveStatement(string id)
     {
         try
         {
-            var statement = await _runService.ApproveStatementAsync(id);
+            var statement = await _runService.ApproveStatementAsync(id, _actor.UserId);
             return Ok(statement);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -104,13 +114,14 @@ public class CapitationStatementsController : ControllerBase
     /// Void a capitation statement
     /// </summary>
     [HttpPut("{id}/void")]
+    [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(CapitationStatement), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationStatement>> VoidStatement(string id, [FromBody] ReasonRequest request)
     {
         try
         {
-            var statement = await _runService.VoidStatementAsync(id, request.Reason);
+            var statement = await _runService.VoidStatementAsync(id, request.Reason, _actor.UserId);
             return Ok(statement);
         }
         catch (InvalidOperationException ex)
@@ -129,7 +140,7 @@ public class CapitationStatementsController : ControllerBase
     {
         try
         {
-            var statement = await _runService.HoldStatementAsync(id, request.Reason);
+            var statement = await _runService.HoldStatementAsync(id, request.Reason, _actor.UserId);
             return Ok(statement);
         }
         catch (InvalidOperationException ex)

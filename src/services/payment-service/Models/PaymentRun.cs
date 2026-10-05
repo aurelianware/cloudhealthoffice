@@ -93,10 +93,22 @@ public class PaymentRun
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// User who created the payment run
+    /// User who created the payment run (token subject; a service client id when
+    /// a service created it). The maker in maker-checker.
     /// </summary>
     [StringLength(100)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>User who executed (released) the payment run, from the token. Never the creator.</summary>
+    [StringLength(100)]
+    public string? ExecutedBy { get; set; }
+
+    /// <summary>User or service that cancelled the run, from the token.</summary>
+    [StringLength(100)]
+    public string? CancelledBy { get; set; }
+
+    /// <summary>When the run was cancelled.</summary>
+    public DateTime? CancelledAt { get; set; }
 
     /// <summary>
     /// Payment run execution started
@@ -122,6 +134,45 @@ public class PaymentRun
     /// Warnings during execution
     /// </summary>
     public List<string> Warnings { get; set; } = new();
+
+    /// <summary>
+    /// Claims this run paid that claims-service has not finalized yet (the
+    /// finalize call failed, or no trading partner resolved so no 835 was
+    /// emitted). Their payments are <c>PaidPendingFinalize</c>. They are never
+    /// paid again; POST /api/paymentruns/{id}/finalize (or the next run that
+    /// sees them) retries the finalize without a new payment.
+    /// </summary>
+    public List<string> PendingFinalizeClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims returned by claims-service that this run did not pay because
+    /// payment-service already holds a payment for them, or another run holds
+    /// their payment reservation.
+    /// </summary>
+    public List<string> AlreadyPaidClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims not paid because their pay-to / billing provider has no trading
+    /// partner, so no 835 could be sent. They stay Approved in claims-service
+    /// and are picked up by a run once a partner is configured.
+    /// </summary>
+    public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims whose payment reservation this run held, and which were released
+    /// after it failed or was cancelled without paying them: automatically (no
+    /// payment and no 835 in payment-service) or by a second approver. A later
+    /// run may pay them. The audit log (PaymentReservationAudit) has who and why.
+    /// </summary>
+    public List<string> ReleasedReservationClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Reservations this run holds that reconciliation could not release safely
+    /// (a payment or 835 exists, the run is stuck Running, or the state cannot
+    /// be classified). A person releases them with
+    /// POST /api/paymentruns/{id}/reservations/{claimId}/release.
+    /// </summary>
+    public List<ReservationAttention> ReservationsNeedingAttention { get; set; } = new();
 
     /// <summary>
     /// Payment method for this run (ACH, Check)

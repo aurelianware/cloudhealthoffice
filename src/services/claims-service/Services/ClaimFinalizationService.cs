@@ -325,8 +325,14 @@ public class ClaimFinalizationService : IClaimFinalizationService
 
         if (claim.Status == ClaimStatus.Voided)
         {
+            // No second void, version event or Kafka emit. The adjustment
+            // transition is still driven: if the first void persisted but
+            // its PendingReversal -> Active step failed, a repeat void (the
+            // reversal run retrying) is what completes it. The transition
+            // only acts on a PendingReversal row, so repeating it is safe.
             _logger.LogInformation(
-                "Claim {ClaimId} already Voided; idempotent no-op", Sanitize(claim.Id));
+                "Claim {ClaimId} already Voided; idempotent no-op apart from the adjustment transition", Sanitize(claim.Id));
+            await CompleteAdjustmentOnReversalAsync(tenantId, claim.Id, request.ReversalRunId, ct);
             return ClaimVoidResult.AlreadyVoided(claim);
         }
 
@@ -415,26 +421,36 @@ public class ClaimFinalizationService : IClaimFinalizationService
         // initiated voids without a ReversalRunId are no-ops here.
         // Failure is non-blocking: the void has persisted and emitted; a
         // follow-up sweep can re-drive the lifecycle transition.
-        if (!string.IsNullOrEmpty(request.ReversalRunId))
-        {
-            try
-            {
-                await _adjustmentService.MarkActiveOnReversalAsync(
-                    tenantId, updated.Id, request.ReversalRunId, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "Adjustment Active-transition callback failed for predecessor {ClaimId}; void already persisted",
-                    Sanitize(updated.Id));
-            }
-        }
+        // A repeat void of the claim re-drives it (see the AlreadyVoided branch).
+        await CompleteAdjustmentOnReversalAsync(tenantId, updated.Id, request.ReversalRunId, ct);
 
         _logger.LogInformation(
             "Voided claim {ClaimId}; reason='{Reason}'; ReversalRun={ReversalRunId}",
             Sanitize(updated.Id), Sanitize(request.Reason), Sanitize(request.ReversalRunId));
 
         return ClaimVoidResult.Voided(updated);
+    }
+
+    /// <summary>
+    /// Moves the predecessor's PendingReversal adjustment to Active when the
+    /// void carries a ReversalRunId. Non-blocking: the void has persisted, and
+    /// a repeat void re-drives this step.
+    /// </summary>
+    private async Task CompleteAdjustmentOnReversalAsync(
+        string tenantId, string claimId, string? reversalRunId, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(reversalRunId))
+            return;
+        try
+        {
+            await _adjustmentService.MarkActiveOnReversalAsync(tenantId, claimId, reversalRunId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Adjustment Active-transition callback failed for predecessor {ClaimId}; void already persisted, a repeat void retries it",
+                Sanitize(claimId));
+        }
     }
 
     private static string Sanitize(string? value) =>

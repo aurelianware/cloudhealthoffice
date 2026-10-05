@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using EncounterSubmissionService.Models;
 using EncounterSubmissionService.Services;
@@ -8,6 +9,12 @@ namespace EncounterSubmissionService.Controllers;
 /// API endpoints for querying and managing FMMIS encounter submissions.
 /// The primary intake path is the Kafka adjudication-completed consumer;
 /// these endpoints serve operational dashboards and manual intervention.
+///
+/// The tenant comes from the validated CHO token. The <c>{tenantId}</c> route
+/// segment is kept for existing callers but never selects a tenant: a path
+/// tenant that differs from the token's tenant is refused with 403.
+/// Permissions: GET needs encounters:read, POST needs encounters:write
+/// (defaults set in Program.cs).
 /// </summary>
 [ApiController]
 [Route("api/encounters")]
@@ -15,13 +22,16 @@ namespace EncounterSubmissionService.Controllers;
 public class EncounterSubmissionController : ControllerBase
 {
     private readonly IEncounterSubmissionService _service;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<EncounterSubmissionController> _logger;
 
     public EncounterSubmissionController(
         IEncounterSubmissionService service,
+        ICurrentActor actor,
         ILogger<EncounterSubmissionController> logger)
     {
         _service = service;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -37,6 +47,8 @@ public class EncounterSubmissionController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Fetching pending submissions for tenant {TenantId} (page {Page}, size {PageSize})",
             SanitizeForLog(tenantId), page, pageSize);
@@ -53,6 +65,8 @@ public class EncounterSubmissionController : ControllerBase
     [ProducesResponseType(typeof(EncounterStatusSummary), StatusCodes.Status200OK)]
     public async Task<ActionResult<EncounterStatusSummary>> GetSummary(string tenantId)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Fetching encounter status summary for tenant {TenantId}",
             SanitizeForLog(tenantId));
@@ -70,6 +84,8 @@ public class EncounterSubmissionController : ControllerBase
         string tenantId,
         [FromQuery] int warningDays = 7)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Fetching deadline warnings for tenant {TenantId} (within {Days} days)",
             SanitizeForLog(tenantId), warningDays);
@@ -89,6 +105,8 @@ public class EncounterSubmissionController : ControllerBase
         string tenantId,
         [FromBody] AcknowledgmentRequest request)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = _actor.TenantId;
         if (string.IsNullOrWhiteSpace(request.BatchId))
         {
             return BadRequest(new { message = "BatchId is required" });
@@ -119,6 +137,8 @@ public class EncounterSubmissionController : ControllerBase
         string tenantId,
         string submissionId)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = _actor.TenantId;
         _logger.LogInformation(
             "Manual retry requested for submission {SubmissionId}, tenant {TenantId}",
             SanitizeForLog(submissionId), SanitizeForLog(tenantId));
@@ -136,6 +156,21 @@ public class EncounterSubmissionController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// The route tenant is only accepted as an echo of the token's tenant.
+    /// </summary>
+    private ObjectResult? PathTenantMismatch(string pathTenantId)
+    {
+        if (string.Equals(pathTenantId, _actor.TenantId, StringComparison.Ordinal))
+            return null;
+
+        _logger.LogWarning(
+            "Encounter request refused: path tenant {PathTenant} does not match the authenticated tenant {TokenTenant} (subject {Subject})",
+            SanitizeForLog(pathTenantId), SanitizeForLog(_actor.TenantId), SanitizeForLog(_actor.UserId));
+        return StatusCode(StatusCodes.Status403Forbidden,
+            new { message = "The tenant in the path does not match the authenticated tenant." });
     }
 
     private static string SanitizeForLog(string? value)

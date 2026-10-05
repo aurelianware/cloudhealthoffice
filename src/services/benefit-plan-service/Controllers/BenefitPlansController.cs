@@ -4,6 +4,7 @@ using BenefitPlanService.Middleware;
 using BenefitPlanService.Models;
 using BenefitPlanService.Repositories;
 using BenefitPlanService.Services;
+using CloudHealthOffice.Infrastructure.Security;
 using MongoDB.Driver;
 
 namespace BenefitPlanService.Controllers;
@@ -17,16 +18,24 @@ public class BenefitPlansController : ControllerBase
 {
     private readonly IBenefitPlanService _service;
     private readonly BenefitPlanAdapterFactory _adapterFactory;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<BenefitPlansController> _logger;
+    private readonly PlanDocumentLocationPolicy _documentPolicy;
 
     public BenefitPlansController(
         IBenefitPlanService service,
         BenefitPlanAdapterFactory adapterFactory,
-        ILogger<BenefitPlansController> logger)
+        ICurrentActor actor,
+        ILogger<BenefitPlansController> logger,
+        PlanDocumentLocationPolicy? documentPolicy = null)
     {
         _service = service;
         _adapterFactory = adapterFactory;
+        _actor = actor;
         _logger = logger;
+        // No policy injected (unit tests): no hosts allowed, so only
+        // internal documentreference/{id} locations pass.
+        _documentPolicy = documentPolicy ?? PlanDocumentLocationPolicy.Empty;
     }
 
     /// <summary>
@@ -93,7 +102,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            PlanDocumentValidation.ValidateDocuments(plan.Documents);
+            _documentPolicy.ValidateDocuments(plan.Documents);
         }
         catch (ArgumentException ex)
         {
@@ -102,7 +111,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            var created = await _service.CreatePlanAsync(plan, TenantId);
+            var created = await _service.CreatePlanAsync(plan, TenantId, ResolveActorId());
             return CreatedAtAction(nameof(GetPlan), new { id = created.Id }, created);
         }
         catch (PlanLimitValidationException ex)
@@ -130,7 +139,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            PlanDocumentValidation.ValidateDocuments(plan.Documents);
+            _documentPolicy.ValidateDocuments(plan.Documents);
         }
         catch (ArgumentException ex)
         {
@@ -139,7 +148,7 @@ public class BenefitPlansController : ControllerBase
 
         try
         {
-            var updated = await _service.UpdatePlanAsync(plan, TenantId);
+            var updated = await _service.UpdatePlanAsync(plan, TenantId, ResolveActorId());
             if (updated == null)
             {
                 return NotFound(new { message = $"Benefit plan '{id}' not found" });
@@ -444,7 +453,7 @@ public class BenefitPlansController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        try { PlanDocumentValidation.ValidateDocuments(plan.Documents); }
+        try { _documentPolicy.ValidateDocuments(plan.Documents); }
         catch (ArgumentException ex) { return BadRequest(new { field = ex.ParamName, message = ex.Message }); }
 
         try
@@ -553,14 +562,12 @@ public class BenefitPlansController : ControllerBase
         }
     }
 
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "system";
-    }
+    /// <summary>
+    /// The acting user is the validated token's subject. An <c>X-User-Id</c>
+    /// header or a body <c>createdBy</c>/<c>publishedBy</c> is never trusted,
+    /// and there is no "system" fallback.
+    /// </summary>
+    private string ResolveActorId() => _actor.UserId;
 
     private static object PlanLimitValidationPayload(PlanLimitValidationException ex) => new
     {

@@ -294,7 +294,8 @@ public sealed class FhirEndpointControllerTests
         var repo = new InMemoryBenefitPlanRepository();
         var controller = new FhirEndpointController(
             repo,
-            new FhirEndpointProjector(),
+            // Fixtures use example.com document hosts; allow them explicitly.
+            new FhirEndpointProjector(new PlanDocumentLocationPolicy(new[] { "example.com" })),
             NullLogger<FhirEndpointController>.Instance);
 
         var ctx = new DefaultHttpContext();

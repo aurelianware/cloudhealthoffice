@@ -2,6 +2,8 @@ using CloudHealthOffice.NcciEngine.Domain;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using CloudHealthOffice.NcciEngine.Data;
+using BenefitPlanService.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BenefitPlanService.Controllers;
@@ -34,6 +36,13 @@ public class NcciController : ControllerBase
     }
 
     /// <summary>
+    /// Tenant from the validated token (set by the shared TenantMiddleware).
+    /// Never from the X-Tenant-Id header or a request body.
+    /// </summary>
+    private string TenantId => HttpContext.GetTenantId()
+        ?? throw new CloudHealthOffice.Infrastructure.Middleware.TenantContextMissingException();
+
+    /// <summary>
     /// Apply NCCI Column 1/2 bundling edits and MUE unit-limit checks
     /// to a claim before payment.  Returns the scrub result with any
     /// edit failures and suggested CARC/RARC codes.
@@ -41,6 +50,7 @@ public class NcciController : ControllerBase
     /// <response code="200">Scrub completed (check Passed property for outcome)</response>
     /// <response code="400">Request validation failed</response>
     [HttpPost("scrub")]
+    [RequirePermission("claims:work,benefits:read")]
     [ProducesResponseType<NcciScrubResult>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<NcciScrubResult>> Scrub(
@@ -49,6 +59,9 @@ public class NcciController : ControllerBase
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
+
+        // The edit tables are read for the caller's tenant; a body tenantId is ignored.
+        request.TenantId = TenantId;
 
         var result = await _ncciService.ScrubAsync(request, ct);
 
@@ -67,11 +80,9 @@ public class NcciController : ControllerBase
     [HttpGet("version")]
     [ProducesResponseType<NcciTableVersion>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<NcciTableVersion>> GetVersion(
-        [FromHeader(Name = "X-Tenant-Id")] string tenantId,
-        CancellationToken ct)
+    public async Task<ActionResult<NcciTableVersion>> GetVersion(CancellationToken ct)
     {
-        var version = await _ncciService.GetTableVersionAsync(tenantId, ct);
+        var version = await _ncciService.GetTableVersionAsync(TenantId, ct);
 
         if (version is null)
             return NotFound(new { message = "No NCCI table version found. Run /api/v1/ncci/seed or /api/v1/ncci/import." });
@@ -96,8 +107,9 @@ public class NcciController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
+        // Imports land in the caller's tenant; a body tenantId is ignored.
         var (pairsWritten, mueWritten) = await _ncciService.ImportQuarterlyUpdateAsync(
-            request.TenantId,
+            TenantId,
             request.Quarter,
             request.Pairs,
             request.MueEntries,
@@ -121,10 +133,10 @@ public class NcciController : ControllerBase
     [HttpPost("seed")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Seed(
-        [FromHeader(Name = "X-Tenant-Id")] string tenantId,
         [FromQuery] string quarter = "2025Q1",
         CancellationToken ct = default)
     {
+        var tenantId = TenantId;
         var pairs = NcciSeedData.BuildNcciPairs(tenantId);
         var mues  = NcciSeedData.BuildMueEntries(tenantId);
 
@@ -154,6 +166,10 @@ public class NcciController : ControllerBase
 /// </summary>
 public class NcciImportRequest
 {
+    /// <summary>
+    /// Ignored. The import always targets the tenant in the caller's token;
+    /// kept so existing clients that still send it do not fail to bind.
+    /// </summary>
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>

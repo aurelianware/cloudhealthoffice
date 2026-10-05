@@ -1,3 +1,15 @@
+# Workload identity for consent-service: its user-assigned managed identity, federated to
+# system:serviceaccount:cloudhealthoffice:consent-service-sa. token-service issues this service's
+# CHO service tokens to that identity only (ServiceTokens:ServiceClients); the service holds
+# no signing key. See docs/security/portal-token-service.md ("Service tokens").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: consent-service-sa
+  namespace: cloudhealthoffice
+  annotations:
+    azure.workload.identity/client-id: "<CONSENT_SERVICE_MANAGED_IDENTITY_CLIENT_ID>"
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -26,18 +38,26 @@ spec:
   template:
     metadata:
       labels:
+        azure.workload.identity/use: "true"
         app: consent-service
         tier: backend
     spec:
+      serviceAccountName: consent-service-sa
       containers:
       - name: consent-service
         image: clouhealthoffice.azurecr.io/cloudhealthoffice-consent-service:latest
         imagePullPolicy: Always
+        envFrom:
+        # Source=TokenService, token-service URL and Entra scope (shared by all services).
+        - configMapRef:
+            name: cho-service-tokens
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
         env:
+        - name: ChoAuth__ServiceToken__ClientId
+          value: "consent-service"
         - name: ASPNETCORE_ENVIRONMENT
           valueFrom:
             configMapKeyRef:

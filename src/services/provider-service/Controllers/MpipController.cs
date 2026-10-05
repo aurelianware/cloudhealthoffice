@@ -1,5 +1,7 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using ProviderService.Models;
+using ProviderService.Security;
 using ProviderService.Services;
 
 namespace ProviderService.Controllers;
@@ -7,12 +9,23 @@ namespace ProviderService.Controllers;
 /// <summary>
 /// FL SMMC 3.0 MPIP (Managed Medical Assistance Physician Incentive Program)
 /// endpoints for qualification management, bulk import, and pre-claim rate checks.
+///
+/// <para>
+/// The tenant comes from the validated CHO token. The <c>{tenantId}</c> route
+/// segment is kept for existing callers (claims-service's rate check) but only
+/// as an echo of the token's tenant: a different path tenant is refused with
+/// 403 and the service is never called. Reads take providers:read; the
+/// qualification writes set enhanced payment-rate multipliers, so they need
+/// contracts:write.
+/// </para>
 /// </summary>
 [ApiController]
 [Route("api/mpip")]
 [Produces("application/json")]
 public class MpipController : ControllerBase
 {
+    private const string QualificationWrite = "contracts:write";
+
     private readonly IMpipRateService _mpipService;
     private readonly ILogger<MpipController> _logger;
 
@@ -34,6 +47,8 @@ public class MpipController : ControllerBase
         string tenantId,
         [FromQuery] string? period = null)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = this.TokenTenantId();
         var effectivePeriod = period ?? MpipRateService.GetFiscalYearPeriod(DateTime.UtcNow);
 
         _logger.LogInformation(
@@ -55,6 +70,8 @@ public class MpipController : ControllerBase
         string providerId,
         [FromQuery] string? period = null)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = this.TokenTenantId();
         var effectivePeriod = period ?? MpipRateService.GetFiscalYearPeriod(DateTime.UtcNow);
 
         _logger.LogInformation(
@@ -75,6 +92,7 @@ public class MpipController : ControllerBase
     /// Create or update a provider's MPIP qualification (admin only).
     /// </summary>
     [HttpPut("{tenantId}/providers/{providerId}")]
+    [RequirePermission(QualificationWrite)]
     [ProducesResponseType(typeof(MpipProviderQualification), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MpipProviderQualification>> UpsertQualification(
@@ -82,6 +100,8 @@ public class MpipController : ControllerBase
         string providerId,
         [FromBody] MpipProviderQualification qualification)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = this.TokenTenantId();
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
@@ -106,12 +126,15 @@ public class MpipController : ControllerBase
     /// Accepts a JSON array of <see cref="MpipProviderQualification"/> records.
     /// </summary>
     [HttpPost("{tenantId}/bulk-import")]
+    [RequirePermission(QualificationWrite)]
     [ProducesResponseType(typeof(BulkImportResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BulkImportResult>> BulkImport(
         string tenantId,
         [FromBody] List<MpipProviderQualification> qualifications)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = this.TokenTenantId();
         if (qualifications.Count == 0)
         {
             return BadRequest(new { message = "Import list is empty" });
@@ -165,6 +188,8 @@ public class MpipController : ControllerBase
         [FromQuery] DateTime serviceDate,
         [FromQuery] int memberAge)
     {
+        if (PathTenantMismatch(tenantId) is { } refused) return refused;
+        tenantId = this.TokenTenantId();
         if (string.IsNullOrWhiteSpace(providerId))
         {
             return BadRequest(new { message = "providerId is required" });
@@ -190,6 +215,20 @@ public class MpipController : ControllerBase
             Multiplier = multiplier,
             EnhancedRateApplies = multiplier > 1.0m
         });
+    }
+
+    /// <summary>The route tenant is only accepted as an echo of the token's tenant.</summary>
+    private ObjectResult? PathTenantMismatch(string pathTenantId)
+    {
+        var tokenTenant = this.TokenTenantId();
+        if (string.Equals(pathTenantId, tokenTenant, StringComparison.Ordinal))
+            return null;
+
+        _logger.LogWarning(
+            "MPIP request refused: path tenant {PathTenant} does not match the authenticated tenant {TokenTenant}",
+            SanitizeForLog(pathTenantId), SanitizeForLog(tokenTenant));
+        return StatusCode(StatusCodes.Status403Forbidden,
+            new { message = "The tenant in the path does not match the authenticated tenant." });
     }
 
     private static string SanitizeForLog(string? value)

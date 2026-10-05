@@ -107,4 +107,14 @@ public class MapVersion
 
     /// <summary>Checksum of source file for deduplication</summary>
     public string? SourceChecksum { get; set; }
+
+    /// <summary>
+    /// Tenant whose plan overrides this version holds; null for a global map
+    /// (NLM, AMA, SNOMED International) that every tenant reads. Versions saved
+    /// before this field existed have no value and read as global.
+    /// </summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>Token subject of the user or service that loaded this version (null for startup auto-loads).</summary>
+    public string? ImportedBy { get; set; }
 }

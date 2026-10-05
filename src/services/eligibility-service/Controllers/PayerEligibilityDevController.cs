@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.Infrastructure.Responders.Adapters;
 using CloudHealthOffice.Infrastructure.Responders.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -37,6 +38,7 @@ public sealed class PayerEligibilityDevController : ControllerBase
     /// status is a rejection (invalid subscriber, member not found, etc.).
     /// </summary>
     [HttpPost("eligibility")]
+    [RequirePermission("eligibility:check")]
     public async Task<IActionResult> Respond(
         [FromBody] PayerEligibilityInquiry inquiry,
         CancellationToken ct)

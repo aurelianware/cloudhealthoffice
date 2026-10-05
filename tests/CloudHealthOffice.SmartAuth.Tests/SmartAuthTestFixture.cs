@@ -1,3 +1,4 @@
+using CloudHealthOffice.Testing.Mongo;
 using EphemeralMongo;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,17 @@ namespace CloudHealthOffice.SmartAuth.Tests;
 /// underscore = section separator) BEFORE the factory creates the host ensures
 /// WebApplicationBuilder picks it up during its own CreateBuilder() call.
 /// </summary>
+/// <summary>
+/// Every class that drives smart-auth-service shares ONE fixture: one mongod
+/// and one host. Separate class fixtures would each set the process-wide
+/// MongoDb__ConnectionString variable and race each other's hosts.
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class SmartAuthCollection : ICollectionFixture<SmartAuthTestFixture>
+{
+    public const string Name = "SmartAuthService";
+}
+
 public sealed class SmartAuthTestFixture : IDisposable
 {
     private const string MongoDbConnectionStringEnvVar = "MongoDb__ConnectionString";
@@ -29,11 +41,7 @@ public sealed class SmartAuthTestFixture : IDisposable
 
     public SmartAuthTestFixture()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions
-        {
-            // Keep connection timeout reasonable for CI
-            ConnectionTimeout = TimeSpan.FromSeconds(30)
-        });
+        _runner = MongoRunner.Run(TestMongo.Options());
 
         // Must be set before the factory creates the host (which happens lazily on
         // first CreateClient() / Services access).  The env var is read by
@@ -57,24 +65,15 @@ public sealed class SmartAuthTestFixture : IDisposable
 
     public void Dispose()
     {
-        Factory.Dispose();
-
         try
         {
+            Factory.Dispose();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MongoDbConnectionStringEnvVar, null);
+            // No catch: a mongod that cannot be stopped must fail the run, not leak.
             _runner.Dispose();
         }
-        catch (TypeLoadException ex)
-        {
-            // EphemeralMongo.Core 2.0.0 calls MongoClientBase.TryShutdownQuietly()
-            // during disposal, but MongoClientBase was removed in MongoDB.Driver 3.x
-            // (required by OpenIddict.MongoDb 7.4.0).  The MongoDB process will be
-            // terminated by the OS when the test runner exits.
-            Console.WriteLine(
-                $"[SmartAuthTestFixture] Ignoring expected TypeLoadException during MongoDB " +
-                $"runner disposal (EphemeralMongo.Core 2.0.0 / MongoDB.Driver 3.x incompatibility): " +
-                $"{ex.Message}");
-        }
-
-        Environment.SetEnvironmentVariable(MongoDbConnectionStringEnvVar, null);
     }
 }

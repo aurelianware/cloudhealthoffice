@@ -86,9 +86,20 @@ public class ReversalRun
     /// <summary>UTC creation timestamp.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    /// <summary>Operator who created the run.</summary>
+    /// <summary>Operator who created the run (token subject). The maker in maker-checker.</summary>
     [StringLength(100)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>User who executed the run, from the token. Never the creator.</summary>
+    [StringLength(100)]
+    public string? ExecutedBy { get; set; }
+
+    /// <summary>User or service that cancelled the run, from the token.</summary>
+    [StringLength(100)]
+    public string? CancelledBy { get; set; }
+
+    /// <summary>When the run was cancelled.</summary>
+    public DateTime? CancelledAt { get; set; }
 
     /// <summary>UTC timestamp when execution started (Status → Running).</summary>
     public DateTime? ExecutionStartedAt { get; set; }
@@ -99,11 +110,45 @@ public class ReversalRun
     /// <summary>Execution wall-clock duration in seconds.</summary>
     public double? ExecutionDurationSeconds { get; set; }
 
-    /// <summary>Hard-stop errors (run lands in Failed when populated).</summary>
+    /// <summary>
+    /// Errors: a hard stop (run lands in Failed), or a void claims-service did
+    /// not record (run completes; the claim is listed in <see cref="PendingVoidClaimIds"/>).
+    /// </summary>
     public List<string> Errors { get; set; } = new();
 
     /// <summary>Per-adjustment warning surface (run completes with warnings).</summary>
     public List<string> Warnings { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims this run recouped (a reversal payment exists) that
+    /// claims-service has not voided yet. They are never reversed again; the
+    /// next reversal run that selects their adjustment retries the void
+    /// (idempotent in claims-service) without a new reversal payment.
+    /// </summary>
+    public List<string> PendingVoidClaimIds { get; set; } = new();
+
+    /// <summary>Predecessor claims skipped because payment-service already holds a reversal payment for them.</summary>
+    public List<string> AlreadyReversedClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims not reversed because their provider has no trading
+    /// partner, so no reversal 835 could be sent. Their adjustments stay
+    /// PendingReversal and are picked up once a partner is configured.
+    /// </summary>
+    public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims whose reversal reservation this run held, released
+    /// after it failed or was cancelled without recouping them (automatically,
+    /// or by a second approver). A later reversal run may reverse them.
+    /// </summary>
+    public List<string> ReleasedReservationClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Reversal reservations reconciliation could not release safely. A person
+    /// releases them with POST /api/reversalruns/{id}/reservations/{claimId}/release.
+    /// </summary>
+    public List<ReservationAttention> ReservationsNeedingAttention { get; set; } = new();
 }
 
 /// <summary>

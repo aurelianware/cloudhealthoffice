@@ -78,11 +78,20 @@ public class PricingApiServiceTests
     [Fact]
     public async Task CreateApiKeyAsync_WhenApiReturns200_DeserializesNewKey()
     {
+        // The Pricing API's create response: the key once, plus the stored view (id and prefix).
         var json = JsonSerializer.Serialize(new
         {
-            apiKey = "key-new", tenantName = "Beta Corp", contactEmail = "admin@beta.com",
-            tier = "professional", monthlyLimit = 5000, currentMonthUsage = 0,
-            createdAt = "2025-03-01T00:00:00Z", isActive = true
+            success = true,
+            data = new
+            {
+                apiKey = "key-new",
+                key = new
+                {
+                    keyId = "pk_1", keyPrefix = "key-new", tenantName = "Beta Corp", contactEmail = "admin@beta.com",
+                    tier = "professional", monthlyLimit = 5000, currentMonthUsage = 0,
+                    createdAt = "2025-03-01T00:00:00Z", isActive = true
+                }
+            }
         }, JsonOpts);
 
         var handler = new FakeHandler(HttpStatusCode.OK, json);
@@ -91,6 +100,7 @@ public class PricingApiServiceTests
         var result = await sut.CreateApiKeyAsync("Beta Corp", "admin@beta.com", "professional");
 
         result.ApiKey.Should().Be("key-new");
+        result.KeyId.Should().Be("pk_1");
         result.Tier.Should().Be("professional");
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Post);
         handler.CapturedUrls[0].Should().Contain("/api/v1/admin/api-keys");
@@ -113,10 +123,10 @@ public class PricingApiServiceTests
         var handler = new FakeHandler(HttpStatusCode.OK, "");
         var sut = CreateService(new HttpClient(handler));
 
-        await sut.DeactivateApiKeyAsync("key-abc");
+        await sut.DeactivateApiKeyAsync("pk_abc");
 
         handler.CapturedRequests[0].Method.Should().Be(HttpMethod.Delete);
-        handler.CapturedUrls[0].Should().Contain("/api/v1/admin/api-keys/key-abc");
+        handler.CapturedUrls[0].Should().Contain("/api/v1/admin/api-keys/pk_abc");
     }
 
     [Fact]

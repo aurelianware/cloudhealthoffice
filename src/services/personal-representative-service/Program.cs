@@ -4,8 +4,8 @@ using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 using PersonalRepresentativeService.HostedServices;
-using PersonalRepresentativeService.Middleware;
 using PersonalRepresentativeService.Repositories;
 using PersonalRepresentativeService.Services;
 using Microsoft.Azure.Cosmos;
@@ -29,6 +29,19 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Records Personal Representative delegation (§164.502(g)) with symmetric-pair associations, field-level encryption, and an append-only audit trail."
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user (who
+// established, activated, associated or revoked a representative) come from
+// that token only. Reads need members:read, writes members:write. The
+// "is X a representative of member Y" resolver
+// (MemberRepresentativesController.ListActive) admits named service clients
+// only.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "members:read";
+    auth.DefaultWritePermission = "members:write";
 });
 
 // ── Database Configuration ───────────────────────────────────────────
@@ -118,6 +131,28 @@ else
     Console.WriteLine("[dev] IPersonalRepFieldEncryptor = NoOp (personal rep body fields stored plaintext). Configure PersonalRepEncryption to enable.");
 }
 
+// ── Activation controls ─────────────────────────────────────────────
+// Activating a representative needs a user other than its creator (unless the
+// tenant's configuration.personalRepresentativeControls.requireSecondPerson is
+// false in tenant-service) and, for guardians, healthcare powers of attorney and
+// surrogates, a proof-of-authority document in member-document-service. Both
+// clients forward the caller's token through the shared outbound handler
+// (ChoAuth:Outbound:Hosts names their hosts).
+builder.Services.AddSingleton<ITenantPersonalRepControls, TenantPersonalRepControls>();
+builder.Services.AddSingleton<IProofOfAuthorityDocuments, MemberDocumentProofOfAuthorityDocuments>();
+builder.Services.AddScoped<IPersonalRepActivationControls, PersonalRepActivationControls>();
+
+builder.Services.AddHttpClient(TenantPersonalRepControls.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["TenantService:BaseUrl"] ?? "http://tenant-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.AddHttpClient(MemberDocumentProofOfAuthorityDocuments.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["MemberDocumentService:BaseUrl"] ?? "http://member-document-service");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 // ── Kafka producer (personal rep status events) ──────────────────────
 builder.Services.AddSingleton<PersonalRepEventPublisher>();
 builder.Services.AddSingleton<IPersonalRepEventPublisher>(sp => sp.GetRequiredService<PersonalRepEventPublisher>());
@@ -125,15 +160,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PersonalRepEventPu
 
 builder.Services.AddChoMessaging(builder.Configuration, builder.Environment);
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoHealthChecks(options =>
 {
@@ -159,9 +187,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();
-app.UseTenantContext();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

@@ -9,11 +9,21 @@ using MongoDB.Driver;
 using Serilog;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
+
+// One-off migration (operator CLI): dotnet CHO.TerminologyService.dll --backfill-override-tenants
+// [--dry-run]. Sets the tenant on override map versions saved before versions carried one.
+if (args.Contains(CHO.TerminologyService.Migrations.BackfillOverrideVersionTenants.Switch))
+{
+    Environment.ExitCode = await CHO.TerminologyService.Migrations.BackfillOverrideVersionTenants.RunAsync(
+        args, builder.Configuration);
+    return;
+}
 
 // ──────────────────────────────────────────────────────
 // Logging
@@ -48,6 +58,8 @@ builder.Services.AddChoDatabase(builder.Configuration);
 // ──────────────────────────────────────────────────────
 builder.Services.AddSingleton<IConceptMapRepository, MongoConceptMapRepository>();
 builder.Services.AddSingleton<ICodeSystemCatalogRepository, MongoCodeSystemCatalogRepository>();
+// TMPPM PA rules: read by the portal and written by the ingestion tool, both through the API.
+builder.Services.AddSingleton<ITmppmStore, MongoTmppmStore>();
 builder.Services.AddSingleton<IContextRuleEngine, ContextRuleEngine>();
 builder.Services.AddSingleton<ITerminologyTranslationService, TerminologyTranslationService>();
 builder.Services.AddHostedService<CodeSystemCatalogSeedService>();
@@ -78,6 +90,20 @@ builder.Services.AddControllers()
             System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
     });
 
+// ──────────────────────────────────────────────────────
+// Authentication
+// ──────────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+// Reads (including the POST $translate/$batch-translate operations, which are annotated)
+// need terminology:read; service tokens satisfy it. Tenant-scoped writes (a tenant's own
+// plan overrides) need settings:manage. Loading a global map that every tenant reads
+// needs platform:admin, checked in the load action.
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "terminology:read";
+    auth.DefaultWritePermission = "settings:manage";
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -96,16 +122,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS for CHO portal
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -117,7 +135,9 @@ app.UseChoObservability();
 // Pipeline
 // ──────────────────────────────────────────────────────
 app.UseSerilogRequestLogging();
-app.UseCors();
+
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 if (app.Environment.IsDevelopment())
 {

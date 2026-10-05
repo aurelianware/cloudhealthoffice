@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="EphemeralMongo" />
     <PackageReference Include="FluentAssertions" VersionOverride="7.2.0" />
     <!--
       Microsoft.Extensions.Logging.Abstractions intentionally not declared.
@@ -30,6 +31,11 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

@@ -618,7 +618,8 @@ public class AdapterPlanDocumentReference
 {
     public string Id { get; set; } = string.Empty;
     public PlanDocumentType DocType { get; set; }
-    public string Location { get; set; } = string.Empty;
+    public string? Location { get; set; } = string.Empty;
+    public bool LocationBlocked { get; set; }
     public string? ContentType { get; set; }
     public long? Size { get; set; }
     public string? ContentHashSha256 { get; set; }
@@ -631,6 +632,7 @@ public class AdapterPlanDocumentReference
         Id = d.Id,
         DocType = d.DocType,
         Location = d.Location,
+        LocationBlocked = d.LocationBlocked,
         ContentType = d.ContentType,
         Size = d.Size,
         ContentHashSha256 = d.ContentHashSha256,
@@ -644,6 +646,7 @@ public class AdapterPlanDocumentReference
         Id = Id,
         DocType = DocType,
         Location = Location,
+        LocationBlocked = LocationBlocked,
         ContentType = ContentType,
         Size = Size,
         ContentHashSha256 = ContentHashSha256,
@@ -813,7 +816,8 @@ public class AdapterPlanDocumentLink
 {
     public string DocType { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public string Location { get; set; } = string.Empty;
+    public string? Location { get; set; } = string.Empty;
+    public bool LocationBlocked { get; set; }
     public string? ContentType { get; set; }
     public long? Size { get; set; }
     public string? ContentHashSha256 { get; set; }
@@ -825,6 +829,7 @@ public class AdapterPlanDocumentLink
         DocType = p.DocType,
         DisplayName = p.DisplayName,
         Location = p.Location,
+        LocationBlocked = p.LocationBlocked,
         ContentType = p.ContentType,
         Size = p.Size,
         ContentHashSha256 = p.ContentHashSha256,
@@ -837,6 +842,7 @@ public class AdapterPlanDocumentLink
         DocType = DocType,
         DisplayName = DisplayName,
         Location = Location,
+        LocationBlocked = LocationBlocked,
         ContentType = ContentType,
         Size = Size,
         ContentHashSha256 = ContentHashSha256,

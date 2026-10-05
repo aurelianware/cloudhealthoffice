@@ -25,7 +25,8 @@ namespace CloudHealthOffice.SmartAuth.Tests;
 ///   2. GET /connect/authorize?launch=... → resolves context → issues code
 ///   3. POST /connect/token → token with patient + encounter claims
 /// </summary>
-public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
+[Collection(SmartAuthCollection.Name)]
+public class SmartLaunchFlowTests
 {
     private readonly SmartAuthTestFixture _fixture;
 
@@ -127,12 +128,16 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
     [Fact]
     public async Task Launch_Register_Returns200WithLaunchToken()
     {
+        // Registration needs a CHO token (members:read); its tenant is the launch's.
         var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.UserToken("demo-tenant", "MemberServices"));
         var body = JsonSerializer.Serialize(new RegisterLaunchRequest
         {
             PatientId = "pat-001",
             EncounterId = "enc-003",
-            ClientId = "cho-ehr-app"
+            ClientId = "cho-ehr-app",
+            PractitionerId = "provider-001"
         });
 
         var resp = await client.PostAsync("/launch",
@@ -153,6 +158,8 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
     public async Task Launch_NoPatientOrEncounter_Returns400()
     {
         var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.UserToken("demo-tenant", "MemberServices"));
         var body = JsonSerializer.Serialize(new RegisterLaunchRequest
         {
             ClientId = "cho-ehr-app"
@@ -162,77 +169,6 @@ public class SmartLaunchFlowTests : IClassFixture<SmartAuthTestFixture>
             new StringContent(body, Encoding.UTF8, "application/json"));
 
         resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    // ── LaunchContextStore unit tests ─────────────────────────────────────────
-
-    [Fact]
-    public async Task LaunchContextStore_RegisterAndConsume_Works()
-    {
-        using var scope = _fixture.Factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
-
-        var token = await store.RegisterAsync(new RegisterLaunchRequest
-        {
-            PatientId = "pat-002",
-            EncounterId = "enc-001",
-            ClientId = "test-app"
-        });
-
-        token.Should().NotBeNullOrEmpty();
-
-        var context = await store.ConsumeAsync(token);
-        context.Should().NotBeNull();
-        context!.PatientId.Should().Be("pat-002");
-        context.EncounterId.Should().Be("enc-001");
-    }
-
-    [Fact]
-    public async Task LaunchContextStore_ConsumeIsSingleUse()
-    {
-        using var scope = _fixture.Factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
-
-        var token = await store.RegisterAsync(new RegisterLaunchRequest
-        {
-            PatientId = "pat-003",
-            ClientId = "test-app"
-        });
-
-        var first = await store.ConsumeAsync(token);
-        var second = await store.ConsumeAsync(token);  // already consumed
-
-        first.Should().NotBeNull();
-        second.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task LaunchContextStore_PeekDoesNotConsume()
-    {
-        using var scope = _fixture.Factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
-
-        var token = await store.RegisterAsync(new RegisterLaunchRequest
-        {
-            PatientId = "pat-001",
-            ClientId = "test-app"
-        });
-
-        var peeked = await store.PeekAsync(token);
-        peeked.Should().NotBeNull();
-
-        var consumed = await store.ConsumeAsync(token);
-        consumed.Should().NotBeNull();  // still available after peek
-    }
-
-    [Fact]
-    public async Task LaunchContextStore_UnknownToken_ReturnsNull()
-    {
-        using var scope = _fixture.Factory.Services.CreateScope();
-        var store = scope.ServiceProvider.GetRequiredService<ILaunchContextStore>();
-
-        var result = await store.ConsumeAsync("nonexistent-token-xyz");
-        result.Should().BeNull();
     }
 
     // ── Introspection endpoint ────────────────────────────────────────────────

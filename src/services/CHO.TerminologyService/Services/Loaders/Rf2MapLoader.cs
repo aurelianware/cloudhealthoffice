@@ -45,7 +45,7 @@ public class Rf2MapLoader : IMapLoader
         var entries = new List<ConceptMapEntry>();
         var errors = new List<string>();
 
-        var mapVersionId = $"{options.MapName}-{options.Version}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var mapVersionId = MapVersionIds.For(options);
 
         try
         {
@@ -158,11 +158,19 @@ public class Rf2MapLoader : IMapLoader
                     TargetSystem = options.TargetSystem,
                     ImportedAt = DateTime.UtcNow,
                     IsActive = true,
-                    EntryCount = entries.Count
+                    EntryCount = entries.Count,
+                    // Override versions belong to their tenant; everything else is global.
+                    TenantId = options.IsOverride ? options.TenantId : null,
+                    ImportedBy = options.ImportedBy
                 };
 
-                // Deactivate previous versions
-                await _repository.DeactivatePreviousVersionsAsync(options.MapName, mapVersionId, ct);
+                // Deactivate previous versions of a global map. A tenant's override load
+                // must never deactivate a map (it is matched by name only, so it could be the
+                // global map every tenant translates with); the CSV loader does the same.
+                if (!options.IsOverride)
+                {
+                    await _repository.DeactivatePreviousVersionsAsync(options.MapName, mapVersionId, ct);
+                }
                 await _repository.SaveMapVersionAsync(mapVersion, ct);
             }
 

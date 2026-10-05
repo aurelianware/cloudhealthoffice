@@ -3,7 +3,6 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.OpenApi.Models;
 using ProviderService.Adapters;
 using ProviderService.HostedServices;
-using ProviderService.Middleware;
 using ProviderService.Models;
 using ProviderService.Repositories;
 using ProviderService.Services;
@@ -11,15 +10,43 @@ using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.HealthChecks;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.FieldProtection;
+using ProviderService.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
-builder.Services.AddControllers()
-    .AddCloudHealthOfficeJsonOptions();
+// One-off migration (operator CLI): dotnet provider-service.dll --encrypt-bank-accounts
+// [--tenant <id>] [--dry-run]. Stores bank numbers written before encryption, or
+// before record binding (enc:v1), as enc:v2. Mongo or Cosmos, as configured.
+if (args.Contains(ProviderService.Migrations.EncryptProviderBankAccounts.Switch))
+{
+    Environment.ExitCode = await ProviderService.Migrations.EncryptProviderBankAccounts.RunAsync(
+        args, builder.Configuration, builder.Environment);
+    return;
+}
+
+builder.Services.AddControllers(options => options.Filters.Add<FieldProtectionExceptionFilter>())
+    .AddCloudHealthOfficeJsonOptions()
+    // Responses never carry full bank-account, routing or tax numbers.
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
+        new ProviderService.Security.MaskedProviderBankAccountJsonConverter()));
 builder.Services.AddEndpointsApiExplorer();
+
+// ── Encryption at rest ─────────────────────────────────────────────
+// Bank routing, account and tax numbers (ProviderBankAccounts records and the
+// legacy Provider.BankAccount copy on provider documents and version rows) are
+// stored encrypted (ASP.NET Data Protection; key ring in Azure Blob Storage
+// wrapped by a Key Vault key, shared by every pod; a local key ring in
+// Development/Testing). Without FieldProtection:KeyRing elsewhere, writes of
+// those numbers fail (503) instead of storing plaintext.
+// See docs/security/bank-account-data.md.
+var keyRing = builder.Services.AddChoFieldProtection(
+    builder.Configuration, builder.Environment, ProviderBankAccountProtection.Purpose);
+Console.WriteLine($"Field protection key ring: {keyRing}");
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -31,6 +58,17 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from
+// that token. Credentialing writes need providers:credential, network
+// endpoints networks:*, contracted rates contracts:read (annotated on the
+// controllers).
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "providers:read";
+    auth.DefaultWritePermission = "providers:write";
+});
+
 // Database Configuration
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
@@ -39,7 +77,11 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
     // MongoDB Registration
     
-    builder.Services.AddScoped<IProviderRepository, ProviderRepositoryMongo>();
+    builder.Services.AddScoped<ProviderRepositoryMongo>();
+    builder.Services.AddScoped<IProviderRepository>(sp => new ProtectedProviderRepository(
+        sp.GetRequiredService<ProviderRepositoryMongo>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderRepository>>()));
     builder.Services.AddScoped<IOrganizationRepository, OrganizationRepositoryMongo>();
     builder.Services.AddScoped<IProviderTransitionRepository, MongoProviderTransitionRepository>();
     builder.Services.AddScoped<IProviderVersionEventPublisher, MongoProviderVersionEventPublisher>();
@@ -47,6 +89,11 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<INetworkParticipationEventPublisher, MongoNetworkParticipationEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventPublisher, MongoCredentialingEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventRepository, MongoCredentialingEventRepository>();
+    builder.Services.AddScoped<MongoProviderBankAccountRepository>();
+    builder.Services.AddScoped<IProviderBankAccountRepository>(sp => new ProtectedProviderBankAccountRepository(
+        sp.GetRequiredService<MongoProviderBankAccountRepository>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderBankAccountRepository>>()));
     builder.Services.AddHostedService<ProviderQueryIndexInitializer>();
     builder.Services.AddHostedService<ProviderVersionEventIndexInitializer>();
     builder.Services.AddHostedService<ProviderVerificationEventIndexInitializer>();
@@ -72,7 +119,11 @@ else
     });
 
     // Repositories
-    builder.Services.AddScoped<IProviderRepository, ProviderRepository>();
+    builder.Services.AddScoped<ProviderRepository>();
+    builder.Services.AddScoped<IProviderRepository>(sp => new ProtectedProviderRepository(
+        sp.GetRequiredService<ProviderRepository>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderRepository>>()));
     builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();
     builder.Services.AddScoped<IProviderTransitionRepository, CosmosProviderTransitionRepository>();
     // Cosmos-only deployments don't have a provisioned events stream; the
@@ -83,10 +134,19 @@ else
     builder.Services.AddScoped<INetworkParticipationEventPublisher, NoopNetworkParticipationEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventPublisher, NoopCredentialingEventPublisher>();
     builder.Services.AddScoped<ICredentialingEventRepository, CosmosCredentialingEventRepository>();
+    // Needs a "ProviderBankAccounts" container (partition key /tenantId).
+    builder.Services.AddScoped<CosmosProviderBankAccountRepository>();
+    builder.Services.AddScoped<IProviderBankAccountRepository>(sp => new ProtectedProviderBankAccountRepository(
+        sp.GetRequiredService<CosmosProviderBankAccountRepository>(),
+        sp.GetRequiredService<IFieldProtector>(),
+        sp.GetRequiredService<ILogger<ProtectedProviderBankAccountRepository>>()));
 }
 
 // Provider versioning service (5.1 — provider identity & versioning)
 builder.Services.AddScoped<IProviderVersioningService, ProviderVersioningService>();
+// Bank-account dual control: a change is pending until a second user with
+// payments:approve approves it; payments read only the approved account.
+builder.Services.AddScoped<IProviderBankAccountChangeService, ProviderBankAccountChangeService>();
 
 // MPIP rate service (FL SMMC 3.0 physician incentive program)
 builder.Services.AddScoped<IMpipRateService, MpipRateService>();
@@ -95,7 +155,12 @@ builder.Services.AddScoped<IMpipRateService, MpipRateService>();
 // Cache is singleton (TTL across requests); adapters and factory are scoped
 // because the CHO adapter wraps scoped repository services. Tenant-service
 // HTTP client uses a 5-second timeout so a flaky tenant-service can't stall
-// provider reads — the cache falls back to "cho" on any failure.
+// provider reads — the cache falls back to "cho" when tenant-service is
+// unreachable, but a 401/403 from it is an error, never the default.
+// AddChoAuthentication puts ChoOutboundTokenHandler on every factory client:
+// it forwards the caller's token, or mints a service token for the
+// X-Tenant-ID the request names (the cache and the verification client both
+// set it).
 builder.Services.AddHttpClient(ProviderTenantConfigCache.HttpClientName)
     .SetHandlerLifetime(TimeSpan.FromMinutes(5))
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(5));
@@ -185,7 +250,7 @@ builder.Services.AddSingleton<IFhirPractitionerRoleProjector, FhirPractitionerRo
 // and mirrors the 5.7 / 5.8 projector pattern.
 builder.Services.AddSingleton<IFhirOrganizationProjector, FhirOrganizationProjector>();
 
-// HTTP context accessor (for tenant middleware)
+// HTTP context accessor (repositories read the token tenant from the request)
 builder.Services.AddHttpContextAccessor();
 
 // Health checks (MongoDB or Cosmos DB)
@@ -197,16 +262,8 @@ builder.Services.AddChoHealthChecks(options =>
     options.CosmosDbKey = builder.Configuration["CosmosDb:Key"];
 });
 
-// CORS (for development)
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 builder.Services.AddChoObservability(builder.Configuration);
 
@@ -228,12 +285,9 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CloudHealthOffice.Infrastructure.Middleware.ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 
-// Multi-tenant middleware (extract TenantId from JWT or headers)
-app.UseTenantMiddleware();
 
-app.UseCors("AllowAll");
-
-app.UseAuthorization();
+// Authentication, then tenant from the validated token, then authorization.
+app.UseChoAuthentication();
 
 app.MapControllers();
 app.MapChoHealthChecks();

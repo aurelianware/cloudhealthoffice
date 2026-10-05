@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using CloudHealthOffice.Infrastructure.Gateways;
 using CloudHealthOffice.Infrastructure.Gateways.Capabilities;
 using CloudHealthOffice.Infrastructure.ReferenceData.Payers;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -14,9 +16,11 @@ using NSubstitute;
 namespace CloudHealthOffice.ProviderEligibilityApi.Tests;
 
 /// <summary>
-/// Runs the API in the Production environment (so production startup guards
-/// apply) with a substitute eligibility gateway and payer directory. Pass
-/// <c>useRealGateway: true</c> to keep the real gateway registrations.
+/// Runs the API in the Testing environment (the production gateway guard
+/// applies there too: only Development is exempt) with development CHO token
+/// trust, a substitute eligibility gateway and payer directory. Pass
+/// <c>useRealGateway: true</c> to keep the real gateway registrations, and
+/// <c>environment: "Production"</c> to boot with asymmetric CHO trust only.
 /// </summary>
 public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Program>
 {
@@ -26,22 +30,28 @@ public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Progra
     public static readonly string OtherKey = Guid.NewGuid().ToString("N");
     public const string OtherTenant = "other-practice";
 
+    public const string ServiceClientId = "provider-eligibility-api";
+
     private readonly bool _useRealGateway;
+    private readonly string _environment;
     private readonly Dictionary<string, string?> _settings;
 
     public ProviderEligibilityApiFactory(
         bool useRealGateway = false,
-        IDictionary<string, string?>? settings = null)
+        IDictionary<string, string?>? settings = null,
+        string environment = "Testing")
     {
         _useRealGateway = useRealGateway;
-        _settings = new Dictionary<string, string?>
+        _environment = environment;
+        _settings = new Dictionary<string, string?>(
+            environment == "Production" ? ProductionChoAuth() : ChoDevelopmentAuth.Configuration(ServiceClientId))
         {
             ["ProviderApi:Clients:0:Name"] = "cdo-third-set-smiles",
             ["ProviderApi:Clients:0:ApiKey"] = PracticeKey,
-            ["ProviderApi:Clients:0:Tenants:0"] = PracticeTenant,
+            ["ProviderApi:Clients:0:TenantId"] = PracticeTenant,
             ["ProviderApi:Clients:1:Name"] = "cdo-other",
             ["ProviderApi:Clients:1:ApiKey"] = OtherKey,
-            ["ProviderApi:Clients:1:Tenants:0"] = OtherTenant,
+            ["ProviderApi:Clients:1:TenantId"] = OtherTenant,
             ["PayerReference:Sync:Enabled"] = "false",
             ["PayerReference:Sync:OnStartup"] = "false"
         };
@@ -61,6 +71,7 @@ public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Progra
     public IPayerDirectorySynchronizer? Synchronizer { get; init; }
     public ConcurrentQueue<string> LogMessages { get; } = new();
 
+    /// <summary>A provider application: its API key, plus an optional <c>X-Tenant-ID</c> echo.</summary>
     public HttpClient CreateAuthorizedClient(string? key = null, string? tenant = PracticeTenant)
     {
         var client = CreateClient();
@@ -70,9 +81,40 @@ public sealed class ProviderEligibilityApiFactory : WebApplicationFactory<Progra
         return client;
     }
 
+    /// <summary>
+    /// A CHO caller: a development token for <paramref name="tenant"/> with
+    /// <paramref name="roles"/> (TenantAdmin when none), minted by
+    /// <see cref="ChoDevelopmentTokenHandler"/> from the <c>X-Tenant-ID</c> it sends.
+    /// </summary>
+    public HttpClient CreateChoClient(string tenant = PracticeTenant, params string[] roles)
+    {
+        var client = CreateDefaultClient(new ChoDevelopmentTokenHandler(roles));
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenant);
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return client;
+    }
+
+    /// <summary>Deployed-style trust: one CHO issuer with an RSA public key, nothing symmetric.</summary>
+    private static Dictionary<string, string?> ProductionChoAuth()
+    {
+        using var rsa = RSA.Create(2048);
+        return new Dictionary<string, string?>
+        {
+            ["ChoAuth:Audience"] = "cho-api",
+            ["ChoAuth:Issuers:0:Issuer"] = "cho-token-service",
+            ["ChoAuth:Issuers:0:PublicKeyPem"] = rsa.ExportSubjectPublicKeyInfoPem()
+        };
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Production");
+        builder.UseEnvironment(_environment);
+        // AddChoAuthentication reads ChoAuth while services are registered,
+        // before ConfigureAppConfiguration sources apply, so it goes in as host settings.
+        foreach (var (key, value) in _settings.Where(s => s.Key.StartsWith("ChoAuth:", StringComparison.Ordinal)))
+        {
+            builder.UseSetting(key, value);
+        }
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(_settings));
         builder.ConfigureLogging(logging =>
         {

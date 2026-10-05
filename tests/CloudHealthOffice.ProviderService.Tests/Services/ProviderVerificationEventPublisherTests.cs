@@ -1,4 +1,4 @@
-using EphemeralMongo;
+using CloudHealthOffice.Testing.Mongo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
@@ -14,32 +14,28 @@ namespace CloudHealthOffice.ProviderService.Tests.Services;
 /// <c>(TenantId, ProviderId)</c>. Mirrors the pattern in
 /// <c>ProviderVersionEventPublisherTests</c>.
 /// </summary>
+[Collection(MongoRunnerFixture.CollectionName)]
 public class ProviderVerificationEventPublisherTests : IAsyncLifetime
 {
     private const string Tenant = "tenant-a";
     private const string ProviderId = "provider-001";
 
-    private IMongoRunner _runner = null!;
+    private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private MongoProviderVerificationEventPublisher _publisher = null!;
 
+    public ProviderVerificationEventPublisherTests(MongoRunnerFixture mongo) => _mongo = mongo;
+
     public Task InitializeAsync()
     {
-        _runner = MongoRunner.Run(new MongoRunnerOptions { ConnectionTimeout = TimeSpan.FromSeconds(30) });
-        var client = new MongoClient(_runner.ConnectionString);
-        _database = client.GetDatabase("provider_verification_event_test");
+        _database = _mongo.CreateDatabase("provider_verification_event_test");
         var config = new ConfigurationBuilder().Build();
         _publisher = new MongoProviderVerificationEventPublisher(
             _database, config, NullLogger<MongoProviderVerificationEventPublisher>.Instance);
         return Task.CompletedTask;
     }
 
-    public Task DisposeAsync()
-    {
-        try { _runner.Dispose(); }
-        catch (TypeLoadException) { /* see MpipRateServiceTests note */ }
-        return Task.CompletedTask;
-    }
+    public Task DisposeAsync() => _mongo.DropDatabaseAsync(_database);
 
     [Fact]
     public async Task Publish_assigns_monotonic_version_per_provider()

@@ -478,14 +478,25 @@ public class PlanDocumentReference
     public PlanDocumentType DocType { get; set; }
 
     /// <summary>
-    /// Resolves to the document. Today this is an external HTTPS URL.
-    /// After Phase 2, this may also be an internal reference of the
-    /// form "documentreference/{id}" resolved by member-document-service.
-    /// Consumers must accept both forms.
+    /// Resolves to the document: an https URL on a host listed in
+    /// <c>BenefitPlan:AllowedDocumentHosts</c>, or an internal reference of
+    /// the form "documentreference/{id}" resolved by member-document-service.
+    /// Consumers must accept both forms. Enforced on write and on read by
+    /// <c>PlanDocumentLocationPolicy</c>; on read, a stored value that fails
+    /// the rule is returned as null with <see cref="LocationBlocked"/> set.
     /// </summary>
     [Required]
     [JsonPropertyName("location")]
-    public string Location { get; set; } = string.Empty;
+    public string? Location { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Response-only: true when the stored location failed the document
+    /// location rule and was withheld. Never persisted.
+    /// </summary>
+    [BsonIgnore]
+    [JsonPropertyName("locationBlocked")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LocationBlocked { get; set; }
 
     [JsonPropertyName("contentType")]
     public string? ContentType { get; set; }

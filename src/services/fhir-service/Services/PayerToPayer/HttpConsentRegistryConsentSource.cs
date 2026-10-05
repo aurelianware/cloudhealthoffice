@@ -54,7 +54,12 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
         HttpResponseMessage response;
         try
         {
-            response = await client.GetAsync(path, ct);
+            // The tenant being decided for is named on the call, so the token it
+            // carries (the CHO caller's, or fhir-service's service token for a
+            // SMART caller or no caller) is for that tenant.
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Add(TenantHeaderPropagationHandler.HeaderName, tenantId);
+            response = await client.SendAsync(request, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -71,6 +76,18 @@ public sealed class HttpConsentRegistryConsentSource : IPayerToPayerConsentSourc
 
         using (response)
         {
+            // A refusal (401/403) is NOT "no consent on file" turned into a
+            // success: it yields no snapshots, and no snapshots denies. Logged as
+            // an error because it means service authentication is broken.
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                _logger.LogError(
+                    "Consent registry refused the call ({Status}) for tenant={Tenant}; check service "
+                    + "authentication. Authorization will be denied.",
+                    (int)response.StatusCode, Clean(tenantId));
+                return Array.Empty<ConsentAuthorizationSnapshot>();
+            }
+
             if (response.StatusCode != HttpStatusCode.OK)
             {
                 _logger.LogWarning(

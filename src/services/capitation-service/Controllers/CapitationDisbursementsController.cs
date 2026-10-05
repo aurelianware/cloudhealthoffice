@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CapitationService.Models;
 using CapitationService.Services;
+using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.NachaTransmission;
 
 namespace CapitationService.Controllers;
 
@@ -10,13 +13,19 @@ namespace CapitationService.Controllers;
 public class CapitationDisbursementsController : ControllerBase
 {
     private readonly ICapitationDisbursementService _disbursementService;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CapitationDisbursementsController> _logger;
+
+    /// <summary>Releasing or voiding money needs more than running capitation.</summary>
+    public const string ApprovePermission = "payments:approve";
 
     public CapitationDisbursementsController(
         ICapitationDisbursementService disbursementService,
+        ICurrentActor actor,
         ILogger<CapitationDisbursementsController> logger)
     {
         _disbursementService = disbursementService;
+        _actor = actor;
         _logger = logger;
     }
 
@@ -24,14 +33,26 @@ public class CapitationDisbursementsController : ControllerBase
     /// Initiate a disbursement for a single capitation statement
     /// </summary>
     [HttpPost]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CapitationDisbursement>> InitiateDisbursement([FromBody] InitiateDisbursementRequest request)
     {
+        request.InitiatedBy = _actor.UserId; // never the body's claim
         try
         {
             var disbursement = await _disbursementService.InitiateDisbursementAsync(request);
             return CreatedAtAction(nameof(GetDisbursementById), new { id = disbursement.Id }, disbursement);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (PaymentReleaseConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -43,14 +64,21 @@ public class CapitationDisbursementsController : ControllerBase
     /// Initiate disbursements for a batch of statements (from capitation run or statement list)
     /// </summary>
     [HttpPost("batch")]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(BatchDisbursementResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BatchDisbursementResult>> InitiateBatchDisbursement([FromBody] InitiateBatchDisbursementRequest request)
     {
+        request.InitiatedBy = _actor.UserId; // never the body's claim
         try
         {
             var result = await _disbursementService.InitiateBatchDisbursementAsync(request);
             return Ok(result);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -59,23 +87,203 @@ public class CapitationDisbursementsController : ControllerBase
     }
 
     /// <summary>
-    /// Generate a NACHA credit file for all pending NACHA disbursements
+    /// Generate a NACHA credit file for all pending NACHA disbursements and send
+    /// it straight to the tenant's bank (SFTP). Returns a masked summary
+    /// (provider, last 4, amount per entry) and the transmission receipt, never
+    /// the file. Disbursements become Submitted only once the bank has the file;
+    /// when it cannot be sent they are AwaitingRetrieval (held encrypted, 7 days).
     /// </summary>
     [HttpPost("nacha-file")]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(NachaCreditFileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<NachaCreditFileResult>> GenerateNachaCreditFile()
     {
         try
         {
-            var result = await _disbursementService.GenerateNachaCreditFileAsync();
+            var result = await _disbursementService.GenerateNachaCreditFileAsync(_actor.UserId);
             return Ok(result);
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (PaymentReleaseConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>
+    /// NACHA files that were not delivered to the bank and wait for a platform
+    /// admin's retrieval or another approver's retry. Never the file.
+    /// </summary>
+    [HttpGet("nacha/held")]
+    [RequirePermission("payments:read,payments:approve")]
+    [ProducesResponseType(typeof(IEnumerable<NachaHeldFileView>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<NachaHeldFileView>>> ListHeldNachaFiles()
+        => Ok((await _disbursementService.ListHeldNachaFilesAsync(_actor.TenantId)).Select(NachaHeldFileView.From));
+
+    /// <summary>
+    /// Send a held NACHA file to the bank again. payments:approve, a user token,
+    /// and not the user who released it.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retry")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(NachaCreditFileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult<NachaCreditFileResult>> RetryNachaTransmission(string fileReference)
+    {
+        try
+        {
+            return Ok(await _disbursementService.RetryNachaTransmissionAsync(
+                _actor.TenantId, fileReference, new NachaActor(_actor.UserId, _actor.IsService)));
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
+    /// Record what the bank said about a NACHA file whose delivery was unknown
+    /// (uploaded, but whether it was renamed into place could not be checked).
+    /// Until then it is neither retried nor retrieved. payments:approve, a user
+    /// token, not the user who released it, and a reason (the bank's answer).
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/resolve-delivery")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(NachaDeliveryResolutionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<NachaDeliveryResolutionResult>> ResolveNachaDelivery(string fileReference, [FromBody] ResolveNachaDeliveryRequest request)
+    {
+        if (request?.BankReceived is not { } bankReceived)
+            return BadRequest(new { error = "bankReceived (true or false, as the bank confirmed) is required." });
+        try
+        {
+            return Ok(await _disbursementService.ResolveNachaDeliveryAsync(
+                _actor.TenantId, fileReference, new NachaActor(_actor.UserId, _actor.IsService), bankReceived, request.Reason ?? string.Empty));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
+    /// A held NACHA file, for a platform admin to deliver by hand: platform:admin,
+    /// a user token, not the user who released it, and a reason. Every retrieval
+    /// is recorded and audit-logged. The first retrieval marks its disbursements Submitted.
+    /// </summary>
+    [HttpPost("nacha/held/{fileReference}/retrieve")]
+    [RequirePermission("platform:admin")]
+    [Produces("text/plain", "application/json")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<ActionResult> RetrieveHeldNachaFile(string fileReference, [FromBody] RetrieveNachaFileRequest request)
+    {
+        try
+        {
+            var file = await _disbursementService.RetrieveHeldNachaFileAsync(
+                _actor.TenantId, fileReference, new NachaActor(_actor.UserId, _actor.IsService), request?.Reason ?? string.Empty);
+            Response.Headers.CacheControl = "no-store";
+            return File(NachaFileFacts.Encode(file.Content), "text/plain", file.FileName);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (HeldFileProblem(ex) is { } problem)
+        {
+            return problem;
+        }
+    }
+
+    /// <summary>
+    /// Disbursements that need a person, never recovered automatically:
+    /// Releasing longer than <paramref name="releasingOlderThanMinutes"/>
+    /// (default 30, at least 5; the release stopped mid-send), DeliveryUnknown,
+    /// PaymentUnknown, and held NACHA files stuck in a retry (Transmitting).
+    /// </summary>
+    [HttpGet("stuck")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(StuckDisbursements), StatusCodes.Status200OK)]
+    public async Task<ActionResult<StuckDisbursements>> ListStuckDisbursements([FromQuery] int? releasingOlderThanMinutes)
+        => Ok(await _disbursementService.ListStuckDisbursementsAsync(
+            _actor.TenantId, TimeSpan.FromMinutes(Math.Max(5, releasingOlderThanMinutes ?? 30))));
+
+    /// <summary>
+    /// After checking with the bank (or Stripe), record whether a stuck
+    /// disbursement went out: Releasing (past the threshold) goes back to
+    /// Pending (not sent) or to Submitted (sent); a Stripe PaymentUnknown one to
+    /// Failed (statement payable again) or Submitted. payments:approve, a user
+    /// token, a reason, and not the user who released it. Audited.
+    /// </summary>
+    [HttpPost("{id}/resolve-stuck")]
+    [RequirePermission(ApprovePermission)]
+    [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CapitationDisbursement>> ResolveStuckDisbursement(string id, [FromBody] ResolveStuckDisbursementRequest request)
+    {
+        if (request?.Sent is not { } sent)
+            return BadRequest(new { error = "sent (true or false, as the bank or Stripe confirmed) is required." });
+        try
+        {
+            return Ok(await _disbursementService.ResolveStuckDisbursementAsync(
+                id, new NachaActor(_actor.UserId, _actor.IsService), sent, request.Reason ?? string.Empty, request.StripeTransferId));
+        }
+        catch (SeparationOfDutiesException ex)
+        {
+            return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
+    private ActionResult? HeldFileProblem(Exception ex) => ex switch
+    {
+        NachaSeparationOfDutiesException => Problem(title: "Separation of duties", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden),
+        NachaHeldFileNotFoundException => NotFound(new { error = ex.Message }),
+        NachaHeldFileExpiredException => StatusCode(StatusCodes.Status410Gone, new { error = ex.Message }),
+        NachaHeldFileStateException => Conflict(new { error = ex.Message }),
+        _ => null
+    };
 
     /// <summary>
     /// Get disbursement by ID
@@ -106,6 +314,7 @@ public class CapitationDisbursementsController : ControllerBase
     /// Cancel a pending disbursement
     /// </summary>
     [HttpDelete("{id}")]
+    [RequirePermission(ApprovePermission)]
     [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CapitationDisbursement>> CancelDisbursement(string id)
@@ -141,9 +350,13 @@ public class CapitationDisbursementsController : ControllerBase
     }
 
     /// <summary>
-    /// Stripe Connect webhook endpoint for transfer/payout events
+    /// Stripe Connect webhook endpoint for transfer/payout events.
+    /// Stripe cannot present a CHO token: the caller is authenticated by the
+    /// Stripe-Signature HMAC over the body, verified before anything is read.
+    /// No tenant is established for this call, so it never falls back to one.
     /// </summary>
     [HttpPost("stripe-webhook")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> StripeWebhook()

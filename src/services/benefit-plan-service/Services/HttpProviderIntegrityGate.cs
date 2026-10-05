@@ -96,14 +96,21 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
     public async Task<ProviderIntegrityResult> CheckAsync(
         string npi,
-        string? tenantId = null,
+        string tenantId,
         bool forceRefresh = false,
         CancellationToken ct = default)
     {
+        // Both callees take the tenant from the token; the header is what
+        // the outbound handler mints a service token for when there is no
+        // caller. A missing tenant is a caller bug, never a default.
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("A tenant is required for the provider integrity check.", nameof(tenantId));
+        tenantId = tenantId.Trim();
+
         // Cache key separates default vs force-refresh so a force-refresh
         // call's live-only result doesn't pollute the cached-or-live entry,
         // and vice-versa.
-        var cacheTenant = string.IsNullOrWhiteSpace(tenantId) ? "default" : tenantId.Trim();
+        var cacheTenant = tenantId;
         var cacheKey = forceRefresh
             ? $"provider-integrity:force:{cacheTenant}:{npi}"
             : $"provider-integrity:cached-or-live:{cacheTenant}:{npi}";
@@ -191,7 +198,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         return DateTimeOffset.UtcNow - lastVerifiedAt > threshold;
     }
 
-    private async Task<ProviderProjection?> TryReadProjectionAsync(string npi, string? tenantId, CancellationToken ct)
+    private async Task<ProviderProjection?> TryReadProjectionAsync(string npi, string tenantId, CancellationToken ct)
     {
         try
         {
@@ -227,7 +234,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
 
     private async Task<ProviderIntegrityResult?> CallVerificationServiceAsync(
         string npi,
-        string? tenantId,
+        string tenantId,
         CancellationToken ct)
     {
         try
@@ -345,12 +352,10 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
     private static string? NormalizeStatus(JsonElement value)
         => NormalizeEnumValue(value, ["Pending", "Verified", "VerifiedWithWarnings", "Failed", "Excluded", "Expired", "ManualReviewRequired"]);
 
-    private static void AddTenantHeader(HttpRequestMessage request, string? tenantId)
+    private static void AddTenantHeader(HttpRequestMessage request, string tenantId)
     {
-        if (!string.IsNullOrWhiteSpace(tenantId))
-        {
-            request.Headers.TryAddWithoutValidation(TenantHeaderName, tenantId.Trim());
-        }
+        request.Headers.Remove(TenantHeaderName);
+        request.Headers.TryAddWithoutValidation(TenantHeaderName, tenantId);
     }
 
     private static string? NormalizeEnumValue(JsonElement value, IReadOnlyList<string> names)

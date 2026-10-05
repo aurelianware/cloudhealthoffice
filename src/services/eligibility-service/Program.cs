@@ -3,7 +3,6 @@ using CloudHealthOffice.Infrastructure.Extensions;
 using Microsoft.Azure.Cosmos;
 using EligibilityService;
 using EligibilityService.Adapters;
-using EligibilityService.Middleware;
 using EligibilityService.Repositories;
 using EligibilityService.Services;
 using CloudHealthOffice.Infrastructure.Configuration;
@@ -13,6 +12,7 @@ using CloudHealthOffice.Infrastructure.Responders;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.Infrastructure.Observability;
+using CloudHealthOffice.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 // Secret provider (Azure Key Vault / none)
@@ -20,10 +20,7 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // Add services
-builder.Services.AddControllers(options =>
-{
-    options.Filters.Add<TenantActionFilter>();
-}).AddCloudHealthOfficeJsonOptions();
+builder.Services.AddControllers().AddCloudHealthOfficeJsonOptions();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -34,6 +31,15 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1",
         Description = "Real-time eligibility verification (270/271 EDI transactions)"
     });
+});
+
+// ── Authentication ──────────────────────────────────────────────────
+// Every caller presents a CHO token; the tenant and the acting user come from that token.
+// 270-style inquiries sent as POST only read, so they carry [RequirePermission("eligibility:check")].
+builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment, auth =>
+{
+    auth.DefaultReadPermission = "eligibility:check";
+    auth.DefaultWritePermission = "settings:manage";
 });
 
 // Database Configuration
@@ -127,16 +133,8 @@ builder.Services.AddBatchEligibilityStorage(builder.Configuration, builder.Envir
 builder.Services.AddScoped<IBatchEligibilityService, BatchEligibilityService>();
 builder.Services.AddHostedService<BatchEligibilityQueueWorker>();
 
-// CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// No CORS: this service is called server-to-server only (the portal is
+// Blazor Server), so browsers on other origins get no CORS grant.
 
 // Health checks (MongoDB or Cosmos DB)
 builder.Services.AddChoHealthChecks(options =>
@@ -163,9 +161,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
-app.UseTenantMiddleware();
-app.UseAuthorization();
+app.UseChoAuthentication();
 app.MapControllers();
 app.MapChoHealthChecks();
 

@@ -1,6 +1,7 @@
 using BenefitPlanService.Controllers;
 using BenefitPlanService.Models;
 using BenefitPlanService.Services;
+using BenefitPlanService.Tests.Fakes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -30,16 +31,52 @@ public sealed class NetworkTierBackfillAdminControllerTests
     }
 
     [Fact]
-    public async Task BackfillNetworkTiers_Returns_400_When_TenantId_Missing()
+    public async Task BackfillNetworkTiers_Returns_400_When_Tenant_Context_Missing()
     {
-        var (controller, _) = Build(adminEnabled: true);
+        var (controller, _) = Build(adminEnabled: true, contextTenant: null);
 
         var response = await controller.BackfillNetworkTiers(
-            tenantId: "",
+            tenantId: "tenant-a",
             request: new NetworkTierBackfillRequest(),
             ct: default);
 
         response.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task BackfillNetworkTiers_Rejects_Query_Tenant_That_Differs_From_Token_Tenant()
+    {
+        var (controller, service) = Build(adminEnabled: true, contextTenant: "tenant-a");
+
+        var response = await controller.BackfillNetworkTiers(
+            tenantId: "tenant-b",
+            request: new NetworkTierBackfillRequest
+            {
+                Mappings = new() { new() { PlanId = "plan-1", TierName = "In-Network", NetworkId = "net-1" } },
+            },
+            ct: default);
+
+        response.Result.Should().BeOfType<BadRequestObjectResult>();
+        service.LastTenantId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BackfillNetworkTiers_Uses_Token_Tenant_And_Token_Actor_When_Query_And_Body_Omit_Or_Forge_Them()
+    {
+        var (controller, service) = Build(adminEnabled: true, contextTenant: "tenant-a", actor: "ops-user-9");
+
+        var response = await controller.BackfillNetworkTiers(
+            tenantId: null,
+            request: new NetworkTierBackfillRequest
+            {
+                ActorId = "forged-actor",
+                Mappings = new() { new() { PlanId = "plan-1", TierName = "In-Network", NetworkId = "net-1" } },
+            },
+            ct: default);
+
+        response.Result.Should().BeOfType<OkObjectResult>();
+        service.LastTenantId.Should().Be("tenant-a");
+        service.LastRequest!.ActorId.Should().Be("ops-user-9");
     }
 
     [Fact]
@@ -90,7 +127,9 @@ public sealed class NetworkTierBackfillAdminControllerTests
 
     private static (NetworkTierBackfillAdminController controller, RecordingBackfillService service) Build(
         bool adminEnabled,
-        int maxMappingsPerCall = 5_000)
+        int maxMappingsPerCall = 5_000,
+        string? contextTenant = "tenant-a",
+        string actor = "test-user")
     {
         var service = new RecordingBackfillService();
         var options = new NetworkTierBackfillOptions
@@ -100,10 +139,13 @@ public sealed class NetworkTierBackfillAdminControllerTests
         };
         var monitor = new SingleValueOptionsMonitor<NetworkTierBackfillOptions>(options);
         var controller = new NetworkTierBackfillAdminController(
-            service, monitor, NullLogger<NetworkTierBackfillAdminController>.Instance)
+            service, monitor, new FakeCurrentActor(actor), NullLogger<NetworkTierBackfillAdminController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
+        // The shared TenantMiddleware puts the token tenant here.
+        if (contextTenant is not null)
+            controller.ControllerContext.HttpContext.Items["TenantId"] = contextTenant;
         return (controller, service);
     }
 

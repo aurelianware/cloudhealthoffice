@@ -11,6 +11,19 @@ public interface ICapitationDisbursementRepository
     Task<IEnumerable<CapitationDisbursement>> GetByStripeTransferIdAsync(string transferId);
     Task<CapitationDisbursement> CreateAsync(CapitationDisbursement disbursement);
     Task<CapitationDisbursement> UpdateAsync(CapitationDisbursement disbursement);
+
+    /// <summary>
+    /// Pending to <see cref="DisbursementStatus.Releasing"/> under <paramref name="claimId"/>,
+    /// as one conditional write: of two releases racing for the same disbursement
+    /// exactly one gets it. False when it is no longer Pending.
+    /// </summary>
+    Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt, string releasedBy);
+
+    /// <summary>
+    /// Releasing under <paramref name="claimId"/> back to Pending (nothing was sent),
+    /// recording why. Does nothing when it is not held by that claim.
+    /// </summary>
+    Task ReleaseClaimAsync(string id, string claimId, string? reason);
 }
 
 /// <summary>
@@ -50,6 +63,80 @@ public class CapitationDisbursementRepository : ICapitationDisbursementRepositor
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return null;
+        }
+    }
+
+    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt, string releasedBy)
+    {
+        var tenantId = GetTenantId();
+        ItemResponse<CapitationDisbursement> current;
+        try
+        {
+            current = await _container.ReadItemAsync<CapitationDisbursement>(id, new PartitionKey(tenantId));
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        var disbursement = current.Resource;
+        if (disbursement.Status != DisbursementStatus.Pending)
+            return false;
+
+        disbursement.Status = DisbursementStatus.Releasing;
+        disbursement.ReleaseClaimId = claimId;
+        disbursement.ReleaseClaimedAt = claimedAt;
+        disbursement.ReleasedBy = releasedBy;
+        disbursement.LastUpdatedAt = DateTime.UtcNow;
+        try
+        {
+            // Optimistic concurrency: the replace applies only to the version read
+            // above, so of two releases exactly one moves it to Releasing.
+            await _container.ReplaceItemAsync(disbursement, id, new PartitionKey(tenantId),
+                new ItemRequestOptions { IfMatchEtag = current.ETag });
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            return false;
+        }
+    }
+
+    public async Task ReleaseClaimAsync(string id, string claimId, string? reason)
+    {
+        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            ItemResponse<CapitationDisbursement> current;
+            try
+            {
+                current = await _container.ReadItemAsync<CapitationDisbursement>(id, new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return;
+            }
+
+            var disbursement = current.Resource;
+            if (disbursement.Status != DisbursementStatus.Releasing || disbursement.ReleaseClaimId != claimId)
+                return;
+
+            disbursement.Status = DisbursementStatus.Pending;
+            disbursement.ReleaseClaimId = null;
+            disbursement.ReleaseClaimedAt = null;
+            disbursement.ReleasedBy = null;
+            disbursement.ErrorMessage = reason;
+            disbursement.LastUpdatedAt = DateTime.UtcNow;
+            try
+            {
+                await _container.ReplaceItemAsync(disbursement, id, new PartitionKey(tenantId),
+                    new ItemRequestOptions { IfMatchEtag = current.ETag });
+                return;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Changed since the read: read again.
+            }
         }
     }
 

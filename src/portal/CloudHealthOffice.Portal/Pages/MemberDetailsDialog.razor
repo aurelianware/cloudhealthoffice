@@ -7,6 +7,7 @@
 @inject IFamilyRelationshipService FamilyRelationshipService
 @inject IMemberNoteService MemberNoteService
 @inject IMemberDocumentService MemberDocumentService
+@inject IUserContextService UserContextService
 @inject IIdCardService IdCardService
 @inject IClaimsService ClaimsService
 @inject IArService ArService
@@ -522,11 +523,7 @@
                                     <div class="d-flex flex-wrap gap-2">
                                         @foreach (var doc in _benefitView.Documents)
                                         {
-                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                       Href="@doc.Location" Target="_blank">
-                                                @(string.IsNullOrEmpty(doc.DisplayName) ? doc.DocType : doc.DisplayName)
-                                            </MudButton>
+                                            <PlanDocumentLinkButton Document="@doc" />
                                         }
                                     </div>
                                 }
@@ -696,6 +693,7 @@
                                     <MudTh style="text-align: right;">Size</MudTh>
                                     <MudTh>Retention Until</MudTh>
                                     <MudTh>Legal Hold</MudTh>
+                                    <MudTh></MudTh>
                                 </HeaderContent>
                                 <RowTemplate>
                                     <MudTd DataLabel="Uploaded">
@@ -719,13 +717,29 @@
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">@context.RetentionPolicyId</MudText>
                                     </MudTd>
                                     <MudTd DataLabel="Legal Hold">
-                                        <MudButton Size="Size.Small"
-                                                   Variant="Variant.Outlined"
-                                                   Color="@(context.LegalHold ? Color.Warning : Color.Default)"
-                                                   StartIcon="@(context.LegalHold ? Icons.Material.Filled.Lock : Icons.Material.Filled.LockOpen)"
-                                                   OnClick="@(() => ToggleLegalHoldAsync(context))">
-                                            @(context.LegalHold ? "Held" : "Not Held")
-                                        </MudButton>
+                                        @if (CanManageLegalHold)
+                                        {
+                                            <MudButton Size="Size.Small"
+                                                       Variant="Variant.Outlined"
+                                                       Color="@(context.LegalHold ? Color.Warning : Color.Default)"
+                                                       StartIcon="@(context.LegalHold ? Icons.Material.Filled.Lock : Icons.Material.Filled.LockOpen)"
+                                                       OnClick="@(() => ToggleLegalHoldAsync(context))">
+                                                @(context.LegalHold ? "Held" : "Not Held")
+                                            </MudButton>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@(context.LegalHold ? Color.Warning : Color.Default)"
+                                                     Icon="@(context.LegalHold ? Icons.Material.Filled.Lock : Icons.Material.Filled.LockOpen)">
+                                                @(context.LegalHold ? "Held" : "Not Held")
+                                            </MudChip>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Download">
+                                        <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.Id)" Target="_blank" download rel="noopener">
+                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Download">Download</MudButton>
+                                        </MudLink>
                                     </MudTd>
                                 </RowTemplate>
                             </MudTable>
@@ -791,12 +805,12 @@
                                     </MudTd>
                                     <MudTd DataLabel="Scans" Style="text-align: right;">@context.ScanCount</MudTd>
                                     <MudTd DataLabel="Actions">
-                                        <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.DocumentId)" Target="_blank">
+                                        <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.DocumentId)" Target="_blank" download rel="noopener">
                                             <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.PictureAsPdf">PDF</MudButton>
                                         </MudLink>
                                         @if (!string.IsNullOrEmpty(context.PreviewDocumentId))
                                         {
-                                            <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.PreviewDocumentId!)" Target="_blank">
+                                            <MudLink Href="@IdCardService.BuildDocumentDownloadUrl(context.PreviewDocumentId!)" Target="_blank" download rel="noopener">
                                                 <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Image">PNG</MudButton>
                                             </MudLink>
                                         }
@@ -2042,11 +2056,23 @@
         return LoadDocumentsAsync();
     }
 
+    /// <summary>Placing or releasing a hold needs records:legal-hold (member-document-service enforces it).</summary>
+    private bool CanManageLegalHold => UserContextService.HasPermission("records:legal-hold");
+
     private async Task ToggleLegalHoldAsync(MemberDocumentSummary doc)
     {
+        var place = !doc.LegalHold;
+        var parameters = new DialogParameters<LegalHoldReasonDialog> { { d => d.Place, place } };
+        var dialog = await DialogService.ShowAsync<LegalHoldReasonDialog>(
+            place ? "Place legal hold" : "Release legal hold", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result == null || result.Canceled || result.Data is not string reason || string.IsNullOrWhiteSpace(reason))
+            return;
+
         try
         {
-            await MemberDocumentService.ToggleLegalHoldAsync(doc.Id, !doc.LegalHold);
+            await MemberDocumentService.ToggleLegalHoldAsync(doc.Id, place, reason);
             await LoadDocumentsAsync();
         }
         catch (Exception ex)

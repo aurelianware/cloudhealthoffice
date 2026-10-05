@@ -28,27 +28,35 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task<TradingPartner?> GetAsync(string tenantId, string tradingPartnerId, string environment)
     {
-        var id = $"{tradingPartnerId}-{tenantId}-{environment}";
-        
-        try
-        {
-            var response = await _container.ReadItemAsync<TradingPartner>(
-                id,
-                new PartitionKey(tenantId));
+        RequireTenant(tenantId);
+        // By the record's fields within the tenant's partition, not a recomputed id:
+        // records keep whichever id they were saved with (see TradingPartnerIds).
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.tradingPartnerId = @partnerId AND c.environment = @environment")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@partnerId", tradingPartnerId)
+            .WithParameter("@environment", environment);
 
-            return response.Resource;
-        }
-        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        using var iterator = _container.GetItemQueryIterator<TradingPartner>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId), MaxItemCount = 1 });
+        while (iterator.HasMoreResults)
         {
-            _logger.LogWarning(
-                "Trading partner not found: {TenantId}/{TradingPartnerId}/{Environment}",
-                SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment));
-            return null;
+            var page = await iterator.ReadNextAsync();
+            var found = page.FirstOrDefault();
+            if (found != null)
+                return found;
         }
+
+        _logger.LogWarning(
+            "Trading partner not found: {TenantId}/{TradingPartnerId}/{Environment}",
+            SanitizeForLog(tenantId), SanitizeForLog(tradingPartnerId), SanitizeForLog(environment));
+        return null;
     }
 
     public async Task<IEnumerable<TradingPartner>> GetByTenantAsync(string tenantId)
     {
+        RequireTenant(tenantId);
         var query = new QueryDefinition(
             "SELECT * FROM c WHERE c.tenantId = @tenantId")
             .WithParameter("@tenantId", tenantId);
@@ -67,11 +75,30 @@ public class TradingPartnerRepository : ITradingPartnerRepository
         return results;
     }
 
+    /// <summary>
+    /// Creates the record. A record with the same (tenant, partner id,
+    /// environment) is refused with <see cref="DuplicateTradingPartnerException"/>:
+    /// a record saved under the old id is found by the lookup first, and the
+    /// deterministic id (unique within the tenant's partition) refuses a
+    /// concurrent second create.
+    /// </summary>
     public async Task<TradingPartner> CreateAsync(TradingPartner partner)
     {
-        var response = await _container.CreateItemAsync(
-            partner,
-            new PartitionKey(partner.TenantId));
+        RequireTenant(partner.TenantId);
+        if (await GetAsync(partner.TenantId, partner.TradingPartnerId, partner.Environment) != null)
+            throw new DuplicateTradingPartnerException(partner.TradingPartnerId, partner.Environment);
+
+        ItemResponse<TradingPartner> response;
+        try
+        {
+            response = await _container.CreateItemAsync(
+                partner,
+                new PartitionKey(partner.TenantId));
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            throw new DuplicateTradingPartnerException(partner.TradingPartnerId, partner.Environment, ex);
+        }
 
         _logger.LogInformation(
             "Created trading partner: {Id} in partition {TenantId}",
@@ -82,6 +109,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task<TradingPartner> UpdateAsync(TradingPartner partner)
     {
+        RequireTenant(partner.TenantId);
         var response = await _container.ReplaceItemAsync(
             partner,
             partner.Id,
@@ -96,6 +124,7 @@ public class TradingPartnerRepository : ITradingPartnerRepository
 
     public async Task DeleteAsync(string id, string partitionKey)
     {
+        RequireTenant(partitionKey);
         await _container.DeleteItemAsync<TradingPartner>(
             id,
             new PartitionKey(partitionKey));
@@ -104,6 +133,11 @@ public class TradingPartnerRepository : ITradingPartnerRepository
             "Deleted trading partner: {Id} from partition {PartitionKey}",
             SanitizeForLog(id), SanitizeForLog(partitionKey));
     }
+
+    private static string RequireTenant(string? tenantId)
+        => string.IsNullOrWhiteSpace(tenantId)
+            ? throw new InvalidOperationException("A tenant is required; trading partners are never read or written without one.")
+            : tenantId;
 
     private static string SanitizeForLog(string? value)
     {

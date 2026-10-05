@@ -106,6 +106,27 @@ public class SponsorRepositoryMongo : ISponsorRepository
         return sponsor;
     }
 
+    public async Task<bool> UpdateStatusAsync(string tenantId, string id, SponsorStatusChange change)
+    {
+        // A targeted $set/$push, conditional on the status the caller saw:
+        // no other field of the document is written.
+        var filter = Builders<Sponsor>.Filter.And(
+            Builders<Sponsor>.Filter.Eq(x => x.Id, id),
+            Builders<Sponsor>.Filter.Eq(x => x.TenantId, tenantId),
+            Builders<Sponsor>.Filter.Eq(x => x.Status, change.From));
+        var update = Builders<Sponsor>.Update
+            .Set(x => x.Status, change.To)
+            .Set(x => x.StatusReason, change.Reason)
+            .Set(x => x.StatusChangedBy, change.ChangedBy)
+            .Set(x => x.StatusChangedDate, change.ChangedAt)
+            .Set(x => x.LastUpdatedBy, change.ChangedBy)
+            .Set(x => x.LastUpdatedDate, change.ChangedAt)
+            .Push(x => x.StatusHistory, change);
+
+        var result = await _collection.UpdateOneAsync(filter, update);
+        return result.MatchedCount == 1;
+    }
+
     public async Task DeleteAsync(string tenantId, string id)
     {
         var filter = Builders<Sponsor>.Filter.And(

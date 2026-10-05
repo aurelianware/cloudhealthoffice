@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using CapitationService.Models;
 using CapitationService.Repositories;
 using CapitationService.Services;
+using CapitationService.Tests.Support;
 
 namespace CapitationService.Tests.Services;
 
@@ -26,6 +27,7 @@ public class CapitationDisbursementServiceTests
         _nachaService = new Mock<INachaCreditFileService>();
         _stripeService = new Mock<IStripeConnectService>();
         _httpClientFactory = new Mock<IHttpClientFactory>();
+        ReleaseClaims.Uncontended(_statementRepo, _disbursementRepo);
 
         var configData = new Dictionary<string, string?>
         {
@@ -51,7 +53,37 @@ public class CapitationDisbursementServiceTests
             _stripeService.Object,
             _httpClientFactory.Object,
             configuration,
-            logger.Object);
+            TestSeparationOfDuties.Create(runs: _runRepo.Object),
+            _bankAccountSource = new FactoryBackedProviderBankAccountSource(_httpClientFactory.Object),
+            _dispatcher,
+            logger.Object,
+            _httpContextAccessor);
+    }
+
+    /// <summary>The anonymous webhook request: no tenant until the signed event names one.</summary>
+    private readonly Microsoft.AspNetCore.Http.HttpContextAccessor _httpContextAccessor =
+        new() { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() };
+
+    /// <summary>Like the real repositories: the tenant comes from the request, or the read fails.</summary>
+    private string RequestTenant()
+        => _httpContextAccessor.HttpContext?.Items["TenantId"] as string
+           ?? throw new InvalidOperationException("TenantId not found in request context");
+
+    private readonly FactoryBackedProviderBankAccountSource _bankAccountSource;
+    private readonly RecordingNachaDispatcher _dispatcher = new();
+
+    /// <summary>Statements the NACHA file's pending disbursements belong to (separation of duties is checked on them).</summary>
+    private void StatementsFor(IEnumerable<CapitationDisbursement> disbursements)
+    {
+        foreach (var d in disbursements)
+        {
+            if (string.IsNullOrEmpty(d.StatementId)) d.StatementId = "stmt-" + d.Id;
+            _statementRepo.Setup(r => r.GetByIdAsync(d.StatementId)).ReturnsAsync(new CapitationStatement
+            {
+                Id = d.StatementId, ProviderNPI = d.ProviderNPI, Status = CapitationStatementStatus.PaymentInitiated,
+                NetPayable = d.Amount, CreatedBy = "maker-1"
+            });
+        }
     }
 
     private static CapitationStatement CreateApprovedStatement(
@@ -124,7 +156,7 @@ public class CapitationDisbursementServiceTests
             AccountNumberLast4 = "4321"
         });
         _stripeService.Setup(s => s.CreateTransferAsync(
-                "acct_provider123", 5000.00m, It.IsAny<string>(), "1234567890"))
+                "acct_provider123", 5000.00m, It.IsAny<string>(), "1234567890", It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new StripeTransferResult
             {
                 TransferId = "tr_abc123",
@@ -192,7 +224,7 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync((CapitationDisbursement d) => d);
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
         {
@@ -373,7 +405,7 @@ public class CapitationDisbursementServiceTests
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending))
             .ReturnsAsync(Enumerable.Empty<CapitationDisbursement>());
 
-        var act = () => _service.GenerateNachaCreditFileAsync();
+        var act = () => _service.GenerateNachaCreditFileAsync("releaser-1");
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("No pending NACHA*");
@@ -390,6 +422,7 @@ public class CapitationDisbursementServiceTests
                      Method = DisbursementMethod.NachaCredit, Amount = 8000, Status = DisbursementStatus.Pending }
         };
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(disbursements);
+        StatementsFor(disbursements);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
 
@@ -414,9 +447,9 @@ public class CapitationDisbursementServiceTests
                 for (int i = 0; i < entries.Count; i++)
                     entries[i].TraceNumber = $"091000010000{i + 1}";
             })
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST", EntryCount = 2, TotalAmount = 13000 });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST", EntryCount = 2, TotalAmount = 13000 });
 
-        var result = await _service.GenerateNachaCreditFileAsync();
+        var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
         result.FileReference.Should().Be("NACHA-CR-TEST");
         result.EntryCount.Should().Be(2);
@@ -425,6 +458,47 @@ public class CapitationDisbursementServiceTests
         // Verify disbursements updated to Submitted with trace numbers
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
             d.Status == DisbursementStatus.Submitted && d.TraceNumber != null)), Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.Transmitted, DisbursementStatus.Submitted)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.AwaitingRetrieval, DisbursementStatus.AwaitingRetrieval)]
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.NotSent, DisbursementStatus.Pending)]
+    // May be at the bank: never back to Pending, where the next release would pay it again.
+    [InlineData(CloudHealthOffice.NachaTransmission.NachaTransmissionStatus.DeliveryUnknown, DisbursementStatus.DeliveryUnknown)]
+    public async Task GenerateNachaCreditFileAsync_SubmittedOnlyWhenTheBankHasTheFile(
+        CloudHealthOffice.NachaTransmission.NachaTransmissionStatus outcome, DisbursementStatus expected)
+    {
+        var disbursement = new CapitationDisbursement
+        {
+            Id = "d1", TenantId = "tenant-1", ProviderNPI = "1234567890", ProviderName = "Dr. Chen", AccountNumberLast4 = "6789",
+            Method = DisbursementMethod.NachaCredit, Amount = 5000, Status = DisbursementStatus.Pending
+        };
+        _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(new List<CapitationDisbursement> { disbursement });
+        StatementsFor(new List<CapitationDisbursement> { disbursement });
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>())).ReturnsAsync((CapitationDisbursement d) => d);
+        var handler = new MockHttpMessageHandler<ProviderBankAccountDto>(_ => new ProviderBankAccountDto
+        {
+            EftEnabled = true, RoutingNumber = "091000019", AccountNumber = "123456789", AccountHolderName = "DR CHEN"
+        });
+        _httpClientFactory.Setup(f => f.CreateClient("ProviderService"))
+            .Returns(new HttpClient(handler) { BaseAddress = new Uri("http://provider-service") });
+        _nachaService.Setup(s => s.GenerateNachaCreditFile(It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST", FileContent = "622...", EntryCount = 1, TotalAmount = 5000 });
+        _dispatcher.Status = outcome;
+
+        var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
+
+        disbursement.Status.Should().Be(expected);
+        disbursement.ReleasedBy.Should().Be(expected == DisbursementStatus.Pending ? null : "releaser-1",
+            "the releaser is kept with each disbursement in a file, for the releaser check after the held file expires");
+        if (expected != DisbursementStatus.Submitted) disbursement.SubmittedAt.Should().BeNull();
+        result.TransmissionStatus.Should().Be(outcome.ToString());
+        result.Entries.Should().ContainSingle(e => e.DisbursementId == "d1" && e.AccountNumberLast4 == "6789" && e.Amount == 5000);
+        var sent = _dispatcher.Sent.Should().ContainSingle().Subject;
+        sent.TransmittedBy.Should().Be("releaser-1");
+        sent.TenantId.Should().Be("tenant-1");
+        typeof(NachaCreditFileResult).GetProperty("FileContent").Should().BeNull("the API type has no file content");
     }
 
     [Fact]
@@ -436,6 +510,7 @@ public class CapitationDisbursementServiceTests
             new() { Id = "d2", ProviderNPI = "2222222222", Method = DisbursementMethod.NachaCredit, Amount = 3000, Status = DisbursementStatus.Pending }
         };
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(disbursements);
+        StatementsFor(disbursements);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
 
@@ -452,15 +527,17 @@ public class CapitationDisbursementServiceTests
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.Is<List<NachaCreditEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
-        await _service.GenerateNachaCreditFileAsync();
+        var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
-        // Only d1 should be updated (d2 skipped due to missing bank)
+        // Only d1 is submitted; d2 is left out of the file, handed back to Pending and needs attention.
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
             d.Id == "d1" && d.Status == DisbursementStatus.Submitted)), Times.Once);
-        _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
-            d.Id == "d2")), Times.Never);
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d => d.Id == "d2")), Times.Never);
+        _disbursementRepo.Verify(r => r.ReleaseClaimAsync("d2", It.IsAny<string>(),
+            It.Is<string>(reason => reason.Contains("Needs attention"))), Times.Once);
+        result.NeedsAttention.Should().ContainSingle(a => a.DisbursementId == "d2" && a.ProviderNPI == "2222222222");
     }
 
     [Fact]
@@ -472,6 +549,7 @@ public class CapitationDisbursementServiceTests
             new() { Id = "d2", ProviderNPI = "1234567890", Method = DisbursementMethod.StripeConnect, Amount = 3000, Status = DisbursementStatus.Pending }
         };
         _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(disbursements);
+        StatementsFor(disbursements);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
 
@@ -483,9 +561,9 @@ public class CapitationDisbursementServiceTests
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.Is<List<NachaCreditEntryDetail>>(e => e.Count == 1),
                 It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
-        await _service.GenerateNachaCreditFileAsync();
+        await _service.GenerateNachaCreditFileAsync("releaser-1");
 
         _nachaService.Verify(s => s.GenerateNachaCreditFile(
             It.Is<List<NachaCreditEntryDetail>>(e => e.Count == 1),
@@ -497,7 +575,7 @@ public class CapitationDisbursementServiceTests
     #region ProcessStripeWebhookAsync
 
     [Fact]
-    public async Task ProcessStripeWebhookAsync_PayoutPaid_SettlesDisbursement()
+    public async Task ProcessStripeWebhookAsync_TransferCreated_SettlesDisbursement()
     {
         var disbursement = new CapitationDisbursement
         {
@@ -506,7 +584,7 @@ public class CapitationDisbursementServiceTests
             StripeTransferId = "tr_abc123", Method = DisbursementMethod.StripeConnect
         };
         _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_abc123"))
-            .ReturnsAsync(new[] { disbursement });
+            .ReturnsAsync(() => { RequestTenant(); return new[] { disbursement }; });
         _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(disbursement);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
@@ -521,14 +599,16 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync(new DisbursementWebhookResult
             {
                 Handled = true,
-                EventType = "payout_paid",
-                TransferId = "tr_abc123"
+                EventType = "transfer_created",
+                TransferId = "tr_abc123",
+                TenantId = "tenant-1"
             });
 
         await _service.ProcessStripeWebhookAsync("{}", "sig_test");
 
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
             d.Status == DisbursementStatus.Settled)), Times.Once);
+        statement.Status.Should().Be(CapitationStatementStatus.Paid);
     }
 
     [Fact]
@@ -541,7 +621,7 @@ public class CapitationDisbursementServiceTests
             StripeTransferId = "tr_abc123"
         };
         _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_abc123"))
-            .ReturnsAsync(new[] { disbursement });
+            .ReturnsAsync(() => { RequestTenant(); return new[] { disbursement }; });
         _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(disbursement);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
@@ -558,6 +638,7 @@ public class CapitationDisbursementServiceTests
                 Handled = true,
                 EventType = "transfer_reversed",
                 TransferId = "tr_abc123",
+                TenantId = "tenant-1",
                 FailureCode = "TRANSFER_REVERSED",
                 FailureMessage = "Transfer was reversed"
             });
@@ -587,7 +668,8 @@ public class CapitationDisbursementServiceTests
             {
                 Handled = true,
                 EventType = "payout_paid",
-                TransferId = "tr_unknown"
+                TransferId = "tr_unknown",
+                TenantId = "tenant-1"
             });
         _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_unknown"))
             .ReturnsAsync(Enumerable.Empty<CapitationDisbursement>());
@@ -595,6 +677,60 @@ public class CapitationDisbursementServiceTests
         await _service.ProcessStripeWebhookAsync("{}", "sig_test");
 
         _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessStripeWebhookAsync_TransferReversed_RunsUnderTheTenantFromTheSignedEvent()
+    {
+        var disbursement = new CapitationDisbursement
+        {
+            Id = "disb-1", StatementId = "stmt-1", TenantId = "tenant-7",
+            Status = DisbursementStatus.Submitted, Amount = 5000, StripeTransferId = "tr_t7"
+        };
+        string? lookedUpUnder = null;
+        _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_t7"))
+            .ReturnsAsync(() => { lookedUpUnder = RequestTenant(); return new[] { disbursement }; });
+        _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(() => { RequestTenant(); return disbursement; });
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+        _stripeService.Setup(s => s.ProcessWebhookAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new DisbursementWebhookResult
+            {
+                Handled = true, EventType = "transfer_reversed", TransferId = "tr_t7", TenantId = "tenant-7",
+                FailureCode = "TRANSFER_REVERSED"
+            });
+
+        await _service.ProcessStripeWebhookAsync("{}", "sig_test");
+
+        lookedUpUnder.Should().Be("tenant-7");
+        disbursement.Status.Should().Be(DisbursementStatus.Returned);
+    }
+
+    [Fact]
+    public async Task ProcessStripeWebhookAsync_EventWithoutTenant_IsAcknowledgedNotProcessed()
+    {
+        // A payout (or a transfer created before transfers carried tenant_id):
+        // no tenant to act for, and an error would make Stripe retry forever.
+        _stripeService.Setup(s => s.ProcessWebhookAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new DisbursementWebhookResult { Handled = true, EventType = "payout_paid", TransferId = "po_1" });
+
+        await _service.ProcessStripeWebhookAsync("{}", "sig_test");
+
+        _disbursementRepo.Verify(r => r.GetByStripeTransferIdAsync(It.IsAny<string>()), Times.Never);
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessStripeWebhookAsync_EventForAnotherTenantThanTheRequestNames_IsRefused()
+    {
+        _httpContextAccessor.HttpContext!.Items["TenantId"] = "tenant-1";
+        _stripeService.Setup(s => s.ProcessWebhookAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new DisbursementWebhookResult { Handled = true, EventType = "transfer_reversed", TransferId = "tr_x", TenantId = "tenant-2" });
+
+        var act = () => _service.ProcessStripeWebhookAsync("{}", "sig_test");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _disbursementRepo.Verify(r => r.GetByStripeTransferIdAsync(It.IsAny<string>()), Times.Never);
     }
 
     #endregion
@@ -662,7 +798,7 @@ public class CapitationDisbursementServiceTests
             AccountNumberLast4 = "4321"
         });
         _stripeService.Setup(s => s.CreateTransferAsync(
-                It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new StripeTransferResult
             {
                 Status = "failed",
@@ -734,7 +870,7 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync((CapitationDisbursement d) => d);
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
         {
@@ -769,7 +905,7 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync((CapitationDisbursement d) => d);
         _nachaService.Setup(s => s.GenerateNachaCreditFile(
                 It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
-            .Returns(new NachaCreditFileResult { FileReference = "NACHA-CR-TEST" });
+            .Returns(new GeneratedNachaCreditFile { FileReference = "NACHA-CR-TEST" });
 
         var result = await _service.InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest
         {
@@ -831,6 +967,78 @@ public class CapitationDisbursementServiceTests
 
         result.ReturnCode.Should().Be("R02");
         result.ReturnReason.Should().Be("Account Closed");
+    }
+
+    #endregion
+
+    #region ResolveNachaDeliveryAsync after the held file expired
+
+    private List<CapitationDisbursement> DeliveryUnknownInFile(string? releasedBy)
+    {
+        var disbursements = new List<CapitationDisbursement>
+        {
+            new() { Id = "d1", TenantId = "tenant-1", StatementId = "s1", NachaFileReference = "NACHA-DU", TraceNumber = "1",
+                Method = DisbursementMethod.NachaCredit, Amount = 100, Status = DisbursementStatus.DeliveryUnknown,
+                ReleaseClaimId = "c1", ReleasedBy = releasedBy },
+            new() { Id = "d2", TenantId = "tenant-1", StatementId = "s2", NachaFileReference = "NACHA-DU", TraceNumber = "2",
+                Method = DisbursementMethod.NachaCredit, Amount = 200, Status = DisbursementStatus.DeliveryUnknown,
+                ReleaseClaimId = "c1", ReleasedBy = releasedBy },
+        };
+        _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.DeliveryUnknown)).ReturnsAsync(disbursements);
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>())).ReturnsAsync((CapitationDisbursement d) => d);
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+        return disbursements;
+    }
+
+    [Theory]
+    [InlineData("releaser-1")]
+    [InlineData("RELEASER-1")]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByTheReleaser_IsRefused(string actor)
+    {
+        var disbursements = DeliveryUnknownInFile(releasedBy: "releaser-1");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor(actor, false), bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>().WithMessage("*released*");
+        disbursements.Should().OnlyContain(d => d.Status == DisbursementStatus.DeliveryUnknown, "the releaser cannot make them payable again");
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_WithAServiceToken_IsRefused()
+    {
+        DeliveryUnknownInFile(releasedBy: "releaser-1");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor("svc-capitation", true), bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_WithoutARecordedReleaser_IsRefused()
+    {
+        DeliveryUnknownInFile(releasedBy: null);
+
+        var act = () => _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor("approver-2", false), bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByAnotherUser_NotReceived_GoesBackToPending()
+    {
+        var disbursements = DeliveryUnknownInFile(releasedBy: "releaser-1");
+
+        var result = await _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor("approver-2", false), bankReceived: false, "Bank ops confirmed no file");
+
+        result.PaymentStatus.Should().Be(nameof(DisbursementStatus.Pending));
+        disbursements.Should().OnlyContain(d => d.Status == DisbursementStatus.Pending && d.NachaFileReference == null && d.ReleasedBy == null);
     }
 
     #endregion

@@ -1,3 +1,4 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
@@ -31,6 +32,9 @@ public class MembersPremiumController : ControllerBase
     /// state (APTC-aware), and the last 12 invoices for the member.
     /// </summary>
     [HttpGet("{memberId}/premium-summary")]
+    // The portal Member Details dialog is used by member services staff
+    // (members:read) as well as Finance (billing:read).
+    [RequirePermission("billing:read,members:read")]
     [ProducesResponseType(typeof(MemberPremiumSummary), StatusCodes.Status200OK)]
     public async Task<ActionResult<MemberPremiumSummary>> GetPremiumSummary(string memberId)
     {

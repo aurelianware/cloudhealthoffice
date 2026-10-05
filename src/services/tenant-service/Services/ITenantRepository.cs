@@ -13,4 +13,11 @@ public interface ITenantRepository
     Task DeleteAsync(string tenantId);
     Task<bool> ExistsAsync(string tenantId);
     Task<Tenant?> GetByApiKeyHashAsync(string keyHash);
+
+    /// <summary>
+    /// Sets a <c>pending</c> tenant to <c>active</c> in one conditional write.
+    /// False when the tenant is missing or not pending at the moment of the
+    /// write (for example, suspended meanwhile): nothing is changed then.
+    /// </summary>
+    Task<bool> TryActivatePendingAsync(string tenantId, string actor);
 }

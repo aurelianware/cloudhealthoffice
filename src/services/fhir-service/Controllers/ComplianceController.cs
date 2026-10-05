@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,7 @@ namespace FhirService.Controllers;
 /// for the current tenant — a key differentiator for CHO health plans.
 /// </summary>
 [Route("fhir/r4")]
-[Authorize]
+[FhirAccess(smart: true, cho: "compliance:read")]
 public class ComplianceController : FhirControllerBase
 {
     private readonly IConfiguration _config;

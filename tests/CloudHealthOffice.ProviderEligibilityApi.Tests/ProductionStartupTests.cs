@@ -15,7 +15,7 @@ public sealed class ProductionStartupTests
     [Fact]
     public async Task Starts_in_production_without_a_database()
     {
-        using var factory = new ProviderEligibilityApiFactory(useRealGateway: true);
+        using var factory = new ProviderEligibilityApiFactory(useRealGateway: true, environment: "Production");
 
         var response = await factory.CreateClient().GetAsync("/health/ready");
 
@@ -30,7 +30,8 @@ public sealed class ProductionStartupTests
     {
         using var factory = new ProviderEligibilityApiFactory(
             useRealGateway: true,
-            settings: new Dictionary<string, string?> { ["HealthcareTransactions:DefaultGateway"] = gateway });
+            settings: new Dictionary<string, string?> { ["HealthcareTransactions:DefaultGateway"] = gateway },
+            environment: "Production");
 
         var start = () => factory.CreateClient();
 
@@ -38,9 +39,26 @@ public sealed class ProductionStartupTests
     }
 
     [Fact]
+    public void Refuses_development_token_keys_in_production()
+    {
+        using var factory = new ProviderEligibilityApiFactory(
+            useRealGateway: true,
+            settings: new Dictionary<string, string?>
+            {
+                ["ChoAuth:Issuers:0:PublicKeyPem"] = "",
+                ["ChoAuth:Issuers:0:SymmetricKey"] = CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.SymmetricKey
+            },
+            environment: "Production");
+
+        var start = () => factory.CreateClient();
+
+        start.Should().Throw<InvalidOperationException>().WithMessage("*symmetric key*");
+    }
+
+    [Fact]
     public async Task Missing_stedi_credential_fails_closed()
     {
-        using var factory = new ProviderEligibilityApiFactory(useRealGateway: true);
+        using var factory = new ProviderEligibilityApiFactory(useRealGateway: true, environment: "Production");
 
         var response = await factory.CreateAuthorizedClient()
             .PostAsJsonAsync("/api/v1/eligibility/check", EligibilityTestData.SelfRequest());

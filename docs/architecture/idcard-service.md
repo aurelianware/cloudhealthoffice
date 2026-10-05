@@ -139,7 +139,9 @@ by an arbitrary `issuedAt + 24h` check.
 2. Verify `keyVersion` is in `AcceptedKeyVersions`; else
    `CARD_SIGNATURE_STALE`.
 3. Verify HMAC with the key for that version; else `CARD_SIGNATURE_INVALID`.
-4. Cross-check `payload.TenantId` against the request's tenant header.
+4. The tenant is `payload.TenantId` from the verified payload (providers hold
+   no CHO token). A caller that does present a CHO token must belong to that
+   tenant. Upstream calls use idcard-service's service token for that tenant.
 5. Look up `IdCardRecord` by `cardId`; missing → `CARD_NOT_FOUND`.
 6. If `RevokedAt` is set → `410 Gone` with `CARD_REVOKED`.
 7. Look up coverage at scan time; not active → `409 Conflict` with
@@ -161,7 +163,8 @@ single dimension tripping a threshold blocks the request.
 ### Provider JWT
 
 `[Authorize(Policy = "ProviderJwt")]`. Production wires a real JwtBearer
-handler via `ProviderJwt:Authority` + `Audience`. When the authority is not
+handler, registered as its own `ProviderJwt` scheme beside the CHO `Bearer`
+scheme, via `ProviderJwt:Authority` + `Audience`. When the authority is not
 configured (dev/test), a `DevProviderAuthHandler` accepts all requests and
 stamps an `X-Provider-Id` (or `"dev-provider"`) into the principal so rate
 limiting by provider still has a non-empty partition key.

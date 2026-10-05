@@ -3,213 +3,165 @@ using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Middleware;
 using CloudHealthOffice.Infrastructure.Models;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CloudHealthOffice.Infrastructure.Tests;
 
+/// <summary>
+/// The tenant comes from the validated token only (review item P6 / §8.10).
+/// Several of these cases passed the opposite way before the fix: a bare
+/// X-Tenant-ID or X-Dev-Tenant-ID header selected the tenant, a header beat a
+/// token-less principal, and a request with neither landed in "default-tenant".
+/// </summary>
 public class TenantMiddlewareTests
 {
-    private readonly ILogger<TenantMiddleware> _logger = NullLogger<TenantMiddleware>.Instance;
+    private static TenantMiddleware CreateMiddleware(RequestDelegate next, TenantMiddlewareOptions? options = null)
+        => new(next, NullLogger<TenantMiddleware>.Instance, options ?? new TenantMiddlewareOptions());
 
-    private static TenantMiddleware CreateMiddleware(
-        RequestDelegate next,
-        TenantMiddlewareOptions? options = null,
-        ILogger<TenantMiddleware>? logger = null)
+    private static DefaultHttpContext Authenticated(params Claim[] claims)
     {
-        return new TenantMiddleware(
-            next,
-            logger ?? NullLogger<TenantMiddleware>.Instance,
-            options ?? new TenantMiddlewareOptions());
-    }
-
-    [Fact]
-    public async Task InvokeAsync_WithXTenantIdHeader_SetsTenantInContext()
-    {
-        // Arrange
-        string? capturedTenantId = null;
-        var middleware = CreateMiddleware(ctx =>
-        {
-            capturedTenantId = ctx.Items["TenantId"]?.ToString();
-            return Task.CompletedTask;
-        });
-
-        var context = new DefaultHttpContext();
-        context.Request.Headers["X-Tenant-ID"] = "tenant-123";
-
-        // Act
-        await middleware.InvokeAsync(context);
-
-        // Assert
-        capturedTenantId.Should().Be("tenant-123");
-    }
-
-    [Fact]
-    public async Task InvokeAsync_WithDevTenantIdHeader_SetsTenantInContext()
-    {
-        string? capturedTenantId = null;
-        var middleware = CreateMiddleware(ctx =>
-        {
-            capturedTenantId = ctx.Items["TenantId"]?.ToString();
-            return Task.CompletedTask;
-        });
-
-        var context = new DefaultHttpContext();
-        context.Request.Headers["X-Dev-Tenant-ID"] = "dev-tenant-456";
-
-        await middleware.InvokeAsync(context);
-
-        capturedTenantId.Should().Be("dev-tenant-456");
-    }
-
-    [Fact]
-    public async Task InvokeAsync_WithJwtTenantClaim_PreferClaimOverHeader()
-    {
-        string? capturedTenantId = null;
-        var middleware = CreateMiddleware(ctx =>
-        {
-            capturedTenantId = ctx.Items["TenantId"]?.ToString();
-            return Task.CompletedTask;
-        });
-
-        var context = new DefaultHttpContext();
-        context.Request.Headers["X-Tenant-ID"] = "header-tenant";
-        var claims = new[] { new Claim("tenant_id", "jwt-tenant") };
-        context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
-
-        await middleware.InvokeAsync(context);
-
-        capturedTenantId.Should().Be("jwt-tenant");
-    }
-
-    [Fact]
-    public async Task InvokeAsync_WithExtensionTenantIdClaim_ExtractsTenant()
-    {
-        string? capturedTenantId = null;
-        var middleware = CreateMiddleware(ctx =>
-        {
-            capturedTenantId = ctx.Items["TenantId"]?.ToString();
-            return Task.CompletedTask;
-        });
-
-        var context = new DefaultHttpContext();
-        var claims = new[] { new Claim("extension_TenantId", "ext-tenant") };
-        context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
-
-        await middleware.InvokeAsync(context);
-
-        capturedTenantId.Should().Be("ext-tenant");
-    }
-
-    [Fact]
-    public async Task InvokeAsync_LenientMode_NoTenant_UsesDefault()
-    {
-        string? capturedTenantId = null;
-        var options = new TenantMiddlewareOptions { RequireTenantId = false, DefaultTenantId = "my-default" };
-        var middleware = CreateMiddleware(ctx =>
-        {
-            capturedTenantId = ctx.Items["TenantId"]?.ToString();
-            return Task.CompletedTask;
-        }, options);
-
-        var context = new DefaultHttpContext();
-
-        await middleware.InvokeAsync(context);
-
-        capturedTenantId.Should().Be("my-default");
-    }
-
-    [Fact]
-    public async Task InvokeAsync_StrictMode_NoTenant_Returns401WithJsonError()
-    {
-        var nextCalled = false;
-        var options = new TenantMiddlewareOptions { RequireTenantId = true };
-        var middleware = CreateMiddleware(_ =>
-        {
-            nextCalled = true;
-            return Task.CompletedTask;
-        }, options);
-
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Bearer"));
+        return context;
+    }
+
+    private static async Task<StandardErrorResponse?> ReadError(HttpContext context)
+    {
+        context.Response.Body.Position = 0;
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
+        return JsonSerializer.Deserialize<StandardErrorResponse>(body,
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    }
+
+    [Fact]
+    public async Task TokenTenantClaim_SetsTenant()
+    {
+        string? captured = null;
+        var middleware = CreateMiddleware(ctx => { captured = ctx.Items["TenantId"] as string; return Task.CompletedTask; });
+
+        await middleware.InvokeAsync(Authenticated(new Claim("tenant_id", "tenant-a")));
+
+        captured.Should().Be("tenant-a");
+    }
+
+    [Fact]
+    public async Task HeaderMatchingToken_IsAccepted()
+    {
+        string? captured = null;
+        var middleware = CreateMiddleware(ctx => { captured = ctx.Items["TenantId"] as string; return Task.CompletedTask; });
+        var context = Authenticated(new Claim("tenant_id", "tenant-a"));
+        context.Request.Headers["X-Tenant-ID"] = "tenant-a";
+
+        await middleware.InvokeAsync(context);
+
+        captured.Should().Be("tenant-a");
+    }
+
+    [Fact]
+    public async Task HeaderContradictingToken_Returns403_AndNeverReachesNext()
+    {
+        var nextCalled = false;
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        var context = Authenticated(new Claim("tenant_id", "tenant-a"));
+        context.Request.Headers["X-Tenant-ID"] = "tenant-b";
+
+        await middleware.InvokeAsync(context);
+
+        nextCalled.Should().BeFalse();
+        context.Response.StatusCode.Should().Be(403);
+        (await ReadError(context))!.Code.Should().Be("TENANT_CONTEXT_CONFLICT");
+    }
+
+    [Fact]
+    public async Task AuthenticatedWithoutTenantClaim_HeaderDoesNotSupplyIt_Returns401()
+    {
+        var nextCalled = false;
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        var context = Authenticated(new Claim("sub", "someone"));
+        context.Request.Headers["X-Tenant-ID"] = "tenant-b";
 
         await middleware.InvokeAsync(context);
 
         nextCalled.Should().BeFalse();
         context.Response.StatusCode.Should().Be(401);
-        context.Response.ContentType.Should().Be("application/json");
+        (await ReadError(context))!.Code.Should().Be("TENANT_CONTEXT_MISSING");
+    }
 
-        context.Response.Body.Position = 0;
-        var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
-        var error = JsonSerializer.Deserialize<StandardErrorResponse>(body,
-            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        error.Should().NotBeNull();
-        error!.Code.Should().Be("TENANT_CONTEXT_MISSING");
+    [Fact]
+    public async Task DevTenantHeader_IsNeverHonoured()
+    {
+        var nextCalled = false;
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        var context = Authenticated(new Claim("sub", "someone"));
+        context.Request.Headers["X-Dev-Tenant-ID"] = "dev-tenant";
+
+        await middleware.InvokeAsync(context);
+
+        nextCalled.Should().BeFalse();
+        context.Response.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public async Task Unauthenticated_HeaderOnly_DoesNotEstablishTenant()
+    {
+        string? captured = "unset";
+        var middleware = CreateMiddleware(ctx => { captured = ctx.Items["TenantId"] as string; return Task.CompletedTask; });
+        var context = new DefaultHttpContext();
+        context.Request.Headers["X-Tenant-ID"] = "tenant-b";
+
+        await middleware.InvokeAsync(context);
+
+        // Passed on so authorization can challenge; with no tenant and no default.
+        captured.Should().BeNull();
+    }
+
+    [Fact]
+    public void Options_HaveNoDefaultTenant()
+    {
+        typeof(TenantMiddlewareOptions).GetProperty("DefaultTenantId").Should().BeNull();
+        typeof(TenantMiddlewareOptions).GetProperty("RequireTenantId").Should().BeNull();
     }
 
     [Theory]
     [InlineData("/health")]
+    [InlineData("/health/ready")]
     [InlineData("/ready")]
     [InlineData("/live")]
-    [InlineData("/swagger")]
-    public async Task InvokeAsync_PassthroughPaths_SkipsTenantResolution(string path)
+    [InlineData("/metrics")]
+    public async Task PassthroughPaths_SkipTenantResolution(string path)
     {
         var nextCalled = false;
-        var options = new TenantMiddlewareOptions { RequireTenantId = true };
-        var middleware = CreateMiddleware(_ =>
-        {
-            nextCalled = true;
-            return Task.CompletedTask;
-        }, options);
-
-        var context = new DefaultHttpContext();
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        var context = Authenticated(new Claim("sub", "probe"));
         context.Request.Path = path;
 
         await middleware.InvokeAsync(context);
 
         nextCalled.Should().BeTrue();
-        context.Response.StatusCode.Should().Be(200);
     }
 
     [Fact]
-    public async Task InvokeAsync_CustomPassthroughPaths_AreRespected()
+    public async Task Swagger_IsNoLongerAPassthroughPath()
     {
         var nextCalled = false;
-        var options = new TenantMiddlewareOptions
-        {
-            RequireTenantId = true,
-            PassthroughPaths = ["/custom-health"]
-        };
-        var middleware = CreateMiddleware(_ =>
-        {
-            nextCalled = true;
-            return Task.CompletedTask;
-        }, options);
-
-        var context = new DefaultHttpContext();
-        context.Request.Path = "/custom-health";
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        var context = Authenticated(new Claim("sub", "someone"));
+        context.Request.Path = "/swagger/v1/swagger.json";
 
         await middleware.InvokeAsync(context);
 
-        nextCalled.Should().BeTrue();
+        nextCalled.Should().BeFalse();
     }
 
     [Fact]
-    public async Task InvokeAsync_HeaderPrecedence_XTenantIdBeforeXDevTenantId()
+    public async Task ExtensionTenantClaim_IsAccepted()
     {
-        string? capturedTenantId = null;
-        var middleware = CreateMiddleware(ctx =>
-        {
-            capturedTenantId = ctx.Items["TenantId"]?.ToString();
-            return Task.CompletedTask;
-        });
+        string? captured = null;
+        var middleware = CreateMiddleware(ctx => { captured = ctx.Items["TenantId"] as string; return Task.CompletedTask; });
 
-        var context = new DefaultHttpContext();
-        context.Request.Headers["X-Tenant-ID"] = "primary";
-        context.Request.Headers["X-Dev-Tenant-ID"] = "dev-fallback";
+        await middleware.InvokeAsync(Authenticated(new Claim("extension_TenantId", "ext-tenant")));
 
-        await middleware.InvokeAsync(context);
-
-        capturedTenantId.Should().Be("primary");
+        captured.Should().Be("ext-tenant");
     }
 }

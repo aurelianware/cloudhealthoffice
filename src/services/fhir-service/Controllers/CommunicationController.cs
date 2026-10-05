@@ -1,3 +1,4 @@
+using FhirService.Services.Identity;
 using FhirService.Models;
 using FhirService.Services;
 using Hl7.Fhir.Model;
@@ -13,6 +14,7 @@ namespace FhirService.Controllers;
 /// <see cref="FhirAppealMapper.ToAppealCommunications"/>.
 /// </summary>
 [Route("fhir/r4")]
+[FhirAccess(smart: true, cho: "appeals:read")]
 public sealed class CommunicationController : FhirControllerBase
 {
     private readonly IFhirAppealAdapter _appeals;
@@ -39,6 +41,7 @@ public sealed class CommunicationController : FhirControllerBase
         var result = await _appeals.GetNoteByIdAsync(id, TenantId, ct);
         if (result is null) return FhirNotFound("Communication", id);
         var (appeal, note) = result.Value;
+        if (IsOutsidePatientContext(appeal.MemberId)) return FhirNotFound("Communication", id);
         var communication = _mapper.ToAppealCommunication(note, appeal.Id, appeal.MemberId);
         return Ok(communication);
     }
@@ -54,8 +57,8 @@ public sealed class CommunicationController : FhirControllerBase
 
         var query = new AppealSearchQuery
         {
-            MemberId = StripPrefix("Patient/", search.Patient)
-                       ?? StripPrefix("Patient/", SmartPatientId),
+            MemberId = StripPrefix("Patient/", AuthorizedMemberId)
+                       ?? StripPrefix("Patient/", search.Patient),
             ClaimId = null,
             Page = search.Page,
             // Fix 6: use larger page to fetch more appeals for projection-level pagination

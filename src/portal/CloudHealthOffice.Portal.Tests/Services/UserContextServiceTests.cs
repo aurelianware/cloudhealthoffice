@@ -1,10 +1,11 @@
-using System.Net;
 using System.Security.Claims;
-using System.Text;
-using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using CloudHealthOffice.Portal.Services;
 
 namespace CloudHealthOffice.Portal.Tests.Services;
@@ -12,38 +13,27 @@ namespace CloudHealthOffice.Portal.Tests.Services;
 public class UserContextServiceTests
 {
     private readonly Mock<AuthenticationStateProvider> _authStateProvider = new();
-    private readonly Mock<ITenantContextService> _tenantContextService = new();
+    private readonly Mock<IChoTokenProvider> _tokenProvider = new();
     private readonly Mock<ILogger<UserContextService>> _logger = new();
 
-    private readonly TenantContext _defaultTenantContext = new()
-    {
-        TenantId = "tenant-1",
-        TenantName = "Test Tenant",
-        AzureTenantId = "azure-tid-1",
-        SubscriptionTier = "professional",
-        SubscriptionStatus = "Active"
-    };
-
     private UserContextService CreateService(
-        HttpClient? httpClient = null,
-        string? tenantServiceUrl = "http://localhost:9000")
+        string? environmentName = null,
+        bool allowTenantAdminFallback = false)
     {
         var configEntries = new Dictionary<string, string?>();
-        if (tenantServiceUrl != null)
-            configEntries["Services:TenantService"] = tenantServiceUrl;
+        if (allowTenantAdminFallback)
+            configEntries["Authentication:AllowTenantAdminFallback"] = "true";
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(configEntries)
             .Build();
 
-        httpClient ??= new HttpClient(new FakeHandler(HttpStatusCode.InternalServerError));
-
         return new UserContextService(
             _authStateProvider.Object,
-            _tenantContextService.Object,
-            httpClient,
+            _tokenProvider.Object,
             configuration,
-            _logger.Object);
+            _logger.Object,
+            environmentName == null ? null : new TestHostEnvironment(environmentName));
     }
 
     private void SetupAuthState(params Claim[] claims)
@@ -57,35 +47,42 @@ public class UserContextServiceTests
             .ReturnsAsync(authState);
     }
 
-    private void SetupTenantContext(TenantContext? context = null)
+    /// <summary>The token exchange fails: the user has no CHO token.</summary>
+    private void SetupNoToken(ChoTokenStatus status = ChoTokenStatus.NoAccess)
     {
-        _tenantContextService.Setup(x => x.GetCurrentTenantContextAsync())
-            .ReturnsAsync(context);
+        _tokenProvider.Setup(x => x.GetTokenAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Failure(status));
     }
 
-    private static string SerializeUser(
-        string id = "user-1",
+    /// <summary>The token exchange succeeds with this response.</summary>
+    private void SetupExchange(
+        string userId = "usr-1",
         string tenantId = "tenant-1",
         string email = "jane@acme.com",
         string displayName = "Jane Doe",
         string firstName = "Jane",
         string lastName = "Doe",
-        string azureAdObjectId = "",
         List<string>? roles = null,
-        string department = "Claims",
-        string status = "Active")
+        IEnumerable<string>? permissions = null,
+        string department = "Claims")
     {
-        return JsonSerializer.Serialize(new
-        {
-            id, tenantId, email, displayName, firstName, lastName,
-            azureAdObjectId, roles = roles ?? new List<string> { "ClaimsExaminer" },
-            department, status
-        });
-    }
-
-    private static string SerializeUsers(params string[] userJsons)
-    {
-        return $"[{string.Join(",", userJsons)}]";
+        roles ??= new List<string> { "ClaimsExaminer" };
+        _tokenProvider.Setup(x => x.GetTokenAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Success(new ChoTokenExchangeResponse
+            {
+                AccessToken = "cho-token",
+                ExpiresIn = 3600,
+                TenantId = tenantId,
+                TenantName = "Test Tenant",
+                Roles = roles,
+                // What the token service computes; the portal uses it as issued.
+                Permissions = (permissions ?? ChoRolePermissions.Expand(roles)).ToList(),
+                User = new ChoTokenUser
+                {
+                    Id = userId, Email = email, DisplayName = displayName,
+                    FirstName = firstName, LastName = lastName, Department = department
+                }
+            }));
     }
 
     // ================================================================
@@ -114,22 +111,59 @@ public class UserContextServiceTests
         result.Should().BeNull();
     }
 
-    [Fact]
-    public async Task GetCurrentUserAsync_WhenTenantContextIsNull_ReturnsTenantAdminFallback()
+    [Theory]
+    [InlineData(ChoTokenStatus.NoAccess)]        // 403 no_access (unknown or inactive user)
+    [InlineData(ChoTokenStatus.Unavailable)]     // 503, network failure, not configured
+    [InlineData(ChoTokenStatus.InvalidToken)]    // 401 invalid_token
+    [InlineData(ChoTokenStatus.TenantRequired)]  // 409 with no usable tenant
+    [InlineData(ChoTokenStatus.ConsentRequired)] // Entra re-sign-in / consent pending
+    public async Task GetCurrentUserAsync_WhenTokenExchangeFails_GrantsNoRoles(ChoTokenStatus status)
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "admin@acme.com"),
             new Claim("name", "Admin User"),
             new Claim("tid", "azure-tid-1"));
-        SetupTenantContext(null);
+        SetupNoToken(status);
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
-        result.Permissions.Should().Contain("*:*");
+        result.Roles.Should().BeEmpty();
+        result.Permissions.Should().BeEmpty();
+        result.TenantId.Should().BeEmpty("without a CHO token there is no tenant");
+        sut.HasPermission("claims:read").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetCurrentUserAsync_FallbackOnDevelopmentWithFlag_GrantsTenantAdmin()
+    {
+        SetupAuthState(
+            new Claim(ClaimTypes.Email, "admin@acme.com"),
+            new Claim("name", "Admin User"));
+        SetupNoToken();
+        var sut = CreateService(environmentName: Environments.Development, allowTenantAdminFallback: true);
+
+        var result = await sut.GetCurrentUserAsync();
+
+        result!.Roles.Should().Equal("TenantAdmin");
+    }
+
+    [Theory]
+    [InlineData("Production", true)]
+    [InlineData("Development", false)]
+    public async Task GetCurrentUserAsync_FallbackWithoutDevelopmentAndFlag_GrantsNoRoles(string environment, bool flag)
+    {
+        SetupAuthState(
+            new Claim(ClaimTypes.Email, "admin@acme.com"),
+            new Claim("name", "Admin User"));
+        SetupNoToken();
+        var sut = CreateService(environmentName: environment, allowTenantAdminFallback: flag);
+
+        var result = await sut.GetCurrentUserAsync();
+
+        result!.Roles.Should().BeEmpty();
     }
 
     // ── Fallback DisplayName extraction ──
@@ -140,7 +174,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("name", "Jane Doe"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -154,7 +188,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim(ClaimTypes.Name, "Jane From ClaimTypes"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -166,7 +200,7 @@ public class UserContextServiceTests
     public async Task GetCurrentUserAsync_FallbackExtractsDisplayName_FallsBackToEmail()
     {
         SetupAuthState(new Claim(ClaimTypes.Email, "jane@acme.com"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -182,7 +216,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("name", "Jane"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -197,7 +231,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("name", "Jane Doe"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -212,7 +246,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("name", "Mary Jane Watson"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -222,255 +256,172 @@ public class UserContextServiceTests
         result.LastName.Should().Be("Jane");
     }
 
-    // ── TenantService URL not configured ──
+    // ── User context from the token exchange ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenTenantServiceUrlNotConfigured_FallsBackToTenantAdmin()
-    {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "admin@acme.com"),
-            new Claim("name", "Admin User"));
-        SetupTenantContext(_defaultTenantContext);
-        var sut = CreateService(tenantServiceUrl: null);
-
-        var result = await sut.GetCurrentUserAsync();
-
-        result.Should().NotBeNull();
-        result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
-    }
-
-    // ── OID lookup succeeds ──
-
-    [Fact]
-    public async Task GetCurrentUserAsync_WhenOidLookupSucceeds_MapsAllFieldsCorrectly()
+    public async Task GetCurrentUserAsync_WhenExchangeSucceeds_MapsAllFieldsFromTheResponse()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("oid", "oid-abc-123"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var userJson = SerializeUser(
-            id: "usr-42", tenantId: "tenant-1", email: "jane@acme.com",
+            new Claim("name", "Claim Name"));
+        SetupExchange(
+            userId: "usr-42", tenantId: "tenant-7", email: "jane.doe@acme.com",
             displayName: "Jane Doe", firstName: "Jane", lastName: "Doe",
-            azureAdObjectId: "oid-abc-123",
             roles: new List<string> { "ClaimsExaminer", "Finance" },
-            department: "Claims Dept", status: "Active");
-
-        var handler = new FakeHandler(req =>
-        {
-            if (req.RequestUri!.AbsolutePath.Contains("/by-oid/"))
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(userJson, Encoding.UTF8, "application/json")
-                };
-            return new HttpResponseMessage(HttpStatusCode.NotFound);
-        });
-
-        var sut = CreateService(new HttpClient(handler));
+            department: "Claims Dept");
+        var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be("usr-42");
-        result.Email.Should().Be("jane@acme.com");
+        result.Email.Should().Be("jane.doe@acme.com");
         result.DisplayName.Should().Be("Jane Doe");
         result.FirstName.Should().Be("Jane");
         result.LastName.Should().Be("Doe");
-        result.TenantId.Should().Be("tenant-1");
+        result.TenantId.Should().Be("tenant-7");
         result.Roles.Should().BeEquivalentTo(new[] { "ClaimsExaminer", "Finance" });
         result.Department.Should().Be("Claims Dept");
         result.Permissions.Should().Contain("claims:read");
         result.Permissions.Should().Contain("payments:read");
     }
 
-    // ── OID lookup fails, email lookup succeeds ──
+    [Fact]
+    public async Task GetCurrentUserAsync_UsesPermissionsExactlyAsTheTokenServiceIssuedThem()
+    {
+        SetupAuthState(new Claim(ClaimTypes.Email, "jane@acme.com"));
+        // The role would grant claims:work, but the token service issued only claims:read.
+        SetupExchange(roles: new List<string> { "ClaimsExaminer" }, permissions: new[] { "claims:read" });
+        var sut = CreateService();
+
+        await sut.GetCurrentUserAsync();
+
+        sut.HasPermission("claims:read").Should().BeTrue();
+        sut.HasPermission("claims:work").Should().BeFalse("the portal does not expand roles itself");
+        sut.HasRole("ClaimsExaminer").Should().BeTrue();
+    }
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenOidLookupFailsAndEmailLookupSucceeds_MapsCorrectly()
+    public async Task GetCurrentUserAsync_WhenResponseLacksUserNames_UsesTheSignInClaims()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("oid", "oid-abc-123"),
             new Claim("name", "Jane Doe"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var userJson = SerializeUser(
-            id: "usr-99", email: "jane@acme.com",
-            displayName: "Jane Doe", firstName: "Jane", lastName: "Doe",
-            roles: new List<string> { "MemberServices" },
-            department: "Member Dept", status: "Active");
-
-        var handler = new FakeHandler(req =>
-        {
-            if (req.RequestUri!.AbsolutePath.Contains("/by-oid/"))
-                return new HttpResponseMessage(HttpStatusCode.NotFound);
-            if (req.RequestUri.AbsolutePath.EndsWith("/users"))
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        SerializeUsers(userJson), Encoding.UTF8, "application/json")
-                };
-            return new HttpResponseMessage(HttpStatusCode.NotFound);
-        });
-
-        var sut = CreateService(new HttpClient(handler));
+        _tokenProvider.Setup(x => x.GetTokenAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ChoTokenResult.Success(new ChoTokenExchangeResponse
+            {
+                AccessToken = "t", TenantId = "tenant-1", ExpiresIn = 3600,
+                Roles = new List<string> { "MemberServices" },
+                Permissions = new List<string> { "members:read" },
+                User = new ChoTokenUser { Id = "usr-5" }
+            }));
+        var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
 
-        result.Should().NotBeNull();
-        result!.UserId.Should().Be("usr-99");
-        result.Roles.Should().Contain("MemberServices");
+        result!.UserId.Should().Be("usr-5");
+        result.Email.Should().Be("jane@acme.com");
+        result.DisplayName.Should().Be("Jane Doe");
+        result.FirstName.Should().Be("Jane");
+        result.LastName.Should().Be("Doe");
     }
 
-    // ── Empty roles defaults to TenantAdmin ──
+    // ── Empty roles grant nothing ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenEmailLookupFindsUserWithEmptyRoles_DefaultsToTenantAdmin()
+    public async Task GetCurrentUserAsync_WhenExchangeIssuesNoRoles_GrantsNoRoles()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "noroles@acme.com"),
             new Claim("name", "No Roles"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var userJson = SerializeUser(
-            id: "usr-empty", email: "noroles@acme.com",
-            roles: new List<string>(), status: "Active");
-
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            SerializeUsers(userJson));
-
-        var sut = CreateService(new HttpClient(handler));
+        SetupExchange(userId: "usr-empty", email: "noroles@acme.com", roles: new List<string>());
+        var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
 
         result.Should().NotBeNull();
-        result!.Roles.Should().Contain("TenantAdmin");
+        result!.UserId.Should().Be("usr-empty");
+        result.Roles.Should().BeEmpty();
+        result.Permissions.Should().BeEmpty();
     }
 
-    // ── Inactive user falls back to TenantAdmin ──
+    // ── Development fallback applies only without a token ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenUserStatusIsNotActive_FallsBackToTenantAdmin()
+    public async Task GetCurrentUserAsync_DevelopmentFallbackFlag_DoesNotOverrideAnIssuedToken()
     {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "inactive@acme.com"),
-            new Claim("name", "Inactive User"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var userJson = SerializeUser(
-            id: "usr-inactive", email: "inactive@acme.com",
-            status: "Disabled");
-
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            SerializeUsers(userJson));
-
-        var sut = CreateService(new HttpClient(handler));
+        SetupAuthState(new Claim(ClaimTypes.Email, "jane@acme.com"));
+        SetupExchange(roles: new List<string> { "ClaimsExaminer" });
+        var sut = CreateService(environmentName: Environments.Development, allowTenantAdminFallback: true);
 
         var result = await sut.GetCurrentUserAsync();
 
-        result.Should().NotBeNull();
-        result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
+        result!.Roles.Should().Equal("ClaimsExaminer");
     }
 
-    // ── OID backfill ──
+    // ── Exception from the token provider falls back ──
 
     [Fact]
-    public async Task GetCurrentUserAsync_WhenEmailLookupSucceedsAndUserHasNoOid_BackfillsPatchRequest()
-    {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("oid", "new-oid-value"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var userJson = SerializeUser(
-            id: "usr-77", email: "jane@acme.com",
-            azureAdObjectId: "", status: "Active");
-
-        var handler = new FakeHandler(req =>
-        {
-            if (req.RequestUri!.AbsolutePath.Contains("/by-oid/"))
-                return new HttpResponseMessage(HttpStatusCode.NotFound);
-            if (req.Method == HttpMethod.Get && req.RequestUri.AbsolutePath.EndsWith("/users"))
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        SerializeUsers(userJson), Encoding.UTF8, "application/json")
-                };
-            if (req.Method == HttpMethod.Patch)
-                return new HttpResponseMessage(HttpStatusCode.OK);
-            return new HttpResponseMessage(HttpStatusCode.NotFound);
-        });
-
-        var httpClient = new HttpClient(handler);
-        var sut = CreateService(httpClient);
-
-        await sut.GetCurrentUserAsync();
-
-        handler.CapturedRequests.Should().Contain(r =>
-            r.Method == HttpMethod.Patch &&
-            r.RequestUri!.AbsolutePath.Contains("/users/usr-77"));
-    }
-
-    [Fact]
-    public async Task GetCurrentUserAsync_WhenOidBackfillFails_SwallowsExceptionAndReturnsUser()
-    {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("oid", "new-oid-value"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var userJson = SerializeUser(
-            id: "usr-77", email: "jane@acme.com",
-            azureAdObjectId: "", status: "Active");
-
-        var handler = new FakeHandler(req =>
-        {
-            if (req.RequestUri!.AbsolutePath.Contains("/by-oid/"))
-                return new HttpResponseMessage(HttpStatusCode.NotFound);
-            if (req.Method == HttpMethod.Get && req.RequestUri.AbsolutePath.EndsWith("/users"))
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        SerializeUsers(userJson), Encoding.UTF8, "application/json")
-                };
-            if (req.Method == HttpMethod.Patch)
-                throw new HttpRequestException("Network error");
-            return new HttpResponseMessage(HttpStatusCode.NotFound);
-        });
-
-        var sut = CreateService(new HttpClient(handler));
-
-        var result = await sut.GetCurrentUserAsync();
-
-        result.Should().NotBeNull();
-        result!.UserId.Should().Be("usr-77");
-    }
-
-    // ── HTTP exception falls back ──
-
-    [Fact]
-    public async Task GetCurrentUserAsync_WhenHttpExceptionOccurs_FallsBackToTenantAdmin()
+    public async Task GetCurrentUserAsync_WhenTokenProviderThrows_GrantsNoRoles()
     {
         SetupAuthState(
             new Claim(ClaimTypes.Email, "admin@acme.com"),
             new Claim("name", "Admin User"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var handler = new FakeHandler(_ =>
-            throw new HttpRequestException("Connection refused"));
-
-        var sut = CreateService(new HttpClient(handler));
+        _tokenProvider.Setup(x => x.GetTokenAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Connection refused"));
+        var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
 
         result.Should().NotBeNull();
         result!.UserId.Should().Be("fallback");
-        result.Roles.Should().Contain("TenantAdmin");
+        result.Roles.Should().BeEmpty();
+    }
+
+    // ── LocalDemo (real provider) ──
+
+    [Fact]
+    public async Task GetCurrentUserAsync_LocalDemoInDevelopment_GetsTheLocalDemoRolesFromTheMintedToken()
+    {
+        var sut = CreateLocalDemoService("Development");
+
+        var result = await sut.GetCurrentUserAsync();
+
+        result!.TenantId.Should().Be("demo");
+        result.Roles.Should().BeEquivalentTo(ChoTokenProvider.LocalDemoRoles);
+        sut.HasPermission("users:manage").Should().BeTrue();
+        sut.HasPermission("platform:admin").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetCurrentUserAsync_LocalDemoOutsideDevelopment_GrantsNoRoles()
+    {
+        var sut = CreateLocalDemoService("Production");
+
+        var result = await sut.GetCurrentUserAsync();
+
+        result!.Roles.Should().BeEmpty();
+        result.Permissions.Should().BeEmpty();
+    }
+
+    private static UserContextService CreateLocalDemoService(string environment)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Authentication:Mode"] = "LocalDemo",
+            ["Authentication:LocalDemo:TenantId"] = "demo",
+        }).Build();
+        var auth = new StaticAuthenticationStateProvider(ChoTokenTestSupport.LocalDemoUser());
+        var provider = new ChoTokenProvider(
+            auth,
+            new SingleHandlerHttpClientFactory(new FakeHandler(_ => throw new InvalidOperationException("no HTTP in LocalDemo"))),
+            new MemoryCache(new MemoryCacheOptions()),
+            configuration,
+            new TestHostEnvironment(environment),
+            NullLogger<ChoTokenProvider>.Instance);
+        return new UserContextService(auth, provider, configuration,
+            NullLogger<UserContextService>.Instance, new TestHostEnvironment(environment));
     }
 
     // ── Caching ──
@@ -481,7 +432,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "admin@acme.com"),
             new Claim("name", "Admin User"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result1 = await sut.GetCurrentUserAsync();
@@ -489,6 +440,7 @@ public class UserContextServiceTests
 
         result1.Should().BeSameAs(result2);
         _authStateProvider.Verify(x => x.GetAuthenticationStateAsync(), Times.Once);
+        _tokenProvider.Verify(x => x.GetTokenAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Email claim priority ──
@@ -500,7 +452,7 @@ public class UserContextServiceTests
             new Claim(ClaimTypes.Email, "primary@acme.com"),
             new Claim("preferred_username", "secondary@acme.com"),
             new Claim("upn", "tertiary@acme.com"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -514,7 +466,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim("preferred_username", "secondary@acme.com"),
             new Claim("upn", "tertiary@acme.com"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -526,7 +478,7 @@ public class UserContextServiceTests
     public async Task GetCurrentUserAsync_ExtractsEmail_FallsBackToUpn()
     {
         SetupAuthState(new Claim("upn", "tertiary@acme.com"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
 
         var result = await sut.GetCurrentUserAsync();
@@ -548,26 +500,14 @@ public class UserContextServiceTests
     [Fact]
     public async Task HasPermission_ExactMatch_WorksCaseInsensitive()
     {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(null); // fallback grants TenantAdmin which has *:*
-        var sut = CreateService();
-        await sut.GetCurrentUserAsync();
-
-        // TenantAdmin has "*:*" which matches everything
+        var sut = await CreateServiceWithRole("ClaimsExaminer"); // has claims:read
         sut.HasPermission("Claims:Read").Should().BeTrue();
     }
 
     [Fact]
     public async Task HasRole_ExactMatch_WorksCaseInsensitive()
     {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(null);
-        var sut = CreateService();
-        await sut.GetCurrentUserAsync();
+        var sut = await CreateServiceWithRole("TenantAdmin");
 
         sut.HasRole("tenantadmin").Should().BeTrue();
         sut.HasRole("TenantAdmin").Should().BeTrue();
@@ -576,12 +516,7 @@ public class UserContextServiceTests
     [Fact]
     public async Task HasAnyRole_ReturnsTrueIfAnyRoleMatches()
     {
-        SetupAuthState(
-            new Claim(ClaimTypes.Email, "jane@acme.com"),
-            new Claim("name", "Jane Doe"));
-        SetupTenantContext(null);
-        var sut = CreateService();
-        await sut.GetCurrentUserAsync();
+        var sut = await CreateServiceWithRole("TenantAdmin");
 
         sut.HasAnyRole("Finance", "TenantAdmin", "Unknown").Should().BeTrue();
     }
@@ -592,7 +527,7 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("name", "Jane Doe"));
-        SetupTenantContext(null);
+        SetupNoToken();
         var sut = CreateService();
         await sut.GetCurrentUserAsync();
 
@@ -615,15 +550,10 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("name", "Jane Doe"));
-        SetupTenantContext(_defaultTenantContext);
+        // The token service issues the role and the permissions it grants.
+        SetupExchange(email: "jane@acme.com", roles: new List<string> { role });
 
-        var userJson = SerializeUser(
-            email: "jane@acme.com",
-            roles: new List<string> { role }, status: "Active");
-
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            SerializeUsers(userJson));
-        var sut = CreateService(new HttpClient(handler));
+        var sut = CreateService();
         await sut.GetCurrentUserAsync();
         return sut;
     }
@@ -633,6 +563,33 @@ public class UserContextServiceTests
     {
         var sut = await CreateServiceWithRole("TenantAdmin"); // has *:*
         sut.HasPermission("anything:whatever").Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("platform:admin")]
+    [InlineData("platform:tenants")]
+    [InlineData("platform:inquiries")]
+    public async Task PermissionMatches_TenantAdminWildcard_DoesNotGrantPlatformPermissions(string permission)
+    {
+        var sut = await CreateServiceWithRole("TenantAdmin"); // has *:*
+        sut.HasPermission(permission).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PermissionMatches_ReadWildcard_DoesNotGrantPlatformPermissions()
+    {
+        var sut = await CreateServiceWithRole("ComplianceOfficer"); // has *:read
+        sut.HasPermission("platform:read").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("platform:admin")]
+    [InlineData("platform:tenants")]
+    [InlineData("platform:inquiries")]
+    public async Task PermissionMatches_PlatformAdmin_HasPlatformPermissions(string permission)
+    {
+        var sut = await CreateServiceWithRole("PlatformAdmin");
+        sut.HasPermission(permission).Should().BeTrue();
     }
 
     [Fact]
@@ -709,6 +666,8 @@ public class UserContextServiceTests
         sut.HasPermission("compliance:read").Should().BeTrue();
         sut.HasPermission("authorizations:read").Should().BeTrue();
         sut.HasPermission("audit:read").Should().BeTrue();
+        // Code-set lookups (not PHI).
+        sut.HasPermission("reference-data:read").Should().BeTrue();
     }
 
     [Fact]
@@ -726,6 +685,39 @@ public class UserContextServiceTests
     }
 
     [Fact]
+    public async Task ExpandPermissions_Finance_CanRunButNotApprovePayments()
+    {
+        var sut = await CreateServiceWithRole("Finance");
+
+        sut.HasPermission("payments:read").Should().BeTrue();
+        sut.HasPermission("payments:run").Should().BeTrue();
+        sut.HasPermission("billing:run").Should().BeTrue();
+        sut.HasPermission("reports:financial").Should().BeTrue();
+        sut.HasPermission("payments:approve").Should().BeFalse();
+        // Calculates and submits risk scores; looks up code sets.
+        sut.HasPermission("risk-adjustment:write").Should().BeTrue();
+        sut.HasPermission("reference-data:read").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExpandPermissions_FinanceApprover_CanApproveButNotRunPayments()
+    {
+        var sut = await CreateServiceWithRole("FinanceApprover");
+
+        sut.HasPermission("payments:read").Should().BeTrue();
+        sut.HasPermission("payments:approve").Should().BeTrue();
+        sut.HasPermission("finance:read").Should().BeTrue();
+        sut.HasPermission("reports:financial").Should().BeTrue();
+        // Reviews premium billing before releasing sponsor debits; cannot run it.
+        sut.HasPermission("billing:read").Should().BeTrue();
+        sut.HasPermission("payments:run").Should().BeFalse();
+        sut.HasPermission("billing:run").Should().BeFalse();
+        sut.HasPermission("finance:write").Should().BeFalse();
+        sut.HasPermission("risk-adjustment:write").Should().BeFalse();
+        sut.HasPermission("reference-data:read").Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ExpandPermissions_UnknownRole_GetsEmptyPermissions()
     {
         var sut = await CreateServiceWithRole("NonExistentRole");
@@ -740,16 +732,8 @@ public class UserContextServiceTests
         SetupAuthState(
             new Claim(ClaimTypes.Email, "jane@acme.com"),
             new Claim("name", "Jane Doe"));
-        SetupTenantContext(_defaultTenantContext);
-
-        var userJson = SerializeUser(
-            email: "jane@acme.com",
-            roles: new List<string> { "ClaimsExaminer", "Finance" },
-            status: "Active");
-
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            SerializeUsers(userJson));
-        var sut = CreateService(new HttpClient(handler));
+        SetupExchange(email: "jane@acme.com", roles: new List<string> { "ClaimsExaminer", "Finance" });
+        var sut = CreateService();
         await sut.GetCurrentUserAsync();
 
         // ClaimsExaminer permissions
@@ -787,6 +771,7 @@ public class UserContextServiceTests
     [InlineData("UMCoordinator", "UM Coordinator")]
     [InlineData("ProviderRelations", "Provider Relations")]
     [InlineData("Finance", "Finance")]
+    [InlineData("FinanceApprover", "Finance Approver")]
     [InlineData("ComplianceOfficer", "Compliance Officer")]
     [InlineData("ComplianceViewer", "Compliance Viewer")]
     [InlineData("TenantAdmin", "Tenant Admin")]

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using CloudHealthOffice.Infrastructure.Security;
 using CoverageService.Middleware;
 using CoverageService.Models;
 using CoverageService.Repositories;
@@ -24,18 +25,21 @@ public class CoverageController : ControllerBase
     private readonly ICoverageRepository _coverageRepository;
     private readonly IPcpAssignmentService? _pcpService;
     private readonly ICareTeamProjector? _careTeamProjector;
+    private readonly ICurrentActor _actor;
     private readonly ILogger<CoverageController> _logger;
 
-    // Tenant context from middleware
+    // Tenant from the validated token (shared TenantMiddleware via UseChoAuthentication).
     private string TenantId => HttpContext.GetTenantId();
 
     public CoverageController(
         ICoverageRepository coverageRepository,
+        ICurrentActor actor,
         ILogger<CoverageController> logger,
         IPcpAssignmentService? pcpService = null,
         ICareTeamProjector? careTeamProjector = null)
     {
         _coverageRepository = coverageRepository;
+        _actor = actor;
         _pcpService = pcpService;
         _careTeamProjector = careTeamProjector;
         _logger = logger;
@@ -45,6 +49,11 @@ public class CoverageController : ControllerBase
     /// Search coverage records by various criteria
     /// </summary>
     [HttpGet]
+    // Premium billing lists a sponsor group's active coverage to price its
+    // invoice (PremiumBillingService CoverageServiceClient), forwarding the
+    // Finance user's token: billing:read reads this search too. Every other
+    // coverage read and all writes keep the defaults.
+    [RequirePermission("coverage:read,billing:read")]
     [ProducesResponseType(typeof(CoverageListResponse), 200)]
     public async Task<IActionResult> SearchCoverage(
         [FromQuery] string? memberId = null,
@@ -235,7 +244,7 @@ public class CoverageController : ControllerBase
             MaintenanceReasonCode = request.MaintenanceReasonCode,
             CreatedDate = DateTime.UtcNow,
             LastUpdatedDate = DateTime.UtcNow,
-            CreatedBy = User.Identity?.Name ?? "System"
+            CreatedBy = _actor.UserId
         };
 
         var created = await _coverageRepository.CreateAsync(coverage);
@@ -270,7 +279,7 @@ public class CoverageController : ControllerBase
         if (request.OtherInsurance != null) coverage.OtherInsurance = request.OtherInsurance;
 
         coverage.LastUpdatedDate = DateTime.UtcNow;
-        coverage.LastUpdatedBy = User.Identity?.Name ?? "System";
+        coverage.LastUpdatedBy = _actor.UserId;
 
         var updated = await _coverageRepository.UpdateAsync(coverage);
         return Ok(updated);
@@ -297,7 +306,7 @@ public class CoverageController : ControllerBase
         coverage.TerminationDate = terminationDate ?? DateTime.UtcNow.Date;
         coverage.MaintenanceReasonCode = reasonCode;
         coverage.LastUpdatedDate = DateTime.UtcNow;
-        coverage.LastUpdatedBy = User.Identity?.Name ?? "System";
+        coverage.LastUpdatedBy = _actor.UserId;
 
         await _coverageRepository.UpdateAsync(coverage);
         return NoContent();
@@ -433,10 +442,19 @@ public class CoverageController : ControllerBase
             Reason = request.Reason,
             Source = ParseSource(request.AssignmentSource),
             MemberDateOfBirth = request.MemberDateOfBirth,
-            AssignedBy = User.Identity?.Name ?? "member-service"
+            AssignedBy = _actor.UserId
         };
 
-        var result = await _pcpService.AssignAsync(TenantId, memberId, cmd, ct);
+        PcpAssignmentResult result;
+        try
+        {
+            result = await _pcpService.AssignAsync(TenantId, memberId, cmd, ct);
+        }
+        catch (ProviderDirectoryUnavailableException ex)
+        {
+            _logger.LogError("PCP assignment: provider directory unavailable ({Status})", ex.StatusCode);
+            return StatusCode(503, new { Message = "Provider directory is unavailable; the assignment was not made." });
+        }
         if (!result.IsSuccess)
         {
             var err = result.Error!;
@@ -571,7 +589,7 @@ public class CoverageController : ControllerBase
             if (!string.IsNullOrEmpty(request.ReasonCode))
                 coverage.MaintenanceReasonCode = request.ReasonCode;
             coverage.LastUpdatedDate = DateTime.UtcNow;
-            coverage.LastUpdatedBy = User.Identity?.Name ?? "member-service";
+            coverage.LastUpdatedBy = _actor.UserId;
             await _coverageRepository.UpdateAsync(coverage);
         }
 

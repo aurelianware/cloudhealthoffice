@@ -4,7 +4,9 @@
     RFAI Service tests
     ==================
     Unit coverage for the additional-information aggregate: the pure rules in
-    RfaiCaseLifecycle and the orchestration in RfaiCaseService.
+    RfaiCaseLifecycle and the orchestration in RfaiCaseService. Security/ runs
+    the real HTTP pipeline (CHO authentication, tenant from token, permissions)
+    over an in-memory repository.
 
     This is where the aggregate's own invariants are proven in isolation. The
     CMS-0057-F acceptance suite (tests/Cms0057Acceptance.Tests,
@@ -26,6 +28,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">

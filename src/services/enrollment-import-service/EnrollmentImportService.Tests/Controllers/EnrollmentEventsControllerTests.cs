@@ -4,6 +4,8 @@ using EnrollmentImportService.Repositories;
 using EnrollmentImportService.Tests.Services;
 using Microsoft.AspNetCore.Mvc;
 
+using EnrollmentImportService.Tests.Support;
+
 namespace EnrollmentImportService.Tests.Controllers;
 
 public class EnrollmentEventsControllerTests
@@ -11,7 +13,7 @@ public class EnrollmentEventsControllerTests
     private static (EnrollmentEventsController ctl, InMemoryEnrollmentEventRepository repo) Build()
     {
         var repo = new InMemoryEnrollmentEventRepository();
-        var ctl = new EnrollmentEventsController(repo);
+        var ctl = new EnrollmentEventsController(repo, new TestActor(tenantId: "t1"));
         return (ctl, repo);
     }
 
@@ -36,7 +38,7 @@ public class EnrollmentEventsControllerTests
         await repo.AppendAsync(Make("M-1", EnrollmentEventType.Enrolled, 1, DateTime.UtcNow.AddDays(-2)));
         await repo.AppendAsync(Make("M-1", EnrollmentEventType.PlanChanged, 2, DateTime.UtcNow.AddDays(-1)));
 
-        var resp = await ctl.List("M-1", "t1");
+        var resp = await ctl.List("M-1");
         var ok = resp.Should().BeOfType<OkObjectResult>().Subject;
         var page = ok.Value.Should().BeOfType<EnrollmentEventListResponse>().Subject;
         page.Items.Should().HaveCount(2);
@@ -50,7 +52,7 @@ public class EnrollmentEventsControllerTests
         await repo.AppendAsync(Make("M-1", EnrollmentEventType.Enrolled, 1, DateTime.UtcNow));
         await repo.AppendAsync(Make("M-1", EnrollmentEventType.PlanChanged, 2, DateTime.UtcNow));
 
-        var resp = await ctl.List("M-1", "t1", type: "PlanChanged");
+        var resp = await ctl.List("M-1", type: "PlanChanged");
         var ok = resp.Should().BeOfType<OkObjectResult>().Subject;
         var page = ok.Value.Should().BeOfType<EnrollmentEventListResponse>().Subject;
         page.Items.Should().ContainSingle();
@@ -61,15 +63,7 @@ public class EnrollmentEventsControllerTests
     public async Task List_UnknownType_ReturnsBadRequest()
     {
         var (ctl, _) = Build();
-        var resp = await ctl.List("M-1", "t1", type: "Bogus");
-        resp.Should().BeOfType<BadRequestObjectResult>();
-    }
-
-    [Fact]
-    public async Task List_MissingTenant_ReturnsBadRequest()
-    {
-        var (ctl, _) = Build();
-        var resp = await ctl.List("M-1", tenantId: "");
+        var resp = await ctl.List("M-1", type: "Bogus");
         resp.Should().BeOfType<BadRequestObjectResult>();
     }
 
@@ -81,7 +75,7 @@ public class EnrollmentEventsControllerTests
         await repo.AppendAsync(Make("M-1", EnrollmentEventType.Enrolled, 1, now.AddDays(-10)));
         await repo.AppendAsync(Make("M-1", EnrollmentEventType.PlanChanged, 2, now.AddDays(-1)));
 
-        var resp = await ctl.List("M-1", "t1", from: now.AddDays(-5));
+        var resp = await ctl.List("M-1", from: now.AddDays(-5));
         var ok = resp.Should().BeOfType<OkObjectResult>().Subject;
         var page = ok.Value.Should().BeOfType<EnrollmentEventListResponse>().Subject;
         page.Items.Should().ContainSingle();

@@ -159,15 +159,23 @@ of plan authoring history.
 `PlanDocumentValidation.ValidateLocation` is wired into
 `ValidateDocuments` next to `ValidateHash`. It accepts:
 
-- HTTPS URLs (the operator-authored external address Endpoint
-  projection requires).
+- HTTPS URLs whose host is on `BenefitPlan:AllowedDocumentHosts`
+  (exact host, or `*.example.com` for subdomains; empty by default).
+  Userinfo, IP-literal hosts, non-default ports and internal / cluster
+  hosts (`localhost`, single-label names, `*.svc`, `*.cluster.local`,
+  `*.cloudhealthoffice`, `*.internal`, `*.local`) are refused even if
+  listed.
 - The reserved `documentreference/{id}` form (Phase 2 forward-compat;
-  rejects bare `documentreference/`).
+  the id is letters, digits, `.`, `_`, `-`).
 
-Plain HTTP, relative URLs, and other schemes are rejected with a
-field-name-aware message. Producer-boundary only — setter-side
-validation would break Mongo hydration for any historical malformed
-document, same trust posture as `ValidateHash`.
+Plain HTTP, relative URLs, and other schemes (`javascript:`, `data:`,
+`file:`) are rejected with a field-name-aware 400. The rule lives in
+`PlanDocumentLocationPolicy`. It is enforced at the producer boundary
+(setter-side validation would break Mongo hydration for any historical
+malformed document, same trust posture as `ValidateHash`) and again on
+read: `PlanDocumentLocationResultFilter` returns a stored location that
+fails the rule as `location: null, locationBlocked: true` (and logs a
+warning), and the Endpoint projector does not project it.
 
 ## Search surface
 

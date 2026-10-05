@@ -211,10 +211,10 @@ spec:
             pip install paramiko
             
             # Get trading partner config for SFTP host/credentials
-            TRADING_PARTNER_ENDPOINT="{{workflow.parameters.trading-partner-service-endpoint}}"
-            TENANT_ID="{{inputs.parameters.tenant-id}}"
-            PARTNER_ID="{{inputs.parameters.trading-partner-id}}"
-            ENV="{{inputs.parameters.environment}}"
+            TRADING_PARTNER_ENDPOINT="${WF_PARAM_TRADING_PARTNER_SERVICE_ENDPOINT}"
+            TENANT_ID="${PARAM_TENANT_ID}"
+            PARTNER_ID="${PARAM_TRADING_PARTNER_ID}"
+            ENV="${PARAM_ENVIRONMENT}"
             
             echo "Fetching trading partner config: $TENANT_ID/$PARTNER_ID/$ENV"
             
@@ -234,7 +234,7 @@ spec:
             export SFTP_PASSWORD="${SFTP_PASSWORD}"
             
             echo "Connecting to SFTP: $SFTP_HOST"
-            echo "Downloading from: {{inputs.parameters.sftp-folder}}"
+            echo "Downloading from: ${PARAM_SFTP_FOLDER}"
             
             echo "Pre-Python check of /data/inbound:"
             ls -lh /data/inbound/
@@ -247,7 +247,7 @@ spec:
             host = os.environ.get('SFTP_HOST')
             user = os.environ.get('SFTP_USER')
             password = os.environ.get('SFTP_PASSWORD')
-            remote_dir = "{{inputs.parameters.sftp-folder}}"
+            remote_dir = os.environ["PARAM_SFTP_FOLDER"]
             local_dir = "/data/inbound"
 
             print(f"Python script starting...")
@@ -291,6 +291,16 @@ spec:
                echo "WARNING: No EDI files found in /data/inbound. Assuming injection or manual fix."
             fi
         env:
+          - name: PARAM_ENVIRONMENT
+            value: "{{inputs.parameters.environment}}"
+          - name: PARAM_SFTP_FOLDER
+            value: "{{inputs.parameters.sftp-folder}}"
+          - name: PARAM_TENANT_ID
+            value: "{{inputs.parameters.tenant-id}}"
+          - name: PARAM_TRADING_PARTNER_ID
+            value: "{{inputs.parameters.trading-partner-id}}"
+          - name: WF_PARAM_TRADING_PARTNER_SERVICE_ENDPOINT
+            value: "{{workflow.parameters.trading-partner-service-endpoint}}"
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -341,12 +351,15 @@ spec:
           - name: claims-service-endpoint
       # No artifacts
       script:
+        env:
+          - name: PARAM_CLAIMS_SERVICE_ENDPOINT
+            value: "{{inputs.parameters.claims-service-endpoint}}"
         image: curlimages/curl:latest
         command: [sh]
         source: |
           set -e
           
-          CLAIMS_API="{{inputs.parameters.claims-service-endpoint}}"
+          CLAIMS_API="${PARAM_CLAIMS_SERVICE_ENDPOINT}"
           
           # Read parsed 276 JSON from PVC
           PARSED_276=$(cat /data/output/parsed.json)
@@ -375,6 +388,11 @@ spec:
           - name: trading-partner-id
       # No artifacts - uses PVC
       container:
+        env:
+          - name: PARAM_TENANT_ID
+            value: "{{inputs.parameters.tenant-id}}"
+          - name: PARAM_TRADING_PARTNER_ID
+            value: "{{inputs.parameters.trading-partner-id}}"
         image: ghcr.io/aurelianware/cloudhealthoffice-x12-encoder:latest
         command: ["/bin/sh"]
         args:
@@ -384,8 +402,8 @@ spec:
             
             echo "Generating 277 claim status response"
             
-            TENANT_ID="{{inputs.parameters.tenant-id}}"
-            PARTNER_ID="{{inputs.parameters.trading-partner-id}}"
+            TENANT_ID="${PARAM_TENANT_ID}"
+            PARTNER_ID="${PARAM_TRADING_PARTNER_ID}"
             
             # Read claim status data
             # Note: query-claims writes this to /data/output
@@ -425,20 +443,22 @@ spec:
             SFTP_HOST="${SFTP_HOST:-sftp-service.cho-sftp.svc.cluster.local}"
             SFTP_USER="${SFTP_USER:-cho-edi}"
             SFTP_PASS="${SFTP_PASSWORD}"
-            REMOTE_DIR="{{inputs.parameters.sftp-folder}}"
+            REMOTE_DIR="${PARAM_SFTP_FOLDER}"
             LOCAL_DIR="/data/output"
             
             echo "Uploading to SFTP: $REMOTE_DIR from $LOCAL_DIR"
-            
-            cat <<EOF > /app/upload.py
+            # Values reach Python through the environment, never pasted into its source.
+            export SFTP_HOST SFTP_USER SFTP_PASS REMOTE_DIR LOCAL_DIR
+
+            cat <<'EOF' > /app/upload.py
             import os
             import paramiko
             
-            host = "$SFTP_HOST"
-            user = "$SFTP_USER"
-            password = "$SFTP_PASS"
-            remote_dir = "$REMOTE_DIR"
-            local_dir = "$LOCAL_DIR"
+            host = os.environ["SFTP_HOST"]
+            user = os.environ["SFTP_USER"]
+            password = os.environ["SFTP_PASS"]
+            remote_dir = os.environ["REMOTE_DIR"]
+            local_dir = os.environ["LOCAL_DIR"]
 
             print(f"Connecting to {host} as {user}...")
             try:
@@ -477,6 +497,8 @@ spec:
             timeout 90s python -u /app/upload.py || echo "WARNING: SFTP Upload timed out or failed. Continuing..."
             echo "Upload complete"
         env:
+          - name: PARAM_SFTP_FOLDER
+            value: "{{inputs.parameters.sftp-folder}}"
           - name: SFTP_PASSWORD
             valueFrom:
               secretKeyRef:
@@ -501,10 +523,10 @@ spec:
         source: |
           set -e
           
-          CONTAINER="{{inputs.parameters.container}}"
-          BLOB_PATH="{{inputs.parameters.blob-path}}"
-          LOCAL_PATH="{{inputs.parameters.local-path}}"
-          PATTERN="{{inputs.parameters.file-pattern}}"
+          CONTAINER="${PARAM_CONTAINER}"
+          BLOB_PATH="${PARAM_BLOB_PATH}"
+          LOCAL_PATH="${PARAM_LOCAL_PATH}"
+          PATTERN="${PARAM_FILE_PATTERN}"
           
           echo "Uploading to Azure Blob: $CONTAINER/$BLOB_PATH"
           echo "Source: $LOCAL_PATH/$PATTERN"
@@ -526,6 +548,14 @@ spec:
           
           echo "Upload complete"
         env:
+          - name: PARAM_BLOB_PATH
+            value: "{{inputs.parameters.blob-path}}"
+          - name: PARAM_CONTAINER
+            value: "{{inputs.parameters.container}}"
+          - name: PARAM_FILE_PATTERN
+            value: "{{inputs.parameters.file-pattern}}"
+          - name: PARAM_LOCAL_PATH
+            value: "{{inputs.parameters.local-path}}"
           - name: AZURE_STORAGE_ACCOUNT
             valueFrom:
               secretKeyRef:
@@ -552,8 +582,8 @@ spec:
         source: |
           set -e
           
-          TOPIC="{{inputs.parameters.topic}}"
-          MESSAGE='{{inputs.parameters.message}}'
+          TOPIC="${PARAM_TOPIC}"
+          MESSAGE="${PARAM_MESSAGE}"
           
           echo "Publishing to Kafka topic: $TOPIC"
           
@@ -564,6 +594,10 @@ spec:
           
           echo "Published to Kafka"
         env:
+          - name: PARAM_MESSAGE
+            value: "{{inputs.parameters.message}}"
+          - name: PARAM_TOPIC
+            value: "{{inputs.parameters.topic}}"
           - name: KAFKA_BOOTSTRAP_SERVERS
             valueFrom:
               secretKeyRef:

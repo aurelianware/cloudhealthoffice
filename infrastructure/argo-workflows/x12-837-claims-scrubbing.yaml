@@ -97,6 +97,8 @@ spec:
       configMap:
         name: claims-validation-rules
   
+  onExit: exit-handler
+
   templates:
     # Main orchestration template
     - name: scrub-claims
@@ -369,8 +371,8 @@ spec:
             import os
             from kafka import KafkaProducer
             
-            status_filter = "{{inputs.parameters.status-filter}}"
-            topic = "{{inputs.parameters.kafka-topic}}"
+            status_filter = os.environ["PARAM_STATUS_FILTER"]
+            topic = os.environ["PARAM_KAFKA_TOPIC"]
             
             with open('/data/input/results.json') as f:
                 results = json.load(f)
@@ -398,6 +400,10 @@ spec:
             
             print(f"Routed {len(filtered)} {status_filter} claims to {topic}")
         env:
+          - name: PARAM_KAFKA_TOPIC
+            value: "{{inputs.parameters.kafka-topic}}"
+          - name: PARAM_STATUS_FILTER
+            value: "{{inputs.parameters.status-filter}}"
           - name: KAFKA_BOOTSTRAP_SERVERS
             valueFrom:
               configMapKeyRef:
@@ -438,12 +444,14 @@ spec:
             month=$(date +%m)
             day=$(date +%d)
             
-            s3_path="s3://{{inputs.parameters.s3-bucket}}/validation-results/${year}/${month}/${day}/results-${timestamp}.json"
+            s3_path="s3://${PARAM_S3_BUCKET}/validation-results/${year}/${month}/${day}/results-${timestamp}.json"
             
             aws s3 cp /data/input/results.json "$s3_path" --sse AES256
             
             echo "Archived results to $s3_path"
         env:
+          - name: PARAM_S3_BUCKET
+            value: "{{inputs.parameters.s3-bucket}}"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -485,13 +493,17 @@ spec:
             valueFrom:
               path: /data/output/metrics.json
       container:
+        env:
+          - name: PARAM_FIRST_PASS_RATE_TARGET
+            value: "{{inputs.parameters.first-pass-rate-target}}"
         image: cloudhealthoffice/claims-scrubber:latest
         command: ["python", "-c"]
         args:
           - |
+            import os
             import json
             
-            target = float("{{inputs.parameters.first-pass-rate-target}}")
+            target = float(os.environ["PARAM_FIRST_PASS_RATE_TARGET"])
             
             with open('/data/input/results.json') as f:
                 results = json.load(f)
@@ -569,25 +581,25 @@ spec:
             cpu: "100m"
 
   # Exit handler for cleanup and error notification
-  onExit: exit-handler
-  
-  - name: exit-handler
-    steps:
-      - - name: notify-completion
-          template: notify-template
-          when: "{{workflow.status}} == Succeeded"
-      - - name: notify-failure
-          template: error-handler
-          when: "{{workflow.status}} != Succeeded"
-          arguments:
-            parameters:
-              - name: error-message
-                value: "Workflow failed"
-              - name: failed-step
-                value: "{{workflow.failures}}"
 
-  - name: notify-template
-    container:
-      image: curlimages/curl:latest
-      command: ["echo"]
-      args: ["Claims scrubbing workflow completed successfully"]
+  
+    - name: exit-handler
+      steps:
+        - - name: notify-completion
+            template: notify-template
+            when: "{{workflow.status}} == Succeeded"
+        - - name: notify-failure
+            template: error-handler
+            when: "{{workflow.status}} != Succeeded"
+            arguments:
+              parameters:
+                - name: error-message
+                  value: "Workflow failed"
+                - name: failed-step
+                  value: "{{workflow.failures}}"
+
+    - name: notify-template
+      container:
+        image: curlimages/curl:latest
+        command: ["echo"]
+        args: ["Claims scrubbing workflow completed successfully"]

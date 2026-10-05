@@ -1,4 +1,6 @@
-using System.Text.Json;
+using CloudHealthOffice.Infrastructure.Security;
+using CloudHealthOffice.NachaTransmission;
+using PremiumBillingService.Clients;
 using PremiumBillingService.Models;
 using PremiumBillingService.Repositories;
 
@@ -21,9 +23,46 @@ public interface IEftDraftService
     Task<BatchEftResult> InitiateBatchDraftAsync(InitiateBatchEftRequest request);
 
     /// <summary>
-    /// Generate a NACHA file for all pending NACHA drafts
+    /// Generate a NACHA file for all pending NACHA drafts and send it to the
+    /// bank. Returns the masked summary and receipt, never the file.
     /// </summary>
     Task<NachaFileResult> GenerateNachaFileForPendingDraftsAsync();
+
+    /// <summary>NACHA files of this tenant that were not delivered (no content).</summary>
+    Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync();
+
+    /// <summary>
+    /// Re-sends a held NACHA file. The acting user must hold payments:approve
+    /// (controller) and must not be the user who released it.
+    /// </summary>
+    Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference);
+
+    /// <summary>
+    /// A held NACHA file for a platform admin (controller: platform:admin),
+    /// never the releasing user. Audited with the reason.
+    /// </summary>
+    Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string fileReference, string reason);
+
+    /// <summary>
+    /// Records what the bank said about a NACHA file whose delivery was unknown
+    /// (payments:approve in the controller; a user, not the releaser). Received:
+    /// its drafts are Submitted. Not received: they can be retried or retrieved
+    /// again (or, when the held file expired, go back to Pending).
+    /// </summary>
+    Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string fileReference, bool bankReceived, string reason);
+
+    /// <summary>
+    /// Drafts stuck in Releasing (longer than <paramref name="releasingOlderThan"/>),
+    /// DeliveryUnknown or PaymentUnknown, and held files stuck Transmitting. Read only.
+    /// </summary>
+    Task<StuckEftDrafts> ListStuckDraftsAsync(TimeSpan releasingOlderThan);
+
+    /// <summary>
+    /// Records what a person found out about a stuck draft (Releasing past the
+    /// threshold, or PaymentUnknown): sent (Submitted) or not (Pending / Failed).
+    /// A user token, a reason, and not the user who released it. Audited.
+    /// </summary>
+    Task<EftDraft> ResolveStuckDraftAsync(string draftId, bool sent, string reason, string? stripePaymentIntentId);
 
     /// <summary>
     /// Process an ACH return (bank rejection)
@@ -56,6 +95,15 @@ public interface IEftDraftService
     Task<EftDraft> CancelDraftAsync(string draftId);
 }
 
+/// <summary>
+/// Every draft this release would send is already being released by another
+/// request (409): two releases never put the same draft in two files.
+/// </summary>
+public sealed class NachaReleaseConflictException : Exception
+{
+    public NachaReleaseConflictException(string message) : base(message) { }
+}
+
 public class EftDraftService : IEftDraftService
 {
     private readonly IEftDraftRepository _draftRepository;
@@ -63,14 +111,16 @@ public class EftDraftService : IEftDraftService
     private readonly IBillingRunRepository _billingRunRepository;
     private readonly INachaFileService _nachaFileService;
     private readonly IStripeAchService _stripeAchService;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ISponsorBankAccountSource _bankAccounts;
+    private readonly INachaDispatcher _dispatcher;
+    private readonly ICurrentActor _actor;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
     private readonly ILogger<EftDraftService> _logger;
+    private readonly DebitSeparationOfDuties _separationOfDuties;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
+    /// <summary>Recorded as the actor for changes driven by (signature-verified) Stripe events.</summary>
+    public const string StripeWebhookActor = "stripe-webhook";
 
     public EftDraftService(
         IEftDraftRepository draftRepository,
@@ -78,7 +128,10 @@ public class EftDraftService : IEftDraftService
         IBillingRunRepository billingRunRepository,
         INachaFileService nachaFileService,
         IStripeAchService stripeAchService,
-        IHttpClientFactory httpClientFactory,
+        ISponsorBankAccountSource bankAccounts,
+        INachaDispatcher dispatcher,
+        ICurrentActor actor,
+        IHttpContextAccessor httpContextAccessor,
         IConfiguration configuration,
         ILogger<EftDraftService> logger)
     {
@@ -87,10 +140,17 @@ public class EftDraftService : IEftDraftService
         _billingRunRepository = billingRunRepository;
         _nachaFileService = nachaFileService;
         _stripeAchService = stripeAchService;
-        _httpClientFactory = httpClientFactory;
+        _bankAccounts = bankAccounts;
+        _dispatcher = dispatcher;
+        _actor = actor;
+        _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
         _logger = logger;
+        _separationOfDuties = new DebitSeparationOfDuties(billingRunRepository, actor, logger);
     }
+
+    /// <summary>The acting user from the token; never from a request body.</summary>
+    private string ActorId => _actor.UserId;
 
     public async Task<EftDraft> InitiateDraftAsync(InitiateEftDraftRequest request)
     {
@@ -103,10 +163,22 @@ public class EftDraftService : IEftDraftService
         if (invoice.BalanceDue <= 0)
             throw new InvalidOperationException("Invoice has no balance due");
 
+        // The initiator comes from the token (any body value is ignored), and may
+        // not be the user who prepared the invoice (maker-checker).
+        request.InitiatedBy = ActorId;
+        await _separationOfDuties.EnsureMayReleaseAsync(new[] { invoice });
+
         // Fetch sponsor bank account info
-        var bankAccount = await FetchSponsorBankAccountAsync(invoice.GroupNumber);
-        if (bankAccount == null || !bankAccount.EftEnabled)
+        var lookup = await _bankAccounts.GetAsync(invoice.TenantId, invoice.GroupNumber);
+        if (lookup.Status == SponsorBankAccountLookupStatus.Unavailable)
+        {
+            _logger.LogError("EFT draft for invoice {InvoiceNumber} (group {GroupNumber}) needs attention: {Reason}",
+                invoice.InvoiceNumber, invoice.GroupNumber, lookup.Reason);
+            throw new InvalidOperationException($"Sponsor {invoice.GroupNumber}: {lookup.Reason}");
+        }
+        if (lookup.Status == SponsorBankAccountLookupStatus.NotEnrolled || lookup.Account == null)
             throw new InvalidOperationException($"EFT not enabled for sponsor {invoice.GroupNumber}");
+        var bankAccount = lookup.Account;
 
         var amount = request.Amount ?? invoice.BalanceDue;
         var method = request.Method ?? bankAccount.PreferredMethod ?? EftMethod.Nacha;
@@ -124,18 +196,44 @@ public class EftDraftService : IEftDraftService
             Status = EftDraftStatus.Pending,
             RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
             AccountNumberLast4 = bankAccount.AccountNumberLast4,
-            InitiatedBy = request.InitiatedBy
+            InitiatedBy = request.InitiatedBy,
+            // A Stripe debit is released now, by this user; a NACHA draft when it is claimed for a file.
+            ReleasedBy = method == EftMethod.StripeAch ? ActorId : null,
+            ExpectedSettlementDate = method == EftMethod.Nacha ? DateTime.UtcNow.AddBusinessDays(2) : null
         };
 
-        // For Stripe ACH, initiate immediately
+        // The draft is recorded (and takes its invoice) before any money moves:
+        // a second draft or batch for the same invoice gets 409, never a second debit.
+        draft = await _draftRepository.CreateAsync(draft);
+
+        // For NACHA, the draft stays Pending until a NACHA file is generated.
+        // For Stripe ACH, it is initiated now.
         if (method == EftMethod.StripeAch)
         {
-            var result = await _stripeAchService.CreateAchDraftAsync(
-                bankAccount.StripeCustomerId!,
-                bankAccount.StripePaymentMethodId!,
-                amount,
-                invoice.InvoiceNumber,
-                invoice.GroupNumber);
+            StripeAchDraftResult result;
+            try
+            {
+                result = await _stripeAchService.CreateAchDraftAsync(
+                    bankAccount.StripeCustomerId!,
+                    bankAccount.StripePaymentMethodId!,
+                    amount,
+                    invoice.InvoiceNumber,
+                    invoice.GroupNumber,
+                    draft.Id);
+            }
+            catch (Exception ex)
+            {
+                // The debit may have been made: the draft keeps the invoice until
+                // someone checks Stripe, so nothing debits it again meanwhile.
+                _logger.LogCritical(ex,
+                    "Stripe ACH draft {DraftId} for invoice {InvoiceNumber}: outcome unknown ({Error}); PaymentUnknown until checked with Stripe",
+                    draft.Id, invoice.InvoiceNumber, ex.GetType().Name);
+                draft.Status = EftDraftStatus.PaymentUnknown;
+                draft.ErrorMessage = $"The Stripe debit may have been made ({ex.GetType().Name}). Do not draft this invoice again: check Stripe, " +
+                                     "then another user with payments:approve records the answer.";
+                draft.LastUpdatedBy = ActorId;
+                return await _draftRepository.UpdateAsync(draft);
+            }
 
             if (result.Status == "failed")
             {
@@ -149,14 +247,9 @@ public class EftDraftService : IEftDraftService
                 draft.SubmittedAt = DateTime.UtcNow;
                 draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(4); // ACH typically 3-5 business days via Stripe
             }
+            draft.LastUpdatedBy = ActorId;
+            draft = await _draftRepository.UpdateAsync(draft);
         }
-        // For NACHA, draft stays Pending until a NACHA file is generated
-        else
-        {
-            draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-        }
-
-        draft = await _draftRepository.CreateAsync(draft);
 
         _logger.LogInformation(
             "Initiated {Method} EFT draft {DraftId} for invoice {InvoiceNumber}, amount ${Amount:N2}",
@@ -181,16 +274,28 @@ public class EftDraftService : IEftDraftService
         // Deduplicate before counting
         var uniqueInvoiceIds = invoiceIds.Distinct().ToList();
         result.TotalInvoices = uniqueInvoiceIds.Count;
+        request.InitiatedBy = ActorId;
+
+        // Maker-checker over the whole batch before any money moves: one invoice
+        // the actor prepared refuses the batch.
+        var invoices = new Dictionary<string, PremiumInvoice?>(StringComparer.Ordinal);
+        foreach (var invoiceId in uniqueInvoiceIds)
+            invoices[invoiceId] = await _invoiceRepository.GetByIdAsync(invoiceId);
+        await _separationOfDuties.EnsureMayReleaseAsync(invoices.Values.OfType<PremiumInvoice>());
 
         // Separate NACHA entries (built as batch) from Stripe (initiated individually)
         var nachaEntries = new List<NachaEntryDetail>();
         var nachaDrafts = new List<EftDraft>();
+        // The NACHA drafts this batch creates are born claimed by it (Releasing),
+        // so a concurrent release of Pending drafts never puts them in a second file.
+        var claimId = NewClaimId();
+        var claimedAt = DateTime.UtcNow;
 
         foreach (var invoiceId in uniqueInvoiceIds)
         {
             try
             {
-                var invoice = await _invoiceRepository.GetByIdAsync(invoiceId);
+                var invoice = invoices[invoiceId];
                 if (invoice == null || invoice.BalanceDue <= 0 ||
                     invoice.Status == InvoiceStatus.Paid || invoice.Status == InvoiceStatus.Voided)
                 {
@@ -198,12 +303,29 @@ public class EftDraftService : IEftDraftService
                     continue;
                 }
 
-                var bankAccount = await FetchSponsorBankAccountAsync(invoice.GroupNumber);
-                if (bankAccount == null || !bankAccount.EftEnabled)
+                var lookup = await _bankAccounts.GetAsync(invoice.TenantId, invoice.GroupNumber);
+                if (lookup.Status == SponsorBankAccountLookupStatus.Unavailable)
+                {
+                    // Not knowing the bank details is not the same as "not enrolled":
+                    // the item needs attention, it is not a normal skip.
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Invoice {invoiceId}: {lookup.Reason}");
+                    result.NeedsAttention.Add(new EftAttentionItem
+                    {
+                        InvoiceId = invoice.Id,
+                        GroupNumber = invoice.GroupNumber,
+                        Reason = lookup.Reason ?? "Sponsor bank details unavailable"
+                    });
+                    _logger.LogError("EFT draft for invoice {InvoiceNumber} (group {GroupNumber}) needs attention: {Reason}",
+                        invoice.InvoiceNumber, invoice.GroupNumber, lookup.Reason);
+                    continue;
+                }
+                if (lookup.Status == SponsorBankAccountLookupStatus.NotEnrolled || lookup.Account == null)
                 {
                     result.Skipped++;
                     continue;
                 }
+                var bankAccount = lookup.Account;
 
                 var method = request.Method ?? bankAccount.PreferredMethod ?? EftMethod.Nacha;
 
@@ -217,6 +339,18 @@ public class EftDraftService : IEftDraftService
                         InitiatedBy = request.InitiatedBy
                     });
                     result.DraftIds.Add(draft.Id);
+                    if (draft.Status == EftDraftStatus.PaymentUnknown)
+                    {
+                        // May have been debited: never retried by this batch, reported for checking.
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Invoice {invoiceId}: {draft.ErrorMessage}");
+                        result.NeedsAttention.Add(new EftAttentionItem
+                        {
+                            DraftId = draft.Id, InvoiceId = invoice.Id, GroupNumber = invoice.GroupNumber,
+                            Reason = draft.ErrorMessage ?? "Stripe debit outcome unknown"
+                        });
+                        continue;
+                    }
                     result.DraftsInitiated++;
                     result.TotalAmount += draft.Amount;
                 }
@@ -230,7 +364,10 @@ public class EftDraftService : IEftDraftService
                         GroupNumber = invoice.GroupNumber,
                         Amount = invoice.BalanceDue,
                         Method = EftMethod.Nacha,
-                        Status = EftDraftStatus.Pending,
+                        Status = EftDraftStatus.Releasing,
+                        ReleaseClaimId = claimId,
+                        ReleaseClaimedAt = claimedAt,
+                        ReleasedBy = ActorId,
                         RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
                         AccountNumberLast4 = bankAccount.AccountNumberLast4,
                         InitiatedBy = request.InitiatedBy
@@ -262,23 +399,23 @@ public class EftDraftService : IEftDraftService
             }
         }
 
-        // Generate NACHA file if there are NACHA entries
+        // Build the NACHA file and send it straight to the bank. The drafts are
+        // Submitted only once the bank has it; otherwise they await retrieval
+        // (file held encrypted) or stay Pending (nothing held).
         if (nachaEntries.Count > 0)
         {
-            var nachaOptions = BuildNachaOptionsFromConfig();
-            var nachaResult = _nachaFileService.GenerateNachaFile(nachaEntries, nachaOptions);
-            result.NachaFile = nachaResult;
+            result.NachaFile = await SendNachaFileAsync(nachaEntries, nachaDrafts, request.BillingRunId, claimId);
+        }
 
-            // Update NACHA drafts with file reference, trace numbers, and mark as submitted
-            for (int i = 0; i < nachaDrafts.Count; i++)
+        // Mark the billing run so the items needing attention are visible on it.
+        if (result.NeedsAttention.Count > 0 && !string.IsNullOrEmpty(request.BillingRunId))
+        {
+            var run = await _billingRunRepository.GetByIdAsync(request.BillingRunId);
+            if (run != null)
             {
-                var draft = nachaDrafts[i];
-                draft.NachaFileReference = nachaResult.FileReference;
-                draft.Status = EftDraftStatus.Submitted;
-                draft.SubmittedAt = DateTime.UtcNow;
-                draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-                draft.TraceNumber = nachaEntries[i].TraceNumber;
-                await _draftRepository.UpdateAsync(draft);
+                foreach (var item in result.NeedsAttention)
+                    run.Warnings.Add($"EFT needs attention for invoice {item.InvoiceId} (group {item.GroupNumber}): {item.Reason}");
+                await _billingRunRepository.UpdateAsync(run);
             }
         }
 
@@ -291,6 +428,10 @@ public class EftDraftService : IEftDraftService
 
     public async Task<NachaFileResult> GenerateNachaFileForPendingDraftsAsync()
     {
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: releasing sponsor debits needs a user with payments:approve, not a service token");
+
         var pendingDrafts = (await _draftRepository.GetByStatusAsync(EftDraftStatus.Pending))
             .Where(d => d.Method == EftMethod.Nacha)
             .ToList();
@@ -298,56 +439,522 @@ public class EftDraftService : IEftDraftService
         if (pendingDrafts.Count == 0)
             throw new InvalidOperationException("No pending NACHA drafts to process");
 
-        var entries = new List<NachaEntryDetail>();
-        var includedDrafts = new List<EftDraft>();
-        var skippedDraftIds = new HashSet<string>();
-
+        // Claim the drafts before anything is built: Pending to Releasing, one
+        // conditional write each. A concurrent release gets none of these, so the
+        // same draft can never be in two files at the bank.
+        var claimId = NewClaimId();
+        var claimedAt = DateTime.UtcNow;
+        var claimed = new List<EftDraft>();
         foreach (var draft in pendingDrafts)
         {
-            var bankAccount = await FetchSponsorBankAccountAsync(draft.GroupNumber);
-            if (bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
-            {
-                _logger.LogWarning("Skipping draft {DraftId}: missing bank account for group {GroupNumber}",
-                    draft.Id, draft.GroupNumber);
-                skippedDraftIds.Add(draft.Id);
+            if (!await _draftRepository.TryClaimForReleaseAsync(draft.Id, claimId, claimedAt, ActorId))
                 continue;
-            }
+            draft.Status = EftDraftStatus.Releasing;
+            draft.ReleaseClaimId = claimId;
+            draft.ReleaseClaimedAt = claimedAt;
+            draft.ReleasedBy = ActorId;
+            claimed.Add(draft);
+        }
 
-            entries.Add(new NachaEntryDetail
+        if (claimed.Count == 0)
+            throw new NachaReleaseConflictException(
+                "The pending NACHA drafts are already being released by another request; nothing was sent.");
+
+        var entries = new List<NachaEntryDetail>();
+        var includedDrafts = new List<EftDraft>();
+        var needsAttention = new List<EftAttentionItem>();
+
+        try
+        {
+            foreach (var draft in claimed)
             {
-                RoutingNumber = bankAccount.RoutingNumber,
-                AccountNumber = bankAccount.AccountNumber,
-                AccountType = bankAccount.AccountType,
-                Amount = draft.Amount,
-                GroupNumber = draft.GroupNumber,
-                IndividualName = bankAccount.AccountHolderName ?? draft.GroupNumber,
-                IndividualId = draft.GroupNumber
-            });
-            includedDrafts.Add(draft);
+                var lookup = await _bankAccounts.GetAsync(draft.TenantId, draft.GroupNumber);
+                var bankAccount = lookup.Account;
+                if (lookup.Status != SponsorBankAccountLookupStatus.Found
+                    || bankAccount?.RoutingNumber == null || bankAccount.AccountNumber == null)
+                {
+                    var reason = lookup.Status switch
+                    {
+                        SponsorBankAccountLookupStatus.Unavailable => lookup.Reason ?? "Sponsor bank details unavailable",
+                        SponsorBankAccountLookupStatus.NotEnrolled => "Sponsor is no longer enrolled in auto-debit",
+                        _ => "Sponsor bank account is missing routing or account number"
+                    };
+                    // Back to Pending (so it is picked up once fixed) and reported, never silently dropped.
+                    await ReleaseClaimsAsync(new[] { draft }, claimId, reason);
+                    _logger.LogError("Draft {DraftId} for group {GroupNumber} left out of the NACHA file and needs attention: {Reason}",
+                        draft.Id, draft.GroupNumber, reason);
+                    needsAttention.Add(new EftAttentionItem { DraftId = draft.Id, InvoiceId = draft.InvoiceId, GroupNumber = draft.GroupNumber, Reason = reason });
+                    continue;
+                }
+
+                // The masked summary shows the last 4 of the account actually debited.
+                draft.RoutingNumberLast4 = bankAccount.RoutingNumberLast4 ?? Last4(bankAccount.RoutingNumber);
+                draft.AccountNumberLast4 = bankAccount.AccountNumberLast4 ?? Last4(bankAccount.AccountNumber);
+                entries.Add(new NachaEntryDetail
+                {
+                    RoutingNumber = bankAccount.RoutingNumber,
+                    AccountNumber = bankAccount.AccountNumber,
+                    AccountType = bankAccount.AccountType,
+                    Amount = draft.Amount,
+                    GroupNumber = draft.GroupNumber,
+                    IndividualName = bankAccount.AccountHolderName ?? draft.GroupNumber,
+                    IndividualId = draft.GroupNumber
+                });
+                includedDrafts.Add(draft);
+            }
+        }
+        catch
+        {
+            // Nothing was built or sent: every draft this release still holds goes back.
+            await ReleaseClaimsAsync(claimed.Where(d => d.Status == EftDraftStatus.Releasing), claimId,
+                "The NACHA release failed before a file was built; back to Pending for the next release.");
+            throw;
         }
 
         if (entries.Count == 0)
-            throw new InvalidOperationException("No drafts with valid bank accounts to include in NACHA file");
+            throw new InvalidOperationException(
+                "No drafts with valid bank accounts to include in NACHA file; needs attention: " +
+                string.Join("; ", needsAttention.Select(a => $"draft {a.DraftId} (group {a.GroupNumber}): {a.Reason}")));
 
-        var nachaOptions = BuildNachaOptionsFromConfig();
-        var result = _nachaFileService.GenerateNachaFile(entries, nachaOptions);
+        // Only drafts actually in the file change state, and only to what the
+        // transmission outcome says.
+        var result = await SendNachaFileAsync(entries, includedDrafts, runId: null, claimId);
+        result.NeedsAttention.AddRange(needsAttention);
+        return result;
+    }
 
-        // Only mark drafts that were actually included in the file as submitted
-        for (int i = 0; i < includedDrafts.Count; i++)
+    private static string NewClaimId() => Guid.NewGuid().ToString("N");
+
+    /// <summary>Releasing (under this claim) back to Pending: nothing of theirs was sent.</summary>
+    private async Task ReleaseClaimsAsync(IEnumerable<EftDraft> drafts, string claimId, string reason)
+    {
+        foreach (var draft in drafts.ToList())
         {
-            var draft = includedDrafts[i];
-            draft.NachaFileReference = result.FileReference;
-            draft.Status = EftDraftStatus.Submitted;
-            draft.SubmittedAt = DateTime.UtcNow;
-            draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-            draft.TraceNumber = entries[i].TraceNumber;
+            try
+            {
+                await _draftRepository.ReleaseClaimAsync(draft.Id, claimId, reason);
+                draft.Status = EftDraftStatus.Pending;
+                draft.ReleaseClaimId = null;
+                draft.ReleaseClaimedAt = null;
+                draft.ReleasedBy = null;
+                draft.ErrorMessage = reason;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Draft {DraftId} could not be released from NACHA release {ClaimId}; it stays Releasing and needs attention",
+                    draft.Id, claimId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Generates the file, hands it to the dispatcher (bank SFTP, or held
+    /// encrypted for retrieval), updates the drafts to match what happened, and
+    /// returns the masked summary. The file content never leaves this method.
+    /// The drafts are held by <paramref name="claimId"/> (Releasing) throughout.
+    /// </summary>
+    private async Task<NachaFileResult> SendNachaFileAsync(List<NachaEntryDetail> entries, List<EftDraft> drafts, string? runId, string claimId)
+    {
+        GeneratedNachaFile file;
+        NachaFileFacts facts;
+        try
+        {
+            file = _nachaFileService.GenerateNachaFile(entries, BuildNachaOptionsFromConfig());
+            facts = NachaFileFacts.From(file.FileContent);
+        }
+        catch
+        {
+            await ReleaseClaimsAsync(drafts, claimId,
+                "The NACHA file could not be built; nothing was sent. Back to Pending for the next release.");
+            throw;
+        }
+
+        NachaDispatchOutcome outcome;
+        try
+        {
+            outcome = await _dispatcher.DispatchAsync(new NachaTransmissionRequest
+            {
+                TenantId = _actor.TenantId,
+                FileReference = file.FileReference,
+                FileName = file.FileName,
+                Content = file.FileContent,
+                RunId = runId,
+                BatchId = file.FileReference,
+                TransmittedBy = ActorId,
+            });
+        }
+        catch (Exception ex)
+        {
+            // The dispatcher answers every transmission failure with an outcome; an
+            // exception here means it is not known whether the bank got the file.
+            // The drafts stay Releasing (never back to Pending, which could send
+            // them again) until someone checks with the bank.
+            _logger.LogCritical(ex,
+                "NACHA file {FileReference} (release {ClaimId}): delivery to the bank is unknown; its {Count} drafts stay " +
+                "Releasing and must be checked with the bank before anything is re-sent",
+                file.FileReference, claimId, drafts.Count);
+            throw;
+        }
+        finally
+        {
+            file.FileContent = string.Empty;
+        }
+
+        var now = DateTime.UtcNow;
+        var result = new NachaFileResult
+        {
+            FileReference = file.FileReference,
+            FileName = file.FileName,
+            EntryCount = file.EntryCount,
+            TotalAmount = file.TotalAmount,
+            TotalDebitAmount = facts.TotalDebitAmount,
+            TotalCreditAmount = facts.TotalCreditAmount,
+            GeneratedAt = file.GeneratedAt,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        for (int i = 0; i < drafts.Count; i++)
+        {
+            var draft = drafts[i];
+            draft.LastUpdatedBy = ActorId;
+            // Who released the file, kept with each draft: the releaser check
+            // still holds once the held file has expired.
+            draft.ReleasedBy = ActorId;
+            switch (outcome.Status)
+            {
+                case NachaTransmissionStatus.Transmitted:
+                    draft.NachaFileReference = file.FileReference;
+                    draft.TraceNumber = entries[i].TraceNumber;
+                    draft.Status = EftDraftStatus.Submitted;
+                    draft.SubmittedAt = now;
+                    draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    draft.ErrorMessage = null;
+                    break;
+                case NachaTransmissionStatus.AwaitingRetrieval:
+                    draft.NachaFileReference = file.FileReference;
+                    draft.TraceNumber = entries[i].TraceNumber;
+                    draft.Status = EftDraftStatus.AwaitingRetrieval;
+                    draft.ErrorMessage = AwaitingRetrievalMessage(file.FileReference, outcome.Reason);
+                    break;
+                case NachaTransmissionStatus.DeliveryUnknown:
+                    // It may be at the bank: never back to Pending (that would send it again).
+                    draft.NachaFileReference = file.FileReference;
+                    draft.TraceNumber = entries[i].TraceNumber;
+                    draft.Status = EftDraftStatus.DeliveryUnknown;
+                    draft.ErrorMessage = DeliveryUnknownMessage(file.FileReference, outcome.Reason);
+                    break;
+                default:
+                    // Nothing was sent or held: the draft goes back to Pending for the next file.
+                    draft.NachaFileReference = null;
+                    draft.TraceNumber = null;
+                    draft.Status = EftDraftStatus.Pending;
+                    draft.ReleaseClaimId = null;
+                    draft.ReleaseClaimedAt = null;
+                    draft.ReleasedBy = null;
+                    draft.ErrorMessage = outcome.Reason;
+                    break;
+            }
             await _draftRepository.UpdateAsync(draft);
+
+            var summary = Summary(draft);
+            summary.AccountHolderName = entries[i].IndividualName;
+            result.Entries.Add(summary);
         }
 
         return result;
     }
 
-    public async Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request)
+    private static string DeliveryUnknownMessage(string fileReference, string? reason)
+        => $"NACHA file {fileReference} may have reached the bank: {reason} Do not send it again: verify with the bank, then " +
+           "another user with payments:approve records whether the bank received it.";
+
+    private static string AwaitingRetrievalMessage(string fileReference, string? reason)
+        => $"NACHA file {fileReference} was not delivered to the bank: {reason} It is held encrypted for 7 days: " +
+           "a platform admin must retrieve it, or another user with payments:approve must retry it.";
+
+    public Task<IReadOnlyList<NachaHeldFile>> ListHeldNachaFilesAsync()
+        => _dispatcher.ListHeldAsync(_actor.TenantId);
+
+    public async Task<NachaFileResult> RetryNachaTransmissionAsync(string fileReference)
+    {
+        var tenantId = _actor.TenantId;
+        var drafts = (await _draftRepository.GetByStatusAsync(EftDraftStatus.AwaitingRetrieval))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        NachaDispatchOutcome outcome;
+        try
+        {
+            outcome = await _dispatcher.RetryAsync(tenantId, fileReference, new NachaActor(ActorId, _actor.IsService));
+        }
+        catch (Exception ex) when (ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException)
+        {
+            // The held file is gone: its drafts go back to Pending, so the next
+            // release builds a new file for them.
+            foreach (var draft in drafts)
+            {
+                draft.Status = EftDraftStatus.Pending;
+                draft.NachaFileReference = null;
+                draft.TraceNumber = null;
+                draft.ReleasedBy = null;
+                draft.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
+            throw;
+        }
+
+        var held = await _dispatcher.GetHeldAsync(tenantId, fileReference);
+        var result = new NachaFileResult
+        {
+            FileReference = fileReference,
+            FileName = held?.FileName ?? string.Empty,
+            EntryCount = held?.EntryCount ?? drafts.Count,
+            TotalAmount = drafts.Sum(d => d.Amount),
+            TotalDebitAmount = held?.TotalDebitAmount ?? 0,
+            TotalCreditAmount = held?.TotalCreditAmount ?? 0,
+            GeneratedAt = held?.CreatedAt ?? DateTime.UtcNow,
+            TransmissionStatus = outcome.Status.ToString(),
+            TransmissionError = outcome.Reason,
+            HeldUntil = outcome.HeldUntil,
+            Receipt = outcome.Receipt,
+        };
+
+        var now = DateTime.UtcNow;
+        foreach (var draft in drafts)
+        {
+            if (outcome.Status == NachaTransmissionStatus.Transmitted)
+            {
+                draft.Status = EftDraftStatus.Submitted;
+                draft.SubmittedAt = now;
+                draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                draft.ErrorMessage = null;
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
+            else if (outcome.Status == NachaTransmissionStatus.DeliveryUnknown)
+            {
+                draft.Status = EftDraftStatus.DeliveryUnknown;
+                draft.ErrorMessage = DeliveryUnknownMessage(fileReference, outcome.Reason);
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
+            result.Entries.Add(Summary(draft));
+        }
+
+        return result;
+    }
+
+    public async Task<NachaDeliveryResolutionResult> ResolveNachaDeliveryAsync(string fileReference, bool bankReceived, string reason)
+    {
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: recording whether the bank received a NACHA file needs a user with payments:approve, not a service token");
+
+        var drafts = (await _draftRepository.GetByStatusAsync(EftDraftStatus.DeliveryUnknown))
+            .Where(d => d.NachaFileReference == fileReference)
+            .ToList();
+
+        var fileStillHeld = true;
+        try
+        {
+            // Checks the user (not a service, not the releaser), the reason and the
+            // file's state, and records the answer on the held file.
+            await _dispatcher.ResolveDeliveryUnknownAsync(_actor.TenantId, fileReference, new NachaActor(ActorId, _actor.IsService), bankReceived, reason);
+        }
+        catch (Exception ex) when ((ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException) && drafts.Count > 0)
+        {
+            // The held file is gone (7 days); the drafts still wait for the answer.
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("A reason (what the bank said) is required.");
+            // The same checks the dispatcher makes on a held file, from the
+            // releaser recorded on the drafts (not whoever last updated them).
+            if (drafts.Any(d => string.IsNullOrEmpty(d.ReleasedBy)))
+                throw new SeparationOfDutiesException(
+                    $"Separation of duties: the user who released NACHA file {fileReference} is not recorded, so who may record the bank's " +
+                    "answer cannot be checked. Reconcile it by hand.");
+            if (drafts.Any(d => string.Equals(d.ReleasedBy, ActorId, StringComparison.OrdinalIgnoreCase)))
+                throw new SeparationOfDutiesException(
+                    "Separation of duties: you released this NACHA file, so you cannot record whether the bank received it.");
+            fileStillHeld = false;
+            _logger.LogWarning(
+                "AUDIT NACHA file {FileReference}: held file expired; {User} recorded that the bank {Answer} it (released by {ReleasedBy}): {Reason}",
+                SanitizeForLog(fileReference), SanitizeForLog(ActorId), bankReceived ? "received" : "did not receive",
+                SanitizeForLog(string.Join(",", drafts.Select(d => d.ReleasedBy).Distinct())), SanitizeForLog(reason));
+        }
+
+        var now = DateTime.UtcNow;
+        var status = bankReceived ? EftDraftStatus.Submitted
+            : fileStillHeld ? EftDraftStatus.AwaitingRetrieval : EftDraftStatus.Pending;
+        foreach (var draft in drafts)
+        {
+            draft.Status = status;
+            draft.LastUpdatedBy = ActorId;
+            switch (status)
+            {
+                case EftDraftStatus.Submitted:
+                    draft.SubmittedAt = now;
+                    draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                    draft.ErrorMessage = $"The bank confirmed it received NACHA file {fileReference} (recorded by {ActorId}).";
+                    break;
+                case EftDraftStatus.AwaitingRetrieval:
+                    draft.ErrorMessage = AwaitingRetrievalMessage(fileReference, "The bank confirmed it did not receive it.");
+                    break;
+                default:
+                    draft.NachaFileReference = null;
+                    draft.TraceNumber = null;
+                    draft.ReleaseClaimId = null;
+                    draft.ReleaseClaimedAt = null;
+                    draft.ReleasedBy = null;
+                    draft.ErrorMessage = $"The bank confirmed it did not receive NACHA file {fileReference}, which has expired; back to Pending for the next file.";
+                    break;
+            }
+            await _draftRepository.UpdateAsync(draft);
+        }
+
+        return new NachaDeliveryResolutionResult
+        {
+            FileReference = fileReference,
+            BankReceived = bankReceived,
+            PaymentStatus = status.ToString(),
+            PaymentsUpdated = drafts.Count,
+        };
+    }
+
+    public async Task<NachaRetrievedFile> RetrieveHeldNachaFileAsync(string fileReference, string reason)
+    {
+        var file = await _dispatcher.RetrieveAsync(_actor.TenantId, fileReference, new NachaActor(ActorId, _actor.IsService), reason);
+        if (file.FirstRetrieval)
+        {
+            // The platform admin now delivers it by hand: its drafts count as submitted.
+            var now = DateTime.UtcNow;
+            foreach (var draft in (await _draftRepository.GetByStatusAsync(EftDraftStatus.AwaitingRetrieval))
+                     .Where(d => d.NachaFileReference == fileReference))
+            {
+                draft.Status = EftDraftStatus.Submitted;
+                draft.SubmittedAt = now;
+                draft.ExpectedSettlementDate = now.AddBusinessDays(2);
+                draft.ErrorMessage = $"NACHA file retrieved by platform admin {ActorId} for manual delivery to the bank.";
+                draft.LastUpdatedBy = ActorId;
+                await _draftRepository.UpdateAsync(draft);
+            }
+        }
+        return file;
+    }
+
+    /// <summary>How long a draft may be Releasing before it counts as stuck (Payments:StuckReleasingMinutes, default 30, at least 5).</summary>
+    private TimeSpan StuckReleasingAge
+        => TimeSpan.FromMinutes(Math.Max(5, _configuration.GetValue("Payments:StuckReleasingMinutes", 30)));
+
+    public async Task<StuckEftDrafts> ListStuckDraftsAsync(TimeSpan releasingOlderThan)
+    {
+        var cutoff = DateTime.UtcNow - releasingOlderThan;
+        var held = await _dispatcher.ListHeldAsync(_actor.TenantId);
+        return new StuckEftDrafts
+        {
+            ReleasingOlderThanMinutes = (int)releasingOlderThan.TotalMinutes,
+            Releasing = (await _draftRepository.GetByStatusAsync(EftDraftStatus.Releasing))
+                .Where(d => (d.ReleaseClaimedAt ?? d.LastUpdatedAt) <= cutoff).ToList(),
+            DeliveryUnknown = (await _draftRepository.GetByStatusAsync(EftDraftStatus.DeliveryUnknown)).ToList(),
+            PaymentUnknown = (await _draftRepository.GetByStatusAsync(EftDraftStatus.PaymentUnknown)).ToList(),
+            TransmittingHeldFiles = held
+                .Where(f => f.Status == NachaHeldFileStatus.Transmitting && (f.LastAttemptAt ?? f.CreatedAt) <= cutoff)
+                .Select(NachaHeldFileView.From).ToList(),
+        };
+    }
+
+    public async Task<EftDraft> ResolveStuckDraftAsync(string draftId, bool sent, string reason, string? stripePaymentIntentId)
+    {
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(
+                "Separation of duties: resolving a stuck debit needs a user with payments:approve, not a service token");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason (what the bank or Stripe said) is required.");
+        reason = SanitizeForLog(reason.Trim());
+        if (reason.Length > 500) reason = reason[..500];
+
+        var draft = await _draftRepository.GetByIdAsync(draftId)
+            ?? throw new KeyNotFoundException($"Draft {draftId} not found");
+        if (draft.Status is not (EftDraftStatus.Releasing or EftDraftStatus.PaymentUnknown))
+            throw new InvalidOperationException(draft.Status == EftDraftStatus.DeliveryUnknown
+                ? $"Draft {draftId} is DeliveryUnknown: record the bank's answer on its NACHA file (resolve-delivery)."
+                : $"Draft {draftId} is {draft.Status}, not stuck.");
+        if (draft.Status == EftDraftStatus.Releasing && (draft.ReleaseClaimedAt ?? draft.LastUpdatedAt) > DateTime.UtcNow - StuckReleasingAge)
+            throw new InvalidOperationException(
+                $"Draft {draftId} has been Releasing for less than {(int)StuckReleasingAge.TotalMinutes} minutes; the release may still be running.");
+
+        var releaser = draft.ReleasedBy;
+        if (string.IsNullOrEmpty(releaser))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: who released draft {draftId} is not recorded, so who may resolve it cannot be checked. Reconcile it by hand.");
+        if (string.Equals(releaser, ActorId, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                "Separation of duties: you released this debit, so you cannot record whether it went out. Another user with payments:approve must.");
+
+        var previous = draft.Status;
+        var now = DateTime.UtcNow;
+        if (previous == EftDraftStatus.Releasing && !sent)
+        {
+            // Back to Pending only if it is still held by the same stuck release (conditional write).
+            await _draftRepository.ReleaseClaimAsync(draft.Id, draft.ReleaseClaimId ?? string.Empty,
+                $"Not sent (checked with the bank by {ActorId}): {reason}. Back to Pending for the next file.");
+            draft = await _draftRepository.GetByIdAsync(draftId) ?? draft;
+            if (draft.Status != EftDraftStatus.Pending)
+                throw new InvalidOperationException($"Draft {draftId} changed while it was being resolved; it is {draft.Status}.");
+        }
+        else
+        {
+            if (sent)
+            {
+                if (draft.Method == EftMethod.StripeAch && previous == EftDraftStatus.PaymentUnknown)
+                {
+                    if (string.IsNullOrWhiteSpace(stripePaymentIntentId))
+                        throw new ArgumentException("stripePaymentIntentId (the debit Stripe made) is required for a Stripe draft that went out.");
+                    draft.StripePaymentIntentId = stripePaymentIntentId.Trim();
+                }
+                draft.Status = EftDraftStatus.Submitted;
+                draft.SubmittedAt = now;
+                draft.ExpectedSettlementDate = now.AddBusinessDays(draft.Method == EftMethod.StripeAch ? 4 : 2);
+                draft.ErrorMessage = $"Sent (confirmed by {ActorId}): {reason}";
+            }
+            else
+            {
+                draft.Status = EftDraftStatus.Failed;
+                draft.ErrorMessage = $"Not sent (confirmed with Stripe by {ActorId}): {reason}";
+            }
+            draft.LastUpdatedBy = ActorId;
+            draft = await _draftRepository.UpdateAsync(draft);
+        }
+
+        _logger.LogWarning(
+            "AUDIT stuck EFT draft {DraftId} (invoice {InvoiceNumber}, {Method}, released by {ReleasedBy}) resolved by {User}: was {Previous}, " +
+            "the debit {Answer}; now {Status}. Reason: {Reason}",
+            draft.Id, SanitizeForLog(draft.InvoiceNumber), draft.Method, SanitizeForLog(releaser), SanitizeForLog(ActorId), previous,
+            sent ? "went out" : "did not go out", draft.Status, reason);
+        return draft;
+    }
+
+    private static string? Last4(string? number)
+        => string.IsNullOrEmpty(number) ? null : number.Length <= 4 ? number : number[^4..];
+
+    private static NachaEntrySummary Summary(EftDraft draft) => new()
+    {
+        DraftId = draft.Id,
+        InvoiceId = draft.InvoiceId,
+        GroupNumber = draft.GroupNumber,
+        RoutingNumberLast4 = draft.RoutingNumberLast4,
+        AccountNumberLast4 = draft.AccountNumberLast4,
+        Amount = draft.Amount,
+        TraceNumber = draft.TraceNumber,
+    };
+
+    public Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request)
+        => ProcessAchReturnAsync(request, ActorId);
+
+    private async Task<EftDraft> ProcessAchReturnAsync(ProcessAchReturnRequest request, string actor)
     {
         var draft = await _draftRepository.GetByIdAsync(request.DraftId)
             ?? throw new InvalidOperationException($"Draft {request.DraftId} not found");
@@ -359,6 +966,7 @@ public class EftDraftService : IEftDraftService
         draft.ReturnCode = request.ReturnCode;
         draft.ReturnReason = request.ReturnReason ?? MapReturnCodeToReason(request.ReturnCode);
         draft.ReturnedAt = DateTime.UtcNow;
+        draft.LastUpdatedBy = actor;
 
         await _draftRepository.UpdateAsync(draft);
 
@@ -384,6 +992,7 @@ public class EftDraftService : IEftDraftService
             }
 
             invoice.RecalculateTotals();
+            invoice.LastUpdatedBy = actor;
 
             // Update invoice status
             if (invoice.BalanceDue > 0 && invoice.TotalPaid > 0)
@@ -408,7 +1017,9 @@ public class EftDraftService : IEftDraftService
         return draft;
     }
 
-    public async Task<EftDraft> SettleDraftAsync(string draftId)
+    public Task<EftDraft> SettleDraftAsync(string draftId) => SettleDraftAsync(draftId, ActorId);
+
+    private async Task<EftDraft> SettleDraftAsync(string draftId, string actor)
     {
         var draft = await _draftRepository.GetByIdAsync(draftId)
             ?? throw new InvalidOperationException($"Draft {draftId} not found");
@@ -418,6 +1029,7 @@ public class EftDraftService : IEftDraftService
 
         draft.Status = EftDraftStatus.Settled;
         draft.SettledAt = DateTime.UtcNow;
+        draft.LastUpdatedBy = actor;
         await _draftRepository.UpdateAsync(draft);
 
         // Record payment on the invoice
@@ -430,11 +1042,13 @@ public class EftDraftService : IEftDraftService
                 PaymentDate = DateTime.UtcNow,
                 PaymentMethod = draft.Method == EftMethod.StripeAch ? "StripeACH" : "ACH",
                 ReferenceNumber = draft.TraceNumber ?? draft.StripePaymentIntentId,
-                ReceivedDate = DateTime.UtcNow
+                ReceivedDate = DateTime.UtcNow,
+                RecordedBy = actor
             };
 
             invoice.Payments.Add(payment);
             invoice.RecalculateTotals();
+            invoice.LastUpdatedBy = actor;
 
             if (invoice.BalanceDue <= 0)
                 invoice.Status = InvoiceStatus.Paid;
@@ -457,6 +1071,22 @@ public class EftDraftService : IEftDraftService
         if (!webhookResult.Handled || string.IsNullOrEmpty(webhookResult.PaymentIntentId))
             return;
 
+        // The webhook is anonymous (authenticated by the Stripe signature just
+        // verified), so the tenant comes from the signed event: the tenant_id we
+        // wrote into the PaymentIntent metadata. No tenant, no processing.
+        if (string.IsNullOrEmpty(webhookResult.TenantId))
+        {
+            _logger.LogError(
+                "Stripe event for PaymentIntent {PaymentIntentId} carries no tenant_id metadata; not processed and needs attention",
+                webhookResult.PaymentIntentId);
+            return;
+        }
+        var http = _httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("Stripe webhook processed outside a request");
+        if (http.Items["TenantId"] is string existing && !string.Equals(existing, webhookResult.TenantId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Stripe event tenant does not match the request tenant");
+        http.Items["TenantId"] = webhookResult.TenantId;
+
         // Find the draft by Stripe PaymentIntent ID
         var drafts = await _draftRepository.GetByStripePaymentIntentIdAsync(webhookResult.PaymentIntentId);
         var draft = drafts.FirstOrDefault();
@@ -470,7 +1100,7 @@ public class EftDraftService : IEftDraftService
         switch (webhookResult.EventType)
         {
             case "payment_succeeded":
-                await SettleDraftAsync(draft.Id);
+                await SettleDraftAsync(draft.Id, StripeWebhookActor);
                 break;
 
             case "payment_failed":
@@ -479,11 +1109,12 @@ public class EftDraftService : IEftDraftService
                     DraftId = draft.Id,
                     ReturnCode = webhookResult.FailureCode ?? "STRIPE_FAIL",
                     ReturnReason = webhookResult.FailureMessage
-                });
+                }, StripeWebhookActor);
                 break;
 
             case "payment_cancelled":
                 draft.Status = EftDraftStatus.Cancelled;
+                draft.LastUpdatedBy = StripeWebhookActor;
                 await _draftRepository.UpdateAsync(draft);
                 break;
         }
@@ -513,29 +1144,16 @@ public class EftDraftService : IEftDraftService
             await _stripeAchService.CancelDraftAsync(draft.StripePaymentIntentId);
         }
 
+        // Pending to Cancelled as one conditional write, freeing the invoice.
+        if (!await _draftRepository.TryCancelPendingAsync(draft.Id, ActorId))
+            throw new InvalidOperationException($"Draft {draftId} is no longer Pending; it was not cancelled.");
         draft.Status = EftDraftStatus.Cancelled;
-        return await _draftRepository.UpdateAsync(draft);
+        draft.LastUpdatedBy = ActorId;
+        draft.ActiveInvoiceKey = null;
+        return draft;
     }
 
     // --- Private helpers ---
-
-    private async Task<SponsorBankAccount?> FetchSponsorBankAccountAsync(string groupNumber)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("SponsorService");
-            var response = await client.GetAsync($"/api/v1/sponsors/{groupNumber}/bank-account");
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            return await response.Content.ReadFromJsonAsync<SponsorBankAccount>(JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch bank account for group {GroupNumber}", groupNumber);
-            return null;
-        }
-    }
 
     private static void ValidateBankAccountForMethod(SponsorBankAccount bankAccount, EftMethod method, string groupNumber)
     {

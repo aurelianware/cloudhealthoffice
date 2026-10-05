@@ -1,6 +1,8 @@
+using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using ProviderService.Models;
+using ProviderService.Security;
 using ProviderService.Services;
 
 namespace ProviderService.Controllers;
@@ -21,17 +23,14 @@ namespace ProviderService.Controllers;
 ///     <see cref="NetworkParticipationBackfillOptions.AdminBackfillEnabled"/>
 ///     defaults to <c>false</c>. The controller returns
 ///     <see cref="StatusCodes.Status503ServiceUnavailable"/> until an
-///     operator explicitly opts in via configuration. Provider-service
-///     does not yet configure authentication
-///     (<c>Program.cs</c> calls <c>UseAuthorization()</c> with no
-///     <c>AddAuthentication()</c>) — without this guard a misconfigured
-///     gateway / NetworkPolicy could expose a route that triggers
-///     large cross-tenant work.
+///     operator explicitly opts in via configuration.
 ///   </item>
 ///   <item>
-///     Even with the flag enabled, the deployment layer
-///     (NetworkPolicy, gateway ACL, mTLS) is the load-bearing
-///     authorization. The flag is a tripwire, not authn.
+///     The caller needs a CHO token holding <c>settings:manage</c>
+///     (TenantAdmin). The backfill runs in the token's tenant only; the
+///     optional <c>tenantId</c> query parameter is accepted as an echo of
+///     that tenant and a different value is refused with 403. To cover
+///     several tenants an operator runs it once per tenant token.
 ///   </item>
 /// </list>
 ///
@@ -78,11 +77,12 @@ public sealed class NetworkParticipationBackfillAdminController : ControllerBase
     /// across tenant ids externally for multi-tenant coverage.
     /// </summary>
     [HttpPost("backfill-network-participations")]
+    [RequirePermission("settings:manage")]
     [ProducesResponseType(typeof(NetworkParticipationBackfillResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<NetworkParticipationBackfillResult>> BackfillNetworkParticipations(
-        [FromQuery] string tenantId,
+        [FromQuery] string? tenantId,
         [FromQuery] int? maxProviders,
         [FromQuery] int? pageSize,
         CancellationToken ct)
@@ -105,16 +105,23 @@ public sealed class NetworkParticipationBackfillAdminController : ControllerBase
                 });
         }
 
-        if (string.IsNullOrWhiteSpace(tenantId))
+        // The tenant is the token's. A query tenant is only an echo of it.
+        var tokenTenant = this.TokenTenantId();
+        if (!string.IsNullOrEmpty(tenantId) && !string.Equals(tenantId, tokenTenant, StringComparison.Ordinal))
         {
-            return BadRequest(new { error = "tenantId query parameter is required" });
+            _logger.LogWarning(
+                "panel-gating backfill refused: query tenant {QueryTenant} does not match the authenticated tenant {TokenTenant}",
+                Sanitize(tenantId), Sanitize(tokenTenant));
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "The tenantId query parameter does not match the authenticated tenant." });
         }
+        tenantId = tokenTenant;
 
         _logger.LogInformation(
             "panel-gating backfill triggered tenant={Tenant} maxProviders={Max} pageSize={PageSize}",
             Sanitize(tenantId), maxProviders, pageSize);
 
-        var actorId = ResolveActorId();
+        var actorId = this.TokenActorId();
         var correlationId = HttpContext.TraceIdentifier;
 
         var result = await _backfill.RunTenantAsync(
@@ -136,15 +143,6 @@ public sealed class NetworkParticipationBackfillAdminController : ControllerBase
             result.ParticipationsFailed, result.EtagConflicts);
 
         return Ok(result);
-    }
-
-    private string ResolveActorId()
-    {
-        var sub = HttpContext.User?.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(sub)) return sub;
-        if (HttpContext.Request.Headers.TryGetValue("X-User-Id", out var header) && !string.IsNullOrEmpty(header.ToString()))
-            return header.ToString();
-        return "admin:backfill-network-participations";
     }
 
     private static string Sanitize(string? value) =>

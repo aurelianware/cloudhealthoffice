@@ -137,6 +137,12 @@ public class EftDraft
     public string? InitiatedBy { get; set; }
 
     /// <summary>
+    /// Who last changed the draft (settle, return, cancel): token subject, or
+    /// "stripe-webhook" for changes driven by Stripe events.
+    /// </summary>
+    public string? LastUpdatedBy { get; set; }
+
+    /// <summary>
     /// Last updated timestamp
     /// </summary>
     public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
@@ -145,6 +151,55 @@ public class EftDraft
     /// Error details for failed drafts
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>The NACHA release that claimed this draft (Pending to Releasing).</summary>
+    public string? ReleaseClaimId { get; set; }
+
+    /// <summary>When that release claimed it.</summary>
+    public DateTime? ReleaseClaimedAt { get; set; }
+
+    /// <summary>
+    /// The user (token subject) who released it: claimed it for a NACHA file,
+    /// or initiated the Stripe debit. Never the one who resolves it when it is stuck.
+    /// </summary>
+    public string? ReleasedBy { get; set; }
+
+    /// <summary>
+    /// The invoice id while this draft is active (not Settled, Returned, Failed
+    /// or Cancelled), otherwise null. Set by the repository on every write: at
+    /// most one active draft per invoice (Mongo: unique partial index on
+    /// TenantId + ActiveInvoiceKey; Cosmos: a lock item per invoice).
+    /// </summary>
+    public string? ActiveInvoiceKey { get; set; }
+
+    /// <summary>
+    /// Active: may still debit the sponsor. An invoice has at most one active
+    /// draft, so two releases never debit it twice.
+    /// </summary>
+    public static bool IsActive(EftDraftStatus status) => status is not
+        (EftDraftStatus.Settled or EftDraftStatus.Returned or EftDraftStatus.Failed or EftDraftStatus.Cancelled);
+
+    /// <summary>Statuses in which a draft holds its invoice.</summary>
+    public static readonly EftDraftStatus[] ActiveStatuses =
+        Enum.GetValues<EftDraftStatus>().Where(IsActive).ToArray();
+
+    /// <summary>Sets <see cref="ActiveInvoiceKey"/> from the status.</summary>
+    public void RefreshActiveInvoiceKey() => ActiveInvoiceKey = IsActive(Status) ? InvoiceId : null;
+}
+
+/// <summary>
+/// The invoice already has an active draft (409): an invoice is debited by at
+/// most one draft at a time, so a second draft or batch never debits it twice.
+/// </summary>
+public sealed class InvoiceDraftConflictException : Exception
+{
+    public InvoiceDraftConflictException(string invoiceId)
+        : base($"Invoice {invoiceId} already has an active EFT draft; it is not drafted again until that one is settled, returned, failed or cancelled.")
+    {
+        InvoiceId = invoiceId;
+    }
+
+    public string InvoiceId { get; }
 }
 
 /// <summary>
@@ -201,7 +256,38 @@ public enum EftDraftStatus
     /// <summary>
     /// Cancelled before settlement
     /// </summary>
-    Cancelled
+    Cancelled,
+
+    /// <summary>
+    /// In a NACHA file that could not be sent to the bank (transmission not
+    /// configured or failed). The file is held encrypted for 7 days: a
+    /// platform admin must retrieve it or another approver retry it.
+    /// </summary>
+    AwaitingRetrieval,
+
+    /// <summary>
+    /// Claimed by one NACHA release (<see cref="EftDraft.ReleaseClaimId"/>) and
+    /// being put in a file: no other release may include it. Moved from Pending
+    /// by a conditional write before the file is built; it ends Submitted,
+    /// AwaitingRetrieval, or back in Pending when nothing was sent. A draft left
+    /// here (the process stopped mid-send) needs checking with the bank.
+    /// </summary>
+    Releasing,
+
+    /// <summary>
+    /// In a NACHA file that may have reached the bank (upload finished, rename
+    /// outcome unknown). Never re-sent, retried or retrieved until a user with
+    /// payments:approve records what the bank says (Submitted, or back to
+    /// AwaitingRetrieval / Pending).
+    /// </summary>
+    DeliveryUnknown,
+
+    /// <summary>
+    /// A Stripe debit whose outcome is unknown (the call failed after it was
+    /// sent): it may have been made. It keeps the invoice until someone checks
+    /// Stripe and records the answer.
+    /// </summary>
+    PaymentUnknown
 }
 
 /// <summary>
@@ -289,8 +375,9 @@ public class InitiateEftDraftRequest
     public decimal? Amount { get; set; }
 
     /// <summary>
-    /// Who is initiating this draft
+    /// Who is initiating this draft. Ignored from the body: set from the token.
     /// </summary>
+    [JsonIgnore]
     public string? InitiatedBy { get; set; }
 }
 
@@ -315,8 +402,9 @@ public class InitiateBatchEftRequest
     public EftMethod? Method { get; set; }
 
     /// <summary>
-    /// Who is initiating
+    /// Who is initiating. Ignored from the body: set from the token.
     /// </summary>
+    [JsonIgnore]
     public string? InitiatedBy { get; set; }
 }
 
@@ -344,9 +432,10 @@ public class ProcessAchReturnRequest
 }
 
 /// <summary>
-/// Result of a NACHA file generation
+/// A generated NACHA debit file. Holds full routing and account numbers: it
+/// never leaves the service except to the bank (INachaDispatcher). Not an API type.
 /// </summary>
-public class NachaFileResult
+public class GeneratedNachaFile
 {
     public string FileReference { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
@@ -354,6 +443,64 @@ public class NachaFileResult
     public int EntryCount { get; set; }
     public decimal TotalAmount { get; set; }
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// What an approver gets back for a NACHA file: a masked summary and the
+/// transmission receipt. Never the file, never a full routing or account number.
+/// </summary>
+public class NachaFileResult
+{
+    public string FileReference { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public decimal TotalAmount { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalCreditAmount { get; set; }
+    public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Transmitted, AwaitingRetrieval or NotSent.</summary>
+    public string TransmissionStatus { get; set; } = string.Empty;
+
+    /// <summary>Why the file was not delivered (AwaitingRetrieval, NotSent).</summary>
+    public string? TransmissionError { get; set; }
+
+    /// <summary>When a held file is deleted (AwaitingRetrieval).</summary>
+    public DateTime? HeldUntil { get; set; }
+
+    /// <summary>Set when the bank received the file.</summary>
+    public CloudHealthOffice.NachaTransmission.NachaTransmissionReceipt? Receipt { get; set; }
+
+    /// <summary>One line per debit: sponsor, last 4 and amount.</summary>
+    public List<NachaEntrySummary> Entries { get; set; } = new();
+
+    /// <summary>Pending drafts left out of the file because something needs fixing first.</summary>
+    public List<EftAttentionItem> NeedsAttention { get; set; } = new();
+}
+
+/// <summary>One debit in a NACHA file, masked.</summary>
+public class NachaEntrySummary
+{
+    public string DraftId { get; set; } = string.Empty;
+    public string InvoiceId { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public string? AccountHolderName { get; set; }
+    public string? RoutingNumberLast4 { get; set; }
+    public string? AccountNumberLast4 { get; set; }
+    public decimal Amount { get; set; }
+    public string? TraceNumber { get; set; }
+}
+
+/// <summary>
+/// An invoice or draft that could not be drafted for a reason someone has to
+/// fix (as opposed to a normal skip such as a paid invoice).
+/// </summary>
+public class EftAttentionItem
+{
+    public string? InvoiceId { get; set; }
+    public string? DraftId { get; set; }
+    public string GroupNumber { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -369,4 +516,38 @@ public class BatchEftResult
     public List<string> DraftIds { get; set; } = new();
     public List<string> ErrorMessages { get; set; } = new();
     public NachaFileResult? NachaFile { get; set; }
+
+    /// <summary>Invoices that were not drafted for a reason someone has to fix (also counted in Errors).</summary>
+    public List<EftAttentionItem> NeedsAttention { get; set; } = new();
 }
+
+/// <summary>
+/// Drafts that need a person: Releasing longer than the threshold (the release
+/// stopped mid-send), DeliveryUnknown (resolve-delivery on the held file), and
+/// PaymentUnknown (Stripe outcome unknown); plus held NACHA files stuck in a
+/// retry (Transmitting). Nothing here is recovered automatically.
+/// </summary>
+public class StuckEftDrafts
+{
+    public int ReleasingOlderThanMinutes { get; set; }
+    public List<EftDraft> Releasing { get; set; } = new();
+    public List<EftDraft> DeliveryUnknown { get; set; } = new();
+    public List<EftDraft> PaymentUnknown { get; set; } = new();
+    public List<CloudHealthOffice.NachaTransmission.NachaHeldFileView> TransmittingHeldFiles { get; set; } = new();
+}
+
+/// <summary>
+/// What a person found out (from the bank, or Stripe) about a stuck draft.
+/// </summary>
+public class ResolveStuckDraftRequest
+{
+    /// <summary>True: the debit went out (Submitted). False: it did not (Releasing back to Pending; Stripe PaymentUnknown to Failed).</summary>
+    public bool? Sent { get; set; }
+
+    /// <summary>What the bank or Stripe said. Required.</summary>
+    public string? Reason { get; set; }
+
+    /// <summary>For a Stripe draft that went out: its PaymentIntent id, so Stripe events settle it.</summary>
+    public string? StripePaymentIntentId { get; set; }
+}
+

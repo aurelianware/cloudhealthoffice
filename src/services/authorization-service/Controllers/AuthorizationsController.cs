@@ -6,10 +6,18 @@ using AuthorizationService.Models;
 using AuthorizationService.Repositories;
 using AuthorizationService.Services;
 using AuthorizationService.Services.Rfai;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace AuthorizationService.Controllers;
 
-[Authorize]
+/// <summary>
+/// Prior authorizations. The tenant and the acting user come from the
+/// validated CHO token only (<see cref="ICurrentActor"/>); request bodies never
+/// name the tenant or the actor. Reads need <c>authorizations:read</c>, writes
+/// <c>authorizations:write</c> (defaults set in Program.cs). Review decisions
+/// (278 response, status transitions, seeding decided fixtures) need
+/// <c>authorizations:decide</c>.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
@@ -20,6 +28,13 @@ public class AuthorizationsController : ControllerBase
     private readonly IWebHostEnvironment _environment;
     private readonly IPendedAuthorizationRfaiCoordinator? _rfai;
     private readonly ILogger<AuthorizationsController> _logger;
+    private readonly ICurrentActor _currentActor;
+
+    /// <summary>Decision actions: approve / modify / deny / pend / status transitions.</summary>
+    public const string DecidePermission = "authorizations:decide";
+
+    /// <summary>The token subject. Every write records this as its actor.</summary>
+    private string Actor => _currentActor.UserId;
 
     /// <param name="rfai">
     /// Raises the CDex additional-information request an A4 decision implies.
@@ -32,8 +47,10 @@ public class AuthorizationsController : ControllerBase
         IAuthorizationBackendSelector backends,
         IWebHostEnvironment environment,
         ILogger<AuthorizationsController> logger,
+        ICurrentActor currentActor,
         IPendedAuthorizationRfaiCoordinator? rfai = null)
     {
+        _currentActor = currentActor;
         _authorizationRepository = authorizationRepository;
         _backends = backends;
         _environment = environment;
@@ -44,7 +61,9 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Report the active authorization backend (operating mode + backend).
     /// Makes Replace (CHO-native) vs Augment (external core) explicit for demos
-    /// and diligence. No sensitive configuration is exposed.
+    /// and diligence. Anonymous callers get the status only (configured or
+    /// not); the mode, backend key and description go to authenticated CHO
+    /// callers, so the external core a deployment fronts is not advertised.
     /// </summary>
     [AllowAnonymous]
     [HttpGet("backend-status")]
@@ -78,8 +97,12 @@ public class AuthorizationsController : ControllerBase
                           "Configure Cms0057:Authorization to a registered backend.";
         }
 
+        if (User.Identity?.IsAuthenticated != true)
+            return Ok(new { status = configured ? "ok" : "misconfigured" });
+
         return Ok(new
         {
+            status = configured ? "ok" : "misconfigured",
             operatingMode = mode.ToString(),
             backend = backendKey,
             configured,
@@ -112,6 +135,15 @@ public class AuthorizationsController : ControllerBase
         authorization.CreatedDate = DateTime.UtcNow;
         authorization.LastUpdatedDate = DateTime.UtcNow;
 
+        // The body is the full persisted model, so everything a requester must
+        // not set is overwritten here: the tenant and the actor come from the
+        // token, and a new request carries no review outcome (that needs
+        // authorizations:decide on the decision endpoints).
+        authorization.TenantId = _currentActor.TenantId;
+        authorization.CreatedBy = Actor;
+        authorization.LastUpdatedBy = Actor;
+        ClearReviewOutcome(authorization);
+
         // Persist via the operating-mode-selected backend. Replace = CHO-native
         // repository; Augment = configured external core. No vendor branching here.
         var created = await _backends.Resolve().CreateAsync(authorization, HttpContext.RequestAborted);
@@ -121,6 +153,42 @@ public class AuthorizationsController : ControllerBase
             SanitizeForLog(authorization.AuthorizationNumber), _backends.ActiveBackendKey, _backends.Mode);
 
         return CreatedAtAction(nameof(GetAuthorizationById), new { id = created.Id }, created);
+    }
+
+    /// <summary>
+    /// Removes every review-outcome field a submitter could pre-fill on the
+    /// full-model create body.
+    /// </summary>
+    private static void ClearReviewOutcome(Authorization authorization)
+    {
+        authorization.ReviewDecision = null;
+        authorization.ApprovedUnits = null;
+        authorization.ApprovedServiceDateFrom = null;
+        authorization.ApprovedServiceDateTo = null;
+        authorization.ExpirationDate = null;
+        authorization.DenialReasonCode = null;
+        authorization.DenialReason = null;
+        authorization.PendReason = null;
+        authorization.FollowUpAction = null;
+        authorization.ReviewerName = null;
+        authorization.ReviewerPhone = null;
+        authorization.ReviewedDate = null;
+        authorization.EDI278ResponseControlNumber = null;
+        authorization.RFAIReference = null;
+        authorization.RFAIIssued = false;
+        authorization.RFAIIssuedDate = null;
+        authorization.RFAIResponseDate = null;
+        authorization.SlaResumedAt = null;
+        authorization.SlaEscalation = SlaEscalationLevel.None;
+        authorization.SlaEscalatedAt = null;
+        authorization.StatusHistory = new List<AuthorizationStatusChange>();
+
+        foreach (var service in authorization.RequestedServices ?? new List<RequestedService>())
+        {
+            service.ApprovedUnits = null;
+            service.ServiceStatus = null;
+            service.DenialReason = null;
+        }
     }
 
     /// <summary>
@@ -167,7 +235,6 @@ public class AuthorizationsController : ControllerBase
     /// Check if authorization is valid for claim submission
     /// CRITICAL for claims processing: validates auth before submitting 837
     /// </summary>
-    [AllowAnonymous]
     [HttpGet("{authNumber}/validate")]
     [ProducesResponseType(typeof(AuthorizationValidationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -177,11 +244,6 @@ public class AuthorizationsController : ControllerBase
         [FromQuery] DateTime? serviceDate = null,
         [FromQuery] string? providerNpi = null)
     {
-        if (!AllowsAnonymousLocalValidation() && HttpContext?.User.Identity?.IsAuthenticated != true)
-        {
-            return Forbid();
-        }
-
         var checkDate = serviceDate ?? DateTime.UtcNow;
 
         _logger.LogInformation(
@@ -264,14 +326,13 @@ public class AuthorizationsController : ControllerBase
                 StringComparison.OrdinalIgnoreCase));
     }
 
-    private bool AllowsAnonymousLocalValidation() =>
-        _environment.IsDevelopment() ||
-        string.Equals(_environment.EnvironmentName, "Test", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>
     /// Seed deterministic prior authorization fixtures for local validation.
+    /// Development/Test hosts only. Fixtures carry review outcomes (approved
+    /// authorizations), so seeding needs <c>authorizations:decide</c>; the
+    /// tenant and the actor come from the token.
     /// </summary>
-    [AllowAnonymous]
+    [RequirePermission(DecidePermission)]
     [HttpPost("dev-seed")]
     [ApiExplorerSettings(IgnoreApi = true)]
     [ProducesResponseType(typeof(DevelopmentAuthorizationSeedResponse), StatusCodes.Status200OK)]
@@ -308,6 +369,9 @@ public class AuthorizationsController : ControllerBase
             fixture.RequestingProviderNPI = fixture.RequestingProviderNPI?.Trim() ?? string.Empty;
             fixture.CreatedDate = fixture.CreatedDate == default ? now : fixture.CreatedDate;
             fixture.LastUpdatedDate = now;
+            fixture.TenantId = _currentActor.TenantId;
+            fixture.CreatedBy = Actor;
+            fixture.LastUpdatedBy = Actor;
 
             var existing = await _authorizationRepository.GetByAuthorizationNumberAsync(fixture.AuthorizationNumber);
             if (existing is null)
@@ -320,6 +384,7 @@ public class AuthorizationsController : ControllerBase
 
             fixture.Id = existing.Id;
             fixture.CreatedDate = existing.CreatedDate == default ? fixture.CreatedDate : existing.CreatedDate;
+            fixture.CreatedBy = existing.CreatedBy ?? Actor;
             await _authorizationRepository.UpdateAsync(fixture);
             updated++;
         }
@@ -359,6 +424,7 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Update authorization status (278 response processing)
     /// </summary>
+    [RequirePermission(DecidePermission)]
     [HttpPut("{id}/status")]
     [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -379,6 +445,7 @@ public class AuthorizationsController : ControllerBase
         authorization.Status = statusUpdate.Status;
         authorization.ReviewDecision = statusUpdate.ReviewDecision;
         authorization.LastUpdatedDate = DateTime.UtcNow;
+        authorization.LastUpdatedBy = Actor;
 
         if (statusUpdate.Status == AuthorizationStatus.Approved ||
             statusUpdate.Status == AuthorizationStatus.Modified ||
@@ -415,6 +482,7 @@ public class AuthorizationsController : ControllerBase
     /// <summary>
     /// Process 278 response (approval/denial/pend decision)
     /// </summary>
+    [RequirePermission(DecidePermission)]
     [HttpPost("{id}/response")]
     [ProducesResponseType(typeof(Authorization), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -436,6 +504,7 @@ public class AuthorizationsController : ControllerBase
         authorization.ReviewDecision = response.ReviewDecision;
         authorization.ReviewedDate = DateTime.UtcNow;
         authorization.LastUpdatedDate = DateTime.UtcNow;
+        authorization.LastUpdatedBy = Actor;
 
         // Map review decision to status
         authorization.Status = response.ReviewDecision switch
@@ -475,6 +544,8 @@ public class AuthorizationsController : ControllerBase
             authorization.FollowUpAction = response.FollowUpAction;
         }
 
+        // 278 reviewer CONTACT details for the provider (PER segment). They do
+        // not identify who recorded the decision: that is LastUpdatedBy (token).
         authorization.ReviewerName = response.ReviewerName;
         authorization.ReviewerPhone = response.ReviewerPhone;
 
@@ -563,10 +634,11 @@ public class AuthorizationsController : ControllerBase
     [HttpGet("sla/at-risk")]
     [ProducesResponseType(typeof(IEnumerable<AuthorizationSlaStatus>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<AuthorizationSlaStatus>>> GetAtRiskAuthorizations(
-        [FromQuery] SlaEscalationLevel? minLevel = SlaEscalationLevel.Warning,
-        [FromQuery] string? tenantId = null)
+        [FromQuery] SlaEscalationLevel? minLevel = SlaEscalationLevel.Warning)
     {
-        var auths = await _authorizationRepository.GetOpenAuthorizationsAsync(tenantId);
+        // Tenant from the token only. This endpoint used to take ?tenantId=,
+        // which let any caller list another tenant's open authorizations.
+        var auths = await _authorizationRepository.GetOpenAuthorizationsAsync(_currentActor.TenantId);
 
         var effectiveMinLevel = minLevel ?? SlaEscalationLevel.Warning;
 
@@ -597,6 +669,7 @@ public class AuthorizationsController : ControllerBase
 
         authorization.Status = AuthorizationStatus.Cancelled;
         authorization.LastUpdatedDate = DateTime.UtcNow;
+        authorization.LastUpdatedBy = Actor;
 
         await _authorizationRepository.UpdateAsync(authorization);
 

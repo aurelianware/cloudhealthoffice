@@ -53,10 +53,13 @@ public class ProvidersControllerNetworkParticipationTests
             integrityProjection: null!,
             panelGatingValidator: _panelGatingValidator,
             credentialing: null!,
+            bankAccountChanges: new ProviderBankAccountChangeService(
+                new Fakes.InMemoryProviderBankAccountRepository(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ProviderBankAccountChangeService>.Instance),
             logger: NullLogger<ProvidersController>.Instance);
 
-        var ctx = new DefaultHttpContext();
-        ctx.Items["TenantId"] = TenantId;
+        // As UseChoAuthentication() leaves it: tenant and subject from the token.
+        var ctx = TestHelpers.TokenHttpContext.For(TenantId);
         _controller.ControllerContext = new ControllerContext { HttpContext = ctx };
     }
 
