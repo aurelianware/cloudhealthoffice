@@ -11,7 +11,8 @@ public static class TestSeparationOfDuties
         bool enforced = true,
         ICapitationRunRepository? runs = null,
         ILogger<PaymentSeparationOfDuties>? logger = null,
-        string tenantId = "tenant-1")
+        string tenantId = "tenant-1",
+        bool serviceToken = false)
     {
         var controls = new Mock<ITenantPaymentControls>();
         controls.Setup(c => c.IsSeparationOfDutiesEnforcedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -19,7 +20,7 @@ public static class TestSeparationOfDuties
         return new PaymentSeparationOfDuties(
             runs ?? Mock.Of<ICapitationRunRepository>(),
             controls.Object,
-            new TestActor(tenantId: tenantId),
+            new TestActor(tenantId: tenantId, isService: serviceToken),
             logger ?? Mock.Of<ILogger<PaymentSeparationOfDuties>>());
     }
 }

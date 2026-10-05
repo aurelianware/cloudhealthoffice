@@ -56,14 +56,14 @@ public class SeparationOfDutiesTests
         return statement;
     }
 
-    private PaymentSeparationOfDuties Rule(bool enforced = true)
-        => TestSeparationOfDuties.Create(enforced, _runs.Object, _sodLog);
+    private PaymentSeparationOfDuties Rule(bool enforced = true, bool serviceToken = false)
+        => TestSeparationOfDuties.Create(enforced, _runs.Object, _sodLog, serviceToken: serviceToken);
 
-    private CapitationRunService RunService(bool enforced = true)
+    private CapitationRunService RunService(bool enforced = true, bool serviceToken = false)
         => new(_runs.Object, Mock.Of<ICapitationContractRepository>(), _statements.Object,
-            Mock.Of<IHttpClientFactory>(), Rule(enforced), Mock.Of<ILogger<CapitationRunService>>());
+            Mock.Of<IHttpClientFactory>(), Rule(enforced, serviceToken), Mock.Of<ILogger<CapitationRunService>>());
 
-    private CapitationDisbursementService DisbursementService(bool enforced = true)
+    private CapitationDisbursementService DisbursementService(bool enforced = true, bool serviceToken = false)
     {
         var handler = new MockHttpMessageHandler<ProviderBankAccountDto>(_ => new ProviderBankAccountDto
         {
@@ -79,7 +79,7 @@ public class SeparationOfDutiesTests
 
         return new CapitationDisbursementService(_disbursements.Object, _statements.Object, _runs.Object,
             _nacha.Object, Mock.Of<IStripeConnectService>(), factory.Object,
-            new ConfigurationBuilder().Build(), Rule(enforced), new FactoryBackedProviderBankAccountSource(factory.Object),
+            new ConfigurationBuilder().Build(), Rule(enforced, serviceToken), new FactoryBackedProviderBankAccountSource(factory.Object),
             new RecordingNachaDispatcher(), Mock.Of<ILogger<CapitationDisbursementService>>());
     }
 
@@ -288,6 +288,60 @@ public class SeparationOfDutiesTests
         var result = await DisbursementService().GenerateNachaCreditFileAsync(Checker);
 
         result.FileReference.Should().Be("file-1");
+    }
+
+    // ── Service tokens ─────────────────────────────────────────────────
+    // A service token satisfies payments:approve (every non-platform
+    // permission) and its subject is never a recorded maker: approving or
+    // releasing needs a user, even with the tenant's rule turned off.
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Approve_WithAServiceToken_IsRefused(bool enforced)
+    {
+        var statement = Statement(createdBy: Maker, runCreatedBy: Maker);
+
+        var act = () => RunService(enforced, serviceToken: true).ApproveStatementAsync("stmt-1", "capitation-service");
+
+        (await act.Should().ThrowAsync<SeparationOfDutiesException>()).Which.Message.Should().Contain("service token");
+        statement.Status.Should().Be(CapitationStatementStatus.Generated);
+        _statements.Verify(r => r.UpdateAsync(It.IsAny<CapitationStatement>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Release_WithAServiceToken_IsRefused(bool enforced)
+    {
+        Statement(status: CapitationStatementStatus.Approved);
+
+        var single = () => DisbursementService(enforced, serviceToken: true)
+            .InitiateDisbursementAsync(new InitiateDisbursementRequest { StatementId = "stmt-1", InitiatedBy = "capitation-service" });
+        var batch = () => DisbursementService(enforced, serviceToken: true)
+            .InitiateBatchDisbursementAsync(new InitiateBatchDisbursementRequest { StatementIds = ["stmt-1"], InitiatedBy = "capitation-service" });
+
+        (await single.Should().ThrowAsync<SeparationOfDutiesException>()).Which.Message.Should().Contain("service token");
+        (await batch.Should().ThrowAsync<SeparationOfDutiesException>()).Which.Message.Should().Contain("service token");
+        _disbursements.Verify(r => r.CreateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+        _statements.Verify(r => r.UpdateAsync(It.IsAny<CapitationStatement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task NachaFile_WithAServiceToken_IsNotGenerated()
+    {
+        Statement(status: CapitationStatementStatus.PaymentInitiated);
+        _disbursements.Setup(r => r.GetByStatusAsync(DisbursementStatus.Pending)).ReturnsAsync(new List<CapitationDisbursement>
+        {
+            new() { Id = "d-1", StatementId = "stmt-1", Method = DisbursementMethod.NachaCredit, Amount = 5000m, ProviderNPI = "1234567890" }
+        });
+        _nacha.Setup(n => n.GenerateNachaCreditFile(It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()))
+            .Returns(new GeneratedNachaCreditFile { FileReference = "file-1" });
+
+        var act = () => DisbursementService(serviceToken: true).GenerateNachaCreditFileAsync("capitation-service");
+
+        (await act.Should().ThrowAsync<SeparationOfDutiesException>()).Which.Message.Should().Contain("service token");
+        _nacha.Verify(n => n.GenerateNachaCreditFile(It.IsAny<List<NachaCreditEntryDetail>>(), It.IsAny<NachaCreditFileOptions>()), Times.Never);
     }
 
     // ── Tenant setting ─────────────────────────────────────────────────

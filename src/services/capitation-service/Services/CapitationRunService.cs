@@ -284,6 +284,8 @@ public class CapitationRunService : ICapitationRunService
 
     public async Task<CapitationStatement> ApproveStatementAsync(string statementId, string approvedBy)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Approve);
+
         var statement = await _statementRepository.GetByIdAsync(statementId)
             ?? throw new InvalidOperationException($"Statement {statementId} not found");
 

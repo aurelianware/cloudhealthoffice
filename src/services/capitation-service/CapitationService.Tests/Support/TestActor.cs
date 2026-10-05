@@ -7,10 +7,11 @@ public sealed class TestActor : ICurrentActor
 {
     public const string DefaultUserId = "token-user";
 
-    public TestActor(string userId = DefaultUserId, string tenantId = "tenant-1")
+    public TestActor(string userId = DefaultUserId, string tenantId = "tenant-1", bool isService = false)
     {
         UserId = userId;
         TenantId = tenantId;
+        IsService = isService;
     }
 
     public bool IsAuthenticated => true;
@@ -18,7 +19,7 @@ public sealed class TestActor : ICurrentActor
     public string? DisplayName => null;
     public string? Email => null;
     public string TenantId { get; }
-    public bool IsService => false;
+    public bool IsService { get; }
     public IReadOnlyCollection<string> Roles => [];
     public bool HasPermission(string permission) => true;
 }

@@ -118,6 +118,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     public async Task<CapitationDisbursement> InitiateDisbursementAsync(InitiateDisbursementRequest request)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
         var statement = await _statementRepository.GetByIdAsync(request.StatementId)
             ?? throw new InvalidOperationException($"Statement {request.StatementId} not found");
 
@@ -213,6 +215,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     public async Task<BatchDisbursementResult> InitiateBatchDisbursementAsync(InitiateBatchDisbursementRequest request)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
         var result = new BatchDisbursementResult();
         var statementIds = new List<string>(request.StatementIds);
 
@@ -371,6 +375,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
     public async Task<NachaCreditFileResult> GenerateNachaCreditFileAsync(string releasedBy)
     {
+        _separationOfDuties.EnsureUserToken(PaymentAction.Release);
+
         var pendingDisbursements = (await _disbursementRepository.GetByStatusAsync(DisbursementStatus.Pending))
             .Where(d => d.Method == DisbursementMethod.NachaCredit)
             .ToList();

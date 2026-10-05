@@ -38,6 +38,15 @@ public interface IPaymentSeparationOfDuties
     /// is one of the statement's makers and the tenant enforces separation of duties.
     /// </summary>
     Task EnsureActorIsNotMakerAsync(CapitationStatement statement, string? actorUserId, PaymentAction action);
+
+    /// <summary>
+    /// Throws <see cref="SeparationOfDutiesException"/> when the caller is a service
+    /// token: approving and releasing payments needs a user with payments:approve.
+    /// A service token satisfies every non-platform permission (payments:approve
+    /// included), and its subject is never a recorded maker, so without this check
+    /// maker-checker would not apply to it at all.
+    /// </summary>
+    void EnsureUserToken(PaymentAction action);
 }
 
 public sealed class PaymentSeparationOfDuties : IPaymentSeparationOfDuties
@@ -63,8 +72,18 @@ public sealed class PaymentSeparationOfDuties : IPaymentSeparationOfDuties
         _logger = logger;
     }
 
+    public void EnsureUserToken(PaymentAction action)
+    {
+        if (_actor.IsService)
+            throw new SeparationOfDutiesException(action == PaymentAction.Approve
+                ? "Separation of duties: approving a capitation statement needs a user with payments:approve, not a service token."
+                : "Separation of duties: releasing a capitation payment needs a user with payments:approve, not a service token.");
+    }
+
     public async Task EnsureActorIsNotMakerAsync(CapitationStatement statement, string? actorUserId, PaymentAction action)
     {
+        EnsureUserToken(action);
+
         var makers = await ResolveMakersAsync(statement);
 
         if (makers.Count == 0)
