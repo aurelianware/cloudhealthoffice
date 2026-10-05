@@ -43,7 +43,8 @@ public class StripeConnectServiceTests
             { "statement_number", statementNumber ?? "" },
             { "provider_npi", "1234567890" },
             { "type", "capitation" },
-            { "tenant_id", "tenant-1" }
+            { "tenant_id", "tenant-1" },
+            { "disbursement_id", "disb-1" }
         }
     };
 
@@ -106,7 +107,8 @@ public class StripeConnectServiceTests
         capturedOptions.Metadata.Should().ContainKey("provider_npi").WhoseValue.Should().Be("5551234567");
         capturedOptions.Metadata.Should().ContainKey("type").WhoseValue.Should().Be("capitation");
         // Signed back to us on every transfer event: how the anonymous webhook finds the tenant.
-        capturedOptions.Metadata.Should().ContainKey("tenant_id").WhoseValue.Should().Be("tenant-1", "disb-1");
+        capturedOptions.Metadata.Should().ContainKey("tenant_id").WhoseValue.Should().Be("tenant-1");
+        capturedOptions.Metadata.Should().ContainKey("disbursement_id").WhoseValue.Should().Be("disb-1");
     }
 
     [Fact]
@@ -246,7 +248,8 @@ public class StripeConnectServiceTests
         result.Handled.Should().BeTrue();
         result.EventType.Should().Be("transfer_created");
         result.TransferId.Should().Be("tr_new");
-        result.TenantId.Should().Be("tenant-1", "disb-1");
+        result.TenantId.Should().Be("tenant-1");
+        result.DisbursementId.Should().Be("disb-1", "the signed transfer names its disbursement");
         result.Amount.Should().Be(3000.00m);
         result.Status.Should().Be("submitted");
     }

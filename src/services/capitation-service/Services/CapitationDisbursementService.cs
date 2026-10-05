@@ -1062,7 +1062,10 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         var disbursement = await _disbursementRepository.GetByIdAsync(request.DisbursementId)
             ?? throw new InvalidOperationException($"Disbursement {request.DisbursementId} not found");
 
-        if (disbursement.Status != DisbursementStatus.Submitted && disbursement.Status != DisbursementStatus.Processing)
+        // A Stripe transfer is settled when it is created, and can still be reversed.
+        var reversible = disbursement.Status is DisbursementStatus.Submitted or DisbursementStatus.Processing
+            || (disbursement.Status == DisbursementStatus.Settled && disbursement.Method == DisbursementMethod.StripeConnect);
+        if (!reversible)
             throw new InvalidOperationException($"Cannot process return for disbursement in {disbursement.Status} state");
 
         disbursement.Status = DisbursementStatus.Returned;
@@ -1145,12 +1148,25 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         if (!webhookResult.Handled || string.IsNullOrEmpty(webhookResult.TransferId))
             return;
 
+        // Settlement comes from the transfer events, which carry our metadata: a
+        // transfer to the provider's connected account is the payment (final
+        // unless reversed). Payout events (the connected account paying out to
+        // the provider's bank) carry no CHO metadata, cannot be matched to a
+        // tenant or to the transfers they include without further Stripe calls,
+        // and are acknowledged only (so Stripe stops retrying).
+        if (webhookResult.EventType is "payout_paid" or "payout_failed")
+        {
+            _logger.LogInformation(
+                "Stripe {EventType} event for payout {PayoutId}: payouts are not matched to disbursements (settlement comes from transfer events); acknowledged",
+                SanitizeForLog(webhookResult.EventType), SanitizeForLog(webhookResult.TransferId));
+            return;
+        }
+
         // The webhook is anonymous (authenticated by the Stripe signature just
         // verified), so the tenant comes from the signed event: the tenant_id we
-        // wrote into the transfer's metadata. An event without one (a payout, or a
-        // transfer created before transfers carried it) cannot be matched to a
-        // tenant: it is acknowledged, so Stripe stops retrying, and logged for
-        // reconciliation.
+        // wrote into the transfer's metadata. An event without one (a transfer
+        // created before transfers carried it) cannot be matched to a tenant: it
+        // is acknowledged, so Stripe stops retrying, and logged for reconciliation.
         if (string.IsNullOrEmpty(webhookResult.TenantId))
         {
             _logger.LogWarning(
@@ -1165,28 +1181,37 @@ public class CapitationDisbursementService : ICapitationDisbursementService
             throw new InvalidOperationException("Stripe event tenant does not match the request tenant");
         http.Items["TenantId"] = webhookResult.TenantId;
 
-        // Find the disbursement by Stripe Transfer ID
-        var disbursements = await _disbursementRepository.GetByStripeTransferIdAsync(webhookResult.TransferId);
-        var disbursement = disbursements.FirstOrDefault();
+        // Find the disbursement by Stripe Transfer ID; one whose transfer outcome
+        // was unknown has no transfer id yet, and is found by the disbursement id
+        // the transfer carries.
+        var disbursement = (await _disbursementRepository.GetByStripeTransferIdAsync(webhookResult.TransferId)).FirstOrDefault();
+        if (disbursement == null && !string.IsNullOrEmpty(webhookResult.DisbursementId))
+        {
+            disbursement = await _disbursementRepository.GetByIdAsync(webhookResult.DisbursementId);
+            if (disbursement != null && disbursement.Method != DisbursementMethod.StripeConnect)
+                disbursement = null;
+        }
 
         if (disbursement == null)
         {
-            _logger.LogWarning("No disbursement found for Transfer {TransferId}", webhookResult.TransferId);
+            if (!string.IsNullOrEmpty(webhookResult.DisbursementId))
+                // Our transfer, not recorded yet (the event can arrive before the
+                // disbursement is written): fail, so Stripe delivers it again.
+                throw new InvalidOperationException(
+                    $"Transfer {webhookResult.TransferId} for disbursement {webhookResult.DisbursementId} is not recorded yet; Stripe will retry");
+            _logger.LogWarning("No disbursement found for Transfer {TransferId}", SanitizeForLog(webhookResult.TransferId));
             return;
         }
 
         switch (webhookResult.EventType)
         {
             case "transfer_created":
-                // Transfer created — already in Submitted state, no action needed
+                await SettleFromTransferAsync(disbursement, webhookResult.TransferId);
                 break;
 
-            case "payout_paid":
-                await SettleDisbursementAsync(disbursement.Id);
-                break;
-
-            case "payout_failed":
             case "transfer_reversed":
+                if (disbursement.Status == DisbursementStatus.Returned)
+                    return; // the same event again
                 await ProcessReturnAsync(new ProcessReturnRequest
                 {
                     DisbursementId = disbursement.Id,
@@ -1194,6 +1219,40 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     ReturnReason = webhookResult.FailureMessage
                 });
                 break;
+        }
+    }
+
+    /// <summary>
+    /// The transfer exists at Stripe: the provider's connected account has the
+    /// money. A disbursement whose outcome was unknown is now known to be paid.
+    /// The same event delivered again changes nothing.
+    /// </summary>
+    private async Task SettleFromTransferAsync(CapitationDisbursement disbursement, string transferId)
+    {
+        switch (disbursement.Status)
+        {
+            case DisbursementStatus.Settled:
+                return;
+            case DisbursementStatus.PaymentUnknown:
+                disbursement.StripeTransferId = transferId;
+                disbursement.Status = DisbursementStatus.Submitted;
+                disbursement.SubmittedAt ??= DateTime.UtcNow;
+                disbursement.ErrorMessage = $"Stripe confirmed transfer {transferId} (transfer.created).";
+                await _statementRepository.ResolvePaymentUnknownAsync(disbursement.StatementId, disbursement.Id, paid: true);
+                await _disbursementRepository.UpdateAsync(disbursement);
+                _logger.LogWarning("Disbursement {DisbursementId}: outcome was unknown; Stripe confirmed transfer {TransferId}",
+                    SanitizeForLog(disbursement.Id), SanitizeForLog(transferId));
+                await SettleDisbursementAsync(disbursement.Id);
+                return;
+            case DisbursementStatus.Submitted:
+            case DisbursementStatus.Processing:
+                await SettleDisbursementAsync(disbursement.Id);
+                return;
+            default:
+                _logger.LogCritical(
+                    "Stripe transfer {TransferId} exists for disbursement {DisbursementId}, which is {Status}; not settled. Reconcile by hand",
+                    SanitizeForLog(transferId), SanitizeForLog(disbursement.Id), disbursement.Status);
+                return;
         }
     }
 

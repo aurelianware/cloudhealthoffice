@@ -575,7 +575,7 @@ public class CapitationDisbursementServiceTests
     #region ProcessStripeWebhookAsync
 
     [Fact]
-    public async Task ProcessStripeWebhookAsync_PayoutPaid_SettlesDisbursement()
+    public async Task ProcessStripeWebhookAsync_TransferCreated_SettlesDisbursement()
     {
         var disbursement = new CapitationDisbursement
         {
@@ -599,7 +599,7 @@ public class CapitationDisbursementServiceTests
             .ReturnsAsync(new DisbursementWebhookResult
             {
                 Handled = true,
-                EventType = "payout_paid",
+                EventType = "transfer_created",
                 TransferId = "tr_abc123",
                 TenantId = "tenant-1"
             });
@@ -608,6 +608,7 @@ public class CapitationDisbursementServiceTests
 
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
             d.Status == DisbursementStatus.Settled)), Times.Once);
+        statement.Status.Should().Be(CapitationStatementStatus.Paid);
     }
 
     [Fact]

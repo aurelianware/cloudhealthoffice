@@ -257,6 +257,7 @@ public class StripeConnectService : IStripeConnectService
             TransferId = transfer.Id,
             StatementNumber = statementNumber,
             TenantId = transfer.Metadata?.GetValueOrDefault(TenantMetadataKey),
+            DisbursementId = transfer.Metadata?.GetValueOrDefault(DisbursementMetadataKey),
             Amount = transfer.Amount / 100m,
             Status = "submitted"
         };
@@ -281,6 +282,7 @@ public class StripeConnectService : IStripeConnectService
             TransferId = transfer.Id,
             StatementNumber = statementNumber,
             TenantId = transfer.Metadata?.GetValueOrDefault(TenantMetadataKey),
+            DisbursementId = transfer.Metadata?.GetValueOrDefault(DisbursementMetadataKey),
             Amount = transfer.Amount / 100m,
             Status = "returned",
             FailureCode = "TRANSFER_REVERSED",
@@ -369,6 +371,9 @@ public class DisbursementWebhookResult
 
     /// <summary>The tenant from the signed event's metadata (<see cref="StripeConnectService.TenantMetadataKey"/>).</summary>
     public string? TenantId { get; set; }
+
+    /// <summary>The CHO disbursement from the signed transfer's metadata (<see cref="StripeConnectService.DisbursementMetadataKey"/>).</summary>
+    public string? DisbursementId { get; set; }
 
     public decimal Amount { get; set; }
     public string? Status { get; set; }
