@@ -12,10 +12,11 @@ namespace CloudHealthOffice.Infrastructure.Security;
 ///   "Audience": "cho-api",
 ///   "Issuers": [
 ///     { "Issuer": "cho-token-service", "PublicKeyPem": "...", "Kind": "User" },
-///     { "Issuer": "cho-internal",      "PublicKeyPem": "...", "Kind": "Service" },
+///     { "Issuer": "cho-token-service-svc", "PublicKeyPem": "...", "Kind": "Service" },
 ///     { "Issuer": "cho-workload",      "PublicKeyPem": "...", "Kind": "Workload" }
 ///   ],
-///   "ServiceToken": { "Issuer": "cho-internal", "ClientId": "claims-service", "PrivateKeyPem": "..." }
+///   "ServiceToken": { "Source": "TokenService", "ClientId": "claims-service",
+///                     "TokenServiceUrl": "http://token-service", "EntraScope": "api://&lt;app id&gt;/.default" }
 /// }
 /// </code>
 ///
@@ -97,16 +98,9 @@ public sealed class ChoAuthOptions
             throw new InvalidOperationException(
                 $"{SectionName} issuer '{duplicate.Key}' is configured more than once; each issuer has exactly one kind.");
 
-        if (ServiceToken != null)
-        {
-            if (string.IsNullOrWhiteSpace(ServiceToken.Issuer) || string.IsNullOrWhiteSpace(ServiceToken.ClientId))
-                throw new InvalidOperationException($"{SectionName}:ServiceToken requires Issuer and ClientId.");
-            if (string.IsNullOrWhiteSpace(ServiceToken.PrivateKeyPem) == string.IsNullOrWhiteSpace(ServiceToken.SymmetricKey))
-                throw new InvalidOperationException($"{SectionName}:ServiceToken must set exactly one of PrivateKeyPem or SymmetricKey.");
-            if (!string.IsNullOrWhiteSpace(ServiceToken.SymmetricKey) && !allowSymmetricKeys)
-                throw new InvalidOperationException(
-                    $"{SectionName}:ServiceToken uses a symmetric key, which is permitted only on a Development host.");
-        }
+        // allowSymmetricKeys is "a Development or Testing host": the only hosts
+        // on which a service may hold a service-token signing key at all.
+        ServiceToken?.Validate(allowLocalKey: allowSymmetricKeys);
     }
 }
 
@@ -123,7 +117,9 @@ public enum ChoIssuerKind
     User,
 
     /// <summary>
-    /// Service tokens (<c>cho-internal</c>, whose key every service holds).
+    /// Service tokens: token-service's <c>cho-token-service-svc</c> in deployed
+    /// environments (issued per service after a workload-identity check), the
+    /// locally signed <c>cho-internal-dev</c> in Development/Testing.
     /// Every token must carry <see cref="ChoServiceRole"/> and is only ever a
     /// service actor; one without it is rejected, never read as a user.
     /// </summary>
@@ -195,10 +191,48 @@ public sealed class ChoTrustedIssuer
     }
 }
 
-/// <summary>Settings for minting this service's own access tokens.</summary>
+/// <summary>
+/// How this service obtains its own service tokens (<see cref="IChoServiceTokenSource"/>).
+///
+/// <code>
+/// // Deployed: token-service issues them; this service holds no signing key.
+/// "ServiceToken": { "Source": "TokenService", "ClientId": "claims-service",
+///                   "TokenServiceUrl": "http://token-service", "EntraScope": "api://&lt;token-service app&gt;/.default" }
+/// // Development / Testing only: signed locally with the development key.
+/// "ServiceToken": { "Source": "LocalKey", "Issuer": "cho-internal-dev", "ClientId": "claims-service", "SymmetricKey": "..." }
+/// </code>
+/// </summary>
 public sealed class ChoServiceTokenOptions
 {
-    /// <summary>Issuer name written into minted tokens; must be trusted by callees.</summary>
+    /// <summary>
+    /// Where tokens come from. When unset: <see cref="ChoServiceTokenSourceKind.TokenService"/>
+    /// if <see cref="TokenServiceUrl"/> is set, otherwise <see cref="ChoServiceTokenSourceKind.LocalKey"/>.
+    /// </summary>
+    public ChoServiceTokenSourceKind? Source { get; set; }
+
+    /// <summary>The source in force.</summary>
+    public ChoServiceTokenSourceKind EffectiveSource => Source
+        ?? (string.IsNullOrWhiteSpace(TokenServiceUrl) ? ChoServiceTokenSourceKind.LocalKey : ChoServiceTokenSourceKind.TokenService);
+
+    /// <summary>token-service's base URL (in cluster: <c>http://token-service</c>). TokenService source only.</summary>
+    public string? TokenServiceUrl { get; set; }
+
+    /// <summary>
+    /// The Entra scope of token-service's service-token API, <c>api://&lt;app id&gt;/.default</c>.
+    /// The workload identity's access token for it is what token-service exchanges. TokenService source only.
+    /// </summary>
+    public string? EntraScope { get; set; }
+
+    /// <summary>
+    /// Client id of the user-assigned managed identity, when the pod's
+    /// workload-identity environment (<c>AZURE_CLIENT_ID</c>) should not decide. TokenService source only.
+    /// </summary>
+    public string? ManagedIdentityClientId { get; set; }
+
+    /// <summary>How long before expiry a cached token is replaced. TokenService source only.</summary>
+    public TimeSpan RefreshBefore { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>Issuer name written into locally minted tokens; must be trusted by callees. LocalKey source only.</summary>
     public string Issuer { get; set; } = "cho-internal";
 
     /// <summary>This service's identity (becomes <c>sub</c> and <c>azp</c>).</summary>
@@ -210,8 +244,54 @@ public sealed class ChoServiceTokenOptions
     /// <summary>Base64 HMAC key. Development hosts only.</summary>
     public string? SymmetricKey { get; set; }
 
-    /// <summary>Lifetime of a minted token.</summary>
+    /// <summary>Lifetime of a locally minted token. LocalKey source only.</summary>
     public TimeSpan Lifetime { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Fails startup on a service-token configuration that is incomplete, or
+    /// that would hold a signing key on a deployed host. A local key (the old
+    /// shared <c>cho-internal</c> key, with which any service could mint a
+    /// token naming any other) is refused outside Development and Testing.
+    /// </summary>
+    public void Validate(bool allowLocalKey)
+    {
+        const string section = ChoAuthOptions.SectionName + ":ServiceToken";
+        if (string.IsNullOrWhiteSpace(ClientId))
+            throw new InvalidOperationException($"{section} requires ClientId.");
+
+        var hasKey = !string.IsNullOrWhiteSpace(PrivateKeyPem) || !string.IsNullOrWhiteSpace(SymmetricKey);
+        switch (EffectiveSource)
+        {
+            case ChoServiceTokenSourceKind.LocalKey:
+                if (!allowLocalKey)
+                    throw new InvalidOperationException(
+                        $"{section}: Source=LocalKey (a signing key held by this service) is permitted only on a Development " +
+                        "or Testing host. Set Source=TokenService, TokenServiceUrl and EntraScope so token-service issues this " +
+                        "service's tokens (docs/security/portal-token-service.md, \"Service tokens\").");
+                if (string.IsNullOrWhiteSpace(Issuer))
+                    throw new InvalidOperationException($"{section} requires Issuer.");
+                if (string.IsNullOrWhiteSpace(PrivateKeyPem) == string.IsNullOrWhiteSpace(SymmetricKey))
+                    throw new InvalidOperationException($"{section} must set exactly one of PrivateKeyPem or SymmetricKey.");
+                break;
+
+            case ChoServiceTokenSourceKind.TokenService:
+                if (hasKey)
+                    throw new InvalidOperationException(
+                        $"{section}: Source=TokenService takes no PrivateKeyPem or SymmetricKey; remove the key from this service.");
+                if (!Uri.TryCreate(TokenServiceUrl, UriKind.Absolute, out var url)
+                    || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
+                    throw new InvalidOperationException($"{section}:TokenServiceUrl must be an absolute http(s) URL.");
+                if (string.IsNullOrWhiteSpace(EntraScope) || !EntraScope.EndsWith("/.default", StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        $"{section}:EntraScope must be token-service's application scope, api://<app id>/.default.");
+                if (RefreshBefore < TimeSpan.Zero || RefreshBefore > TimeSpan.FromMinutes(5))
+                    throw new InvalidOperationException($"{section}:RefreshBefore must be between 0 and 5 minutes.");
+                break;
+
+            default:
+                throw new InvalidOperationException($"{section}:Source must be LocalKey or TokenService.");
+        }
+    }
 }
 
 internal static class ChoKeys

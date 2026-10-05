@@ -121,9 +121,8 @@ public sealed class RunExecutionServiceTokenHandler : DelegatingHandler
             return base.SendAsync(request, cancellationToken);
         }
 
-        var issuer = _services.GetService<ChoTokenIssuer>();
-        var clientId = _services.GetService<ChoAuthOptions>()?.ServiceToken?.ClientId;
-        if (issuer == null || string.IsNullOrEmpty(clientId))
+        var tokens = ChoServiceTokens.Resolve(_services);
+        if (tokens == null)
         {
             _logger.LogError(NoGrantEvent,
                 "Call to {Host}{Path} for an approved run, but no service token is configured; sent without credentials",
@@ -133,9 +132,15 @@ public sealed class RunExecutionServiceTokenHandler : DelegatingHandler
 
         request.Headers.Remove(TenantMiddleware.TenantHeaderName);
         request.Headers.Add(TenantMiddleware.TenantHeaderName, grant.TenantId);
+        return SendWithServiceTokenAsync(request, tokens, grant.TenantId, cancellationToken);
+    }
+
+    private async Task<HttpResponseMessage> SendWithServiceTokenAsync(
+        HttpRequestMessage request, IChoServiceTokenSource tokens, string tenantId, CancellationToken cancellationToken)
+    {
         request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer", issuer.IssueServiceToken(clientId, grant.TenantId));
-        return base.SendAsync(request, cancellationToken);
+            "Bearer", await tokens.GetTokenAsync(tenantId, cancellationToken));
+        return await base.SendAsync(request, cancellationToken);
     }
 
     /// <summary>The same notion of "a CHO service" as ChoOutboundTokenHandler: the configured allowlist.</summary>

@@ -36,8 +36,7 @@ public sealed class HttpNachaTransmissionSettingsSource : INachaTransmissionSett
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ChoTokenIssuer? _issuer;
-    private readonly ChoAuthOptions? _authOptions;
+    private readonly IChoServiceTokenSource? _tokens;
     private readonly ChoOutboundHosts? _hosts;
     private readonly ILogger<HttpNachaTransmissionSettingsSource> _logger;
 
@@ -45,16 +44,14 @@ public sealed class HttpNachaTransmissionSettingsSource : INachaTransmissionSett
         IHttpClientFactory httpClientFactory, IServiceProvider services, ILogger<HttpNachaTransmissionSettingsSource> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _issuer = services.GetService<ChoTokenIssuer>();
-        _authOptions = services.GetService<ChoAuthOptions>();
+        _tokens = ChoServiceTokens.Resolve(services);
         _hosts = services.GetService<ChoOutboundHosts>();
         _logger = logger;
     }
 
     public async Task<NachaTransmissionSettings?> GetAsync(string tenantId, CancellationToken cancellationToken = default)
     {
-        var clientId = _authOptions?.ServiceToken?.ClientId;
-        if (_issuer == null || string.IsNullOrEmpty(clientId))
+        if (_tokens == null)
             throw new NachaTransmissionException(
                 "NACHA transmission settings cannot be read: this service has no service token configured (ChoAuth:ServiceToken).");
 
@@ -64,10 +61,9 @@ public sealed class HttpNachaTransmissionSettingsSource : INachaTransmissionSett
             throw new NachaTransmissionException(
                 "NACHA transmission settings cannot be read: TenantService:BaseUrl is not a configured CHO host (ChoAuth:Outbound:Hosts).");
         request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _issuer.IssueServiceToken(clientId, tenantId));
-
         try
         {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _tokens.GetTokenAsync(tenantId, cancellationToken));
             using var response = await client.SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return null;

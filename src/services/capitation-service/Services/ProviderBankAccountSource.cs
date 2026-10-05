@@ -55,8 +55,7 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ChoTokenIssuer? _issuer;
-    private readonly ChoAuthOptions? _authOptions;
+    private readonly IChoServiceTokenSource? _tokens;
     private readonly ChoOutboundHosts? _hosts;
     private readonly ILogger<HttpProviderBankAccountSource> _logger;
 
@@ -66,8 +65,7 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
         ILogger<HttpProviderBankAccountSource> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _issuer = services.GetService<ChoTokenIssuer>();
-        _authOptions = services.GetService<ChoAuthOptions>();
+        _tokens = ChoServiceTokens.Resolve(services);
         _hosts = services.GetService<ChoOutboundHosts>();
         _logger = logger;
     }
@@ -79,8 +77,7 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
             return ProviderBankAccountLookup.Unavailable(
                 "Provider bank details unavailable: no tenant or NPI to look up. Needs attention.");
 
-        var clientId = _authOptions?.ServiceToken?.ClientId;
-        if (_issuer == null || string.IsNullOrEmpty(clientId))
+        if (_tokens == null)
         {
             _logger.LogError("Bank details for provider {NPI} cannot be fetched: ChoAuth:ServiceToken is not configured", Sanitize(providerNpi));
             return ProviderBankAccountLookup.Unavailable(
@@ -102,7 +99,7 @@ public sealed class HttpProviderBankAccountSource : IProviderBankAccountSource
             request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
             // Always this service's own token. Set here, the shared outbound
             // handler leaves it alone instead of forwarding the user's token.
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _issuer.IssueServiceToken(clientId, tenantId));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _tokens.GetTokenAsync(tenantId, cancellationToken));
 
             using var response = await client.SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.OK)

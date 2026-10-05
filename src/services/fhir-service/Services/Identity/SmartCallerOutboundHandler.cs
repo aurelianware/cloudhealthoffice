@@ -38,16 +38,16 @@ public sealed class SmartCallerOutboundHandler : DelegatingHandler
         _logger = logger;
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var http = _accessor.HttpContext;
         if (http != null && FhirCallerSchemes.IsSmart(http.User))
-            Prepare(request, http);
+            await PrepareAsync(request, http, cancellationToken);
 
-        return base.SendAsync(request, cancellationToken);
+        return await base.SendAsync(request, cancellationToken);
     }
 
-    private void Prepare(HttpRequestMessage request, HttpContext http)
+    private async Task PrepareAsync(HttpRequestMessage request, HttpContext http, CancellationToken cancellationToken)
     {
         var inbound = http.Request.Headers.Authorization.ToString();
         if (request.Headers.Authorization != null
@@ -66,21 +66,20 @@ public sealed class SmartCallerOutboundHandler : DelegatingHandler
         request.Headers.Remove(SharedTenantMiddleware.TenantHeaderName);
 
         var tenant = http.Items["TenantId"] as string;
-        var issuer = _services.GetService<ChoTokenIssuer>();
-        var clientId = _services.GetService<ChoAuthOptions>()?.ServiceToken?.ClientId;
-        if (string.IsNullOrEmpty(tenant) || issuer == null || string.IsNullOrEmpty(clientId))
+        var tokens = ChoServiceTokens.Resolve(_services);
+        if (string.IsNullOrEmpty(tenant) || tokens == null)
         {
             // Sent without credentials; the callee refuses it. Never the SMART token.
             _logger.LogError(
                 "A SMART caller's request needs {Host}, but no service token could be minted "
                 + "(service token configured: {Configured}, tenant resolved: {HasTenant}).",
-                request.RequestUri?.Host, issuer != null && !string.IsNullOrEmpty(clientId), !string.IsNullOrEmpty(tenant));
+                request.RequestUri?.Host, tokens != null, !string.IsNullOrEmpty(tenant));
             return;
         }
 
         request.Headers.Add(SharedTenantMiddleware.TenantHeaderName, tenant);
         request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer", issuer.IssueServiceToken(clientId, tenant));
+            "Bearer", await tokens.GetTokenAsync(tenant, cancellationToken));
     }
 
     /// <summary>The same notion of "a CHO service" as ChoOutboundTokenHandler: the configured allowlist.</summary>

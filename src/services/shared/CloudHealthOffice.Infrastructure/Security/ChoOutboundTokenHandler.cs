@@ -13,8 +13,9 @@ namespace CloudHealthOffice.Infrastructure.Security;
 ///   <item>Inside an authenticated request, the caller's own token is forwarded,
 ///   so the callee sees the same user, tenant and permissions (and its audience
 ///   check applies to the original token).</item>
-///   <item>Outside one (message consumers, hosted services), this service mints
-///   a short-lived service token for the tenant the outbound request names in
+///   <item>Outside one (message consumers, hosted services), this service sends
+///   its own short-lived service token (<see cref="IChoServiceTokenSource"/>:
+///   issued by token-service in deployed environments) for the tenant the outbound request names in
 ///   <c>X-Tenant-ID</c>. That header is read here, inside the calling service,
 ///   from code that took the tenant from its own message or record; the callee
 ///   still takes the tenant only from the token.</item>
@@ -54,19 +55,19 @@ public sealed class ChoOutboundTokenHandler : DelegatingHandler
         _logger = logger;
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (request.Headers.Authorization == null)
         {
             if (IsChoService(request.RequestUri))
-                request.Headers.Authorization = ResolveAuthorization(request);
+                request.Headers.Authorization = await ResolveAuthorizationAsync(request, cancellationToken);
             else
                 _logger.LogDebug(
                     "Outbound call to {Host} is not to a configured CHO host; no CHO token or tenant added.",
                     request.RequestUri?.Host);
         }
 
-        return base.SendAsync(request, cancellationToken);
+        return await base.SendAsync(request, cancellationToken);
     }
 
     /// <summary>
@@ -79,7 +80,8 @@ public sealed class ChoOutboundTokenHandler : DelegatingHandler
     private bool IsChoService(Uri? uri)
         => _services.GetService<ChoOutboundHosts>()?.IsChoService(uri) == true;
 
-    private AuthenticationHeaderValue? ResolveAuthorization(HttpRequestMessage request)
+    private async ValueTask<AuthenticationHeaderValue?> ResolveAuthorizationAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var http = _accessor.HttpContext;
         var inbound = http?.Request.Headers.Authorization.ToString();
@@ -110,19 +112,21 @@ public sealed class ChoOutboundTokenHandler : DelegatingHandler
             return null;
         }
 
-        var issuer = _services.GetService<ChoTokenIssuer>();
-        var options = _services.GetService<ChoAuthOptions>();
+        var source = ChoServiceTokens.Resolve(_services);
         var tenantId = request.Headers.TryGetValues(TenantMiddleware.TenantHeaderName, out var values)
             ? values.FirstOrDefault()
             : null;
 
-        if (issuer != null && options?.ServiceToken != null && !string.IsNullOrEmpty(tenantId))
-            return new AuthenticationHeaderValue("Bearer", issuer.IssueServiceToken(options.ServiceToken.ClientId, tenantId));
+        // A source that cannot produce a token (token-service down) throws
+        // ChoServiceTokenUnavailableException, an HttpRequestException: the
+        // call fails as unavailable instead of going out to be refused.
+        if (source != null && !string.IsNullOrEmpty(tenantId))
+            return new AuthenticationHeaderValue("Bearer", await source.GetTokenAsync(tenantId, cancellationToken));
 
         _logger.LogWarning(
             "Outbound call to {Host} has no user token to forward and no service token could be minted " +
             "(service token configured: {Configured}, tenant named: {HasTenant}); the callee will reject it.",
-            request.RequestUri?.Host, issuer != null, !string.IsNullOrEmpty(tenantId));
+            request.RequestUri?.Host, source != null, !string.IsNullOrEmpty(tenantId));
         return null;
     }
 }

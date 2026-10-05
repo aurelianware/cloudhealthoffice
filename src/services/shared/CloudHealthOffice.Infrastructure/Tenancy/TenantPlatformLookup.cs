@@ -82,7 +82,7 @@ public static class TenantPlatformLookup
         ILogger logger,
         CancellationToken ct = default,
         Func<JsonElement, (string Platform, Dictionary<string, string> Settings)?>? alternateParser = null,
-        Action<HttpRequestMessage>? prepare = null)
+        Func<HttpRequestMessage, CancellationToken, Task>? prepare = null)
     {
         var baseUrl = string.IsNullOrWhiteSpace(tenantServiceBaseUrl) ? DefaultTenantServiceUrl : tenantServiceBaseUrl;
         try
@@ -90,7 +90,8 @@ public static class TenantPlatformLookup
             using var request = new HttpRequestMessage(
                 HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/tenants/{Uri.EscapeDataString(tenantId)}");
             request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
-            prepare?.Invoke(request);
+            if (prepare != null)
+                await prepare(request, ct).ConfigureAwait(false);
             using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
 
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)

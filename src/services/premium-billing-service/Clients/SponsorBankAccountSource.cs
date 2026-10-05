@@ -100,8 +100,7 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
     };
 
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ChoTokenIssuer? _issuer;
-    private readonly ChoAuthOptions? _authOptions;
+    private readonly IChoServiceTokenSource? _tokens;
     private readonly ILogger<HttpSponsorBankAccountSource> _logger;
 
     public HttpSponsorBankAccountSource(
@@ -110,8 +109,7 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
         ILogger<HttpSponsorBankAccountSource> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _issuer = services.GetService<ChoTokenIssuer>();
-        _authOptions = services.GetService<ChoAuthOptions>();
+        _tokens = ChoServiceTokens.Resolve(services);
         _logger = logger;
     }
 
@@ -121,8 +119,7 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
             return SponsorBankAccountLookup.Unavailable(
                 "Sponsor bank details unavailable: no tenant or group number to look up. Needs attention.");
 
-        var clientId = _authOptions?.ServiceToken?.ClientId;
-        if (_issuer == null || string.IsNullOrEmpty(clientId))
+        if (_tokens == null)
         {
             _logger.LogError("Sponsor bank details for group {GroupNumber} cannot be fetched: ChoAuth:ServiceToken is not configured",
                 Sanitize(groupNumber));
@@ -138,7 +135,7 @@ public sealed class HttpSponsorBankAccountSource : ISponsorBankAccountSource
             request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
             // Always this service's own token. Set here, the shared outbound
             // handler leaves it alone instead of forwarding the user's token.
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _issuer.IssueServiceToken(clientId, tenantId));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _tokens.GetTokenAsync(tenantId, cancellationToken));
 
             using var response = await client.SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.OK)

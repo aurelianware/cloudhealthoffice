@@ -57,11 +57,10 @@ public sealed class HttpTradingPartnerLookup : ITradingPartnerLookup
         using var request = new HttpRequestMessage(HttpMethod.Get,
             $"api/TradingPartners/tenant/{Uri.EscapeDataString(tenantId)}");
         request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
-        AttachServiceToken(request, client, tenantId);
-
         HttpResponseMessage response;
         try
         {
+            await AttachServiceTokenAsync(request, client, tenantId);
             response = await client.SendAsync(request);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -108,18 +107,16 @@ public sealed class HttpTradingPartnerLookup : ITradingPartnerLookup
         }
     }
 
-    private void AttachServiceToken(HttpRequestMessage request, HttpClient client, string tenantId)
+    private async Task AttachServiceTokenAsync(HttpRequestMessage request, HttpClient client, string tenantId)
     {
-        var issuer = _services.GetService<ChoTokenIssuer>();
-        var clientId = _services.GetService<ChoAuthOptions>()?.ServiceToken?.ClientId;
+        var tokens = ChoServiceTokens.Resolve(_services);
         var target = client.BaseAddress is null ? request.RequestUri : new Uri(client.BaseAddress, request.RequestUri!);
-        if (issuer is null || string.IsNullOrEmpty(clientId)
-            || _services.GetService<ChoOutboundHosts>()?.IsChoService(target) != true)
+        if (tokens is null || _services.GetService<ChoOutboundHosts>()?.IsChoService(target) != true)
         {
             return; // the shared handler forwards the caller's token (CHO hosts only)
         }
 
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", issuer.IssueServiceToken(clientId, tenantId));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokens.GetTokenAsync(tenantId));
     }
 
     private static string Sanitize(string? value) =>

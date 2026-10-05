@@ -14,11 +14,12 @@ namespace CapitationService.Migrations;
 /// Usage: dotnet run --project src/services/capitation-service -- --migrate-split
 /// (run by an operator with capitation-service's own configuration:
 /// <c>MongoDb</c>, <c>ProviderContractsService:BaseUrl</c> and <c>ChoAuth</c>,
-/// including <c>ChoAuth:ServiceToken</c> from Key Vault outside Development).
+/// including <c>ChoAuth:ServiceToken</c>; outside Development/Testing that is
+/// <c>Source=TokenService</c>, run from a pod with capitation-service's workload identity).
 ///
 /// Credentials: the CLI has no inbound caller, so there is no user token to
-/// forward. It signs a short-lived CHO service token as capitation-service
-/// (<c>ChoAuth:ServiceToken</c>, the key the running service already uses for
+/// forward. It sends a short-lived CHO service token as capitation-service
+/// (<c>ChoAuth:ServiceToken</c>, the source the running service uses for
 /// its background calls) through the shared <see cref="ChoOutboundTokenHandler"/>,
 /// one per call, for the tenant the call names in <c>X-Tenant-ID</c>: each
 /// legacy document's own tenant. A document with no tenant is not migrated.
@@ -65,10 +66,9 @@ public static class SplitCapitationContracts
         var services = new ServiceCollection();
         services.AddLogging(logging => logging.AddConsole());
         services.AddSingleton(options);
-        services.AddSingleton(ChoTokenIssuer.FromKeys(
-            options.ServiceToken.Issuer, options.Audience,
-            options.ServiceToken.PrivateKeyPem, options.ServiceToken.SymmetricKey,
-            options.ServiceToken.Lifetime));
+        // Deployed: token-service issues the token for this workload identity;
+        // Development/Testing: the local development key.
+        services.AddChoServiceTokenSource(options);
         services.AddHttpContextAccessor();
         // The outbound handler only attaches tokens to allowlisted CHO hosts.
         // This CLI calls exactly one: the provider-contracts URL it was given.

@@ -98,7 +98,7 @@ public class IdCardAdapterFactory
             _logger,
             ct,
             alternateParser: ReadCustomSettingsPlatform,
-            prepare: request => _upstream.Prepare(request, tenantId));
+            prepare: (request, token) => _upstream.PrepareAsync(request, tenantId, token));
 
         if (result.Outcome == TenantPlatformOutcome.Refused)
         {

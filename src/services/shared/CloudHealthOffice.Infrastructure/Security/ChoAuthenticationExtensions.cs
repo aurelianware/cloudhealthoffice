@@ -64,13 +64,9 @@ public static class ChoAuthenticationExtensions
         services.AddHttpContextAccessor();
         services.TryAddScoped<ICurrentActor, HttpContextCurrentActor>();
 
-        if (options.ServiceToken != null)
-        {
-            services.TryAddSingleton(ChoTokenIssuer.FromKeys(
-                options.ServiceToken.Issuer, options.Audience,
-                options.ServiceToken.PrivateKeyPem, options.ServiceToken.SymmetricKey,
-                options.ServiceToken.Lifetime));
-        }
+        // This service's own tokens: from token-service (deployed) or a local
+        // development key (Development/Testing; Validate refused it elsewhere).
+        services.AddChoServiceTokenSource(options);
         // The allowlist is read from the final configuration (the one the host
         // builds), so test hosts and environment overrides apply.
         services.TryAddSingleton(sp => new ChoOutboundHosts(

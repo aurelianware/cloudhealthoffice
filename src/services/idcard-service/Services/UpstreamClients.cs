@@ -54,7 +54,7 @@ public sealed class UpstreamAuthorization
         _services = services;
     }
 
-    public void Prepare(HttpRequestMessage request, string tenantId)
+    public async Task PrepareAsync(HttpRequestMessage request, string tenantId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(tenantId))
             throw new InvalidOperationException("An outbound CHO call must name a tenant.");
@@ -65,15 +65,14 @@ public sealed class UpstreamAuthorization
         var http = _accessor.HttpContext;
         if (http?.User?.Identity?.IsAuthenticated == true && http.Items["TenantId"] is not string)
         {
-            var issuer = _services.GetService<ChoTokenIssuer>();
-            var clientId = _services.GetService<ChoAuthOptions>()?.ServiceToken?.ClientId;
-            if (issuer == null || string.IsNullOrEmpty(clientId))
+            var tokens = ChoServiceTokens.Resolve(_services);
+            if (tokens == null)
             {
                 throw new InvalidOperationException(
                     "An external caller needs an upstream CHO call, but ChoAuth:ServiceToken is not configured.");
             }
             request.Headers.Authorization = new AuthenticationHeaderValue(
-                "Bearer", issuer.IssueServiceToken(clientId, tenantId));
+                "Bearer", await tokens.GetTokenAsync(tenantId, ct));
         }
     }
 
@@ -192,7 +191,7 @@ public class MemberClient : IMemberClient
     {
         var baseUrl = _cfg["Services:MemberService"] ?? "http://member-service.cloudhealthoffice/api/v1";
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/members/{Uri.EscapeDataString(memberId)}");
-        _auth.Prepare(req, tenantId);
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
@@ -219,7 +218,7 @@ public class CoverageClient : ICoverageClient
         var baseUrl = _cfg["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
         using var req = new HttpRequestMessage(HttpMethod.Get,
             $"{baseUrl}/coverage/member/{Uri.EscapeDataString(memberId)}/active");
-        _auth.Prepare(req, tenantId);
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         // 404 is coverage-service's "no active coverage". Any other failure,
         // a refusal above all, is not "coverage inactive".
@@ -248,7 +247,7 @@ public class SponsorClient : ISponsorClient
     {
         var baseUrl = _cfg["Services:SponsorService"] ?? "http://sponsor-service.cloudhealthoffice/api/v1";
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/sponsors/{Uri.EscapeDataString(groupNumber)}");
-        _auth.Prepare(req, tenantId);
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
@@ -274,7 +273,7 @@ public class BenefitPlanClient : IBenefitPlanClient
     {
         var baseUrl = _cfg["Services:BenefitPlanService"] ?? "http://benefit-plan-service.cloudhealthoffice/api/v1";
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/plans/{Uri.EscapeDataString(planId)}");
-        _auth.Prepare(req, tenantId);
+        await _auth.PrepareAsync(req, tenantId, ct);
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
@@ -328,7 +327,7 @@ public class MemberDocumentClient : IMemberDocumentClient
         form.Add(fileContent, "File", SanitizeFormValue(fileName));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
-        _auth.Prepare(req, SanitizeFormValue(tenantId));
+        await _auth.PrepareAsync(req, SanitizeFormValue(tenantId), ct);
 
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (!resp.IsSuccessStatusCode)
@@ -397,7 +396,7 @@ public class EligibilityClient : IEligibilityClient
         {
             Content = JsonContent.Create(body)
         };
-        _auth.Prepare(req, tenantId);
+        await _auth.PrepareAsync(req, tenantId, ct);
 
         using var resp = await _http.CreateClient("IdCardDefault").SendAsync(req, ct);
         if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
