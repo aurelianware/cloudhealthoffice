@@ -490,6 +490,8 @@ public class CapitationDisbursementServiceTests
         var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
         disbursement.Status.Should().Be(expected);
+        disbursement.ReleasedBy.Should().Be(expected == DisbursementStatus.Pending ? null : "releaser-1",
+            "the releaser is kept with each disbursement in a file, for the releaser check after the held file expires");
         if (expected != DisbursementStatus.Submitted) disbursement.SubmittedAt.Should().BeNull();
         result.TransmissionStatus.Should().Be(outcome.ToString());
         result.Entries.Should().ContainSingle(e => e.DisbursementId == "d1" && e.AccountNumberLast4 == "6789" && e.Amount == 5000);
@@ -964,6 +966,78 @@ public class CapitationDisbursementServiceTests
 
         result.ReturnCode.Should().Be("R02");
         result.ReturnReason.Should().Be("Account Closed");
+    }
+
+    #endregion
+
+    #region ResolveNachaDeliveryAsync after the held file expired
+
+    private List<CapitationDisbursement> DeliveryUnknownInFile(string? releasedBy)
+    {
+        var disbursements = new List<CapitationDisbursement>
+        {
+            new() { Id = "d1", TenantId = "tenant-1", StatementId = "s1", NachaFileReference = "NACHA-DU", TraceNumber = "1",
+                Method = DisbursementMethod.NachaCredit, Amount = 100, Status = DisbursementStatus.DeliveryUnknown,
+                ReleaseClaimId = "c1", ReleasedBy = releasedBy },
+            new() { Id = "d2", TenantId = "tenant-1", StatementId = "s2", NachaFileReference = "NACHA-DU", TraceNumber = "2",
+                Method = DisbursementMethod.NachaCredit, Amount = 200, Status = DisbursementStatus.DeliveryUnknown,
+                ReleaseClaimId = "c1", ReleasedBy = releasedBy },
+        };
+        _disbursementRepo.Setup(r => r.GetByStatusAsync(DisbursementStatus.DeliveryUnknown)).ReturnsAsync(disbursements);
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>())).ReturnsAsync((CapitationDisbursement d) => d);
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+        return disbursements;
+    }
+
+    [Theory]
+    [InlineData("releaser-1")]
+    [InlineData("RELEASER-1")]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByTheReleaser_IsRefused(string actor)
+    {
+        var disbursements = DeliveryUnknownInFile(releasedBy: "releaser-1");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor(actor, false), bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>().WithMessage("*released*");
+        disbursements.Should().OnlyContain(d => d.Status == DisbursementStatus.DeliveryUnknown, "the releaser cannot make them payable again");
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_WithAServiceToken_IsRefused()
+    {
+        DeliveryUnknownInFile(releasedBy: "releaser-1");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor("svc-capitation", true), bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_WithoutARecordedReleaser_IsRefused()
+    {
+        DeliveryUnknownInFile(releasedBy: null);
+
+        var act = () => _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor("approver-2", false), bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByAnotherUser_NotReceived_GoesBackToPending()
+    {
+        var disbursements = DeliveryUnknownInFile(releasedBy: "releaser-1");
+
+        var result = await _service.ResolveNachaDeliveryAsync("tenant-1", "NACHA-DU",
+            new CloudHealthOffice.NachaTransmission.NachaActor("approver-2", false), bankReceived: false, "Bank ops confirmed no file");
+
+        result.PaymentStatus.Should().Be(nameof(DisbursementStatus.Pending));
+        disbursements.Should().OnlyContain(d => d.Status == DisbursementStatus.Pending && d.NachaFileReference == null && d.ReleasedBy == null);
     }
 
     #endregion

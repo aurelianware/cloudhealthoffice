@@ -703,6 +703,9 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         for (int i = 0; i < disbursements.Count; i++)
         {
             var disbursement = disbursements[i];
+            // Who released the file, kept with each disbursement: the releaser
+            // check still holds once the held file has expired.
+            disbursement.ReleasedBy = releasedBy;
             switch (outcome.Status)
             {
                 case NachaTransmissionStatus.Transmitted:
@@ -735,6 +738,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     disbursement.Status = DisbursementStatus.Pending;
                     disbursement.ReleaseClaimId = null;
                     disbursement.ReleaseClaimedAt = null;
+                    disbursement.ReleasedBy = null;
                     disbursement.ErrorMessage = outcome.Reason;
                     break;
             }
@@ -770,6 +774,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 disbursement.Status = DisbursementStatus.Pending;
                 disbursement.NachaFileReference = null;
                 disbursement.TraceNumber = null;
+                disbursement.ReleasedBy = null;
                 disbursement.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
                 await _disbursementRepository.UpdateAsync(disbursement);
             }
@@ -838,12 +843,25 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         catch (Exception ex) when ((ex is NachaHeldFileExpiredException or NachaHeldFileNotFoundException) && disbursements.Count > 0)
         {
             // The held file is gone (7 days); the disbursements still wait for the answer.
+            // The same checks the dispatcher makes on a held file, from the
+            // releaser recorded on the disbursements.
+            if (actor.IsService)
+                throw new SeparationOfDutiesException(
+                    "Separation of duties: recording whether the bank received a NACHA file needs a user with payments:approve, not a service token");
             if (string.IsNullOrWhiteSpace(reason))
                 throw new ArgumentException("A reason (what the bank said) is required.");
+            if (disbursements.Any(d => string.IsNullOrEmpty(d.ReleasedBy)))
+                throw new SeparationOfDutiesException(
+                    $"Separation of duties: the user who released NACHA file {fileReference} is not recorded, so who may record the bank's " +
+                    "answer cannot be checked. Reconcile it by hand.");
+            if (disbursements.Any(d => string.Equals(d.ReleasedBy, actor.UserId, StringComparison.OrdinalIgnoreCase)))
+                throw new SeparationOfDutiesException(
+                    "Separation of duties: you released this NACHA file, so you cannot record whether the bank received it.");
             fileStillHeld = false;
             _logger.LogWarning(
-                "NACHA file {FileReference}: held file expired; {User} recorded the bank's answer ({Received}) without the releaser check",
-                SanitizeForLog(fileReference), SanitizeForLog(actor.UserId), bankReceived);
+                "AUDIT NACHA file {FileReference}: held file expired; {User} recorded that the bank {Answer} it (released by {ReleasedBy}): {Reason}",
+                SanitizeForLog(fileReference), SanitizeForLog(actor.UserId), bankReceived ? "received" : "did not receive",
+                SanitizeForLog(string.Join(",", disbursements.Select(d => d.ReleasedBy).Distinct())), SanitizeForLog(reason));
         }
 
         var now = DateTime.UtcNow;
@@ -869,6 +887,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                     disbursement.TraceNumber = null;
                     disbursement.ReleaseClaimId = null;
                     disbursement.ReleaseClaimedAt = null;
+                    disbursement.ReleasedBy = null;
                     disbursement.ErrorMessage = $"The bank confirmed it did not receive NACHA file {fileReference}, which has expired; back to Pending for the next file.";
                     break;
             }

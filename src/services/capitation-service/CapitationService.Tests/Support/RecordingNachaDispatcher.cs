@@ -39,5 +39,9 @@ public sealed class RecordingNachaDispatcher : INachaDispatcher
     public Task<NachaRetrievedFile> RetrieveAsync(string tenantId, string fileReference, NachaActor actor, string reason, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
-    public Task<NachaHeldFile> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>What ResolveDeliveryUnknownAsync throws (e.g. the held file expired); unset: not supported.</summary>
+    public Exception? ResolveThrows { get; set; }
+
+    public Task<NachaHeldFile> ResolveDeliveryUnknownAsync(string tenantId, string fileReference, NachaActor actor, bool bankReceived, string reason, CancellationToken cancellationToken = default)
+        => throw (ResolveThrows ?? new NotSupportedException());
 }

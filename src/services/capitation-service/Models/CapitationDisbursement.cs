@@ -161,6 +161,12 @@ public class CapitationDisbursement
 
     /// <summary>When that release claimed it.</summary>
     public DateTime? ReleaseClaimedAt { get; set; }
+
+    /// <summary>
+    /// The user (token subject) who released the NACHA file this disbursement
+    /// is in. Never the one who records the bank's answer for that file.
+    /// </summary>
+    public string? ReleasedBy { get; set; }
 }
 
 /// <summary>
