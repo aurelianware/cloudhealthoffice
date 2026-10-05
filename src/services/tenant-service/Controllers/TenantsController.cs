@@ -131,9 +131,9 @@ public class TenantsController : ControllerBase
 
     /// <summary>
     /// Update tenant settings (names, contact, configuration including
-    /// <c>paymentControls</c>). Needs <c>settings:manage</c>. Status and
-    /// subscription tier are platform decisions: sending either needs
-    /// <c>platform:tenants</c>.
+    /// <c>paymentControls</c>). Needs <c>settings:manage</c>. Status,
+    /// subscription tier and <c>paymentControls.nachaTransmission</c> are
+    /// platform decisions: changing any of them needs <c>platform:tenants</c>.
     /// </summary>
     [HttpPut("{tenantId}")]
     [RequirePermission(TenantPermissions.SettingsManage)]
@@ -149,20 +149,47 @@ public class TenantsController : ControllerBase
                 new { error = "Changing a tenant's status or subscription tier needs platform:tenants." });
         }
 
-        // NACHA transmission settings name Key Vault secrets of this tenant only,
-        // pin the bank's host key, and never carry a credential.
-        if (request.Configuration?.PaymentControls?.NachaTransmission is { } nacha)
+        // NACHA transmission decides where payment files go (bank SFTP host,
+        // pinned host key) and which Key Vault credentials are sent there, so
+        // changing it needs platform:tenants, not settings:manage alone. A
+        // configuration write that omits it keeps the stored settings (it no
+        // longer silently clears them); resending them unchanged is allowed.
+        var changesNacha = false;
+        if (request.Configuration != null)
         {
-            if (nacha.Validate(tenantId) is { } problem)
-                return BadRequest(new { error = problem });
-            nacha.UnknownProperties = null;
+            var stored = (await _tenantService.GetTenantAsync(tenantId))?.Configuration?.PaymentControls?.NachaTransmission;
+            request.Configuration.PaymentControls ??= new PaymentControlsConfig();
+            if (request.Configuration.PaymentControls.NachaTransmission is not { } requested)
+            {
+                request.Configuration.PaymentControls.NachaTransmission = stored;
+            }
+            else
+            {
+                changesNacha = !NachaTransmissionConfig.SameSettings(stored, requested);
+                if (changesNacha && !_actor.HasPermission(TenantPermissions.PlatformTenants))
+                {
+                    _audit.Record("refused NACHA transmission change (needs platform:tenants)", tenantId, "denied");
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        new { error = "Changing paymentControls.nachaTransmission needs platform:tenants." });
+                }
+
+                // NACHA transmission settings name Key Vault secrets of this tenant only,
+                // pin the bank's host key, and never carry a credential.
+                if (requested.Validate(tenantId) is { } problem)
+                    return BadRequest(new { error = problem });
+                requested.UnknownProperties = null;
+            }
         }
 
         try
         {
             var tenant = await _tenantService.UpdateTenantAsync(tenantId, request);
-            if (request.Configuration?.PaymentControls?.NachaTransmission != null)
-                _audit.Record("update NACHA transmission settings", tenantId);
+            if (changesNacha)
+            {
+                var n = request.Configuration!.PaymentControls.NachaTransmission!;
+                _audit.Record($"update NACHA transmission settings (enabled={n.Enabled}, host={n.Host}:{n.Port}, " +
+                              $"hostKey={n.HostKeyFingerprint}, dir={n.RemoteDirectory})", tenantId);
+            }
             if (changesPlatformFields)
                 _audit.Record($"update tenant status/tier (status={request.Status}, tier={request.SubscriptionTier})", tenantId);
             return Ok(tenant);

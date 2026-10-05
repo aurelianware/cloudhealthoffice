@@ -169,7 +169,11 @@ user token, maker-checker).
   literal credential in the body (`password`, `privateKey`, anything unknown),
   another tenant's prefix, or `enabled` without host, username, remote
   directory, a credential name and a SHA-256 `hostKeyFingerprint` is 400.
-  Settings writes need settings:manage. The sending services read the names
+  Setting or changing this block needs platform:tenants (it decides where
+  payment files and the bank credentials go), not settings:manage alone: a
+  settings manager may resend it unchanged or leave it out (the stored block
+  is kept), and any other change is 403 and audited as refused. Changes are
+  audited with host, port, host-key pin and directory. The sending services read the names
   with their own service token; any other reader without settings:manage sees
   `privateKeyConfigured` / `passwordConfigured` instead. `passwordSecretRef`
   is the private key's passphrase when a key is set, otherwise the SFTP password.

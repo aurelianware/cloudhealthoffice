@@ -317,6 +317,23 @@ public class NachaTransmissionConfig
     [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
     internal bool MaskedPassword { get; init; }
 
+    /// <summary>
+    /// Whether two settings transmit the same way (destination, host key,
+    /// credentials and directory). Null equals only null.
+    /// </summary>
+    public static bool SameSettings(NachaTransmissionConfig? a, NachaTransmissionConfig? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        return a.Enabled == b.Enabled
+               && a.Port == b.Port
+               && string.Equals(a.Host, b.Host, StringComparison.Ordinal)
+               && string.Equals(a.Username, b.Username, StringComparison.Ordinal)
+               && string.Equals(a.PrivateKeySecretRef, b.PrivateKeySecretRef, StringComparison.Ordinal)
+               && string.Equals(a.PasswordSecretRef, b.PasswordSecretRef, StringComparison.Ordinal)
+               && string.Equals(a.HostKeyFingerprint, b.HostKeyFingerprint, StringComparison.Ordinal)
+               && string.Equals(a.RemoteDirectory, b.RemoteDirectory, StringComparison.Ordinal);
+    }
+
     private static readonly System.Text.RegularExpressions.Regex SecretNameChars = new("^[0-9A-Za-z-]+$");
 
     /// <summary>Key Vault secret names for a tenant's NACHA credentials must start with this.</summary>

@@ -199,7 +199,7 @@ public sealed class TenantPlatformSettingsRoundTripTests : IAsyncLifetime
     [Fact]
     public async Task NachaTransmission_RoundTrips_SecretNamesOnlyToServicesAndSettingsManagers()
     {
-        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "ops-1", ChoRolePermissions.PlatformAdmin);
 
         var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(ValidNacha()));
         put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
@@ -240,7 +240,7 @@ public sealed class TenantPlatformSettingsRoundTripTests : IAsyncLifetime
     [InlineData("privateKey")]
     public async Task NachaTransmission_WithALiteralCredential_IsRefused_AndNothingIsStored(string field)
     {
-        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "ops-1", ChoRolePermissions.PlatformAdmin);
         var body = new Dictionary<string, object?>
         {
             ["enabled"] = false, ["host"] = "sftp.bank.example", [field] = "hunter2-literal-secret",
@@ -262,13 +262,85 @@ public sealed class TenantPlatformSettingsRoundTripTests : IAsyncLifetime
     [InlineData("hostKeyFingerprint", "MD5:aa:bb")]                  // not a SHA-256 pin
     public async Task NachaTransmission_Invalid_IsRefused(string field, string? value)
     {
-        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "ops-1", ChoRolePermissions.PlatformAdmin);
         var nacha = JsonSerializer.Deserialize<Dictionary<string, object?>>(JsonSerializer.Serialize(ValidNacha()))!;
         nacha[field] = value;
 
         var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(nacha));
 
         put.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private async Task<BsonValue> StoredNacha()
+    {
+        var stored = await _database.GetCollection<BsonDocument>("Tenants")
+            .Find(new BsonDocument("tenantId", TenantServiceFactory.TenantA)).SingleAsync();
+        return stored["configuration"]["paymentControls"].AsBsonDocument.GetValue("nachaTransmission", BsonNull.Value);
+    }
+
+    private async Task SetNachaAsPlatformAdmin()
+    {
+        var ops = _factory.UserClient(TenantServiceFactory.TenantA, "ops-1", ChoRolePermissions.PlatformAdmin);
+        (await ops.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(ValidNacha()))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// settings:manage alone cannot redirect payment files: setting or changing
+    /// the bank SFTP destination, host-key pin or credential names needs
+    /// platform:tenants, and the refusal is audited.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "host", "attacker.example")]
+    [InlineData(true, "host", "attacker.example")]
+    [InlineData(true, "hostKeyFingerprint", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [InlineData(true, "passwordSecretRef", "nacha--tenant-a--other")]
+    [InlineData(true, "enabled", false)]
+    public async Task NachaTransmission_SettingsManagerAlone_CannotSetOrChangeIt(bool existing, string field, object value)
+    {
+        if (existing) await SetNachaAsPlatformAdmin();
+        var before = await StoredNacha();
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+        var nacha = JsonSerializer.Deserialize<Dictionary<string, object?>>(JsonSerializer.Serialize(ValidNacha()))!;
+        nacha[field] = value;
+        _factory.Logs.Clear();
+
+        var put = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(nacha));
+
+        put.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await StoredNacha()).Should().Be(before);
+        _factory.Logs.Entries.Should().Contain(e => e.Message.Contains("refused NACHA transmission change") && e.Message.Contains("admin-1"));
+    }
+
+    [Fact]
+    public async Task NachaTransmission_ChangedByPlatformAdmin_IsAudited()
+    {
+        _factory.Logs.Clear();
+        await SetNachaAsPlatformAdmin();
+
+        _factory.Logs.Entries.Should().Contain(e => e.Message.Contains("update NACHA transmission settings")
+                                                    && e.Message.Contains("sftp.bank.example") && e.Message.Contains("ops-1"));
+    }
+
+    /// <summary>
+    /// A settings manager can still save other settings: resending the stored
+    /// NACHA block unchanged, or leaving it out, keeps it as it is.
+    /// </summary>
+    [Fact]
+    public async Task NachaTransmission_UnchangedOrOmitted_BySettingsManager_IsKept()
+    {
+        await SetNachaAsPlatformAdmin();
+        var before = await StoredNacha();
+        var admin = _factory.UserClient(TenantServiceFactory.TenantA, "admin-1", ChoRolePermissions.TenantAdmin);
+
+        (await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", NachaBody(ValidNacha()))).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await StoredNacha()).Should().Be(before);
+
+        var omitted = await admin.PutAsJsonAsync("/api/v1/tenants/tenant-a", new
+        {
+            configuration = new { paymentControls = new { enforceSeparationOfDuties = false } },
+        });
+        omitted.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await StoredNacha()).Should().Be(before);
     }
 
     /// <summary>The real pipeline over a real <see cref="TenantRepository"/> in MongoDB.</summary>
