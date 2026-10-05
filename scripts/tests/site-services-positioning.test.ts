@@ -890,6 +890,15 @@ describe('Services & deployment positioning', () => {
       expect(ownership).not.toMatch(/\.nav-links\{display:none\}/);
       expect(ownership).toMatch(/@media\(max-width:820px\)\{[\s\S]*?\.nav-links\{[^}]*overflow-x:auto/);
     });
+
+    it('keeps small dim text legible and the breadcrumb out of the sticky-nav styles', () => {
+      // #606060 on #05070a is 3.21:1, below WCAG AA 4.5:1 for the small metadata,
+      // breadcrumb, footer and PHI-warning text that uses --text-dim.
+      expect(ownership).toContain('--text-dim:#8a8a8a');
+      // An unscoped `nav{position:sticky…}` also styles the breadcrumb <nav>.
+      expect(ownership).not.toMatch(/^\s*nav\{/m);
+      expect(ownership).toMatch(/body>nav\{position:sticky/);
+    });
   });
 
   describe('site deployment workflows', () => {
