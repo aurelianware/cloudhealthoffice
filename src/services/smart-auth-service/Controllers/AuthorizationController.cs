@@ -39,7 +39,11 @@ namespace SmartAuthService.Controllers;
 /// app and that scope set on a consent page (<see cref="SmartConsent"/>). The
 /// approval is a permanent OpenIddict authorization for (identity, client,
 /// scopes), so the page is shown once per new scope set; every code and token
-/// is tied to it, and revoking it ends refresh.
+/// is tied to it, and revoking it ends refresh. The person withdraws an
+/// approval on <c>/account/apps</c>, an administrator through
+/// <c>/api/admin/smart/clients/{clientId}/approvals</c>. A code or refresh
+/// token not tied to an approval (issued before consent existed) is refused
+/// with invalid_grant.
 /// </summary>
 [ApiController]
 public class AuthorizationController : ControllerBase
@@ -50,6 +54,7 @@ public class AuthorizationController : ControllerBase
     private readonly IOpenIddictApplicationManager _applications;
     private readonly IOpenIddictAuthorizationManager _authorizations;
     private readonly SmartConsent _consent;
+    private readonly SmartAppApprovals _approvals;
 
     public AuthorizationController(
         SmartTokenContextResolver resolver,
@@ -57,7 +62,8 @@ public class AuthorizationController : ControllerBase
         ILogger<AuthorizationController> logger,
         IOpenIddictApplicationManager applications,
         IOpenIddictAuthorizationManager authorizations,
-        SmartConsent consent)
+        SmartConsent consent,
+        SmartAppApprovals approvals)
     {
         _resolver = resolver;
         _audit = audit;
@@ -65,6 +71,7 @@ public class AuthorizationController : ControllerBase
         _applications = applications;
         _authorizations = authorizations;
         _consent = consent;
+        _approvals = approvals;
     }
 
     // ── Authorization endpoint ────────────────────────────────────────────────
@@ -203,6 +210,17 @@ public class AuthorizationController : ControllerBase
                 return Forbid(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
             var principal = result.Principal;
+
+            // Every code and refresh token must rest on the person's approval
+            // (a valid permanent authorization from the consent page). A
+            // refresh token issued before consent existed rests on an ad-hoc
+            // authorization: refused, so that app must ask again. A withdrawn
+            // approval (/account/apps, admin API) ends here too.
+            if (!await _approvals.IsApprovalAsync(principal.GetAuthorizationId(), ct))
+            {
+                _audit.TokenRefused(principal.GetClaim(Claims.Subject), request.ClientId, "no_consent_authorization");
+                return ForbidGrant(Errors.InvalidGrant, "The user has not approved this app, or withdrew the approval. Authorize again.");
+            }
 
             // The binding the code was issued under must still hold. A revoked
             // link or deleted client registration ends refresh immediately.

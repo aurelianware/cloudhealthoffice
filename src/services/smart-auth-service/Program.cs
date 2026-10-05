@@ -218,6 +218,7 @@ builder.Services.AddSingleton<ILaunchContextStore>(sp =>
 builder.Services.AddScoped<SmartTokenContextResolver>();
 builder.Services.AddSingleton<SmartAuthAudit>();
 builder.Services.AddSingleton<SmartConsent>();
+builder.Services.AddScoped<SmartAppApprovals>();
 
 // ── Hosted seed worker ────────────────────────────────────────────────────────
 builder.Services.AddHostedService<OpenIddictSeedWorker>();

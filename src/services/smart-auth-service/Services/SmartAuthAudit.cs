@@ -43,6 +43,12 @@ public sealed class SmartAuthAudit
             "SMART consent {Outcome}: identity={Identity} client={Client} scopes={Scopes}",
             "granted", Clean(identity), Clean(clientId), Clean(scopes));
 
+    /// <summary>An approval withdrawn: by the person (<paramref name="by"/> "member") or an administrator ("admin").</summary>
+    public void ConsentRevoked(string identity, string clientId, string by, string actor)
+        => _logger.LogInformation(
+            "SMART consent {Outcome}: identity={Identity} client={Client} by={By} actor={Actor}",
+            "revoked", Clean(identity), Clean(clientId), Clean(by), Clean(actor));
+
     public void SignedIn(string method, string identity)
         => _logger.LogInformation(
             "SMART sign-in {Outcome}: method={Method} identity={Identity}",

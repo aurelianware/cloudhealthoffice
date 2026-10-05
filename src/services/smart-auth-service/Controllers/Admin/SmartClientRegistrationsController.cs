@@ -174,6 +174,61 @@ public sealed class SmartClientRegistrationsController : ControllerBase
         return NoContent();
     }
 
+    // ── App approvals (consent) of this tenant's clients ───────────────────
+
+    /// <summary>GET {clientId}/approvals[?subject=] — the valid approvals of one of this tenant's clients.</summary>
+    [HttpGet("{clientId}/approvals")]
+    public async Task<IActionResult> ListApprovals(
+        string clientId, [FromQuery] string? subject, [FromServices] SmartAppApprovals approvals, CancellationToken ct)
+    {
+        if (!await IsOwnClientAsync(clientId, ct))
+            return NotFound();
+        return Ok(await approvals.ForClientAsync(clientId, subject, ct));
+    }
+
+    /// <summary>
+    /// DELETE {clientId}/approvals/{approvalId} — withdraws one approval of one
+    /// of this tenant's clients, and every token issued under it.
+    /// </summary>
+    [HttpDelete("{clientId}/approvals/{approvalId}")]
+    public async Task<IActionResult> RevokeApproval(
+        string clientId, string approvalId, [FromServices] SmartAppApprovals approvals, CancellationToken ct)
+    {
+        if (!await IsOwnClientAsync(clientId, ct))
+            return NotFound();
+        var approval = await approvals.FindAsync(approvalId, ct);
+        if (approval is null || approval.ClientId != clientId || !await approvals.RevokeAsync(approvalId, ct))
+            return NotFound();
+
+        _audit.ConsentRevoked(approval.Subject, clientId, "admin", _actor.UserId);
+        _audit.Admin("consent-revoked", _actor.TenantId, _actor.UserId, $"client={clientId} approval={approvalId}");
+        return NoContent();
+    }
+
+    /// <summary>
+    /// DELETE {clientId}/approvals[?subject=] — withdraws every approval of one
+    /// of this tenant's clients (of one person, with <c>subject</c>).
+    /// </summary>
+    [HttpDelete("{clientId}/approvals")]
+    public async Task<IActionResult> RevokeApprovals(
+        string clientId, [FromQuery] string? subject, [FromServices] SmartAppApprovals approvals, CancellationToken ct)
+    {
+        if (!await IsOwnClientAsync(clientId, ct))
+            return NotFound();
+        var revoked = 0;
+        foreach (var approval in await approvals.ForClientAsync(clientId, subject, ct))
+        {
+            if (!await approvals.RevokeAsync(approval.Id, ct)) continue;
+            revoked++;
+            _audit.ConsentRevoked(approval.Subject, clientId, "admin", _actor.UserId);
+        }
+        _audit.Admin("consent-revoked", _actor.TenantId, _actor.UserId, $"client={clientId} count={revoked}");
+        return Ok(new { revoked });
+    }
+
+    private async Task<bool> IsOwnClientAsync(string clientId, CancellationToken ct)
+        => await _store.FindClientAsync(clientId, ct) is { } binding && binding.TenantId == _actor.TenantId;
+
     private static string? ValidateScopes(string kind, IReadOnlyList<string> scopes)
     {
         if (scopes.Count == 0) return "scopes is required.";

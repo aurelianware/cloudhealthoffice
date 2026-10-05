@@ -98,6 +98,37 @@ issued refresh tokens.
   `launch` parameter with control characters is refused before the page.
 - There is no first-party exemption: client registrations have no first-party
   flag, so every interactive client, the demo ones included, is asked once.
+- Every authorization code and refresh token must rest on a valid permanent
+  authorization (an approval). One that does not, such as a refresh token
+  issued before consent existed (OpenIddict tied it to an ad-hoc
+  authorization), is refused at `/connect/token` with `invalid_grant`, so that
+  app must send the person through `/connect/authorize` again.
+- Withdrawing an approval revokes the authorization and every token issued
+  under it (`TryRevokeAsync` + `RevokeByAuthorizationIdAsync`); the app's
+  refresh tokens stop working at once and the consent page is shown again.
+  - The person: `GET /account/apps` (signed in) lists their approvals (app,
+    scopes, date) with a "Withdraw access" form per approval, posting to
+    `POST /account/apps/revoke`. Each form carries a 10-minute Data
+    Protection proof bound to the signed-in identity and that approval (the
+    consent form's pattern), so another site cannot post a revocation and one
+    person cannot revoke another's approval.
+  - An administrator of the client's tenant: see the admin API table
+    (`…/clients/{clientId}/approvals`).
+  - Each revocation is an audit line (`SMART consent revoked`, `by=member` or
+    `by=admin`).
+
+### Browser security headers
+
+Every response carries `X-Frame-Options: DENY`,
+`Content-Security-Policy: frame-ancestors 'none'`,
+`X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`, so no
+site can frame the login, consent, link or connected-apps pages, and a code or
+launch token in a URL never leaves in a Referer. The pages this service renders
+get `default-src 'self'; script-src 'none'; style-src 'unsafe-inline';
+object-src 'none'; base-uri 'none'; frame-ancestors 'none'`. There is no
+`form-action`: the consent form posts to `/connect/authorize`, which redirects
+to the client's redirect URI on any origin, and browsers apply `form-action`
+to that redirect.
 
 ### EHR launch (`POST /launch`)
 
@@ -156,6 +187,7 @@ through a named policy.
 | `POST/GET /api/admin/smart/provider-enrolments`, `DELETE …/{id}` | `providers:write` |
 | `GET /api/admin/smart/provider-users`, `DELETE …/{id}` (revoke) | `providers:write` |
 | `POST/GET /api/admin/smart/clients`, `GET/DELETE …/{clientId}` | `settings:manage` |
+| `GET …/{clientId}/approvals[?subject=]`, `DELETE …/{clientId}/approvals/{approvalId}`, `DELETE …/{clientId}/approvals[?subject=]` (withdraw app approvals of the tenant's own client; `404` for another tenant's) | `settings:manage` |
 | `POST /launch` | `members:read` |
 
 - Every read and write is filtered by the CHO token's tenant. Another tenant's

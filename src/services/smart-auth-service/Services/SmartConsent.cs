@@ -28,21 +28,39 @@ public sealed class SmartConsent
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
 
     private readonly ITimeLimitedDataProtector _protector;
+    private readonly ITimeLimitedDataProtector _revocation;
 
     public SmartConsent(IDataProtectionProvider provider)
-        => _protector = provider.CreateProtector("SmartAuth.Consent.v1").ToTimeLimitedDataProtector();
+    {
+        _protector = provider.CreateProtector("SmartAuth.Consent.v1").ToTimeLimitedDataProtector();
+        _revocation = provider.CreateProtector("SmartAuth.ConsentRevocation.v1").ToTimeLimitedDataProtector();
+    }
 
     public string Issue(string identity, string clientId, IEnumerable<string> scopes)
         => _protector.Protect(Payload(identity, clientId, scopes), Lifetime);
 
     public bool Verify(string? token, string identity, string clientId, IEnumerable<string> scopes)
+        => Matches(_protector, token, Payload(identity, clientId, scopes));
+
+    /// <summary>
+    /// The proof a revoke form on <c>/account/apps</c> carries: this identity
+    /// was shown this approval. Another site cannot post a revocation, and a
+    /// proof is good for one approval of one person only.
+    /// </summary>
+    public string IssueRevocation(string identity, string authorizationId)
+        => _revocation.Protect(identity + "\n" + authorizationId, Lifetime);
+
+    public bool VerifyRevocation(string? token, string identity, string authorizationId)
+        => Matches(_revocation, token, identity + "\n" + authorizationId);
+
+    private static bool Matches(ITimeLimitedDataProtector protector, string? token, string payload)
     {
         if (string.IsNullOrEmpty(token))
             return false;
         try
         {
-            var expected = Encoding.UTF8.GetBytes(Payload(identity, clientId, scopes));
-            var actual = Encoding.UTF8.GetBytes(_protector.Unprotect(token, out _));
+            var expected = Encoding.UTF8.GetBytes(payload);
+            var actual = Encoding.UTF8.GetBytes(protector.Unprotect(token, out _));
             return CryptographicOperations.FixedTimeEquals(expected, actual);
         }
         catch (CryptographicException)
@@ -94,7 +112,8 @@ public sealed class SmartConsent
                 <button type="submit" name="{DecisionField}" value="{Approve}" style="padding:8px 20px">Allow</button>
                 <button type="submit" name="{DecisionField}" value="{Deny}" style="padding:8px 20px">Deny</button>
               </form>
-              <p style="font-size:0.8em;color:#666">You will not be asked again for this app and these permissions.</p>
+              <p style="font-size:0.8em;color:#666">You will not be asked again for this app and these permissions.
+                You can withdraw it at any time on <a href="/account/apps">your connected apps</a>.</p>
             </body>
             </html>
             """;
