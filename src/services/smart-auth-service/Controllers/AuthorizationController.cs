@@ -78,7 +78,7 @@ public class AuthorizationController : ControllerBase
                 CookieAuthenticationDefaults.AuthenticationScheme);
         }
 
-        var identity = DevelopmentLogin.IdentityOf(cookieAuth.Principal);
+        var identity = SmartSession.IdentityOf(cookieAuth.Principal);
         if (identity is null)
             return Refuse(null, request.ClientId, "session_has_no_identity");
 

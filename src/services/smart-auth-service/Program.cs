@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using CloudHealthOffice.Infrastructure.Extensions;
 using MongoDB.Driver;
 using OpenIddict.Abstractions;
@@ -37,6 +39,16 @@ var accessTokenLifetime = TimeSpan.FromMinutes(
     builder.Configuration.GetValue<int>("SmartAuth:AccessTokenLifetimeMinutes", 60));
 
 var smartIssuer = SmartIssuer.Resolve(builder.Configuration, builder.Environment);
+
+// Production sign-in for members and provider users (Entra External ID).
+// Null when SmartAuth:ExternalLogin:Enabled is false; throws when enabled but
+// incomplete or unsafe.
+var externalLogin = ExternalLogin.Resolve(builder.Configuration, builder.Environment, smartIssuer);
+
+// Token signing / encryption certificates. Required outside Development and
+// Testing; null means the development certificates.
+var signingCertificates = SmartCertificates.LoadSigning(builder.Configuration, builder.Environment);
+var encryptionCertificates = SmartCertificates.LoadEncryption(builder.Configuration, builder.Environment);
 
 var refreshTokenLifetime = TimeSpan.FromDays(
     builder.Configuration.GetValue<int>("SmartAuth:RefreshTokenLifetimeDays", 7));
@@ -115,11 +127,11 @@ builder.Services.AddOpenIddict()
 
         // ── Token signing ────────────────────────────────────────────────────
         // Disable access token encryption so standard JwtBearer can validate them.
-        // Production: replace development certs with Azure Key Vault certificates.
+        // SmartAuth:SigningCertificates / EncryptionCertificates (Key Vault);
+        // development certificates only on Development/Testing hosts. Every
+        // signing certificate is published in the JWKS; the active one signs.
         options.DisableAccessTokenEncryption();
-        options
-            .AddDevelopmentEncryptionCertificate()
-            .AddDevelopmentSigningCertificate();
+        options.AddSmartCertificates(signingCertificates, encryptionCertificates);
 
         // ── ASP.NET Core integration ─────────────────────────────────────────
         options.UseAspNetCore()
@@ -144,7 +156,10 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
 
 // ── Cookie auth for the consent/login UI ─────────────────────────────────────
 // Not the default scheme: only the SMART sign-in flow uses it, by name.
-builder.Services.AddAuthentication()
+// Secure outside Development (TLS ends at the ingress, so the request this
+// pod sees is plain HTTP; the cookie is marked Secure regardless). Lax: the
+// external login returns on a top-level GET.
+var sessionAuthentication = builder.Services.AddAuthentication()
     .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
     {
         options.LoginPath = "/account/login";
@@ -152,7 +167,35 @@ builder.Services.AddAuthentication()
         options.ExpireTimeSpan = TimeSpan.FromHours(2);
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
     });
+
+// The external OIDC login signs in to the cookie scheme above, with exactly
+// the session the development login produces (SmartSession).
+if (externalLogin is not null)
+{
+    sessionAuthentication.AddExternalLogin(externalLogin, builder.Environment);
+    builder.Services.AddSingleton(externalLogin);
+}
+
+// One Data Protection key ring for every pod (MongoDB), so a session cookie
+// or an external sign-in started on one pod is honoured by another. Keys are
+// encrypted at rest with the active encryption certificate when configured.
+if (!string.IsNullOrEmpty(mongoConnStr))
+{
+    var dataProtection = builder.Services.AddDataProtection().SetApplicationName("smart-auth-service");
+    builder.Services.AddOptions<KeyManagementOptions>()
+        .Configure<IServiceProvider>((options, sp) =>
+            options.XmlRepository = new MongoDataProtectionRepository(sp.GetRequiredService<IMongoDatabase>()));
+    if (encryptionCertificates is not null)
+    {
+        dataProtection
+            .ProtectKeysWithCertificate(encryptionCertificates.Active)
+            .UnprotectKeysWithAnyCertificate(encryptionCertificates.All.ToArray());
+    }
+}
 
 builder.Services.AddAuthorization(options =>
     options.AddPolicy(SmartAuthService.Controllers.SmartAccessTokenPolicy.Name, policy => policy

@@ -16,6 +16,11 @@
       first-class MongoDB stores for applications, authorizations, scopes, and tokens.
     -->
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <!-- External member/provider sign-in (Entra External ID). The handler is built
+         against IdentityModel 7.x; OpenIddict brings 8.x, and a 7.x Protocols.OpenIdConnect
+         beside 8.x Tokens reads discovery documents as empty. Keep them aligned. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" />
     <PackageReference Include="OpenIddict.AspNetCore" />
     <PackageReference Include="OpenIddict.Server.AspNetCore" />
     <PackageReference Include="OpenIddict.Validation.AspNetCore" />

@@ -38,6 +38,16 @@ public sealed class SmartAuthAudit
             "SMART token {Outcome}: identity={Identity} client={Client} reason={Reason}",
             "refused", Clean(identity), Clean(clientId), Clean(reason));
 
+    public void SignedIn(string method, string identity)
+        => _logger.LogInformation(
+            "SMART sign-in {Outcome}: method={Method} identity={Identity}",
+            "succeeded", Clean(method), Clean(identity));
+
+    public void SignInRefused(string method, string reason)
+        => _logger.LogWarning(
+            "SMART sign-in {Outcome}: method={Method} reason={Reason}",
+            "refused", Clean(method), Clean(reason));
+
     internal static string Clean(string? value)
     {
         if (string.IsNullOrEmpty(value)) return "-";

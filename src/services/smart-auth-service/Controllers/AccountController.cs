@@ -13,15 +13,20 @@ namespace SmartAuthService.Controllers;
 /// enrolment-code redemption that binds a signed-in identity to a member or
 /// provider of one tenant.
 ///
-/// The session cookie carries exactly two facts: the identity's issuer
-/// (<see cref="DevelopmentLogin.IssuerClaim"/>) and its subject
-/// (<see cref="ClaimTypes.NameIdentifier"/>). It carries no tenant and no
-/// patient: those are looked up from the bindings when a token is issued.
+/// The session cookie carries the identity's issuer
+/// (<see cref="SmartSession.IssuerClaim"/>), its subject
+/// (<see cref="ClaimTypes.NameIdentifier"/>) and, for display only, a name
+/// (<see cref="SmartSession"/>). It carries no tenant and no patient: those
+/// are looked up from the bindings when a token is issued.
 ///
-/// The only login implemented here is <see cref="DevelopmentLogin"/>, which
-/// works on a Development host with SmartAuth:DevMode=true and nowhere else.
-/// A production member/provider login must federate to an external identity
-/// provider; see docs/security/smart-auth-tenancy.md for what it must supply.
+/// Two logins produce that session:
+/// <list type="bullet">
+/// <item>the external OIDC login (<c>SmartAuth:ExternalLogin</c>, Microsoft
+/// Entra External ID), wired in <see cref="Services.ExternalLogin"/>;</item>
+/// <item><see cref="DevelopmentLogin"/>, on a Development host with
+/// SmartAuth:DevMode=true and nowhere else.</item>
+/// </list>
+/// See docs/security/smart-auth-tenancy.md.
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -32,40 +37,48 @@ public class AccountController : ControllerBase
     private readonly ISmartIdentityStore _store;
     private readonly SmartAuthAudit _audit;
     private readonly ILogger<AccountController> _logger;
+    private readonly ExternalLoginOptions? _external;
 
     public AccountController(
         IConfiguration config,
         IHostEnvironment environment,
         ISmartIdentityStore store,
         SmartAuthAudit audit,
-        ILogger<AccountController> logger)
+        ILogger<AccountController> logger,
+        IServiceProvider services)
     {
         _config = config;
         _environment = environment;
         _store = store;
         _audit = audit;
         _logger = logger;
+        // Registered only when SmartAuth:ExternalLogin is enabled and valid.
+        _external = services.GetService<ExternalLoginOptions>();
     }
 
     private bool DevelopmentLoginEnabled
         => _environment.IsDevelopment() && _config.GetValue<bool>("SmartAuth:DevMode");
 
-    /// <summary>GET /account/login — renders a minimal HTML login form.</summary>
+    /// <summary>GET /account/login — the sign-in methods enabled on this host.</summary>
     [HttpGet("~/account/login")]
     public ContentResult Login([FromQuery] string returnUrl = "/")
     {
-        if (!DevelopmentLoginEnabled)
-        {
-            return Content(Page("Cloud Health Office — SMART Login",
-                "<p>No sign-in method is configured for this environment.</p>"), "text/html");
-        }
-
-        var error = HttpContext.Request.Query["error"].FirstOrDefault();
-        var errorMsg = error == "invalid" ? "<p style='color:red'>Invalid credentials.</p>" : "";
+        if (!LocalUrl.IsLocal(returnUrl)) returnUrl = "/";
         var safeReturn = System.Web.HttpUtility.HtmlEncode(Uri.EscapeDataString(returnUrl));
 
-        return Content(Page("Cloud Health Office — SMART Login (Development)", $"""
-              {errorMsg}
+        var methods = new List<string>();
+        if (_external is not null)
+        {
+            methods.Add($"""
+              <p><a id="external-login" href="/account/external-login?returnUrl={safeReturn}"
+                    style="display:inline-block;padding:8px 20px;border:1px solid #333;text-decoration:none">
+                Sign in with {System.Web.HttpUtility.HtmlEncode(_external.DisplayName)}</a></p>
+            """);
+        }
+
+        if (DevelopmentLoginEnabled)
+        {
+            methods.Add($"""
               <form method="post" action="/account/login?returnUrl={safeReturn}">
                 <p><label>Username<br>
                   <input name="username" type="text" required autocomplete="username"
@@ -82,7 +95,42 @@ public class AccountController : ControllerBase
                 A username gets a token only once it is bound to a member or provider
                 (demo-member and demo-provider are bound in demo-tenant).
               </p>
-            """), "text/html");
+            """);
+        }
+
+        if (methods.Count == 0)
+        {
+            return Content(Page("Cloud Health Office — SMART Login",
+                "<p>No sign-in method is configured for this environment.</p>"), "text/html");
+        }
+
+        var error = HttpContext.Request.Query["error"].FirstOrDefault() switch
+        {
+            "invalid" => "<p style='color:red'>Invalid credentials.</p>",
+            "external" => "<p style='color:red'>Sign-in did not complete. Please try again.</p>",
+            _ => "",
+        };
+        var title = DevelopmentLoginEnabled && _external is null
+            ? "Cloud Health Office — SMART Login (Development)"
+            : "Cloud Health Office — SMART Login";
+        return Content(Page(title, error + string.Join("\n", methods)), "text/html");
+    }
+
+    /// <summary>
+    /// GET /account/external-login — starts the external OIDC sign-in, which
+    /// comes back through the callback path to the (local) return URL. A
+    /// non-local return URL is replaced by "/".
+    /// </summary>
+    [HttpGet("~/account/external-login")]
+    public IActionResult ExternalLogin([FromQuery] string returnUrl = "/")
+    {
+        if (_external is null)
+            return NotFound();
+
+        if (!LocalUrl.IsLocal(returnUrl)) returnUrl = "/";
+        if (returnUrl.StartsWith("~/", StringComparison.Ordinal)) returnUrl = returnUrl[1..];
+
+        return Challenge(new AuthenticationProperties { RedirectUri = returnUrl }, ExternalLoginOptions.Scheme);
     }
 
     /// <summary>POST /account/login — Development login; sets the session cookie.</summary>
@@ -93,6 +141,8 @@ public class AccountController : ControllerBase
         [FromForm] string password,
         [FromQuery] string returnUrl = "/")
     {
+        if (!LocalUrl.IsLocal(returnUrl)) returnUrl = "/";
+
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)
             || !DevelopmentLoginEnabled || password != DevelopmentLogin.Password)
         {
@@ -107,11 +157,15 @@ public class AccountController : ControllerBase
 
         _logger.LogInformation("SMART development login for user: {Username}", SmartAuthAudit.Clean(username));
 
-        // Validate redirect target to prevent open redirect attacks
-        return LocalRedirect(IsLocalUrl(returnUrl) ? returnUrl : "/");
+        // Validated above: never an open redirect.
+        return LocalRedirect(returnUrl);
     }
 
-    /// <summary>GET /account/logout — clears the auth cookie.</summary>
+    /// <summary>
+    /// GET /account/logout — clears the local session cookie. The external
+    /// IdP's own session is left as it is: the next external sign-in may
+    /// complete without a prompt, and always creates a fresh local session.
+    /// </summary>
     [HttpGet("~/account/logout")]
     public async Task<IActionResult> Logout()
     {
@@ -177,7 +231,7 @@ public class AccountController : ControllerBase
     private async Task<SmartIdentity?> SignedInIdentityAsync()
     {
         var auth = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        return auth.Succeeded ? DevelopmentLogin.IdentityOf(auth.Principal) : null;
+        return auth.Succeeded ? SmartSession.IdentityOf(auth.Principal) : null;
     }
 
     private static string Page(string title, string body) => $"""
@@ -190,19 +244,12 @@ public class AccountController : ControllerBase
         </body>
         </html>
         """;
-
-    private static bool IsLocalUrl(string url)
-        => !string.IsNullOrEmpty(url)
-            && ((url[0] == '/' && (url.Length == 1 || (url[1] != '/' && url[1] != '\\')))
-                || (url.Length > 1 && url[0] == '~' && url[1] == '/'));
 }
 
 /// <summary>
-/// The Development-only login and the shape of a sign-in session. A
-/// production login (an external OIDC provider) must produce the same two
-/// claims from its validated ID token: <see cref="IssuerClaim"/> = the IdP's
-/// <c>iss</c>, and <see cref="ClaimTypes.NameIdentifier"/> = its immutable
-/// subject (<c>sub</c>, or <c>oid</c> for Entra).
+/// The Development-only login. Its sessions have exactly the shape of the
+/// external login's (<see cref="SmartSession"/>), under an issuer that no
+/// production binding can name.
 /// </summary>
 public static class DevelopmentLogin
 {
@@ -212,22 +259,9 @@ public static class DevelopmentLogin
     public const string Password = "Password123!";
 
     /// <summary>Session claim naming the identity's issuer.</summary>
-    public const string IssuerClaim = "cho_idp_iss";
+    public const string IssuerClaim = SmartSession.IssuerClaim;
 
-    public static ClaimsPrincipal Principal(string username)
-        => new(new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.NameIdentifier, username),
-            new Claim(ClaimTypes.Name, username),
-            new Claim(IssuerClaim, Issuer),
-        ], CookieAuthenticationDefaults.AuthenticationScheme));
+    public static ClaimsPrincipal Principal(string username) => SmartSession.Principal(Issuer, username, username);
 
-    public static SmartIdentity? IdentityOf(ClaimsPrincipal? principal)
-    {
-        var issuer = principal?.FindFirstValue(IssuerClaim);
-        var subject = principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-        return string.IsNullOrEmpty(issuer) || string.IsNullOrEmpty(subject)
-            ? null
-            : new SmartIdentity(issuer, subject);
-    }
+    public static SmartIdentity? IdentityOf(ClaimsPrincipal? principal) => SmartSession.IdentityOf(principal);
 }
