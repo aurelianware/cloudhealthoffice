@@ -157,6 +157,43 @@ public class EftDraft
 
     /// <summary>When that release claimed it.</summary>
     public DateTime? ReleaseClaimedAt { get; set; }
+
+    /// <summary>
+    /// The invoice id while this draft is active (not Settled, Returned, Failed
+    /// or Cancelled), otherwise null. Set by the repository on every write: at
+    /// most one active draft per invoice (Mongo: unique partial index on
+    /// TenantId + ActiveInvoiceKey; Cosmos: a lock item per invoice).
+    /// </summary>
+    public string? ActiveInvoiceKey { get; set; }
+
+    /// <summary>
+    /// Active: may still debit the sponsor. An invoice has at most one active
+    /// draft, so two releases never debit it twice.
+    /// </summary>
+    public static bool IsActive(EftDraftStatus status) => status is not
+        (EftDraftStatus.Settled or EftDraftStatus.Returned or EftDraftStatus.Failed or EftDraftStatus.Cancelled);
+
+    /// <summary>Statuses in which a draft holds its invoice.</summary>
+    public static readonly EftDraftStatus[] ActiveStatuses =
+        Enum.GetValues<EftDraftStatus>().Where(IsActive).ToArray();
+
+    /// <summary>Sets <see cref="ActiveInvoiceKey"/> from the status.</summary>
+    public void RefreshActiveInvoiceKey() => ActiveInvoiceKey = IsActive(Status) ? InvoiceId : null;
+}
+
+/// <summary>
+/// The invoice already has an active draft (409): an invoice is debited by at
+/// most one draft at a time, so a second draft or batch never debits it twice.
+/// </summary>
+public sealed class InvoiceDraftConflictException : Exception
+{
+    public InvoiceDraftConflictException(string invoiceId)
+        : base($"Invoice {invoiceId} already has an active EFT draft; it is not drafted again until that one is settled, returned, failed or cancelled.")
+    {
+        InvoiceId = invoiceId;
+    }
+
+    public string InvoiceId { get; }
 }
 
 /// <summary>
@@ -237,7 +274,14 @@ public enum EftDraftStatus
     /// payments:approve records what the bank says (Submitted, or back to
     /// AwaitingRetrieval / Pending).
     /// </summary>
-    DeliveryUnknown
+    DeliveryUnknown,
+
+    /// <summary>
+    /// A Stripe debit whose outcome is unknown (the call failed after it was
+    /// sent): it may have been made. It keeps the invoice until someone checks
+    /// Stripe and records the answer.
+    /// </summary>
+    PaymentUnknown
 }
 
 /// <summary>

@@ -41,6 +41,7 @@ public class EftController : ControllerBase
     [RequirePermission("payments:approve")]
     [ProducesResponseType(typeof(EftDraft), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<EftDraft>> InitiateDraft([FromBody] InitiateEftDraftRequest request)
     {
         try
@@ -51,6 +52,10 @@ public class EftController : ControllerBase
         catch (SeparationOfDutiesException ex)
         {
             return SeparationOfDuties(ex);
+        }
+        catch (InvoiceDraftConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

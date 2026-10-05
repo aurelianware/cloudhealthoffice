@@ -183,18 +183,41 @@ public class EftDraftService : IEftDraftService
             Status = EftDraftStatus.Pending,
             RoutingNumberLast4 = bankAccount.RoutingNumberLast4,
             AccountNumberLast4 = bankAccount.AccountNumberLast4,
-            InitiatedBy = request.InitiatedBy
+            InitiatedBy = request.InitiatedBy,
+            ExpectedSettlementDate = method == EftMethod.Nacha ? DateTime.UtcNow.AddBusinessDays(2) : null
         };
 
-        // For Stripe ACH, initiate immediately
+        // The draft is recorded (and takes its invoice) before any money moves:
+        // a second draft or batch for the same invoice gets 409, never a second debit.
+        draft = await _draftRepository.CreateAsync(draft);
+
+        // For NACHA, the draft stays Pending until a NACHA file is generated.
+        // For Stripe ACH, it is initiated now.
         if (method == EftMethod.StripeAch)
         {
-            var result = await _stripeAchService.CreateAchDraftAsync(
-                bankAccount.StripeCustomerId!,
-                bankAccount.StripePaymentMethodId!,
-                amount,
-                invoice.InvoiceNumber,
-                invoice.GroupNumber);
+            StripeAchDraftResult result;
+            try
+            {
+                result = await _stripeAchService.CreateAchDraftAsync(
+                    bankAccount.StripeCustomerId!,
+                    bankAccount.StripePaymentMethodId!,
+                    amount,
+                    invoice.InvoiceNumber,
+                    invoice.GroupNumber);
+            }
+            catch (Exception ex)
+            {
+                // The debit may have been made: the draft keeps the invoice until
+                // someone checks Stripe, so nothing debits it again meanwhile.
+                _logger.LogCritical(ex,
+                    "Stripe ACH draft {DraftId} for invoice {InvoiceNumber}: outcome unknown ({Error}); PaymentUnknown until checked with Stripe",
+                    draft.Id, invoice.InvoiceNumber, ex.GetType().Name);
+                draft.Status = EftDraftStatus.PaymentUnknown;
+                draft.ErrorMessage = $"The Stripe debit may have been made ({ex.GetType().Name}). Do not draft this invoice again: check Stripe, " +
+                                     "then another user with payments:approve records the answer.";
+                draft.LastUpdatedBy = ActorId;
+                return await _draftRepository.UpdateAsync(draft);
+            }
 
             if (result.Status == "failed")
             {
@@ -208,14 +231,9 @@ public class EftDraftService : IEftDraftService
                 draft.SubmittedAt = DateTime.UtcNow;
                 draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(4); // ACH typically 3-5 business days via Stripe
             }
+            draft.LastUpdatedBy = ActorId;
+            draft = await _draftRepository.UpdateAsync(draft);
         }
-        // For NACHA, draft stays Pending until a NACHA file is generated
-        else
-        {
-            draft.ExpectedSettlementDate = DateTime.UtcNow.AddBusinessDays(2);
-        }
-
-        draft = await _draftRepository.CreateAsync(draft);
 
         _logger.LogInformation(
             "Initiated {Method} EFT draft {DraftId} for invoice {InvoiceNumber}, amount ${Amount:N2}",
@@ -987,9 +1005,13 @@ public class EftDraftService : IEftDraftService
             await _stripeAchService.CancelDraftAsync(draft.StripePaymentIntentId);
         }
 
+        // Pending to Cancelled as one conditional write, freeing the invoice.
+        if (!await _draftRepository.TryCancelPendingAsync(draft.Id, ActorId))
+            throw new InvalidOperationException($"Draft {draftId} is no longer Pending; it was not cancelled.");
         draft.Status = EftDraftStatus.Cancelled;
         draft.LastUpdatedBy = ActorId;
-        return await _draftRepository.UpdateAsync(draft);
+        draft.ActiveInvoiceKey = null;
+        return draft;
     }
 
     // --- Private helpers ---

@@ -40,6 +40,8 @@ public class EftDraftServiceTests
         // Every Pending draft is free to claim unless a test says otherwise.
         _draftRepo.Setup(r => r.TryClaimForReleaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>()))
             .ReturnsAsync(true);
+        _draftRepo.Setup(r => r.TryCancelPendingAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
+        _draftRepo.Setup(r => r.UpdateAsync(It.IsAny<EftDraft>())).ReturnsAsync((EftDraft d) => d);
 
         var configData = new Dictionary<string, string?>
         {
@@ -716,6 +718,42 @@ public class EftDraftServiceTests
         });
 
         await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task InitiateDraftAsync_StripeAch_DraftTakesTheInvoiceBeforeStripe_AndAnUnknownOutcomeKeepsIt()
+    {
+        var invoice = CreateInvoice();
+        _invoiceRepo.Setup(r => r.GetByIdAsync("inv-1")).ReturnsAsync(invoice);
+        SetupSponsorBankAccountResponse(new SponsorBankAccount
+        {
+            EftEnabled = true, PreferredMethod = EftMethod.StripeAch, StripeCustomerId = "cus_123", StripePaymentMethodId = "pm_123",
+        });
+        var order = new List<string>();
+        _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
+            .Callback(() => order.Add("draft"))
+            .ReturnsAsync((EftDraft d) => d);
+        _stripeService.Setup(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Callback(() => order.Add("stripe"))
+            .ThrowsAsync(new HttpRequestException("connection reset"));
+
+        var result = await _service.InitiateDraftAsync(new InitiateEftDraftRequest { InvoiceId = "inv-1", Method = EftMethod.StripeAch });
+
+        order.Should().Equal("draft", "stripe");
+        result.Status.Should().Be(EftDraftStatus.PaymentUnknown);
+        EftDraft.IsActive(result.Status).Should().BeTrue("the debit may exist: the invoice stays taken");
+        _draftRepo.Verify(r => r.UpdateAsync(It.Is<EftDraft>(d => d.Status == EftDraftStatus.PaymentUnknown)), Times.Once);
+    }
+
+    [Fact]
+    public async Task CancelDraftAsync_IsAConditionalWrite()
+    {
+        var draft = new EftDraft { Id = "d1", Status = EftDraftStatus.Pending, Method = EftMethod.Nacha };
+        _draftRepo.Setup(r => r.GetByIdAsync("d1")).ReturnsAsync(draft);
+        _draftRepo.Setup(r => r.TryCancelPendingAsync("d1", "approver-1")).ReturnsAsync(false);
+
+        await FluentActions.Awaiting(() => _service.CancelDraftAsync("d1")).Should().ThrowAsync<InvalidOperationException>();
+        _draftRepo.Verify(r => r.UpdateAsync(It.IsAny<EftDraft>()), Times.Never);
     }
 
     #endregion
