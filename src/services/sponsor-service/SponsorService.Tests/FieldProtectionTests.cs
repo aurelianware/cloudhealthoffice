@@ -67,6 +67,102 @@ public class FieldProtectionTests
         mine.Invoking(p => p.Unprotect(stored[..^4] + "AAAA")).Should().Throw<FieldProtectionException>();
     }
 
+    private static readonly FieldProtectionContext Here = new("tenant-a", "record-1", "accountNumber");
+
+    [Fact]
+    public void WithAContext_IsBound_AndRoundTrips()
+    {
+        var protector = new DataProtectionFieldProtector(new EphemeralDataProtectionProvider(), "sponsor-service");
+
+        var stored = protector.Protect("000123456789", Here);
+
+        stored.Should().StartWith("enc:v2:").And.NotContain("000123456789");
+        protector.IsProtected(stored).Should().BeTrue();
+        FieldCiphertext.IsBound(stored).Should().BeTrue();
+        protector.Unprotect(stored, Here).Should().Be("000123456789");
+        protector.Protect(stored, Here).Should().Be(stored, "protecting twice changes nothing");
+        protector.Protect(null, Here).Should().BeNull();
+        protector.Protect("", Here).Should().Be("");
+    }
+
+    [Theory]
+    [InlineData("tenant-b", "record-1", "accountNumber")]   // another tenant
+    [InlineData("tenant-a", "record-2", "accountNumber")]   // another record
+    [InlineData("tenant-a", "record-1", "routingNumber")]   // another field
+    [InlineData("", "record-1", "accountNumber")]           // no tenant
+    public void ABoundValue_CopiedElsewhere_DoesNotDecrypt(string tenant, string record, string field)
+    {
+        var protector = new DataProtectionFieldProtector(new EphemeralDataProtectionProvider(), "sponsor-service");
+        var stored = protector.Protect("000123456789", Here);
+
+        protector.Invoking(p => p.Unprotect(stored, new FieldProtectionContext(tenant, record, field)))
+            .Should().Throw<FieldProtectionException>().Which.Message.Should().NotContain("000123456789");
+    }
+
+    [Fact]
+    public void ABoundValue_NeedsItsContext()
+    {
+        var protector = new DataProtectionFieldProtector(new EphemeralDataProtectionProvider(), "sponsor-service");
+        var stored = protector.Protect("000123456789", Here);
+
+        protector.Invoking(p => p.Unprotect(stored)).Should().Throw<FieldProtectionException>();
+    }
+
+    [Fact]
+    public void AnUnboundV1Value_StillReadsThroughTheContextOverload()
+    {
+        var protector = new DataProtectionFieldProtector(new EphemeralDataProtectionProvider(), "sponsor-service");
+        var v1 = protector.Protect("000123456789");
+
+        v1.Should().StartWith("enc:v1:");
+        protector.Unprotect(v1, Here).Should().Be("000123456789");
+    }
+
+    [Fact]
+    public void RejectPlaintext_RefusesLegacyPlaintext_ButNotEmptyOrCiphertext()
+    {
+        var keys = new EphemeralDataProtectionProvider();
+        var protector = new DataProtectionFieldProtector(keys, "sponsor-service", rejectPlaintext: true);
+
+        protector.Invoking(p => p.Unprotect("987654321012", Here)).Should().Throw<FieldProtectionException>()
+            .Which.Message.Should().Contain("RejectPlaintext").And.NotContain("987654321012");
+        protector.Invoking(p => p.Unprotect("987654321012")).Should().Throw<FieldProtectionException>();
+        protector.Unprotect(null, Here).Should().BeNull();
+        protector.Unprotect("", Here).Should().Be("");
+        protector.Unprotect(protector.Protect("000123456789", Here), Here).Should().Be("000123456789");
+        protector.Unprotect(protector.Protect("000123456789")).Should().Be("000123456789");
+
+        new UnconfiguredFieldProtector(rejectPlaintext: true).Invoking(p => p.Unprotect("987654321012", Here))
+            .Should().Throw<FieldProtectionException>();
+    }
+
+    [Fact]
+    public void RejectPlaintext_IsReadFromConfiguration_AndOffByDefault()
+    {
+        var dir = TempDir();
+        try
+        {
+            var (_, off) = Build("Development", new Dictionary<string, string?> { ["FieldProtection:KeyRing:LocalDirectory"] = dir });
+            off.GetRequiredService<IFieldProtector>().Unprotect("987654321012", Here).Should().Be("987654321012");
+
+            var (_, on) = Build("Development", new Dictionary<string, string?>
+            {
+                ["FieldProtection:KeyRing:LocalDirectory"] = dir,
+                ["FieldProtection:RejectPlaintext"] = "true",
+            });
+            on.GetRequiredService<IFieldProtector>().Invoking(p => p.Unprotect("987654321012", Here))
+                .Should().Throw<FieldProtectionException>();
+
+            var (_, unconfigured) = Build("Production", new Dictionary<string, string?> { ["FieldProtection:RejectPlaintext"] = "true" });
+            unconfigured.GetRequiredService<IFieldProtector>().Invoking(p => p.Unprotect("987654321012"))
+                .Should().Throw<FieldProtectionException>();
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
     [Fact]
     public void Development_UsesALocalKeyRing_SharedByInstancesWithTheSameDirectory()
     {

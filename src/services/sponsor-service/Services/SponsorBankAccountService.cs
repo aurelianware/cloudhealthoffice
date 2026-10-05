@@ -345,11 +345,11 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
     private async Task<bool> SaveAsync(SponsorBankAccountRecord record, long expectedRevision, CancellationToken ct)
     {
         var stored = Clone(record);
-        Encrypt(stored.Active);
+        Encrypt(stored, stored.Active);
         foreach (var change in stored.Changes)
         {
-            Encrypt(change.Proposed);
-            Encrypt(change.PreviousAccount);
+            Encrypt(stored, change.Proposed);
+            Encrypt(stored, change.PreviousAccount);
         }
 
         var saved = await _repository.SaveAsync(stored, expectedRevision, ct);
@@ -365,27 +365,35 @@ public sealed class SponsorBankAccountService : ISponsorBankAccountService
     private SponsorBankAccountRecord Decrypt(SponsorBankAccountRecord stored)
     {
         var record = Clone(stored);
-        Decrypt(record.Active);
+        Decrypt(record, record.Active);
         foreach (var change in record.Changes)
         {
-            Decrypt(change.Proposed);
-            Decrypt(change.PreviousAccount);
+            Decrypt(record, change.Proposed);
+            Decrypt(record, change.PreviousAccount);
         }
         return record;
     }
 
-    private void Encrypt(SponsorBankAccountDetails? details)
+    /// <summary>
+    /// Numbers are bound to the record (tenant and group number, the record's
+    /// key) and the field (<c>enc:v2:</c>): a value copied to another sponsor's
+    /// record, another tenant or the other field does not decrypt.
+    /// </summary>
+    internal static FieldProtectionContext Context(SponsorBankAccountRecord record, string field)
+        => new(record.TenantId, "group:" + record.GroupNumber, field);
+
+    private void Encrypt(SponsorBankAccountRecord record, SponsorBankAccountDetails? details)
     {
         if (details == null) return;
-        details.RoutingNumber = _protector.Protect(details.RoutingNumber);
-        details.AccountNumber = _protector.Protect(details.AccountNumber);
+        details.RoutingNumber = _protector.Protect(details.RoutingNumber, Context(record, "routingNumber"));
+        details.AccountNumber = _protector.Protect(details.AccountNumber, Context(record, "accountNumber"));
     }
 
-    private void Decrypt(SponsorBankAccountDetails? details)
+    private void Decrypt(SponsorBankAccountRecord record, SponsorBankAccountDetails? details)
     {
         if (details == null) return;
-        details.RoutingNumber = _protector.Unprotect(details.RoutingNumber);
-        details.AccountNumber = _protector.Unprotect(details.AccountNumber);
+        details.RoutingNumber = _protector.Unprotect(details.RoutingNumber, Context(record, "routingNumber"));
+        details.AccountNumber = _protector.Unprotect(details.AccountNumber, Context(record, "accountNumber"));
     }
 
     // ── rules ───────────────────────────────────────────────────────────

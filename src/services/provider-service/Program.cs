@@ -20,7 +20,8 @@ builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
 // One-off migration (operator CLI): dotnet provider-service.dll --encrypt-bank-accounts
-// [--tenant <id>] [--dry-run]. Re-encrypts bank numbers stored before encryption.
+// [--tenant <id>] [--dry-run]. Stores bank numbers written before encryption, or
+// before record binding (enc:v1), as enc:v2. Mongo or Cosmos, as configured.
 if (args.Contains(ProviderService.Migrations.EncryptProviderBankAccounts.Switch))
 {
     Environment.ExitCode = await ProviderService.Migrations.EncryptProviderBankAccounts.RunAsync(

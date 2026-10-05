@@ -9,7 +9,7 @@ namespace ProviderService.Repositories;
 /// Encrypts the bank numbers in <c>ProviderBankAccounts</c> at rest around the
 /// Mongo or Cosmos store: the active account, every change's proposed account
 /// (full numbers while pending) and previous account. Saves store them
-/// encrypted (<c>enc:v1:...</c>); without a key ring outside Development the
+/// encrypted and bound to the tenant and provider (<c>enc:v2:...</c>); without a key ring outside Development the
 /// save fails (<see cref="FieldProtectionException"/>, answered 503) and
 /// nothing is stored. Reads return them decrypted; a value that does not
 /// decrypt fails the read (503), since these records are what payments use.
@@ -42,11 +42,11 @@ public sealed class ProtectedProviderBankAccountRepository : IProviderBankAccoun
         var record = await _inner.GetAsync(tenantId, providerId, ct);
         if (record == null) return null;
 
-        var legacy = ProviderBankAccountProtection.Unprotect(_protector, record.Active);
+        var legacy = ProviderBankAccountProtection.Unprotect(_protector, record.Active, record.TenantId, record.ProviderId);
         foreach (var change in record.Changes)
         {
-            legacy |= ProviderBankAccountProtection.Unprotect(_protector, change.Proposed);
-            legacy |= ProviderBankAccountProtection.Unprotect(_protector, change.PreviousAccount);
+            legacy |= ProviderBankAccountProtection.Unprotect(_protector, change.Proposed, record.TenantId, record.ProviderId);
+            legacy |= ProviderBankAccountProtection.Unprotect(_protector, change.PreviousAccount, record.TenantId, record.ProviderId);
         }
 
         if (legacy)
@@ -62,11 +62,11 @@ public sealed class ProtectedProviderBankAccountRepository : IProviderBankAccoun
     public async Task<bool> SaveAsync(ProviderBankAccountRecord record, long expectedRevision, CancellationToken ct = default)
     {
         var stored = Clone(record);
-        stored.Active = ProviderBankAccountProtection.ForStorage(_protector, stored.Active);
+        stored.Active = ProviderBankAccountProtection.ForStorage(_protector, stored.Active, stored.TenantId, stored.ProviderId);
         foreach (var change in stored.Changes)
         {
-            change.Proposed = ProviderBankAccountProtection.ForStorage(_protector, change.Proposed);
-            change.PreviousAccount = ProviderBankAccountProtection.ForStorage(_protector, change.PreviousAccount);
+            change.Proposed = ProviderBankAccountProtection.ForStorage(_protector, change.Proposed, stored.TenantId, stored.ProviderId);
+            change.PreviousAccount = ProviderBankAccountProtection.ForStorage(_protector, change.PreviousAccount, stored.TenantId, stored.ProviderId);
         }
 
         var saved = await _inner.SaveAsync(stored, expectedRevision, ct);

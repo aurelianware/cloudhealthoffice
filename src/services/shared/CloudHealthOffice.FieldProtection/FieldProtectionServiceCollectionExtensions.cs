@@ -35,6 +35,11 @@ public enum FieldProtectionKeyRing
 ///   identity for both (otherwise <c>DefaultAzureCredential</c>'s chain).</item>
 ///   <item><c>KeyRing:LocalDirectory</c>: Development/Testing only; where the
 ///   local key ring lives.</item>
+///   <item><c>RejectPlaintext</c>: when true, reading a protected field that
+///   still holds a value stored before encryption fails
+///   (<see cref="FieldProtectionException"/>) instead of returning it. Turn it
+///   on once the service's <c>--encrypt-bank-accounts</c> command reports
+///   nothing left in plaintext. Default false.</item>
 /// </list>
 /// </summary>
 public static class FieldProtectionServiceCollectionExtensions
@@ -65,6 +70,7 @@ public static class FieldProtectionServiceCollectionExtensions
         var blobUri = section["KeyRing:BlobUri"];
         var keyId = section["KeyRing:KeyVaultKeyId"];
         var localDirectory = section["KeyRing:LocalDirectory"];
+        var rejectPlaintext = section.GetValue("RejectPlaintext", false);
 
         var hasBlob = !string.IsNullOrWhiteSpace(blobUri);
         var hasKey = !string.IsNullOrWhiteSpace(keyId);
@@ -99,12 +105,12 @@ public static class FieldProtectionServiceCollectionExtensions
         }
         else
         {
-            services.TryAddSingleton<IFieldProtector, UnconfiguredFieldProtector>();
+            services.TryAddSingleton<IFieldProtector>(new UnconfiguredFieldProtector(rejectPlaintext));
             return FieldProtectionKeyRing.None;
         }
 
         services.TryAddSingleton<IFieldProtector>(sp =>
-            new DataProtectionFieldProtector(sp.GetRequiredService<IDataProtectionProvider>(), appName));
+            new DataProtectionFieldProtector(sp.GetRequiredService<IDataProtectionProvider>(), appName, rejectPlaintext));
         return ring;
     }
 

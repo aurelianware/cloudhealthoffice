@@ -103,7 +103,7 @@ public class ProviderBankAccountEncryptionAtRestTests : IAsyncLifetime
         foreach (var field in new[] { "RoutingNumber", "AccountNumber", "TaxId" })
         {
             var value = account[field].AsString;
-            value.Should().StartWith("enc:v1:", $"{field} is stored encrypted");
+            value.Should().StartWith("enc:v2:", $"{field} is stored encrypted");
         }
         var raw = account.ToJson();
         foreach (var plaintext in plaintexts) raw.Should().NotContain(plaintext);
@@ -277,7 +277,7 @@ public class ProviderBankAccountEncryptionAtRestTests : IAsyncLifetime
         var read = await Providers(otherKeys).GetVersionAsync("p-lost", "p-lost-v1");
 
         read.Should().NotBeNull();
-        read!.BankAccount!.AccountNumber.Should().StartWith("enc:v1:");
+        read!.BankAccount!.AccountNumber.Should().StartWith("enc:v2:");
         ProviderBankAccountProtection.HasCiphertext(read.BankAccount).Should().BeTrue();
         BankAccountMasking.Mask(read.BankAccount)!.AccountNumberLast4.Should().Be("3333", "last 4 stored at write time");
     }
@@ -394,6 +394,224 @@ public class ProviderBankAccountEncryptionAtRestTests : IAsyncLifetime
         (await RawAsync(RawRecords, key))["Active"]["AccountNumber"].AsString.Should().Be(Account, "left for the next run");
         var again = await EncryptProviderBankAccounts.MigrateAsync(_database, _protector, new[] { Tenant }, "ProviderBankAccounts", false, new StringWriter());
         again.RecordsEncrypted.Should().Be(1);
+        again.Complete.Should().BeTrue();
+    }
+
+    // ── binding to the record (enc:v2) ─────────────────────────────────
+
+    [Fact]
+    public async Task A_record_value_copied_to_another_providers_record_does_not_decrypt()
+    {
+        var changes = Changes(Records());
+        var first = await changes.ProposeAsync(Sample("p-src"), BankAccount(), "proposer", "test");
+        await changes.ApproveAsync(Sample("p-src"), first.Id, new BankAccountActor("approver", false), null);
+        var source = await RawAsync(RawRecords, ProviderBankAccountRecord.KeyFor(Tenant, "p-src"));
+        var copy = source.DeepClone().AsBsonDocument;
+        copy["_id"] = ProviderBankAccountRecord.KeyFor(Tenant, "p-dst");
+        copy["ProviderId"] = "p-dst";
+        await RawRecords.InsertOneAsync(copy);
+
+        var read = () => Records().GetAsync(Tenant, "p-dst");
+
+        (await read.Should().ThrowAsync<FieldProtectionException>()).Which.Message.Should().NotContain(Account);
+        (await Records().GetAsync(Tenant, "p-src"))!.Active!.AccountNumber.Should().Be(Account);
+    }
+
+    [Fact]
+    public async Task A_row_value_copied_to_another_provider_stays_encrypted_on_read()
+    {
+        await Providers().CreateDraftAsync(Sample("p-row-src", BankAccount()));
+        await Providers().CreateDraftAsync(Sample("p-row-dst"));
+        var source = await RawAsync(RawProviders, "p-row-src");
+        await RawProviders.UpdateOneAsync(Builders<BsonDocument>.Filter.Eq("_id", "p-row-dst"),
+            Builders<BsonDocument>.Update.Set("BankAccount", source["BankAccount"]));
+
+        var read = await Providers().GetVersionAsync("p-row-dst", "p-row-dst-v1");
+
+        ProviderBankAccountProtection.HasCiphertext(read!.BankAccount).Should().BeTrue();
+        read.BankAccount!.AccountNumber.Should().NotBe(Account);
+    }
+
+    [Fact]
+    public async Task RejectPlaintext_refuses_a_legacy_plaintext_record()
+    {
+        await RawRecords.InsertOneAsync(new BsonDocument
+        {
+            ["_id"] = ProviderBankAccountRecord.KeyFor(Tenant, "p-plain"),
+            ["TenantId"] = Tenant,
+            ["ProviderId"] = "p-plain",
+            ["Active"] = new BsonDocument { ["RoutingNumber"] = Routing, ["AccountNumber"] = Account, ["TaxId"] = TaxId },
+            ["Changes"] = new BsonArray(),
+            ["Revision"] = 1L,
+        });
+        var rejecting = new DataProtectionFieldProtector(_keys, ProviderBankAccountProtection.Purpose, rejectPlaintext: true);
+
+        var read = () => Records(rejecting).GetAsync(Tenant, "p-plain");
+
+        (await read.Should().ThrowAsync<FieldProtectionException>()).Which.Message.Should().NotContain(Account);
+    }
+
+    /// <summary>enc:v1 values (encrypted before binding) as an earlier build wrote them.</summary>
+    private async Task SeedUnboundV1Async()
+    {
+        var v1 = BankAccount();
+        v1.RoutingNumber = _protector.Protect(Routing);
+        v1.AccountNumber = _protector.Protect(Account);
+        v1.TaxId = _protector.Protect(TaxId);
+        v1.AccountNumberLast4 = "3333";
+        await _database.GetCollection<Provider>("Providers").InsertOneAsync(Sample("v1-row", v1));
+        await RawRecords.InsertOneAsync(new BsonDocument
+        {
+            ["_id"] = ProviderBankAccountRecord.KeyFor(Tenant, "v1-row"),
+            ["TenantId"] = Tenant,
+            ["ProviderId"] = "v1-row",
+            ["Active"] = new BsonDocument
+            {
+                ["RoutingNumber"] = v1.RoutingNumber, ["AccountNumber"] = v1.AccountNumber, ["TaxId"] = v1.TaxId, ["AccountNumberLast4"] = "3333",
+            },
+            ["Changes"] = new BsonArray(),
+            ["Revision"] = 2L,
+        });
+    }
+
+    [Fact]
+    public async Task Unbound_v1_values_still_read_and_the_migration_binds_them()
+    {
+        await SeedUnboundV1Async();
+        (await Records().GetAsync(Tenant, "v1-row"))!.Active!.AccountNumber.Should().Be(Account);
+        (await Providers().GetVersionAsync("v1-row", "v1-row-v1"))!.BankAccount!.AccountNumber.Should().Be(Account);
+
+        var counts = await EncryptProviderBankAccounts.MigrateAsync(_database, _protector, new[] { Tenant }, "ProviderBankAccounts", false, new StringWriter());
+
+        counts.ProvidersEncrypted.Should().Be(1);
+        counts.RecordsEncrypted.Should().Be(1);
+        AssertEncrypted((await RawAsync(RawProviders, "v1-row"))["BankAccount"].AsBsonDocument, Routing, Account, TaxId);
+        AssertEncrypted((await RawAsync(RawRecords, ProviderBankAccountRecord.KeyFor(Tenant, "v1-row")))["Active"].AsBsonDocument, Routing, Account, TaxId);
+        (await Records().GetAsync(Tenant, "v1-row"))!.Active!.AccountNumber.Should().Be(Account);
+        (await Providers().GetVersionAsync("v1-row", "v1-row-v1"))!.BankAccount!.TaxId.Should().Be(TaxId);
+    }
+
+    // ── store-neutral (Cosmos) migration ───────────────────────────────
+
+    /// <summary>Provider rows as a Cosmos container holds them: typed documents with an ETag.</summary>
+    private sealed class InMemoryRowStore : IProviderRowStore
+    {
+        private static readonly System.Text.Json.JsonSerializerOptions Json = new(System.Text.Json.JsonSerializerDefaults.Web);
+        public Dictionary<string, (string Json, int Version)> Rows { get; } = new();
+        public Action<string>? BeforeReplace { get; set; }
+
+        public void Put(Provider row)
+            => Rows[row.Id] = (System.Text.Json.JsonSerializer.Serialize(row, Json), Rows.TryGetValue(row.Id, out var r) ? r.Version + 1 : 1);
+
+        public Provider Get(string id) => System.Text.Json.JsonSerializer.Deserialize<Provider>(Rows[id].Json, Json)!;
+
+        public async IAsyncEnumerable<StoredProviderRow> ListRowsWithBankAccountAsync(string? tenant,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            foreach (var id in Rows.Keys.ToList())
+            {
+                var row = Get(id);
+                if (row.BankAccount == null || (tenant != null && row.TenantId != tenant)) continue;
+                yield return new StoredProviderRow(row, Rows[id].Version.ToString());
+                await Task.Yield();
+            }
+        }
+
+        public Task<bool> ReplaceIfUnchangedAsync(StoredProviderRow row, CancellationToken ct)
+        {
+            BeforeReplace?.Invoke(row.Row.Id);
+            if (Rows[row.Row.Id].Version.ToString() != row.ETag) return Task.FromResult(false);
+            Put(row.Row);
+            return Task.FromResult(true);
+        }
+    }
+
+    private sealed class InMemoryRecordStore : IBankAccountRecordStore
+    {
+        public CloudHealthOffice.ProviderService.Tests.Fakes.InMemoryProviderBankAccountRepository Repository { get; } = new();
+
+        public async IAsyncEnumerable<ProviderBankAccountRecord> ListAsync(string? tenant,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            foreach (var record in Repository.Records.Where(r => tenant == null || r.TenantId == tenant))
+            {
+                yield return record;
+                await Task.Yield();
+            }
+        }
+
+        public Task<bool> SaveAsync(ProviderBankAccountRecord record, long expectedRevision, CancellationToken ct)
+            => Repository.SaveAsync(record, expectedRevision, ct);
+    }
+
+    [Fact]
+    public async Task Store_migration_binds_plaintext_and_v1_values_and_is_idempotent()
+    {
+        var rows = new InMemoryRowStore();
+        var v1Account = BankAccount();
+        v1Account.AccountNumber = _protector.Protect(Account);
+        rows.Put(Sample("c-plain", BankAccount()));
+        rows.Put(Sample("c-v1", v1Account, OtherTenant));
+        rows.Put(Sample("c-none"));
+        var records = new InMemoryRecordStore();
+        (await records.Repository.SaveAsync(new ProviderBankAccountRecord
+        {
+            TenantId = Tenant, ProviderId = "c-plain", Active = BankAccount(),
+            Changes = { new PendingBankAccountChange { Id = "c-1", Proposed = BankAccount(NewRouting, NewAccount) } },
+        }, 0)).Should().BeTrue();
+        var output = new StringWriter();
+
+        var first = await EncryptProviderBankAccounts.MigrateStoresAsync(rows, records, _protector, null, dryRun: false, output);
+
+        first.ProvidersEncrypted.Should().Be(2);
+        first.RecordsEncrypted.Should().Be(1);
+        first.Complete.Should().BeTrue();
+        output.ToString().Should().Contain($"tenant {Tenant}:").And.Contain($"tenant {OtherTenant}:").And.NotContain(Account);
+        foreach (var id in new[] { "c-plain", "c-v1" })
+        {
+            var stored = rows.Get(id).BankAccount!;
+            new[] { stored.RoutingNumber, stored.AccountNumber, stored.TaxId }.Should().OnlyContain(v => v!.StartsWith("enc:v2:"));
+        }
+        var record = records.Repository.Records.Single();
+        record.Active!.AccountNumber.Should().StartWith("enc:v2:");
+        record.Changes.Single().Proposed!.AccountNumber.Should().StartWith("enc:v2:");
+        record.Active.AccountNumberLast4.Should().Be("3333");
+
+        // The service reads what the migration wrote (same bindings).
+        var readBack = await new ProtectedProviderBankAccountRepository(records.Repository, _protector,
+            NullLogger<ProtectedProviderBankAccountRepository>.Instance).GetAsync(Tenant, "c-plain");
+        readBack!.Active!.AccountNumber.Should().Be(Account);
+        readBack.Changes.Single().Proposed!.AccountNumber.Should().Be(NewAccount);
+        var row = rows.Get("c-v1");
+        ProviderBankAccountProtection.Unprotect(_protector, row.BankAccount, row.TenantId, ProviderBankAccountProtection.RecordIdOf(row));
+        row.BankAccount!.AccountNumber.Should().Be(Account);
+
+        var second = await EncryptProviderBankAccounts.MigrateStoresAsync(rows, records, _protector, null, dryRun: false, new StringWriter());
+        second.ProvidersEncrypted.Should().Be(0);
+        second.RecordsEncrypted.Should().Be(0);
+        second.ProvidersAlreadyEncrypted.Should().Be(2);
+        second.RecordsAlreadyEncrypted.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Store_migration_counts_a_row_changed_meanwhile_as_a_conflict_and_dry_run_writes_nothing()
+    {
+        var rows = new InMemoryRowStore();
+        rows.Put(Sample("c-race", BankAccount()));
+        var records = new InMemoryRecordStore();
+
+        var dry = await EncryptProviderBankAccounts.MigrateStoresAsync(rows, records, _protector, new[] { Tenant }, dryRun: true, new StringWriter());
+        dry.ProvidersEncrypted.Should().Be(1);
+        rows.Get("c-race").BankAccount!.AccountNumber.Should().Be(Account);
+
+        rows.BeforeReplace = id => rows.Put(rows.Get(id)); // the service wrote the row in between
+        var raced = await EncryptProviderBankAccounts.MigrateStoresAsync(rows, records, _protector, new[] { Tenant }, dryRun: false, new StringWriter());
+        raced.ProviderConflicts.Should().Be(1);
+        raced.Complete.Should().BeFalse();
+
+        rows.BeforeReplace = null;
+        var again = await EncryptProviderBankAccounts.MigrateStoresAsync(rows, records, _protector, new[] { Tenant }, dryRun: false, new StringWriter());
+        again.ProvidersEncrypted.Should().Be(1);
         again.Complete.Should().BeTrue();
     }
 }

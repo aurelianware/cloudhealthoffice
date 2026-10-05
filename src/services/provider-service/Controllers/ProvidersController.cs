@@ -962,7 +962,8 @@ public class ProvidersController : ControllerBase
         if (account == null) return;
         var protector = HttpContext?.RequestServices?.GetService(typeof(CloudHealthOffice.FieldProtection.IFieldProtector))
             as CloudHealthOffice.FieldProtection.IFieldProtector;
-        if (protector != null) ProviderBankAccountProtection.ForStorage(protector, account);
+        // A probe: the result is discarded, so any binding will do.
+        if (protector != null) ProviderBankAccountProtection.ForStorage(protector, account, TenantId, "encryption-probe");
     }
 
     /// <summary>A new provider's first account is proposed, never applied.</summary>

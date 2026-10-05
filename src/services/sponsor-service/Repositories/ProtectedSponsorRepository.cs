@@ -5,17 +5,27 @@ namespace SponsorService.Repositories;
 
 /// <summary>
 /// Encrypts the sponsor's <see cref="BillingInfo.BillingAccountNumber"/> at
-/// rest around the Mongo or Cosmos repository. Writes store it encrypted
-/// (<c>enc:v1:...</c>); reads return it decrypted (responses mask it, see
-/// MaskedBillingInfoJsonConverter). A value stored before encryption existed
-/// (legacy plaintext) is read as is, logged without the number, and stored
-/// encrypted by the next create or full update of that sponsor. The
+/// rest around the Mongo or Cosmos repository. Writes store it encrypted and
+/// bound to the sponsor (<c>enc:v2:...</c>: tenant, sponsor id and field, so
+/// it does not decrypt on another sponsor); reads return it decrypted
+/// (responses mask it, see MaskedBillingInfoJsonConverter). <c>enc:v1:</c>
+/// values (written before binding) still decrypt. A value stored before
+/// encryption existed (legacy plaintext) is read as is (refused when
+/// <c>FieldProtection:RejectPlaintext</c> is on), logged without the number,
+/// and stored encrypted by the next create or full update of that sponsor. The
 /// status-only write touches no billing field and leaves the stored value as
 /// it is.
 /// </summary>
 public sealed class ProtectedSponsorRepository : ISponsorRepository
 {
     public static readonly EventId LegacyPlaintextEvent = new(4817, "SponsorBillingAccountNumberPlaintext");
+
+    /// <summary>The binding field name of <see cref="BillingInfo.BillingAccountNumber"/>.</summary>
+    public const string BillingAccountField = "billingAccountNumber";
+
+    /// <summary>The binding of a sponsor's billing account number: tenant and sponsor document id.</summary>
+    public static FieldProtectionContext Context(Sponsor sponsor)
+        => new(sponsor.TenantId, sponsor.Id, BillingAccountField);
 
     private readonly ISponsorRepository _inner;
     private readonly IFieldProtector _protector;
@@ -65,7 +75,7 @@ public sealed class ProtectedSponsorRepository : ISponsorRepository
     {
         var billing = sponsor.BillingInfo;
         var plaintext = billing?.BillingAccountNumber;
-        if (billing != null) billing.BillingAccountNumber = _protector.Protect(plaintext);
+        if (billing != null) billing.BillingAccountNumber = _protector.Protect(plaintext, Context(sponsor));
         try
         {
             var written = await write(sponsor);
@@ -91,10 +101,10 @@ public sealed class ProtectedSponsorRepository : ISponsorRepository
                     "it is stored encrypted by the next create or update of this sponsor",
                     Sanitize(sponsor!.GroupNumber), Sanitize(sponsor.TenantId));
             }
-            return sponsor;
         }
 
-        billing.BillingAccountNumber = _protector.Unprotect(billing.BillingAccountNumber);
+        // Plaintext comes back as is, or is refused with FieldProtection:RejectPlaintext.
+        billing.BillingAccountNumber = _protector.Unprotect(billing.BillingAccountNumber, Context(sponsor!));
         return sponsor;
     }
 

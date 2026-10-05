@@ -735,10 +735,9 @@ public class ProviderBankAccount : IValidatableObject
     /// </summary>
     IEnumerable<ValidationResult> IValidatableObject.Validate(ValidationContext validationContext)
     {
-        const string prefix = CloudHealthOffice.FieldProtection.DataProtectionFieldProtector.Prefix;
         foreach (var (name, value) in new[] { (nameof(RoutingNumber), RoutingNumber), (nameof(AccountNumber), AccountNumber), (nameof(TaxId), TaxId) })
         {
-            if (value != null && value.StartsWith(prefix, StringComparison.Ordinal))
+            if (CloudHealthOffice.FieldProtection.FieldCiphertext.IsCiphertext(value))
                 yield return new ValidationResult($"{name} is not a valid value.", new[] { name });
         }
     }

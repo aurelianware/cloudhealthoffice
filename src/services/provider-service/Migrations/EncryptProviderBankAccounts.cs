@@ -7,8 +7,10 @@ using ProviderService.Security;
 namespace ProviderService.Migrations;
 
 /// <summary>
-/// One-off operator command: encrypts the bank numbers that were stored before
-/// encryption at rest existed, per tenant, in
+/// Operator command: stores every bank number encrypted and bound to its
+/// record (<c>enc:v2:</c>, tenant + provider id + field): values stored before
+/// encryption existed (plaintext) and values encrypted before binding existed
+/// (<c>enc:v1:</c>), per tenant, in
 /// <list type="bullet">
 ///   <item>provider documents and version rows (<c>Providers</c>,
 ///   <c>BankAccount.RoutingNumber / AccountNumber / TaxId</c>);</item>
@@ -17,8 +19,8 @@ namespace ProviderService.Migrations;
 /// </list>
 ///
 /// <para>
-/// Usage (with provider-service's own configuration: <c>MongoDb</c> and
-/// <c>FieldProtection</c>, the same key ring the service uses):
+/// Usage (with provider-service's own configuration: <c>MongoDb</c> or
+/// <c>CosmosDb</c>, and <c>FieldProtection</c>, the same key ring the service uses):
 /// <c>dotnet provider-service.dll --encrypt-bank-accounts [--tenant &lt;id&gt;]... [--dry-run]</c>
 /// or <c>dotnet run --project src/services/provider-service -- --encrypt-bank-accounts</c>.
 /// Without <c>--tenant</c> every tenant found in the two collections is processed
@@ -26,9 +28,10 @@ namespace ProviderService.Migrations;
 /// </para>
 ///
 /// <para>
-/// Idempotent and resumable: a value already encrypted is left alone, and each
-/// document is updated on its own with a compare-and-set filter (the values it
-/// read and, for bank-account records, the record revision). A document changed
+/// Idempotent and resumable: a value already bound is left alone, and each
+/// document is updated on its own with a compare-and-set filter (Mongo: the
+/// values it read and, for bank-account records, the record revision; Cosmos:
+/// the document's ETag, and the record revision). A document changed
 /// by the running service in between is counted as a conflict and left to the
 /// next run (the service itself stores it encrypted on that write). Stop it at
 /// any point and run it again. Exit code 0 when nothing is left in plaintext, 2
@@ -37,11 +40,12 @@ namespace ProviderService.Migrations;
 /// </para>
 ///
 /// <para>
-/// Mongo only (what the deployments use). A Cosmos deployment has no command:
-/// its values are re-encrypted on their next write.
+/// Once it reports nothing left (exit code 0) for every tenant, set
+/// <c>FieldProtection:RejectPlaintext=true</c> so a plaintext value that
+/// appears later is refused instead of used.
 /// </para>
 /// </summary>
-public static class EncryptProviderBankAccounts
+public static partial class EncryptProviderBankAccounts
 {
     public const string Switch = "--encrypt-bank-accounts";
     public const string ProvidersCollection = "Providers";
@@ -104,16 +108,30 @@ public static class EncryptProviderBankAccounts
         }
         Console.WriteLine($"Key ring: {ring}");
 
+        var tenants = ArgValues(args, "--tenant");
+        var dryRun = args.Contains("--dry-run");
+
         var connectionString = configuration["MongoDb:ConnectionString"];
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            Console.Error.WriteLine("ABORT: MongoDb:ConnectionString is not configured. This command covers Mongo deployments; " +
-                                    "a Cosmos deployment re-encrypts each value on its next write.");
-            return 1;
+            // The service uses Cosmos when Mongo is not configured (Program.cs).
+            if (string.IsNullOrWhiteSpace(configuration["CosmosDb:Endpoint"]) || string.IsNullOrWhiteSpace(configuration["CosmosDb:Key"]))
+            {
+                Console.Error.WriteLine("ABORT: neither MongoDb:ConnectionString nor CosmosDb:Endpoint/Key is configured.");
+                return 1;
+            }
+            await using var cosmosServices = services.BuildServiceProvider();
+            using var cosmos = new Microsoft.Azure.Cosmos.CosmosClient(configuration["CosmosDb:Endpoint"], configuration["CosmosDb:Key"]);
+            var cosmosTotal = await MigrateStoresAsync(
+                new CosmosProviderRowStore(cosmos, configuration),
+                new CosmosBankAccountRecordStore(cosmos, configuration),
+                cosmosServices.GetRequiredService<IFieldProtector>(),
+                tenants.Count == 0 ? null : tenants, dryRun, Console.Out);
+            Console.WriteLine($"TOTAL (Cosmos){(dryRun ? " (dry run, nothing written)" : string.Empty)}: {cosmosTotal}");
+            if (!cosmosTotal.Complete)
+                Console.WriteLine("Some documents were changed while this ran or failed: run the command again.");
+            return cosmosTotal.Complete ? 0 : 2;
         }
-
-        var tenants = ArgValues(args, "--tenant");
-        var dryRun = args.Contains("--dry-run");
         var baseName = configuration["MongoDb:DatabaseName"] ?? "CloudHealthOffice";
         var scoped = configuration.GetValue<bool>("MongoDb:UseTenantScoping", false);
         if (scoped && tenants.Count == 0)
@@ -190,7 +208,7 @@ public static class EncryptProviderBankAccounts
         var f = Builders<BsonDocument>.Filter;
         var filter = f.And(TenantFilter(tenant), f.Type("BankAccount", BsonType.Document));
         using var cursor = await providers.Find(filter)
-            .Project(Builders<BsonDocument>.Projection.Include("_id").Include("BankAccount"))
+            .Project(Builders<BsonDocument>.Projection.Include("_id").Include("ProviderId").Include("BankAccount"))
             .Sort(Builders<BsonDocument>.Sort.Ascending("_id"))
             .ToCursorAsync(ct);
 
@@ -201,7 +219,11 @@ public static class EncryptProviderBankAccounts
                 counts.ProvidersScanned++;
                 try
                 {
-                    var plan = Plan(protector, doc["BankAccount"].AsBsonDocument, "BankAccount");
+                    // As ProtectedProviderRepository binds a row: its chain key, or its id on a legacy row.
+                    var recordId = doc.TryGetValue("ProviderId", out var chain) && chain.IsString && chain.AsString.Length > 0
+                        ? chain.AsString
+                        : doc["_id"].ToString()!;
+                    var plan = Plan(protector, doc["BankAccount"].AsBsonDocument, "BankAccount", tenant, recordId);
                     if (plan.IsEmpty)
                     {
                         counts.ProvidersAlreadyEncrypted++;
@@ -220,7 +242,7 @@ public static class EncryptProviderBankAccounts
                     if (result.ModifiedCount == 1) counts.ProvidersEncrypted++;
                     else counts.ProviderConflicts++;
                 }
-                catch (Exception ex) when (ex is FieldProtectionException or MongoException or InvalidCastException)
+                catch (Exception ex) when (ex is FieldProtectionException or MongoException or InvalidCastException or ArgumentException)
                 {
                     counts.Failures++;
                     await Console.Error.WriteLineAsync(
@@ -249,8 +271,9 @@ public static class EncryptProviderBankAccounts
                 try
                 {
                     var plan = new UpdatePlan();
+                    var providerId = doc.GetValue("ProviderId", string.Empty).AsString;
                     if (doc.TryGetValue("Active", out var active) && active.IsBsonDocument)
-                        plan.Merge(Plan(protector, active.AsBsonDocument, "Active"));
+                        plan.Merge(Plan(protector, active.AsBsonDocument, "Active", tenant, providerId));
                     if (doc.TryGetValue("Changes", out var changes) && changes.IsBsonArray)
                     {
                         var i = 0;
@@ -261,7 +284,7 @@ public static class EncryptProviderBankAccounts
                                 foreach (var part in new[] { "Proposed", "PreviousAccount" })
                                 {
                                     if (change.AsBsonDocument.TryGetValue(part, out var account) && account.IsBsonDocument)
-                                        plan.Merge(Plan(protector, account.AsBsonDocument, $"Changes.{i}.{part}"));
+                                        plan.Merge(Plan(protector, account.AsBsonDocument, $"Changes.{i}.{part}", tenant, providerId));
                                 }
                             }
                             i++;
@@ -289,7 +312,7 @@ public static class EncryptProviderBankAccounts
                     if (result.ModifiedCount == 1) counts.RecordsEncrypted++;
                     else counts.RecordConflicts++;
                 }
-                catch (Exception ex) when (ex is FieldProtectionException or MongoException or InvalidCastException)
+                catch (Exception ex) when (ex is FieldProtectionException or MongoException or InvalidCastException or ArgumentException)
                 {
                     counts.Failures++;
                     await Console.Error.WriteLineAsync(
@@ -316,25 +339,56 @@ public static class EncryptProviderBankAccounts
         }
     }
 
-    /// <summary>What to change in one stored account: each plaintext secret encrypted, last 4 filled in when missing.</summary>
-    private static UpdatePlan Plan(IFieldProtector protector, BsonDocument account, string path)
+    /// <summary>
+    /// What to change in one stored account: each secret not yet bound to its
+    /// record (plaintext or <c>enc:v1:</c>) stored as <c>enc:v2:</c>, last 4
+    /// filled in when missing.
+    /// </summary>
+    private static UpdatePlan Plan(IFieldProtector protector, BsonDocument account, string path, string tenant, string recordId)
     {
         var plan = new UpdatePlan();
         foreach (var field in SecretFields)
         {
             if (!account.TryGetValue(field, out var value) || !value.IsString) continue;
-            var plaintext = value.AsString;
-            if (string.IsNullOrEmpty(plaintext) || protector.IsProtected(plaintext)) continue;
+            if (Rebind(protector, value.AsString, tenant, recordId, field) is not { } rebound) continue;
 
             plan.Expected.Add(new FieldValue($"{path}.{field}", value));
-            plan.Sets.Add(new FieldValue($"{path}.{field}", protector.Protect(plaintext)!));
+            plan.Sets.Add(new FieldValue($"{path}.{field}", rebound.Stored));
 
             var last4Field = field + "Last4";
             if (field != "TaxId" && (!account.TryGetValue(last4Field, out var last4) || last4.IsBsonNull))
-                plan.Sets.Add(new FieldValue($"{path}.{last4Field}", plaintext.Length >= 4 ? plaintext[^4..] : plaintext));
+                plan.Sets.Add(new FieldValue($"{path}.{last4Field}", Last4(rebound.Plaintext)));
         }
         return plan;
     }
+
+    /// <summary>
+    /// The stored form of one secret bound to its record, with its plaintext;
+    /// null when there is nothing to do (empty, or already <c>enc:v2:</c>).
+    /// Throws <see cref="FieldProtectionException"/> when an <c>enc:v1:</c>
+    /// value does not decrypt.
+    /// </summary>
+    internal static (string Stored, string Plaintext)? Rebind(
+        IFieldProtector protector, string? value, string tenant, string recordId, string field)
+    {
+        if (string.IsNullOrEmpty(value) || FieldCiphertext.IsBound(value)) return null;
+        var context = ProviderBankAccountProtection.Context(tenant, recordId, FieldName(field));
+        // enc:v1: is decrypted first; plaintext is taken as stored (never through
+        // Unprotect, which FieldProtection:RejectPlaintext would refuse).
+        var plaintext = FieldCiphertext.IsCiphertext(value) ? protector.Unprotect(value, context)! : value;
+        return (protector.Protect(plaintext, context)!, plaintext);
+    }
+
+    /// <summary>The binding name of a stored field (as ProviderBankAccountProtection binds it).</summary>
+    private static string FieldName(string storedField) => storedField switch
+    {
+        "RoutingNumber" => ProviderBankAccountProtection.RoutingField,
+        "AccountNumber" => ProviderBankAccountProtection.AccountField,
+        "TaxId" => ProviderBankAccountProtection.TaxIdField,
+        _ => throw new ArgumentOutOfRangeException(nameof(storedField)),
+    };
+
+    private static string Last4(string value) => value.Length >= 4 ? value[^4..] : value;
 
     private static FilterDefinition<BsonDocument> TenantFilter(string tenant)
     {

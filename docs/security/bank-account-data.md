@@ -244,9 +244,22 @@ mechanism. A service opts in with a project reference and
 `AddChoFieldProtection(configuration, environment, "<service>")`.
 
 - It is built on ASP.NET Core Data Protection (authenticated encryption, with
-  key rotation handled by Data Protection). A protected value is stored as
-  `enc:v1:<ciphertext>`. The purpose includes the service name, so one
-  service's values cannot be decrypted by another.
+  key rotation handled by Data Protection). The purpose includes the service
+  name, so one service's values cannot be decrypted by another.
+- **Bound to the record:** a bank number on a record is stored as
+  `enc:v2:<ciphertext>`, whose purpose also names the tenant, the record
+  (provider id; sponsor id for `BillingAccountNumber`; tenant + group number
+  for `SponsorBankAccounts`) and the field. A ciphertext copied to another
+  record, tenant or field does not decrypt (the read fails, 503 where the
+  numbers are needed). Values without a record (held NACHA files) are
+  `enc:v1:<ciphertext>`, and record values written before binding existed
+  (`enc:v1:`) still decrypt; they are stored as `enc:v2:` by the record's
+  next write or by the migration below.
+- **`FieldProtection:RejectPlaintext`** (default `false`): when `true`,
+  reading a protected field that still holds plaintext fails
+  (`FieldProtectionException`, 503) instead of returning it. Turn it on per
+  service once nothing is left in plaintext (provider-service: the migration
+  below exits 0 for every tenant).
 - **Key ring:** an Azure Blob, wrapped by a Key Vault key
   (`PersistKeysToAzureBlobStorage` + `ProtectKeysWithAzureKeyVault`), so all
   pods share the same keys. The configuration keys are:
@@ -280,12 +293,13 @@ mechanism. A service opts in with a project reference and
   last 4 are filled in at write time, so masked reads need no decryption.
   Writes of a bank number without a key ring answer 503 before anything is
   written (a provider create or update with a bank account included). A
-  request value in the stored `enc:v1:` form is refused (400). A
+  request value in a stored `enc:` form is refused (400). A
   `ProviderBankAccounts` value that does not decrypt fails that read (503).
   A provider-row copy that does not decrypt does not fail provider reads
   (claims, rosters, FHIR never show the numbers); it stays encrypted on the
   object, is logged (event 4708) and the full read refuses it (503).
-- **Legacy plaintext:** a value without the `enc:v1:` prefix is read as is.
+- **Legacy plaintext:** a value without an `enc:` prefix is read as is
+  (unless `FieldProtection:RejectPlaintext`).
   For a sponsor's billing account number, each read logs event 4817 (sponsor
   and tenant, never the number). It is stored encrypted on the next create or
   full update of that sponsor. The status-only write leaves it unchanged.
@@ -297,12 +311,13 @@ mechanism. A service opts in with a project reference and
 
 ### Re-encrypting existing provider data
 
-`provider-service --encrypt-bank-accounts` encrypts every plaintext routing,
-account and tax number in `Providers` (all version rows) and
-`ProviderBankAccounts` (active, pending and history), tenant by tenant. Run
-it once after deploying, with provider-service's own configuration (the same
-`MongoDb` and `FieldProtection` settings and identity as the pods, so it
-writes with the shared key ring):
+`provider-service --encrypt-bank-accounts` stores every routing, account and
+tax number in `Providers` (all version rows) and `ProviderBankAccounts`
+(active, pending and history) as `enc:v2:` (bound to its record): plaintext
+and `enc:v1:` values alike, tenant by tenant. Run it after deploying, with
+provider-service's own configuration (the same `MongoDb` or `CosmosDb` and
+`FieldProtection` settings and identity as the pods, so it writes with the
+shared key ring):
 
 ```
 dotnet provider-service.dll --encrypt-bank-accounts [--tenant <id>]... [--dry-run]
@@ -317,12 +332,20 @@ dotnet run --project src/services/provider-service -- --encrypt-bank-accounts --
   tenant (one database per tenant).
 - It prints, per tenant, rows and records scanned, encrypted, already
   encrypted and conflicts. It never prints a number.
-- Idempotent and resumable: encrypted values are left alone, and each
-  document is updated on its own with a compare-and-set on the values it read
-  (and, for records, the revision, which it does not bump). A document the
+- Idempotent and resumable: bound values are left alone, and each document
+  is updated on its own with a compare-and-set (Mongo: on the values it read
+  and, for records, the revision, which it does not bump; Cosmos: the row's
+  ETag, and for records the service's own revision-checked save). A document the
   service changed meanwhile is a conflict, left for the next run. Stop it at
   any time and run it again.
 - Exit code 0: nothing left in plaintext. 2: conflicts or failures, run again.
   1: it did not start (no key ring outside Development/Testing, half a key-ring
-  configuration, or no Mongo connection). It covers Mongo deployments; a
-  Cosmos deployment re-encrypts each value on its next write.
+  configuration, or neither Mongo nor Cosmos configured). With
+  `MongoDb:ConnectionString` it uses Mongo; otherwise `CosmosDb:Endpoint` /
+  `CosmosDb:Key` (containers `CosmosDb:ContainerName`, default `Providers`,
+  and `CosmosDb:ProviderBankAccountsContainer`, default `ProviderBankAccounts`).
+- When it exits 0 for every tenant, set `FieldProtection__RejectPlaintext=true`
+  on provider-service.
+- sponsor-service has no such command yet: its values are encrypted and bound
+  on the record's next write, so keep `RejectPlaintext` off there until every
+  sponsor and sponsor bank-account record has been written once.

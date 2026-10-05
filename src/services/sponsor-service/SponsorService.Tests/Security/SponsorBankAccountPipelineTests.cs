@@ -403,7 +403,7 @@ public class SponsorBankAccountPipelineTests : IClassFixture<SponsorBankAccountP
             response.StatusCode.Should().Be(HttpStatusCode.OK, path);
             var body = await BodyOf(response);
             body.Should().NotContain(Account).And.NotContain(Routing).And.NotContain(Account2).And.NotContain(Routing2);
-            body.Should().NotContain("enc:v1");
+            body.Should().NotContain("enc:");
         }
 
         var view = await client.GetFromJsonAsync<JsonElement>($"{Base}/bank-account");
@@ -528,16 +528,16 @@ public class SponsorBankAccountPipelineTests : IClassFixture<SponsorBankAccountP
         var pendingRaw = _factory.Accounts.RawJson(Tenant, Group)!;
         pendingRaw.Should().NotContain(Account).And.NotContain(Routing);
         var pending = _factory.Accounts.Raw(Tenant, Group)!.GetPending()!.Proposed!;
-        pending.AccountNumber.Should().StartWith("enc:v1:").And.NotBe(Account);
-        pending.RoutingNumber.Should().StartWith("enc:v1:").And.NotBe(Routing);
+        pending.AccountNumber.Should().StartWith("enc:v2:").And.NotBe(Account);
+        pending.RoutingNumber.Should().StartWith("enc:v2:").And.NotBe(Routing);
 
         (await ApproveAsync(FinanceApprover, id)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         var raw = _factory.Accounts.RawJson(Tenant, Group)!;
         raw.Should().NotContain(Account).And.NotContain(Routing);
         var active = _factory.Accounts.Raw(Tenant, Group)!.Active!;
-        active.AccountNumber.Should().StartWith("enc:v1:");
-        active.RoutingNumber.Should().StartWith("enc:v1:");
+        active.AccountNumber.Should().StartWith("enc:v2:");
+        active.RoutingNumber.Should().StartWith("enc:v2:");
         // Decided changes keep no numbers at all, encrypted or not.
         _factory.Accounts.Raw(Tenant, Group)!.Changes.Single().Proposed!.AccountNumber.Should().BeNull();
     }
@@ -578,6 +578,113 @@ public class SponsorBankAccountPipelineTests : IClassFixture<SponsorBankAccountP
         response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
     }
 
+    // ── binding: a ciphertext only decrypts on its own record and field ──
+
+    private const string OtherGroup = "GRP-101";
+
+    private void PutOtherSponsor() => _factory.Sponsors.Put(new Sponsor
+    {
+        Id = "sponsor-id-2", TenantId = Tenant, GroupNumber = OtherGroup, EmployerName = "Other Co", Status = SponsorStatus.Active,
+        EffectiveDate = new DateTime(2026, 1, 1)
+    });
+
+    [Fact]
+    public async Task CiphertextCopiedToAnotherSponsorsRecord_DoesNotDecrypt()
+    {
+        await ApprovedAccountAsync();
+        PutOtherSponsor();
+        var source = _factory.Accounts.Raw(Tenant, Group)!;
+        _factory.Accounts.Put(new SponsorBankAccountRecord
+        {
+            TenantId = Tenant, GroupNumber = OtherGroup, SponsorId = "sponsor-id-2", Revision = 1,
+            ActiveChangeId = "copied", ActiveApprovedBy = "attacker", Active = source.Active,
+        });
+
+        var response = await PremiumBilling.GetAsync($"/api/v1/internal/sponsors/{OtherGroup}/bank-account");
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        (await BodyOf(response)).Should().NotContain(Account);
+        // The original record still reads.
+        (await PremiumBilling.GetFromJsonAsync<JsonElement>(FullPath)).GetProperty("accountNumber").GetString().Should().Be(Account);
+    }
+
+    [Fact]
+    public async Task CiphertextMovedToTheOtherField_DoesNotDecrypt()
+    {
+        await ApprovedAccountAsync();
+        var raw = _factory.Accounts.Raw(Tenant, Group)!;
+        (raw.Active!.RoutingNumber, raw.Active.AccountNumber) = (raw.Active.AccountNumber, raw.Active.RoutingNumber);
+        _factory.Accounts.Put(raw);
+
+        (await PremiumBilling.GetAsync(FullPath)).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task UnboundV1Values_StillRead_AndAreBoundOnTheNextWrite()
+    {
+        // As written before binding existed: the same key ring and purpose, no record context.
+        var protector = _factory.Services.GetRequiredService<IFieldProtector>();
+        _factory.Accounts.Put(new SponsorBankAccountRecord
+        {
+            TenantId = Tenant, GroupNumber = Group, SponsorId = SponsorId, Revision = 1,
+            ActiveChangeId = "v1", ActiveApprovedBy = "earlier-build",
+            Active = new SponsorBankAccountDetails
+            {
+                EftEnabled = true, PreferredMethod = SponsorDebitMethod.Nacha,
+                RoutingNumber = protector.Protect(Routing), AccountNumber = protector.Protect(Account),
+                RoutingNumberLast4 = "0021", AccountNumberLast4 = "6789"
+            }
+        });
+        _factory.Accounts.Raw(Tenant, Group)!.Active!.AccountNumber.Should().StartWith("enc:v1:");
+
+        (await PremiumBilling.GetFromJsonAsync<JsonElement>(FullPath)).GetProperty("accountNumber").GetString().Should().Be(Account);
+
+        await ProposeAsync(body: new { eftEnabled = true, preferredMethod = "Nacha", accountHolderName = "Acme" });
+        _factory.Accounts.Raw(Tenant, Group)!.Active!.AccountNumber.Should().StartWith("enc:v2:");
+        (await PremiumBilling.GetFromJsonAsync<JsonElement>(FullPath)).GetProperty("accountNumber").GetString().Should().Be(Account);
+    }
+
+    [Fact]
+    public async Task BillingAccountNumberCopiedToAnotherSponsor_DoesNotDecrypt()
+    {
+        var create = await As("enroller", ChoRolePermissions.EnrollmentSpecialist).PostAsJsonAsync("/api/v1/sponsors", new
+        {
+            groupNumber = "GRP-400", employerName = "Delta Co", effectiveDate = "2026-01-01T00:00:00Z",
+            billingInfo = new { premiumAmount = 100m, billingDay = 1, billingAccountNumber = "4444333322221111", paymentMethod = "ACH" }
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.Created, await BodyOf(create));
+        var ciphertext = _factory.Sponsors.RawByGroup(Tenant, "GRP-400")!.BillingInfo!.BillingAccountNumber;
+        _factory.Sponsors.Put(new Sponsor
+        {
+            Id = "sponsor-id-5", TenantId = Tenant, GroupNumber = "GRP-500", EmployerName = "Epsilon Co",
+            BillingInfo = new BillingInfo { PremiumAmount = 10m, BillingAccountNumber = ciphertext }
+        });
+
+        var act = () => ScopedSponsorsAsync(r => r.GetByGroupNumberAsync(Tenant, "GRP-500"));
+
+        await act.Should().ThrowAsync<FieldProtectionException>();
+        (await ScopedSponsorsAsync(r => r.GetByGroupNumberAsync(Tenant, "GRP-400")))!.BillingInfo!.BillingAccountNumber
+            .Should().Be("4444333322221111");
+    }
+
+    [Fact]
+    public async Task RejectPlaintext_RefusesALegacyPlaintextBillingAccountNumber()
+    {
+        _factory.Sponsors.Put(new Sponsor
+        {
+            Id = "legacy-9", TenantId = Tenant, GroupNumber = "GRP-900", EmployerName = "Legacy Co",
+            BillingInfo = new BillingInfo { PremiumAmount = 50m, BillingAccountNumber = "987654321012" }
+        });
+        var keys = _factory.Services.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
+        var rejecting = new ProtectedSponsorRepository(_factory.Sponsors,
+            new DataProtectionFieldProtector(keys, "sponsor-service", rejectPlaintext: true),
+            _factory.Services.GetRequiredService<ILogger<ProtectedSponsorRepository>>());
+
+        var act = () => rejecting.GetByGroupNumberAsync(Tenant, "GRP-900");
+
+        (await act.Should().ThrowAsync<FieldProtectionException>()).Which.Message.Should().Contain("RejectPlaintext").And.NotContain("987654321012");
+    }
+
     // ── the sponsor's BillingInfo account number ────────────────────────
 
     [Fact]
@@ -595,12 +702,12 @@ public class SponsorBankAccountPipelineTests : IClassFixture<SponsorBankAccountP
         (await BodyOf(create)).Should().NotContain(billingAccount).And.Contain("5544");
 
         var stored = _factory.Sponsors.RawByGroup(Tenant, "GRP-200")!;
-        stored.BillingInfo!.BillingAccountNumber.Should().StartWith("enc:v1:").And.NotBe(billingAccount);
+        stored.BillingInfo!.BillingAccountNumber.Should().StartWith("enc:v2:").And.NotBe(billingAccount);
 
         foreach (var path in new[] { "/api/v1/sponsors/GRP-200", "/api/v1/sponsors" })
         {
             var body = await BodyOf(await As("finance", ChoRolePermissions.Finance).GetAsync(path));
-            body.Should().NotContain(billingAccount).And.NotContain("enc:v1").And.Contain("\"billingAccountNumberLast4\":\"5544\"");
+            body.Should().NotContain(billingAccount).And.NotContain("enc:").And.Contain("\"billingAccountNumberLast4\":\"5544\"");
         }
 
         // A client that PUTs back what it read (no number) keeps the stored one.
@@ -635,7 +742,7 @@ public class SponsorBankAccountPipelineTests : IClassFixture<SponsorBankAccountP
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
         var stored = _factory.Sponsors.RawByGroup(Tenant, "GRP-300")!.BillingInfo!.BillingAccountNumber;
-        stored.Should().StartWith("enc:v1:");
+        stored.Should().StartWith("enc:v2:");
         (await ScopedSponsorsAsync(r => r.GetByGroupNumberAsync(Tenant, "GRP-300")))!.BillingInfo!.BillingAccountNumber.Should().Be(legacy);
     }
 

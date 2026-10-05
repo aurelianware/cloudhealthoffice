@@ -264,7 +264,7 @@ public static class BankAccountMasking
 
     /// <summary>The last 4 characters; nothing for a value still encrypted (<c>enc:v1:...</c>), whose tail means nothing.</summary>
     private static string? Last4(string? value)
-        => string.IsNullOrEmpty(value) || value.StartsWith(CloudHealthOffice.FieldProtection.DataProtectionFieldProtector.Prefix, StringComparison.Ordinal)
+        => string.IsNullOrEmpty(value) || CloudHealthOffice.FieldProtection.FieldCiphertext.IsCiphertext(value)
             ? null
             : value.Length >= 4 ? value[^4..] : value;
 }

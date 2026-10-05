@@ -181,9 +181,9 @@ public class ProviderBankAccountFullReadPipelineTests : IClassFixture<ProviderBa
         await ApprovedAccountAsync();
 
         var stored = _factory.BankAccounts.Records.Should().ContainSingle().Subject;
-        stored.Active!.AccountNumber.Should().StartWith("enc:v1:").And.NotContain(Account);
-        stored.Active.RoutingNumber.Should().StartWith("enc:v1:");
-        stored.Active.TaxId.Should().StartWith("enc:v1:");
+        stored.Active!.AccountNumber.Should().StartWith("enc:v2:").And.NotContain(Account);
+        stored.Active.RoutingNumber.Should().StartWith("enc:v2:");
+        stored.Active.TaxId.Should().StartWith("enc:v2:");
         stored.Active.AccountNumberLast4.Should().Be("7777");
     }
 
@@ -341,7 +341,7 @@ public class ProviderBankAccountFullReadPipelineTests : IClassFixture<ProviderBa
         var response = await Capitation.GetAsync(FullPath);
 
         response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
-        (await response.Content.ReadAsStringAsync()).Should().NotContain("enc:v1:").And.NotContain(Account);
+        (await response.Content.ReadAsStringAsync()).Should().NotContain("enc:").And.NotContain(Account);
     }
 
     [Fact]

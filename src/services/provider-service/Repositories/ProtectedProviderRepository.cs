@@ -12,7 +12,7 @@ namespace ProviderService.Repositories;
 /// <list type="bullet">
 ///   <item>Every write of a whole row (create, update, drafts, activate and
 ///   supersede, state changes) stores the numbers encrypted
-///   (<c>enc:v1:...</c>). Without a key ring outside Development the write
+///   and bound to the row's tenant and provider (<c>enc:v2:...</c>). Without a key ring outside Development the write
 ///   fails (<see cref="FieldProtectionException"/>, answered 503) rather than
 ///   store plaintext. The caller's object keeps the plaintext.</item>
 ///   <item>Reads return the numbers decrypted. A value written before
@@ -99,8 +99,8 @@ public sealed class ProtectedProviderRepository : IProviderRepository
         var draftAccount = draftToActivate.BankAccount;
         var predecessorAccount = predecessor?.BankAccount;
         // Both encrypted before either row is written.
-        var draftStored = ProviderBankAccountProtection.ForStorage(_protector, draftAccount);
-        var predecessorStored = predecessor == null ? null : ProviderBankAccountProtection.ForStorage(_protector, predecessorAccount);
+        var draftStored = ForStorage(draftToActivate, draftAccount);
+        var predecessorStored = predecessor == null ? null : ForStorage(predecessor, predecessorAccount);
         draftToActivate.BankAccount = draftStored;
         if (predecessor != null) predecessor.BankAccount = predecessorStored;
         try
@@ -146,7 +146,7 @@ public sealed class ProtectedProviderRepository : IProviderRepository
     private async Task<Provider> WriteAsync(Provider provider, Func<Provider, Task<Provider>> write)
     {
         var plaintext = provider.BankAccount;
-        provider.BankAccount = ProviderBankAccountProtection.ForStorage(_protector, plaintext);
+        provider.BankAccount = ForStorage(provider, plaintext);
         try
         {
             var written = await write(provider);
@@ -172,14 +172,18 @@ public sealed class ProtectedProviderRepository : IProviderRepository
 
         try
         {
-            ProviderBankAccountProtection.Unprotect(_protector, account);
+            ProviderBankAccountProtection.Unprotect(_protector, account, provider!.TenantId, ProviderBankAccountProtection.RecordIdOf(provider));
         }
         catch (FieldProtectionException ex)
         {
             // Leave whatever did not decrypt as stored (encrypted). Never log a value.
-            account.RoutingNumber = TryUnprotect(account.RoutingNumber);
-            account.AccountNumber = TryUnprotect(account.AccountNumber);
-            account.TaxId = TryUnprotect(account.TaxId);
+            var recordId = ProviderBankAccountProtection.RecordIdOf(provider!);
+            account.RoutingNumber = TryUnprotect(account.RoutingNumber,
+                ProviderBankAccountProtection.Context(provider!.TenantId, recordId, ProviderBankAccountProtection.RoutingField));
+            account.AccountNumber = TryUnprotect(account.AccountNumber,
+                ProviderBankAccountProtection.Context(provider.TenantId, recordId, ProviderBankAccountProtection.AccountField));
+            account.TaxId = TryUnprotect(account.TaxId,
+                ProviderBankAccountProtection.Context(provider.TenantId, recordId, ProviderBankAccountProtection.TaxIdField));
             _logger.LogError(UndecryptableEvent,
                 "The bank-account copy on provider {ProviderId} (version {VersionId}) in tenant {TenantId} could not be decrypted " +
                 "({Reason}); it stays encrypted on this read and nothing that needs the numbers can use it",
@@ -188,11 +192,15 @@ public sealed class ProtectedProviderRepository : IProviderRepository
         return provider;
     }
 
-    private string? TryUnprotect(string? value)
+    /// <summary>The row's account as stored: encrypted and bound to the row's tenant and provider.</summary>
+    private ProviderBankAccount? ForStorage(Provider row, ProviderBankAccount? account)
+        => ProviderBankAccountProtection.ForStorage(_protector, account, row.TenantId, ProviderBankAccountProtection.RecordIdOf(row));
+
+    private string? TryUnprotect(string? value, FieldProtectionContext context)
     {
         try
         {
-            return _protector.Unprotect(value);
+            return _protector.Unprotect(value, context);
         }
         catch (FieldProtectionException)
         {
