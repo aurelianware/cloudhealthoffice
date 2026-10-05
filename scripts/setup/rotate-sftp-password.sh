@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "🔐 SFTP Password Rotation Tool"
 echo "=============================="
@@ -25,45 +25,48 @@ NEW_PASSWORD=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-24)
 echo "✅ Generated new password (24 chars)"
 echo ""
 
-# Get current users.conf
+# Never print users.conf (it holds every SFTP user's password) and never put
+# it on a command line (visible to other users via `ps`). The working copy
+# lives in a private temp dir that is removed on exit.
+umask 077
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf "$WORK_DIR"' EXIT INT TERM
+CONFIG_FILE="${WORK_DIR}/users.conf"
+
 echo "📥 Fetching current SFTP configuration..."
-CURRENT_CONFIG=$(kubectl -n ${NAMESPACE} get secret ${SECRET_NAME} -o jsonpath='{.data.users\.conf}' | base64 -d)
+kubectl -n "${NAMESPACE}" get secret "${SECRET_NAME}" -o jsonpath='{.data.users\.conf}' | base64 -d > "$CONFIG_FILE"
+chmod 600 "$CONFIG_FILE"
 
-echo "Current users:"
-echo "$CURRENT_CONFIG"
-echo ""
-
-# Update the password for the specified user
+# Update the password for the specified user (exact username match on field 1).
 echo "🔄 Updating password for user: ${USERNAME}"
-UPDATED_CONFIG=$(echo "$CURRENT_CONFIG" | sed "s/^${USERNAME}:[^:]*:/${USERNAME}:${NEW_PASSWORD}:/")
-
-if [ "$UPDATED_CONFIG" = "$CURRENT_CONFIG" ]; then
+if ! awk -F: -v u="$USERNAME" '$1 == u { found = 1 } END { exit !found }' "$CONFIG_FILE"; then
   echo "❌ User '${USERNAME}' not found in configuration"
   exit 1
 fi
-
-echo "Updated configuration:"
-echo "$UPDATED_CONFIG"
+# The new password goes to awk through the environment, not argv.
+NEW_PASSWORD="$NEW_PASSWORD" awk -F: -v OFS=: -v u="$USERNAME" \
+  '$1 == u { $2 = ENVIRON["NEW_PASSWORD"] } { print }' "$CONFIG_FILE" > "${CONFIG_FILE}.new"
+mv "${CONFIG_FILE}.new" "$CONFIG_FILE"
+chmod 600 "$CONFIG_FILE"
+echo "Changed users: ${USERNAME}"
 echo ""
 
-# Encode to base64
-ENCODED_CONFIG=$(echo "$UPDATED_CONFIG" | base64)
-
-# Update the secret
+# Update the secret: render it from the file and apply via stdin so the
+# contents never appear in argv.
 echo "💾 Updating Kubernetes secret..."
-kubectl -n ${NAMESPACE} patch secret ${SECRET_NAME} \
-  --type='json' \
-  -p="[{\"op\": \"replace\", \"path\": \"/data/users.conf\", \"value\":\"${ENCODED_CONFIG}\"}]"
+kubectl -n "${NAMESPACE}" create secret generic "${SECRET_NAME}" \
+  --from-file=users.conf="$CONFIG_FILE" \
+  --dry-run=client -o yaml | kubectl -n "${NAMESPACE}" apply -f -
 
 echo "✅ Secret updated successfully"
 echo ""
 
 # Restart SFTP pods to pick up new password
 echo "🔄 Restarting SFTP pods..."
-kubectl -n ${NAMESPACE} rollout restart deployment/sftp-service
+kubectl -n "${NAMESPACE}" rollout restart deployment/sftp-service
 
 echo "⏳ Waiting for pods to be ready..."
-kubectl -n ${NAMESPACE} rollout status deployment/sftp-service --timeout=60s
+kubectl -n "${NAMESPACE}" rollout status deployment/sftp-service --timeout=60s
 
 echo ""
 echo "✅ Password rotation complete!"
