@@ -74,6 +74,9 @@ spec:
     
     - name: import-to-cosmos
       container:
+        env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
         image: alpine:3.18
         command: [sh, -c]
         args:
@@ -81,7 +84,7 @@ spec:
             apk add --no-cache curl jq
             # CHO workload token for the tenant (Authorization + X-Tenant-ID).
             . /opt/cho/cho-workload.sh
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
             mkdir -p /work/results
 
             for file in /work/parsed/*.json; do

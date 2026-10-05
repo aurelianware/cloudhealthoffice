@@ -66,6 +66,12 @@ spec:
     # Main orchestration workflow
     - name: onboard-tenant
       steps:
+        # Step 0: Refuse malformed parameters before anything uses them. The
+        # tenant id also lands in a namespace name, URLs and Key Vault secret
+        # names, and enabled-modules / subscription-tier in `when` expressions.
+        - - name: validate-parameters
+            template: validate-parameters
+
         # Step 1: Validate tenant doesn't already exist
         - - name: validate-tenant
             template: validate-tenant-exists
@@ -160,9 +166,59 @@ spec:
         - - name: activate-tenant
             template: complete-onboarding
 
+    # Template: Validate workflow parameters. Values arrive as env vars, never
+    # pasted into the script; every other step also reads them from env vars.
+    - name: validate-parameters
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            fail() { echo "Invalid parameter: $1"; exit 1; }
+            # No parameter may carry control characters (newlines included), so
+            # each check below sees exactly one line.
+            for v in "$TENANT_ID" "$SUBSCRIPTION_TIER" "$ENABLED_MODULES" "$PAYMENT_METHOD_ID" "$ADMIN_EMAIL" \
+                     "$TENANT_NAME" "$ORGANIZATION_NAME" "$BILLING_NAME" "$ADMIN_NAME" "$PHONE"; do
+              case "$v" in *[[:cntrl:]]*) fail "a value contains control characters";; esac
+            done
+            matches() { printf '%s\n' "$1" | grep -Eqx "$2"; }
+            # Tenant ids are what tenant-service generates: lowercase letters,
+            # digits and '-', a DNS label short enough for cho-tenant-<id>.
+            matches "$TENANT_ID" '[a-z0-9]([a-z0-9-]{0,50}[a-z0-9])?' || fail tenant-id
+            case "$SUBSCRIPTION_TIER" in starter|professional|enterprise) ;; *) fail subscription-tier;; esac
+            matches "$ENABLED_MODULES" '[a-z0-9,-]*' || fail enabled-modules
+            matches "$PAYMENT_METHOD_ID" '(pm_[A-Za-z0-9_]{1,250})?' || fail payment-method-id
+            matches "$ADMIN_EMAIL" '([^[:space:]@]{1,64}@[A-Za-z0-9.-]{1,253})?' || fail admin-email
+            echo "Parameters valid for tenant $TENANT_ID"
+        env:
+          - name: TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
+          - name: SUBSCRIPTION_TIER
+            value: "{{workflow.parameters.subscription-tier}}"
+          - name: ENABLED_MODULES
+            value: "{{workflow.parameters.enabled-modules}}"
+          - name: PAYMENT_METHOD_ID
+            value: "{{workflow.parameters.payment-method-id}}"
+          - name: ADMIN_EMAIL
+            value: "{{workflow.parameters.admin-email}}"
+          - name: TENANT_NAME
+            value: "{{workflow.parameters.tenant-name}}"
+          - name: ORGANIZATION_NAME
+            value: "{{workflow.parameters.organization-name}}"
+          - name: BILLING_NAME
+            value: "{{workflow.parameters.billing-name}}"
+          - name: ADMIN_NAME
+            value: "{{workflow.parameters.admin-name}}"
+          - name: PHONE
+            value: "{{workflow.parameters.phone}}"
+
     # Template: Validate tenant doesn't exist
     - name: validate-tenant-exists
       container:
+        env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
         image: alpine:3.18
         command: [sh, -c]
         args:
@@ -170,7 +226,7 @@ spec:
             apk add --no-cache curl jq
             . /opt/cho/cho-workload.sh
 
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
             TENANT_SERVICE="http://tenant-service.cloudhealthoffice/api/v1/tenants"
 
             echo "Validating tenant $TENANT_ID..."
@@ -203,8 +259,8 @@ spec:
         command: [sh, -c]
         args:
           - |
-            CONTAINER_NAME="{{inputs.parameters.container-name}}"
-            PARTITION_KEY="{{inputs.parameters.partition-key}}"
+            CONTAINER_NAME="${PARAM_CONTAINER_NAME}"
+            PARTITION_KEY="${PARAM_PARTITION_KEY}"
             COSMOS_ACCOUNT="${COSMOS_ACCOUNT_NAME}"
             RESOURCE_GROUP="${COSMOS_RESOURCE_GROUP}"
             DATABASE="CloudHealthOffice"
@@ -233,6 +289,10 @@ spec:
               echo "Container $CONTAINER_NAME created successfully"
             fi
         env:
+          - name: PARAM_CONTAINER_NAME
+            value: "{{inputs.parameters.container-name}}"
+          - name: PARAM_PARTITION_KEY
+            value: "{{inputs.parameters.partition-key}}"
           - name: COSMOS_ACCOUNT_NAME
             valueFrom:
               secretKeyRef:
@@ -256,7 +316,7 @@ spec:
           - |
             apk add --no-cache openssh-client
             
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
             SFTP_HOST="${SFTP_SERVER_HOST}"
             SFTP_USER="${SFTP_SERVER_USER}"
             
@@ -280,6 +340,8 @@ spec:
             
             echo "SFTP folder structure created (stub - implement with actual SFTP)"
         env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
           - name: SFTP_SERVER_HOST
             value: "sftp.cloudhealthoffice.com"
           - name: SFTP_SERVER_USER
@@ -294,12 +356,12 @@ spec:
           - |
             apk add --no-cache curl jq
             
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
-            ORG_NAME="{{workflow.parameters.organization-name}}"
-            EMAIL="{{workflow.parameters.admin-email}}"
-            BILLING_NAME="{{workflow.parameters.billing-name}}"
-            TIER="{{workflow.parameters.subscription-tier}}"
-            PAYMENT_METHOD_ID="{{workflow.parameters.payment-method-id}}"
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
+            ORG_NAME="${WF_PARAM_ORGANIZATION_NAME}"
+            EMAIL="${WF_PARAM_ADMIN_EMAIL}"
+            BILLING_NAME="${WF_PARAM_BILLING_NAME}"
+            TIER="${WF_PARAM_SUBSCRIPTION_TIER}"
+            PAYMENT_METHOD_ID="${WF_PARAM_PAYMENT_METHOD_ID}"
             
             echo "Creating Stripe subscription for $ORG_NAME ($TIER tier)..."
             
@@ -342,14 +404,14 @@ spec:
             
             # Attach payment method to customer
             echo "Attaching payment method $PAYMENT_METHOD_ID to customer..."
-            curl -s -X POST "https://api.stripe.com/v1/payment_methods/$PAYMENT_METHOD_ID/attach" \
+            curl --fail --show-error -s -o /dev/null -X POST "https://api.stripe.com/v1/payment_methods/$PAYMENT_METHOD_ID/attach" \
               -u "${STRIPE_SECRET_KEY}:" \
-              -d "customer=$CUSTOMER_ID" > /dev/null
+              -d "customer=$CUSTOMER_ID" || { echo "Failed to attach the payment method"; exit 1; }
             
             # Set as default payment method
-            curl -s -X POST "https://api.stripe.com/v1/customers/$CUSTOMER_ID" \
+            curl --fail --show-error -s -o /dev/null -X POST "https://api.stripe.com/v1/customers/$CUSTOMER_ID" \
               -u "${STRIPE_SECRET_KEY}:" \
-              -d "invoice_settings[default_payment_method]=$PAYMENT_METHOD_ID" > /dev/null
+              -d "invoice_settings[default_payment_method]=$PAYMENT_METHOD_ID" || { echo "Failed to set the default payment method"; exit 1; }
             
             # Create subscription with 14-day trial
             echo "Creating subscription with $PRICE_ID (14-day trial)..."
@@ -377,6 +439,18 @@ spec:
             echo "  Price: $PRICE_ID"
             echo "  Trial: 14 days"
         env:
+          - name: WF_PARAM_ADMIN_EMAIL
+            value: "{{workflow.parameters.admin-email}}"
+          - name: WF_PARAM_BILLING_NAME
+            value: "{{workflow.parameters.billing-name}}"
+          - name: WF_PARAM_ORGANIZATION_NAME
+            value: "{{workflow.parameters.organization-name}}"
+          - name: WF_PARAM_PAYMENT_METHOD_ID
+            value: "{{workflow.parameters.payment-method-id}}"
+          - name: WF_PARAM_SUBSCRIPTION_TIER
+            value: "{{workflow.parameters.subscription-tier}}"
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
           - name: STRIPE_SECRET_KEY
             valueFrom:
               secretKeyRef:
@@ -393,11 +467,14 @@ spec:
     # log, a file on the work volume or a workflow parameter.
     - name: create-azure-ad-user
       container:
+        env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
         image: alpine:3.18
         command: [sh, -c]
         args:
           - |
-            echo "Admin user for {{workflow.parameters.tenant-id}}: invite through tenant-service (no B2C user is created here)."
+            echo "Admin user for ${WF_PARAM_TENANT_ID}: invite through tenant-service (no B2C user is created here)."
 
     # Template: Generate SFTP credentials
     # The generated SFTP password and private key go to Key Vault only
@@ -419,7 +496,7 @@ spec:
         args:
           - |
             set -euo pipefail
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
             : "${KEY_VAULT_NAME:?KEY_VAULT_NAME is not set (configmap onboarding-config, key key-vault-name)}"
 
             SCRATCH=$(mktemp -d -p /dev/shm 2>/dev/null || mktemp -d)
@@ -473,6 +550,8 @@ spec:
             # TODO: Store SSH public key in SFTP server authorized_keys
             # TODO: Create SFTP user account with chroot jail
         env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
           - name: KEY_VAULT_NAME
             valueFrom:
               configMapKeyRef:
@@ -488,6 +567,9 @@ spec:
     # Template: Seed benefit plans
     - name: seed-benefit-plans
       container:
+        env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
         image: alpine:3.18
         command: [sh, -c]
         args:
@@ -495,7 +577,7 @@ spec:
             apk add --no-cache curl jq
             . /opt/cho/cho-workload.sh
 
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
             BENEFIT_PLAN_SERVICE="http://benefit-plan-service.cloudhealthoffice/api/v1/benefitplans"
 
             echo "Seeding default benefit plans for $TENANT_ID..."
@@ -546,6 +628,9 @@ spec:
     # terminated one is refused with 409). Audited by tenant-service.
     - name: complete-onboarding
       container:
+        env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
         image: alpine:3.18
         command: [sh, -c]
         args:
@@ -553,7 +638,7 @@ spec:
             apk add --no-cache curl
             . /opt/cho/cho-workload.sh
 
-            TENANT_ID="{{workflow.parameters.tenant-id}}"
+            TENANT_ID="${WF_PARAM_TENANT_ID}"
 
             echo "Activating tenant $TENANT_ID..."
             cho_token "$TENANT_ID" || exit 1
@@ -577,13 +662,18 @@ spec:
     # Cleanup on failure (spec.onExit)
     - name: cleanup-on-failure
       container:
+        env:
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
+          - name: WF_STATUS
+            value: "{{workflow.status}}"
         image: alpine:3.18
         command: [sh, -c]
         args:
           - |
-            if [ "{{workflow.status}}" != "Succeeded" ]; then
+            if [ "${WF_STATUS}" != "Succeeded" ]; then
               echo "Workflow failed - cleaning up resources..."
-              TENANT_ID="{{workflow.parameters.tenant-id}}"
+              TENANT_ID="${WF_PARAM_TENANT_ID}"
               
               # TODO: Implement cleanup logic
               # - Delete Cosmos containers

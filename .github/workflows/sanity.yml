@@ -185,6 +185,9 @@ jobs:
 
           echo "✅ Argo Workflows validated"
 
+      - name: Check Argo workflow scripts (no parameter interpolation)
+        run: python3 scripts/ci/check-argo-workflows.py
+
       # ---------- PowerShell script validation ----------
       - name: Validate PowerShell scripts
         shell: pwsh

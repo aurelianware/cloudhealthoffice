@@ -323,6 +323,11 @@ spec:
           factor: 2
           maxDuration: "2m"
       container:
+        env:
+          - name: PARAM_API_ENDPOINT
+            value: "{{inputs.parameters.api-endpoint}}"
+          - name: PARAM_TENANT_ID
+            value: "{{inputs.parameters.tenant-id}}"
         image: curlimages/curl:latest
         command: ["/bin/sh", "-c"]
         args:
@@ -349,8 +354,8 @@ spec:
             )
             
             # Call the CHO endpoint with a CHO workload token (wf-278-ingest) for the tenant.
-            API_ENDPOINT="{{inputs.parameters.api-endpoint}}"
-            TENANT_ID="{{inputs.parameters.tenant-id}}"
+            API_ENDPOINT="${PARAM_API_ENDPOINT}"
+            TENANT_ID="${PARAM_TENANT_ID}"
             mkdir -p /data/output
             if [ -z "$API_ENDPOINT" ]; then
               echo "No CHO 278 endpoint configured; skipping the backend call"
@@ -415,12 +420,16 @@ spec:
               if [ -f "$file" ]; then
                 filename=$(basename "$file")
                 timestamp=$(date +%Y%m%d%H%M%S)
-                s3_path="s3://{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-prefix}}/${filename%.edi}-${timestamp}.edi"
+                s3_path="s3://${PARAM_S3_BUCKET}/${PARAM_S3_PREFIX}/${filename%.edi}-${timestamp}.edi"
                 aws s3 cp "$file" "$s3_path" --sse AES256
                 echo "Uploaded: $s3_path"
               fi
             done
         env:
+          - name: PARAM_S3_BUCKET
+            value: "{{inputs.parameters.s3-bucket}}"
+          - name: PARAM_S3_PREFIX
+            value: "{{inputs.parameters.s3-prefix}}"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -536,7 +545,7 @@ spec:
             with open('/data/manifest.json') as f:
                 manifest = json.load(f)
             
-            host = "{{inputs.parameters.sftp-host}}"
+            host = os.environ["PARAM_SFTP_HOST"]
             username = os.environ.get('SFTP_USERNAME')
             password = os.environ.get('SFTP_PASSWORD')
             
@@ -555,6 +564,8 @@ spec:
                 sftp.close()
                 transport.close()
         env:
+          - name: PARAM_SFTP_HOST
+            value: "{{inputs.parameters.sftp-host}}"
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:

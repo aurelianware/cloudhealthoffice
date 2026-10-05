@@ -135,6 +135,15 @@ spec:
     # Step 1: Fetch 837 files from SFTP
     - name: fetch-from-sftp
       container:
+        env:
+          - name: WF_PARAM_FILE_PATTERN
+            value: "{{workflow.parameters.file-pattern}}"
+          - name: WF_PARAM_SFTP_FOLDER
+            value: "{{workflow.parameters.sftp-folder}}"
+          - name: WF_PARAM_SFTP_HOST
+            value: "{{workflow.parameters.sftp-host}}"
+          - name: WF_PARAM_SFTP_PORT
+            value: "{{workflow.parameters.sftp-port}}"
         image: cloudhealthoffice/sftp-client:latest
         command: ["/bin/sh", "-c"]
         args:
@@ -148,11 +157,14 @@ spec:
             chmod 600 ~/.ssh/id_rsa
             
             # Fetch files
-            sftp -o StrictHostKeyChecking=no -P {{workflow.parameters.sftp-port}} \
-              -i ~/.ssh/id_rsa sftp-user@{{workflow.parameters.sftp-host}} <<EOF
-            cd {{workflow.parameters.sftp-folder}}
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${WF_PARAM_SFTP_FOLDER}" "${WF_PARAM_FILE_PATTERN}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
+            sftp -o StrictHostKeyChecking=no -P "${WF_PARAM_SFTP_PORT}" \
+              -i ~/.ssh/id_rsa sftp-user@"${WF_PARAM_SFTP_HOST}" <<EOF
+            cd ${WF_PARAM_SFTP_FOLDER}
             lcd /work
-            mget {{workflow.parameters.file-pattern}}
+            mget ${WF_PARAM_FILE_PATTERN}
             bye
             EOF
             
@@ -260,6 +272,13 @@ spec:
           - name: edi-files
             path: /work/files
       container:
+        env:
+          - name: WF_PARAM_ARCHIVE_FOLDER
+            value: "{{workflow.parameters.archive-folder}}"
+          - name: WF_PARAM_SFTP_HOST
+            value: "{{workflow.parameters.sftp-host}}"
+          - name: WF_PARAM_SFTP_PORT
+            value: "{{workflow.parameters.sftp-port}}"
         image: cloudhealthoffice/sftp-client:latest
         command: ["/bin/sh", "-c"]
         args:
@@ -273,11 +292,14 @@ spec:
             chmod 600 ~/.ssh/id_rsa
             
             # Create archive folder with timestamp
-            ARCHIVE_FOLDER="{{workflow.parameters.archive-folder}}/$(date +%Y-%m-%d)"
+            ARCHIVE_FOLDER="${WF_PARAM_ARCHIVE_FOLDER}/$(date +%Y-%m-%d)"
             
             # Move files to archive
-            sftp -o StrictHostKeyChecking=no -P {{workflow.parameters.sftp-port}} \
-              -i ~/.ssh/id_rsa sftp-user@{{workflow.parameters.sftp-host}} <<EOF
+            # Parameters go into the sftp batch below: one printable line each,
+            # so a value cannot add sftp commands (e.g. '!cmd' runs a local shell).
+            for v in "${ARCHIVE_FOLDER}"; do case "$v" in *[![:print:]]*) echo "Refusing a parameter with control characters"; exit 1;; esac; done
+            sftp -o StrictHostKeyChecking=no -P "${WF_PARAM_SFTP_PORT}" \
+              -i ~/.ssh/id_rsa sftp-user@"${WF_PARAM_SFTP_HOST}" <<EOF
             mkdir -p $ARCHIVE_FOLDER
             cd $ARCHIVE_FOLDER
             lcd /work/files

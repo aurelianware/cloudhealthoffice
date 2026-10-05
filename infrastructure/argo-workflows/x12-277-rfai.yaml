@@ -208,6 +208,11 @@ spec:
             valueFrom:
               path: /data/output/tenant-id
       container:
+        env:
+          - name: PARAM_RFAI_PAYLOAD
+            value: "{{inputs.parameters.rfai-payload}}"
+          - name: WF_PARAM_TENANT_ID
+            value: "{{workflow.parameters.tenant-id}}"
         image: python:3.11-slim
         command: ["python", "-c"]
         args:
@@ -215,7 +220,7 @@ spec:
             import json
             import os
             
-            payload = json.loads('''{{inputs.parameters.rfai-payload}}''')
+            payload = json.loads(os.environ["PARAM_RFAI_PAYLOAD"])
             
             os.makedirs('/data/output', exist_ok=True)
             
@@ -234,7 +239,7 @@ spec:
             # The CHO tenant: the workflow parameter if set, else the request's.
             # token-service only issues a token for wf-277-rfai's allowed tenants.
             with open('/data/output/tenant-id', 'w') as f:
-                f.write('{{workflow.parameters.tenant-id}}' or payload.get('tenantId', ''))
+                f.write(os.environ["WF_PARAM_TENANT_ID"] or payload.get('tenantId', ''))
 
             print(f"Parsed RFAI request for claim: {payload.get('claimNumber')}")
         volumeMounts:
@@ -267,8 +272,8 @@ spec:
             # Fetch the claim from claims-service with a CHO workload token
             # (wf-277-rfai, claims:read) for the claim's tenant.
             . /opt/cho/cho-workload.sh
-            TENANT_ID="{{inputs.parameters.tenant-id}}"
-            CLAIM_NUMBER="{{inputs.parameters.claim-number}}"
+            TENANT_ID="${PARAM_TENANT_ID}"
+            CLAIM_NUMBER="${PARAM_CLAIM_NUMBER}"
             if [ -z "$TENANT_ID" ]; then
               echo "No tenant: set the tenant-id parameter or tenantId in the RFAI request"
               exit 1
@@ -281,8 +286,8 @@ spec:
             # If API call fails or returns empty, create minimal claim info
             if [ -z "$RESPONSE" ] || [ "$RESPONSE" = "null" ]; then
               RESPONSE='{
-                "claimNumber": "{{inputs.parameters.claim-number}}",
-                "memberId": "{{inputs.parameters.member-id}}",
+                "claimNumber": "${PARAM_CLAIM_NUMBER}",
+                "memberId": "${PARAM_MEMBER_ID}",
                 "memberFirstName": "",
                 "memberLastName": "",
                 "providerNpi": "",
@@ -293,8 +298,14 @@ spec:
             
             mkdir -p /data/output
             echo "$RESPONSE" > /data/output/claim-info.json
-            echo "Fetched claim data for: {{inputs.parameters.claim-number}}"
+            echo "Fetched claim data for: ${PARAM_CLAIM_NUMBER}"
         env:
+          - name: PARAM_CLAIM_NUMBER
+            value: "{{inputs.parameters.claim-number}}"
+          - name: PARAM_MEMBER_ID
+            value: "{{inputs.parameters.member-id}}"
+          - name: PARAM_TENANT_ID
+            value: "{{inputs.parameters.tenant-id}}"
           - name: CLAIMS_SERVICE_URL
             value: "{{workflow.parameters.claims-service-url}}"
         volumeMounts:
@@ -330,6 +341,15 @@ spec:
           - name: edi-output
             path: /data/output/277_rfai.edi
       container:
+        env:
+          - name: PARAM_RECEIVER_ID
+            value: "{{inputs.parameters.receiver-id}}"
+          - name: PARAM_RFAI_REASON_CODE
+            value: "{{inputs.parameters.rfai-reason-code}}"
+          - name: PARAM_RFAI_REFERENCE
+            value: "{{inputs.parameters.rfai-reference}}"
+          - name: PARAM_SENDER_ID
+            value: "{{inputs.parameters.sender-id}}"
         image: cloudhealthoffice/x12-encoder:latest
         command: ["/bin/sh", "-c"]
         args:
@@ -345,20 +365,20 @@ spec:
               "memberFirstName": $(echo "$CLAIM_DATA" | jq -r '.memberFirstName // ""' | jq -Rs .),
               "memberLastName": $(echo "$CLAIM_DATA" | jq -r '.memberLastName // ""' | jq -Rs .),
               "providerNpi": $(echo "$CLAIM_DATA" | jq -r '.providerNpi // ""' | jq -Rs .),
-              "payerId": "{{inputs.parameters.sender-id}}",
+              "payerId": "${PARAM_SENDER_ID}",
               "payerName": $(echo "$CLAIM_DATA" | jq -r '.payerName // "HEALTH PLAN"' | jq -Rs .),
-              "rfaiReference": "{{inputs.parameters.rfai-reference}}",
-              "rfaiReasonCode": "{{inputs.parameters.rfai-reason-code}}",
+              "rfaiReference": "${PARAM_RFAI_REFERENCE}",
+              "rfaiReasonCode": "${PARAM_RFAI_REASON_CODE}",
               "statusCategoryCode": "A1",
               "statusCode": "20",
               "envelope": {
                 "sender": {
                   "qualifier": "ZZ",
-                  "identifier": "{{inputs.parameters.sender-id}}"
+                  "identifier": "${PARAM_SENDER_ID}"
                 },
                 "receiver": {
                   "qualifier": "ZZ",
-                  "identifier": "{{inputs.parameters.receiver-id}}"
+                  "identifier": "${PARAM_RECEIVER_ID}"
                 },
                 "usageIndicator": "P"
               }
@@ -408,8 +428,8 @@ spec:
             import paramiko
             from datetime import datetime
             
-            host = "{{inputs.parameters.sftp-host}}"
-            folder = "{{inputs.parameters.sftp-folder}}"
+            host = os.environ["PARAM_SFTP_HOST"]
+            folder = os.environ["PARAM_SFTP_FOLDER"]
             username = os.environ.get('SFTP_USERNAME')
             password = os.environ.get('SFTP_PASSWORD')
             
@@ -442,6 +462,10 @@ spec:
             with open('/data/output/upload-status.json', 'w') as f:
                 json.dump(result, f)
         env:
+          - name: PARAM_SFTP_FOLDER
+            value: "{{inputs.parameters.sftp-folder}}"
+          - name: PARAM_SFTP_HOST
+            value: "{{inputs.parameters.sftp-host}}"
           - name: SFTP_USERNAME
             valueFrom:
               secretKeyRef:
@@ -485,12 +509,16 @@ spec:
               if [ -f "$file" ]; then
                 filename=$(basename "$file")
                 timestamp=$(date +%Y%m%d%H%M%S)
-                s3_path="s3://{{inputs.parameters.s3-bucket}}/{{inputs.parameters.s3-prefix}}/${filename%.edi}-${timestamp}.edi"
+                s3_path="s3://${PARAM_S3_BUCKET}/${PARAM_S3_PREFIX}/${filename%.edi}-${timestamp}.edi"
                 aws s3 cp "$file" "$s3_path" --sse AES256
                 echo "Archived: $s3_path"
               fi
             done
         env:
+          - name: PARAM_S3_BUCKET
+            value: "{{inputs.parameters.s3-bucket}}"
+          - name: PARAM_S3_PREFIX
+            value: "{{inputs.parameters.s3-prefix}}"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
