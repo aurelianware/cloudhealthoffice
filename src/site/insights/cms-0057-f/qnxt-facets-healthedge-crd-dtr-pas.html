@@ -69,7 +69,7 @@
       --cyan:#00ffff;--green:#00ff88;--blue:#00b4ff;
       --bg:#05070a;--surface:rgba(8,8,8,.92);--surface-alt:rgba(0,255,255,.03);
       --border:rgba(0,255,255,.12);--border-bright:rgba(0,255,255,.3);
-      --text:#d7dde3;--text-muted:#a0a0a0;--text-dim:#606060;
+      --text:#d7dde3;--text-muted:#a0a0a0;--text-dim:#8a8a8a;
       --font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--max:1140px;--measure:760px;
     }
     html{scroll-behavior:smooth}
@@ -79,7 +79,7 @@
     .skip-to-main{position:absolute;left:-999px;top:0;background:var(--cyan);color:#000;padding:.6rem 1rem;z-index:200}
     .skip-to-main:focus{left:8px;top:8px}
 
-    nav{position:sticky;top:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
+    body>nav{position:sticky;top:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem}
     .nav-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
     .nav-brand{font-weight:800;font-size:1.05rem;color:#fff;text-decoration:none;display:flex;align-items:center;gap:.6rem}
     .nav-brand span{opacity:.5;font-weight:400;font-size:.8rem}
@@ -173,7 +173,7 @@
       /* Never hide the primary nav without a way back to it: there is no mobile
          toggle on these article pages, so the links stack and scroll instead of
          disappearing. Keyboard and screen-reader users keep full reach. */
-      nav{padding:0 1rem}
+      body>nav{padding:0 1rem}
       .nav-inner{height:auto;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.55rem 0}
       .nav-links{width:100%;gap:1.1rem;overflow-x:auto;padding-bottom:.15rem;scrollbar-width:none}
       .nav-links::-webkit-scrollbar{display:none}
