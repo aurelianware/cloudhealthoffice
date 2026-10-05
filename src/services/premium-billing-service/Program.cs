@@ -19,6 +19,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSecretProvider(builder.Configuration);
 builder.Configuration.AddAzureKeyVaultConfiguration(builder.Configuration);
 
+// The anonymous Stripe webhook is authenticated only by its signature: with
+// Stripe configured, a missing webhook secret is a startup error (outside
+// Development/Testing). See StripeWebhookSecret.
+StripeWebhookSecret.EnsureConfigured(builder.Configuration, builder.Environment);
+
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
 

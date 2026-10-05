@@ -172,6 +172,12 @@ public class StripeAchService : IStripeAchService
 
     public async Task<EftWebhookResult> ProcessWebhookAsync(string json, string stripeSignature)
     {
+        // The webhook endpoint is reachable without a CHO token; the signature is
+        // its only authentication. With an empty secret anyone could compute a
+        // valid signature (HMAC with an empty key) and settle any tenant's draft.
+        if (!StripeWebhookSecret.IsUsable(_webhookSecret))
+            throw new InvalidOperationException("Stripe webhook secret is not configured; webhook rejected");
+
         try
         {
             var stripeEvent = EventUtility.ConstructEvent(json, stripeSignature, _webhookSecret);
