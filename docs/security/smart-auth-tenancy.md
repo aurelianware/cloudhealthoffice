@@ -323,6 +323,27 @@ The value must be the same everywhere:
 `SmartIssuerTests` checks that the smart-auth and fhir-service appsettings
 values agree.
 
+## Behind the ingress (TLS termination)
+
+TLS ends at ingress-nginx, so every request reaches the pod as plain HTTP.
+OpenIddict refuses non-HTTPS requests to its endpoints, and the session and
+sign-in cookies are Secure. The service therefore takes the client's scheme
+from `X-Forwarded-Proto`, and **only** that header, **only** from the CIDRs in
+`SmartAuth:TrustedProxyNetworks` (`TrustedProxy`):
+
+- Set it to the network the ingress-nginx controller pods connect from: the AKS
+  pod CIDR (kubenet), or the node subnet (Azure CNI). An invalid entry fails
+  startup.
+- With nothing listed, no forwarded header is honoured from anyone (ASP.NET
+  would otherwise treat empty proxy lists as "trust every sender"), and every
+  `/connect/*` request is refused as plain HTTP.
+- `X-Forwarded-Host` and `X-Forwarded-For` are never used: the issuer,
+  discovery URLs and the external login's redirect URI come from configuration.
+
+`TrustedProxyTests` keep OpenIddict's HTTPS requirement on (the other suites
+turn it off) and show discovery is served only for a trusted
+`X-Forwarded-Proto: https`.
+
 ## Token signing keys
 
 Outside Development and Testing the OpenIddict server's certificates come from

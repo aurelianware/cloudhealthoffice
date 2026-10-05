@@ -237,8 +237,13 @@ builder.Services.AddChoBrowserCors(builder.Configuration, builder.Environment);
 
 builder.Services.AddChoObservability(builder.Configuration);
 
+// TLS ends at the ingress: the client's scheme comes from X-Forwarded-Proto,
+// trusted only from SmartAuth:TrustedProxyNetworks. See TrustedProxy.
+builder.Services.AddSmartTrustedProxy(builder.Configuration);
+
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseChoObservability();
 
 if (app.Environment.IsDevelopment())

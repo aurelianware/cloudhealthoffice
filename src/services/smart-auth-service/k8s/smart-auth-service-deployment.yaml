@@ -42,6 +42,12 @@ data:
   SmartAuth__LaunchContextTtlMinutes: "5"
   SmartAuth__DevMode: "false"
   SmartAuth__EnrolmentCodeTtlHours: "72"
+  # TLS ends at the ingress, so pods see plain HTTP; OpenIddict refuses that
+  # unless the ingress's X-Forwarded-Proto says the client used HTTPS. Only
+  # requests from these CIDRs (the ingress-nginx controller pods' network:
+  # the AKS pod CIDR, or the node subnet with Azure CNI) are trusted. With
+  # none listed every /connect/* request is refused.
+  SmartAuth__TrustedProxyNetworks__0: "<INGRESS_POD_CIDR>"
   # Configuration from Key Vault (certificates, client secret; see the header).
   SecretProvider__Provider: "AzureKeyVault"
   SecretProvider__AzureKeyVaultUri: "https://<KEY_VAULT_NAME>.vault.azure.net/"
