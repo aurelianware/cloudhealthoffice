@@ -218,7 +218,8 @@ public class EftDraftService : IEftDraftService
                     bankAccount.StripePaymentMethodId!,
                     amount,
                     invoice.InvoiceNumber,
-                    invoice.GroupNumber);
+                    invoice.GroupNumber,
+                    draft.Id);
             }
             catch (Exception ex)
             {
@@ -338,6 +339,18 @@ public class EftDraftService : IEftDraftService
                         InitiatedBy = request.InitiatedBy
                     });
                     result.DraftIds.Add(draft.Id);
+                    if (draft.Status == EftDraftStatus.PaymentUnknown)
+                    {
+                        // May have been debited: never retried by this batch, reported for checking.
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Invoice {invoiceId}: {draft.ErrorMessage}");
+                        result.NeedsAttention.Add(new EftAttentionItem
+                        {
+                            DraftId = draft.Id, InvoiceId = invoice.Id, GroupNumber = invoice.GroupNumber,
+                            Reason = draft.ErrorMessage ?? "Stripe debit outcome unknown"
+                        });
+                        continue;
+                    }
                     result.DraftsInitiated++;
                     result.TotalAmount += draft.Amount;
                 }
@@ -607,6 +620,9 @@ public class EftDraftService : IEftDraftService
         {
             var draft = drafts[i];
             draft.LastUpdatedBy = ActorId;
+            // Who released the file, kept with each draft: the releaser check
+            // still holds once the held file has expired.
+            draft.ReleasedBy = ActorId;
             switch (outcome.Status)
             {
                 case NachaTransmissionStatus.Transmitted:
@@ -683,6 +699,7 @@ public class EftDraftService : IEftDraftService
                 draft.Status = EftDraftStatus.Pending;
                 draft.NachaFileReference = null;
                 draft.TraceNumber = null;
+                draft.ReleasedBy = null;
                 draft.ErrorMessage = $"Held NACHA file {fileReference} expired before it was delivered; back to Pending for the next file.";
                 draft.LastUpdatedBy = ActorId;
                 await _draftRepository.UpdateAsync(draft);
@@ -753,10 +770,20 @@ public class EftDraftService : IEftDraftService
             // The held file is gone (7 days); the drafts still wait for the answer.
             if (string.IsNullOrWhiteSpace(reason))
                 throw new ArgumentException("A reason (what the bank said) is required.");
-            if (drafts.Any(d => string.Equals(d.LastUpdatedBy, ActorId, StringComparison.OrdinalIgnoreCase)))
+            // The same checks the dispatcher makes on a held file, from the
+            // releaser recorded on the drafts (not whoever last updated them).
+            if (drafts.Any(d => string.IsNullOrEmpty(d.ReleasedBy)))
+                throw new SeparationOfDutiesException(
+                    $"Separation of duties: the user who released NACHA file {fileReference} is not recorded, so who may record the bank's " +
+                    "answer cannot be checked. Reconcile it by hand.");
+            if (drafts.Any(d => string.Equals(d.ReleasedBy, ActorId, StringComparison.OrdinalIgnoreCase)))
                 throw new SeparationOfDutiesException(
                     "Separation of duties: you released this NACHA file, so you cannot record whether the bank received it.");
             fileStillHeld = false;
+            _logger.LogWarning(
+                "AUDIT NACHA file {FileReference}: held file expired; {User} recorded that the bank {Answer} it (released by {ReleasedBy}): {Reason}",
+                SanitizeForLog(fileReference), SanitizeForLog(ActorId), bankReceived ? "received" : "did not receive",
+                SanitizeForLog(string.Join(",", drafts.Select(d => d.ReleasedBy).Distinct())), SanitizeForLog(reason));
         }
 
         var now = DateTime.UtcNow;
@@ -781,6 +808,7 @@ public class EftDraftService : IEftDraftService
                     draft.TraceNumber = null;
                     draft.ReleaseClaimId = null;
                     draft.ReleaseClaimedAt = null;
+                    draft.ReleasedBy = null;
                     draft.ErrorMessage = $"The bank confirmed it did not receive NACHA file {fileReference}, which has expired; back to Pending for the next file.";
                     break;
             }

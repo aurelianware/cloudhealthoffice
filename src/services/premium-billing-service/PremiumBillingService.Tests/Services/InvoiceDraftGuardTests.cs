@@ -96,7 +96,7 @@ public sealed class InvoiceDraftGuardTests : IAsyncLifetime
         }
     }
 
-    private EftDraftService Approver(string userId, INachaDispatcher bank)
+    private EftDraftService Approver(string userId, INachaDispatcher bank, IStripeAchService? stripe = null)
     {
         var accessor = Request();
         var actor = new Mock<ICurrentActor>();
@@ -111,6 +111,7 @@ public sealed class InvoiceDraftGuardTests : IAsyncLifetime
             .ReturnsAsync(SponsorBankAccountLookup.Found(new SponsorBankAccount
             {
                 EftEnabled = true, PreferredMethod = EftMethod.Nacha, RoutingNumber = "091000019", AccountNumber = "123456789",
+                StripeCustomerId = "cus_1", StripePaymentMethodId = "pm_1",
                 RoutingNumberLast4 = "0019", AccountNumberLast4 = "6789", AccountHolderName = "ACME"
             }));
         var config = Config();
@@ -118,7 +119,7 @@ public sealed class InvoiceDraftGuardTests : IAsyncLifetime
             new EftDraftRepositoryMongo(_database, accessor),
             invoices.Object, Mock.Of<IBillingRunRepository>(),
             new NachaFileService(config, Mock.Of<ILogger<NachaFileService>>()),
-            Mock.Of<IStripeAchService>(), accounts.Object, bank, actor.Object, accessor, config,
+            stripe ?? Mock.Of<IStripeAchService>(), accounts.Object, bank, actor.Object, accessor, config,
             Mock.Of<ILogger<EftDraftService>>());
     }
 
@@ -264,5 +265,75 @@ public sealed class InvoiceDraftGuardTests : IAsyncLifetime
 
         await FluentActions.Awaiting(() => Drafts().CreateAsync(new EftDraft { InvoiceId = "inv-1", GroupNumber = "G", Amount = 10 }))
             .Should().ThrowAsync<InvoiceDraftConflictException>();
+    }
+
+    public static TheoryData<string> UnknownOutcomes() => new() { "http", "timeout", "io", "stripe-5xx" };
+
+    private static Exception UnknownOutcome(string kind) => kind switch
+    {
+        "http" => new HttpRequestException("connection reset after the request was sent"),
+        "timeout" => new TaskCanceledException("Stripe did not answer in time"),
+        "io" => new IOException("broken pipe"),
+        _ => new Stripe.StripeException(System.Net.HttpStatusCode.InternalServerError, new Stripe.StripeError { Type = "api_error" }, "Stripe error"),
+    };
+
+    [Theory]
+    [MemberData(nameof(UnknownOutcomes))]
+    public async Task StripeDebitWhoseOutcomeIsUnknown_KeepsTheInvoice_AndIsNeverDebitedAgain(string kind)
+    {
+        SeedInvoices(1);
+        var draftIds = new List<string>();
+        var stripe = new Mock<IStripeAchService>();
+        stripe.Setup(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Callback<string, string, decimal, string, string, string>((_, _, _, _, _, id) => draftIds.Add(id))
+            .ThrowsAsync(UnknownOutcome(kind));
+
+        var draft = await Approver("approver-1", new Bank(), stripe.Object)
+            .InitiateDraftAsync(new InitiateEftDraftRequest { InvoiceId = "inv-0", Method = EftMethod.StripeAch });
+
+        draft.Status.Should().Be(EftDraftStatus.PaymentUnknown);
+        draftIds.Should().ContainSingle().Which.Should().Be(draft.Id, "the idempotency key is derived from the draft id");
+        (await Drafts().GetByIdAsync(draft.Id))!.Status.Should().Be(EftDraftStatus.PaymentUnknown);
+
+        // Neither a second draft nor a batch debits it again.
+        await FluentActions.Awaiting(() => Approver("approver-2", new Bank(), stripe.Object)
+                .InitiateDraftAsync(new InitiateEftDraftRequest { InvoiceId = "inv-0", Method = EftMethod.StripeAch }))
+            .Should().ThrowAsync<InvoiceDraftConflictException>();
+        var batch = await Approver("approver-2", new Bank(), stripe.Object)
+            .InitiateBatchDraftAsync(new InitiateBatchEftRequest { InvoiceIds = new List<string> { "inv-0" }, Method = EftMethod.StripeAch });
+        batch.DraftsInitiated.Should().Be(0);
+        stripe.Verify(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        (await AllDraftsAsync()).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BatchStripeDebitWhoseOutcomeIsUnknown_IsReportedForChecking_NotCountedAsInitiated()
+    {
+        SeedInvoices(1);
+        var stripe = new Mock<IStripeAchService>();
+        stripe.Setup(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new HttpRequestException("reset"));
+
+        var batch = await Approver("approver-1", new Bank(), stripe.Object)
+            .InitiateBatchDraftAsync(new InitiateBatchEftRequest { InvoiceIds = new List<string> { "inv-0" }, Method = EftMethod.StripeAch });
+
+        batch.DraftsInitiated.Should().Be(0);
+        batch.NeedsAttention.Should().ContainSingle();
+        (await AllDraftsAsync()).Should().ContainSingle().Which.Status.Should().Be(EftDraftStatus.PaymentUnknown);
+    }
+
+    [Fact]
+    public async Task StripeRefusal_FreesTheInvoice()
+    {
+        SeedInvoices(1);
+        var stripe = new Mock<IStripeAchService>();
+        stripe.Setup(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new StripeAchDraftResult { Status = "failed", ErrorMessage = "declined" });
+
+        var draft = await Approver("approver-1", new Bank(), stripe.Object)
+            .InitiateDraftAsync(new InitiateEftDraftRequest { InvoiceId = "inv-0", Method = EftMethod.StripeAch });
+
+        draft.Status.Should().Be(EftDraftStatus.Failed);
+        await Drafts().CreateAsync(new EftDraft { InvoiceId = "inv-0", GroupNumber = "G", Amount = 10, Status = EftDraftStatus.Pending });
     }
 }

@@ -226,7 +226,7 @@ public class EftDraftServiceTests
             AccountNumberLast4 = "6789"
         });
         _stripeService.Setup(s => s.CreateAchDraftAsync(
-                "cus_123", "pm_123", 1500.00m, It.IsAny<string>(), "GRP001"))
+                "cus_123", "pm_123", 1500.00m, It.IsAny<string>(), "GRP001", It.IsAny<string>()))
             .ReturnsAsync(new StripeAchDraftResult
             {
                 PaymentIntentId = "pi_123",
@@ -262,7 +262,7 @@ public class EftDraftServiceTests
         });
         _stripeService.Setup(s => s.CreateAchDraftAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(),
-                It.IsAny<string>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new StripeAchDraftResult
             {
                 Status = "failed",
@@ -422,12 +422,12 @@ public class EftDraftServiceTests
             .WithMessage("No pending NACHA drafts*");
     }
 
-    private EftDraft DeliveryUnknownDraft(string lastUpdatedBy = "releaser-1")
+    private EftDraft DeliveryUnknownDraft(string? releasedBy = "releaser-1", string lastUpdatedBy = "releaser-1")
     {
         var draft = new EftDraft
         {
             Id = "d-du", GroupNumber = "GRP001", Method = EftMethod.Nacha, Amount = 100, Status = EftDraftStatus.DeliveryUnknown,
-            NachaFileReference = "NACHA-DU", TraceNumber = "091000010000001", LastUpdatedBy = lastUpdatedBy
+            NachaFileReference = "NACHA-DU", TraceNumber = "091000010000001", LastUpdatedBy = lastUpdatedBy, ReleasedBy = releasedBy
         };
         _draftRepo.Setup(r => r.GetByStatusAsync(EftDraftStatus.DeliveryUnknown)).ReturnsAsync(new List<EftDraft> { draft });
         _draftRepo.Setup(r => r.UpdateAsync(It.IsAny<EftDraft>())).ReturnsAsync((EftDraft d) => d);
@@ -465,13 +465,53 @@ public class EftDraftServiceTests
     [Fact]
     public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByTheReleaser_IsRefused()
     {
-        var draft = DeliveryUnknownDraft(lastUpdatedBy: "approver-1");
+        var draft = DeliveryUnknownDraft(releasedBy: "approver-1", lastUpdatedBy: "approver-1");
         _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
 
         var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "it never arrived");
 
         await act.Should().ThrowAsync<SeparationOfDutiesException>();
         draft.Status.Should().Be(EftDraftStatus.DeliveryUnknown);
+    }
+
+    [Theory]
+    [InlineData("approver-1")]
+    [InlineData("APPROVER-1")]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ChecksTheRecordedReleaser_NotWhoeverLastUpdatedIt(string releasedBy)
+    {
+        // Someone else touched the draft last (e.g. a retry); the releaser is still the releaser.
+        var draft = DeliveryUnknownDraft(releasedBy: releasedBy, lastUpdatedBy: "retrier-9");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        draft.Status.Should().Be(EftDraftStatus.DeliveryUnknown);
+        _draftRepo.Verify(r => r.UpdateAsync(It.IsAny<EftDraft>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_WithoutARecordedReleaser_IsRefused()
+    {
+        var draft = DeliveryUnknownDraft(releasedBy: null, lastUpdatedBy: "someone-else");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        var act = () => _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "it never arrived");
+
+        await act.Should().ThrowAsync<SeparationOfDutiesException>();
+        draft.Status.Should().Be(EftDraftStatus.DeliveryUnknown);
+    }
+
+    [Fact]
+    public async Task ResolveNachaDelivery_AfterTheHeldFileExpired_ByAnotherUser_ClearsTheReleaser()
+    {
+        var draft = DeliveryUnknownDraft(releasedBy: "releaser-1");
+        _dispatcher.ResolveThrows = new CloudHealthOffice.NachaTransmission.NachaHeldFileExpiredException("NACHA-DU");
+
+        await _service.ResolveNachaDeliveryAsync("NACHA-DU", bankReceived: false, "Bank ops confirmed no file");
+
+        draft.Status.Should().Be(EftDraftStatus.Pending);
+        draft.ReleasedBy.Should().BeNull();
     }
 
     [Fact]
@@ -509,6 +549,8 @@ public class EftDraftServiceTests
         var result = await _service.GenerateNachaFileForPendingDraftsAsync();
 
         draft.Status.Should().Be(expected);
+        draft.ReleasedBy.Should().Be(expected == EftDraftStatus.Pending ? null : "approver-1",
+            "the releaser is kept with each draft in a file, for the releaser check after the held file expires");
         if (expected != EftDraftStatus.Submitted) draft.SubmittedAt.Should().BeNull();
         result.TransmissionStatus.Should().Be(outcome.ToString());
         result.Entries.Should().ContainSingle(e => e.DraftId == "d1" && e.AccountNumberLast4 == "6789" && e.Amount == 100);
@@ -733,7 +775,7 @@ public class EftDraftServiceTests
         _draftRepo.Setup(r => r.CreateAsync(It.IsAny<EftDraft>()))
             .Callback(() => order.Add("draft"))
             .ReturnsAsync((EftDraft d) => d);
-        _stripeService.Setup(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
+        _stripeService.Setup(s => s.CreateAchDraftAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Callback(() => order.Add("stripe"))
             .ThrowsAsync(new HttpRequestException("connection reset"));
 
