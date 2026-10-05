@@ -75,6 +75,30 @@ expire (default 60 minutes).
 `offline_access` is now a registered scope, so interactive clients can be
 issued refresh tokens.
 
+### Consent (`SmartConsent`)
+
+- Before an interactive app gets an authorization code (and so before any
+  refresh token), the signed-in person sees a consent page naming the app
+  (its registered display name) and each requested scope, `offline_access`
+  spelled out as "keep access when you are not using the app". Allow or Deny.
+- The decision posts back to `/connect/authorize` with the original request
+  parameters and a `consent_token`: a 10-minute Data Protection-protected proof
+  of the exact (identity, client, scope set) the page was shown for. A decision
+  without a valid proof for the signed-in identity and the request's client
+  and scopes is ignored and the page is shown again, so another site cannot
+  post an approval for the person and a proof cannot be reused for wider scopes.
+- Allow creates a permanent OpenIddict authorization for (identity `issuer|subject`,
+  client, scopes); the page is not shown again for that client while a valid
+  authorization covers the requested scopes. Every code and refresh token
+  carries that authorization's id, so revoking it (OpenIddict
+  `TryRevokeAsync`) ends refresh. Deny returns `access_denied`.
+- `prompt=none` without a stored approval returns `consent_required`;
+  `prompt=consent` always shows the page.
+- Consent runs before the binding checks and before a launch is consumed. A
+  `launch` parameter with control characters is refused before the page.
+- There is no first-party exemption: client registrations have no first-party
+  flag, so every interactive client, the demo ones included, is asked once.
+
 ### EHR launch (`POST /launch`)
 
 - It needs a CHO token with `members:read`, and the launch belongs to that

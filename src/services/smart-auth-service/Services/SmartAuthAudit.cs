@@ -38,6 +38,11 @@ public sealed class SmartAuthAudit
             "SMART token {Outcome}: identity={Identity} client={Client} reason={Reason}",
             "refused", Clean(identity), Clean(clientId), Clean(reason));
 
+    public void Consented(string identity, string clientId, string scopes)
+        => _logger.LogInformation(
+            "SMART consent {Outcome}: identity={Identity} client={Client} scopes={Scopes}",
+            "granted", Clean(identity), Clean(clientId), Clean(scopes));
+
     public void SignedIn(string method, string identity)
         => _logger.LogInformation(
             "SMART sign-in {Outcome}: method={Method} identity={Identity}",

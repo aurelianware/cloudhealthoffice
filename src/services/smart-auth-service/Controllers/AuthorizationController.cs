@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -32,6 +33,13 @@ namespace SmartAuthService.Controllers;
 ///         be of the provider's tenant and for this client
 ///
 /// Backend (client_credentials): tenant = the client's registration.
+///
+/// Consent: before an interactive app gets a code (and, with
+/// <c>offline_access</c>, a refresh token), the signed-in person approves that
+/// app and that scope set on a consent page (<see cref="SmartConsent"/>). The
+/// approval is a permanent OpenIddict authorization for (identity, client,
+/// scopes), so the page is shown once per new scope set; every code and token
+/// is tied to it, and revoking it ends refresh.
 /// </summary>
 [ApiController]
 public class AuthorizationController : ControllerBase
@@ -39,15 +47,24 @@ public class AuthorizationController : ControllerBase
     private readonly SmartTokenContextResolver _resolver;
     private readonly SmartAuthAudit _audit;
     private readonly ILogger<AuthorizationController> _logger;
+    private readonly IOpenIddictApplicationManager _applications;
+    private readonly IOpenIddictAuthorizationManager _authorizations;
+    private readonly SmartConsent _consent;
 
     public AuthorizationController(
         SmartTokenContextResolver resolver,
         SmartAuthAudit audit,
-        ILogger<AuthorizationController> logger)
+        ILogger<AuthorizationController> logger,
+        IOpenIddictApplicationManager applications,
+        IOpenIddictAuthorizationManager authorizations,
+        SmartConsent consent)
     {
         _resolver = resolver;
         _audit = audit;
         _logger = logger;
+        _applications = applications;
+        _authorizations = authorizations;
+        _consent = consent;
     }
 
     // ── Authorization endpoint ────────────────────────────────────────────────
@@ -82,17 +99,73 @@ public class AuthorizationController : ControllerBase
         if (identity is null)
             return Refuse(null, request.ClientId, "session_has_no_identity");
 
-        // The EHR launch (if any) is consumed by the resolver, atomically and
-        // only for the provider's tenant and this client, after every other check.
-        var launchToken = request.GetParameter("launch")?.ToString();
-
         var scopes = request.GetScopes();
+
+        // The EHR launch (if any) is consumed by the resolver, atomically and
+        // only for the provider's tenant and this client, after every other
+        // check. A launch token is base64url: one with control characters is
+        // refused before it is echoed into the consent form.
+        var launchToken = request.GetParameter("launch")?.ToString();
+        if (launchToken != null && launchToken.Any(char.IsControl))
+            return Refuse(identity.Value.ToString(), request.ClientId, "launch_malformed");
+
+        // ── Consent ──────────────────────────────────────────────────────────
+        // Nothing is resolved (and no launch consumed) until the person has
+        // approved this client for these scopes.
+        var application = await _applications.FindByClientIdAsync(request.ClientId ?? string.Empty, ct);
+        if (application is null)
+            return Refuse(identity.Value.ToString(), request.ClientId, "client_unknown");
+        var applicationId = (await _applications.GetIdAsync(application, ct))!;
+        var subject = identity.Value.ToString();
+
+        var authorization = request.HasPromptValue(PromptValues.Consent)
+            ? null
+            : await FindConsentAsync(subject, applicationId, scopes, ct);
+        var approvedNow = false;
+        if (authorization is null)
+        {
+            var decision = Request.HasFormContentType ? Request.Form[SmartConsent.DecisionField].ToString() : null;
+            var proof = Request.HasFormContentType ? Request.Form[SmartConsent.TokenField].ToString() : null;
+            var proven = !string.IsNullOrEmpty(decision)
+                         && _consent.Verify(proof, subject, request.ClientId!, scopes);
+
+            if (proven && decision == SmartConsent.Deny)
+                return Refuse(subject, request.ClientId, "consent_denied", "The user did not approve this app.");
+
+            if (!(proven && decision == SmartConsent.Approve))
+            {
+                if (request.HasPromptValue(PromptValues.None))
+                {
+                    return ForbidAuthorize(Errors.ConsentRequired, "The user has not approved this app for these scopes.");
+                }
+
+                var displayName = await _applications.GetLocalizedDisplayNameAsync(application, ct)
+                                  ?? request.ClientId!;
+                return Content(SmartConsent.Page(
+                        displayName, scopes, OriginalParameters(),
+                        _consent.Issue(subject, request.ClientId!, scopes)),
+                    "text/html");
+            }
+
+            approvedNow = true;
+        }
+
         var resolution = await _resolver.ResolveInteractiveAsync(
             identity.Value, request.ClientId ?? string.Empty, scopes, launchToken, ct);
         if (resolution.Context is not { } context)
             return Refuse(identity.Value.ToString(), request.ClientId, resolution.Refusal!);
 
         var principal = SmartTokenContextResolver.CreatePrincipal(context, scopes);
+
+        // Remember the approval: a permanent authorization for (identity,
+        // client, scopes). Codes and refresh tokens are tied to it.
+        if (approvedNow)
+        {
+            authorization = await _authorizations.CreateAsync(
+                principal, subject, applicationId, AuthorizationTypes.Permanent, scopes, ct);
+            _audit.Consented(subject, request.ClientId!, string.Join(" ", scopes));
+        }
+        principal.SetAuthorizationId(await _authorizations.GetIdAsync(authorization!, ct));
         var name = cookieAuth.Principal.FindFirstValue(ClaimTypes.Name);
         if (!string.IsNullOrEmpty(name))
         {
@@ -204,19 +277,49 @@ public class AuthorizationController : ControllerBase
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /// <summary>A valid permanent approval of this client covering every requested scope, or null.</summary>
+    private async Task<object?> FindConsentAsync(
+        string subject, string applicationId, ImmutableArray<string> scopes, CancellationToken ct)
+    {
+        await foreach (var authorization in _authorizations.FindAsync(
+                           subject, applicationId, Statuses.Valid, AuthorizationTypes.Permanent, scopes, ct))
+        {
+            return authorization;
+        }
+        return null;
+    }
+
+    /// <summary>The authorization request's own parameters, for the consent form to post back.</summary>
+    private IEnumerable<KeyValuePair<string, string>> OriginalParameters()
+    {
+        var source = Request.HasFormContentType
+            ? Request.Form.Select(p => new KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>(p.Key, p.Value))
+            : Request.Query.Select(p => new KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>(p.Key, p.Value));
+        foreach (var (key, values) in source)
+        {
+            if (key is SmartConsent.DecisionField or SmartConsent.TokenField)
+                continue;
+            foreach (var value in values)
+                yield return new(key, value ?? string.Empty);
+        }
+    }
+
     /// <summary>No binding, no token: OAuth access_denied back to the client.</summary>
-    private IActionResult Refuse(string? identity, string? clientId, string reason)
+    private IActionResult Refuse(string? identity, string? clientId, string reason, string? description = null)
     {
         _audit.TokenRefused(identity, clientId, reason);
-        return Forbid(
+        return ForbidAuthorize(Errors.AccessDenied, description
+            ?? "This account is not linked to a member or provider of a tenant this app is registered with.");
+    }
+
+    private IActionResult ForbidAuthorize(string error, string description)
+        => Forbid(
             new AuthenticationProperties(new Dictionary<string, string?>
             {
-                [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.AccessDenied,
-                [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] =
-                    "This account is not linked to a member or provider of a tenant this app is registered with.",
+                [OpenIddictServerAspNetCoreConstants.Properties.Error] = error,
+                [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = description,
             }),
             OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-    }
 
     private IActionResult ForbidGrant(string error, string description)
         => Forbid(

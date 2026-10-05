@@ -114,10 +114,15 @@ public sealed class SmartAuthDriver
 
     public sealed record AuthorizeOutcome(string? Code, string? Error, string Verifier, string RedirectUri);
 
+    /// <summary>
+    /// The authorization request; when the consent page comes back, the person
+    /// answers it with <paramref name="consent"/> ("approve" by default; null
+    /// leaves the page unanswered and fails the call).
+    /// </summary>
     public static async Task<AuthorizeOutcome> AuthorizeAsync(
         HttpClient browser, string clientId, string scope, string? launch = null,
         IDictionary<string, string>? extra = null, Action<HttpRequestMessage>? tamper = null,
-        string redirectUri = RedirectUri)
+        string redirectUri = RedirectUri, string? consent = "approve")
     {
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
@@ -137,6 +142,13 @@ public sealed class SmartAuthDriver
         var request = new HttpRequestMessage(HttpMethod.Get, QueryHelpers.AddQueryString("/connect/authorize", query));
         tamper?.Invoke(request);
         var resp = await browser.SendAsync(request);
+        if (resp.StatusCode == HttpStatusCode.OK && consent != null)
+        {
+            var page = await resp.Content.ReadAsStringAsync();
+            var form = ConsentForm(page);
+            form.Add(new("consent_decision", consent));
+            resp = await browser.PostAsync("/connect/authorize", new FormUrlEncodedContent(form));
+        }
         resp.StatusCode.Should().Be(HttpStatusCode.Redirect, await resp.Content.ReadAsStringAsync());
 
         var location = resp.Headers.Location!;
@@ -147,6 +159,17 @@ public sealed class SmartAuthDriver
             parsed.TryGetValue("error", out var e) ? e.ToString() : null,
             verifier,
             redirectUri);
+    }
+
+    /// <summary>The hidden fields of a consent page, as a browser would post them.</summary>
+    public static List<KeyValuePair<string, string>> ConsentForm(string page)
+    {
+        page.Should().Contain("consent_token", "the consent page is expected here");
+        return System.Text.RegularExpressions.Regex
+            .Matches(page, "<input type=\"hidden\" name=\"([^\"]*)\" value=\"([^\"]*)\">")
+            .Select(m => new KeyValuePair<string, string>(
+                System.Net.WebUtility.HtmlDecode(m.Groups[1].Value), System.Net.WebUtility.HtmlDecode(m.Groups[2].Value)))
+            .ToList();
     }
 
     public async Task<(HttpStatusCode Status, JsonElement Body)> ExchangeCodeAsync(

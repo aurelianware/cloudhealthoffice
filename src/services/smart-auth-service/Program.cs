@@ -217,6 +217,7 @@ builder.Services.AddSingleton<ILaunchContextStore>(sp =>
     new MongoLaunchContextStore(RequireMongo(sp), sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddScoped<SmartTokenContextResolver>();
 builder.Services.AddSingleton<SmartAuthAudit>();
+builder.Services.AddSingleton<SmartConsent>();
 
 // ── Hosted seed worker ────────────────────────────────────────────────────────
 builder.Services.AddHostedService<OpenIddictSeedWorker>();
