@@ -21,9 +21,13 @@ public class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        // Config/appsettings.{environment}.json overlays the base file
+        // (DOTNET_ENVIRONMENT; e.g. Development points at a local terminology-service).
+        var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
         var config = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("Config/appsettings.json", optional: true)
+            .AddJsonFile($"Config/appsettings.{environment}.json", optional: true)
             .AddEnvironmentVariables("CHO_TMPPM_")
             .Build();
 

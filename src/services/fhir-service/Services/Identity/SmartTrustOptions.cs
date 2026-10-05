@@ -78,11 +78,12 @@ public sealed class SmartTrustOptions
 
     /// <summary>
     /// Legacy Demo field: the tenants the bundled smart-auth-service may
-    /// authenticate. smart-auth-service has no reliable notion of a user's tenant
-    /// (its development login accepts any user, and launch registration takes the
-    /// tenant from an unauthenticated header), so its tokens carry no tenant claim.
-    /// Confining the Demo issuer to ONE tenant here makes that tenant the token's
-    /// tenant by configuration (see SmartTenant); without it, its tokens get 401.
+    /// authenticate. smart-auth-service now always issues <c>tenant_id</c> from
+    /// the server-side member, provider or client binding, so this list only
+    /// matters for legacy tokens that carry no tenant claim: confining the Demo
+    /// issuer to ONE tenant makes that tenant such a token's tenant (see
+    /// SmartTenant); without it they get 401. A token's own tenant claim must
+    /// still be one of these tenants.
     /// </summary>
     public List<string> Tenants { get; set; } = [];
 
