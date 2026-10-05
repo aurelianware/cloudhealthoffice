@@ -83,6 +83,7 @@ public class CapitationDisbursementService : ICapitationDisbursementService
     private readonly IPaymentSeparationOfDuties _separationOfDuties;
     private readonly IProviderBankAccountSource _bankAccounts;
     private readonly INachaDispatcher _dispatcher;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private readonly ILogger<CapitationDisbursementService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -101,8 +102,10 @@ public class CapitationDisbursementService : ICapitationDisbursementService
         IPaymentSeparationOfDuties separationOfDuties,
         IProviderBankAccountSource bankAccounts,
         INachaDispatcher dispatcher,
-        ILogger<CapitationDisbursementService> logger)
+        ILogger<CapitationDisbursementService> logger,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
+        _httpContextAccessor = httpContextAccessor;
         _separationOfDuties = separationOfDuties;
         _bankAccounts = bankAccounts;
         _dispatcher = dispatcher;
@@ -172,7 +175,8 @@ public class CapitationDisbursementService : ICapitationDisbursementService
                 bankAccount.StripeConnectedAccountId!,
                 amount,
                 statement.StatementNumber,
-                statement.ProviderNPI);
+                statement.ProviderNPI,
+                statement.TenantId);
 
             if (result.Status == "failed")
             {
@@ -739,6 +743,26 @@ public class CapitationDisbursementService : ICapitationDisbursementService
 
         if (!webhookResult.Handled || string.IsNullOrEmpty(webhookResult.TransferId))
             return;
+
+        // The webhook is anonymous (authenticated by the Stripe signature just
+        // verified), so the tenant comes from the signed event: the tenant_id we
+        // wrote into the transfer's metadata. An event without one (a payout, or a
+        // transfer created before transfers carried it) cannot be matched to a
+        // tenant: it is acknowledged, so Stripe stops retrying, and logged for
+        // reconciliation.
+        if (string.IsNullOrEmpty(webhookResult.TenantId))
+        {
+            _logger.LogWarning(
+                "Stripe {EventType} event for {StripeObjectId} carries no tenant_id metadata; acknowledged but not processed. " +
+                "Reconcile the disbursement by hand",
+                SanitizeForLog(webhookResult.EventType), SanitizeForLog(webhookResult.TransferId));
+            return;
+        }
+        var http = _httpContextAccessor?.HttpContext
+            ?? throw new InvalidOperationException("Stripe webhook processed outside a request");
+        if (http.Items["TenantId"] is string existing && !string.Equals(existing, webhookResult.TenantId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Stripe event tenant does not match the request tenant");
+        http.Items["TenantId"] = webhookResult.TenantId;
 
         // Find the disbursement by Stripe Transfer ID
         var disbursements = await _disbursementRepository.GetByStripeTransferIdAsync(webhookResult.TransferId);

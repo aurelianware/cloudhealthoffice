@@ -55,8 +55,18 @@ public class CapitationDisbursementServiceTests
             TestSeparationOfDuties.Create(runs: _runRepo.Object),
             _bankAccountSource = new FactoryBackedProviderBankAccountSource(_httpClientFactory.Object),
             _dispatcher,
-            logger.Object);
+            logger.Object,
+            _httpContextAccessor);
     }
+
+    /// <summary>The anonymous webhook request: no tenant until the signed event names one.</summary>
+    private readonly Microsoft.AspNetCore.Http.HttpContextAccessor _httpContextAccessor =
+        new() { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() };
+
+    /// <summary>Like the real repositories: the tenant comes from the request, or the read fails.</summary>
+    private string RequestTenant()
+        => _httpContextAccessor.HttpContext?.Items["TenantId"] as string
+           ?? throw new InvalidOperationException("TenantId not found in request context");
 
     private readonly FactoryBackedProviderBankAccountSource _bankAccountSource;
     private readonly RecordingNachaDispatcher _dispatcher = new();
@@ -145,7 +155,7 @@ public class CapitationDisbursementServiceTests
             AccountNumberLast4 = "4321"
         });
         _stripeService.Setup(s => s.CreateTransferAsync(
-                "acct_provider123", 5000.00m, It.IsAny<string>(), "1234567890"))
+                "acct_provider123", 5000.00m, It.IsAny<string>(), "1234567890", It.IsAny<string>()))
             .ReturnsAsync(new StripeTransferResult
             {
                 TransferId = "tr_abc123",
@@ -570,7 +580,7 @@ public class CapitationDisbursementServiceTests
             StripeTransferId = "tr_abc123", Method = DisbursementMethod.StripeConnect
         };
         _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_abc123"))
-            .ReturnsAsync(new[] { disbursement });
+            .ReturnsAsync(() => { RequestTenant(); return new[] { disbursement }; });
         _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(disbursement);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
@@ -586,7 +596,8 @@ public class CapitationDisbursementServiceTests
             {
                 Handled = true,
                 EventType = "payout_paid",
-                TransferId = "tr_abc123"
+                TransferId = "tr_abc123",
+                TenantId = "tenant-1"
             });
 
         await _service.ProcessStripeWebhookAsync("{}", "sig_test");
@@ -605,7 +616,7 @@ public class CapitationDisbursementServiceTests
             StripeTransferId = "tr_abc123"
         };
         _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_abc123"))
-            .ReturnsAsync(new[] { disbursement });
+            .ReturnsAsync(() => { RequestTenant(); return new[] { disbursement }; });
         _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(disbursement);
         _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
@@ -622,6 +633,7 @@ public class CapitationDisbursementServiceTests
                 Handled = true,
                 EventType = "transfer_reversed",
                 TransferId = "tr_abc123",
+                TenantId = "tenant-1",
                 FailureCode = "TRANSFER_REVERSED",
                 FailureMessage = "Transfer was reversed"
             });
@@ -651,7 +663,8 @@ public class CapitationDisbursementServiceTests
             {
                 Handled = true,
                 EventType = "payout_paid",
-                TransferId = "tr_unknown"
+                TransferId = "tr_unknown",
+                TenantId = "tenant-1"
             });
         _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_unknown"))
             .ReturnsAsync(Enumerable.Empty<CapitationDisbursement>());
@@ -659,6 +672,60 @@ public class CapitationDisbursementServiceTests
         await _service.ProcessStripeWebhookAsync("{}", "sig_test");
 
         _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessStripeWebhookAsync_TransferReversed_RunsUnderTheTenantFromTheSignedEvent()
+    {
+        var disbursement = new CapitationDisbursement
+        {
+            Id = "disb-1", StatementId = "stmt-1", TenantId = "tenant-7",
+            Status = DisbursementStatus.Submitted, Amount = 5000, StripeTransferId = "tr_t7"
+        };
+        string? lookedUpUnder = null;
+        _disbursementRepo.Setup(r => r.GetByStripeTransferIdAsync("tr_t7"))
+            .ReturnsAsync(() => { lookedUpUnder = RequestTenant(); return new[] { disbursement }; });
+        _disbursementRepo.Setup(r => r.GetByIdAsync("disb-1")).ReturnsAsync(() => { RequestTenant(); return disbursement; });
+        _disbursementRepo.Setup(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()))
+            .ReturnsAsync((CapitationDisbursement d) => d);
+        _stripeService.Setup(s => s.ProcessWebhookAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new DisbursementWebhookResult
+            {
+                Handled = true, EventType = "transfer_reversed", TransferId = "tr_t7", TenantId = "tenant-7",
+                FailureCode = "TRANSFER_REVERSED"
+            });
+
+        await _service.ProcessStripeWebhookAsync("{}", "sig_test");
+
+        lookedUpUnder.Should().Be("tenant-7");
+        disbursement.Status.Should().Be(DisbursementStatus.Returned);
+    }
+
+    [Fact]
+    public async Task ProcessStripeWebhookAsync_EventWithoutTenant_IsAcknowledgedNotProcessed()
+    {
+        // A payout (or a transfer created before transfers carried tenant_id):
+        // no tenant to act for, and an error would make Stripe retry forever.
+        _stripeService.Setup(s => s.ProcessWebhookAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new DisbursementWebhookResult { Handled = true, EventType = "payout_paid", TransferId = "po_1" });
+
+        await _service.ProcessStripeWebhookAsync("{}", "sig_test");
+
+        _disbursementRepo.Verify(r => r.GetByStripeTransferIdAsync(It.IsAny<string>()), Times.Never);
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.IsAny<CapitationDisbursement>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessStripeWebhookAsync_EventForAnotherTenantThanTheRequestNames_IsRefused()
+    {
+        _httpContextAccessor.HttpContext!.Items["TenantId"] = "tenant-1";
+        _stripeService.Setup(s => s.ProcessWebhookAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new DisbursementWebhookResult { Handled = true, EventType = "transfer_reversed", TransferId = "tr_x", TenantId = "tenant-2" });
+
+        var act = () => _service.ProcessStripeWebhookAsync("{}", "sig_test");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _disbursementRepo.Verify(r => r.GetByStripeTransferIdAsync(It.IsAny<string>()), Times.Never);
     }
 
     #endregion
@@ -726,7 +793,7 @@ public class CapitationDisbursementServiceTests
             AccountNumberLast4 = "4321"
         });
         _stripeService.Setup(s => s.CreateTransferAsync(
-                It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
+                It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new StripeTransferResult
             {
                 Status = "failed",

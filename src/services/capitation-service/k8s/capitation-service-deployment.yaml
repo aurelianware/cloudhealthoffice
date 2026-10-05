@@ -84,6 +84,10 @@ spec:
             secretKeyRef:
               name: stripe-api-keys
               key: secret-key
+        # optional so a deployment that does not use Stripe Connect (secret-key
+        # left empty) starts without it. When secret-key is set, the service
+        # refuses to start without webhook-secret (StripeWebhookSecret.EnsureConfigured),
+        # and the anonymous webhook rejects every event while it is empty.
         - name: Stripe__WebhookSecret
           valueFrom:
             secretKeyRef:

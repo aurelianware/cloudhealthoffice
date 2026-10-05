@@ -46,7 +46,8 @@ public interface IStripeConnectService
         string stripeConnectedAccountId,
         decimal amount,
         string statementNumber,
-        string providerNpi);
+        string providerNpi,
+        string tenantId);
 
     /// <summary>
     /// Get the current status of a Transfer
@@ -66,6 +67,12 @@ public interface IStripeConnectService
 
 public class StripeConnectService : IStripeConnectService
 {
+    /// <summary>
+    /// Transfer metadata key carrying the CHO tenant. The Stripe webhook is
+    /// anonymous; this signed value is how an event finds its tenant.
+    /// </summary>
+    public const string TenantMetadataKey = "tenant_id";
+
     private readonly IStripeTransferClient _stripeClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<StripeConnectService> _logger;
@@ -81,14 +88,18 @@ public class StripeConnectService : IStripeConnectService
         _logger = logger;
 
         StripeConfiguration.ApiKey = configuration["Stripe:SecretKey"];
-        _webhookSecret = configuration["Stripe:ConnectWebhookSecret"] ?? configuration["Stripe:WebhookSecret"] ?? string.Empty;
+        // The first secret actually set: appsettings.json carries both keys as "",
+        // and Kubernetes sets only Stripe__WebhookSecret.
+        _webhookSecret = new[] { configuration["Stripe:ConnectWebhookSecret"], configuration["Stripe:WebhookSecret"] }
+            .FirstOrDefault(StripeWebhookSecret.IsUsable) ?? string.Empty;
     }
 
     public async Task<StripeTransferResult> CreateTransferAsync(
         string stripeConnectedAccountId,
         decimal amount,
         string statementNumber,
-        string providerNpi)
+        string providerNpi,
+        string tenantId)
     {
         var options = new TransferCreateOptions
         {
@@ -99,7 +110,8 @@ public class StripeConnectService : IStripeConnectService
             {
                 { "statement_number", statementNumber },
                 { "provider_npi", providerNpi },
-                { "type", "capitation" }
+                { "type", "capitation" },
+                { TenantMetadataKey, tenantId }
             },
             Description = $"Capitation payment for {statementNumber}"
         };
@@ -159,7 +171,7 @@ public class StripeConnectService : IStripeConnectService
     {
         // The webhook endpoint is reachable without a CHO token; the signature is
         // its only authentication. An empty secret would make any body "valid".
-        if (string.IsNullOrEmpty(_webhookSecret))
+        if (!StripeWebhookSecret.IsUsable(_webhookSecret))
             throw new InvalidOperationException("Stripe webhook secret is not configured; webhook rejected");
 
         try
@@ -210,6 +222,7 @@ public class StripeConnectService : IStripeConnectService
             EventType = "transfer_created",
             TransferId = transfer.Id,
             StatementNumber = statementNumber,
+            TenantId = transfer.Metadata?.GetValueOrDefault(TenantMetadataKey),
             Amount = transfer.Amount / 100m,
             Status = "submitted"
         };
@@ -233,6 +246,7 @@ public class StripeConnectService : IStripeConnectService
             EventType = "transfer_reversed",
             TransferId = transfer.Id,
             StatementNumber = statementNumber,
+            TenantId = transfer.Metadata?.GetValueOrDefault(TenantMetadataKey),
             Amount = transfer.Amount / 100m,
             Status = "returned",
             FailureCode = "TRANSFER_REVERSED",
@@ -254,6 +268,7 @@ public class StripeConnectService : IStripeConnectService
             Handled = true,
             EventType = "payout_paid",
             TransferId = payout.Id,
+            TenantId = payout.Metadata?.GetValueOrDefault(TenantMetadataKey),
             Amount = payout.Amount / 100m,
             Status = "settled"
         });
@@ -273,6 +288,7 @@ public class StripeConnectService : IStripeConnectService
             Handled = true,
             EventType = "payout_failed",
             TransferId = payout.Id,
+            TenantId = payout.Metadata?.GetValueOrDefault(TenantMetadataKey),
             Amount = payout.Amount / 100m,
             Status = "failed",
             FailureCode = payout.FailureCode,
@@ -316,6 +332,10 @@ public class DisbursementWebhookResult
     public string? EventType { get; set; }
     public string? TransferId { get; set; }
     public string? StatementNumber { get; set; }
+
+    /// <summary>The tenant from the signed event's metadata (<see cref="StripeConnectService.TenantMetadataKey"/>).</summary>
+    public string? TenantId { get; set; }
+
     public decimal Amount { get; set; }
     public string? Status { get; set; }
     public string? FailureCode { get; set; }

@@ -30,6 +30,11 @@ if (args.Contains("--migrate-split"))
     return;
 }
 
+// The anonymous Stripe Connect webhook is authenticated only by its signature:
+// with Stripe configured, a missing webhook secret is a startup error (outside
+// Development/Testing). See StripeWebhookSecret.
+StripeWebhookSecret.EnsureConfigured(builder.Configuration, builder.Environment);
+
 builder.Services.AddControllers()
     .AddCloudHealthOfficeJsonOptions();
 builder.Services.AddEndpointsApiExplorer();
