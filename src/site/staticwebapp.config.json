@@ -510,6 +510,15 @@
       "rewrite": "/insights/cms-0057-f/caps-vendor-sow-questions.html"
     },
     {
+      "route": "/insights/cms-0057-f/own-what-you-pay-for.html",
+      "redirect": "/insights/cms-0057-f/own-what-you-pay-for",
+      "statusCode": 301
+    },
+    {
+      "route": "/insights/cms-0057-f/own-what-you-pay-for",
+      "rewrite": "/insights/cms-0057-f/own-what-you-pay-for.html"
+    },
+    {
       "route": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas.html",
       "redirect": "/insights/cms-0057-f/qnxt-facets-healthedge-crd-dtr-pas",
       "statusCode": 301

@@ -832,6 +832,66 @@ describe('Services & deployment positioning', () => {
     });
   });
 
+  describe('ownership article (The Hangover Tax)', () => {
+    const slug = '/insights/cms-0057-f/own-what-you-pay-for';
+    const ownership = read('insights/cms-0057-f/own-what-you-pay-for.html');
+
+    it('is routed, listed in the sitemap, and linked from the series index', () => {
+      expect(redirects).not.toContain(slug);
+      const routes = swaConfig.routes as Array<Record<string, unknown>>;
+      expect(routes).toContainEqual({ route: slug, rewrite: `${slug}.html` });
+      expect(routes).toContainEqual({ route: `${slug}.html`, redirect: slug, statusCode: 301 });
+      expect(sitemap).toContain(`<loc>https://cloudhealthoffice.com${slug}</loc>`);
+      expect(insightsIndex).toContain(`href="${slug}"`);
+    });
+
+    it('carries article metadata and parseable structured data', () => {
+      expect(ownership).toContain(`<link rel="canonical" href="https://cloudhealthoffice.com${slug}"/>`);
+      expect(ownership).toMatch(/<meta name="description" content="[^"]{80,}"/);
+      const graph = (jsonLdBlocks(ownership)[0] as { '@graph': Array<{ '@type': string }> })['@graph'];
+      expect(graph.map((n) => n['@type'])).toEqual(expect.arrayContaining(['Article', 'BreadcrumbList']));
+    });
+
+    it('stays inside the locked commercial posture', () => {
+      // MESSAGE_SHEET: do not headline "free CMS-0057-F"; production use requires a
+      // license, and waived terms for an early tenant are described via /deploy.
+      expect(ownership).not.toMatch(/free CMS-0057-F|no license fee/i);
+      expect(ownership).toContain('/deploy#terms');
+      expect(ownership).toMatch(/source-available under BSL 1\.1/i);
+      expect(ownership).not.toMatch(/open[ -]source/i);
+      expect(ownership).not.toMatch(/Cognizant|TriZetto/);
+    });
+
+    it('discloses the commercial interest without casting vendors as adversaries', () => {
+      expect(ownership).toContain('id="disclosure"');
+      expect(ownership).toMatch(/do not claim certification by, affiliation with, or an implementation partnership/i);
+      expect(ownership).toMatch(/nothing here should be read as a criticism of any of them/i);
+      expect(ownership).toMatch(/make no claim of savings/i);
+    });
+
+    it('carries the locked CMS-0057-F definition and the sensitive-data warning', () => {
+      expect(ownership).toMatch(
+        /CMS-0057-F<\/strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some/
+      );
+      expect(ownership).toMatch(/do not send PHI, member data, claim data, production credentials/i);
+    });
+
+    it('links the ownership clauses, the SOW questions, and the SOW review', () => {
+      expect(ownership).toContain('https://cms-0057-f.com/guides/sow-ownership-clauses');
+      expect(ownership).toContain('/insights/cms-0057-f/caps-vendor-sow-questions');
+      expect(ownership).toContain('/services#offer-sow-review');
+    });
+
+    it('keeps the accessibility affordances and the mobile nav of the series', () => {
+      expect(ownership).toContain('class="skip-to-main"');
+      expect(ownership).toContain('<main id="main-content">');
+      expect((ownership.match(/<h1[^>]*>/g) || []).length).toBe(1);
+      expect(ownership).toContain('aria-label="Breadcrumb"');
+      expect(ownership).not.toMatch(/\.nav-links\{display:none\}/);
+      expect(ownership).toMatch(/@media\(max-width:820px\)\{[\s\S]*?\.nav-links\{[^}]*overflow-x:auto/);
+    });
+  });
+
   describe('site deployment workflows', () => {
     const azure = readRepo('.github/workflows/deploy-static-site.yml');
     const pages = readRepo('.github/workflows/deploy-pages.yml');
