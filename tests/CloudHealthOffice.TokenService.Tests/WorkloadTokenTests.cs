@@ -363,7 +363,8 @@ public sealed class WorkloadTokenTests : IDisposable
         });
 
         (await Client(service, asService).GetAsync("/svc/onboarding")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await Client(service, asWorkload).GetAsync("/svc/onboarding")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        // A cho-internal token without cho.service is refused at authentication.
+        (await Client(service, asWorkload).GetAsync("/svc/onboarding")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
         // The ordinary service token still works for its own client id.
         var tokenService = Sign(InternalKeyPem, "cho-internal", new Dictionary<string, object>

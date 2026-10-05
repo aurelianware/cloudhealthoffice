@@ -149,7 +149,10 @@ public class OnboardingRouteTests : IClassFixture<TenantServiceFactory>
 
         var response = await Post(Bearer(token), TenantA);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden, caller);
+        // A service-issuer token without cho.service is refused at
+        // authentication (401); every other caller is authenticated but not
+        // the onboarding workflow (403).
+        response.StatusCode.Should().BeOneOf([HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized], caller);
         _factory.Tenants.Verify(r => r.TryActivatePendingAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
