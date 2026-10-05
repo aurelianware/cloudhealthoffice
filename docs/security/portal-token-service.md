@@ -555,8 +555,15 @@ Set the values through Key Vault references or environment variables
 - Symmetric keys are refused outside Development and Testing, both here and in
   token-service.
 - `Testing` is for automated tests. A service (`AddChoAuthentication`) or
-  token-service running as `Testing` on a Kubernetes host
-  (`KUBERNETES_SERVICE_HOST` set) refuses to start, unless
+  token-service running as `Testing` refuses to start unless `CHO_TESTING=1`
+  is set. Test assemblies set it for their own process: the root
+  `Directory.Build.targets` compiles `tests/Shared/ChoTestingMarker.cs` (a
+  module initializer) into every project whose name ends in `Tests`. Nothing
+  deployed sets it. A test host started some other way (a separate process)
+  must set `CHO_TESTING=1` itself.
+- Even with `CHO_TESTING=1`, a `Testing` host on a deployed platform
+  (Kubernetes `KUBERNETES_SERVICE_HOST`, App Service `WEBSITE_SITE_NAME`,
+  Container Apps `CONTAINER_APP_NAME`) refuses to start, unless
   `CHO_ALLOW_TESTING_ENVIRONMENT=true` marks a deliberate in-cluster test run
   (it then warns on stderr). CI that runs tests inside Kubernetes pods must set
   that variable.
