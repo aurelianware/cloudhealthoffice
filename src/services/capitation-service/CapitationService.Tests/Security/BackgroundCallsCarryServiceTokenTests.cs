@@ -114,6 +114,7 @@ public class BackgroundCallsCarryServiceTokenTests
 
         var statements = new Mock<ICapitationStatementRepository>();
         var disbursements = new Mock<ICapitationDisbursementRepository>();
+        ReleaseClaims.Uncontended(statements, disbursements);
         var runs = new Mock<ICapitationRunRepository>();
         statements.Setup(r => r.GetByIdAsync("stmt-1")).ReturnsAsync(new CapitationStatement
         {

@@ -217,6 +217,7 @@ public class DisbursementIntegrityTests
         var disbursements = new Mock<ICapitationDisbursementRepository>();
         disbursements.Setup(r => r.CreateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
+        ReleaseClaims.Uncontended(statements, disbursements);
 
         var handler = new MockHttpMessageHandler<ProviderBankAccountDto>(_ => new ProviderBankAccountDto
         {

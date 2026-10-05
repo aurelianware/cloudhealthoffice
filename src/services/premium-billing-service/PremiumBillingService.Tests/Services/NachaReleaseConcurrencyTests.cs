@@ -74,11 +74,21 @@ public sealed class NachaReleaseConcurrencyTests : IAsyncLifetime
         ["Nacha:OriginatingDfi"] = "9100001",
     }).Build();
 
-    private static HttpContextAccessor Request()
+    /// <summary>
+    /// One request's context. Not <see cref="HttpContextAccessor"/>: its AsyncLocal
+    /// holder is cleared for every flow when another request sets a context, and
+    /// these tests run several requests at once.
+    /// </summary>
+    private sealed class RequestContext : IHttpContextAccessor
+    {
+        public HttpContext? HttpContext { get; set; }
+    }
+
+    private static IHttpContextAccessor Request()
     {
         var http = new DefaultHttpContext();
         http.Items["TenantId"] = Tenant;
-        return new HttpContextAccessor { HttpContext = http };
+        return new RequestContext { HttpContext = http };
     }
 
     /// <summary>One approver's request: its own request context and repository instance over the shared database.</summary>

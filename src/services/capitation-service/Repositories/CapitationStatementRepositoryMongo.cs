@@ -111,6 +111,36 @@ public class CapitationStatementRepositoryMongo : ICapitationStatementRepository
         return statement;
     }
 
+    public async Task<bool> TryStartPaymentAsync(string statementId, string disbursementId)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<CapitationStatement>.Filter;
+        var filter = f.And(
+            f.Eq(x => x.Id, statementId),
+            f.Eq(x => x.TenantId, tenantId),
+            f.Eq(x => x.Status, CapitationStatementStatus.Approved));
+        var result = await _collection.UpdateOneAsync(filter, Builders<CapitationStatement>.Update
+            .Set(x => x.Status, CapitationStatementStatus.PaymentInitiated)
+            .Set(x => x.EftDisbursementId, disbursementId)
+            .Set(x => x.LastUpdatedAt, DateTime.UtcNow));
+        return result.ModifiedCount == 1;
+    }
+
+    public async Task UndoStartPaymentAsync(string statementId, string disbursementId)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<CapitationStatement>.Filter;
+        var filter = f.And(
+            f.Eq(x => x.Id, statementId),
+            f.Eq(x => x.TenantId, tenantId),
+            f.Eq(x => x.Status, CapitationStatementStatus.PaymentInitiated),
+            f.Eq(x => x.EftDisbursementId, disbursementId));
+        await _collection.UpdateOneAsync(filter, Builders<CapitationStatement>.Update
+            .Set(x => x.Status, CapitationStatementStatus.Approved)
+            .Set(x => x.EftDisbursementId, null)
+            .Set(x => x.LastUpdatedAt, DateTime.UtcNow));
+    }
+
     public async Task<CapitationStatement> UpdateAsync(CapitationStatement statement)
     {
         statement.LastUpdatedAt = DateTime.UtcNow;

@@ -37,6 +37,7 @@ public class CapitationDisbursementsController : ControllerBase
     [ProducesResponseType(typeof(CapitationDisbursement), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CapitationDisbursement>> InitiateDisbursement([FromBody] InitiateDisbursementRequest request)
     {
         request.InitiatedBy = _actor.UserId; // never the body's claim
@@ -48,6 +49,10 @@ public class CapitationDisbursementsController : ControllerBase
         catch (SeparationOfDutiesException ex)
         {
             return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (PaymentReleaseConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -93,6 +98,7 @@ public class CapitationDisbursementsController : ControllerBase
     [ProducesResponseType(typeof(NachaCreditFileResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<NachaCreditFileResult>> GenerateNachaCreditFile()
     {
         try
@@ -103,6 +109,10 @@ public class CapitationDisbursementsController : ControllerBase
         catch (SeparationOfDutiesException ex)
         {
             return SeparationOfDutiesProblem.For(this, ex);
+        }
+        catch (PaymentReleaseConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

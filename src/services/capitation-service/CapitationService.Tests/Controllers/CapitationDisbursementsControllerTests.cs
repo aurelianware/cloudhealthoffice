@@ -121,6 +121,28 @@ public class CapitationDisbursementsControllerTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task GenerateNachaCreditFile_HeldByAnotherRelease_Returns409()
+    {
+        _disbursementService.Setup(s => s.GenerateNachaCreditFileAsync(TestActor.DefaultUserId))
+            .ThrowsAsync(new PaymentReleaseConflictException("already being released"));
+
+        var result = await _controller.GenerateNachaCreditFile();
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
+    [Fact]
+    public async Task InitiateDisbursement_StatementAlreadyBeingPaid_Returns409()
+    {
+        _disbursementService.Setup(s => s.InitiateDisbursementAsync(It.IsAny<InitiateDisbursementRequest>()))
+            .ThrowsAsync(new PaymentReleaseConflictException("already being paid"));
+
+        var result = await _controller.InitiateDisbursement(new InitiateDisbursementRequest { StatementId = "s-1" });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+    }
+
     #endregion
 
     #region GetDisbursement

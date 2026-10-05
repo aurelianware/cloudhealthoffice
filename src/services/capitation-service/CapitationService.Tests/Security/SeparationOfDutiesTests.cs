@@ -31,6 +31,7 @@ public class SeparationOfDutiesTests
             .ReturnsAsync((CapitationStatement s) => s);
         _disbursements.Setup(r => r.CreateAsync(It.IsAny<CapitationDisbursement>()))
             .ReturnsAsync((CapitationDisbursement d) => d);
+        ReleaseClaims.Uncontended(_statements, _disbursements);
     }
 
     private CapitationStatement Statement(

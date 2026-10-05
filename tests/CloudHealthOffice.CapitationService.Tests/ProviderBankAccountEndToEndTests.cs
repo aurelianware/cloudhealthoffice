@@ -97,6 +97,9 @@ public class ProviderBankAccountEndToEndTests : IClassFixture<ProviderBankAccoun
         _factory.DisbursementRepository.ClearReceivedCalls();
         _factory.PaymentControls.IsSeparationOfDutiesEnforcedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
         _factory.StatementRepository.UpdateAsync(Arg.Any<CapitationStatement>()).Returns(ci => ci.Arg<CapitationStatement>());
+        // The conditional release writes, uncontended.
+        _factory.StatementRepository.TryStartPaymentAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _factory.DisbursementRepository.TryClaimForReleaseAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>()).Returns(true);
         _factory.DisbursementRepository.CreateAsync(Arg.Any<CapitationDisbursement>()).Returns(ci =>
         {
             var d = ci.Arg<CapitationDisbursement>();
@@ -321,9 +324,10 @@ public class ProviderBankAccountEndToEndTests : IClassFixture<ProviderBankAccoun
         var error = (await Json(response)).GetProperty("error").GetString()!;
         Assert.Contains("Needs attention", error);
         Assert.Contains("no approved bank account", error);
-        var flagged = Assert.Single(_updated);
-        Assert.Equal(DisbursementStatus.Pending, flagged.Status);
-        Assert.Contains("no approved bank account", flagged.ErrorMessage);
+        // Claimed for the release, then handed back to Pending with the reason.
+        Assert.Empty(_updated);
+        await _factory.DisbursementRepository.Received(1).ReleaseClaimAsync("d-3", Arg.Any<string>(),
+            Arg.Is<string>(reason => reason.Contains("no approved bank account")));
         FullReadsOnlyByCapitationServiceToken();
     }
 

@@ -77,6 +77,39 @@ public class CapitationDisbursementRepositoryMongo : ICapitationDisbursementRepo
         return disbursement;
     }
 
+    public async Task<bool> TryClaimForReleaseAsync(string id, string claimId, DateTime claimedAt)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<CapitationDisbursement>.Filter;
+        var filter = f.And(
+            f.Eq(d => d.TenantId, tenantId),
+            f.Eq(d => d.Id, id),
+            f.Eq(d => d.Status, DisbursementStatus.Pending));
+        var result = await _collection.UpdateOneAsync(filter, Builders<CapitationDisbursement>.Update
+            .Set(d => d.Status, DisbursementStatus.Releasing)
+            .Set(d => d.ReleaseClaimId, claimId)
+            .Set(d => d.ReleaseClaimedAt, claimedAt)
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
+        return result.ModifiedCount == 1;
+    }
+
+    public async Task ReleaseClaimAsync(string id, string claimId, string? reason)
+    {
+        var tenantId = GetTenantId();
+        var f = Builders<CapitationDisbursement>.Filter;
+        var filter = f.And(
+            f.Eq(d => d.TenantId, tenantId),
+            f.Eq(d => d.Id, id),
+            f.Eq(d => d.Status, DisbursementStatus.Releasing),
+            f.Eq(d => d.ReleaseClaimId, claimId));
+        await _collection.UpdateOneAsync(filter, Builders<CapitationDisbursement>.Update
+            .Set(d => d.Status, DisbursementStatus.Pending)
+            .Set(d => d.ReleaseClaimId, null)
+            .Set(d => d.ReleaseClaimedAt, null)
+            .Set(d => d.ErrorMessage, reason)
+            .Set(d => d.LastUpdatedAt, DateTime.UtcNow));
+    }
+
     public async Task<CapitationDisbursement> UpdateAsync(CapitationDisbursement disbursement)
     {
         disbursement.LastUpdatedAt = DateTime.UtcNow;

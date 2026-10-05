@@ -27,6 +27,7 @@ public class CapitationDisbursementServiceTests
         _nachaService = new Mock<INachaCreditFileService>();
         _stripeService = new Mock<IStripeConnectService>();
         _httpClientFactory = new Mock<IHttpClientFactory>();
+        ReleaseClaims.Uncontended(_statementRepo, _disbursementRepo);
 
         var configData = new Dictionary<string, string?>
         {
@@ -526,13 +527,12 @@ public class CapitationDisbursementServiceTests
 
         var result = await _service.GenerateNachaCreditFileAsync("releaser-1");
 
-        // Only d1 is submitted; d2 is left out of the file, stays Pending and needs attention.
+        // Only d1 is submitted; d2 is left out of the file, handed back to Pending and needs attention.
         _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
             d.Id == "d1" && d.Status == DisbursementStatus.Submitted)), Times.Once);
-        _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
-            d.Id == "d2" && d.Status != DisbursementStatus.Pending)), Times.Never);
-        _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d =>
-            d.Id == "d2" && d.Status == DisbursementStatus.Pending && d.ErrorMessage!.Contains("Needs attention"))), Times.Once);
+        _disbursementRepo.Verify(r => r.UpdateAsync(It.Is<CapitationDisbursement>(d => d.Id == "d2")), Times.Never);
+        _disbursementRepo.Verify(r => r.ReleaseClaimAsync("d2", It.IsAny<string>(),
+            It.Is<string>(reason => reason.Contains("Needs attention"))), Times.Once);
         result.NeedsAttention.Should().ContainSingle(a => a.DisbursementId == "d2" && a.ProviderNPI == "2222222222");
     }
 
