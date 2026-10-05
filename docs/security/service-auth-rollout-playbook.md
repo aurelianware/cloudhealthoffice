@@ -97,7 +97,10 @@ worked example.
    It adds development-only trust and a service token setting.
    For deployed environments, see `docs/security/portal-token-service.md`
    ("How services trust the issuer"). It covers trusting `cho-token-service`
-   for user tokens and `cho-internal` for service tokens. Comments written by
+   for user tokens and `cho-token-service-svc` for service tokens, which
+   deployed services obtain from token-service by workload identity
+   (`ChoAuth:ServiceToken:Source=TokenService`, "Service tokens"; a local
+   service-token key is refused outside Development/Testing). Comments written by
    earlier runs of the script point at `docs/security/service-authentication.md`,
    which was never written. Read them as pointing at that document.
    Then check every CHO service this service calls against "Which hosts are

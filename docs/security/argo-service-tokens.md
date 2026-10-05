@@ -79,8 +79,11 @@ is a recognised client. Recognition comes from **issuer configuration only**:
 - Client ids are split by prefix: a workload's client id starts with `wf-`, a
   service's never does. `ChoPrincipal.ServiceClientId` returns nothing for a
   service token naming a `wf-` client or a workload token naming any other
-  client. Every service holds the shared `cho-internal` key, so without this
-  split any service could mint `sub = wf-tenant-onboarding`. With it, only
+  client. Services used to hold the shared `cho-internal` key (and still may,
+  in Development/Testing, as `cho-internal-dev`), so without this split a
+  service could mint `sub = wf-tenant-onboarding`. token-service's service
+  issuer (`cho-token-service-svc`) also never issues a `wf-` client id: its
+  registry refuses one. With the split, only
   token-service (the only holder of the `cho-workload` key) can produce a
   `wf-` identity, and only for the Kubernetes service account registered for it.
 - An issuer may not set both `AllowServiceRole` and `AllowWorkloadIdentity`
@@ -91,10 +94,15 @@ is a recognised client. Recognition comes from **issuer configuration only**:
   `cho.workload`, or a `cho-internal` token without `cho.service`, is rejected
   at authentication (401). Neither can be read as a user token.
 
-Why a dedicated issuer rather than `cho-internal`: the `cho-internal` private key
-is held by every service. A marker set for `cho-internal` tokens would be
-forgeable by every service; a marker set only for `cho-workload`, whose key only
-token-service holds (inside Key Vault in production), is not.
+Why a dedicated issuer rather than a service issuer: a workload is not a
+service, and the workload marker must come only from an issuer that mints
+nothing else. `cho-workload` (workloads), `cho-token-service-svc` (services,
+issued per service after a workload-identity check, see
+`docs/security/portal-token-service.md`, "Service tokens") and
+`cho-token-service` (users) share token-service's key, which only
+token-service holds (inside Key Vault in production); the issuer name decides
+the kind. The legacy shared `cho-internal` key, held by every service, is
+being retired (same document, "Migration").
 
 ## Kubernetes token validation: OIDC discovery / JWKS
 

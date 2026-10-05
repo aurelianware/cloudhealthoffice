@@ -249,8 +249,9 @@ token-service sends that service token on every call, naming:
 
 tenant-service authorizes these endpoints on the caller's identity, never on
 that tenant value: they are the only routes exempt from tenant-service's route
-tenant check. tenant-service must trust the `cho-internal` service-token issuer
-(with `AllowServiceRole`) that token-service signs with.
+tenant check. tenant-service must trust the service-token issuer token-service
+signs with: `cho-token-service-svc` (`Kind: Service`) deployed, `cho-internal-dev`
+in Development/Testing.
 
 token-service attaches this token with its own handler, not the shared
 `ChoOutboundTokenHandler`. Inside a request, the shared handler forwards the
@@ -511,13 +512,20 @@ Every CHO service validates tokens through `AddChoAuthentication` and the
 "ChoAuth": {
   "Audience": "cho-api",
   "Issuers": [
-    { "Issuer": "cho-token-service", "PublicKeyPem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----", "Kind": "User" },
-    { "Issuer": "cho-internal",      "PublicKeyPem": "-----BEGIN PUBLIC KEY-----\n...", "Kind": "Service" },
-    { "Issuer": "cho-workload",      "PublicKeyPem": "<same key as cho-token-service>",   "Kind": "Workload" }
+    { "Issuer": "cho-token-service",     "PublicKeyPem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----", "Kind": "User" },
+    { "Issuer": "cho-token-service-svc", "PublicKeyPem": "<same key as cho-token-service>", "Kind": "Service" },
+    { "Issuer": "cho-workload",          "PublicKeyPem": "<same key as cho-token-service>", "Kind": "Workload" }
   ],
-  "ServiceToken": { "Issuer": "cho-internal", "ClientId": "<service-client-id>", "PrivateKeyPem": "<from Key Vault>" }
+  "ServiceToken": {
+    "Source": "TokenService", "ClientId": "<service-client-id>",
+    "TokenServiceUrl": "http://token-service", "EntraScope": "api://<TOKEN_SERVICE_SVC_APP_ID>/.default"
+  }
 }
 ```
+
+During the migration (see "Service tokens" below) services also keep trusting
+`{ "Issuer": "cho-internal", "PublicKeyPem": "...", "Kind": "Service" }` until
+the last service has switched; then remove it everywhere.
 
 Set the values through Key Vault references or environment variables
 (`ChoAuth__Issuers__0__Issuer=cho-token-service`,
@@ -528,18 +536,17 @@ Set the values through Key Vault references or environment variables
   `Workload`, neither means `User`. User tokens are accepted **only** from a
   `User` issuer. Every token from a `Service` issuer must carry `cho.service`
   and every token from a `Workload` issuer `cho.workload`; one without it is
-  rejected (401), never read as a user. Without this, any service (all of
-  them hold the `cho-internal` private key) could mint a `PlatformAdmin` user
-  token by leaving `cho.service` out.
+  rejected (401), never read as a user. Without this, any holder of a
+  service issuer's key could mint a `PlatformAdmin` user token by leaving
+  `cho.service` out.
 - `cho-token-service` must be `User` (never `AllowServiceRole`). Even then, the
   shared layer ignores `cho.service` from a user issuer, and token-service never writes it.
-- Residual risk of the shared `cho-internal` key: any service can still mint a
-  *service* token naming another service (`sub` = `azp` = `capitation-service`)
-  and pass that service's `[RequireServiceClient]`. Closing it needs one key
-  pair per service (a `cho-internal/<client-id>` issuer per caller, each
-  callee trusting the issuers it names in `[RequireServiceClient]`, the
-  client id bound to the issuer rather than read from `sub`), or service
-  tokens obtained from token-service with workload identity.
+- Service tokens come from token-service (`cho-token-service-svc`), which
+  decides the client id from the caller's Azure workload identity. No service
+  holds a service-token key, so none can mint a token naming another service
+  (`sub` = `azp` = `capitation-service`) to pass that service's
+  `[RequireServiceClient]`. The old shared `cho-internal` key allowed exactly
+  that; it remains only as `cho-internal-dev` in Development/Testing.
 - token-service also issues Argo workflow tokens under the issuer `cho-workload`
   (same key, `"AllowWorkloadIdentity": true`). See
   `docs/security/argo-service-tokens.md`.
@@ -553,6 +560,176 @@ Set the values through Key Vault references or environment variables
   `CHO_ALLOW_TESTING_ENVIRONMENT=true` marks a deliberate in-cluster test run
   (it then warns on stderr). CI that runs tests inside Kubernetes pods must set
   that variable.
+
+## Service tokens
+
+A CHO service acting as itself (message consumers, scheduled jobs, the
+explicit `UseChoServiceToken` cases) sends a **service token**: role
+`cho.service`, `sub` = `azp` = its client id, `tenant_id` = the tenant it acts
+for. Callees authorize it with `[RequireServiceClient("<client id>")]`.
+
+Previously every service signed its own service tokens with one shared
+`cho-internal` key, so a compromised service could mint a token naming any
+other service. Now **token-service issues them**, after authenticating the
+calling service by its Azure workload identity. Services hold no signing key.
+
+### Flow
+
+```
+claims-service pod (service account claims-service-sa, label azure.workload.identity/use)
+   │ DefaultAzureCredential → WorkloadIdentityCredential
+   │   (projected SA token ─▶ Entra, federated credential on claims-service's managed identity)
+   ▼
+Entra app-only access token  aud=api://<svc app>  oid=<claims MI object id>  roles=[Cho.ServiceToken]
+   │
+   ▼  POST http://token-service/v1/token/service   Authorization: Bearer <Entra token>   { "tenantId": "acme" }
+token-service ──(validate: Entra signature via discovery, iss = CHO directory (v1 or v2 form),
+   │             tid, aud, exp, app-only: no scp, sub = oid, idtyp=app; role Cho.ServiceToken)
+   │           ──(registry: oid → exactly one client id, e.g. claims-service; else 403)
+   ▼
+200 { access_token: <iss=cho-token-service-svc, sub=azp=claims-service, roles=[cho.service], tenant_id=acme, ≤10 min>,
+      token_type, expires_in, tenant_id, client_id }      (audited: client, oid, appid, tenant)
+   │
+claims-service ──Bearer──▶ member-service, … (trust cho-token-service-svc as Kind=Service)
+```
+
+The service caches each tenant's token until one minute before it expires
+(`ChoAuth:ServiceToken:RefreshBefore`), and concurrent requests for one tenant
+share one exchange. If no token can be obtained (Entra or token-service down,
+identity not registered), the outbound call fails with
+`ChoServiceTokenUnavailableException` (an `HttpRequestException`), so callers
+treat it like any unavailable downstream; nothing is sent without credentials
+in its place.
+
+### `POST /v1/token/service`
+
+| Status | Body | When |
+|---|---|---|
+| 200 | `{ "access_token", "token_type": "Bearer", "expires_in", "tenant_id", "client_id" }` | Issued. `Cache-Control: no-store`. |
+| 401 | `{ "error": "invalid_token" }` | Missing, badly signed or expired Entra token; wrong issuer, directory or audience; a delegated (user) token; missing the required app role. |
+| 403 | `{ "error": "unknown_service" }` | Valid token, but its `oid` (and, when pinned, `appid`/`azp`) is not in the registry. |
+| 400 | `{ "error": "invalid_request" }` | No or malformed `tenantId`. |
+| 503 | `{ "error": "unavailable" }` | Entra's keys or the signing key could not be reached. |
+
+Every issuance and refusal is one audit line (`CloudHealthOffice.TokenService.Audit`,
+`CHO service token issued|refused: client= oid= appid= tenant= reason=`).
+
+**Tenant scope.** Unchanged from local minting: a registered service may ask
+for any tenant id (it acts for tenants taken from its own messages and
+records), and every issuance is audited with the tenant. Per-client tenant
+lists would need each service's tenants configured; that is a possible
+follow-up, not part of this change.
+
+**Issuer and key.** Service tokens are signed with token-service's own key
+(Key Vault in production) under `cho-token-service-svc`. The same key signs
+user tokens (`cho-token-service`) and workload tokens (`cho-workload`); the
+three issuer names keep them apart, and token-service refuses to start if
+`ServiceTokens:Issuer` equals either other issuer. Callees trust each name
+with its own `Kind`. token-service's own calls to tenant-service use a service
+token it signs itself under the same issuer (client id `token-service`), so it
+needs no service-token secret either.
+
+### Service configuration
+
+| Setting | Deployed | Development / Testing |
+|---|---|---|
+| `ChoAuth:ServiceToken:Source` | `TokenService` | `LocalKey` (default when `TokenServiceUrl` is unset) |
+| `ChoAuth:ServiceToken:ClientId` | the service's client id (must match its registry entry) | same |
+| `ChoAuth:ServiceToken:TokenServiceUrl` | `http://token-service` | — |
+| `ChoAuth:ServiceToken:EntraScope` | `api://<TOKEN_SERVICE_SVC_APP_ID>/.default` | — |
+| `ChoAuth:ServiceToken:ManagedIdentityClientId` | optional; normally the pod's `AZURE_CLIENT_ID` from the workload-identity webhook | — |
+| `ChoAuth:ServiceToken:Issuer` / `SymmetricKey` / `PrivateKeyPem` | **not allowed** (startup error) | `cho-internal-dev` + the development key |
+
+`Source=LocalKey` (any local signing key) is refused at startup outside
+Development and Testing, and `Source=TokenService` refuses a key, so a deployed
+service cannot hold one. The k8s manifests take Source, URL and scope from the
+shared ConfigMap `infrastructure/k8s/configmaps/cho-service-tokens.yaml` and set
+`ChoAuth__ServiceToken__ClientId` per Deployment. That ConfigMap also adds the
+callee trust entry (`ChoAuth__Issuers__9__*`: `cho-token-service-svc`,
+`Kind: Service`, token-service's public key).
+
+### token-service configuration (`ServiceTokens`)
+
+| Setting | Value |
+|---|---|
+| `Enabled` | `true` |
+| `EntraTenantId` | CHO's own Entra directory id (where the managed identities live) |
+| `Audiences` | `api://<TOKEN_SERVICE_SVC_APP_ID>` and `<TOKEN_SERVICE_SVC_APP_ID>` |
+| `RequiredAppRole` | `Cho.ServiceToken` (recommended; empty disables the check) |
+| `Issuer` | `cho-token-service-svc` |
+| `TokenLifetime` | `00:05:00` (at most 10 minutes) |
+| `ServiceClientsFile` / `ServiceClients` | registry: `[{ "clientId": "claims-service", "objectId": "<MI object id>", "appId": "<MI client id, optional>" }]` |
+| `MetadataAddress` | default `https://login.microsoftonline.com/<EntraTenantId>/v2.0/.well-known/openid-configuration` |
+
+The registry maps one managed identity (object id) to one client id. No
+wildcards; duplicates, `wf-` client ids and placeholders fail startup. The
+shipped registry is the ConfigMap `token-service-service-clients` in
+`src/services/token-service/k8s/token-service-deployment.yaml`.
+
+### Azure setup (owner action)
+
+Once, for token-service:
+
+1. Create an app registration "CHO token-service (service tokens)"
+   (single tenant, CHO's directory). Set its Application ID URI to
+   `api://<app id>`. Under **App roles**, add `Cho.ServiceToken` (allowed member
+   types: Applications). Under **Enterprise applications → Properties**, set
+   **Assignment required = Yes**, so Entra issues tokens for it only to
+   identities assigned the role. It needs no secret and no redirect URI.
+   (A separate app from the CHO API app keeps user scopes and service roles apart.)
+2. Put its id into `<TOKEN_SERVICE_SVC_APP_ID>` (token-service-config and the
+   `cho-service-tokens` ConfigMap) and CHO's directory id into
+   `ServiceTokens__EntraTenantId`.
+3. Put token-service's public key (`az keyvault key download … -e PEM`, the
+   `cho-token-service` key) into `<TOKEN_SERVICE_PUBLIC_KEY_PEM>`.
+
+Per service (`<svc>` = its client id, e.g. `claims-service`):
+
+```bash
+az identity create -g <rg> -n <svc>-identity
+az identity federated-credential create -g <rg> --identity-name <svc>-identity --name <svc>-k8s \
+  --issuer "$(az aks show -g <rg> -n <cluster> --query oidcIssuerProfile.issuerUrl -o tsv)" \
+  --subject system:serviceaccount:cloudhealthoffice:<svc>-sa --audiences api://AzureADTokenExchange
+CLIENT_ID=$(az identity show -g <rg> -n <svc>-identity --query clientId -o tsv)
+OBJECT_ID=$(az identity show -g <rg> -n <svc>-identity --query principalId -o tsv)
+# Assign the app role to the identity (Graph: servicePrincipals/{OBJECT_ID}/appRoleAssignments):
+az rest -m POST -u "https://graph.microsoft.com/v1.0/servicePrincipals/$OBJECT_ID/appRoleAssignments" \
+  --body "{\"principalId\":\"$OBJECT_ID\",\"resourceId\":\"<token-service-svc SP object id>\",\"appRoleId\":\"<Cho.ServiceToken role id>\"}"
+```
+
+Then put `$CLIENT_ID` into the service's ServiceAccount annotation
+(`<SVC>_MANAGED_IDENTITY_CLIENT_ID`) and `$OBJECT_ID` into its registry entry
+(`<SVC>_MANAGED_IDENTITY_OBJECT_ID`). The cluster needs the OIDC issuer and the
+workload-identity webhook enabled (`az aks update --enable-oidc-issuer
+--enable-workload-identity`). If a service already has an identity for Key
+Vault, reuse it.
+
+Services deployed outside AKS (provider-eligibility-api as a Container App)
+use the Container App's user-assigned managed identity instead of a federated
+credential; set `ChoAuth__ServiceToken__ManagedIdentityClientId` to it.
+
+### Migration
+
+1. **token-service first.** Deploy it with `ServiceTokens` enabled and the
+   registry filled in. Its tenant-service calls switch to
+   `cho-token-service-svc`, so before this, add the `cho-token-service-svc`
+   issuer (`Kind: Service`) to **tenant-service**'s trust, keeping `cho-internal`.
+2. **Callees trust the new issuer.** Add `cho-token-service-svc` to every
+   service's `ChoAuth:Issuers` (the `cho-service-tokens` ConfigMap does it),
+   keeping `cho-internal` for now. Roll all services.
+3. **Switch services one by one.** For each service: create its managed
+   identity, federated credential and role assignment, fill its registry entry
+   (redeploy token-service's ConfigMap), then deploy the service with its
+   service account, `Source=TokenService` and **without**
+   `ChoAuth__ServiceToken__PrivateKeyPem`. A new image refuses to start with a
+   local key outside Development/Testing, so a service is either fully old or
+   fully new. Check token-service's audit log for `CHO service token issued:
+   client=<svc>` and the service's background calls.
+4. **Remove `cho-internal` everywhere.** When no service sends it (no
+   `iss=cho-internal` in callee logs), delete the `cho-internal` issuer entry
+   from every service's trust, delete the `cho-internal` private key from Key
+   Vault and the `token-service-secrets` Secret, and rotate nothing else: the
+   new tokens never depended on it.
 
 ## Entra app registration changes (owner action)
 
@@ -586,7 +763,8 @@ and calls `POST /v1/token/exchange`.
 | tenant-service `Invitations:Lifetime` / `Invitations:PortalBaseUrl` | `7.00:00:00` (1 hour to 30 days) / `https://portal.cloudhealthoffice.com` (for `redemptionUrl`) |
 | `TokenSigning:KeyVaultKeyId` | Versioned key id (**required in Production**) |
 | `TokenSigning:Issuer` / `Audience` | `cho-token-service` / `cho-api` |
-| `ChoAuth:ServiceToken:PrivateKeyPem` | The `cho-internal` service-token key, from Key Vault (secret `token-service-secrets`) |
+| `ServiceTokens:*` | See "Service tokens" (`Enabled`, `EntraTenantId`, `Audiences`, `RequiredAppRole`, `Issuer` = `cho-token-service-svc`, `TokenLifetime` ≤ 10 min, `ServiceClientsFile`) |
+| `ChoAuth:ServiceToken:ClientId` | `token-service`. No key: token-service signs its own tenant-service token under `ServiceTokens:Issuer`; a local key is refused outside Development/Testing |
 | `Services:TenantService` | `http://tenant-service` |
 
 The k8s manifest is `src/services/token-service/k8s/token-service-deployment.yaml`.
