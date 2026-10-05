@@ -12,6 +12,9 @@ using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// token-service does not use AddChoAuthentication; apply its Testing guard here.
+ChoTestingEnvironment.EnsureNotDeployed(builder.Environment);
+
 var serviceOptions = builder.Configuration.GetSection(TokenServiceOptions.SectionName).Get<TokenServiceOptions>()
                      ?? new TokenServiceOptions();
 serviceOptions.Validate();

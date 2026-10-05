@@ -547,6 +547,12 @@ Set the values through Key Vault references or environment variables
   same key published at `GET /.well-known/jwks.json`.
 - Symmetric keys are refused outside Development and Testing, both here and in
   token-service.
+- `Testing` is for automated tests. A service (`AddChoAuthentication`) or
+  token-service running as `Testing` on a Kubernetes host
+  (`KUBERNETES_SERVICE_HOST` set) refuses to start, unless
+  `CHO_ALLOW_TESTING_ENVIRONMENT=true` marks a deliberate in-cluster test run
+  (it then warns on stderr). CI that runs tests inside Kubernetes pods must set
+  that variable.
 
 ## Entra app registration changes (owner action)
 

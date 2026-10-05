@@ -49,6 +49,9 @@ public static class ChoAuthenticationExtensions
         IHostEnvironment environment,
         Action<ChoAuthorizationDefaults>? configureDefaults = null)
     {
+        // A deployed host never runs as Testing by accident (see ChoTestingEnvironment).
+        ChoTestingEnvironment.EnsureNotDeployed(environment);
+
         var options = new ChoAuthOptions();
         configuration.GetSection(ChoAuthOptions.SectionName).Bind(options);
         options.Validate(allowSymmetricKeys: AllowsSymmetricKeys(environment));
@@ -221,8 +224,9 @@ public static class ChoAuthenticationExtensions
 
     /// <summary>
     /// Symmetric keys are tolerated only where no real data lives: a Development
-    /// host, or an automated test host.
+    /// host, or an automated test host (never a Testing host in Kubernetes
+    /// without the explicit override).
     /// </summary>
     internal static bool AllowsSymmetricKeys(IHostEnvironment environment)
-        => environment.IsDevelopment() || environment.IsEnvironment("Testing");
+        => ChoTestingEnvironment.AllowsDevelopmentSecrets(environment);
 }
