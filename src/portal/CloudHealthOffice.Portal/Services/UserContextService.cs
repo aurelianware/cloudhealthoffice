@@ -111,20 +111,20 @@ public class UserContextService : IUserContextService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "CHO token exchange failed for {RedactedEmail}", RedactEmail(email));
+            _logger.LogWarning(ex, "CHO token exchange failed for user {ObjectId}", ObjectIdOf(principal));
             result = ChoTokenResult.Failure(ChoTokenStatus.Unavailable);
         }
 
         if (result.Succeeded)
         {
             _cachedContext = FromExchange(result.Token!, principal, email);
-            _logger.LogDebug("User context loaded for {RedactedEmail} with roles: {Roles}",
-                RedactEmail(email), string.Join(", ", _cachedContext.Roles));
+            _logger.LogDebug("User context loaded for user {ObjectId} with roles: {Roles}",
+                ObjectIdOf(principal), string.Join(", ", _cachedContext.Roles));
         }
         else
         {
-            _logger.LogWarning("No CHO token for {RedactedEmail} ({Status}); the user has no roles",
-                RedactEmail(email), result.Status);
+            _logger.LogWarning("No CHO token for user {ObjectId} ({Status}); the user has no roles",
+                ObjectIdOf(principal), result.Status);
             _cachedContext = FallbackContext(principal, email, string.Empty);
         }
 
@@ -180,7 +180,7 @@ public class UserContextService : IUserContextService
         var roles = grantAdmin ? new List<string> { ChoRolePermissions.TenantAdmin } : new List<string>();
 
         if (grantAdmin)
-            _logger.LogWarning("Granting development TenantAdmin fallback to {RedactedEmail}", RedactEmail(email));
+            _logger.LogWarning("Granting development TenantAdmin fallback to user {ObjectId}", ObjectIdOf(principal));
 
         return new UserContext
         {
@@ -196,12 +196,14 @@ public class UserContextService : IUserContextService
         };
     }
 
-    private static string RedactEmail(string email)
-    {
-        var atIndex = email.IndexOf('@');
-        if (atIndex <= 1) return "***@" + (atIndex >= 0 ? email[(atIndex + 1)..] : "***");
-        return email[0] + "***" + email[(atIndex - 1)..];
-    }
+    /// <summary>
+    /// The user's Entra object id for logs. Logs never carry the email address,
+    /// even partly masked (that still shows the domain and part of the name).
+    /// </summary>
+    private static string ObjectIdOf(ClaimsPrincipal principal)
+        => principal.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value
+           ?? principal.FindFirst("oid")?.Value
+           ?? "unknown";
 
     public bool HasPermission(string permission)
     {

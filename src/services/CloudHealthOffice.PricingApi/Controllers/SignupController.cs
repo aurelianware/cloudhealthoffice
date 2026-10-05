@@ -54,8 +54,9 @@ public class SignupController : ControllerBase
 
         await _apiKeyRepo.CreateAsync(record);
 
-        _logger.LogInformation("AUDIT pricing free-tier signup: {Org} ({Email}) by {Actor}",
-            SanitizeForLog(record.TenantName), SanitizeForLog(record.ContactEmail), _actor.UserId);
+        // The contact email stays in the key record; the log names the key.
+        _logger.LogInformation("AUDIT pricing free-tier signup: {Org} key {KeyId} by {Actor}",
+            SanitizeForLog(record.TenantName), record.KeyId, SanitizeForLog(_actor.UserId));
 
         return StatusCode(StatusCodes.Status201Created, new SignupResponse
         {

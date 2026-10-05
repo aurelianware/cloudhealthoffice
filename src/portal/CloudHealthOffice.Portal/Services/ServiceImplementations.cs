@@ -3247,7 +3247,7 @@ internal static class BillingApiHttp
             {
                 var (title, detail) = ParseError(text);
                 logger.LogWarning("{ServiceName} refused {Method} {Path}: {Status} {Title}",
-                    serviceName, method, new Uri(url).AbsolutePath, (int)response.StatusCode, title);
+                    serviceName, method, OneLine(new Uri(url).AbsolutePath), (int)response.StatusCode, OneLine(title));
                 throw new BillingApiException((int)response.StatusCode, title, detail) { Body = text };
             }
 
@@ -3261,6 +3261,10 @@ internal static class BillingApiHttp
         try { return JsonSerializer.Deserialize<T>(text, JsonOptions); }
         catch (JsonException) { return null; }
     }
+
+    /// <summary>Strips line breaks so a response or path cannot forge log lines.</summary>
+    private static string OneLine(string? value)
+        => string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", string.Empty).Replace("\n", " ");
 
     /// <summary>
     /// The services refuse with ProblemDetails (<c>title</c>, <c>detail</c>),
