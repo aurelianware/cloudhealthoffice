@@ -183,9 +183,9 @@ metadata:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     # Larger body size for token endpoint form posts
     nginx.ingress.kubernetes.io/proxy-body-size: "1m"
-    # Required for OAuth2 cookie handling
-    nginx.ingress.kubernetes.io/proxy-cookie-path: "/ /"
-    nginx.ingress.kubernetes.io/proxy-cookie-domain: ".cloudhealthoffice.com"
+    # No cookie domain/path rewriting: the sign-in session cookie stays
+    # host-only on auth.cloudhealthoffice.com, never shared with other
+    # *.cloudhealthoffice.com hosts.
 spec:
   ingressClassName: nginx
   tls:
