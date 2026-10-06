@@ -124,3 +124,15 @@ Release announcements and executive communications.
 ---
 
 *BSL 1.1 • CloudHealthOffice*
+
+---
+
+## Publishing a release
+
+1. Merge to `main`:
+   - `docs/releases/RELEASE_NOTES_vX.Y.Z.md`, whose first line is `# vX.Y.Z — <release name>`
+   - a `## [X.Y.Z] - YYYY-MM-DD` section in `CHANGELOG.md` with the real date
+   - a row for the new version under **Current Release** above
+2. Go to **Actions → Publish Release → Run workflow**, enter the version (for example `v5.1.0`), and run it. This works from a phone browser. Tick **dry_run** first if you want to preview the release body in the run summary.
+
+The workflow tags `main`, publishes the release with the notes as its body (title taken from the notes' first line, relative links made absolute), marks it Latest, and opens an Announcements discussion. A version with a suffix such as `v5.1.0-rc.1` is published as a pre-release and is not marked Latest.
