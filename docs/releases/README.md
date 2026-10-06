@@ -6,6 +6,20 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Current Release
 
+### v5.0.0 — The Native Backend (October 2026)
+
+CHO as the system of record behind its CMS-0057-F APIs, claims lifecycle and X12
+trading-partner surface; production SMART/OAuth trust and service-wide token auth.
+
+| Document | Description |
+|----------|-------------|
+| [v5.0.0 Release Notes](./RELEASE_NOTES_v5.0.0.md) | Highlights, breaking changes, upgrade notes |
+| [Changelog](../../CHANGELOG.md) | Itemized changes (includes untagged 4.1.0–4.4.0) |
+
+---
+
+## Previous Releases
+
 ### v3.0.0 — The Open Frontier Release (December 2025)
 
 Multi-cloud independence, commercial launch readiness, and Kubernetes-native workflow orchestration.
@@ -22,8 +36,6 @@ Multi-cloud independence, commercial launch readiness, and Kubernetes-native wor
 - 🤖 **AI-Powered Analytics**: ClaimRiskScorer for fraud detection
 
 ---
-
-## Previous Releases
 
 ### v2.0.0 — FHIR Frontier Forge (November 2025)
 
