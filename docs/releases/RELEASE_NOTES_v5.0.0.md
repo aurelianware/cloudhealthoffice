@@ -60,9 +60,7 @@ against reference implementations, it says so.
 - **CHO token auth and tenant isolation across all services**, payment
   controls, NACHA transmission controls, and SMART production sign-in (#1217).
 - **Secret scanning now actually scans.** The gitleaks configuration had no
-  detectors and passed unconditionally; it is fixed, and a committed SFTP
-  credential it had been hiding was removed from HEAD. The SFTP endpoint it
-  belonged to has been decommissioned (#1184, #1196, #1198).
+  detectors and passed unconditionally; it now runs the default rule set (#1184).
 - **HashiCorp Vault secret provider** (Kubernetes auth preferred, no new package
   dependency), so off-Azure deployments have a working secret store (#1182).
 - Log-forging fix in the SMART authorization controller (#792).
@@ -171,9 +169,6 @@ against reference implementations, it says so.
 2. Follow `docs/security/service-auth-rollout-playbook.md` to provision service
    tokens before rolling services.
 3. Set the data provider explicitly if you are not on MongoDB.
-4. If you previously cloned the repository, rotate any credential you may have
-   copied from older manifests; the SFTP credential removed in #1184 remains in
-   git history and its endpoint has been decommissioned.
 
 ---
 

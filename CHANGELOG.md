@@ -21,8 +21,7 @@ recorded here but never tagged. Release notes:
 - **Da Vinci external interoperability harness** against digest-pinned HL7
   reference implementations: PAS submit, CRD, and DTR `$questionnaire-package`
   (#1159, #1160, #1161).
-- **Secret scanning fixed** (gitleaks ran with zero detectors); committed SFTP
-  credential removed from HEAD and its endpoint decommissioned (#1184, #1196, #1198).
+- **Secret scanning fixed** — gitleaks ran with zero detectors (#1184).
 - **HashiCorp Vault secret provider** (#1182).
 - **MongoDB as the default data provider**; services routed through shared
   infrastructure; clean-cluster startup defects fixed (#1174, #1177, #1178, #1188).
