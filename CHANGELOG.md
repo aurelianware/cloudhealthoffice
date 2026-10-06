@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-10-XX
+
+First tagged release since v4.0.0; also covers 4.1.0–4.4.0 below, which were
+recorded here but never tagged. Release notes:
+`docs/releases/RELEASE_NOTES_v5.0.0.md`.
+
+### Also in this release (not itemized below)
+
+- **CHO token auth and tenant isolation across all backend services**, payment
+  controls, NACHA transmission controls, SMART production sign-in; Argo
+  claims-adjudication workflow, event source and SLA watchdog removed (#1217).
+- **Da Vinci external interoperability harness** against digest-pinned HL7
+  reference implementations: PAS submit, CRD, and DTR `$questionnaire-package`
+  (#1159, #1160, #1161).
+- **Secret scanning fixed** — gitleaks ran with zero detectors (#1184).
+- **HashiCorp Vault secret provider** (#1182).
+- **MongoDB as the default data provider**; services routed through shared
+  infrastructure; clean-cluster startup defects fixed (#1174, #1177, #1178, #1188).
+- **Prospective adjudication (payment estimate) API** (#1091).
+- **Canonical reference data service**; ICD-10 display catalog (#914–#920, #1094–#1097).
+- **Benefit plan authoring** — version-safe rules, exclusions, networks;
+  plan validation; provider network verification (#1076–#1081).
+- **Pended-claim examiner workflow**, claim audit timeline, evaluator journeys
+  (#1069–#1071, #1082–#1085).
+- **Inbound X12 834 and 837 parsers**, 834→837 smoke test, EDI Transactions
+  console (#1002–#1018).
+- **Million Claim Challenge** validation harness, scaled to one million claims;
+  scale fixes for Redis eviction, MongoDB cache, CPU contention; 837
+  adjudication over Azure Service Bus (#799–#1047).
+- **Provider eligibility API for Cloud Dental Office** (#1204).
+- Runbooks: production readiness, DR, observability incidents, 837 operations
+  (#1072–#1075); full local Kubernetes deployment (#790, #791).
+
 ### Added — SEC-01: production SMART on FHIR / OAuth trust
 
 Cloud Health Office can now be deployed behind an externally managed OAuth/OIDC/
@@ -1194,18 +1227,6 @@ Payers JSON (`GET https://payers.us.stedi.com/2024-04-01/payers`) synchronizes
 into `IPayerReferenceService`. `StediHealthcareGateway` resolves eligibility
 payers through that service; `PayerMap`/`TenantPayerMap` are deprecated
 fallbacks. Arbitrary payer ids are no longer passed through to Stedi.
-
-### v5.0 - Planned
-
-**Enhanced Provider Management & Multi-Market Expansion**
-
-- Enhanced practice management features for small-to-medium practices
-- Advanced provider network analytics and reporting
-- Expanded core system integrations (Epic Tapestry, additional CAPS)
-- Mobile provider app (React Native) for iOS and Android
-- Provider-facing scheduling and patient communication tools
-- Enhanced claims scrubbing with AI-powered validation
-- Multi-location practice support with centralized billing
 
 ---
 
