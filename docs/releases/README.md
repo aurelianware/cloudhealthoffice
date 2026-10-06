@@ -8,7 +8,7 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ### v5.0.0 — 2001: A Payer Odyssey (October 2026)
 
-CHO as the system of record behind its CMS-0057-F APIs, claims lifecycle and X12
+Cloud Health Office as the system of record behind its CMS-0057-F APIs, claims lifecycle and X12
 trading-partner surface; production SMART/OAuth trust and service-wide token auth.
 
 | Document | Description |
@@ -19,6 +19,18 @@ trading-partner surface; production SMART/OAuth trust and service-wide token aut
 ---
 
 ## Previous Releases
+
+### v4.0.0 — Production Multi-Tenant SaaS (February 11, 2026)
+
+Security hardening, multi-tenant SaaS isolation, and cloud portability across Azure and DigitalOcean.
+
+| Document | Description |
+|----------|-------------|
+| [v4.0.0 Release](../features/RELEASE-v4.0.0.md) | Release overview |
+| [Changelog v4.0.0](../../CHANGELOG.md#400---february-11-2026) | Detailed v4.0.0 changes |
+| [GitHub release](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0) | Published release notes |
+
+---
 
 ### v3.0.0 — The Open Frontier Release (December 2025)
 
