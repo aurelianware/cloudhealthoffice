@@ -6,7 +6,7 @@ This directory contains comprehensive release documentation for CloudHealthOffic
 
 ## Current Release
 
-### v5.0.0 — The Native Backend (October 2026)
+### v5.0.0 — 2001: A Payer Odyssey (October 2026)
 
 CHO as the system of record behind its CMS-0057-F APIs, claims lifecycle and X12
 trading-partner surface; production SMART/OAuth trust and service-wide token auth.
