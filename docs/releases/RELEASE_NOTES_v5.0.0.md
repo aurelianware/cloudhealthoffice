@@ -1,6 +1,6 @@
 # v5.0.0 — 2001: A Payer Odyssey
 
-**Release date:** October 2026
+**Release date:** October 6, 2026
 **Previous GitHub release:** [v4.0.0](https://github.com/aurelianware/cloudhealthoffice/releases/tag/v4.0.0) (February 11, 2026)
 
 This is the first tagged release since v4.0.0. It rolls up the work recorded in
@@ -19,10 +19,10 @@ against reference implementations, it says so.
 
 ## Highlights
 
-### CMS-0057-F: CHO as the native authorization and data backend
+### CMS-0057-F: Cloud Health Office as the native authorization and data backend
 
-- **CHO as the native prior-authorization backend** — a backend seam selected
-  by operating mode makes CHO the system of record (Replace mode, the default)
+- **Cloud Health Office as the native prior-authorization backend** — a backend seam selected
+  by operating mode makes Cloud Health Office the system of record (Replace mode, the default)
   for the CMS-0057-F prior-auth slice, with external-core integration (Augment
   mode) as an explicit, never-silent alternative (#1144).
 - **Da Vinci PAS `Claim/$inquire`** — prior-authorization status through the
@@ -142,13 +142,15 @@ against reference implementations, it says so.
   `ExternalIssuer`. A `Demo` deployment on a non-development host **fails at
   startup**. Configure `ExternalIssuer` and its trust registry before upgrading
   production.
-- **Tenant headers can no longer override a token.** `X-Tenant-ID` may fill in
-  only when the token carries no tenant, and a mismatch returns **403**.
-  `X-Dev-Tenant-ID` is honored on development hosts only.
+- **Tenant comes from the token only.** Backend services and smart-auth-service
+  resolve the tenant through the shared CHO `TenantMiddleware`: an `X-Tenant-ID`
+  header is accepted only as an echo of the token's tenant (a mismatch is
+  **403**), a token without a tenant is **401**, and `X-Dev-Tenant-ID` is no
+  longer honored in any environment. This supersedes the header fallback
+  introduced with SEC-01.
 - **Backend services require CHO tokens and are default-deny** (#1217).
-  Startup fails if no `ChoAuth` issuers are configured; the tenant comes from
-  the token only (a disagreeing header is 403, a token without a tenant is 401);
-  symmetric keys are allowed only in Development/Testing. See
+  Startup fails if no `ChoAuth` issuers are configured; symmetric keys are
+  allowed only in Development/Testing. See
   `docs/security/service-auth-rollout-playbook.md` for the rollout order.
 - **MongoDB is now the default provider** (#1177). Deployments relying on the
   previous default must set their provider explicitly.

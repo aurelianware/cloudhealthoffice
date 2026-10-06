@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [5.0.0] - 2026-10-XX
+## [5.0.0] - 2026-10-06
 
 First tagged release since v4.0.0; also covers 4.1.0–4.4.0 below, which were
 recorded here but never tagged. Release notes:
@@ -18,6 +18,8 @@ recorded here but never tagged. Release notes:
 - **CHO token auth and tenant isolation across all backend services**, payment
   controls, NACHA transmission controls, SMART production sign-in; Argo
   claims-adjudication workflow, event source and SLA watchdog removed (#1217).
+  Tenant now comes from the token only — this supersedes the SEC-01 header
+  fallback below; `X-Dev-Tenant-ID` is no longer honored.
 - **Da Vinci external interoperability harness** against digest-pinned HL7
   reference implementations: PAS submit, CRD, and DTR `$questionnaire-package`
   (#1159, #1160, #1161).
