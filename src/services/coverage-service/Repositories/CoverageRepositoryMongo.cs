@@ -99,7 +99,11 @@ public class CoverageRepositoryMongo : ICoverageRepository
 
         if (!includeTerminated)
         {
-            filter = builder.And(filter, builder.Ne(c => c.Status, CoverageStatus.Terminated));
+            // Terminated = status Terminated, or a termination date already
+            // reached that the daily status sweep has not flipped yet.
+            filter = builder.And(filter,
+                builder.Ne(c => c.Status, CoverageStatus.Terminated),
+                NotTerminatedAsOf(DateTime.UtcNow.Date));
         }
 
         var sort = Builders<Coverage>.Sort.Descending(c => c.EffectiveDate);
@@ -136,7 +140,11 @@ public class CoverageRepositoryMongo : ICoverageRepository
 
         if (activeOnly)
         {
-            filter = builder.And(filter, builder.Eq(c => c.Status, CoverageStatus.Active));
+            // Currently active (Coverage.CurrentStatus): Active, or Pending
+            // whose effective date has arrived, with the termination date (if
+            // any) not yet reached — so the listing doesn't depend on when the
+            // daily status sweep last ran.
+            filter = builder.And(filter, CurrentlyActiveAsOf(DateTime.UtcNow.Date));
         }
 
         // Pagination in MongoDB usually works with Skip/Limit.
@@ -186,7 +194,11 @@ public class CoverageRepositoryMongo : ICoverageRepository
             builder.Eq(c => c.PcpNpi, pcpNpi)
         );
 
-        if (status.HasValue)
+        if (status == CoverageStatus.Active)
+        {
+            filter = builder.And(filter, CurrentlyActiveAsOf(DateTime.UtcNow.Date));
+        }
+        else if (status.HasValue)
         {
             filter = builder.And(filter, builder.Eq(c => c.Status, status.Value));
         }
@@ -214,6 +226,48 @@ public class CoverageRepositoryMongo : ICoverageRepository
 
         var count = await _collection.CountDocumentsAsync(filter);
         return (int)count;
+    }
+
+    public async Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems)
+    {
+        var builder = Builders<Coverage>.Filter;
+        // In-force coverage whose termination date is reached, or Pending
+        // whose effective date arrived (Coverage.DueStatusTransition). Only
+        // the statuses the sweep will actually change, so rows it skips
+        // (Suspended, unknown) never fill a batch and stall it.
+        var filter = builder.Or(
+            builder.And(
+                builder.In(c => c.Status, Coverage.AutoTerminatedStatuses),
+                builder.Ne(c => c.TerminationDate, null),
+                builder.Lte(c => c.TerminationDate, today.Date)),
+            builder.And(
+                builder.Eq(c => c.Status, CoverageStatus.Pending),
+                builder.Lte(c => c.EffectiveDate, today.Date)));
+
+        return await _collection.Find(filter).Limit(maxItems).ToListAsync();
+    }
+
+    public async Task<bool> SetStatusAsync(Coverage observed, CoverageStatus newStatus, string updatedBy)
+    {
+        // Only the status/audit fields, and only while the status and the
+        // dates the transition was decided from are still the ones the sweep
+        // read, so a concurrent edit (PCP change, reinstatement - which clears
+        // the termination date and may leave the status unchanged) is neither
+        // overwritten nor undone.
+        var builder = Builders<Coverage>.Filter;
+        var filter = builder.And(
+            builder.Eq(c => c.TenantId, observed.TenantId),
+            builder.Eq(c => c.Id, observed.Id),
+            builder.Eq(c => c.Status, observed.Status),
+            builder.Eq(c => c.EffectiveDate, observed.EffectiveDate),
+            builder.Eq(c => c.TerminationDate, observed.TerminationDate));
+        var update = Builders<Coverage>.Update
+            .Set(c => c.Status, newStatus)
+            .Set(c => c.LastUpdatedDate, DateTime.UtcNow)
+            .Set(c => c.LastUpdatedBy, updatedBy);
+
+        var result = await _collection.UpdateOneAsync(filter, update);
+        return result.ModifiedCount > 0;
     }
 
     public async Task<Coverage> CreateAsync(Coverage coverage)
@@ -257,5 +311,26 @@ public class CoverageRepositoryMongo : ICoverageRepository
         );
 
         await _collection.DeleteOneAsync(filter);
+    }
+
+    // Termination date not yet reached (or none).
+    private static FilterDefinition<Coverage> NotTerminatedAsOf(DateTime today) =>
+        Builders<Coverage>.Filter.Or(
+            Builders<Coverage>.Filter.Eq(c => c.TerminationDate, null),
+            Builders<Coverage>.Filter.Gt(c => c.TerminationDate, today));
+
+    // Coverage.CurrentStatus == Active. An effective COBRA Pending coverage is
+    // currently COBRA, not Active (Ne true also matches records without the flag).
+    private static FilterDefinition<Coverage> CurrentlyActiveAsOf(DateTime today)
+    {
+        var b = Builders<Coverage>.Filter;
+        return b.And(
+            b.Or(
+                b.Eq(c => c.Status, CoverageStatus.Active),
+                b.And(
+                    b.Eq(c => c.Status, CoverageStatus.Pending),
+                    b.Lte(c => c.EffectiveDate, today),
+                    b.Ne(c => c.IsCOBRA, true))),
+            NotTerminatedAsOf(today));
     }
 }

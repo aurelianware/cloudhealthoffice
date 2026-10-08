@@ -130,6 +130,43 @@ public class CoveragePipelineAuthTests : IClassFixture<CoveragePipelineAuthTests
         _factory.Coverage.VerifyNoOtherCalls();
     }
 
+    /// <summary>
+    /// Pins the wire shape eligibility-service reads from /active: a JSON array
+    /// of Coverage, camelCase, enums by name ("status":"Terminated"). See
+    /// EligibilityServiceCoverageSelectionTests, which uses this exact shape.
+    /// </summary>
+    [Fact]
+    public async Task ActiveCoverage_IsAJsonArrayOfCoverage_WithEnumsByName()
+    {
+        _factory.Coverage.Setup(r => r.GetActiveCoverageByMemberIdAsync("tenant-1", "M1", new DateTime(2025, 3, 15), null))
+            .ReturnsAsync(new List<Coverage>
+            {
+                new()
+                {
+                    Id = "cov-hlt", TenantId = "tenant-1", MemberId = "M1", GroupNumber = "GRP-100", PlanId = "PLAN-PPO",
+                    CoverageLevel = "FAM", InsuranceLineCode = "HLT", EffectiveDate = new DateTime(2025, 1, 1),
+                    TerminationDate = new DateTime(2025, 6, 30), Status = CoverageStatus.Terminated,
+                    LineOfBusiness = LineOfBusiness.Commercial
+                }
+            });
+        var client = Client("tenant-1", "dev-user", ChoRolePermissions.MemberServices);
+
+        var response = await client.GetAsync("/api/v1/coverage/member/M1/active?serviceDate=2025-03-15");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        doc.RootElement.ValueKind.Should().Be(System.Text.Json.JsonValueKind.Array);
+        var c = doc.RootElement[0];
+        c.GetProperty("id").GetString().Should().Be("cov-hlt");
+        c.GetProperty("planId").GetString().Should().Be("PLAN-PPO");
+        c.GetProperty("groupNumber").GetString().Should().Be("GRP-100");
+        c.GetProperty("insuranceLineCode").GetString().Should().Be("HLT");
+        c.GetProperty("status").GetString().Should().Be("Terminated");
+        c.GetProperty("lineOfBusiness").GetString().Should().Be("Commercial");
+        c.GetProperty("effectiveDate").GetString().Should().Be("2025-01-01T00:00:00");
+        c.GetProperty("terminationDate").GetString().Should().Be("2025-06-30T00:00:00");
+    }
+
     // ── premium billing reads coverage with the Finance user's token ────
 
     /// <summary>The search premium-billing's CoverageServiceClient makes.</summary>
@@ -184,8 +221,9 @@ public class CoveragePipelineAuthTests : IClassFixture<CoveragePipelineAuthTests
         var terminate = await client.PostAsJsonAsync("/api/v1/coverage/member/M1/terminate",
             new { terminationDate = DateTime.UtcNow.Date, reason = "x" });
         var pcp = await client.PutAsJsonAsync("/api/v1/coverage/member/M1/pcp", new { npi = "1234567893" });
+        var reinstate = await client.PostAsync("/api/v1/coverage/cov-1/reinstate", null);
 
-        foreach (var response in new[] { create, update, delete, terminate, pcp })
+        foreach (var response in new[] { create, update, delete, terminate, pcp, reinstate })
             response.StatusCode.Should().Be(HttpStatusCode.Forbidden, response.RequestMessage!.RequestUri!.ToString());
         _factory.Coverage.Verify(r => r.CreateAsync(It.IsAny<Coverage>()), Times.Never);
         _factory.Coverage.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
