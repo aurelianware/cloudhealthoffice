@@ -41,6 +41,16 @@ public class RateResolutionService : IRateResolutionService
     }
 
     public async Task<PricingResult> ResolveAsync(PricingRequest request, CancellationToken ct = default)
+        => (await ResolveLineAsync(request, applyMultipleProcedureReduction: true, ct)).Result;
+
+    /// <summary>
+    /// Prices one line and also returns the matched rate line so batch pricing can
+    /// honour per-line flags (e.g. <see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>).
+    /// When <paramref name="applyMultipleProcedureReduction"/> is false the per-line
+    /// modifier-51 / line-position reduction is suppressed (batch pricing ranks instead).
+    /// </summary>
+    private async Task<(PricingResult Result, FeeScheduleLine? RateLine)> ResolveLineAsync(
+        PricingRequest request, bool applyMultipleProcedureReduction, CancellationToken ct)
     {
         // 1. Provider contract lookup
         var contract = await _contractRepo.GetContractAsync(
@@ -74,8 +84,32 @@ public class RateResolutionService : IRateResolutionService
         }
 
         // 4. Calculate base allowed amount
-        var (baseAmount, rateSource, scheduleType) = await CalculateBaseAmountAsync(
+        var (baseAmount, rateSource, scheduleType, unresolvedReason) = await CalculateBaseAmountAsync(
             request, schedule, rateLine, networkStatus, ct);
+
+        if (unresolvedReason is not null)
+        {
+            // A rate line matched but its base could not be computed (e.g. percent-of-Medicare
+            // with no resolvable Medicare reference). Report it as unresolved so the caller can
+            // pend the line, rather than silently substituting billed charges.
+            _logger.LogWarning(
+                "Rate unresolved for {ProcedureCode} on schedule {ScheduleId}: {Reason}",
+                request.ProcedureCode, schedule?.Id, unresolvedReason);
+
+            return (new PricingResult
+            {
+                LineNumber       = request.LineNumber,
+                ProcedureCode    = request.ProcedureCode,
+                AllowedAmount    = 0m,
+                BilledAmount     = request.BilledAmount,
+                FeeScheduleType  = scheduleType,
+                RateSource       = RateSource.Unresolved,
+                NetworkStatus    = networkStatus,
+                FeeScheduleId    = schedule?.Id,
+                FeeScheduleName  = schedule?.Name,
+                UnresolvedReason = unresolvedReason,
+            }, rateLine);
+        }
 
         // 5. Apply modifier adjustments (not applicable for DRG/PerDiem/Capitation)
         IReadOnlyList<RateAdjustment> adjustments;
@@ -90,14 +124,14 @@ public class RateResolutionService : IRateResolutionService
         else
         {
             (finalAmount, adjustments) = ApplyModifierAdjustments(
-                baseAmount, request, rateLine, schedule);
+                baseAmount, request, rateLine, applyMultipleProcedureReduction);
         }
 
         // 6. Apply units (not for DRG — case rate is per-admission regardless of line count)
         if (scheduleType != FeeScheduleType.Drg)
             finalAmount *= request.Units;
 
-        return new PricingResult
+        return (new PricingResult
         {
             LineNumber      = request.LineNumber,
             ProcedureCode   = request.ProcedureCode,
@@ -109,18 +143,21 @@ public class RateResolutionService : IRateResolutionService
             FeeScheduleId   = schedule?.Id,
             FeeScheduleName = schedule?.Name,
             Adjustments     = adjustments,
-        };
+        }, rateLine);
     }
 
     /// <summary>
     /// Batch pricing with proper multiple-procedure ranking.
     ///
-    /// CMS multiple procedure rules rank lines by allowed amount
-    /// (highest-paid = 100%, second = 50%, third+ = 25% for most
-    /// endoscopic/surgical families). This implementation:
-    ///   1. Prices all lines at 100% first
-    ///   2. Ranks by allowed amount descending
-    ///   3. Re-applies multiple procedure reductions based on rank
+    /// CMS multiple surgery rules (MPFS multiple procedure indicator 2) rank
+    /// eligible procedures by allowed amount: highest = 100%, 2nd through 5th
+    /// = 50%. 6th and subsequent are "by report"; this engine prices them at
+    /// 50% and flags the adjustment for review. This implementation:
+    ///   1. Prices all lines at 100% (per-line multiple procedure logic suppressed)
+    ///   2. Ranks only lines whose rate line is flagged
+    ///      <see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>
+    ///      (E&amp;M and other non-surgical lines are left unreduced)
+    ///   3. Applies the rank-based reduction to ranked lines 2+
     /// </summary>
     public async Task<PricingResultSet> ResolveBatchAsync(
         IReadOnlyList<PricingRequest> requests, CancellationToken ct = default)
@@ -134,73 +171,59 @@ public class RateResolutionService : IRateResolutionService
             return new PricingResultSet { LineResults = results };
         }
 
-        // Phase 1: Price all lines at 100% (override LineNumber/TotalLineCount to suppress
-        // the per-line multiple procedure logic in ApplyModifierAdjustments)
-        var initialResults = new List<(PricingRequest Request, PricingResult Result)>(requests.Count);
+        // Phase 1: Price all lines at 100% (per-line multiple procedure reduction suppressed)
+        var initialResults = new List<(PricingResult Result, FeeScheduleLine? RateLine)>(requests.Count);
         foreach (var request in requests.OrderBy(r => r.LineNumber))
-        {
-            // Create a modified request that suppresses multiple procedure reduction
-            var singleLineRequest = request with { LineNumber = 1, TotalLineCount = 1 };
-            var result = await ResolveAsync(singleLineRequest, ct);
-            initialResults.Add((request, result));
-        }
+            initialResults.Add(await ResolveLineAsync(request, applyMultipleProcedureReduction: false, ct));
 
-        // Phase 2: Identify lines eligible for multiple procedure reduction
-        var eligibleForReduction = initialResults
-            .Where(r => r.Result.FeeScheduleType is not (FeeScheduleType.Drg or FeeScheduleType.PerDiem or FeeScheduleType.Capitation))
-            .OrderByDescending(r => r.Result.AllowedAmount)
-            .ToList();
+        // Phase 2: Rank the lines eligible for multiple procedure reduction
+        var rankByIndex = Enumerable.Range(0, initialResults.Count)
+            .Where(i => IsMultipleProcedureEligible(initialResults[i].Result, initialResults[i].RateLine))
+            .OrderByDescending(i => initialResults[i].Result.AllowedAmount)
+            .ThenBy(i => initialResults[i].Result.LineNumber)
+            .Select((index, rank) => (index, rank))
+            .ToDictionary(x => x.index, x => x.rank);
 
         // Phase 3: Apply rank-based reductions
         var finalResults = new List<PricingResult>(requests.Count);
 
-        foreach (var (request, result) in initialResults)
+        for (var i = 0; i < initialResults.Count; i++)
         {
-            // Phase 1 priced each line as a single-line request (LineNumber
-            // forced to 1 to suppress per-line MPPR), so restore the original
-            // line number here. Without this every batch result carries
-            // LineNumber = 1, which collapses/duplicates line identity for any
-            // caller that keys results by line number.
-            var rankedResult = result with { LineNumber = request.LineNumber };
+            var result = initialResults[i].Result;
 
-            var rank = eligibleForReduction.FindIndex(e => e.Request.LineNumber == request.LineNumber);
-
-            if (rank <= 0)
+            if (!rankByIndex.TryGetValue(i, out var rank) || rank == 0)
             {
-                // Rank 0 (highest paid) or not eligible — no reduction
-                finalResults.Add(rankedResult);
+                // Highest-ranked eligible line, or not eligible — no reduction
+                finalResults.Add(result);
                 continue;
             }
 
-            // Check if the rate line allows multiple procedure reduction
-            // (we need to re-check the rate line's flag)
-            var hasMultProcModifier = request.Modifiers.Contains(
-                PaymentModifiers.MultipleProcedures, StringComparer.OrdinalIgnoreCase);
-            var isMultProcEligible = hasMultProcModifier || eligibleForReduction.Count > 1;
-
-            if (!isMultProcEligible)
-            {
-                finalResults.Add(rankedResult);
-                continue;
-            }
-
-            // Rank 1 = 50%, Rank 2+ = 25% (CMS MPPR indicator 2/3 rules)
-            var reductionFactor = rank == 1 ? 0.50m : 0.25m;
+            // Rank 2–5 = 50%; rank 6+ is "by report" under CMS — priced at 50% and flagged
+            const decimal reductionFactor = 0.50m;
+            var byReport = rank >= 5;
             var reducedAmount = Math.Round(result.AllowedAmount * reductionFactor, 2);
             var reductionAmount = reducedAmount - result.AllowedAmount;
+
+            if (byReport)
+            {
+                _logger.LogWarning(
+                    "Multiple procedure rank {Rank} for line {LineNumber} ({ProcedureCode}) is by report; " +
+                    "priced at {Factor:P0} pending review",
+                    rank + 1, result.LineNumber, result.ProcedureCode, reductionFactor);
+            }
 
             var adjustments = new List<RateAdjustment>(result.Adjustments);
             adjustments.Add(new RateAdjustment
             {
                 Modifier = PaymentModifiers.MultipleProcedures,
-                Description = rank == 1
-                    ? $"Multiple procedure reduction — rank {rank + 1} ({reductionFactor:P0} of base)"
+                Description = byReport
+                    ? $"Multiple procedure reduction — rank {rank + 1} is by report; priced at {reductionFactor:P0} of base, review required"
                     : $"Multiple procedure reduction — rank {rank + 1} ({reductionFactor:P0} of base)",
                 AdjustmentFactor = reductionFactor,
                 AdjustmentAmount = reductionAmount,
             });
 
-            finalResults.Add(rankedResult with
+            finalResults.Add(result with
             {
                 AllowedAmount = reducedAmount,
                 Adjustments = adjustments
@@ -212,6 +235,16 @@ public class RateResolutionService : IRateResolutionService
             LineResults = finalResults.OrderBy(r => r.LineNumber).ToList()
         };
     }
+
+    /// <summary>
+    /// A line participates in multiple procedure ranking only when it was priced from a
+    /// fee schedule line that is flagged for the reduction. Unresolved, billed-charge,
+    /// DRG, per diem and capitation lines never participate.
+    /// </summary>
+    private static bool IsMultipleProcedureEligible(PricingResult result, FeeScheduleLine? rateLine)
+        => rateLine is { MultipleProcedureReductionApplies: true }
+           && result.RateSource is not (RateSource.Unresolved or RateSource.BilledCharges)
+           && result.FeeScheduleType is not (FeeScheduleType.Drg or FeeScheduleType.PerDiem or FeeScheduleType.Capitation);
 
     // ── Schedule selection ─────────────────────────────────────────────
 
@@ -299,9 +332,12 @@ public class RateResolutionService : IRateResolutionService
     // ── Base amount calculation ────────────────────────────────────────
 
     /// <summary>
-    /// Async version of base amount calculation — needed for Medicaid cross-schedule resolution.
+    /// Async version of base amount calculation — needed for Medicaid and
+    /// percent-of-Medicare cross-schedule resolution. A non-null
+    /// <c>unresolvedReason</c> means a rate line matched but its base amount
+    /// could not be determined; the amount is then meaningless.
     /// </summary>
-    private async Task<(decimal amount, RateSource source, FeeScheduleType scheduleType)> CalculateBaseAmountAsync(
+    private async Task<(decimal amount, RateSource source, FeeScheduleType scheduleType, string? unresolvedReason)> CalculateBaseAmountAsync(
         PricingRequest request,
         FeeSchedule? schedule,
         FeeScheduleLine? line,
@@ -310,19 +346,19 @@ public class RateResolutionService : IRateResolutionService
     {
         if (schedule is null || line is null)
         {
-            return (request.BilledAmount, RateSource.BilledCharges, FeeScheduleType.Ucr);
+            return (request.BilledAmount, RateSource.BilledCharges, FeeScheduleType.Ucr, null);
         }
 
         switch (schedule.Type)
         {
             case FeeScheduleType.Capitation:
-                return (0m, RateSource.Capitation, FeeScheduleType.Capitation);
+                return (0m, RateSource.Capitation, FeeScheduleType.Capitation, null);
 
             case FeeScheduleType.PerDiem:
             {
                 var los = request.LengthOfStay ?? 1;
                 var rate = schedule.PerDiemRate ?? line.Rate;
-                return (rate * los, RateSource.PerDiem, FeeScheduleType.PerDiem);
+                return (rate * los, RateSource.PerDiem, FeeScheduleType.PerDiem, null);
             }
 
             case FeeScheduleType.Drg:
@@ -331,39 +367,49 @@ public class RateResolutionService : IRateResolutionService
                 // If DRG weight is specified, rate = base rate × weight
                 if (line.DrgWeight.HasValue && line.DrgWeight.Value > 0)
                     drgRate = (schedule.DrgBaseRate ?? line.Rate) * line.DrgWeight.Value;
-                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg);
+                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg, null);
             }
 
             case FeeScheduleType.MedicareMpfs:
             case FeeScheduleType.MedicareOpps:
             {
-                var amount = line.RateType == FeeScheduleRateType.Rvu
-                    ? CalculateRvuAmount(schedule, line, request.PlaceOfServiceCode)
-                    : line.Rate;
-                return (amount, RateSource.MedicareMpfs, schedule.Type);
+                var amount = CalculateMedicareLineAmount(schedule, line, request.PlaceOfServiceCode);
+                return (amount, RateSource.MedicareMpfs, schedule.Type, null);
             }
 
             case FeeScheduleType.Medicaid:
             {
                 var amount = await ResolveMedicaidRateAsync(
                     request, schedule, line, ct);
-                return (amount, RateSource.Medicaid, FeeScheduleType.Medicaid);
+                return (amount, RateSource.Medicaid, FeeScheduleType.Medicaid, null);
             }
 
             default: // Commercial, Custom
             {
-                var amount = line.RateType switch
-                {
-                    FeeScheduleRateType.PercentOfBilled   => request.BilledAmount * line.Rate,
-                    FeeScheduleRateType.PercentOfMedicare  => request.BilledAmount * line.Rate,
-                    _                                      => line.Rate,
-                };
-
                 var source = schedule.Type == FeeScheduleType.Commercial
                     ? RateSource.ContractedRate
                     : RateSource.PlanDefault;
 
-                return (amount, source, schedule.Type);
+                if (line.RateType == FeeScheduleRateType.PercentOfMedicare)
+                {
+                    // line.Rate is a multiplier on the Medicare allowed amount (e.g. 1.10 = 110%),
+                    // never on billed charges.
+                    var (medicareRate, failure) = await ResolveMedicareBaseRateAsync(
+                        request, schedule, line, ct);
+
+                    if (medicareRate is null)
+                        return (0m, source, schedule.Type, failure);
+
+                    return (Math.Round(medicareRate.Value * line.Rate, 2), source, schedule.Type, null);
+                }
+
+                var amount = line.RateType switch
+                {
+                    FeeScheduleRateType.PercentOfBilled => request.BilledAmount * line.Rate,
+                    _                                   => line.Rate,
+                };
+
+                return (amount, source, schedule.Type, null);
             }
         }
     }
@@ -422,9 +468,8 @@ public class RateResolutionService : IRateResolutionService
                 var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
                 if (baseLine is not null)
                 {
-                    var medicareRate = baseLine.RateType == FeeScheduleRateType.Rvu
-                        ? CalculateRvuAmount(baseSchedule, baseLine, request.PlaceOfServiceCode)
-                        : baseLine.Rate;
+                    var medicareRate = CalculateMedicareLineAmount(
+                        baseSchedule, baseLine, request.PlaceOfServiceCode);
 
                     var medicaidRate = medicareRate * medicaidSchedule.PercentOfMedicare.Value;
 
@@ -459,7 +504,67 @@ public class RateResolutionService : IRateResolutionService
         return Math.Round(fallbackRate, 2);
     }
 
+    // ── Percent-of-Medicare base resolution (Commercial / Custom) ──────
+
+    /// <summary>
+    /// Resolves the Medicare allowed amount that a PercentOfMedicare line's
+    /// multiplier applies to. Sources, in order:
+    ///
+    /// 1. The Medicare reference schedule named by
+    ///    <see cref="FeeSchedule.BaseMpfsFeeScheduleId"/> (flat or RVU line,
+    ///    same lookup as Medicaid cross-schedule pricing).
+    /// 2. RVUs stored inline on the line itself, priced with the schedule's
+    ///    GPCI × ConversionFactor.
+    ///
+    /// Returns a null rate with a reason when neither yields a Medicare amount.
+    /// </summary>
+    private async Task<(decimal? medicareRate, string? failureReason)> ResolveMedicareBaseRateAsync(
+        PricingRequest request,
+        FeeSchedule schedule,
+        FeeScheduleLine line,
+        CancellationToken ct)
+    {
+        if (schedule.BaseMpfsFeeScheduleId is not null)
+        {
+            var baseSchedule = await _feeScheduleRepo.GetByIdAsync(
+                request.TenantId, schedule.BaseMpfsFeeScheduleId, ct);
+
+            if (baseSchedule is null)
+                return (null, $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} not found");
+
+            var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
+            if (baseLine is null
+                || baseLine.RateType is FeeScheduleRateType.PercentOfBilled or FeeScheduleRateType.PercentOfMedicare)
+            {
+                return (null,
+                    $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} has no Medicare rate " +
+                    $"for {request.ProcedureCode}");
+            }
+
+            return (CalculateMedicareLineAmount(baseSchedule, baseLine, request.PlaceOfServiceCode), null);
+        }
+
+        // Inline RVUs: only usable when a conversion factor is configured — CalculateRvuAmount
+        // otherwise falls back to line.Rate, which here is the percentage multiplier.
+        if (schedule.ConversionFactor.HasValue
+            && (line.WorkRvu.HasValue || line.PeRvu.HasValue || line.PeRvuFacility.HasValue || line.MpRvu.HasValue))
+        {
+            return (CalculateRvuAmount(schedule, line, request.PlaceOfServiceCode), null);
+        }
+
+        return (null,
+            $"Percent-of-Medicare rate for {request.ProcedureCode} has no Medicare reference schedule " +
+            "or inline RVUs to price against");
+    }
+
     // ── RVU calculation ───────────────────────────────────────────────
+
+    /// <summary>Medicare allowed amount for a Medicare schedule line (RVU-based or stored flat rate).</summary>
+    private static decimal CalculateMedicareLineAmount(
+        FeeSchedule schedule, FeeScheduleLine line, string placeOfServiceCode)
+        => line.RateType == FeeScheduleRateType.Rvu
+            ? CalculateRvuAmount(schedule, line, placeOfServiceCode)
+            : line.Rate;
 
     private static decimal CalculateRvuAmount(
         FeeSchedule schedule, FeeScheduleLine line, string placeOfServiceCode)
@@ -483,7 +588,7 @@ public class RateResolutionService : IRateResolutionService
         decimal baseAmount,
         PricingRequest request,
         FeeScheduleLine? line,
-        FeeSchedule? schedule)
+        bool applyMultipleProcedureReduction)
     {
         var modifiers = request.Modifiers;
         var adjustments = new List<RateAdjustment>();
@@ -589,10 +694,12 @@ public class RateResolutionService : IRateResolutionService
 
         // Note: Multiple procedure reduction (mod 51) is now handled in ResolveBatchAsync
         // via rank-based ordering. The per-line fallback below only applies when
-        // ResolveBatchAsync is not used (single-line ResolveAsync calls).
-        if (modifiers.Contains(PaymentModifiers.MultipleProcedures, StringComparer.OrdinalIgnoreCase)
-            || (request.LineNumber > 1 && request.TotalLineCount > 1
-                && (line?.MultipleProcedureReductionApplies ?? true)))
+        // ResolveBatchAsync is not used (single-line ResolveAsync calls); batch pricing
+        // suppresses it so a modifier-51 line is not reduced twice.
+        if (applyMultipleProcedureReduction
+            && (modifiers.Contains(PaymentModifiers.MultipleProcedures, StringComparer.OrdinalIgnoreCase)
+                || (request.LineNumber > 1 && request.TotalLineCount > 1
+                    && (line?.MultipleProcedureReductionApplies ?? true))))
         {
             var reduced = amount * 0.50m;
             var adj = reduced - amount;

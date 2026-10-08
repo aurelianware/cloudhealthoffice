@@ -285,6 +285,23 @@ public class PaymentEstimateServiceTests
     }
 
     [Fact]
+    public async Task UnresolvedRate_AddsWarningAndLowersConfidence()
+    {
+        var h = new Harness();
+        h.SetupPricing(Pricing((1, 200m, 0m, RateSource.Unresolved)));
+        h.SetupBenefit(Benefit(true, PayableLine(1, 0m)));
+
+        var resp = await h.Build().EstimateAsync(Tenant, Request(Line(1, "99213", 200m)));
+
+        resp.Lines.Single().Messages.Should().Contain(m => m.Code == "RATE_UNRESOLVED"
+            && m.Severity == EstimateMessageSeverity.Warning);
+        resp.Lines.Single().Messages.Should().NotContain(m => m.Code == "FEE_SCHEDULE_APPLIED");
+        resp.Confidence.MissingData.Should().Contain(d => d.Contains("line 1") && d.Contains("could not be resolved"));
+        resp.Confidence.Reasons.Should().NotContain("Provider fee schedule resolved");
+        resp.Confidence.Level.Should().NotBe(EstimateConfidenceLevel.High);
+    }
+
+    [Fact]
     public async Task PriorAuthRequired_NoAuthNumber_AddsWarning()
     {
         var h = new Harness();
