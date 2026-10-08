@@ -238,7 +238,8 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             rules.Add(new CostShareRuleConfig
             {
                 CostShareType = CostShareType.Deductible,
-                DeductibleApplies = true
+                DeductibleApplies = true,
+                OopApplies = b.OopApplies
             });
         }
 
@@ -294,6 +295,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
                 CostShareType = CostShareType.Copay,
                 CopayAmount = copay.Value,
                 DeductibleApplies = b.DeductibleApplies,
+                OopApplies = b.OopApplies,
                 CopayApplicationMode = b.DeductibleApplies
                     ? CopayApplicationMode.AfterDeductible
                     : CopayApplicationMode.InsteadOfDeductible
@@ -307,7 +309,8 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             {
                 CostShareType = CostShareType.Coinsurance,
                 CoinsurancePercent = NormalizeCoinsurance(coins.Value),
-                DeductibleApplies = b.DeductibleApplies
+                DeductibleApplies = b.DeductibleApplies,
+                OopApplies = b.OopApplies
             });
         }
 
@@ -324,7 +327,8 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             {
                 CostShareType = CostShareType.Copay,
                 CopayAmount = b.OutNetworkCopay.Value,
-                DeductibleApplies = b.DeductibleApplies
+                DeductibleApplies = b.DeductibleApplies,
+                OopApplies = b.OopApplies
             });
         }
 
@@ -334,7 +338,8 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             {
                 CostShareType = CostShareType.Coinsurance,
                 CoinsurancePercent = NormalizeCoinsurance(b.OutNetworkCoinsurance.Value),
-                DeductibleApplies = b.DeductibleApplies
+                DeductibleApplies = b.DeductibleApplies,
+                OopApplies = b.OopApplies
             });
         }
 

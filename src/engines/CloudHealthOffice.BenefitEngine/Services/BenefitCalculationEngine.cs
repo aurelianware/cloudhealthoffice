@@ -823,29 +823,46 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         }
 
         // ── 5. Raw member responsibility ──
-        var rawMemberResponsibility = deductibleAmount + finalCopay + coinsuranceAmount;
+        // Split by whether each component counts toward the OOP max. A rule
+        // with OopApplies=false contributes cost share that neither consumes
+        // nor is capped by the OOP max. Absent rules (e.g. the HDHP-forced
+        // deductible) default to counting.
+        var deductibleCountsToOop = deductibleRule?.OopApplies ?? true;
+        var copayCountsToOop = copayRule?.OopApplies ?? true;
+        var coinsuranceCountsToOop = coinsuranceRule?.OopApplies ?? true;
 
-        // ── 6. OOP max cap ──
+        var oopEligible =
+            (deductibleCountsToOop ? deductibleAmount : 0)
+            + (copayCountsToOop ? finalCopay : 0)
+            + (coinsuranceCountsToOop ? coinsuranceAmount : 0);
+        var oopExcluded = deductibleAmount + finalCopay + coinsuranceAmount - oopEligible;
+
+        // ── 6. OOP max cap (OOP-eligible portion only) ──
         decimal oopMaxReduction = 0;
-        var oopRemaining = accumulators.GetRemainingOopMax(effectiveNetworkTier);
-
-        if (rawMemberResponsibility > oopRemaining && oopRemaining >= 0)
+        if (oopEligible > 0)
         {
-            oopMaxReduction = rawMemberResponsibility - oopRemaining;
-            rawMemberResponsibility = oopRemaining;
+            var oopRemaining = accumulators.GetRemainingOopMax(effectiveNetworkTier);
 
-            if (oopMaxReduction > 0)
+            if (oopEligible > oopRemaining && oopRemaining >= 0)
             {
-                adjustments.Add(new AdjustmentReason
+                oopMaxReduction = oopEligible - oopRemaining;
+                oopEligible = oopRemaining;
+
+                if (oopMaxReduction > 0)
                 {
-                    GroupCode = "OA",
-                    ReasonCode = "23",
-                    Amount = -oopMaxReduction
-                });
+                    adjustments.Add(new AdjustmentReason
+                    {
+                        GroupCode = "OA",
+                        ReasonCode = "23",
+                        Amount = -oopMaxReduction
+                    });
+                }
             }
+
+            accumulators.ApplyOopMax(oopEligible, effectiveNetworkTier);
         }
 
-        accumulators.ApplyOopMax(rawMemberResponsibility, effectiveNetworkTier);
+        var rawMemberResponsibility = oopEligible + oopExcluded;
 
         var memberResponsibility = rawMemberResponsibility;
         var planPaid = allowedAmount - memberResponsibility;
