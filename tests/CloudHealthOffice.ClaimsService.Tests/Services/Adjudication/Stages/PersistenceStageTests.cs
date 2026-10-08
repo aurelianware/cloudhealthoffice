@@ -191,4 +191,37 @@ public class PersistenceStageTests
             BillingProviderNPI = "1234567890",
         },
     };
+
+    [Fact]
+    public async Task Execute_ReattachesDuplicateFindings_WhenLaterStageReplacedPendDetails()
+    {
+        var ctx = BuildContext();
+        ctx.DuplicateFindings.Add(new DuplicateFindingSnapshot
+        {
+            DuplicateType = "Suspect",
+            RuleId = "DUP002",
+            LineNumber = 1,
+            MatchedClaimId = "prior-1",
+            SuggestedCarc = "18",
+        });
+        // NcciEditsStage-style wholesale replacement after the duplicate pend.
+        ctx.PendDetails = new PendDetails { PendCode = "NCCI", PendReason = "NCCI edit" };
+        ctx.StageResults.Add(ClaimAdjudicationStageResult.Pend("DuplicateClaim", "suspect duplicate"));
+        StubRepositoryReturns(true);
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<AdjudicationResult>(),
+            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Is<PendDetails?>(p => p != null
+                && p.PendCode == "NCCI"
+                && p.DuplicateFindings.Count == 1
+                && p.DuplicateFindings[0].RuleId == "DUP002"),
+            Arg.Is<bool>(isPend => isPend),
+            Arg.Any<ClaimStatus?>());
+    }
 }

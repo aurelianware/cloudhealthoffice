@@ -403,6 +403,75 @@ public class ExplanationOfBenefitProjectorTests
     }
 
     [Fact]
+    public void Project_codes_duplicate_findings_under_duplicate_edit_system_not_ncci()
+    {
+        var claim = MinimalClaim();
+        claim.ClaimLines.Add(new ClaimLine
+        {
+            LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 100m, Units = 1,
+            ServiceDateFrom = claim.ServiceDateFrom, ServiceDateTo = claim.ServiceDateTo,
+        });
+        claim.ClaimLines.Add(new ClaimLine
+        {
+            LineNumber = 2, ProcedureCode = "36415", ChargeAmount = 50m, Units = 1,
+            ServiceDateFrom = claim.ServiceDateFrom, ServiceDateTo = claim.ServiceDateTo,
+        });
+        claim.PendDetails = new PendDetails
+        {
+            PendCode = "NCCI",
+            EditFailures =
+            {
+                new NcciEditFailureSnapshot
+                {
+                    EditType = "Mue", RuleId = "NE002", Message = "MUE exceeded",
+                    AffectedLineNumbers = { 2 }, SuggestedCarc = "151",
+                },
+            },
+            DuplicateFindings =
+            {
+                new DuplicateFindingSnapshot
+                {
+                    DuplicateType = "Exact", RuleId = "DUP001", LineNumber = 2,
+                    Message = "Line 2 vs claim CN-PRIOR (prior-1) line 2: identical service",
+                    MatchedClaimId = "prior-1", MatchedClaimNumber = "CN-PRIOR", MatchedLineNumber = 2,
+                    SuggestedCarc = "18",
+                },
+                new DuplicateFindingSnapshot
+                {
+                    DuplicateType = "Suspect", RuleId = "DUP002", LineNumber = 1,
+                    Message = "Line 1 vs claim CN-PRIOR (prior-1) line 1: different modifiers",
+                    SuggestedCarc = null,
+                },
+            },
+        };
+
+        var json = _projector.Project(claim);
+        var items = json["item"]!.AsArray();
+
+        var line1Adj = items[0]!["adjudication"]!.AsArray();
+        line1Adj.Should().HaveCount(1);
+        line1Adj[0]!["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
+            .Should().Be("18", "CARC 18 is the fallback for duplicate findings");
+        line1Adj[0]!["reason"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>()
+            .Should().Be("urn:cho:duplicate-edit");
+        line1Adj[0]!["reason"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>()
+            .Should().Be("DUP002");
+
+        // Line 2 carries both the NCCI edit and the duplicate, each under its own system.
+        var line2Adj = items[1]!["adjudication"]!.AsArray();
+        line2Adj.Should().HaveCount(2);
+        var systems = line2Adj
+            .Select(a => a!["reason"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>())
+            .ToList();
+        systems.Should().BeEquivalentTo(new[] { "urn:cho:ncci-edit", "urn:cho:duplicate-edit" });
+        var duplicateEntry = line2Adj.Single(a =>
+            a!["reason"]!["coding"]!.AsArray()[0]!["system"]!.GetValue<string>() == "urn:cho:duplicate-edit")!;
+        duplicateEntry["reason"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("DUP001");
+        duplicateEntry["category"]!["coding"]!.AsArray()[0]!["code"]!.GetValue<string>().Should().Be("18");
+        json.ToJsonString().Should().NotContain("\"urn:cho:ncci-edit\",\"code\":\"DUP");
+    }
+
+    [Fact]
     public void Project_uses_default_237_CARC_when_engine_did_not_supply_one()
     {
         var claim = MinimalClaim();

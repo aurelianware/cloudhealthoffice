@@ -130,6 +130,16 @@ public class ClaimAdjudicationContext
     public PendDetails? PendDetails { get; set; }
 
     /// <summary>
+    /// Duplicate-claim findings recorded by
+    /// <see cref="Stages.DuplicateClaimStage"/> when it pends. Held here as
+    /// well as on <see cref="PendDetails"/> because later stages replace
+    /// <see cref="PendDetails"/> wholesale; <see cref="Stages.PersistenceStage"/>
+    /// re-attaches these before the projection write so the duplicate
+    /// evidence is never lost.
+    /// </summary>
+    public List<DuplicateFindingSnapshot> DuplicateFindings { get; } = new();
+
+    /// <summary>
     /// Coordination of Benefits outcome populated by
     /// <see cref="Stages.CoordinationOfBenefitsStage"/> (capability 5.8).
     /// Null until the COB stage runs. Phase 1 (α posture, mirrors 5.4
