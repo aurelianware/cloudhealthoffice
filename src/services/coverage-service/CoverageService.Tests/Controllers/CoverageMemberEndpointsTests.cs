@@ -165,4 +165,44 @@ public class CoverageMemberEndpointsTests
             new TerminateMemberCoverageBody { TerminationDate = DateTime.UtcNow.Date });
         resp.Should().BeOfType<NotFoundObjectResult>();
     }
+
+    [Fact]
+    public async Task TerminateMemberCoverage_SkipsCoverageAlreadyTerminated()
+    {
+        // The DOS query returns coverages terminated on/after asOf because they
+        // were in force that day; the endpoint must not re-terminate them.
+        var (ctl, repo, _) = Build();
+        var open = ActiveCoverage("M1");
+        var alreadyTermed = ActiveCoverage("M1");
+        alreadyTermed.Status = CoverageStatus.Terminated;
+        alreadyTermed.TerminationDate = DateTime.UtcNow.Date.AddDays(10);
+        repo.Setup(r => r.GetActiveCoverageByMemberIdAsync(Tenant, "M1", It.IsAny<DateTime>(), null))
+            .ReturnsAsync(new List<Coverage> { open, alreadyTermed });
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        var resp = await ctl.TerminateMemberCoverage("M1",
+            new TerminateMemberCoverageBody { TerminationDate = DateTime.UtcNow.Date });
+
+        var body = resp.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<TerminateMemberCoverageResponse>().Subject;
+        body.TerminatedCount.Should().Be(1);
+        alreadyTermed.TerminationDate.Should().Be(DateTime.UtcNow.Date.AddDays(10));
+        repo.Verify(r => r.UpdateAsync(alreadyTermed), Times.Never);
+    }
+
+    [Fact]
+    public async Task TerminateMemberCoverage_OnlyAlreadyTerminated_Returns404()
+    {
+        var (ctl, repo, _) = Build();
+        var alreadyTermed = ActiveCoverage("M1");
+        alreadyTermed.Status = CoverageStatus.Terminated;
+        alreadyTermed.TerminationDate = DateTime.UtcNow.Date;
+        repo.Setup(r => r.GetActiveCoverageByMemberIdAsync(Tenant, "M1", It.IsAny<DateTime>(), null))
+            .ReturnsAsync(new List<Coverage> { alreadyTermed });
+
+        var resp = await ctl.TerminateMemberCoverage("M1",
+            new TerminateMemberCoverageBody { TerminationDate = DateTime.UtcNow.Date });
+        resp.Should().BeOfType<NotFoundObjectResult>();
+        repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
+    }
 }
