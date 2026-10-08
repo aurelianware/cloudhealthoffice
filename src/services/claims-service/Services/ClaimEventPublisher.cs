@@ -203,7 +203,7 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
         }
     }
 
-    private static ClaimFinalizedEvent BuildFinalizedEvent(Claim claim, string tenantId)
+    internal static ClaimFinalizedEvent BuildFinalizedEvent(Claim claim, string tenantId)
     {
         var adj = claim.AdjudicationResult;
         var lines = claim.ClaimLines.Select(l => new ClaimFinalizedLineItem
@@ -211,12 +211,12 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             LineNumber = l.LineNumber,
             BenefitCategory = l.RevenueCode ?? l.PlaceOfServiceCode ?? string.Empty,
             ServiceCode = l.ProcedureCode,
-            DeductibleApplied = l.AdjudicationResult?.AdjustmentReasons
-                .Where(r => r.ReasonCode == "1").Sum(r => r.Amount) ?? 0m,
-            CoinsuranceApplied = l.AdjudicationResult?.AdjustmentReasons
-                .Where(r => r.ReasonCode == "2").Sum(r => r.Amount) ?? 0m,
-            CopayApplied = l.AdjudicationResult?.AdjustmentReasons
-                .Where(r => r.ReasonCode == "3").Sum(r => r.Amount) ?? 0m,
+            // Member cost share is the PR group only: a CO/OA entry that
+            // happens to reuse CARC 1/2/3 (e.g. a CO-denial) is not
+            // deductible/coinsurance/copay the member owes.
+            DeductibleApplied = SumPatientResponsibility(l.AdjudicationResult, "1"),
+            CoinsuranceApplied = SumPatientResponsibility(l.AdjudicationResult, "2"),
+            CopayApplied = SumPatientResponsibility(l.AdjudicationResult, "3"),
             OopApplied = (l.AdjudicationResult?.PatientResponsibility) ?? 0m,
             PlanPaid = l.AdjudicationResult?.PaidAmount ?? 0m,
             MemberResponsibility = l.AdjudicationResult?.PatientResponsibility ?? 0m
@@ -266,6 +266,11 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             LineItems = lines
         };
     }
+
+    private static decimal SumPatientResponsibility(LineAdjudicationResult? line, string carc) =>
+        line?.AdjustmentReasons
+            .Where(r => r.GroupCode == "PR" && r.ReasonCode == carc)
+            .Sum(r => r.Amount) ?? 0m;
 
     public async ValueTask DisposeAsync()
     {

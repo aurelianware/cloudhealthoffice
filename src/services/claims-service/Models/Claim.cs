@@ -681,6 +681,13 @@ public class ClaimAdjustmentReason
     public decimal Amount { get; set; }
 
     /// <summary>
+    /// Remittance Advice Remark Code (RARC) qualifying this adjustment, when
+    /// the adjudicator supplied one. 835: LQ (line) / MOA/MIA (claim).
+    /// </summary>
+    [StringLength(10)]
+    public string? RemarkCode { get; set; }
+
+    /// <summary>
     /// Reason description
     /// </summary>
     [StringLength(500)]
