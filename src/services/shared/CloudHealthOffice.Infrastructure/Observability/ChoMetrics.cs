@@ -157,6 +157,20 @@ public static class ChoMetrics
             description: "Benefit-plan write rejections from IPlanLimitValidator (5.7 ACA OOP cap enforcement)");
 
     /// <summary>
+    /// Counter tracking advisory (soft) warnings from
+    /// <c>IPlanLimitValidator</c>. The write still succeeds; the counter
+    /// sizes how many plans carry an ambiguous limit configuration.
+    /// Dimensions: <c>cho.caller</c>, <c>cho.tenant_id</c>,
+    /// <c>cho.reason</c> (AggregateZeroFamilyDeductible |
+    /// AggregateZeroFamilyOop).
+    /// </summary>
+    public static readonly Counter<long> PlanLimitValidationWarnings =
+        Meter.CreateCounter<long>(
+            "cho.benefit_plan.plan_limit_validation_warnings.total",
+            unit: "{warning}",
+            description: "Advisory benefit-plan write warnings from IPlanLimitValidator (write accepted)");
+
+    /// <summary>
     /// Counter tracking network-tier mapping outcomes emitted by the
     /// <c>NetworkTierBackfillService</c> (benefit-plan capability 5.5
     /// admin-triggered backfill). A single benefit plan can contribute

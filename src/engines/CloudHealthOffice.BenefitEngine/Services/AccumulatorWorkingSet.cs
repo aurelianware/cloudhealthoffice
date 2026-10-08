@@ -199,18 +199,23 @@ public class AccumulatorWorkingSet
     }
 
     /// <summary>
-    /// Records <paramref name="amount"/> against the individual fallback
-    /// pool when the Aggregate plan leaves the family limit unset.
+    /// Records <paramref name="amount"/> in exactly one Aggregate pool: the
+    /// family accumulator, or — when the plan leaves the family limit unset —
+    /// the member's individual fallback. A zero-limit family placeholder is
+    /// not also incremented, so the same dollars never land in two pools.
     /// </summary>
-    private void ApplyAggregateIndividualFallback(
+    private void ApplyToAggregatePool(
         AccumulatorType familyType, AccumulatorType individualType,
-        NetworkTier tier, decimal amount, string source)
+        NetworkTier tier, decimal amount, string familySource, string individualSource)
     {
-        if (!IsFamilyUnset(familyType, tier)) return;
-        if (_entries.TryGetValue(MakeKey(individualType, AccumulatorScope.Individual, tier), out var ind))
+        var (key, source) = IsFamilyUnset(familyType, tier)
+            ? (MakeKey(individualType, AccumulatorScope.Individual, tier), individualSource)
+            : (MakeKey(familyType, AccumulatorScope.Family, tier), familySource);
+
+        if (_entries.TryGetValue(key, out var pool))
         {
-            ind.CurrentAccumulated += amount;
-            RecordUpdate(ind, amount, source);
+            pool.CurrentAccumulated += amount;
+            RecordUpdate(pool, amount, source);
         }
     }
 
@@ -264,16 +269,9 @@ public class AccumulatorWorkingSet
 
         if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
-            // Aggregate: only update family pool
-            var familyKey = MakeKey(AccumulatorType.FamilyDeductible,
-                AccumulatorScope.Family, networkTier);
-            if (_entries.TryGetValue(familyKey, out var family))
-            {
-                family.CurrentAccumulated += amount;
-                RecordUpdate(family, amount, "Deductible-Family-Aggregate");
-            }
-            ApplyAggregateIndividualFallback(AccumulatorType.FamilyDeductible,
-                AccumulatorType.IndividualDeductible, networkTier, amount, "Deductible");
+            // Aggregate: only update the single pool
+            ApplyToAggregatePool(AccumulatorType.FamilyDeductible, AccumulatorType.IndividualDeductible,
+                networkTier, amount, "Deductible-Family-Aggregate", "Deductible");
             return;
         }
 
@@ -333,15 +331,8 @@ public class AccumulatorWorkingSet
 
         if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
-            var familyKey = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
-                AccumulatorScope.Family, networkTier);
-            if (_entries.TryGetValue(familyKey, out var family))
-            {
-                family.CurrentAccumulated += memberResponsibility;
-                RecordUpdate(family, memberResponsibility, "OOP-Family-Aggregate");
-            }
-            ApplyAggregateIndividualFallback(AccumulatorType.FamilyOutOfPocketMax,
-                AccumulatorType.IndividualOutOfPocketMax, networkTier, memberResponsibility, "OOP");
+            ApplyToAggregatePool(AccumulatorType.FamilyOutOfPocketMax, AccumulatorType.IndividualOutOfPocketMax,
+                networkTier, memberResponsibility, "OOP-Family-Aggregate", "OOP");
 
             // ACA per-member cap accumulates in lockstep with family pool
             // when enforced. Mirrors the Embedded dual-update pattern below.
