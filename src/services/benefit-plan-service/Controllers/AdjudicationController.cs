@@ -694,7 +694,8 @@ public class AdjudicationController : ControllerBase
                     NetworkStatus = priced?.NetworkStatus.ToString(),
                     ServiceTypeCode = bl.ServiceTypeCode,
                     IsCovered = bl.IsCovered,
-                    AdjustmentReasons = bl.Adjustments
+                    AdjustmentReasons = bl.Adjustments,
+                    PricingWarnings = priced?.Warnings ?? []
                 };
             }).ToList(),
             Accumulators = benefitResult.AccumulatorSnapshot,
@@ -1336,6 +1337,12 @@ public record AdjudicationLineResponse
     public string? ServiceTypeCode { get; init; }
     public bool IsCovered { get; init; }
     public List<AdjustmentReason> AdjustmentReasons { get; init; } = [];
+
+    /// <summary>
+    /// Non-fatal fee schedule pricing notes (e.g. no CMS multiple procedure
+    /// indicator on the rate line, so no multiple procedure reduction was applied).
+    /// </summary>
+    public IReadOnlyList<string> PricingWarnings { get; init; } = [];
 }
 
 /// <summary>

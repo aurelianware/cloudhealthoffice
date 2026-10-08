@@ -258,7 +258,7 @@ public static class SyntheticFeeScheduleGenerator
                 EffectiveDate = effectiveDate,
                 MaxUnitsPerDay = line.MaxUnitsPerDay,
                 BilateralAdjustmentApplies = line.BilateralAdjustmentApplies,
-                MultipleProcedureReductionApplies = line.MultipleProcedureReductionApplies,
+                MultipleProcedureIndicator = line.MultipleProcedureIndicator,
             });
         }
 
@@ -308,6 +308,44 @@ public static class SyntheticFeeScheduleGenerator
             AllowedAmount = amount,
             RateType = "FlatRate",
             EffectiveDate = effectiveDate,
+            MultipleProcedureIndicator = MultipleProcedureIndicatorFor(code),
         };
+    }
+
+    /// <summary>
+    /// CMS MPFS multiple procedure indicators (PPRRVU "MULT PROC") for codes whose value is
+    /// not covered by the defaults in <see cref="MultipleProcedureIndicatorFor"/>.
+    /// </summary>
+    private static readonly Dictionary<string, int> MultipleProcedureIndicators = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Surgery — standard multiple surgery rules
+        ["27447"] = 2, ["27130"] = 2, ["47562"] = 2, ["49505"] = 2, ["29881"] = 2,
+        ["64721"] = 2, ["66984"] = 2, ["23412"] = 2, ["44970"] = 2, ["50590"] = 2,
+        ["28296"] = 2, ["15002"] = 2, ["22612"] = 2, ["33533"] = 2, ["35301"] = 2,
+
+        // Behavioral health / screening / pathology — no multiple procedure adjustment
+        ["90834"] = 0, ["90837"] = 0, ["90791"] = 0, ["90847"] = 0, ["90853"] = 0,
+        ["96127"] = 0, ["88305"] = 0,
+
+        // Post-op visit (bundled) and clinical lab — concept does not apply
+        ["99024"] = 9,
+        ["80053"] = 9, ["80061"] = 9, ["85025"] = 9, ["81001"] = 9, ["83036"] = 9,
+        ["84443"] = 9, ["87880"] = 9, ["87804"] = 9, ["86900"] = 9, ["80048"] = 9,
+        ["82947"] = 9,
+    };
+
+    /// <summary>
+    /// The CMS multiple procedure indicator for a seeded code: explicit table first, then
+    /// E&amp;M (99xxx) = 0 and dental CDT (Dxxxx, not on the MPFS) = 9. Null if unknown.
+    /// </summary>
+    internal static int? MultipleProcedureIndicatorFor(string code)
+    {
+        if (MultipleProcedureIndicators.TryGetValue(code, out var indicator))
+            return indicator;
+        if (code.StartsWith("99", StringComparison.Ordinal))
+            return 0;
+        if (code.StartsWith("D", StringComparison.OrdinalIgnoreCase))
+            return 9;
+        return null;
     }
 }

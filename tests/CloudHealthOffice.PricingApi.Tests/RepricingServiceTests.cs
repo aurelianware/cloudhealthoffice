@@ -143,30 +143,133 @@ public class RepricingServiceTests
     // ─────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RepriceClaimAsync_MultipleLines_AppliesMultiProcReduction()
+    public async Task RepriceClaimAsync_MultipleSurgeries_Indicator2_RankedAt100_50_50()
     {
         var scheduleId = "MEDICARE_RBRVS_2025";
         SetupScheduleInfo(scheduleId);
-        SetupFeeEntries(scheduleId, new[]
+        SetupFeeEntries(scheduleId, new (string, decimal, int?)[]
         {
-            ("27447", 1500.00m), // Total knee — highest value
-            ("99213", 110.00m),  // E/M — lower value
+            ("20610", 200.00m, 2),
+            ("27447", 1500.00m, 2), // Total knee — highest value
+            ("29881", 800.00m, 2),
+        });
+
+        var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "20610", Units = 1 },
+            new ClaimLineRequest { LineNumber = 2, ProcedureCode = "27447", Units = 1 },
+            new ClaimLineRequest { LineNumber = 3, ProcedureCode = "29881", Units = 1 },
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines.Select(l => l.LineNumber).Should().Equal(1, 2, 3);
+        result.Lines.Single(l => l.ProcedureCode == "27447").AllowedAmount.Should().Be(1500.00m);
+        result.Lines.Single(l => l.ProcedureCode == "29881").AllowedAmount.Should().Be(400.00m);
+        result.Lines.Single(l => l.ProcedureCode == "20610").AllowedAmount.Should().Be(100.00m);
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_EmIndicator0_NotReduced()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupFeeEntries(scheduleId, new (string, decimal, int?)[]
+        {
+            ("27447", 1500.00m, 2), // Total knee — highest value
+            ("99213", 110.00m, 0),  // E/M — no multiple procedure reduction
         });
 
         var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
         {
             new ClaimLineRequest { LineNumber = 1, ProcedureCode = "27447", Units = 1 },
-            new ClaimLineRequest { LineNumber = 2, ProcedureCode = "99213", Units = 1 }
+            new ClaimLineRequest { LineNumber = 2, ProcedureCode = "99213", Units = 1, Modifiers = new List<string> { "25" } }
         });
 
         var result = await _sut.RepriceClaimAsync(request);
 
-        // Highest-value line at 100%, subsequent at 50%
-        var knee = result.Lines.First(l => l.ProcedureCode == "27447");
-        var em = result.Lines.First(l => l.ProcedureCode == "99213");
+        result.Lines.Single(l => l.ProcedureCode == "27447").AllowedAmount.Should().Be(1500.00m);
+        var em = result.Lines.Single(l => l.ProcedureCode == "99213");
+        em.AllowedAmount.Should().Be(110.00m);
+        em.Breakdown.MultiProcReduction.Should().BeNull();
+        result.Warnings.Should().BeNull();
+    }
 
-        knee.AllowedAmount.Should().Be(1500.00m);
-        em.AllowedAmount.Should().Be(55.00m); // 110 * 0.5
+    [Fact]
+    public async Task RepriceClaimAsync_ImagingIndicator4_NotReducedBySurgeryRule_Warns()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupFeeEntries(scheduleId, new (string, decimal, int?)[]
+        {
+            ("27447", 1500.00m, 2),
+            ("73721", 300.00m, 4),
+        });
+
+        var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "27447", Units = 1 },
+            new ClaimLineRequest { LineNumber = 2, ProcedureCode = "73721", Units = 1 }
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines.Single(l => l.ProcedureCode == "27447").AllowedAmount.Should().Be(1500.00m);
+        result.Lines.Single(l => l.ProcedureCode == "73721").AllowedAmount.Should().Be(300.00m);
+        result.Warnings.Should().Contain(w => w.Contains("Line 2") && w.Contains("indicator 4") && w.Contains("not yet supported"));
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_UnknownIndicator_NoReduction_Warns()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupFeeEntries(scheduleId, new (string, decimal, int?)[]
+        {
+            ("27447", 1500.00m, null),
+            ("29881", 800.00m, null),
+        });
+
+        var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "27447", Units = 1 },
+            new ClaimLineRequest { LineNumber = 2, ProcedureCode = "29881", Units = 1 }
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines.Select(l => l.AllowedAmount).Should().Equal(1500.00m, 800.00m);
+        result.Warnings.Should().Contain(w => w.Contains("Line 1") && w.Contains("No CMS multiple procedure indicator"));
+        result.Warnings.Should().Contain(w => w.Contains("Line 2") && w.Contains("No CMS multiple procedure indicator"));
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_Opps_StatusT_DiscountedStatusS_NotDiscounted()
+    {
+        var scheduleId = "MEDICARE_OPPS_2025";
+        SetupScheduleInfo(scheduleId);
+        _feeScheduleRepo.Setup(r => r.LookupCodesAsync(
+                scheduleId, It.IsAny<IEnumerable<string>>(), It.IsAny<string?>()))
+            .ReturnsAsync(new List<FeeScheduleEntry>
+            {
+                new() { FeeScheduleId = scheduleId, ProcedureCode = "45380", ApcPaymentRate = 1441.28m, StatusIndicator = "T" },
+                new() { FeeScheduleId = scheduleId, ProcedureCode = "10060", ApcPaymentRate = 302.78m, StatusIndicator = "T" },
+                new() { FeeScheduleId = scheduleId, ProcedureCode = "73721", ApcPaymentRate = 267.83m, StatusIndicator = "S" },
+            });
+
+        var request = BuildRequest(scheduleId, ClaimType.Outpatient, placeOfService: "22", lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "10060", Units = 1 },
+            new ClaimLineRequest { LineNumber = 2, ProcedureCode = "45380", Units = 1 },
+            new ClaimLineRequest { LineNumber = 3, ProcedureCode = "73721", Units = 1 },
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines.Single(l => l.ProcedureCode == "45380").AllowedAmount.Should().Be(1441.28m);
+        result.Lines.Single(l => l.ProcedureCode == "10060").AllowedAmount.Should().Be(151.39m);
+        result.Lines.Single(l => l.ProcedureCode == "73721").AllowedAmount.Should().Be(267.83m);
+        result.Warnings.Should().NotContain(w => w.Contains("multiple procedure indicator", StringComparison.OrdinalIgnoreCase));
     }
 
     // ─────────────────────────────────────────────────────────
@@ -489,14 +592,15 @@ public class RepricingServiceTests
             .ReturnsAsync(new List<FeeScheduleEntry> { entry });
     }
 
-    private void SetupFeeEntries(string scheduleId, (string code, decimal rate)[] entries)
+    private void SetupFeeEntries(string scheduleId, (string code, decimal rate, int? multProc)[] entries)
     {
         var feeEntries = entries.Select(e => new FeeScheduleEntry
         {
             FeeScheduleId = scheduleId,
             ProcedureCode = e.code,
             NonFacilityRate = e.rate,
-            FacilityRate = e.rate
+            FacilityRate = e.rate,
+            MultipleProcedureIndicator = e.multProc
         }).ToList();
 
         _feeScheduleRepo.Setup(r => r.LookupCodesAsync(
