@@ -225,6 +225,81 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    [Theory]
+    [InlineData(LineOfBusiness.Medicare)]
+    [InlineData(LineOfBusiness.Medicaid)]
+    [InlineData(LineOfBusiness.Commercial)]
+    public async Task Create_Urgent_Defaults_TargetResponseDate_To_72_Hours(LineOfBusiness lob)
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate();
+        body.LineOfBusiness = lob;
+        body.IsUrgent = true;
+
+        var before = DateTime.UtcNow;
+        var appeal = await ReadAppealAsync(await client.PostAsJsonAsync("/api/appeals", body, JsonOptions));
+        var after = DateTime.UtcNow;
+
+        appeal.TargetResponseDate.Should().NotBeNull();
+        appeal.TargetResponseDate!.Value.ToUniversalTime()
+            .Should().BeOnOrAfter(before.AddHours(72)).And.BeOnOrBefore(after.AddHours(72));
+    }
+
+    [Theory]
+    [InlineData(LineOfBusiness.Medicare, 30)]
+    [InlineData(LineOfBusiness.Medicaid, 30)]
+    [InlineData(LineOfBusiness.Commercial, 30)]
+    [InlineData(LineOfBusiness.Marketplace, 30)]
+    public async Task Create_Standard_Defaults_TargetResponseDate_Per_LineOfBusiness(LineOfBusiness lob, int days)
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate();
+        body.LineOfBusiness = lob;
+
+        var before = DateTime.UtcNow;
+        var appeal = await ReadAppealAsync(await client.PostAsJsonAsync("/api/appeals", body, JsonOptions));
+        var after = DateTime.UtcNow;
+
+        appeal.TargetResponseDate!.Value.ToUniversalTime()
+            .Should().BeOnOrAfter(before.AddDays(days)).And.BeOnOrBefore(after.AddDays(days));
+    }
+
+    [Fact]
+    public async Task Create_Override_Within_Regulatory_Maximum_Is_Honored()
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate();
+        body.IsUrgent = true;
+        var requested = DateTime.UtcNow.AddHours(24);
+        requested = new DateTime(requested.Ticks - requested.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
+        body.TargetResponseDate = requested;
+
+        var appeal = await ReadAppealAsync(await client.PostAsJsonAsync("/api/appeals", body, JsonOptions));
+
+        appeal.TargetResponseDate!.Value.ToUniversalTime().Should().Be(requested);
+    }
+
+    [Theory]
+    [InlineData(true, 4)]    // urgent: 4 days > 72 hours
+    [InlineData(false, 45)]  // standard: 45 days > 30 days
+    public async Task Create_Override_Beyond_Regulatory_Maximum_Returns400(bool urgent, int days)
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate();
+        body.IsUrgent = urgent;
+        body.TargetResponseDate = DateTime.UtcNow.AddDays(days);
+
+        var response = await client.PostAsJsonAsync("/api/appeals", body, JsonOptions);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("TargetResponseDate");
+        _factory.Repo.SnapshotEvents().Should().BeEmpty("a rejected create must not persist anything");
+    }
+
     [Fact]
     public async Task InvalidTransition_Returns409_WithProblemDetails()
     {
@@ -318,7 +393,8 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
         {
             var body = BuildCreate($"CLM-OPEN-{i:000}");
             body.IsUrgent = i < 2;
-            body.TargetResponseDate = i < 3 ? now.AddDays(3) : now.AddDays(30);
+            // Urgent overrides must stay inside the 72-hour expedited maximum.
+            body.TargetResponseDate = i < 2 ? now.AddHours(48) : i < 3 ? now.AddDays(3) : now.AddDays(29);
             var id = await CreateAsync(body);
             await SubmitAsync(id);
             if (i % 2 == 0) await BeginReviewAsync(id);

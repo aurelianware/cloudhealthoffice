@@ -82,6 +82,21 @@ public class AppealsController : ControllerBase
         var actor = Actor;
         var now = DateTime.UtcNow;
 
+        // Regulatory maximum (see AppealResponseDeadlinePolicy for citations).
+        // An explicit override may tighten the deadline but never extend it
+        // past the regulatory maximum — reject rather than silently cap so
+        // the caller learns its date was not honored.
+        var regulatoryDeadline = AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
+            now, request.LineOfBusiness, request.AppealType, request.IsUrgent);
+        if (request.TargetResponseDate.HasValue
+            && request.TargetResponseDate.Value.ToUniversalTime() > regulatoryDeadline)
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.TargetResponseDate),
+                $"TargetResponseDate exceeds the regulatory maximum of {regulatoryDeadline:o} " +
+                $"for {request.LineOfBusiness} {request.AppealType} (urgent: {request.IsUrgent}).");
+            return ValidationProblem(ModelState);
+        }
+
         var appeal = new Appeal
         {
             TenantId = TenantId,
@@ -102,7 +117,7 @@ public class AppealsController : ControllerBase
             Status = AppealStatus.Draft,
             Source = request.Source,
             SubmittedDate = now,
-            TargetResponseDate = request.TargetResponseDate ?? now.AddDays(request.IsUrgent ? 30 : 60),
+            TargetResponseDate = request.TargetResponseDate?.ToUniversalTime() ?? regulatoryDeadline,
             SubmittedBy = actor,
             IsUrgent = request.IsUrgent,
             ServiceDate = request.ServiceDate,
