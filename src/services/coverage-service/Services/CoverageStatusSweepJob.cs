@@ -41,9 +41,10 @@ public sealed class CoverageStatusSweepOptions
 /// included from its effective date) and the "currently active" listings
 /// derive the same status from the dates themselves, so neither waits on this
 /// job. Safe on several replicas: each
-/// change is a conditional status update (expected status → new status), so a
-/// second replica's write is a no-op, and a coverage reinstated in the
-/// meantime is left alone.
+/// change is a conditional status update (expected status and dates → new
+/// status), so a second replica's write is a no-op, and a coverage reinstated
+/// or re-dated in the meantime is left alone. Suspended (and unknown) statuses
+/// are never auto-terminated.
 /// </summary>
 public sealed class CoverageStatusSweepJob : BackgroundService
 {
@@ -137,7 +138,7 @@ public sealed class CoverageStatusSweepJob : BackgroundService
                 var next = coverage.DueStatusTransition(today);
                 if (next is null) continue;
 
-                if (await repository.SetStatusAsync(coverage.TenantId, coverage.Id, coverage.Status, next.Value, Actor))
+                if (await repository.SetStatusAsync(coverage, next.Value, Actor))
                 {
                     changedThisBatch++;
                     _logger.LogInformation(

@@ -110,7 +110,8 @@ public class CoverageRepositoryCosmosActiveOnDateTests
         await repo.SearchAsync("t1", groupNumber: "G1", activeOnly: true);
 
         captured.Query!.QueryText.Should().Contain(
-                "(c.status = @activeStatus OR (c.status = @pendingStatus AND c.effectiveDate <= @today))")
+                "(c.status = @activeStatus OR (c.status = @pendingStatus AND c.effectiveDate <= @today" +
+                " AND NOT (IS_BOOL(c.isCOBRA) AND c.isCOBRA)))")
             .And.Contain("(NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate) OR c.terminationDate > @today)");
         Param(captured.Query, "@activeStatus").Should().Be((int)CoverageStatus.Active);
         Param(captured.Query, "@pendingStatus").Should().Be((int)CoverageStatus.Pending);
@@ -145,16 +146,91 @@ public class CoverageRepositoryCosmosActiveOnDateTests
         await repo.GetStatusTransitionsDueAsync(new DateTime(2025, 7, 1, 13, 0, 0), 250);
 
         captured.Query!.QueryText.Should().Contain("SELECT TOP @maxItems")
-            .And.Contain("c.status != @terminatedStatus")
+            .And.Contain("c.status IN (@activeStatus, @pendingStatus, @cobraStatus)")
+            .And.NotContain("c.status != @terminatedStatus")
             .And.Contain("NOT IS_NULL(c.terminationDate)")
             .And.Contain("c.terminationDate <= @today")
             .And.Contain("OR (c.status = @pendingStatus AND c.effectiveDate <= @today)")
             .And.NotContain("c.tenantId");
         Param(captured.Query, "@maxItems").Should().Be(250);
-        Param(captured.Query, "@terminatedStatus").Should().Be((int)CoverageStatus.Terminated);
+        Param(captured.Query, "@activeStatus").Should().Be((int)CoverageStatus.Active);
         Param(captured.Query, "@pendingStatus").Should().Be((int)CoverageStatus.Pending);
+        Param(captured.Query, "@cobraStatus").Should().Be((int)CoverageStatus.COBRA);
         Param(captured.Query, "@today").Should().Be(new DateTime(2025, 7, 1));
         // Cross-partition: no partition key.
         captured.Options?.PartitionKey.Should().BeNull();
+    }
+
+    private static Coverage Cov(CoverageStatus status, DateTime? termination) => new()
+    {
+        Id = "c1",
+        TenantId = "t1",
+        MemberId = "M1",
+        GroupNumber = "G",
+        PlanId = "P",
+        Status = status,
+        EffectiveDate = new DateTime(2025, 1, 1),
+        TerminationDate = termination
+    };
+
+    private static (CoverageRepository Repo, Mock<Container> Container) BuildForSetStatus(Coverage stored)
+    {
+        var read = new Mock<ItemResponse<Coverage>>();
+        read.Setup(r => r.Resource).Returns(stored);
+        read.Setup(r => r.ETag).Returns("\"etag-1\"");
+
+        var container = new Mock<Container>();
+        container.Setup(c => c.ReadItemAsync<Coverage>("c1", new PartitionKey("t1"), It.IsAny<ItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(read.Object);
+        container.Setup(c => c.PatchItemAsync<Coverage>(It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<IReadOnlyList<PatchOperation>>(), It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Mock<ItemResponse<Coverage>>().Object);
+
+        var database = new Mock<Database>();
+        database.Setup(d => d.GetContainer("Coverage")).Returns(container.Object);
+        var client = new Mock<CosmosClient>();
+        client.Setup(c => c.GetDatabase("db")).Returns(database.Object);
+        return (new CoverageRepository(client.Object, "db"), container);
+    }
+
+    [Fact]
+    public async Task SetStatus_StaleSweepAfterReinstatement_DoesNotPatch()
+    {
+        // Sweep read Active with an expired termination date; /reinstate has
+        // since cleared the date and left the status Active.
+        var observed = Cov(CoverageStatus.Active, new DateTime(2025, 6, 30));
+        var (repo, container) = BuildForSetStatus(Cov(CoverageStatus.Active, null));
+
+        (await repo.SetStatusAsync(observed, CoverageStatus.Terminated, "sweep")).Should().BeFalse();
+
+        container.Verify(c => c.PatchItemAsync<Coverage>(It.IsAny<string>(), It.IsAny<PartitionKey>(),
+            It.IsAny<IReadOnlyList<PatchOperation>>(), It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SetStatus_Unchanged_PatchesStatusPinnedToTheReadETag()
+    {
+        var observed = Cov(CoverageStatus.Active, new DateTime(2025, 6, 30));
+        var (repo, container) = BuildForSetStatus(Cov(CoverageStatus.Active, new DateTime(2025, 6, 30)));
+
+        (await repo.SetStatusAsync(observed, CoverageStatus.Terminated, "sweep")).Should().BeTrue();
+
+        container.Verify(c => c.PatchItemAsync<Coverage>("c1", new PartitionKey("t1"),
+            It.Is<IReadOnlyList<PatchOperation>>(ops => ops.Any(o => o.Path == "/status")),
+            It.Is<PatchItemRequestOptions>(o => o.IfMatchEtag == "\"etag-1\""), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SetStatus_ConcurrentWriteAfterTheRead_PreconditionFailed_IsFalse()
+    {
+        var observed = Cov(CoverageStatus.Active, new DateTime(2025, 6, 30));
+        var (repo, container) = BuildForSetStatus(Cov(CoverageStatus.Active, new DateTime(2025, 6, 30)));
+        container.Setup(c => c.PatchItemAsync<Coverage>(It.IsAny<string>(), It.IsAny<PartitionKey>(),
+                It.IsAny<IReadOnlyList<PatchOperation>>(), It.IsAny<PatchItemRequestOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CosmosException("etag", System.Net.HttpStatusCode.PreconditionFailed, 0, "", 0));
+
+        (await repo.SetStatusAsync(observed, CoverageStatus.Terminated, "sweep")).Should().BeFalse();
     }
 }

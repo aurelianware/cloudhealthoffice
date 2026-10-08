@@ -235,10 +235,24 @@ public class EligibilityServiceImpl : IEligibilityService
     public static CoverageDto? SelectCoverage(
         IEnumerable<CoverageDto>? coverages, DateTime serviceDate, string? serviceTypeCode, string? groupNumber)
     {
+        var selected = SelectCoverageFor(coverages, serviceDate, serviceTypeCode, groupNumber);
+        if (selected != null) selected.IsActive = true;
+        return selected;
+    }
+
+    /// <summary>
+    /// The selection rule behind <see cref="SelectCoverage"/>, for any shape
+    /// of coverage-service <c>/active</c> entry (the CHO eligibility adapter
+    /// reads its own DTO), so every inquiry path picks the same coverage.
+    /// </summary>
+    public static T? SelectCoverageFor<T>(
+        IEnumerable<T>? coverages, DateTime serviceDate, string? serviceTypeCode, string? groupNumber)
+        where T : class, ICoverageCandidate
+    {
         if (coverages is null) return null;
 
         var line = InsuranceLineFor(serviceTypeCode);
-        var selected = coverages
+        return coverages
             .Where(c => c.IsInForceOn(serviceDate))
             .Where(c => string.Equals(
                 string.IsNullOrWhiteSpace(c.InsuranceLineCode) ? HealthLine : c.InsuranceLineCode.Trim(),
@@ -247,9 +261,6 @@ public class EligibilityServiceImpl : IEligibilityService
                                     && string.Equals(c.GroupNumber, groupNumber, StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(c => c.EffectiveDate)
             .FirstOrDefault();
-
-        if (selected != null) selected.IsActive = true;
-        return selected;
     }
 
     private const string HealthLine = "HLT";
@@ -260,7 +271,7 @@ public class EligibilityServiceImpl : IEligibilityService
     private static readonly HashSet<string> DentalServiceTypes = new(StringComparer.OrdinalIgnoreCase)
         { "23", "24", "25", "26", "27", "28", "35", "36", "37", "38", "39", "40", "41" };
     private static readonly HashSet<string> VisionServiceTypes = new(StringComparer.OrdinalIgnoreCase)
-        { "AL", "AM", "AO" };
+        { "AL", "AM", "AN", "AO" };
 
     /// <summary>834 INS/HD insurance line code (HD03) a 270 service type is asked against.</summary>
     public static string InsuranceLineFor(string? serviceTypeCode)
@@ -440,11 +451,23 @@ public class EligibilityServiceImpl : IEligibilityService
 // DTOs for service calls
 
 /// <summary>
+/// What <see cref="EligibilityServiceImpl.SelectCoverageFor{T}"/> needs from a
+/// coverage-service <c>/active</c> entry.
+/// </summary>
+public interface ICoverageCandidate
+{
+    string? InsuranceLineCode { get; }
+    string GroupNumber { get; }
+    DateTime EffectiveDate { get; }
+    bool IsInForceOn(DateTime serviceDate);
+}
+
+/// <summary>
 /// One entry of coverage-service's <c>GET /coverage/member/{id}/active</c>
 /// list — its <c>Coverage</c> document as serialized there: camelCase
 /// properties, enums by name.
 /// </summary>
-public class CoverageDto
+public class CoverageDto : ICoverageCandidate
 {
     public string Id { get; set; } = string.Empty;
     public string CoverageLevel { get; set; } = string.Empty;

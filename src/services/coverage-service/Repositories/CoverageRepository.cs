@@ -328,16 +328,20 @@ public class CoverageRepository : ICoverageRepository
     public async Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems)
     {
         // Cross-partition on purpose: the daily sweep covers every tenant.
-        // Termination date reached, or Pending whose effective date arrived.
+        // In-force coverage whose termination date is reached, or Pending
+        // whose effective date arrived (Coverage.DueStatusTransition). Only
+        // the statuses the sweep will actually change, so rows it skips
+        // (Suspended, unknown) never fill a batch and stall it.
         var queryDef = new QueryDefinition(
                 "SELECT TOP @maxItems * FROM c WHERE" +
-                " (c.status != @terminatedStatus" +
+                " (c.status IN (@activeStatus, @pendingStatus, @cobraStatus)" +
                 " AND IS_DEFINED(c.terminationDate) AND NOT IS_NULL(c.terminationDate)" +
                 " AND c.terminationDate <= @today)" +
                 " OR (c.status = @pendingStatus AND c.effectiveDate <= @today)")
             .WithParameter("@maxItems", maxItems)
-            .WithParameter("@terminatedStatus", (int)CoverageStatus.Terminated)
+            .WithParameter("@activeStatus", (int)CoverageStatus.Active)
             .WithParameter("@pendingStatus", (int)CoverageStatus.Pending)
+            .WithParameter("@cobraStatus", (int)CoverageStatus.COBRA)
             .WithParameter("@today", today.Date);
 
         var iterator = _container.GetItemQueryIterator<Coverage>(queryDef);
@@ -350,24 +354,37 @@ public class CoverageRepository : ICoverageRepository
         return results;
     }
 
-    public async Task<bool> SetStatusAsync(
-        string tenantId, string id, CoverageStatus expectedStatus, CoverageStatus newStatus, string updatedBy)
+    public async Task<bool> SetStatusAsync(Coverage observed, CoverageStatus newStatus, string updatedBy)
     {
-        // Patch only the status/audit fields, and only while the status is
-        // still the one the sweep read, so a concurrent edit (PCP change,
-        // reinstatement) is neither overwritten nor undone.
+        // Patch only the status/audit fields, and only while the status and
+        // the dates the transition was decided from are still the ones the
+        // sweep read, so a concurrent edit (PCP change, reinstatement - which
+        // clears the termination date and may leave the status unchanged) is
+        // neither overwritten nor undone. The current document is compared
+        // here and the patch is pinned to its ETag, so a write between the
+        // read and the patch fails the precondition too.
         try
         {
+            var current = await _container.ReadItemAsync<Coverage>(observed.Id, new PartitionKey(observed.TenantId));
+            var stored = current.Resource;
+            if (stored is null
+                || stored.Status != observed.Status
+                || stored.EffectiveDate != observed.EffectiveDate
+                || stored.TerminationDate != observed.TerminationDate)
+            {
+                return false;
+            }
+
             await _container.PatchItemAsync<Coverage>(
-                id,
-                new PartitionKey(tenantId),
+                observed.Id,
+                new PartitionKey(observed.TenantId),
                 new[]
                 {
                     PatchOperation.Set("/status", (int)newStatus),
                     PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
                     PatchOperation.Set("/lastUpdatedBy", updatedBy)
                 },
-                new PatchItemRequestOptions { FilterPredicate = $"FROM c WHERE c.status = {(int)expectedStatus}" });
+                new PatchItemRequestOptions { IfMatchEtag = current.ETag });
             return true;
         }
         catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
@@ -413,8 +430,11 @@ public class CoverageRepository : ICoverageRepository
         " AND (NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate) OR c.terminationDate > @today)";
 
     // Coverage.CurrentStatus == Active. Binds @activeStatus, @pendingStatus, @today.
+    // An effective COBRA Pending coverage is currently COBRA, not Active; a
+    // record without the flag (or with null) is non-COBRA.
     private const string CurrentlyActiveClause =
-        " AND (c.status = @activeStatus OR (c.status = @pendingStatus AND c.effectiveDate <= @today))" +
+        " AND (c.status = @activeStatus OR (c.status = @pendingStatus AND c.effectiveDate <= @today" +
+        " AND NOT (IS_BOOL(c.isCOBRA) AND c.isCOBRA)))" +
         NotTerminatedAsOfTodayClause;
 }
 
@@ -444,11 +464,12 @@ public interface ICoverageRepository
     /// </summary>
     Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems);
     /// <summary>
-    /// Sets the status (and audit fields) only, and only while the stored
-    /// status is still <paramref name="expectedStatus"/>. False when it was
-    /// not (changed concurrently) or the coverage is gone.
+    /// Sets the status (and audit fields) of <paramref name="observed"/> only,
+    /// and only while the stored status, effective date and termination date
+    /// are still the ones in <paramref name="observed"/> (as the sweep read
+    /// it). False when any changed concurrently or the coverage is gone.
     /// </summary>
-    Task<bool> SetStatusAsync(string tenantId, string id, CoverageStatus expectedStatus, CoverageStatus newStatus, string updatedBy);
+    Task<bool> SetStatusAsync(Coverage observed, CoverageStatus newStatus, string updatedBy);
     Task<Coverage> CreateAsync(Coverage coverage);
     Task<Coverage> UpdateAsync(Coverage coverage);
     Task DeleteAsync(string tenantId, string id);

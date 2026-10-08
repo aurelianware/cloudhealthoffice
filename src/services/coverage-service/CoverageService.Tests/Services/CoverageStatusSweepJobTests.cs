@@ -49,15 +49,14 @@ public class CoverageStatusSweepJobTests
                 Cov("a", CoverageStatus.Active, new DateTime(2025, 7, 1)),
                 Cov("b", CoverageStatus.COBRA, new DateTime(2025, 6, 15), "t2")
             });
-        repo.Setup(r => r.SetStatusAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CoverageStatus>(),
-                It.IsAny<CoverageStatus>(), It.IsAny<string>()))
+        repo.Setup(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
         (await job.SweepOnceAsync()).Should().Be(2);
 
-        repo.Verify(r => r.SetStatusAsync("t1", "a", CoverageStatus.Active, CoverageStatus.Terminated,
+        repo.Verify(r => r.SetStatusAsync(It.Is<Coverage>(c => c.TenantId == "t1" && c.Id == "a" && c.Status == CoverageStatus.Active), CoverageStatus.Terminated,
             CoverageStatusSweepJob.Actor), Times.Once);
-        repo.Verify(r => r.SetStatusAsync("t2", "b", CoverageStatus.COBRA, CoverageStatus.Terminated,
+        repo.Verify(r => r.SetStatusAsync(It.Is<Coverage>(c => c.TenantId == "t2" && c.Id == "b" && c.Status == CoverageStatus.COBRA), CoverageStatus.Terminated,
             CoverageStatusSweepJob.Actor), Times.Once);
         // Status only: never a whole-document replace that could clobber a concurrent edit.
         repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
@@ -71,12 +70,11 @@ public class CoverageStatusSweepJobTests
         pending.EffectiveDate = new DateTime(2025, 7, 1);
         repo.Setup(r => r.GetStatusTransitionsDueAsync(It.IsAny<DateTime>(), It.IsAny<int>()))
             .ReturnsAsync(new List<Coverage> { pending });
-        repo.Setup(r => r.SetStatusAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CoverageStatus>(),
-                It.IsAny<CoverageStatus>(), It.IsAny<string>()))
+        repo.Setup(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
         (await job.SweepOnceAsync()).Should().Be(1);
-        repo.Verify(r => r.SetStatusAsync("t1", "p", CoverageStatus.Pending, CoverageStatus.Active,
+        repo.Verify(r => r.SetStatusAsync(It.Is<Coverage>(c => c.TenantId == "t1" && c.Id == "p" && c.Status == CoverageStatus.Pending), CoverageStatus.Active,
             CoverageStatusSweepJob.Actor), Times.Once);
     }
 
@@ -88,8 +86,34 @@ public class CoverageStatusSweepJobTests
             .ReturnsAsync(new List<Coverage> { Cov("future", CoverageStatus.Active, new DateTime(2025, 7, 2)) });
 
         (await job.SweepOnceAsync()).Should().Be(0);
-        repo.Verify(r => r.SetStatusAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CoverageStatus>(),
-            It.IsAny<CoverageStatus>(), It.IsAny<string>()), Times.Never);
+        repo.Verify(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Sweep_NeverAutoTerminatesSuspendedCoverage()
+    {
+        var (job, repo) = Build();
+        repo.Setup(r => r.GetStatusTransitionsDueAsync(It.IsAny<DateTime>(), It.IsAny<int>()))
+            .ReturnsAsync(new List<Coverage> { Cov("hold", CoverageStatus.Suspended, new DateTime(2025, 6, 1)) });
+
+        (await job.SweepOnceAsync()).Should().Be(0);
+        repo.Verify(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Sweep_PassesTheCoverageItRead_SoTheWriteIsConditionalOnItsDates()
+    {
+        var (job, repo) = Build();
+        var due = Cov("a", CoverageStatus.Active, new DateTime(2025, 6, 30));
+        repo.Setup(r => r.GetStatusTransitionsDueAsync(It.IsAny<DateTime>(), It.IsAny<int>()))
+            .ReturnsAsync(new List<Coverage> { due });
+        repo.Setup(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        await job.SweepOnceAsync();
+        repo.Verify(r => r.SetStatusAsync(It.Is<Coverage>(c => ReferenceEquals(c, due)
+                && c.TerminationDate == new DateTime(2025, 6, 30)), CoverageStatus.Terminated, CoverageStatusSweepJob.Actor),
+            Times.Once);
     }
 
     [Fact]
@@ -103,8 +127,7 @@ public class CoverageStatusSweepJobTests
                 Cov("b", CoverageStatus.Active, new DateTime(2025, 6, 1))
             })
             .ReturnsAsync(new List<Coverage> { Cov("c", CoverageStatus.Active, new DateTime(2025, 6, 1)) });
-        repo.Setup(r => r.SetStatusAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CoverageStatus>(),
-                It.IsAny<CoverageStatus>(), It.IsAny<string>()))
+        repo.Setup(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
         (await job.SweepOnceAsync()).Should().Be(3);
@@ -118,8 +141,7 @@ public class CoverageStatusSweepJobTests
         var (job, repo) = Build(batchSize: 1);
         repo.Setup(r => r.GetStatusTransitionsDueAsync(It.IsAny<DateTime>(), 1))
             .ReturnsAsync(new List<Coverage> { Cov("a", CoverageStatus.Active, new DateTime(2025, 6, 1)) });
-        repo.Setup(r => r.SetStatusAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CoverageStatus>(),
-                It.IsAny<CoverageStatus>(), It.IsAny<string>()))
+        repo.Setup(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()))
             .ReturnsAsync(false);
 
         (await job.SweepOnceAsync()).Should().Be(0);

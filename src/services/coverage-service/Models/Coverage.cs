@@ -124,6 +124,15 @@ public class Coverage
     [StringLength(3)]
     public string? MaintenanceReasonCode { get; set; }
 
+    /// <summary>
+    /// The termination date the last reinstatement (834 025, <see cref="Reinstate"/>)
+    /// cleared, or null. Lets enrollment-import finish a member-level
+    /// reinstatement that stopped part-way: the lines already reinstated still
+    /// say which termination they reversed, so a replay reinstates the other
+    /// lines ended on that same date and nothing else.
+    /// </summary>
+    public DateTime? ReinstatedTerminationDate { get; set; }
+
     // ── PCP (Primary Care Provider) Assignment ──
 
     /// <summary>
@@ -237,6 +246,7 @@ public class Coverage
     /// </summary>
     public void Reinstate()
     {
+        if (TerminationDate.HasValue) ReinstatedTerminationDate = TerminationDate.Value.Date;
         TerminationDate = null;
         if (Status is CoverageStatus.Terminated or CoverageStatus.Suspended)
         {
@@ -245,9 +255,24 @@ public class Coverage
     }
 
     /// <summary>
+    /// Statuses that end in Terminated on their own once the termination date
+    /// is reached: the in-force ones. Suspended (a payment hold) and any status
+    /// not listed stay as they are — turning them into Terminated would make
+    /// the span eligible for its dates of service again without a
+    /// reinstatement.
+    /// </summary>
+    public static readonly IReadOnlyList<CoverageStatus> AutoTerminatedStatuses = new[]
+    {
+        CoverageStatus.Active,
+        CoverageStatus.Pending,
+        CoverageStatus.COBRA
+    };
+
+    /// <summary>
     /// The status this coverage's date span has moved it to as of
-    /// <paramref name="today"/>, or null when it needs no change: a coverage
-    /// whose termination date is today or past is Terminated, and a Pending
+    /// <paramref name="today"/>, or null when it needs no change: an in-force
+    /// coverage (<see cref="AutoTerminatedStatuses"/>) whose termination date
+    /// is today or past is Terminated, and a Pending
     /// coverage whose effective date has arrived is in force (Active, or COBRA
     /// for COBRA coverage). Pending only ever means "not yet effective" here:
     /// CoverageController.CreateCoverage sets it solely for a future effective
@@ -255,7 +280,7 @@ public class Coverage
     /// </summary>
     public CoverageStatus? DueStatusTransition(DateTime today)
     {
-        if (Status != CoverageStatus.Terminated
+        if (AutoTerminatedStatuses.Contains(Status)
             && TerminationDate.HasValue && TerminationDate.Value.Date <= today.Date)
         {
             return CoverageStatus.Terminated;

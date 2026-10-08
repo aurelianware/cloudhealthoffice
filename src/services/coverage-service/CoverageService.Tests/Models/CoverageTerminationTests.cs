@@ -90,7 +90,7 @@ public class CoverageTerminationTests
     [Theory]
     [InlineData(CoverageStatus.Active, "2025-07-01", CoverageStatus.Terminated)]
     [InlineData(CoverageStatus.COBRA, "2025-06-30", CoverageStatus.Terminated)]
-    [InlineData(CoverageStatus.Suspended, "2025-06-30", CoverageStatus.Terminated)]
+    [InlineData(CoverageStatus.Pending, "2025-06-30", CoverageStatus.Terminated)]
     public void DueStatusTransition_TerminationDateReached_IsTerminated(
         CoverageStatus status, string termination, CoverageStatus expected)
     {
@@ -126,6 +126,31 @@ public class CoverageTerminationTests
     {
         var coverage = Build(CoverageStatus.Pending, new DateTime(2025, 6, 30));
         coverage.DueStatusTransition(Today).Should().Be(CoverageStatus.Terminated);
+    }
+
+    [Theory]
+    [InlineData(CoverageStatus.Suspended)]
+    [InlineData((CoverageStatus)99)]
+    public void DueStatusTransition_SuspendedOrUnknown_IsNeverAutoTerminated(CoverageStatus status)
+    {
+        var coverage = Build(status, new DateTime(2025, 6, 30));
+
+        coverage.DueStatusTransition(Today).Should().BeNull();
+        coverage.CurrentStatus(Today).Should().Be(status);
+        // Terminated would be eligible for its span again; the hold must stay ineligible.
+        coverage.IsActiveOn(new DateTime(2025, 3, 15)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Reinstate_RecordsTheTerminationDateItReversed()
+    {
+        var coverage = Build(CoverageStatus.Terminated, new DateTime(2025, 6, 30));
+        coverage.Reinstate();
+        coverage.ReinstatedTerminationDate.Should().Be(new DateTime(2025, 6, 30));
+
+        // A no-op reinstatement keeps the record of the last real one.
+        coverage.Reinstate();
+        coverage.ReinstatedTerminationDate.Should().Be(new DateTime(2025, 6, 30));
     }
 
     [Fact]

@@ -40,6 +40,10 @@ public class CoverageRecordDto
     public string? InsuranceLineCode { get; set; }
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
+    /// <summary>834 maintenance type of the last create/reinstatement ("025" once reinstated).</summary>
+    public string? MaintenanceTypeCode { get; set; }
+    /// <summary>The termination date the last reinstatement cleared (coverage-service Coverage.ReinstatedTerminationDate).</summary>
+    public DateTime? ReinstatedTerminationDate { get; set; }
 }
 
 /// <summary>Mirrors coverage-service's UpdateCoverageRequest (CoverageController.cs).</summary>

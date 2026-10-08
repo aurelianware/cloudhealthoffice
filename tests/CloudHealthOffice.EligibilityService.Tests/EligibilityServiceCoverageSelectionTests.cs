@@ -125,6 +125,7 @@ public class EligibilityServiceCoverageSelectionTests
     [InlineData(null, "PLAN-PPO")]
     [InlineData("35", "PLAN-DEN")]
     [InlineData("AL", "PLAN-VIS")]
+    [InlineData("AN", "PLAN-VIS")]
     public async Task BenefitDetails_UsesThePlanOfTheServiceTypesInsuranceLine(string? serviceType, string expectedPlan)
     {
         // Dental listed first so "first entry" would be wrong for a medical question.

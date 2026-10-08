@@ -34,6 +34,8 @@ public class EnrollmentImportServiceDependentTests
         public string? ResolvedPlanId { get; set; } = "resolved-plan-id";
         public bool ReturnCreatedCoverageId { get; set; } = true;
         public string? ThrowOnExistsFor { get; set; }
+        /// <summary>coverage-service fails the reinstate call for this coverage id.</summary>
+        public string? FailReinstateFor { get; set; }
         public ImportSvc Service { get; }
 
         public CoverageRecordDto SeedCoverage(string memberId, string line, string level, string effective, string? termination = null)
@@ -89,7 +91,8 @@ public class EnrollmentImportServiceDependentTests
                         InsuranceLineCode = r.InsuranceLineCode,
                         CoverageLevel = r.CoverageLevel,
                         EffectiveDate = r.EffectiveDate,
-                        TerminationDate = r.TerminationDate
+                        TerminationDate = r.TerminationDate,
+                        MaintenanceTypeCode = r.MaintenanceTypeCode
                     });
                 })
                 .ReturnsAsync(() => ReturnCreatedCoverageId ? StoredCoverage[^1].Id : null);
@@ -100,7 +103,9 @@ public class EnrollmentImportServiceDependentTests
                         {
                             Id = s.Id, MemberId = s.MemberId, GroupNumber = s.GroupNumber, PlanId = s.PlanId,
                             InsuranceLineCode = s.InsuranceLineCode, CoverageLevel = s.CoverageLevel,
-                            EffectiveDate = s.EffectiveDate, TerminationDate = s.TerminationDate
+                            EffectiveDate = s.EffectiveDate, TerminationDate = s.TerminationDate,
+                            MaintenanceTypeCode = s.MaintenanceTypeCode,
+                            ReinstatedTerminationDate = s.ReinstatedTerminationDate
                         })
                         .ToList());
             coverageClient.Setup(c => c.UpdateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<UpdateCoverageRequestDto>(), It.IsAny<CancellationToken>()))
@@ -121,12 +126,19 @@ public class EnrollmentImportServiceDependentTests
                 .Returns(Task.CompletedTask);
 
             coverageClient.Setup(c => c.ReinstateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-                .Callback((string _, string id, string? _, CancellationToken _) =>
+                .Returns((string _, string id, string? _, CancellationToken _) =>
                 {
+                    if (id == FailReinstateFor)
+                    {
+                        throw new HttpRequestException("coverage-service unavailable");
+                    }
                     CoverageReinstatements.Add(id);
-                    StoredCoverage.Single(x => x.Id == id).TerminationDate = null;
-                })
-                .Returns(Task.CompletedTask);
+                    var s = StoredCoverage.Single(x => x.Id == id);
+                    if (s.TerminationDate is not null) s.ReinstatedTerminationDate = s.TerminationDate;
+                    s.TerminationDate = null;
+                    s.MaintenanceTypeCode = "025";
+                    return Task.CompletedTask;
+                });
 
             var sponsorClient = new Mock<ISponsorServiceClient>();
             sponsorClient.Setup(s => s.ExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -717,6 +729,149 @@ public class EnrollmentImportServiceDependentTests
 
         h.CoverageReinstatements.Should().BeEmpty();
         h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MemberReinstatement_StoppedPartWay_IsFinishedByReplayingTheFile()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        // A member-level 024 ended health and dental together; vision ended earlier on its own.
+        var health = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20251231");
+        var dental = h.SeedCoverage("SUB1", "DEN", "EMP", "20250101", "20251231");
+        var vision = h.SeedCoverage("SUB1", "VIS", "EMP", "20240101", "20240630");
+
+        // First run: health is reinstated, then the dental call fails.
+        h.FailReinstateFor = dental.Id;
+        var first = await h.ImportAsync(new Enrollment834 { BatchId = "M5", Enrollments = { MemberReinstatement(null) } });
+        first.FailedCount.Should().Be(1);
+        health.TerminationDate.Should().BeNull();
+        dental.TerminationDate.Should().Be(new DateTime(2025, 12, 31));
+
+        // Replay: health is open, but it says it reversed the 2025-12-31
+        // termination, so dental (ended that same day) is finished; vision is not.
+        h.FailReinstateFor = null;
+        var replay = await h.ImportAsync(new Enrollment834 { BatchId = "M5", Enrollments = { MemberReinstatement(null) } });
+        replay.FailedCount.Should().Be(0);
+        h.CoverageReinstatements.Should().Equal(health.Id, dental.Id);
+        dental.TerminationDate.Should().BeNull();
+        vision.TerminationDate.Should().Be(new DateTime(2024, 6, 30));
+
+        // A further replay changes nothing: vision's older termination is not the one reversed.
+        await h.ImportAsync(new Enrollment834 { BatchId = "M5", Enrollments = { MemberReinstatement(null) } });
+        h.CoverageReinstatements.Should().HaveCount(2);
+        vision.TerminationDate.Should().Be(new DateTime(2024, 6, 30));
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MemberReinstatement_AfterAGap_StoppedPartWay_IsFinishedByReplay()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        // State a run leaves when it stopped after health's new span was
+        // created and before dental's: both old spans end 2025-12-31.
+        h.SeedCoverage("SUB1", "HLT", "FAM", "20250101", "20251231");
+        h.SeedCoverage("SUB1", "DEN", "EMP", "20250101", "20251231");
+        h.SeedCoverage("SUB1", "VIS", "EMP", "20240101", "20240630");
+        h.SeedCoverage("SUB1", "HLT", "FAM", "20260301").MaintenanceTypeCode = "025";
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "M6", Enrollments = { MemberReinstatement("20260301") } });
+
+        var created = h.Coverage.Should().ContainSingle().Subject;
+        created.InsuranceLineCode.Should().Be("DEN");
+        created.EffectiveDate.Should().Be(new DateTime(2026, 3, 1));
+        h.CoverageReinstatements.Should().BeEmpty();
+        h.StoredCoverage.Single(c => c.InsuranceLineCode == "VIS").TerminationDate.Should().Be(new DateTime(2024, 6, 30));
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "M6", Enrollments = { MemberReinstatement("20260301") } });
+        h.Coverage.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Reinstatement_OpenEnded_WithALaterSpanOnFile_ReinstatesThePredecessor_BoundedByTheLaterSpan()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var first = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20250630");
+        var later = h.SeedCoverage("SUB1", "HLT", "EMP", "20251001", "20251231");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R9", Enrollments = { Reinstatement("20250701") } });
+
+        // The later span is untouched; the predecessor continues up to it.
+        later.EffectiveDate.Should().Be(new DateTime(2025, 10, 1));
+        later.TerminationDate.Should().Be(new DateTime(2025, 12, 31));
+        first.TerminationDate.Should().Be(new DateTime(2025, 9, 30));
+        h.CoverageTerminations.Should().Equal((first.Id, new DateTime(2025, 9, 30)));
+        h.CoverageReinstatements.Should().BeEmpty();
+        h.Coverage.Should().BeEmpty();
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R9", Enrollments = { Reinstatement("20250701") } });
+        h.CoverageTerminations.Should().HaveCount(1);
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Reinstatement_Bounded_WithALaterSpanOnFile_ExtendsThePredecessor_NotTheLaterSpan()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var first = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20250630");
+        var later = h.SeedCoverage("SUB1", "HLT", "EMP", "20251001", "20251231");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R10", Enrollments = { Reinstatement("20250701", "20250731") } });
+
+        first.TerminationDate.Should().Be(new DateTime(2025, 7, 31));
+        later.TerminationDate.Should().Be(new DateTime(2025, 12, 31));
+        later.EffectiveDate.Should().Be(new DateTime(2025, 10, 1));
+        h.CoverageTerminations.Should().Equal((first.Id, new DateTime(2025, 7, 31)));
+        h.Coverage.Should().BeEmpty();
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R10", Enrollments = { Reinstatement("20250701", "20250731") } });
+        h.CoverageTerminations.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Reinstatement_AfterAGap_WithoutHd05_KeepsThePredecessorsCoverageLevel()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        h.SeedCoverage("SUB1", "HLT", "FAM", "20250101", "20251231");
+        var sub = Reinstatement("20260301");
+        sub.Coverage[0].CoverageLevel = null;
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R11", Enrollments = { sub } });
+
+        var created = h.Coverage.Should().ContainSingle().Subject;
+        created.EffectiveDate.Should().Be(new DateTime(2026, 3, 1));
+        created.CoverageLevel.Should().Be("FAM");
+    }
+
+    [Theory]
+    [InlineData(null)]          // predecessor open-ended
+    [InlineData("20261231")]    // predecessor future-terminated
+    public async Task Reinstatement_ChangingPlan_ClosesThePredecessorOnTheSameLine(string? predecessorEnd)
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var planA = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", predecessorEnd);
+        planA.PlanId = "plan-A";
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R12", Enrollments = { Reinstatement("20260301") } });
+
+        planA.PlanId.Should().Be("plan-A");
+        planA.TerminationDate.Should().Be(new DateTime(2026, 2, 28));
+        var created = h.Coverage.Should().ContainSingle().Subject;
+        created.PlanId.Should().Be("resolved-plan-id");
+        created.EffectiveDate.Should().Be(new DateTime(2026, 3, 1));
+        created.TerminationDate.Should().BeNull();
+        h.CoverageUpdates.Should().BeEmpty();
+
+        // Replay: plan B's span is found; plan A is no longer open on the begin date.
+        await h.ImportAsync(new Enrollment834 { BatchId = "R12", Enrollments = { Reinstatement("20260301") } });
+        h.Coverage.Should().HaveCount(1);
+        h.CoverageTerminations.Should().HaveCount(1);
+        planA.TerminationDate.Should().Be(new DateTime(2026, 2, 28));
     }
 
     [Fact]

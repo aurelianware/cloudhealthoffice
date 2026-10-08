@@ -140,20 +140,142 @@ public class CoverageRepositoryMongoActiveOnDateTests
         new[] { Build("c1", CoverageStatus.Active, D(2025, 1, 1), D(2025, 6, 30)) },
         async repo =>
         {
-            (await repo.SetStatusAsync(Tenant, "c1", CoverageStatus.COBRA, CoverageStatus.Terminated, "sweep"))
-                .Should().BeFalse();
+            var observed = (await repo.GetByIdAsync(Tenant, "c1"))!;
+
+            var wrongStatus = (await repo.GetByIdAsync(Tenant, "c1"))!;
+            wrongStatus.Status = CoverageStatus.COBRA;
+            (await repo.SetStatusAsync(wrongStatus, CoverageStatus.Terminated, "sweep")).Should().BeFalse();
             (await repo.GetByIdAsync(Tenant, "c1"))!.Status.Should().Be(CoverageStatus.Active);
 
-            (await repo.SetStatusAsync(Tenant, "c1", CoverageStatus.Active, CoverageStatus.Terminated, "sweep"))
-                .Should().BeTrue();
+            (await repo.SetStatusAsync(observed, CoverageStatus.Terminated, "sweep")).Should().BeTrue();
             var stored = (await repo.GetByIdAsync(Tenant, "c1"))!;
             stored.Status.Should().Be(CoverageStatus.Terminated);
             stored.LastUpdatedBy.Should().Be("sweep");
             stored.TerminationDate.Should().Be(D(2025, 6, 30));
 
-            (await repo.SetStatusAsync("t2", "c1", CoverageStatus.Terminated, CoverageStatus.Active, "sweep"))
+            var otherTenant = (await repo.GetByIdAsync(Tenant, "c1"))!;
+            otherTenant.TenantId = "t2";
+            (await repo.SetStatusAsync(otherTenant, CoverageStatus.Active, "sweep"))
                 .Should().BeFalse("another tenant's id never matches");
         });
+
+    [Fact]
+    public Task SetStatus_StaleSweepAfterReinstatement_DoesNotUndoIt() => RunAsync(
+        // Active with an expired termination date: due to be terminated.
+        new[] { Build("c1", CoverageStatus.Active, D(2025, 1, 1), D(2025, 6, 30)) },
+        async repo =>
+        {
+            // The sweep read it...
+            var observed = (await repo.GetByIdAsync(Tenant, "c1"))!;
+            observed.DueStatusTransition(D(2025, 7, 1)).Should().Be(CoverageStatus.Terminated);
+
+            // ...then /reinstate cleared the termination date, leaving Active.
+            var reinstated = (await repo.GetByIdAsync(Tenant, "c1"))!;
+            reinstated.Reinstate();
+            await repo.UpdateAsync(reinstated);
+
+            // The stale write must not store Terminated-with-no-date.
+            (await repo.SetStatusAsync(observed, CoverageStatus.Terminated, "sweep")).Should().BeFalse();
+            var stored = (await repo.GetByIdAsync(Tenant, "c1"))!;
+            stored.Status.Should().Be(CoverageStatus.Active);
+            stored.TerminationDate.Should().BeNull();
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2025, 8, 1)))
+                .Select(c => c.Id).Should().Equal("c1");
+        });
+
+    [Fact]
+    public Task Sweep_ReinstatedBetweenItsReadAndWrite_LeavesTheReinstatementInPlace() => RunAsync(
+        new[] { Build("c1", CoverageStatus.Active, D(2025, 1, 1), D(2025, 6, 30)) },
+        async real =>
+        {
+            // A repository whose due-read is followed by a concurrent reinstatement.
+            var repo = new Mock<ICoverageRepository>();
+            repo.Setup(r => r.GetStatusTransitionsDueAsync(It.IsAny<DateTime>(), It.IsAny<int>()))
+                .Returns(async (DateTime today, int max) =>
+                {
+                    var due = await real.GetStatusTransitionsDueAsync(today, max);
+                    var current = (await real.GetByIdAsync(Tenant, "c1"))!;
+                    if (current.TerminationDate is not null)
+                    {
+                        current.Reinstate();
+                        await real.UpdateAsync(current);
+                    }
+                    return due;
+                });
+            repo.Setup(r => r.SetStatusAsync(It.IsAny<Coverage>(), It.IsAny<CoverageStatus>(), It.IsAny<string>()))
+                .Returns((Coverage c, CoverageStatus s, string by) => real.SetStatusAsync(c, s, by));
+
+            var changed = await new CoverageStatusSweepJob(
+                    new ServiceCollection().AddSingleton(repo.Object).BuildServiceProvider(),
+                    new CoverageStatusSweepOptions(),
+                    new FixedClock(D(2025, 7, 1)),
+                    NullLogger<CoverageStatusSweepJob>.Instance)
+                .SweepOnceAsync();
+
+            changed.Should().Be(0);
+            var stored = (await real.GetByIdAsync(Tenant, "c1"))!;
+            stored.Status.Should().Be(CoverageStatus.Active);
+            stored.TerminationDate.Should().BeNull();
+        });
+
+    [Fact]
+    public Task GetStatusTransitionsDue_SkipsSuspendedAndUnknownStatuses_SoTheyCannotStallABatch() => RunAsync(
+        new[]
+        {
+            // Inserted first, so a query that returned them would fill a batch of 1.
+            Build("suspended", CoverageStatus.Suspended, D(2025, 1, 1), D(2025, 6, 30)),
+            Build("unknown", (CoverageStatus)99, D(2025, 1, 1), D(2025, 6, 30)),
+            Build("active", CoverageStatus.Active, D(2025, 1, 1), D(2025, 6, 30)),
+            Build("pending", CoverageStatus.Pending, D(2025, 1, 1), D(2025, 6, 30))
+        },
+        async repo =>
+        {
+            (await repo.GetStatusTransitionsDueAsync(D(2025, 7, 1), 100))
+                .Select(c => c.Id).Should().BeEquivalentTo("active", "pending");
+
+            var changed = await new CoverageStatusSweepJob(
+                    new ServiceCollection().AddSingleton<ICoverageRepository>(repo).BuildServiceProvider(),
+                    new CoverageStatusSweepOptions { BatchSize = 1 },
+                    new FixedClock(D(2025, 7, 1)),
+                    NullLogger<CoverageStatusSweepJob>.Instance)
+                .SweepOnceAsync();
+
+            changed.Should().Be(2);
+            (await repo.GetByIdAsync(Tenant, "suspended"))!.Status.Should().Be(CoverageStatus.Suspended);
+            (await repo.GetByIdAsync(Tenant, "unknown"))!.Status.Should().Be((CoverageStatus)99);
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2025, 3, 15)))
+                .Select(c => c.Id).Should().BeEquivalentTo(new[] { "active", "pending" },
+                    "a payment hold stays ineligible after its termination date passes");
+        });
+
+    [Fact]
+    public Task CurrentlyActiveReads_ExcludeEffectiveCobraPending_BeforeAndAfterTheSweep() => RunAsync(
+        new[]
+        {
+            WithPcp(WithCobra(Build("cobra-pending", CoverageStatus.Pending, DateTime.UtcNow.Date.AddDays(-2)))),
+            WithPcp(Build("pending", CoverageStatus.Pending, DateTime.UtcNow.Date.AddDays(-2)))
+        },
+        async repo =>
+        {
+            async Task AssertActiveAsync()
+            {
+                var (items, _) = await repo.SearchAsync(Tenant, memberId: "M1", activeOnly: true, pageSize: 100);
+                items.Select(c => c.Id).Should().Equal("pending");
+                (await repo.GetByPcpNpiAsync(Tenant, "1234567893", CoverageStatus.Active))
+                    .Select(c => c.Id).Should().Equal("pending");
+            }
+
+            await AssertActiveAsync();
+            (await SweepAsync(repo, DateTime.UtcNow.Date)).Should().Be(2);
+            (await repo.GetByIdAsync(Tenant, "cobra-pending"))!.Status.Should().Be(CoverageStatus.COBRA);
+            await AssertActiveAsync();
+        });
+
+    private static Coverage WithCobra(Coverage c)
+    {
+        c.IsCOBRA = true;
+        return c;
+    }
 
     [Fact]
     public Task SearchActiveOnly_ExcludesActiveCoverageWhoseTerminationDateHasPassed() => RunAsync(
