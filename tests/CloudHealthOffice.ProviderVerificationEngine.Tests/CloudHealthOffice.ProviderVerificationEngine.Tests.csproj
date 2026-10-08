@@ -17,6 +17,11 @@
     <PackageReference Include="System.Text.Json" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="EphemeralMongo" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.ProviderVerificationEngine\CloudHealthOffice.ProviderVerificationEngine.csproj" />

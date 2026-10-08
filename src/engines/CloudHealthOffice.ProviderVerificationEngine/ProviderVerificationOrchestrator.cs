@@ -73,7 +73,9 @@ public class ProviderVerificationOrchestrator
         // ── Tier 1: NPPES (always runs) ──────────────────────────
         var nppesTask = VerifyNppesAsync(npi, ct);
 
-        // ── Tier 2: Exclusions + PECOS + Open Payments + Utilization ──
+        // ── Tier 2: PECOS + Open Payments + Utilization ──────────
+        // Exclusion screening starts once NPPES returns (below) so the
+        // screen can use the provider's name, not just the NPI.
         Task<ExclusionScreeningResult>? exclusionTask = null;
         Task<PecosEnrollmentStatus?>? pecosTask = null;
         Task<OpenPaymentsSummary?>? openPaymentsTask = null;
@@ -81,7 +83,6 @@ public class ProviderVerificationOrchestrator
 
         if (tier >= VerificationTier.Standard)
         {
-            exclusionTask = _exclusions.ScreenProviderAsync(npi, ct: ct);
             pecosTask = _pecos.GetEnrollmentStatusAsync(npi, ct);
             openPaymentsTask = _openPayments.GetPaymentSummaryAsync(npi, ct: ct);
             utilizationTask = _utilization.GetUtilizationProfileAsync(npi, ct: ct);
@@ -98,6 +99,11 @@ public class ProviderVerificationOrchestrator
         // Each task is awaited independently so a failure in one source
         // does not leave other tasks unobserved.
         record.NppesData = await AwaitSafeAsync(nppesTask, "NPPES", npi);
+
+        if (tier >= VerificationTier.Standard)
+        {
+            exclusionTask = _exclusions.ScreenAsync(BuildScreeningRequest(npi, record.NppesData), ct);
+        }
 
         // Enrich taxonomy codes with Medicare crosswalk
         if (record.NppesData?.Taxonomies is { Count: > 0 })
@@ -187,6 +193,31 @@ public class ProviderVerificationOrchestrator
             _logger.LogWarning("NPI {Npi} not found in NPPES registry", SanitizeForLog(npi));
         }
         return data;
+    }
+
+    /// <summary>
+    /// Screening identifiers: the NPI always, plus the NPPES name (individual
+    /// first/last, or organization legal name) when NPPES returned the
+    /// provider, so exclusion lists that carry no NPI can still match by name.
+    /// </summary>
+    public static ProviderScreeningRequest BuildScreeningRequest(string npi, NppesProviderData? nppes)
+    {
+        var request = new ProviderScreeningRequest { Npi = npi };
+        if (nppes is null)
+            return request;
+
+        if (nppes.EnumerationType == NppesEnumerationType.Organization)
+        {
+            request.OrganizationName = nppes.OrganizationName;
+        }
+        else
+        {
+            request.FirstName = nppes.ProviderFirstName;
+            request.MiddleName = nppes.ProviderMiddleName;
+            request.LastName = nppes.ProviderLastName;
+        }
+
+        return request;
     }
 
     private static string SanitizeForLog(string? value)
@@ -283,13 +314,23 @@ public class VerificationOptions
     /// <summary>Open Payments data API endpoint.</summary>
     public string OpenPaymentsApiBaseUrl { get; set; } = "https://openpaymentsdata.cms.gov/api/1/";
 
-    /// <summary>OIG LEIE downloadable database URL.</summary>
+    /// <summary>
+    /// Legacy, unused. LEIE screening is configured under
+    /// <c>ProviderVerification:ExclusionScreening:Leie</c>.
+    /// </summary>
     public string LeieDownloadUrl { get; set; } = "https://oig.hhs.gov/exclusions/downloadables/";
 
-    /// <summary>SAM.gov API base URL (requires API key).</summary>
+    /// <summary>
+    /// Legacy, unused. SAM.gov screening is configured under
+    /// <c>ProviderVerification:ExclusionScreening:Sam</c>.
+    /// </summary>
     public string SamGovApiBaseUrl { get; set; } = "https://api.sam.gov/entity-information/v3/";
 
-    /// <summary>SAM.gov API key. Free registration at sam.gov.</summary>
+    /// <summary>
+    /// SAM.gov API key. Free registration at sam.gov. Used as the fallback
+    /// for <c>ExclusionScreening:Sam:ApiKey</c> (existing deployments set
+    /// this secret).
+    /// </summary>
     public string? SamGovApiKey { get; set; }
 
     /// <summary>FSMB API base URL (requires contract).</summary>
