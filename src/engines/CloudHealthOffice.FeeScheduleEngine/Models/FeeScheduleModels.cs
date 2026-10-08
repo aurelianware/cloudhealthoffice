@@ -358,6 +358,14 @@ public record PricingResult
     public IReadOnlyList<RateAdjustment> Adjustments { get; init; } = Array.Empty<RateAdjustment>();
 
     /// <summary>
+    /// True when this line's amount is its share of a claim-level per-stay
+    /// rate — a DRG case rate or an all-inclusive per diem × length of stay —
+    /// paid once per claim and allocated across the lines by billed charges.
+    /// Benefit calculation should then apply cost sharing once per stay.
+    /// </summary>
+    public bool IsPerStayRate { get; init; }
+
+    /// <summary>
     /// Set when <see cref="RateSource"/> is <see cref="RateSource.Unresolved"/>:
     /// why the allowed amount could not be determined.
     /// </summary>

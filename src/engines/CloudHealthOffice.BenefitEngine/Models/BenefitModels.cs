@@ -56,6 +56,18 @@ public record BenefitResolutionRequest
     public int? LengthOfStay { get; init; }
 
     /// <summary>
+    /// How the claim was actually priced, when the caller knows it: set to
+    /// <see cref="InpatientPricingMethod.DrgCaseRate"/> or
+    /// <see cref="InpatientPricingMethod.PerDiem"/> when the fee schedule paid
+    /// the stay as one claim-level amount (a DRG case rate or an all-inclusive
+    /// per diem) and <see cref="DrgAllowedAmount"/> carries that amount. It
+    /// overrides the plan's <c>DefaultInpatientPricingMethod</c> for 837I
+    /// claims, so cost sharing is applied once per stay (one inpatient copay,
+    /// deductible once) rather than per line. Null = the plan default, as before.
+    /// </summary>
+    public InpatientPricingMethod? InpatientPricingMethod { get; init; }
+
+    /// <summary>
     /// COB context. Null for primary claims.
     /// </summary>
     public CobInfo? Cob { get; init; }

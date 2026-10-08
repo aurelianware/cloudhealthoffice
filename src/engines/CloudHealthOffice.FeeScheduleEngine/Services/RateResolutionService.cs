@@ -178,6 +178,7 @@ public class RateResolutionService : IRateResolutionService
             FeeScheduleId   = schedule?.Id,
             FeeScheduleName = schedule?.Name,
             Adjustments     = adjustments,
+            IsPerStayRate   = isPerStay,
         }, rateLine, isPerStay);
     }
 

@@ -66,7 +66,16 @@
 > can pay more than total billed; the allocation stays proportional, so
 > every line's allowed exceeds its billed and its contractual adjustment
 > (billed − allowed) is negative. The claim total is still correct; 835
-> generation must tolerate a negative line-level CO-45 in that case. CHO
+> generation must tolerate a negative line-level CO-45 in that case.
+> `BenefitCalculationStage` sends such per-stay-priced claims through the
+> benefit engine's claim-level inpatient path (`InpatientPricingMethod`
+> on the request overrides the plan default): deductible, one inpatient
+> copay and coinsurance are computed once on the claim's total allowed,
+> accumulators are written once, and each component is allocated back to
+> the lines by allowed amount with the same truncate-to-cent/remainder
+> rule, so line sums equal the claim totals (Σ line paid = PayerPayment).
+> The stay's benefit is resolved from its first room-and-board line
+> (revenue code 0100–0219), else its first line. CHO
 > has no MS-DRG grouper: a DRG-contracted claim without a billed DRG
 > (HI*DR) pends `NOCONTRACT`.
 

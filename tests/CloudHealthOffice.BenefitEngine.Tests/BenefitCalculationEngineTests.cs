@@ -668,6 +668,110 @@ public class BenefitCalculationEngineTests
     }
 
     /// <summary>
+    /// A stay the fee schedule priced per stay (DRG case rate allocated across
+    /// three lines by billed charges): the request's InpatientPricingMethod
+    /// routes it through the claim-level path even though the plan default is
+    /// PerLine. One $250 copay and the $500 deductible apply once; the result
+    /// is allocated back to the lines so every component and the paid amounts
+    /// reconcile to the claim totals, and each line balances on its own.
+    /// </summary>
+    [Fact]
+    public async Task Drg_PricedPerStay_OneCopayDeductibleOnce_LinesReconcile()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500, individualOopMax: 10000);
+        plan.Categories.Add(new BenefitCategoryConfig
+        {
+            ServiceTypeCode = "IPC",
+            ServiceTypeDescription = "Inpatient Stay",
+            IsCovered = true,
+            InNetworkCostSharing =
+            [
+                new CostShareRuleConfig { CostShareType = CostShareType.Deductible, DeductibleApplies = true },
+                new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 250 },
+                new CostShareRuleConfig { CostShareType = CostShareType.Coinsurance, CoinsurancePercent = 0.20m },
+            ]
+        });
+        var accumulators = new CountingAccumulatorService(new InMemoryAccumulatorService(plan, 0, 0, 0, "IPC"));
+        var engine = new BenefitCalculationEngine(
+            new FixedCategoryResolver("IPC", "Inpatient Stay"),
+            new InMemoryBenefitPlanProvider(plan),
+            accumulators,
+            new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
+            NullLogger<BenefitCalculationEngine>.Instance);
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I",
+            drgCode: "470",
+            drgAllowedAmount: 12000m,
+            lines:
+            [
+                ("", 12000m, 3388.23m, "21"),
+                ("", 1500m, 423.52m, "21"),
+                ("27447", 29000m, 8188.25m, "21"),
+            ]) with { InpatientPricingMethod = InpatientPricingMethod.DrgCaseRate };
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.True(result.Success);
+        var drg = result.DrgCostShare!;
+        // $500 deductible, one $250 copay, 20% of the remaining $11,250 = $2,250.
+        Assert.Equal(500m, drg.DeductibleAmount);
+        Assert.Equal(250m, drg.CopayAmount);
+        Assert.Equal(2250m, drg.CoinsuranceAmount);
+        Assert.Equal(3000m, drg.MemberResponsibility);
+        Assert.Equal(9000m, drg.PlanPaidAmount);
+
+        // Line sums reconcile exactly to the claim totals.
+        Assert.Equal(250m, result.Lines.Sum(l => l.CopayAmount));
+        Assert.Equal(500m, result.Lines.Sum(l => l.DeductibleAmount));
+        Assert.Equal(2250m, result.Lines.Sum(l => l.CoinsuranceAmount));
+        Assert.Equal(3000m, result.Lines.Sum(l => l.MemberResponsibility));
+        Assert.Equal(9000m, result.Lines.Sum(l => l.PlanPaidAmount));
+        Assert.Equal(12000m, result.Lines.Sum(l => l.AllowedAmount));
+        Assert.Equal(250m, result.Totals.TotalCopay);
+        Assert.Equal(500m, result.Totals.TotalDeductible);
+        Assert.Equal(9000m, result.Totals.TotalPlanPaid);
+        Assert.Equal(3000m, result.Totals.TotalMemberResponsibility);
+
+        // Each line balances; its CAS matches its allocated amounts.
+        Assert.All(result.Lines, l =>
+        {
+            Assert.True(l.IsDrgPriced);
+            Assert.True(l.MemberResponsibility >= 0m && l.PlanPaidAmount >= 0m);
+            Assert.Equal(l.DeductibleAmount + l.CopayAmount + l.CoinsuranceAmount - l.OopMaxReduction, l.MemberResponsibility);
+            Assert.Equal(l.AllowedAmount - l.MemberResponsibility, l.PlanPaidAmount);
+            Assert.Equal(l.BilledAmount - l.AllowedAmount, l.ContractualAdjustment);
+            Assert.Equal(l.BilledAmount - l.PlanPaidAmount, l.Adjustments.Sum(a => a.Amount));
+            Assert.Equal(l.CopayAmount, l.Adjustments.Where(a => a is { GroupCode: "PR", ReasonCode: "3" }).Sum(a => a.Amount));
+        });
+
+        // Accumulators written once for the stay.
+        Assert.Equal(1, accumulators.ApplyCalls);
+    }
+
+    [Fact]
+    public async Task PerDiem_PricedPerStay_WithoutDrgCode_UsesClaimLevelPath()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "48");
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I",
+            drgAllowedAmount: 10000m,
+            lines:
+            [
+                ("", 12000m, 6000m, "21"),
+                ("", 8000m, 4000m, "21"),
+            ]) with { InpatientPricingMethod = InpatientPricingMethod.PerDiem };
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.NotNull(result.DrgCostShare);
+        Assert.Equal(500m, result.Lines.Sum(l => l.DeductibleAmount)); // once, not per line
+        Assert.Equal(result.DrgCostShare!.PlanPaidAmount, result.Lines.Sum(l => l.PlanPaidAmount));
+    }
+
+    /// <summary>
     /// DRG: OOP max should cap total member responsibility.
     /// </summary>
     [Fact]
@@ -1069,4 +1173,32 @@ internal class FixedCategoryResolver : IServiceCategoryResolver
             MatchedRule = $"Fixed:{_code}"
         });
     }
+}
+
+/// <summary>Counts accumulator writes; delegates everything to the inner service.</summary>
+internal class CountingAccumulatorService : IAccumulatorService
+{
+    private readonly IAccumulatorService _inner;
+    public int ApplyCalls { get; private set; }
+
+    public CountingAccumulatorService(IAccumulatorService inner) => _inner = inner;
+
+    public Task<IReadOnlyList<AccumulatorSnapshot>> GetAccumulatorsAsync(
+        string memberId, string subscriberId, Guid benefitPlanId, string planYear, CancellationToken ct)
+        => _inner.GetAccumulatorsAsync(memberId, subscriberId, benefitPlanId, planYear, ct);
+
+    public Task ApplyUpdatesAsync(string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear, string claimId,
+        IReadOnlyList<AccumulatorUpdate> updates, CancellationToken ct = default)
+    {
+        ApplyCalls++;
+        return _inner.ApplyUpdatesAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, updates, ct);
+    }
+
+    public Task ReverseAsync(string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear, string claimId, CancellationToken ct)
+        => _inner.ReverseAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, ct);
+
+    public Task ResetForPlanYearAsync(Guid benefitPlanId, string planYear, CancellationToken ct)
+        => _inner.ResetForPlanYearAsync(benefitPlanId, planYear, ct);
 }
