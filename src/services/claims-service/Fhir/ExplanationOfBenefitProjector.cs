@@ -196,9 +196,18 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                     {
                         ["value"] = (decimal)line.Units
                     },
-                    ["unitPrice"] = Money(line.ChargeAmount),
-                    ["net"] = Money(line.ChargeAmount * line.Units)
+                    // ClaimLine.ChargeAmount is the line TOTAL (837
+                    // SV102/SV203), which is exactly FHIR item.net.
+                    ["net"] = Money(line.ChargeAmount)
                 };
+
+                // unitPrice is derived (net / quantity). Omitted when the
+                // quantity is zero rather than dividing by zero.
+                if (line.Units > 0)
+                {
+                    item["unitPrice"] = Money(
+                        Math.Round(line.ChargeAmount / line.Units, 2, MidpointRounding.AwayFromZero));
+                }
 
                 // item[].adjudication[] — Decision 9. Each NCCI/MUE failure
                 // affecting this line emits one adjudication entry whose

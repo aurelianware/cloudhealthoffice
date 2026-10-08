@@ -56,7 +56,9 @@ public class EncountersController : ControllerBase
         if (encounter.ServiceLines == null || encounter.ServiceLines.Count == 0)
             return BadRequest("Encounter must have at least one service line");
 
-        encounter.TotalChargeAmount = encounter.ServiceLines!.Sum(l => l.ChargeAmount * l.Units);
+        // ChargeAmount is the line total (837 SV102/SV203), so CLM02 is a plain
+        // sum; multiplying by Units would break CLM02 = Σ SV102 balancing.
+        encounter.TotalChargeAmount = encounter.ServiceLines!.Sum(l => l.ChargeAmount);
 
         encounter.Id = Guid.NewGuid().ToString();
         encounter.Status = EncounterStatus.Pending;
@@ -424,7 +426,7 @@ public class EncountersController : ControllerBase
         // Body-supplied createdBy / lastUpdatedBy are ignored: the actor is the token subject.
         replacement.CreatedBy = _actor.UserId;
         replacement.LastUpdatedBy = _actor.UserId;
-        replacement.TotalChargeAmount = replacement.ServiceLines.Sum(l => l.ChargeAmount * l.Units);
+        replacement.TotalChargeAmount = replacement.ServiceLines.Sum(l => l.ChargeAmount);
         replacement.Notes = $"Correction for: {original.EncounterControlNumber}. Reason: {request.CorrectionReason}";
 
         // 3. Mark original as CorrectionSubmitted
