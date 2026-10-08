@@ -351,7 +351,17 @@ public class PaymentEstimateService : IPaymentEstimateService
         var messages = new List<EstimateMessage>();
 
         // Fee schedule / rate explainability.
-        if (priced is not null)
+        if (priced is { RateSource: RateSource.Unresolved })
+        {
+            messages.Add(new EstimateMessage
+            {
+                Code = "RATE_UNRESOLVED",
+                Severity = EstimateMessageSeverity.Warning,
+                Description = $"Allowed amount could not be determined from {DescribeFeeSchedule(priced)}" +
+                    (priced.UnresolvedReason is null ? "." : $": {priced.UnresolvedReason}.")
+            });
+        }
+        else if (priced is not null)
         {
             var rateResolved = priced.RateSource != RateSource.BilledCharges;
             messages.Add(new EstimateMessage
@@ -507,10 +517,18 @@ public class PaymentEstimateService : IPaymentEstimateService
             .Select(p => p.LineNumber)
             .ToList();
 
-        if (unpriced.Count == 0 && pricing.LineResults.Count > 0)
+        var unresolved = pricing.LineResults
+            .Where(p => p.RateSource == RateSource.Unresolved)
+            .Select(p => p.LineNumber)
+            .ToList();
+
+        if (unpriced.Count == 0 && unresolved.Count == 0 && pricing.LineResults.Count > 0)
             reasons.Add("Provider fee schedule resolved");
         else
+        {
             missing.AddRange(unpriced.Select(n => $"Fee schedule for line {n} (billed charges used)"));
+            missing.AddRange(unresolved.Select(n => $"Fee schedule rate for line {n} (could not be resolved)"));
+        }
 
         // Provider integrity.
         if (integrity is null)
