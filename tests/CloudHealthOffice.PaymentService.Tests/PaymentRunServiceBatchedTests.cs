@@ -284,6 +284,132 @@ public class PaymentRunServiceBatchedTests
             CreateService().ExecutePaymentRunAsync(run.Id));
         Assert.Contains("not in Pending status", ex.Message);
     }
+
+    private void SetupSinglePartnerPassThrough()
+    {
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "NPI-A", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        _paymentRepo.CreateAsync(Arg.Any<Payment>()).Returns(call => call.Arg<Payment>());
+        _envelopeRepo.CreateAsync(Arg.Any<EraEnvelopeRecord>()).Returns(call => { var rec = call.Arg<EraEnvelopeRecord>(); rec.Id = "env-1"; return rec; });
+        _batchGen.GenerateBatch(Arg.Any<IEnumerable<EraPaymentInput>>(), Arg.Any<IReadOnlyDictionary<string, TradingPartnerInfo>>())
+            .Returns(call =>
+            {
+                var inputs = call.Arg<IEnumerable<EraPaymentInput>>().ToList();
+                return inputs
+                    .GroupBy(i => i.TradingPartnerId)
+                    .Select(g => new EraEnvelope(
+                        g.Key, "ISA~",
+                        g.Sum(p => p.Payment.ClaimPayments.Count),
+                        g.Sum(p => p.Payment.TotalPaymentAmount),
+                        "000000001",
+                        g.SelectMany(p => p.Payment.ClaimPayments.Select(cp => cp.ClaimId)).ToList(),
+                        false))
+                    .ToList();
+            });
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_ClaimWithoutApprovedAmount_NotPaidAtBilledCharges_Reported()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+
+        var claims = new[]
+        {
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved },
+            new ClaimDto { Id = "c-null", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-A", TotalChargeAmount = 5000m, ApprovedAmount = null, MemberId = "m2", Status = ClaimStatus.Approved },
+            new ClaimDto { Id = "c-zero", ClaimNumber = "CLM-3", BillingProviderNPI = "NPI-A", TotalChargeAmount = 300m, ApprovedAmount = 0m, MemberId = "m3", Status = ClaimStatus.Approved }
+        };
+        SetupClaimsResponse(claims);
+        SetupSinglePartnerPassThrough();
+
+        var captured = new List<Payment>();
+        _paymentRepo.CreateAsync(Arg.Do<Payment>(captured.Add)).Returns(call => call.Arg<Payment>());
+
+        var result = await CreateService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(PaymentRunStatus.Completed, result.Status);
+
+        // The claim without an approved amount is reported, not paid, not reserved.
+        Assert.Equal(new[] { "c-null" }, result.MissingApprovedAmountClaimIds);
+        Assert.Contains(result.Warnings, w => w.Contains("c-null") && w.Contains("no approved amount"));
+        Assert.DoesNotContain("c-null", result.ClaimIds);
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "c-null");
+        Assert.DoesNotContain(captured.SelectMany(p => p.ClaimPayments), cp => cp.ClaimId == "c-null");
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests,
+            r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/c-null/"));
+
+        // The other claims are paid their approved amounts (a zero approval is paid zero).
+        Assert.Equal(2, result.TotalClaims);
+        Assert.Equal(new[] { "c1", "c-zero" }, result.ClaimIds);
+        var payment = Assert.Single(captured);
+        Assert.Equal(80m, payment.TotalPaymentAmount);
+        Assert.Equal(80m, payment.ClaimPayments.Single(cp => cp.ClaimId == "c1").PaymentAmount);
+        Assert.Equal(0m, payment.ClaimPayments.Single(cp => cp.ClaimId == "c-zero").PaymentAmount);
+        Assert.Equal(80m, result.TotalPaymentAmount);
+        Assert.Equal(new[] { "c-zero", "c1" }, _reservations.All.Select(r => r.ClaimId).OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_AllClaimsWithoutApprovedAmount_CompletesWithNothingPaid()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(new[]
+        {
+            new ClaimDto { Id = "c-null", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 5000m, ApprovedAmount = null, MemberId = "m1", Status = ClaimStatus.Approved }
+        });
+        SetupSinglePartnerPassThrough();
+
+        var result = await CreateService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(PaymentRunStatus.Completed, result.Status);
+        Assert.Equal(new[] { "c-null" }, result.MissingApprovedAmountClaimIds);
+        Assert.Empty(result.PaymentIds);
+        Assert.Equal(0m, result.TotalPaymentAmount);
+        Assert.Empty(_reservations.All);
+        await _paymentRepo.DidNotReceiveWithAnyArgs().CreateAsync(default!);
+        // Excluded before trading-partner resolution: no lookup for it.
+        await _tpClient.DidNotReceiveWithAnyArgs().GetByBillingProviderNpiAsync(default!, default!, default!);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_AchWithoutOriginatingCompanyId_FailsBeforeAnyClaimIsReservedOrPaid()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Era:PayerRoutingNumber"] = "021000021",
+                ["Era:PayerAccountNumber"] = "111",
+                ["Era:PayeeRoutingNumber"] = "021000089",
+                ["Era:PayeeAccountNumber"] = "222",
+                ["TradingPartners:Environment"] = "Production",
+            })
+            .Build();
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(new[]
+        {
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved }
+        });
+        SetupSinglePartnerPassThrough();
+
+        var service = new PaymentRunService(
+            _paymentRepo, _runRepo, _batchGen, _mapper, _envelopeRepo, _tpClient, _httpFactory,
+            NullLogger<PaymentRunService>.Instance, configuration, _actor, _actor.SeparationOfDuties(), _reservations);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ExecutePaymentRunAsync(run.Id));
+
+        Assert.Contains("BPR10", ex.Message);
+        Assert.Equal(PaymentRunStatus.Failed, run.Status);
+        Assert.Contains(run.Errors, e => e.Contains("Era:OriginatingCompanyId"));
+        Assert.Empty(_reservations.All);
+        await _paymentRepo.DidNotReceiveWithAnyArgs().CreateAsync(default!);
+        Assert.Empty(_claimsHandler.RecordedRequests);
+    }
 }
 
 /// <summary>

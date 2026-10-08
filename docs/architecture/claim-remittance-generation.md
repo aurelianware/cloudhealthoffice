@@ -215,6 +215,17 @@ the trading-partner-service API in Phase 1**. Those flow from
 payment-service `IConfiguration` (`Era:Payer*` / `Era:Payee*` keys),
 overridden per trading partner only via env-scoped deployment
 configuration. Phase 2 may surface bank fields on TradingPartner.
+An ACH BPR also needs BPR10, the originating company identifier
+(`Era:OriginatingCompanyId`: exactly 10 characters, typically `1` +
+the payer's TIN; optional BPR11 `Era:OriginatingCompanySupplementalCode`,
+9 characters). TRN03 carries the same value. When `Era:PayerRoutingNumber`
+is set and any ACH BPR field is missing, payment and reversal runs
+fail before reserving or paying any claim, and generation throws,
+rather than emitting a misaligned BPR.
+
+A claim claims-service returns without an `ApprovedAmount` is never
+paid (never at billed charges): it is excluded before reservation,
+stays Approved, and is listed in `PaymentRun.MissingApprovedAmountClaimIds`.
 
 ## Persistence shape (Decision 4 / 15)
 

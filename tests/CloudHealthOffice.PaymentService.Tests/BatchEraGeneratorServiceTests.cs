@@ -51,6 +51,7 @@ public class BatchEraGeneratorServiceTests
         ApplicationReceiverId = "APPRECEIVER",
         PayerRoutingNumber = "021000021",
         PayerAccountNumber = "111",
+        OriginatingCompanyId = "1987654321",
         PayeeRoutingNumber = "021000089",
         PayeeAccountNumber = "222"
     };
@@ -248,5 +249,64 @@ public class BatchEraGeneratorServiceTests
     {
         Assert.Throws<ArgumentNullException>(() =>
             _generator.GenerateBatch(Array.Empty<EraPaymentInput>(), null!));
+    }
+
+    private static string[] SegmentElements(string edi, string segmentId) =>
+        edi.Split('~', StringSplitOptions.RemoveEmptyEntries)
+            .Single(s => s.StartsWith(segmentId + "*", StringComparison.Ordinal))
+            .Split('*');
+
+    [Fact]
+    public void GenerateBatch_AchBpr_EveryElementAtItsX12Position()
+    {
+        var inputs = new[]
+        {
+            new EraPaymentInput { TradingPartnerId = "TP-A", Payment = Pay("0001", "c1", 500m) },
+            new EraPaymentInput { TradingPartnerId = "TP-A", Payment = Pay("0001", "c2", 250m) }
+        };
+        var envelope = _generator.GenerateBatch(
+            inputs, new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = TpAch("A") }).Single();
+
+        var bpr = SegmentElements(envelope.EdiContent, "BPR");
+        Assert.Equal(17, bpr.Length);
+        Assert.Equal(new[]
+        {
+            "BPR", "C", "750.00", "C", "ACH", "CCP", "01", "021000021", "DA", "111",
+            "1987654321", "", "01", "021000089", "DA", "222", "20260501"
+        }, bpr);
+
+        // TRN03 is identical to BPR10.
+        var trn = SegmentElements(envelope.EdiContent, "TRN");
+        Assert.Equal("0001", trn[2]);
+        Assert.Equal("1987654321", trn[3]);
+    }
+
+    [Fact]
+    public void GenerateBatch_CheckBpr_EmptyBpr05To15_DateInBpr16()
+    {
+        var pay = Pay("0001", "c1", 500m);
+        pay.PaymentMethod = "CHK";
+        var envelope = _generator.GenerateBatch(
+            new[] { new EraPaymentInput { TradingPartnerId = "TP-A", Payment = pay } },
+            new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = TpAch("A") }).Single();
+
+        var bpr = SegmentElements(envelope.EdiContent, "BPR");
+        Assert.Equal(17, bpr.Length);
+        Assert.Equal("CHK", bpr[4]);
+        for (var i = 5; i <= 15; i++)
+            Assert.Equal(string.Empty, bpr[i]);
+        Assert.Equal("20260501", bpr[16]);
+    }
+
+    [Fact]
+    public void GenerateBatch_AchWithoutOriginatingCompanyId_Throws()
+    {
+        var tp = TpAch("A");
+        tp.OriginatingCompanyId = null;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => _generator.GenerateBatch(
+            new[] { new EraPaymentInput { TradingPartnerId = "TP-A", Payment = Pay("0001", "c1", 500m) } },
+            new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = tp }));
+        Assert.Contains("BPR10", ex.Message);
     }
 }

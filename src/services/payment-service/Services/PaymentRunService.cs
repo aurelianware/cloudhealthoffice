@@ -119,12 +119,21 @@ public class PaymentRunService : IPaymentRunService
 
         try
         {
+            // Step 0: The 835 BPR's bank and originating-company details are
+            //         payment-service configuration, the same for every
+            //         partner. Check them before any claim is reserved or paid,
+            //         so a misconfiguration fails the run with nothing issued
+            //         rather than after payments exist without an 835.
+            Era835FinancialSegments.EnsureBprCanBeBuilt(paymentRun.PaymentMethod, ConfiguredBprDetails());
+
             // Step 1: Fetch approved claims from claims-service, then drop every
             //         claim payment-service already paid (whatever its status
             //         in claims-service), so a failed finalize never leads to a
-            //         second payment.
+            //         second payment. A claim with no approved amount is not
+            //         paid (never at billed charges) and is listed on the run.
             var fetched = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
             var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
+            claims = ExcludeWithoutApprovedAmount(claims, paymentRun);
 
             // Step 2: Resolve trading partners for each unique pay-to / billing
             //         provider NPI. A claim whose provider has none is not paid:
@@ -155,7 +164,7 @@ public class PaymentRunService : IPaymentRunService
             {
                 paymentRun.Warnings.Add(fetched.Count == 0
                     ? "No approved claims found matching criteria"
-                    : "No approved claims left to pay after excluding paid, reserved and trading-partner-less claims");
+                    : "No approved claims left to pay after excluding paid, reserved, trading-partner-less and missing-approved-amount claims");
                 paymentRun.Status = PaymentRunStatus.Completed;
                 paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
                 paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
@@ -524,6 +533,33 @@ public class PaymentRunService : IPaymentRunService
         }
     }
 
+    /// <summary>
+    /// Drops every claim claims-service returned without an approved amount.
+    /// The payable amount is the adjudicated approved amount, never the billed
+    /// charge: such a claim is not reserved or paid, stays Approved in
+    /// claims-service, and is listed on the run for someone to correct.
+    /// </summary>
+    private List<ClaimDto> ExcludeWithoutApprovedAmount(List<ClaimDto> claims, PaymentRun paymentRun)
+    {
+        var payable = new List<ClaimDto>(claims.Count);
+        foreach (var claim in claims)
+        {
+            if (claim.ApprovedAmount.HasValue)
+            {
+                payable.Add(claim);
+                continue;
+            }
+
+            paymentRun.MissingApprovedAmountClaimIds.Add(claim.Id);
+            paymentRun.Warnings.Add(
+                $"Claim {claim.Id} not paid: claims-service returned no approved amount; it is never paid at billed charges and will be picked up once its approved amount is set");
+            _logger.LogWarning(
+                "Claim {ClaimId} has no approved amount; excluded from payment run {PaymentRunNumber}",
+                SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+        }
+        return payable;
+    }
+
     private List<ClaimDto> ExcludeWithoutTradingPartner(
         List<ClaimDto> claims, IReadOnlyDictionary<string, TradingPartnerSummary> resolved, PaymentRun paymentRun)
     {
@@ -627,6 +663,7 @@ public class PaymentRunService : IPaymentRunService
     private IReadOnlyDictionary<string, TradingPartnerInfo> BuildTradingPartnerInfos(
         Dictionary<string, TradingPartnerSummary> resolved)
     {
+        var bpr = ConfiguredBprDetails();
         var seen = new Dictionary<string, TradingPartnerInfo>(StringComparer.Ordinal);
         foreach (var partner in resolved.Values)
         {
@@ -642,14 +679,27 @@ public class PaymentRunService : IPaymentRunService
                     ?? _configuration["Era:ApplicationSenderId"] ?? "SENDER",
                 ApplicationReceiverId = partner.X12Config?.ReceiverId
                     ?? _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
-                PayerRoutingNumber = _configuration["Era:PayerRoutingNumber"],
-                PayerAccountNumber = _configuration["Era:PayerAccountNumber"],
-                PayeeRoutingNumber = _configuration["Era:PayeeRoutingNumber"],
-                PayeeAccountNumber = _configuration["Era:PayeeAccountNumber"],
+                PayerRoutingNumber = bpr.PayerRoutingNumber,
+                PayerAccountNumber = bpr.PayerAccountNumber,
+                OriginatingCompanyId = bpr.OriginatingCompanyId,
+                OriginatingCompanySupplementalCode = bpr.OriginatingCompanySupplementalCode,
+                PayeeRoutingNumber = bpr.PayeeRoutingNumber,
+                PayeeAccountNumber = bpr.PayeeAccountNumber,
             };
         }
         return seen;
     }
+
+    /// <summary>The BPR bank and originating-company details from configuration (Era:*).</summary>
+    private TradingPartnerInfo ConfiguredBprDetails() => new()
+    {
+        PayerRoutingNumber = _configuration["Era:PayerRoutingNumber"],
+        PayerAccountNumber = _configuration["Era:PayerAccountNumber"],
+        OriginatingCompanyId = _configuration["Era:OriginatingCompanyId"],
+        OriginatingCompanySupplementalCode = _configuration["Era:OriginatingCompanySupplementalCode"],
+        PayeeRoutingNumber = _configuration["Era:PayeeRoutingNumber"],
+        PayeeAccountNumber = _configuration["Era:PayeeAccountNumber"],
+    };
 
     private async Task<Payment> GeneratePaymentForClaimsAsync(
         List<ClaimDto> claims,
@@ -666,7 +716,7 @@ public class PaymentRunService : IPaymentRunService
         {
             CheckNumber = checkNumber,
             PaymentMethod = paymentRun.PaymentMethod,
-            TotalPaymentAmount = claims.Sum(c => c.ApprovedAmount ?? c.TotalChargeAmount),
+            TotalPaymentAmount = claims.Sum(ApprovedAmountOf),
             PaymentDate = paymentRun.PaymentDate,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
             PayerId = _configuration["Payer:Id"] ?? "CHO",
@@ -710,7 +760,7 @@ public class PaymentRunService : IPaymentRunService
                     PatientControlNumber = claim.ClaimNumber,
                     ClaimStatusCode = headerCas.Any(a => a.GroupCode == "CO" && claim.Status == ClaimStatus.Denied) ? "3" : "1",
                     ChargeAmount = claim.TotalChargeAmount,
-                    PaymentAmount = claim.ApprovedAmount ?? claim.TotalChargeAmount,
+                    PaymentAmount = ApprovedAmountOf(claim),
                     PatientResponsibilityAmount = claim.PatientResponsibility ?? 0,
                     PayerClaimControlNumber = claim.PayerClaimControlNumber,
                     MemberId = claim.MemberId,
@@ -724,6 +774,17 @@ public class PaymentRunService : IPaymentRunService
         var created = await _paymentRepository.CreateAsync(payment);
         return created;
     }
+
+    /// <summary>
+    /// The amount a claim is paid: its approved amount. Claims without one are
+    /// excluded before reservation (<see cref="ExcludeWithoutApprovedAmount"/>);
+    /// reaching here without one is a bug, and the run fails rather than paying
+    /// billed charges.
+    /// </summary>
+    private static decimal ApprovedAmountOf(ClaimDto claim) =>
+        claim.ApprovedAmount
+        ?? throw new InvalidOperationException(
+            $"Claim {claim.Id} has no approved amount; it is never paid at billed charges");
 
     private static ClaimAdjudicationSnapshot BuildAdjudicationSnapshot(ClaimDto claim)
     {

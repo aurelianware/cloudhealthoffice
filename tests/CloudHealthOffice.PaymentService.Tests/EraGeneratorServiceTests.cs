@@ -66,6 +66,7 @@ public class EraGeneratorServiceTests
             ApplicationReceiverId = "APPRECEIVER",
             PayerRoutingNumber = "021000021",
             PayerAccountNumber = "123456789",
+            OriginatingCompanyId = "1123456789",
             PayeeRoutingNumber = "021000089",
             PayeeAccountNumber = "987654321"
         };
@@ -128,7 +129,8 @@ public class EraGeneratorServiceTests
 
         var era = _generator.Generate835(payment, tp);
 
-        Assert.Contains("TRN*1*0001000001*BCBS001~", era);
+        // TRN03 = originating company id, identical to BPR10
+        Assert.Contains("TRN*1*0001000001*1123456789~", era);
     }
 
     [Fact]
@@ -285,5 +287,134 @@ public class EraGeneratorServiceTests
         var era = _generator.Generate835(payment, tp);
 
         Assert.Contains("CAS*CO*45*250.00~", era);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // BPR ELEMENT POSITIONS (005010X221A1)
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static string[] SegmentElements(string era, string segmentId) =>
+        era.Split('~', StringSplitOptions.RemoveEmptyEntries)
+            .Single(s => s.StartsWith(segmentId + "*", StringComparison.Ordinal))
+            .Split('*');
+
+    [Fact]
+    public void Generate835_AchBpr_EveryElementAtItsX12Position()
+    {
+        var tp = CreateTestTradingPartner();
+        tp.OriginatingCompanySupplementalCode = "SUPP00001";
+
+        var bpr = SegmentElements(_generator.Generate835(CreateTestPayment(), tp), "BPR");
+
+        Assert.Equal(17, bpr.Length);           // BPR + BPR01..BPR16
+        Assert.Equal("BPR", bpr[0]);
+        Assert.Equal("C", bpr[1]);              // handling code
+        Assert.Equal("1250.00", bpr[2]);        // amount
+        Assert.Equal("C", bpr[3]);              // credit
+        Assert.Equal("ACH", bpr[4]);            // payment method
+        Assert.Equal("CCP", bpr[5]);            // payment format
+        Assert.Equal("01", bpr[6]);             // sender DFI qualifier
+        Assert.Equal("021000021", bpr[7]);      // sender DFI
+        Assert.Equal("DA", bpr[8]);             // sender account qualifier
+        Assert.Equal("123456789", bpr[9]);      // sender account
+        Assert.Equal("1123456789", bpr[10]);    // originating company id
+        Assert.Equal("SUPP00001", bpr[11]);     // originating company supplemental code
+        Assert.Equal("01", bpr[12]);            // receiver DFI qualifier
+        Assert.Equal("021000089", bpr[13]);     // receiver DFI
+        Assert.Equal("DA", bpr[14]);            // receiver account qualifier
+        Assert.Equal("987654321", bpr[15]);     // receiver account
+        Assert.Equal("20260315", bpr[16]);      // EFT effective date
+    }
+
+    [Fact]
+    public void Generate835_AchBpr_WithoutSupplementalCode_LeavesBpr11Empty()
+    {
+        var bpr = SegmentElements(_generator.Generate835(CreateTestPayment(), CreateTestTradingPartner()), "BPR");
+
+        Assert.Equal(17, bpr.Length);
+        Assert.Equal("1123456789", bpr[10]);
+        Assert.Equal(string.Empty, bpr[11]);
+        Assert.Equal("01", bpr[12]);
+        Assert.Equal("20260315", bpr[16]);
+    }
+
+    [Theory]
+    [InlineData("CHK", "CHK")]
+    [InlineData("NON", "NON")]
+    [InlineData("Check", "NON")]
+    public void Generate835_NonAchBpr_EmptyBpr05To15_DateInBpr16(string method, string expectedBpr04)
+    {
+        var payment = CreateTestPayment();
+        payment.PaymentMethod = method;
+
+        var bpr = SegmentElements(_generator.Generate835(payment, CreateTestTradingPartner()), "BPR");
+
+        Assert.Equal(17, bpr.Length);
+        Assert.Equal(expectedBpr04, bpr[4]);
+        for (var i = 5; i <= 15; i++)
+            Assert.Equal(string.Empty, bpr[i]);
+        Assert.Equal("20260315", bpr[16]);
+    }
+
+    [Fact]
+    public void Generate835_Trn03_IsIdenticalToBpr10()
+    {
+        var era = _generator.Generate835(CreateTestPayment(), CreateTestTradingPartner());
+
+        var bpr = SegmentElements(era, "BPR");
+        var trn = SegmentElements(era, "TRN");
+        Assert.Equal("0001000001", trn[2]);
+        Assert.Equal(bpr[10], trn[3]);
+    }
+
+    [Fact]
+    public void Generate835_CheckWithoutOriginatingCompanyId_Trn03FallsBackToPayerId()
+    {
+        var payment = CreateTestPayment();
+        payment.PaymentMethod = "CHK";
+        var tp = CreateTestTradingPartner();
+        tp.OriginatingCompanyId = null;
+
+        var era = _generator.Generate835(payment, tp);
+
+        Assert.Equal("BCBS001", SegmentElements(era, "TRN")[3]);
+        Assert.Equal(17, SegmentElements(era, "BPR").Length);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("123456789")]     // 9 characters
+    [InlineData("12345678901")]   // 11 characters
+    public void Generate835_AchWithoutValidOriginatingCompanyId_Throws(string? originatingCompanyId)
+    {
+        var tp = CreateTestTradingPartner();
+        tp.OriginatingCompanyId = originatingCompanyId;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => _generator.Generate835(CreateTestPayment(), tp));
+        Assert.Contains("BPR10", ex.Message);
+    }
+
+    [Fact]
+    public void Generate835_AchWithoutPayeeAccount_Throws()
+    {
+        var tp = CreateTestTradingPartner();
+        tp.PayeeAccountNumber = null;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => _generator.Generate835(CreateTestPayment(), tp));
+        Assert.Contains("BPR15", ex.Message);
+    }
+
+    [Fact]
+    public void Generate835_AchBpr_StillMaskedForDownload()
+    {
+        var era = EdiBankNumberMasking.MaskBpr(_generator.Generate835(CreateTestPayment(), CreateTestTradingPartner()));
+        var bpr = SegmentElements(era, "BPR");
+
+        Assert.Equal("XXXXX0021", bpr[7]);
+        Assert.Equal("XXXXX6789", bpr[9]);
+        Assert.Equal("1123456789", bpr[10]); // originating company id is not a bank number
+        Assert.Equal("XXXXX0089", bpr[13]);
+        Assert.Equal("XXXXX4321", bpr[15]);
     }
 }

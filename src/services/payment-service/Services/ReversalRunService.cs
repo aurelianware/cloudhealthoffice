@@ -40,6 +40,9 @@ public interface IReversalRunService
 
 public class ReversalRunService : IReversalRunService
 {
+    /// <summary>Reversal (recoupment) payments are ACH; their 835 BPR is built for ACH.</summary>
+    private const string ReversalPaymentMethod = "ACH";
+
     private readonly IPaymentRepository _paymentRepository;
     private readonly IReversalRunRepository _reversalRunRepository;
     private readonly IBatchEraGeneratorService _batchEraGenerator;
@@ -126,6 +129,19 @@ public class ReversalRunService : IReversalRunService
 
         try
         {
+            // Step 0 — the reversal 835 BPR's bank and originating-company
+            //          details are configuration: check them before any claim
+            //          is reserved or recouped (reversal payments are ACH).
+            Era835FinancialSegments.EnsureBprCanBeBuilt(ReversalPaymentMethod, new TradingPartnerInfo
+            {
+                PayerRoutingNumber = _configuration["Era:PayerRoutingNumber"],
+                PayerAccountNumber = _configuration["Era:PayerAccountNumber"],
+                OriginatingCompanyId = _configuration["Era:OriginatingCompanyId"],
+                OriginatingCompanySupplementalCode = _configuration["Era:OriginatingCompanySupplementalCode"],
+                PayeeRoutingNumber = _configuration["Era:PayeeRoutingNumber"],
+                PayeeAccountNumber = _configuration["Era:PayeeAccountNumber"],
+            });
+
             // Step 1 — fetch the PendingReversal adjustment batch from
             //          claims-service. The 5.12a list endpoint already
             //          supports the filter shape we need (status +
@@ -575,6 +591,8 @@ public class ReversalRunService : IReversalRunService
                     ?? _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
                 PayerRoutingNumber = _configuration["Era:PayerRoutingNumber"],
                 PayerAccountNumber = _configuration["Era:PayerAccountNumber"],
+                OriginatingCompanyId = _configuration["Era:OriginatingCompanyId"],
+                OriginatingCompanySupplementalCode = _configuration["Era:OriginatingCompanySupplementalCode"],
                 PayeeRoutingNumber = _configuration["Era:PayeeRoutingNumber"],
                 PayeeAccountNumber = _configuration["Era:PayeeAccountNumber"],
             };
@@ -609,7 +627,7 @@ public class ReversalRunService : IReversalRunService
         var payment = new Payment
         {
             CheckNumber = checkNumber,
-            PaymentMethod = "ACH",
+            PaymentMethod = ReversalPaymentMethod,
             TotalPaymentAmount = -originalApproved,
             PaymentDate = run.ExecutionStartedAt ?? DateTime.UtcNow,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",

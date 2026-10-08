@@ -61,11 +61,19 @@ public class TradingPartnerInfo
     public string ApplicationReceiverId { get; set; } = "RECEIVER";
     /// <summary>ABA routing number for payer's bank (BPR07)</summary>
     public string? PayerRoutingNumber { get; set; }
-    /// <summary>Payer bank account number (BPR08)</summary>
+    /// <summary>Payer bank account number (BPR09)</summary>
     public string? PayerAccountNumber { get; set; }
-    /// <summary>Payee's bank routing number (BPR12)</summary>
+    /// <summary>
+    /// Originating company identifier (BPR10, and TRN03): exactly 10
+    /// characters, typically "1" followed by the payer's TIN. Required for an
+    /// ACH BPR; generation fails without it. Sourced from Era:OriginatingCompanyId.
+    /// </summary>
+    public string? OriginatingCompanyId { get; set; }
+    /// <summary>Originating company supplemental code (BPR11, situational, 9 characters).</summary>
+    public string? OriginatingCompanySupplementalCode { get; set; }
+    /// <summary>Payee's bank routing number (BPR13)</summary>
     public string? PayeeRoutingNumber { get; set; }
-    /// <summary>Payee's bank account number (BPR13)</summary>
+    /// <summary>Payee's bank account number (BPR15)</summary>
     public string? PayeeAccountNumber { get; set; }
 }
 
@@ -102,46 +110,18 @@ public class EraGeneratorService : IEraGeneratorService
         sb.Append(Seg(ref segmentCount, true, "ST*835*0001*005010X221A1~"));
 
         // ── BPR — Financial Information ─────────────────────────────────
-        // BPR01: Transaction handling code
-        //   C = Payment accompanies remittance
-        //   D = Payment/remittance info sent separately
-        //   I = Remittance information only (zero-pay ERA)
-        var bprCode = payment.TotalPaymentAmount > 0 ? "C" : "I";
-        // BPR06: Payment method code  CHK=check, ACH=EFT, NON=non-payment
-        var payMethod = payment.PaymentMethod switch
-        {
-            "CHK" => "CHK",
-            "ACH" => "ACH",
-            _     => "NON"
-        };
-
-        string bpr;
-        if (payMethod == "ACH" && tp.PayerRoutingNumber is not null)
-        {
-            // Full ACH EFT detail (BPR04-BPR16)
-            bpr = $"BPR*{bprCode}*{payment.TotalPaymentAmount:F2}*C*ACH" +
-                  $"*CCP*01*{tp.PayerRoutingNumber}*DA*{tp.PayerAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(payment.PaymentDate)}" +
-                  $"*01*{tp.PayeeRoutingNumber ?? string.Empty}*DA*{tp.PayeeAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(payment.PaymentDate)}~";
-        }
-        else if (payMethod == "CHK")
-        {
-            bpr = $"BPR*{bprCode}*{payment.TotalPaymentAmount:F2}*C*CHK" +
-                  $"****{FormatDate(payment.PaymentDate)}~";
-        }
-        else
-        {
-            // NON — remittance only
-            bpr = $"BPR*{bprCode}*{payment.TotalPaymentAmount:F2}*C*NON" +
-                  $"****{FormatDate(payment.PaymentDate)}~";
-        }
-        sb.Append(Seg(ref segmentCount, true, bpr));
+        // BPR01: C = payment accompanies remittance, I = remittance only.
+        // BPR04: ACH / CHK / NON. Element positions: Era835FinancialSegments.
+        // Throws when an ACH BPR cannot be filled (e.g. no BPR10 originating
+        // company id) rather than emitting a misaligned segment.
+        sb.Append(Seg(ref segmentCount, true,
+            Era835FinancialSegments.BuildBpr(payment.TotalPaymentAmount, payment.PaymentMethod, payment.PaymentDate, tp)));
 
         // ── TRN — Reassociation Trace Number ────────────────────────────
-        // TRN01=1 (check/eft), TRN02=check/EFT number, TRN03=payer ID
+        // TRN01=1 (check/eft), TRN02=check/EFT number, TRN03=originating
+        // company id (same as BPR10; payer id when none is configured)
         sb.Append(Seg(ref segmentCount, true,
-            $"TRN*1*{payment.CheckNumber}*{payment.PayerId ?? "1999999999"}~"));
+            Era835FinancialSegments.BuildTrn(payment.CheckNumber, payment.PayerId, tp)));
 
         // ── DTM — Production Date ────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,

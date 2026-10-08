@@ -159,6 +159,14 @@ public class PaymentRun
     public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Claims not paid because claims-service returned them without an approved
+    /// amount. A claim is never paid at its billed charges: it is not reserved,
+    /// stays Approved in claims-service, and is picked up by a run once its
+    /// approved amount is set.
+    /// </summary>
+    public List<string> MissingApprovedAmountClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Claims whose payment reservation this run held, and which were released
     /// after it failed or was cancelled without paying them: automatically (no
     /// payment and no 835 in payment-service) or by a second approver. A later
