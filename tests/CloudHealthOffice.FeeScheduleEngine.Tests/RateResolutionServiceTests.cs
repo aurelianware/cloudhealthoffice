@@ -139,6 +139,42 @@ public class RateResolutionServiceTests
     }
 
     /// <summary>
+    /// Medicaid cross-schedule lookup where the MPFS reference has an RVU line but
+    /// no conversion factor: the stored Rate is not a usable Medicare rate, so the
+    /// line is unresolved rather than priced off it.
+    /// </summary>
+    [Fact]
+    public async Task Medicaid_RvuReferenceWithoutConversionFactor_Unresolved()
+    {
+        var mpfsSchedule = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m,
+            cf: 33.8872m);
+        mpfsSchedule.Id = "mpfs-2026";
+        mpfsSchedule.ConversionFactor = null;
+
+        var medicaidSchedule = new FeeSchedule
+        {
+            Id = "medicaid-nocf", TenantId = Tenant, Name = "AZ Medicaid 72% of Medicare",
+            Type = FeeScheduleType.Medicaid,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PercentOfMedicare = 0.72m,
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.FlatRate, Rate = 0m }]
+        };
+
+        var repo = new InMemoryFeeScheduleRepo(medicaidSchedule);
+        repo.AddSchedule(mpfsSchedule);
+        var engine = CreateEngine(medicaidSchedule, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m));
+
+        Assert.Equal(RateSource.Unresolved, result.RateSource);
+        Assert.Equal(FeeScheduleType.Medicaid, result.FeeScheduleType);
+        Assert.Equal(0m, result.AllowedAmount);
+        Assert.Contains("mpfs-2026", result.UnresolvedReason);
+    }
+
+    /// <summary>
     /// Medicaid with inline RVU values and percent-of-Medicare.
     /// The Medicaid schedule stores its own RVU values and applies percent.
     /// </summary>
@@ -889,6 +925,48 @@ public class RateResolutionServiceTests
         var result = await engine.ResolveAsync(CreateRequest("99223", los: 5));
 
         Assert.Equal(12500m, result.AllowedAmount); // 2500 × 5
+        Assert.Equal(RateSource.PerDiem, result.RateSource);
+    }
+
+    /// <summary>
+    /// Institutional per-diem lines carry units = days; with LOS supplied the
+    /// amount is rate × LOS and units are not applied again (not 2500 × 5 × 5).
+    /// </summary>
+    [Fact]
+    public async Task PerDiem_WithLos_UnitsNotAppliedAgain()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-units", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+            Lines = [new FeeScheduleLine { ProcedureCode = "0120", Rate = 2500m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("0120", los: 5, units: 5));
+
+        Assert.Equal(12500m, result.AllowedAmount);
+    }
+
+    /// <summary>Without LOS, units are the day count: 2500 × 4 = 10000.</summary>
+    [Fact]
+    public async Task PerDiem_WithoutLos_UsesUnitsAsDays()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-nolos", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+            Lines = [new FeeScheduleLine { ProcedureCode = "0120", Rate = 2500m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("0120", units: 4));
+
+        Assert.Equal(10000m, result.AllowedAmount);
         Assert.Equal(RateSource.PerDiem, result.RateSource);
     }
 
