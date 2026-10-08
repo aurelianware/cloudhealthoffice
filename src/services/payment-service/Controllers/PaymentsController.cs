@@ -228,6 +228,8 @@ public class PaymentsController : ControllerBase
             ApplicationReceiverId = _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
             PayerRoutingNumber    = _configuration["Era:PayerRoutingNumber"],
             PayerAccountNumber    = _configuration["Era:PayerAccountNumber"],
+            OriginatingCompanyId  = _configuration["Era:OriginatingCompanyId"],
+            OriginatingCompanySupplementalCode = _configuration["Era:OriginatingCompanySupplementalCode"],
             PayeeRoutingNumber    = _configuration["Era:PayeeRoutingNumber"],
             PayeeAccountNumber    = _configuration["Era:PayeeAccountNumber"],
         };
@@ -237,7 +239,19 @@ public class PaymentsController : ControllerBase
 
         // The BPR segment carries the payer's and payee's bank routing and
         // account numbers; a download never returns them in full.
-        var era = EdiBankNumberMasking.MaskBpr(_eraGenerator.Generate835(payment, tp));
+        string era;
+        try
+        {
+            era = EdiBankNumberMasking.MaskBpr(_eraGenerator.Generate835(payment, tp));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // An ACH BPR that configuration cannot fill (e.g. no BPR10
+            // originating company id) is refused, never emitted misaligned.
+            _logger.LogError(ex, "Cannot generate 835 for payment {PaymentId}", SanitizeForLog(id));
+            return Problem(title: "835 cannot be generated", detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
 
         var filename = $"835_{payment.CheckNumber}.edi";
         Response.Headers["Content-Disposition"] = $"attachment; filename=\"{filename}\"";

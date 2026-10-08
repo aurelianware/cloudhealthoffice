@@ -30,6 +30,8 @@ public sealed class PaymentPipelineFactory : WebApplicationFactory<Program>
     public const string PayerAccount = "123456789012";
     public const string PayeeRouting = "021000021";
     public const string PayeeAccount = "987654321098";
+    /// <summary>BPR10 / TRN03 originating company identifier ("1" + payer TIN).</summary>
+    public const string OriginatingCompanyId = "1123456789";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -38,6 +40,7 @@ public sealed class PaymentPipelineFactory : WebApplicationFactory<Program>
         {
             ["Era:PayerRoutingNumber"] = PayerRouting,
             ["Era:PayerAccountNumber"] = PayerAccount,
+            ["Era:OriginatingCompanyId"] = OriginatingCompanyId,
             ["Era:PayeeRoutingNumber"] = PayeeRouting,
             ["Era:PayeeAccountNumber"] = PayeeAccount,
         }));

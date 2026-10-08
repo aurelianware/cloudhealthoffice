@@ -43,6 +43,7 @@ public class ReversalRunServiceTests
                 ["Era:InterchangeReceiverId"] = "RECEIVER",
                 ["Payer:Name"] = "Cloud Health Office",
                 ["Payer:Id"] = "CHO",
+                ["Era:OriginatingCompanyId"] = "1123456789",
                 ["TradingPartners:Environment"] = "Production",
             })
             .Build();
@@ -117,6 +118,7 @@ public class ReversalRunServiceTests
             BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1"),
         });
         SetupClaimResponse("pred-1", BuildClaim("pred-1", approvedAmount: 800m));
+        SeedOriginalPayment("pred-1", paid: 800m);
 
         _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
             .Returns(new TradingPartnerSummary
@@ -172,6 +174,7 @@ public class ReversalRunServiceTests
 
         SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
         SetupClaimResponse("pred-1", BuildClaim("pred-1", approvedAmount: 800m));
+        SeedOriginalPayment("pred-1", paid: 800m);
 
         _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
             .Returns(new TradingPartnerSummary
@@ -328,6 +331,123 @@ public class ReversalRunServiceTests
         CreatedAt = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
     };
 
+    /// <summary>The payment run's recorded payment of <paramref name="claimId"/> (what a reversal recoups).</summary>
+    private Payment SeedOriginalPayment(string claimId, decimal paid)
+    {
+        var original = new Payment
+        {
+            Id = "orig-" + claimId,
+            CheckNumber = "0001000001",
+            PaymentMethod = "ACH",
+            TotalPaymentAmount = paid,
+            IsReversal = false,
+            Status = PaymentStatus.Posted,
+            ClaimPayments = new List<ClaimPayment>
+            {
+                new()
+                {
+                    ClaimId = claimId,
+                    PatientControlNumber = "CLM-" + claimId,
+                    ClaimStatusCode = "1",
+                    ChargeAmount = 1000m,
+                    PaymentAmount = paid,
+                    PatientResponsibilityAmount = 200m,
+                    ServiceLines = new List<ServiceLinePayment>
+                    {
+                        new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 1000m, PaymentAmount = paid, Units = 1 },
+                    },
+                },
+            },
+        };
+        _paymentRepo.GetByClaimIdAsync(claimId).Returns(new[] { original });
+        return original;
+    }
+
+    private void PassThroughEnvelopes() =>
+        _batchGen.GenerateBatch(Arg.Any<IEnumerable<EraPaymentInput>>(), Arg.Any<IReadOnlyDictionary<string, TradingPartnerInfo>>())
+            .Returns(call => call.Arg<IEnumerable<EraPaymentInput>>()
+                .Select(i => new EraEnvelope("TP-A", "ISA~", 1, i.Payment.TotalPaymentAmount, "00001",
+                    new[] { i.Payment.ClaimPayments[0].ClaimId }, true))
+                .ToList());
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_ReversesTheRecordedPaidAmount_NotApprovedOrBilled()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
+        // The claim now says 800 approved, but the original payment paid 650.
+        var claim = BuildClaim("pred-1", approvedAmount: 800m);
+        claim.ServiceLines![0].PaidAmount = null;
+        SetupClaimResponse("pred-1", claim);
+        SeedOriginalPayment("pred-1", paid: 650m);
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        PassThroughEnvelopes();
+
+        var captured = new List<Payment>();
+        _paymentRepo.CreateAsync(Arg.Do<Payment>(captured.Add)).Returns(call => call.Arg<Payment>());
+
+        var executed = await CreateService().ExecuteReversalRunAsync(run.Id);
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        var reversal = Assert.Single(captured);
+        Assert.Equal(-650m, reversal.TotalPaymentAmount);
+        var cp = Assert.Single(reversal.ClaimPayments);
+        Assert.Equal(-650m, cp.PaymentAmount);
+        Assert.Equal(-650m, Assert.Single(cp.ServiceLines).PaymentAmount);
+        Assert.Equal(-650m, executed.TotalReversalAmount);
+        Assert.Empty(executed.MissingPaidAmountClaimIds);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_NoRecordedPayment_NotReversed_Reported_NotReserved()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
+        SetupClaimResponse("pred-1", BuildClaim("pred-1", approvedAmount: 800m));
+        _paymentRepo.GetByClaimIdAsync("pred-1").Returns(Array.Empty<Payment>());
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        PassThroughEnvelopes();
+
+        var executed = await CreateService().ExecuteReversalRunAsync(run.Id);
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        Assert.Equal(new[] { "pred-1" }, executed.MissingPaidAmountClaimIds);
+        Assert.Contains(executed.Warnings, w => w.Contains("pred-1") && w.Contains("no recorded payment"));
+        Assert.Empty(executed.PaymentIds);
+        Assert.Equal(0m, executed.TotalReversalAmount);
+        Assert.Empty(_reservations.All);
+        await _paymentRepo.DidNotReceiveWithAnyArgs().CreateAsync(default!);
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_RecordedPaymentUnbalanced_NotReversed_Reported()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
+        SetupClaimResponse("pred-1", BuildClaim("pred-1", approvedAmount: 800m));
+        // A legacy payment whose line carried the billed charge (1000) against an 800 claim payment.
+        var original = SeedOriginalPayment("pred-1", paid: 800m);
+        original.ClaimPayments[0].ServiceLines[0].PaymentAmount = 1000m;
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        PassThroughEnvelopes();
+
+        var executed = await CreateService().ExecuteReversalRunAsync(run.Id);
+
+        Assert.Equal(new[] { "pred-1" }, executed.UnbalancedServiceLineClaimIds);
+        Assert.Empty(executed.PaymentIds);
+        Assert.Empty(_reservations.All);
+    }
+
     private static ClaimDto BuildClaim(string id, decimal approvedAmount) => new()
     {
         Id = id,
@@ -336,8 +456,6 @@ public class ReversalRunServiceTests
         BillingProviderNPI = "1234567890",
         ProviderName = "Acme",
         TotalChargeAmount = 1000m,
-        ApprovedAmount = approvedAmount,
-        PatientResponsibility = 200m,
         Status = ClaimStatus.Paid,
         ServiceDateFrom = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
         AdjudicationResult = new ClaimAdjudicationDto

@@ -122,6 +122,7 @@ public sealed class RunExecutionTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         var runId = await CreateReversalRunAsync();
 
         var run = await ExecuteReversalRunAsync(runId);
@@ -318,6 +319,7 @@ public sealed class RunExecutionTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         _host.Claims.FailVoid.Add("clm-r1");
 
         var first = await ExecuteReversalRunAsync(await CreateReversalRunAsync());
@@ -352,6 +354,7 @@ public sealed class RunExecutionTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         _host.Claims.FailVoid.Add("clm-r1");
         var first = await ExecuteReversalRunAsync(await CreateReversalRunAsync());
 
@@ -371,7 +374,9 @@ public sealed class RunExecutionTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         _host.Claims.AddPendingReversal("adj-2", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
 
         var run = await ExecuteReversalRunAsync(await CreateReversalRunAsync());
 

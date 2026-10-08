@@ -138,6 +138,21 @@ public class ReversalRun
     public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Predecessor claims not reversed because payment-service holds no single
+    /// recorded payment for them, so the amount actually paid is unknown. A
+    /// reversal is never computed from the approved or billed amount. Their
+    /// adjustments stay PendingReversal for an operator.
+    /// </summary>
+    public List<string> MissingPaidAmountClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims not reversed because their recorded payment's
+    /// service-line payments do not add up to the claim payment, so the
+    /// reversal 835 would not balance. Their adjustments stay PendingReversal.
+    /// </summary>
+    public List<string> UnbalancedServiceLineClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Predecessor claims whose reversal reservation this run held, released
     /// after it failed or was cancelled without recouping them (automatically,
     /// or by a second approver). A later reversal run may reverse them.

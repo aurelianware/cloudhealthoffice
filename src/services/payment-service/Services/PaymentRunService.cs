@@ -119,12 +119,23 @@ public class PaymentRunService : IPaymentRunService
 
         try
         {
+            // Step 0: The 835 BPR's bank and originating-company details are
+            //         payment-service configuration, the same for every
+            //         partner. Check them before any claim is reserved or paid,
+            //         so a misconfiguration fails the run with nothing issued
+            //         rather than after payments exist without an 835.
+            Era835FinancialSegments.EnsureBprCanBeBuilt(paymentRun.PaymentMethod, ConfiguredBprDetails());
+
             // Step 1: Fetch approved claims from claims-service, then drop every
             //         claim payment-service already paid (whatever its status
             //         in claims-service), so a failed finalize never leads to a
-            //         second payment.
+            //         second payment. Only claims-service Approved claims are
+            //         payable, at their plan-paid amount (never billed or
+            //         allowed); a claim without one is listed on the run.
             var fetched = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
             var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
+            claims = ExcludeNotPayable(claims, paymentRun);
+            claims = ExcludeUnbalancedServiceLines(claims, paymentRun);
 
             // Step 2: Resolve trading partners for each unique pay-to / billing
             //         provider NPI. A claim whose provider has none is not paid:
@@ -155,7 +166,7 @@ public class PaymentRunService : IPaymentRunService
             {
                 paymentRun.Warnings.Add(fetched.Count == 0
                     ? "No approved claims found matching criteria"
-                    : "No approved claims left to pay after excluding paid, reserved and trading-partner-less claims");
+                    : "No approved claims left to pay after excluding paid, reserved, trading-partner-less, not-approved, missing- or negative-plan-paid-amount and unbalanced-service-line claims");
                 paymentRun.Status = PaymentRunStatus.Completed;
                 paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
                 paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
@@ -405,7 +416,7 @@ public class PaymentRunService : IPaymentRunService
         var queryParams = new List<string>();
 
         if (criteria.LineOfBusiness.HasValue)
-            queryParams.Add($"lineOfBusiness={(int)criteria.LineOfBusiness.Value}");
+            queryParams.Add($"lineOfBusiness={ClaimsServiceLineOfBusiness(criteria.LineOfBusiness.Value)}");
         if (!string.IsNullOrEmpty(criteria.ProviderNPI))
             queryParams.Add($"providerNPI={criteria.ProviderNPI}");
         if (criteria.ServiceDateFrom.HasValue)
@@ -413,8 +424,9 @@ public class PaymentRunService : IPaymentRunService
         if (criteria.ServiceDateTo.HasValue)
             queryParams.Add($"serviceDateTo={criteria.ServiceDateTo.Value:yyyy-MM-dd}");
 
-        // claims-service ClaimStatus.Approved == 5
-        queryParams.Add("status=5");
+        // claims-service serializes ClaimStatus as a number; payment-service's
+        // ClaimStatus mirrors its values (Approved == 5).
+        queryParams.Add($"status={(int)ClaimStatus.Approved}");
 
         var queryString = string.Join("&", queryParams);
         var response = await _claimsService.SearchClaimsAsync(tenantId, $"{queryString}&pageSize=5000");
@@ -445,6 +457,19 @@ public class PaymentRunService : IPaymentRunService
 
         return claims;
     }
+
+    /// <summary>
+    /// claims-service's numeric <c>LineOfBusiness</c> for payment-service's
+    /// (whose values start at 0 and are persisted on runs, so are not renumbered).
+    /// </summary>
+    private static int ClaimsServiceLineOfBusiness(LineOfBusiness lob) => lob switch
+    {
+        LineOfBusiness.Commercial => 1,
+        LineOfBusiness.Medicare => 2,
+        LineOfBusiness.Medicaid => 3,
+        LineOfBusiness.Marketplace => 4, // claims-service Exchange
+        _ => throw new ArgumentOutOfRangeException(nameof(lob), lob, "Unknown line of business"),
+    };
 
     /// <summary>
     /// The duplicate-selection guard. Drops repeated claim ids, then every claim
@@ -522,6 +547,104 @@ public class PaymentRunService : IPaymentRunService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Keeps only claims that are payable: claims-service status Approved
+    /// (the search asks for status=Approved; anything else returned — Pended,
+    /// Denied, with a possibly stale payerPayment — is refused here too), and
+    /// a plan-paid amount (<c>adjudicationResult.payerPayment</c>). The amount
+    /// paid is the plan's payment, never the billed charge or the allowed
+    /// amount. A claim without one is not reserved or paid, stays Approved in
+    /// claims-service, and is listed on the run for someone to correct.
+    /// </summary>
+    private List<ClaimDto> ExcludeNotPayable(List<ClaimDto> claims, PaymentRun paymentRun)
+    {
+        var payable = new List<ClaimDto>(claims.Count);
+        foreach (var claim in claims)
+        {
+            if (claim.Status != ClaimStatus.Approved)
+            {
+                paymentRun.Warnings.Add(
+                    $"Claim {claim.Id} not paid: claims-service returned it with status {claim.Status}, not Approved");
+                _logger.LogWarning(
+                    "Claim {ClaimId} returned with status {Status}; excluded from payment run {PaymentRunNumber}",
+                    SanitizeForLog(claim.Id), claim.Status, paymentRun.PaymentRunNumber);
+                continue;
+            }
+
+            if (claim.PlanPaidAmount < 0m)
+            {
+                // A plan payment is never negative (recoupment is a reversal
+                // run); claims-service can persist an arbitrary inbound amount.
+                paymentRun.NegativePlanPaidClaimIds.Add(claim.Id);
+                paymentRun.Warnings.Add(
+                    $"Claim {claim.Id} not paid: its plan-paid amount (adjudicationResult.payerPayment) is negative ({claim.PlanPaidAmount:F2})");
+                _logger.LogWarning(
+                    "Claim {ClaimId} has a negative plan-paid amount; excluded from payment run {PaymentRunNumber}",
+                    SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                continue;
+            }
+
+            if (claim.PlanPaidAmount.HasValue)
+            {
+                payable.Add(claim);
+                continue;
+            }
+
+            paymentRun.MissingPlanPaidAmountClaimIds.Add(claim.Id);
+            paymentRun.Warnings.Add(
+                $"Claim {claim.Id} not paid: claims-service returned no plan-paid amount (adjudicationResult.payerPayment); it is never paid at billed charges and will be picked up once it carries an adjudication result");
+            _logger.LogWarning(
+                "Claim {ClaimId} has no plan-paid amount; excluded from payment run {PaymentRunNumber}",
+                SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+        }
+        return payable;
+    }
+
+    /// <summary>
+    /// Drops every claim whose service-line paid amounts (SVC03) do not add up
+    /// to its plan-paid amount (CLP04): its 835 would not balance. A line with no
+    /// paid amount counts as 0, which is only accepted when the other lines
+    /// already make up the plan-paid amount. A claim with no service lines at
+    /// all (claim-level-only adjudication) is not supported here and is
+    /// excluded too. Such a claim is not reserved or paid, stays Approved in
+    /// claims-service, and is listed on the run.
+    /// </summary>
+    private List<ClaimDto> ExcludeUnbalancedServiceLines(List<ClaimDto> claims, PaymentRun paymentRun)
+    {
+        var payable = new List<ClaimDto>(claims.Count);
+        foreach (var claim in claims)
+        {
+            var lines = claim.ServiceLines ?? new List<ClaimServiceLineDto>();
+            var linePaid = lines.Sum(sl => sl.LinePaidAmount ?? 0m);
+            if (lines.Count > 0 && linePaid == claim.PlanPaidAmount)
+            {
+                payable.Add(claim);
+                continue;
+            }
+
+            paymentRun.UnbalancedServiceLineClaimIds.Add(claim.Id);
+            if (lines.Count == 0)
+            {
+                paymentRun.Warnings.Add(
+                    $"Claim {claim.Id} not paid: it has no service lines, so its plan-paid amount {claim.PlanPaidAmount:F2} (CLP04) cannot be balanced by SVC03; claim-level-only adjudications are not paid by this run");
+                _logger.LogWarning(
+                    "Claim {ClaimId} has no service lines; excluded from payment run {PaymentRunNumber}",
+                    SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                continue;
+            }
+
+            var unpriced = lines.Count(sl => sl.LinePaidAmount is null);
+            paymentRun.Warnings.Add(
+                $"Claim {claim.Id} not paid: its service-line paid amounts total {linePaid:F2} " +
+                (unpriced > 0 ? $"({unpriced} line(s) with no paid amount) " : string.Empty) +
+                $"but its plan-paid amount is {claim.PlanPaidAmount:F2}, so its 835 would not balance");
+            _logger.LogWarning(
+                "Claim {ClaimId} service lines do not balance to its plan-paid amount; excluded from payment run {PaymentRunNumber}",
+                SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+        }
+        return payable;
     }
 
     private List<ClaimDto> ExcludeWithoutTradingPartner(
@@ -627,6 +750,7 @@ public class PaymentRunService : IPaymentRunService
     private IReadOnlyDictionary<string, TradingPartnerInfo> BuildTradingPartnerInfos(
         Dictionary<string, TradingPartnerSummary> resolved)
     {
+        var bpr = ConfiguredBprDetails();
         var seen = new Dictionary<string, TradingPartnerInfo>(StringComparer.Ordinal);
         foreach (var partner in resolved.Values)
         {
@@ -642,14 +766,27 @@ public class PaymentRunService : IPaymentRunService
                     ?? _configuration["Era:ApplicationSenderId"] ?? "SENDER",
                 ApplicationReceiverId = partner.X12Config?.ReceiverId
                     ?? _configuration["Era:ApplicationReceiverId"] ?? "RECEIVER",
-                PayerRoutingNumber = _configuration["Era:PayerRoutingNumber"],
-                PayerAccountNumber = _configuration["Era:PayerAccountNumber"],
-                PayeeRoutingNumber = _configuration["Era:PayeeRoutingNumber"],
-                PayeeAccountNumber = _configuration["Era:PayeeAccountNumber"],
+                PayerRoutingNumber = bpr.PayerRoutingNumber,
+                PayerAccountNumber = bpr.PayerAccountNumber,
+                OriginatingCompanyId = bpr.OriginatingCompanyId,
+                OriginatingCompanySupplementalCode = bpr.OriginatingCompanySupplementalCode,
+                PayeeRoutingNumber = bpr.PayeeRoutingNumber,
+                PayeeAccountNumber = bpr.PayeeAccountNumber,
             };
         }
         return seen;
     }
+
+    /// <summary>The BPR bank and originating-company details from configuration (Era:*).</summary>
+    private TradingPartnerInfo ConfiguredBprDetails() => new()
+    {
+        PayerRoutingNumber = _configuration["Era:PayerRoutingNumber"],
+        PayerAccountNumber = _configuration["Era:PayerAccountNumber"],
+        OriginatingCompanyId = _configuration["Era:OriginatingCompanyId"],
+        OriginatingCompanySupplementalCode = _configuration["Era:OriginatingCompanySupplementalCode"],
+        PayeeRoutingNumber = _configuration["Era:PayeeRoutingNumber"],
+        PayeeAccountNumber = _configuration["Era:PayeeAccountNumber"],
+    };
 
     private async Task<Payment> GeneratePaymentForClaimsAsync(
         List<ClaimDto> claims,
@@ -666,7 +803,7 @@ public class PaymentRunService : IPaymentRunService
         {
             CheckNumber = checkNumber,
             PaymentMethod = paymentRun.PaymentMethod,
-            TotalPaymentAmount = claims.Sum(c => c.ApprovedAmount ?? c.TotalChargeAmount),
+            TotalPaymentAmount = claims.Sum(PlanPaidAmountOf),
             PaymentDate = paymentRun.PaymentDate,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
             PayerId = _configuration["Payer:Id"] ?? "CHO",
@@ -693,7 +830,10 @@ public class PaymentRunService : IPaymentRunService
                         LineNumber = sl.LineNumber,
                         ProcedureCode = sl.ProcedureCode,
                         ChargeAmount = sl.ChargeAmount,
-                        PaymentAmount = sl.PaidAmount ?? sl.ChargeAmount,
+                        // Never the line charge: the recorded paid amount, or 0
+                        // (ExcludeUnbalancedServiceLines kept the claim only if
+                        // the lines balance to CLP04 with 0 for unpriced lines).
+                        PaymentAmount = sl.LinePaidAmount ?? 0m,
                         RevenueCode = sl.RevenueCode,
                         Units = sl.Units,
                         ServiceDateFrom = sl.ServiceDateFrom,
@@ -709,9 +849,10 @@ public class PaymentRunService : IPaymentRunService
                     ClaimId = claim.Id,
                     PatientControlNumber = claim.ClaimNumber,
                     ClaimStatusCode = headerCas.Any(a => a.GroupCode == "CO" && claim.Status == ClaimStatus.Denied) ? "3" : "1",
+                    // CLP03 total charge, CLP04 plan paid, CLP05 member responsibility.
                     ChargeAmount = claim.TotalChargeAmount,
-                    PaymentAmount = claim.ApprovedAmount ?? claim.TotalChargeAmount,
-                    PatientResponsibilityAmount = claim.PatientResponsibility ?? 0,
+                    PaymentAmount = PlanPaidAmountOf(claim),
+                    PatientResponsibilityAmount = claim.AdjudicationResult?.PatientResponsibility ?? 0m,
                     PayerClaimControlNumber = claim.PayerClaimControlNumber,
                     MemberId = claim.MemberId,
                     RenderingProviderNPI = claim.RenderingProviderNPI,
@@ -724,6 +865,17 @@ public class PaymentRunService : IPaymentRunService
         var created = await _paymentRepository.CreateAsync(payment);
         return created;
     }
+
+    /// <summary>
+    /// The amount a claim is paid: the plan's payment. Claims without one are
+    /// excluded before reservation (<see cref="ExcludeNotPayable"/>); reaching
+    /// here without one is a bug, and the run fails rather than paying billed
+    /// charges.
+    /// </summary>
+    private static decimal PlanPaidAmountOf(ClaimDto claim) =>
+        claim.PlanPaidAmount
+        ?? throw new InvalidOperationException(
+            $"Claim {claim.Id} has no plan-paid amount; it is never paid at billed charges");
 
     private static ClaimAdjudicationSnapshot BuildAdjudicationSnapshot(ClaimDto claim)
     {
@@ -917,9 +1069,19 @@ public class ClaimDto
     public string? RenderingProviderNPI { get; set; }
     public string? ProviderName { get; set; }
     public string? PayerClaimControlNumber { get; set; }
+    /// <summary>CLP03: the claim's total billed charge. Never the amount paid.</summary>
     public decimal TotalChargeAmount { get; set; }
-    public decimal? ApprovedAmount { get; set; }
-    public decimal? PatientResponsibility { get; set; }
+
+    /// <summary>
+    /// The amount the plan pays the provider (CLP04): claims-service's
+    /// <c>adjudicationResult.payerPayment</c>, the amount it publishes as
+    /// PlanPaid and finalizes. Not the allowed amount (which includes member
+    /// cost share) and never the billed charge. Null when the claim carries no
+    /// adjudication result or no payer payment; such a claim is not paid.
+    /// </summary>
+    [JsonIgnore]
+    public decimal? PlanPaidAmount => AdjudicationResult?.PayerPayment;
+
     public ClaimStatus Status { get; set; }
     public DateTime ServiceDateFrom { get; set; }
     public DateTime? SubmittedDate { get; set; }
@@ -945,7 +1107,8 @@ public class ClaimDto
 public class ClaimAdjudicationDto
 {
     public decimal AllowedAmount { get; set; }
-    public decimal PayerPayment { get; set; }
+    /// <summary>What the plan pays the provider; null when claims-service did not send it.</summary>
+    public decimal? PayerPayment { get; set; }
     public decimal DeductibleAmount { get; set; }
     public decimal CoinsuranceAmount { get; set; }
     public decimal CopayAmount { get; set; }
@@ -985,6 +1148,17 @@ public class EditFailureDto
 
 public class ClaimServiceLineDto
 {
+    /// <summary>
+    /// The line's paid amount (SVC03): <see cref="PaidAmount"/> when sent,
+    /// otherwise claims-service's <c>ClaimLine.AdjudicationResult.PaidAmount</c>.
+    /// Null when neither is present; never the charge.
+    /// </summary>
+    [JsonIgnore]
+    public decimal? LinePaidAmount => PaidAmount ?? AdjudicationResult?.PaidAmount;
+
+    /// <summary>Mirrors <c>ClaimsService.Models.LineAdjudicationResult</c> for the paid amount.</summary>
+    public ClaimLineAdjudicationDto? AdjudicationResult { get; set; }
+
     public int LineNumber { get; set; }
     public string ProcedureCode { get; set; } = string.Empty;
     public decimal ChargeAmount { get; set; }
@@ -993,6 +1167,11 @@ public class ClaimServiceLineDto
     public decimal Units { get; set; } = 1;
     public DateTime? ServiceDateFrom { get; set; }
     public DateTime? ServiceDateTo { get; set; }
+}
+
+public class ClaimLineAdjudicationDto
+{
+    public decimal? PaidAmount { get; set; }
 }
 
 internal class RemittancePostBody

@@ -159,6 +159,31 @@ public class PaymentRun
     public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Claims not paid because claims-service returned them without a plan-paid
+    /// amount (<c>adjudicationResult.payerPayment</c>; no adjudication result).
+    /// A claim is never paid at its billed charges or allowed amount: it is not
+    /// reserved, stays Approved in claims-service, and is picked up by a run
+    /// once it carries an adjudication result.
+    /// </summary>
+    public List<string> MissingPlanPaidAmountClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims not paid because their plan-paid amount is negative. A plan
+    /// payment is never negative (a recoupment is a reversal run); zero is paid
+    /// as a zero-pay remittance. They stay Approved in claims-service.
+    /// </summary>
+    public List<string> NegativePlanPaidClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims not paid because their service-line paid amounts (SVC03) do not
+    /// add up to their plan-paid amount (CLP04), so their 835 would not balance.
+    /// A line with no paid amount counts as 0. A claim with no service lines
+    /// (claim-level-only adjudication) is listed here too. They stay Approved in
+    /// claims-service and are picked up once their line amounts are corrected.
+    /// </summary>
+    public List<string> UnbalancedServiceLineClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Claims whose payment reservation this run held, and which were released
     /// after it failed or was cancelled without paying them: automatically (no
     /// payment and no 835 in payment-service) or by a second approver. A later
@@ -269,20 +294,22 @@ public class PaymentRunCriteria
 }
 
 /// <summary>
-/// Claim status enumeration (mirrored from claims-service)
+/// Claim status, mirrored value for value from claims-service's
+/// <c>ClaimsService.Models.ClaimStatus</c>: claims-service serializes it as a
+/// number, so the numbers must match (they previously did not, and 5 —
+/// claims-service Approved — read here as Denied).
 /// </summary>
 public enum ClaimStatus
 {
-    Draft,
-    Submitted,
-    Acknowledged,
-    InReview,
-    Approved,
-    Denied,
-    PartiallyApproved,
-    Paid,
-    Appealed,
-    Finalized
+    Submitted = 1,
+    Received = 2,
+    InAdjudication = 3,
+    Pended = 4,
+    Approved = 5,
+    Denied = 6,
+    Paid = 7,
+    Voided = 8,
+    PartiallyPaid = 9
 }
 
 /// <summary>

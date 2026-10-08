@@ -170,6 +170,12 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         var paymentDate = first.PaymentDate;
         var traceCheckNumber = first.CheckNumber;
 
+        // BPR02 = sum(CLP04) - sum(PLB); sum(SVC03) = CLP04 per claim.
+        Era835FinancialSegments.EnsureBalanced(
+            totalAmount,
+            inputs.SelectMany(i => i.Payment.ClaimPayments),
+            inputs.SelectMany(i => i.Payment.ProviderAdjustments));
+
         // ── ISA ────────────────────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, false,
             $"ISA*00*          *00*          " +
@@ -186,38 +192,15 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         sb.Append(Seg(ref segmentCount, true, "ST*835*0001*005010X221A1~"));
 
         // ── BPR ─ Financial Information (envelope-wide) ────────────────
-        var bprCode = totalAmount > 0 ? "C" : "I";
-        var payMethod = paymentMethod switch
-        {
-            "CHK" => "CHK",
-            "ACH" => "ACH",
-            _     => "NON"
-        };
-
-        string bpr;
-        if (payMethod == "ACH" && tp.PayerRoutingNumber is not null)
-        {
-            bpr = $"BPR*{bprCode}*{totalAmount:F2}*C*ACH" +
-                  $"*CCP*01*{tp.PayerRoutingNumber}*DA*{tp.PayerAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(paymentDate)}" +
-                  $"*01*{tp.PayeeRoutingNumber ?? string.Empty}*DA*{tp.PayeeAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(paymentDate)}~";
-        }
-        else if (payMethod == "CHK")
-        {
-            bpr = $"BPR*{bprCode}*{totalAmount:F2}*C*CHK" +
-                  $"****{FormatDate(paymentDate)}~";
-        }
-        else
-        {
-            bpr = $"BPR*{bprCode}*{totalAmount:F2}*C*NON" +
-                  $"****{FormatDate(paymentDate)}~";
-        }
-        sb.Append(Seg(ref segmentCount, true, bpr));
+        // Element positions: Era835FinancialSegments. Throws when an ACH BPR
+        // cannot be filled (e.g. no BPR10 originating company id).
+        sb.Append(Seg(ref segmentCount, true,
+            Era835FinancialSegments.BuildBpr(totalAmount, paymentMethod, paymentDate, tp)));
 
         // ── TRN ─ Reassociation Trace Number (envelope) ────────────────
+        // TRN03 = originating company id (same as BPR10; required configuration)
         sb.Append(Seg(ref segmentCount, true,
-            $"TRN*1*{traceCheckNumber}*{first.PayerId ?? "1999999999"}~"));
+            Era835FinancialSegments.BuildTrn(traceCheckNumber, tp)));
 
         // ── DTM ─ Production Date ──────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
