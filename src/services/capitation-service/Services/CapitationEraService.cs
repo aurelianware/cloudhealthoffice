@@ -1,5 +1,6 @@
 using System.Text;
 using CapitationService.Models;
+using CloudHealthOffice.Infrastructure.Edi;
 
 namespace CapitationService.Services;
 
@@ -22,7 +23,7 @@ namespace CapitationService.Services;
 ///   GS   — Functional group header
 ///   ST   — Transaction set header (835)
 ///   BPR  — Financial information (payment method, total amount)
-///   TRN  — Reassociation trace number (statement number)
+///   TRN  — Reassociation trace number (statement number; TRN03 = Era:OriginatingCompanyId)
 ///   DTM  — Production date
 ///   N1   — Payer identification (1000A loop — health plan)
 ///   N1   — Payee identification (1000B loop — provider)
@@ -44,6 +45,9 @@ public interface ICapitationEraService
     /// <summary>
     /// Generate an X12 005010X221A1 835 ERA for a capitation statement.
     /// Returns the raw EDI string ready for transmission or file storage.
+    /// Throws <see cref="InvalidOperationException"/> when the BPR/TRN cannot
+    /// be built (no 10-character Era:OriginatingCompanyId, or an ACH BPR
+    /// without both banks' account numbers).
     /// </summary>
     string Generate835ForStatement(
         CapitationStatement statement,
@@ -68,19 +72,21 @@ public class CapitationEraTradingPartnerInfo
     public string? PayerRoutingNumber { get; set; }
     /// <summary>Payer's bank account number (BPR09)</summary>
     public string? PayerAccountNumber { get; set; }
-    /// <summary>Provider's bank routing number (BPR12)</summary>
+    /// <summary>Provider's bank routing number (BPR13)</summary>
     public string? PayeeRoutingNumber { get; set; }
-    /// <summary>Provider's bank account number (BPR14)</summary>
+    /// <summary>Provider's bank account number (BPR15)</summary>
     public string? PayeeAccountNumber { get; set; }
 }
 
 public class CapitationEraService : ICapitationEraService
 {
     private readonly ILogger<CapitationEraService> _logger;
+    private readonly IConfiguration _configuration;
 
-    public CapitationEraService(ILogger<CapitationEraService> logger)
+    public CapitationEraService(ILogger<CapitationEraService> logger, IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
     }
 
     public string Generate835ForStatement(
@@ -108,34 +114,23 @@ public class CapitationEraService : ICapitationEraService
         // ── ST — Transaction Set Header ──────────────────────────────────
         sb.Append(Seg(ref segmentCount, true, "ST*835*0001*005010X221A1~"));
 
-        // ── BPR — Financial Information ──────────────────────────────────
-        var bprCode = statement.NetPayable > 0 ? "C" : "I";
-        string bpr;
-        if (tp.PayerRoutingNumber is not null && tp.PayeeRoutingNumber is not null)
-        {
-            // Full ACH EFT detail
-            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*ACH" +
-                  $"*CCP*01*{tp.PayerRoutingNumber}*DA*{tp.PayerAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(statement.PaymentDate ?? now)}" +
-                  $"*01*{tp.PayeeRoutingNumber}*DA*{tp.PayeeAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(statement.PaymentDate ?? now)}~";
-        }
-        else if (!string.IsNullOrEmpty(statement.CheckNumber))
-        {
-            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*CHK" +
-                  $"****{FormatDate(statement.PaymentDate ?? now)}~";
-        }
-        else
-        {
-            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*NON" +
-                  $"****{FormatDate(statement.PaymentDate ?? now)}~";
-        }
-        sb.Append(Seg(ref segmentCount, true, bpr));
-
-        // ── TRN — Reassociation Trace Number ─────────────────────────────
-        // TRN02 = statement number as the check/EFT trace
+        // ── BPR / TRN — Financial Information, Reassociation Trace ───────
+        // Element positions: the shared Era835FinancialSegmentBuilder (same
+        // builder as payment-service's claim 835s). ACH when both banks'
+        // routing numbers are supplied, CHK when the statement carries a
+        // check number, otherwise NON; a zero NetPayable is always NON.
+        // TRN02 = statement number as the trace; TRN03 = the configured
+        // originating company id (Era:OriginatingCompanyId, = BPR10 on ACH).
+        // Throws rather than emit a misaligned BPR or a made-up TRN03.
+        var bankDetails = BankDetails(tp);
+        var paymentMethod = tp.PayerRoutingNumber is not null && tp.PayeeRoutingNumber is not null
+            ? "ACH"
+            : !string.IsNullOrEmpty(statement.CheckNumber) ? "CHK" : "NON";
         sb.Append(Seg(ref segmentCount, true,
-            $"TRN*1*{statement.StatementNumber}*{tp.PayerId}~"));
+            Era835FinancialSegmentBuilder.BuildBpr(
+                statement.NetPayable, paymentMethod, statement.PaymentDate ?? now, bankDetails)));
+        sb.Append(Seg(ref segmentCount, true,
+            Era835FinancialSegmentBuilder.BuildTrn(statement.StatementNumber, bankDetails)));
 
         // ── DTM — Production Date ────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
@@ -274,6 +269,21 @@ public class CapitationEraService : ICapitationEraService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// BPR/TRN details: the banks from the request's trading partner info, the
+    /// originating company id (BPR10/TRN03) and supplemental code (BPR11)
+    /// from configuration — the payer's identity, never caller-supplied.
+    /// </summary>
+    private Era835BankDetails BankDetails(CapitationEraTradingPartnerInfo tp) => new()
+    {
+        PayerRoutingNumber = tp.PayerRoutingNumber,
+        PayerAccountNumber = tp.PayerAccountNumber,
+        OriginatingCompanyId = _configuration["Era:OriginatingCompanyId"],
+        OriginatingCompanySupplementalCode = _configuration["Era:OriginatingCompanySupplementalCode"],
+        PayeeRoutingNumber = tp.PayeeRoutingNumber,
+        PayeeAccountNumber = tp.PayeeAccountNumber,
+    };
 
     private static string Seg(ref int count, bool counted, string segment)
     {

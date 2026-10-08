@@ -1,81 +1,36 @@
+using CloudHealthOffice.Infrastructure.Edi;
 using PaymentService.Models;
 
 namespace PaymentService.Services;
 
 /// <summary>
-/// Builds the 835 BPR (Financial Information) and TRN (Reassociation Trace
-/// Number) segments for both <see cref="EraGeneratorService"/> and
-/// <see cref="BatchEraGeneratorService"/>, so the element positions are
-/// defined once, and checks the 835 balances before it is emitted.
-///
-/// BPR element positions (005010X221A1):
-///   BPR01 transaction handling code      BPR09 sender account number
-///   BPR02 total actual provider payment  BPR10 originating company identifier
-///   BPR03 credit/debit flag (C)          BPR11 originating company supplemental code
-///   BPR04 payment method (ACH/CHK/NON)   BPR12 receiver DFI ID qualifier (01)
-///   BPR05 payment format (CCP)           BPR13 receiver DFI (routing) number
-///   BPR06 sender DFI ID qualifier (01)   BPR14 receiver account qualifier (DA)
-///   BPR07 sender DFI (routing) number    BPR15 receiver account number
-///   BPR08 sender account qualifier (DA)  BPR16 check issue / EFT effective date
-///
-/// For CHK and NON, BPR05-BPR15 are empty and BPR16 carries the date.
+/// The 835 BPR (Financial Information) and TRN (Reassociation Trace Number)
+/// segments for both <see cref="EraGeneratorService"/> and
+/// <see cref="BatchEraGeneratorService"/>, and the check that an 835 balances
+/// before it is emitted. The segments themselves are built by the shared
+/// <see cref="Era835FinancialSegmentBuilder"/> (CloudHealthOffice.Infrastructure),
+/// which capitation-service uses too, so the element positions are defined
+/// once. See there for the BPR element positions.
 ///
 /// TRN03 (required for every payment method) is the originating company
 /// identifier, "1" + the payer's TIN, identical to BPR10 on an ACH BPR. It
-/// is always configured (Era:OriginatingCompanyId); it is never synthesised,
-/// because a made-up value breaks reassociation of the payment and the ERA.
+/// is always configured (Era:OriginatingCompanyId); it is never synthesised.
 /// </summary>
 public static class Era835FinancialSegments
 {
     /// <summary>
-    /// The BPR04 payment method code for a payment method. ACH is emitted as
-    /// ACH only when the payer's bank routing number is configured; otherwise
-    /// the 835 is remittance-only (NON), as before. "CHK" and "Check" (any
-    /// case) are checks.
+    /// The BPR04 payment method code for a payment method; see
+    /// <see cref="Era835FinancialSegmentBuilder.ResolvePaymentMethod(string?, Era835BankDetails)"/>.
     /// </summary>
     public static string ResolveBprPaymentMethod(string? paymentMethod, TradingPartnerInfo tp)
-    {
-        if (string.Equals(paymentMethod, "CHK", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(paymentMethod, "Check", StringComparison.OrdinalIgnoreCase))
-            return "CHK";
-        if (string.Equals(paymentMethod, "ACH", StringComparison.OrdinalIgnoreCase) && tp.PayerRoutingNumber is not null)
-            return "ACH";
-        return "NON";
-    }
+        => Era835FinancialSegmentBuilder.ResolvePaymentMethod(paymentMethod, BankDetails(tp));
 
     /// <summary>
     /// The configuration problems that keep BPR/TRN from being built for
-    /// <paramref name="paymentMethod"/>. Every 835 needs a 10-character
-    /// originating company identifier (TRN03; BPR10 on ACH). An ACH BPR also
-    /// needs both banks' routing and account numbers. Empty when both
-    /// segments can be built.
+    /// <paramref name="paymentMethod"/>. Empty when both segments can be built.
     /// </summary>
     public static IReadOnlyList<string> ConfigurationProblems(string? paymentMethod, TradingPartnerInfo tp)
-    {
-        var problems = new List<string>();
-        var ach = ResolveBprPaymentMethod(paymentMethod, tp) == "ACH";
-
-        if (string.IsNullOrWhiteSpace(tp.OriginatingCompanyId))
-            problems.Add("originating company identifier (TRN03/BPR10, Era:OriginatingCompanyId) is missing");
-        else if (tp.OriginatingCompanyId.Length != 10 || HasDelimiter(tp.OriginatingCompanyId))
-            problems.Add("originating company identifier (TRN03/BPR10, Era:OriginatingCompanyId) must be exactly 10 characters, typically '1' + the payer's TIN");
-
-        if (!ach)
-            return problems;
-
-        if (string.IsNullOrWhiteSpace(tp.PayerRoutingNumber))
-            problems.Add("payer routing number (BPR07, Era:PayerRoutingNumber) is missing");
-        if (string.IsNullOrWhiteSpace(tp.PayerAccountNumber))
-            problems.Add("payer account number (BPR09, Era:PayerAccountNumber) is missing");
-        if (!string.IsNullOrEmpty(tp.OriginatingCompanySupplementalCode)
-            && (tp.OriginatingCompanySupplementalCode.Length != 9 || HasDelimiter(tp.OriginatingCompanySupplementalCode)))
-            problems.Add("originating company supplemental code (BPR11, Era:OriginatingCompanySupplementalCode) must be exactly 9 characters");
-        if (string.IsNullOrWhiteSpace(tp.PayeeRoutingNumber))
-            problems.Add("payee routing number (BPR13, Era:PayeeRoutingNumber) is missing");
-        if (string.IsNullOrWhiteSpace(tp.PayeeAccountNumber))
-            problems.Add("payee account number (BPR15, Era:PayeeAccountNumber) is missing");
-        return problems;
-    }
+        => Era835FinancialSegmentBuilder.ConfigurationProblems(paymentMethod, BankDetails(tp));
 
     /// <summary>
     /// Throws <see cref="InvalidOperationException"/> when BPR/TRN cannot be
@@ -85,61 +40,21 @@ public static class Era835FinancialSegments
     /// are issued.
     /// </summary>
     public static void EnsureBprCanBeBuilt(string? paymentMethod, TradingPartnerInfo tp)
-    {
-        var problems = ConfigurationProblems(paymentMethod, tp);
-        if (problems.Count > 0)
-            throw new InvalidOperationException(
-                "Cannot build the 835 BPR/TRN segments: " + string.Join("; ", problems));
-    }
+        => Era835FinancialSegmentBuilder.EnsureCanBeBuilt(paymentMethod, BankDetails(tp));
 
-    /// <summary>The BPR segment, terminator included.</summary>
+    /// <summary>
+    /// The BPR segment, terminator included. A zero-amount 835 (e.g. denials
+    /// only) is NON with BPR01 = I.
+    /// </summary>
     public static string BuildBpr(decimal totalAmount, string? paymentMethod, DateTime paymentDate, TradingPartnerInfo tp)
-    {
-        EnsureBprCanBeBuilt(paymentMethod, tp);
-
-        // BPR01: C = payment accompanies remittance, I = remittance only (zero-pay ERA)
-        var handlingCode = totalAmount > 0 ? "C" : "I";
-        var method = ResolveBprPaymentMethod(paymentMethod, tp);
-
-        var e = new string[17];
-        e[0] = "BPR";
-        e[1] = handlingCode;
-        e[2] = totalAmount.ToString("F2");
-        e[3] = "C";
-        e[4] = method;
-        for (var i = 5; i <= 15; i++)
-            e[i] = string.Empty;
-
-        if (method == "ACH")
-        {
-            e[5] = "CCP";
-            e[6] = "01";
-            e[7] = tp.PayerRoutingNumber!;
-            e[8] = "DA";
-            e[9] = tp.PayerAccountNumber!;
-            e[10] = tp.OriginatingCompanyId!;
-            e[11] = tp.OriginatingCompanySupplementalCode ?? string.Empty;
-            e[12] = "01";
-            e[13] = tp.PayeeRoutingNumber!;
-            e[14] = "DA";
-            e[15] = tp.PayeeAccountNumber!;
-        }
-
-        e[16] = paymentDate.ToString("yyyyMMdd");
-        return string.Join("*", e) + "~";
-    }
+        => Era835FinancialSegmentBuilder.BuildBpr(totalAmount, paymentMethod, paymentDate, BankDetails(tp));
 
     /// <summary>
     /// The TRN segment, terminator included. TRN03 is the configured
     /// originating company identifier, identical to BPR10.
     /// </summary>
     public static string BuildTrn(string checkOrEftNumber, TradingPartnerInfo tp)
-    {
-        if (string.IsNullOrWhiteSpace(tp.OriginatingCompanyId))
-            throw new InvalidOperationException(
-                "Cannot build the 835 TRN segment: originating company identifier (TRN03, Era:OriginatingCompanyId) is missing");
-        return $"TRN*1*{checkOrEftNumber}*{tp.OriginatingCompanyId}~";
-    }
+        => Era835FinancialSegmentBuilder.BuildTrn(checkOrEftNumber, BankDetails(tp));
 
     /// <summary>
     /// The balancing problem of one claim's service lines, or null: when a
@@ -175,6 +90,17 @@ public static class Era835FinancialSegments
             throw new InvalidOperationException("Cannot generate an unbalanced 835: " + string.Join("; ", problems));
     }
 
-    private static bool HasDelimiter(string value) =>
-        value.IndexOfAny(new[] { '*', '~', ':', '^' }) >= 0;
+    private static Era835BankDetails BankDetails(TradingPartnerInfo tp)
+    {
+        ArgumentNullException.ThrowIfNull(tp);
+        return new Era835BankDetails
+        {
+            PayerRoutingNumber = tp.PayerRoutingNumber,
+            PayerAccountNumber = tp.PayerAccountNumber,
+            OriginatingCompanyId = tp.OriginatingCompanyId,
+            OriginatingCompanySupplementalCode = tp.OriginatingCompanySupplementalCode,
+            PayeeRoutingNumber = tp.PayeeRoutingNumber,
+            PayeeAccountNumber = tp.PayeeAccountNumber,
+        };
+    }
 }
