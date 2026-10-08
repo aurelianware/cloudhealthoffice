@@ -53,7 +53,7 @@ namespace BenefitPlanService.Services;
 /// Telemetry is emitted per call as
 /// <c>cho.provider.integrity_gate.decisions.total</c> with the
 /// <c>cho.path</c> dimension set to <c>cached_hit</c>, <c>stale_fallback</c>,
-/// <c>null_fallback</c>, or <c>live_only</c>. See
+/// <c>null_fallback</c>, <c>blocked_recheck</c>, or <c>live_only</c>. See
 /// <c>docs/architecture/integrity-score-consumption.md</c>.
 /// </para>
 ///
@@ -74,6 +74,12 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
     public const string ProviderServiceClientName = "ProviderService";
     public const string VerificationServiceClientName = "ProviderVerificationService";
     private const string TenantHeaderName = "X-Tenant-ID";
+
+    /// <summary>
+    /// Flag code provider-verification-service emits when no real
+    /// OIG/LEIE/SAM exclusion source was queried for the provider.
+    /// </summary>
+    private const string ExclusionNotScreenedFlagCode = "EXCLUSION_NOT_SCREENED";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _cache;
@@ -154,18 +160,39 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                 result = live ?? Unavailable();
                 RecordDecision(IntegrityGatePath.NullFallback, result.Rating);
             }
-            else if (projection.Score is null || projection.LastVerifiedAt is null)
+            else if (projection.Score is null || projection.LastVerifiedAt is null
+                     || IsUnknownRating(projection.IntegrityRating))
             {
-                // Projection row exists but was never refreshed -- unlike
-                // the staleness branch below, there is no real prior rating
-                // here (BuildResultFromProjection on an unset IntegrityRating
-                // would read as "not Blocked" i.e. falsely Clear). Fall back
-                // to live; if that also fails, this NPI has no trustworthy
-                // data anywhere and must be treated as unavailable.
+                // Projection row exists but was never refreshed, or carries
+                // no real rating -- unlike the staleness branch below, there
+                // is no usable prior rating here (BuildResultFromProjection
+                // on an unset/Unknown IntegrityRating would read as "not
+                // Blocked" i.e. falsely Clear). The verification engine rates
+                // a provider Unknown when no real OIG/LEIE/SAM screen was
+                // performed. Fall back to live; if that also fails, this NPI
+                // has no trustworthy data anywhere and must be treated as
+                // unavailable.
                 var live = await CallVerificationServiceAsync(npi, tenantId, ct);
                 isUnavailable = live is null;
                 result = live ?? Unavailable();
                 RecordDecision(IntegrityGatePath.NullFallback, result.Rating);
+            }
+            else if (IsBlockedRating(projection.IntegrityRating))
+            {
+                // A cached Blocked rating cannot by itself be trusted as a
+                // federal exclusion: the projection persists only score and
+                // rating, and the engine also produces Blocked from a very
+                // low composite (e.g. NPI not found) with no exclusion
+                // finding. Denying B7 on that would mislabel the provider as
+                // federally excluded. Re-check live -- the live status
+                // distinguishes Excluded from ManualReviewRequired -- and if
+                // live is unreachable, hold for review rather than either
+                // asserting B7 or paying. This branch precedes the staleness
+                // branch so a stale Blocked never falls back to B7 either.
+                var live = await CallVerificationServiceAsync(npi, tenantId, ct);
+                isUnavailable = live is null;
+                result = live ?? Unavailable();
+                RecordDecision(IntegrityGatePath.BlockedRecheck, result.Rating);
             }
             else if (IsStale(projection.LastVerifiedAt.Value))
             {
@@ -265,7 +292,12 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             // -- they mean the verification service itself could not reach
             // a confident determination. Treat them the same as total
             // unavailability (held for review) rather than a silent pass.
-            var requiresManualReview = !isExcluded && status is "Failed" or "ManualReviewRequired";
+            // An Unknown rating (no real exclusion screen performed, or an
+            // unparseable rating) is likewise never a confident pass.
+            var exclusionNotScreened = !isExcluded && record.Flags?.Any(f =>
+                string.Equals(f.Code, ExclusionNotScreenedFlagCode, StringComparison.OrdinalIgnoreCase)) == true;
+            var requiresManualReview = !isExcluded
+                && (status is "Failed" or "ManualReviewRequired" || rating == "Unknown" || exclusionNotScreened);
             return new ProviderIntegrityResult
             {
                 Passed = !isExcluded && !requiresManualReview,
@@ -278,9 +310,11 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                     : requiresManualReview ? "PROVIDER_VERIFICATION_UNAVAILABLE" : null,
                 DenialReason = isExcluded
                     ? "Provider is excluded from federal healthcare programs"
-                    : requiresManualReview
-                        ? "Provider verification could not reach a confident determination; manual review required"
-                        : null
+                    : exclusionNotScreened
+                        ? "Provider was not screened against OIG LEIE / SAM.gov exclusion lists; manual review required"
+                        : requiresManualReview
+                            ? "Provider verification could not reach a confident determination; manual review required"
+                            : null
             };
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -295,23 +329,33 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
     private static ProviderIntegrityResult BuildResultFromProjection(ProviderProjection projection)
     {
         // The cached projection captures Score + Rating but not the
-        // ExclusionStatus that the live endpoint returns directly. Rating
-        // == "Blocked" indicates active exclusion in the verification
-        // engine's rubric — translate that into the gate's IsExcluded /
-        // DenialCode contract so adjudication denies on cached-only reads.
-        var isExcluded = string.Equals(projection.IntegrityRating, "Blocked", StringComparison.OrdinalIgnoreCase);
+        // ExclusionStatus that the live endpoint returns directly, so it can
+        // never confirm an exclusion. Only non-Blocked, non-Unknown ratings
+        // reach here (CheckAsync re-checks those live); a Blocked rating is
+        // still guarded defensively as "hold for review", never B7.
+        if (IsBlockedRating(projection.IntegrityRating) || IsUnknownRating(projection.IntegrityRating))
+        {
+            return Unavailable() with
+            {
+                IntegrityScore = projection.IntegrityScore,
+                Rating = projection.IntegrityRating ?? "Unknown",
+            };
+        }
+
         return new ProviderIntegrityResult
         {
-            Passed = !isExcluded,
+            Passed = true,
             IntegrityScore = projection.IntegrityScore,
-            Rating = projection.IntegrityRating ?? "Unknown",
-            IsExcluded = isExcluded,
-            DenialCode = isExcluded ? "B7" : null,
-            DenialReason = isExcluded
-                ? "Provider is excluded from federal healthcare programs"
-                : null
+            Rating = projection.IntegrityRating!,
         };
     }
+
+    private static bool IsBlockedRating(string? rating) =>
+        string.Equals(rating, "Blocked", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUnknownRating(string? rating) =>
+        string.IsNullOrWhiteSpace(rating)
+        || string.Equals(rating, "Unknown", StringComparison.OrdinalIgnoreCase);
 
     private static void RecordDecision(IntegrityGatePath path, string? rating)
     {
@@ -327,6 +371,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         IntegrityGatePath.StaleFallback  => "stale_fallback",
         IntegrityGatePath.NullFallback   => "null_fallback",
         IntegrityGatePath.LiveOnly       => "live_only",
+        IntegrityGatePath.BlockedRecheck => "blocked_recheck",
         _                                => "unknown",
     };
 
@@ -401,7 +446,13 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         public int CompositeScore { get; init; }
         public JsonElement Rating { get; init; }
         public JsonElement Status { get; init; }
+        public List<IntegrityFlagResponse>? Flags { get; init; }
         public DateTimeOffset? VerifiedAt { get; init; }
+    }
+
+    private sealed record IntegrityFlagResponse
+    {
+        public string? Code { get; init; }
     }
 
     private enum IntegrityGatePath
@@ -410,5 +461,6 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         StaleFallback,
         NullFallback,
         LiveOnly,
+        BlockedRecheck,
     }
 }
