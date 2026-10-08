@@ -250,13 +250,16 @@ public class Coverage
     private CoverageStatus InForceStatus => IsCOBRA ? CoverageStatus.COBRA : CoverageStatus.Active;
 
     /// <summary>
-    /// Check if coverage is in force on a specific date of service
+    /// Check if coverage is in force on a specific date of service. A Terminated
+    /// coverage with no termination date fails closed: it has no span to honour.
     /// </summary>
     public bool IsActiveOn(DateTime serviceDate)
     {
-        return DateOfServiceStatuses.Contains(Status)
-            && serviceDate >= EffectiveDate.Date
-            && (!TerminationDate.HasValue || serviceDate <= TerminationDate.Value.Date);
+        var date = serviceDate.Date;
+        if (!DateOfServiceStatuses.Contains(Status)) return false;
+        if (Status == CoverageStatus.Terminated && !TerminationDate.HasValue) return false;
+        return date >= EffectiveDate.Date
+            && (!TerminationDate.HasValue || date <= TerminationDate.Value.Date);
     }
 }
 

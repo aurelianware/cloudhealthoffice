@@ -55,7 +55,8 @@ public class CoverageRepositoryMongo : ICoverageRepository
         // AND c.memberId = @memberId
         // AND ARRAY_CONTAINS(@dosStatuses, c.status)
         // AND c.effectiveDate <= @serviceDate
-        // AND (NOT IS_DEFINED(c.terminationDate) OR c.terminationDate >= @serviceDate)
+        // AND ((NOT IS_DEFINED(c.terminationDate) AND c.status != @terminatedStatus)
+        //      OR c.terminationDate >= @serviceDate)
 
         var builder = Builders<Coverage>.Filter;
         var date = serviceDate.Date;
@@ -68,7 +69,11 @@ public class CoverageRepositoryMongo : ICoverageRepository
             builder.In(c => c.Status, Coverage.DateOfServiceStatuses),
             builder.Lte(c => c.EffectiveDate, date),
             builder.Or(
-                builder.Eq(c => c.TerminationDate, null),
+                // Open-ended only for non-Terminated coverage: a Terminated
+                // record with no termination date fails closed.
+                builder.And(
+                    builder.Eq(c => c.TerminationDate, null),
+                    builder.Ne(c => c.Status, CoverageStatus.Terminated)),
                 builder.Gte(c => c.TerminationDate, date)
             )
         );

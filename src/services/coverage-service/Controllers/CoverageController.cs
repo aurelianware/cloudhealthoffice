@@ -272,6 +272,19 @@ public class CoverageController : ControllerBase
             return NotFound(new { Id = id, Message = "Coverage not found" });
         }
 
+        // A Terminated coverage with no termination date would read as open-ended
+        // (in force for every later date of service). The update body carries no
+        // termination date, so termination must go through DELETE /{id} unless
+        // the record already has one.
+        if (request.Status == CoverageStatus.Terminated && !coverage.TerminationDate.HasValue)
+        {
+            return BadRequest(new
+            {
+                Id = id,
+                Message = "Cannot set Status=Terminated without a termination date; use the terminate endpoint."
+            });
+        }
+
         if (request.PlanId != null) coverage.PlanId = request.PlanId;
         if (request.CoverageLevel != null) coverage.CoverageLevel = request.CoverageLevel;
         if (request.Status.HasValue) coverage.Status = request.Status.Value;

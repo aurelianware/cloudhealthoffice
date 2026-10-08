@@ -66,6 +66,13 @@ public class CoverageRepositoryCosmosActiveOnDateTests
         });
         statuses.Should().NotContain((int)CoverageStatus.Pending)
             .And.NotContain((int)CoverageStatus.Suspended);
+
+        // Open-ended (no/null termination date) only for non-Terminated status;
+        // a Terminated record must have a termination date >= DOS.
+        captured.Query.QueryText.Should().Contain(
+            "(((NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate)) AND c.status != @terminatedStatus)");
+        captured.Query.QueryText.Should().Contain("OR c.terminationDate >= @serviceDate)");
+        Param(captured.Query, "@terminatedStatus").Should().Be((int)CoverageStatus.Terminated);
     }
 
     [Fact]
@@ -81,6 +88,8 @@ public class CoverageRepositoryCosmosActiveOnDateTests
         Param(captured.Query, "@tenantId").Should().Be("t1");
         Param(captured.Query, "@memberId").Should().Be("M1");
         Param(captured.Query, "@serviceDate").Should().Be(new DateTime(2025, 3, 15));
+        Param(captured.Query, "@terminatedStatus").Should().Be((int)CoverageStatus.Terminated);
+        captured.Query.QueryText.Should().Contain("AND c.status != @terminatedStatus");
         captured.Options!.PartitionKey.Should().Be(new PartitionKey("t1"));
     }
 
@@ -92,18 +101,6 @@ public class CoverageRepositoryCosmosActiveOnDateTests
 
         captured.Query!.QueryText.Should().NotContain("insuranceLineCode");
         captured.Query.GetQueryParameters().Select(p => p.Name).Should().NotContain("@insuranceLineCode");
-    }
-
-    [Fact]
-    public async Task GetActiveCoverageByMemberId_TreatsNullTerminationDateAsOpenEnded()
-    {
-        // The serializer writes terminationDate: null for open-ended coverage;
-        // NOT IS_DEFINED alone is false for null and null >= date is undefined.
-        var (repo, captured) = Build();
-        await repo.GetActiveCoverageByMemberIdAsync("t1", "M1", new DateTime(2025, 3, 15));
-
-        captured.Query!.QueryText.Should().Contain(
-            "(NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate) OR c.terminationDate >= @serviceDate)");
     }
 
     [Fact]
