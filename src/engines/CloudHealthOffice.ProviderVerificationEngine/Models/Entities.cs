@@ -144,6 +144,16 @@ public class NppesEndpoint
 
 public class ExclusionScreeningResult
 {
+    /// <summary>
+    /// True only when a real exclusion source (LEIE, SAM.gov, ...) was
+    /// actually queried to produce this result. Defaults to <c>false</c> so
+    /// a result is never read as "screened clear" unless the adapter that
+    /// built it affirmatively says it screened -- placeholder adapters, and
+    /// any adapter that could not reach its source, leave it unset. The
+    /// scorer treats an unscreened result as "not evaluated", never as clear.
+    /// </summary>
+    public bool WasScreened { get; set; }
+
     public bool IsExcluded { get; set; }
     public List<ExclusionMatch> Matches { get; set; } = [];
     public DateTimeOffset ScreenedAt { get; set; } = DateTimeOffset.UtcNow;

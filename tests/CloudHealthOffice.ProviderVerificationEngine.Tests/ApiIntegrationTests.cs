@@ -2,7 +2,12 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using CloudHealthOffice.ProviderVerificationEngine.DataSources;
 using CloudHealthOffice.ProviderVerificationEngine.Models;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using NSubstitute;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
 using System.Security.Cryptography;
@@ -134,6 +139,59 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<CloudHeal
         Assert.True(root.TryGetProperty("status", out _));
         Assert.True(root.TryGetProperty("flags", out _));
     }
+
+    // ── Placeholder exclusion adapter ────────────────────────────
+
+    [Fact]
+    public async Task PlaceholderExclusionAdapter_ReportsNotScreened()
+    {
+        // Until real LEIE/SAM adapters exist, the registered adapter must
+        // never claim a screen it did not perform.
+        using var scope = _factory.Services.CreateScope();
+        var adapter = scope.ServiceProvider.GetRequiredService<IExclusionScreeningAdapter>();
+
+        var result = await adapter.ScreenProviderAsync("1234567893");
+
+        Assert.False(result.WasScreened);
+        Assert.False(result.IsExcluded);
+    }
+
+    [Fact]
+    public async Task IntegrityScore_WithPlaceholderExclusionAdapter_IsNotClear()
+    {
+        var nppes = Substitute.For<INppesAdapter>();
+        nppes.LookupByNpiAsync("1234567893", Arg.Any<CancellationToken>())
+            .Returns(new NppesProviderData
+            {
+                Npi = "1234567893",
+                NpiStatus = NppesNpiStatus.Active,
+                Taxonomies = [new NppesTaxonomy { Code = "207Q00000X", IsPrimary = true }],
+                Addresses = [new NppesAddress { AddressPurpose = "LOCATION" }]
+            });
+        var factory = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<INppesAdapter>();
+                services.AddSingleton(nppes);
+            }));
+        var client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-a");
+
+        var response = await client.GetAsync("/api/v1/providers/1234567893/integrity-score?tier=Standard");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var root = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(VerificationStatus.ManualReviewRequired, ReadEnum<VerificationStatus>(root.GetProperty("status")));
+        Assert.Equal(IntegrityRating.Unknown, ReadEnum<IntegrityRating>(root.GetProperty("rating")));
+        Assert.Contains(
+            root.GetProperty("flags").EnumerateArray(),
+            f => f.GetProperty("code").GetString() == "EXCLUSION_NOT_SCREENED");
+    }
+
+    private static T ReadEnum<T>(JsonElement value) where T : struct, Enum =>
+        value.ValueKind == JsonValueKind.Number
+            ? (T)Enum.ToObject(typeof(T), value.GetInt32())
+            : Enum.Parse<T>(value.GetString()!);
 
     // ── Batch verification ───────────────────────────────────────
 

@@ -316,10 +316,16 @@ internal class NullNlmAdapter : INlmTaxonomyCrosswalkAdapter
         Task.FromResult(new List<TaxonomyCrosswalkResult>());
 }
 
+/// <summary>
+/// Placeholder until the LEIE/SAM adapters exist. Returns
+/// <see cref="ExclusionScreeningResult.WasScreened"/> = <c>false</c> so the
+/// scorer reports the provider as NOT screened (EXCLUSION_NOT_SCREENED,
+/// ManualReviewRequired) instead of screened-clear.
+/// </summary>
 internal class NullExclusionAdapter : IExclusionScreeningAdapter
 {
     public Task<ExclusionScreeningResult> ScreenProviderAsync(string npi, string? firstName, string? lastName, DateTimeOffset? dateOfBirth, CancellationToken ct) =>
-        Task.FromResult(new ExclusionScreeningResult { Source = ExclusionScreeningSource.OigLeie });
+        Task.FromResult(new ExclusionScreeningResult { Source = ExclusionScreeningSource.OigLeie, WasScreened = false });
 
     public Task<List<ExclusionScreeningResult>> BatchScreenAsync(IEnumerable<ProviderScreeningRequest> providers, CancellationToken ct) =>
         Task.FromResult(new List<ExclusionScreeningResult>());

@@ -45,6 +45,12 @@ public class NppesSearchCriteria
 /// OIG LEIE + SAM.gov exclusion screening.
 /// LEIE: https://oig.hhs.gov/exclusions/ (downloadable + online search)
 /// SAM:  https://sam.gov/content/exclusions (API requires registration)
+/// <para>
+/// Implementations must set <see cref="ExclusionScreeningResult.WasScreened"/>
+/// to <c>true</c> only when a real exclusion source was actually queried.
+/// A result with <c>WasScreened = false</c> is scored as "not screened",
+/// never as clear.
+/// </para>
 /// </summary>
 public interface IExclusionScreeningAdapter
 {
