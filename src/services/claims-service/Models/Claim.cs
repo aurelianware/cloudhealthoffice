@@ -782,7 +782,7 @@ public class PendDetails
 {
     /// <summary>
     /// Short pend reason code consumed by the work queue categorizer.
-    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN.
+    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN, DUPLICATE.
     /// </summary>
     [Required]
     [StringLength(20)]

@@ -291,6 +291,35 @@ public interface IClaimRepository
         DateTime voidedAt,
         string? actorId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Candidate prior claims for duplicate detection
+    /// (<see cref="Services.Adjudication.Stages.DuplicateClaimStage"/>).
+    /// Returns live versions for <paramref name="tenantId"/> +
+    /// <paramref name="memberId"/> whose service period overlaps
+    /// [<paramref name="serviceDateFrom"/>, <paramref name="serviceDateTo"/>],
+    /// excluding every row of the version chain
+    /// <paramref name="excludeClaimVersionId"/> (the claim being adjudicated
+    /// and its predecessors/successors).
+    ///
+    /// <para>
+    /// "Live" excludes Draft, Denied, Voided and superseded
+    /// (<c>Adjusted</c> / <c>SupersededAt</c> set) versions and void
+    /// requests (frequency code 8) — none of those represent a service the
+    /// payer is still on the hook for. Filter shape is
+    /// tenant + member equality with a service-date range so it rides the
+    /// <c>(TenantId, MemberId, ServiceDateFrom)</c> Mongo index and stays
+    /// single-partition on Cosmos. Capped at
+    /// <see cref="ClaimRepository.MaxDuplicateCandidates"/> rows.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindDuplicateCandidatesAsync(
+        string tenantId,
+        string memberId,
+        DateTime serviceDateFrom,
+        DateTime serviceDateTo,
+        string excludeClaimVersionId,
+        CancellationToken ct = default);
 }
 
 public class ClaimRepository : IClaimRepository
@@ -1792,6 +1821,69 @@ public class ClaimRepository : IClaimRepository
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Upper bound on rows <see cref="FindDuplicateCandidatesAsync"/> returns.
+    /// A member's live claims overlapping one service period are normally a
+    /// handful; the cap keeps a pathological member (or a bad date range)
+    /// from turning one adjudication into an unbounded scan.
+    /// </summary>
+    public const int MaxDuplicateCandidates = 200;
+
+    public async Task<IReadOnlyList<Claim>> FindDuplicateCandidatesAsync(
+        string tenantId,
+        string memberId,
+        DateTime serviceDateFrom,
+        DateTime serviceDateTo,
+        string excludeClaimVersionId,
+        CancellationToken ct = default)
+    {
+        // Single-partition (/tenantId) query: equality on memberId plus a
+        // service-period overlap range — served by the container's default
+        // range indexes. Undefined-vs-anything comparisons evaluate to
+        // undefined in Cosmos SQL (≠ true), so each optional/legacy field is
+        // guarded with NOT IS_DEFINED / null to keep legacy rows visible.
+        var query = new QueryDefinition($@"
+            SELECT TOP {MaxDuplicateCandidates} *
+            FROM c
+            WHERE c.tenantId = @tenantId
+              AND c.memberId = @memberId
+              AND c.serviceDateFrom <= @serviceDateTo
+              AND c.serviceDateTo >= @serviceDateFrom
+              AND c.id != @excludeChain
+              AND (NOT IS_DEFINED(c.claimVersionId) OR c.claimVersionId = null OR c.claimVersionId != @excludeChain)
+              AND c.status != @denied
+              AND c.status != @voided
+              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null
+                   OR (c.versionState != @draft AND c.versionState != @vDenied
+                       AND c.versionState != @vVoided AND c.versionState != @adjusted))
+              AND (NOT IS_DEFINED(c.supersededAt) OR c.supersededAt = null)
+              AND (NOT IS_DEFINED(c.claimFrequencyCode) OR c.claimFrequencyCode = null OR c.claimFrequencyCode != '8')")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@memberId", memberId)
+            .WithParameter("@serviceDateFrom", serviceDateFrom)
+            .WithParameter("@serviceDateTo", serviceDateTo)
+            .WithParameter("@excludeChain", excludeClaimVersionId)
+            .WithParameter("@denied", ClaimStatus.Denied.ToString())
+            .WithParameter("@voided", ClaimStatus.Voided.ToString())
+            .WithParameter("@draft", ClaimVersionState.Draft.ToString())
+            .WithParameter("@vDenied", ClaimVersionState.Denied.ToString())
+            .WithParameter("@vVoided", ClaimVersionState.Voided.ToString())
+            .WithParameter("@adjusted", ClaimVersionState.Adjusted.ToString());
+
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+
+        var items = new List<Claim>();
+        while (iterator.HasMoreResults && items.Count < MaxDuplicateCandidates)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            items.AddRange(page);
+        }
+
+        return items.Take(MaxDuplicateCandidates).Select(Hydrate).ToList();
     }
 
     private sealed class HeadIdResult

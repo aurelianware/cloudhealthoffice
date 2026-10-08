@@ -394,6 +394,7 @@ builder.Services.AddScoped<IAuthorizationValidationClient, HttpAuthorizationVali
 // closing a gap the original 5.5 stage scope never covered — see the
 // stage's own doc comment and docs/architecture/claim-adjudication-pipeline.md.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, DuplicateClaimStage>(); // Order=120
 builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
