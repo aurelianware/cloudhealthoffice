@@ -817,6 +817,141 @@ public class BenefitCalculationStageTests
         Assert.Equal(NetworkTier.InNetwork, BenefitCalculationStage.ResolveNetworkTier(ctx));
     }
 
+    [Fact]
+    public void ApplyToContext_MapsEngineLineAdjustmentsOntoLineCas()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = true, BilledAmount = 100m, AllowedAmount = 80m,
+            ContractualAdjustment = 20m, DeductibleAmount = 10m, CopayAmount = 5m, CoinsuranceAmount = 13m,
+            MemberResponsibility = 28m, PlanPaidAmount = 52m,
+            Adjustments =
+            [
+                new AdjustmentReason { GroupCode = "CO", ReasonCode = "45", Amount = 20m },
+                new AdjustmentReason { GroupCode = "PR", ReasonCode = "1", Amount = 10m },
+                new AdjustmentReason { GroupCode = "PR", ReasonCode = "3", Amount = 5m },
+                new AdjustmentReason { GroupCode = "PR", ReasonCode = "2", Amount = 13m, RemarkCode = "N130" },
+            ],
+        }));
+
+        var cas = Assert.Single(ctx.LineAdjudicationResults).AdjustmentReasons;
+        Assert.Equal(
+            new[] { ("CO", "45", 20m), ("PR", "1", 10m), ("PR", "3", 5m), ("PR", "2", 13m) },
+            cas.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
+        Assert.Equal("N130", cas[3].RemarkCode);
+        Assert.Equal(52m, 100m - cas.Sum(r => r.Amount));
+    }
+
+    [Fact]
+    public void ApplyToContext_DrgLineWithoutAdjustments_SynthesizesBalancingCas()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+
+        // Allocated DRG share: raw cost share 60 capped to member 50 by the
+        // OOP max (allocation rounding lands in the same OA-23 entry).
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = true, IsDrgPriced = true,
+            BilledAmount = 100m, AllowedAmount = 90m, ContractualAdjustment = 10m,
+            DeductibleAmount = 40m, CoinsuranceAmount = 20m, OopMaxReduction = 10m,
+            MemberResponsibility = 50m, PlanPaidAmount = 40m,
+        }));
+
+        var cas = Assert.Single(ctx.LineAdjudicationResults).AdjustmentReasons;
+        Assert.Equal(
+            new[] { ("CO", "45", 10m), ("PR", "1", 40m), ("PR", "2", 20m), ("OA", "23", -10m) },
+            cas.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
+        Assert.Equal(40m, 100m - cas.Sum(r => r.Amount));
+    }
+
+    [Fact]
+    public void ApplyToContext_DeniedLine_AddsContractualSoLineBalances()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = false, BilledAmount = 100m, AllowedAmount = 70m,
+            ContractualAdjustment = 30m, DenialReasonCode = "96",
+            Adjustments = [new AdjustmentReason { GroupCode = "CO", ReasonCode = "96", Amount = 70m }],
+        }));
+
+        var cas = Assert.Single(ctx.LineAdjudicationResults).AdjustmentReasons;
+        Assert.Equal(
+            new[] { ("CO", "45", 30m), ("CO", "96", 70m) },
+            cas.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
+        Assert.Equal(0m, 100m - cas.Sum(r => r.Amount));
+    }
+
+    [Fact]
+    public void ApplyToContext_PriorLineAdjustments_MergedWithoutDoubleCounting()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+        ctx.LineAdjudicationResults.Add(new LineAdjudicationResult
+        {
+            AdjustmentReasons =
+            {
+                // Same pair the engine emits — engine wins, not summed.
+                new ClaimAdjustmentReason { GroupCode = "PR", ReasonCode = "1", Amount = 999m },
+                // Not engine-owned — survives.
+                new ClaimAdjustmentReason { GroupCode = "CO", ReasonCode = "B7", Amount = 0.01m },
+            },
+        });
+
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = true, BilledAmount = 100m, AllowedAmount = 100m,
+            DeductibleAmount = 25m, MemberResponsibility = 25m, PlanPaidAmount = 75m,
+            Adjustments = [new AdjustmentReason { GroupCode = "PR", ReasonCode = "1", Amount = 25m }],
+        }));
+
+        var cas = Assert.Single(ctx.LineAdjudicationResults).AdjustmentReasons;
+        Assert.Equal(
+            new[] { ("PR", "1", 25m), ("CO", "B7", 0.01m) },
+            cas.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
+    }
+
+    [Fact]
+    public void ApplyToContext_OrdersLineResultsByClaimLineOrder()
+    {
+        // PersistenceStage applies line results positionally; the engine
+        // sorts by line number.
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.ClaimLines = new List<AdapterClaimLine>
+        {
+            new() { LineNumber = 2, ProcedureCode = "99214", ChargeAmount = 200m, Units = 1 },
+            new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 100m, Units = 1 },
+        };
+        var ctx = ContextFor(claim);
+
+        BenefitCalculationStage.ApplyToContext(ctx, new BenefitResolutionResult
+        {
+            Success = true,
+            Lines =
+            [
+                new LineBenefitResult { LineNumber = 1, IsCovered = true, AllowedAmount = 100m, PlanPaidAmount = 100m },
+                new LineBenefitResult { LineNumber = 2, IsCovered = true, AllowedAmount = 200m, PlanPaidAmount = 200m },
+            ],
+        });
+
+        Assert.Equal(new[] { 200m, 100m }, ctx.LineAdjudicationResults.Select(l => l.AllowedAmount));
+    }
+
+    private static ClaimAdjudicationContext ContextFor(AdapterClaim claim) => new()
+    {
+        TenantId = "tenant-1",
+        ClaimVersionId = claim.Id,
+        Claim = claim,
+    };
+
+    private static BenefitResolutionResult SingleLineResult(LineBenefitResult line) => new()
+    {
+        Success = line.IsCovered,
+        Lines = [line],
+    };
+
     private static PricingOutcome PricedAt(AdapterClaim claim, decimal allowedPerLine) => new()
     {
         AllowedAmounts = claim.ClaimLines.ToDictionary(l => l.LineNumber, _ => allowedPerLine),

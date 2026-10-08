@@ -211,12 +211,12 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             LineNumber = l.LineNumber,
             BenefitCategory = l.RevenueCode ?? l.PlaceOfServiceCode ?? string.Empty,
             ServiceCode = l.ProcedureCode,
-            DeductibleApplied = l.AdjudicationResult?.AdjustmentReasons
-                .Where(r => r.ReasonCode == "1").Sum(r => r.Amount) ?? 0m,
-            CoinsuranceApplied = l.AdjudicationResult?.AdjustmentReasons
-                .Where(r => r.ReasonCode == "2").Sum(r => r.Amount) ?? 0m,
-            CopayApplied = l.AdjudicationResult?.AdjustmentReasons
-                .Where(r => r.ReasonCode == "3").Sum(r => r.Amount) ?? 0m,
+            // Member cost share is the PR group only: a CO/OA entry that
+            // happens to reuse CARC 1/2/3 (e.g. a CO-denial) is not
+            // deductible/coinsurance/copay the member owes.
+            DeductibleApplied = SumPatientResponsibility(l.AdjudicationResult, "1"),
+            CoinsuranceApplied = SumPatientResponsibility(l.AdjudicationResult, "2"),
+            CopayApplied = SumPatientResponsibility(l.AdjudicationResult, "3"),
             // Engine-computed OOP-eligible amount; excludes cost share the
             // plan keeps outside the OOP max. Claims persisted before the
             // field existed carry null and keep the prior behavior
@@ -273,6 +273,11 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             LineItems = lines
         };
     }
+
+    private static decimal SumPatientResponsibility(LineAdjudicationResult? line, string carc) =>
+        line?.AdjustmentReasons
+            .Where(r => r.GroupCode == "PR" && r.ReasonCode == carc)
+            .Sum(r => r.Amount) ?? 0m;
 
     public async ValueTask DisposeAsync()
     {

@@ -1,6 +1,7 @@
 extern alias accumulator;
 
 using ClaimsService.Models;
+using ClaimsService.Models.Adjudication;
 using ClaimsService.Services;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
@@ -45,10 +46,12 @@ public class OopAppliedFinalizationSeamTests
         evt.LineItems.Single().MemberResponsibility.Should().Be(60m);
         evt.LineItems.Single().OopApplied.Should().Be(50m);
 
-        // Only the OOP delta is asserted: line-level deductible on the event
-        // is derived from line CAS reasons, which BenefitCalculationStage
-        // does not populate today (separate gap).
-        var (_, oop, _) = AccumulatorDomainService.ComputeDeltas(evt);
+        // Line CAS carries the cost share, so the deductible delta comes
+        // through as well; the excluded coinsurance stays out of OOP only.
+        evt.LineItems.Single().DeductibleApplied.Should().Be(50m);
+        evt.LineItems.Single().CoinsuranceApplied.Should().Be(10m);
+        var (deductible, oop, _) = AccumulatorDomainService.ComputeDeltas(evt);
+        deductible.Should().Be(50m);
         oop.Should().Be(50m);
     }
 
@@ -188,6 +191,12 @@ public class OopAppliedFinalizationSeamTests
             TenantId = "tenant-1",
             ClaimVersionId = adapterClaim.Id,
             Claim = adapterClaim,
+            // BenefitCalculationStage fails closed without fee-schedule
+            // allowed amounts (#1235); price at billed for this seam.
+            PricingResult = new PricingOutcome
+            {
+                AllowedAmounts = adapterClaim.ClaimLines.ToDictionary(l => l.LineNumber, l => l.ChargeAmount),
+            },
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
