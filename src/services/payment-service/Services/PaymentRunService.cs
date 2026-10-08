@@ -132,10 +132,19 @@ public class PaymentRunService : IPaymentRunService
             //         second payment. Only claims-service Approved claims are
             //         payable, at their plan-paid amount (never billed or
             //         allowed); a claim without one is listed on the run.
-            var fetched = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
+            var fetched = await FetchClaimsAsync(paymentRun.TenantId, paymentRun.Criteria, ClaimStatus.Approved);
             var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
             claims = ExcludeNotPayable(claims, paymentRun);
-            claims = ExcludeUnbalancedServiceLines(claims, paymentRun);
+            claims = ExcludeUnbalancedServiceLines(claims, paymentRun, denied: false);
+
+            // Step 1b: Denied claims not yet remitted. They ride in the same
+            //          835s as zero-pay claims (CLP02 = 4, CLP04 = 0): no
+            //          payment, no reservation, no claims-service call (Denied
+            //          is final there). A denial listed in an earlier 835 is
+            //          not remitted again.
+            var denials = paymentRun.Criteria.IncludeDeniedClaims
+                ? await SelectDenialsToRemitAsync(paymentRun, fetched)
+                : new List<ClaimDto>();
 
             // Step 2: Resolve trading partners for each unique pay-to / billing
             //         provider NPI. A claim whose provider has none is not paid:
@@ -143,14 +152,15 @@ public class PaymentRunService : IPaymentRunService
             //         claims-service and is listed for the next run.
             var environment = _configuration["TradingPartners:Environment"] ?? "Production";
             var tenantId = paymentRun.TenantId;
-            var resolvedTradingPartners = claims.Count == 0
+            var resolvedTradingPartners = claims.Count == 0 && denials.Count == 0
                 ? new Dictionary<string, TradingPartnerSummary>(StringComparer.Ordinal)
                 : await ResolveTradingPartnersAsync(
-                    claims.Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal),
+                    claims.Concat(denials).Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal),
                     tenantId,
                     environment,
                     paymentRun.Warnings);
-            claims = ExcludeWithoutTradingPartner(claims, resolvedTradingPartners, paymentRun);
+            claims = ExcludeWithoutTradingPartner(claims, resolvedTradingPartners, paymentRun, denied: false);
+            denials = ExcludeWithoutTradingPartner(denials, resolvedTradingPartners, paymentRun, denied: true);
 
             // Step 3: Reserve each claim (insert-if-absent, one holder per
             //         tenant + claim). A claim another run holds, even one
@@ -162,7 +172,7 @@ public class PaymentRunService : IPaymentRunService
                 "Found {ClaimCount} approved claims to pay for payment run {PaymentRunNumber}",
                 claims.Count, paymentRun.PaymentRunNumber);
 
-            if (!claims.Any())
+            if (!claims.Any() && !denials.Any())
             {
                 paymentRun.Warnings.Add(fetched.Count == 0
                     ? "No approved claims found matching criteria"
@@ -173,8 +183,11 @@ public class PaymentRunService : IPaymentRunService
                 return await _paymentRunRepository.UpdateAsync(paymentRun);
             }
 
-            // Group claims by provider (existing semantics)
-            var claimGroups = GroupClaimsByProvider(claims, paymentRun.Criteria);
+            // Group claims by provider (existing semantics). A run that only
+            // remits denials issues no payment.
+            var claimGroups = claims.Count == 0
+                ? new Dictionary<string, List<ClaimDto>>()
+                : GroupClaimsByProvider(claims, paymentRun.Criteria);
 
             // Step 4: Allocate one check number per trading partner. Multiple
             //         provider groups under the same partner share that check
@@ -247,6 +260,12 @@ public class PaymentRunService : IPaymentRunService
                 ? (paymentRun.NextCheckNumber - 1).ToString().PadLeft(10, '0')
                 : checkNumberStart.ToString().PadLeft(10, '0');
 
+            // Step 5b: The denials, one zero-pay input per trading partner,
+            //          after the payments so a partner's envelope keeps its
+            //          payment's check number as TRN02. They add 0 to BPR02; a
+            //          partner with only denials gets a NON 835 (BPR02 = 0).
+            eraInputs.AddRange(BuildDenialInputs(denials, resolvedTradingPartners, checkByTradingPartner, paymentRun));
+
             // Step 6: Batched 835 generation — one envelope per trading partner.
             var partnerInfos = BuildTradingPartnerInfos(resolvedTradingPartners);
             var envelopes = _batchEraGenerator.GenerateBatch(eraInputs, partnerInfos);
@@ -277,6 +296,10 @@ public class PaymentRunService : IPaymentRunService
                 }
             }
 
+            // A denial is remitted once it is in a persisted 835.
+            paymentRun.RemittedDeniedClaimIds.AddRange(
+                denials.Select(d => d.Id).Where(claimToEnvelopeId.ContainsKey));
+
             foreach (var payment in issuedPayments)
             {
                 payment.EraEnvelopeId = payment.ClaimPayments
@@ -301,9 +324,9 @@ public class PaymentRunService : IPaymentRunService
             paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
 
             _logger.LogInformation(
-                "Payment run {PaymentRunNumber} completed: {ClaimCount} claims, {PaymentCount} payments, {EnvelopeCount} envelopes, ${TotalAmount:N2}",
+                "Payment run {PaymentRunNumber} completed: {ClaimCount} claims, {PaymentCount} payments, {DenialCount} denials remitted, {EnvelopeCount} envelopes, ${TotalAmount:N2}",
                 paymentRun.PaymentRunNumber, paymentRun.TotalClaims, paymentRun.PaymentIds.Count,
-                paymentRun.EraEnvelopeIds.Count, paymentRun.TotalPaymentAmount);
+                paymentRun.RemittedDeniedClaimIds.Count, paymentRun.EraEnvelopeIds.Count, paymentRun.TotalPaymentAmount);
 
             return await _paymentRunRepository.UpdateAsync(paymentRun);
         }
@@ -411,7 +434,7 @@ public class PaymentRunService : IPaymentRunService
 
     // ── Private helpers ────────────────────────────────────────────────
 
-    private async Task<List<ClaimDto>> FetchApprovedClaimsAsync(string tenantId, PaymentRunCriteria criteria)
+    private async Task<List<ClaimDto>> FetchClaimsAsync(string tenantId, PaymentRunCriteria criteria, ClaimStatus status)
     {
         var queryParams = new List<string>();
 
@@ -425,8 +448,8 @@ public class PaymentRunService : IPaymentRunService
             queryParams.Add($"serviceDateTo={criteria.ServiceDateTo.Value:yyyy-MM-dd}");
 
         // claims-service serializes ClaimStatus as a number; payment-service's
-        // ClaimStatus mirrors its values (Approved == 5).
-        queryParams.Add($"status={(int)ClaimStatus.Approved}");
+        // ClaimStatus mirrors its values (Approved == 5, Denied == 6).
+        queryParams.Add($"status={(int)status}");
 
         var queryString = string.Join("&", queryParams);
         var response = await _claimsService.SearchClaimsAsync(tenantId, $"{queryString}&pageSize=5000");
@@ -591,39 +614,115 @@ public class PaymentRunService : IPaymentRunService
 
     /// <summary>
     /// Drops every claim whose service-line paid amounts (SVC03) do not add up
-    /// to its plan-paid amount (CLP04): its 835 would not balance. A line with no
-    /// paid amount counts as 0, which is only accepted when the other lines
-    /// already make up the approved amount. Such a claim is not reserved or
-    /// paid, stays Approved in claims-service, and is listed on the run.
+    /// to its claim payment (CLP04: the plan-paid amount, 0 for a denial): its
+    /// 835 would not balance. A claim on which no line carries a paid amount
+    /// was adjudicated at claim level only; it is remitted at claim level, CLP
+    /// without SVC loops (005010X221A1: the 2110 loop is situational). Once
+    /// any line carries a paid amount the lines are remitted, and a line with
+    /// none counts as 0, which is only accepted when the other lines already
+    /// make up CLP04. A dropped claim is not reserved, paid or remitted, and is
+    /// listed on the run.
     /// </summary>
-    private List<ClaimDto> ExcludeUnbalancedServiceLines(List<ClaimDto> claims, PaymentRun paymentRun)
+    private List<ClaimDto> ExcludeUnbalancedServiceLines(List<ClaimDto> claims, PaymentRun paymentRun, bool denied)
     {
-        var payable = new List<ClaimDto>(claims.Count);
+        var kept = new List<ClaimDto>(claims.Count);
         foreach (var claim in claims)
         {
             var lines = claim.ServiceLines ?? new List<ClaimServiceLineDto>();
+            var expected = denied ? 0m : claim.PlanPaidAmount;
             var linePaid = lines.Sum(sl => sl.LinePaidAmount ?? 0m);
-            if (lines.Count == 0 || linePaid == claim.PlanPaidAmount)
+            if (RemitsAtClaimLevel(claim) || linePaid == expected)
             {
-                payable.Add(claim);
+                kept.Add(claim);
                 continue;
             }
 
             var unpriced = lines.Count(sl => sl.LinePaidAmount is null);
             paymentRun.UnbalancedServiceLineClaimIds.Add(claim.Id);
             paymentRun.Warnings.Add(
-                $"Claim {claim.Id} not paid: its service-line paid amounts total {linePaid:F2} " +
+                (denied ? $"Denied claim {claim.Id} not remitted" : $"Claim {claim.Id} not paid") +
+                $": its service-line paid amounts total {linePaid:F2} " +
                 (unpriced > 0 ? $"({unpriced} line(s) with no paid amount) " : string.Empty) +
-                $"but its plan-paid amount is {claim.PlanPaidAmount:F2}, so its 835 would not balance");
+                (denied ? "but a denial pays 0.00" : $"but its plan-paid amount is {expected:F2}") +
+                ", so its 835 would not balance");
             _logger.LogWarning(
-                "Claim {ClaimId} service lines do not balance to its plan-paid amount; excluded from payment run {PaymentRunNumber}",
+                "Claim {ClaimId} service lines do not balance to its claim payment; excluded from payment run {PaymentRunNumber}",
                 SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
         }
-        return payable;
+        return kept;
+    }
+
+    /// <summary>
+    /// True when the claim is remitted at claim level, without SVC loops: it
+    /// has no service lines, or none of them carries a paid amount (the claim
+    /// was adjudicated at claim level only: payerPayment without line results).
+    /// </summary>
+    private static bool RemitsAtClaimLevel(ClaimDto claim) =>
+        claim.ServiceLines is not { Count: > 0 } lines || lines.All(sl => sl.LinePaidAmount is null);
+
+    /// <summary>
+    /// The denied claims to remit in this run: claims-service status Denied,
+    /// not already in a (non-reversal) 835 or a payment in payment-service
+    /// (a denial is remitted once), carrying a denial reason, and with
+    /// service lines that balance to 0. Denials already remitted are skipped
+    /// silently (every run sees them again); the others are listed.
+    /// </summary>
+    private async Task<List<ClaimDto>> SelectDenialsToRemitAsync(PaymentRun paymentRun, List<ClaimDto> approvedFetched)
+    {
+        var fetched = await FetchClaimsAsync(paymentRun.TenantId, paymentRun.Criteria, ClaimStatus.Denied);
+
+        var approvedIds = new HashSet<string>(approvedFetched.Select(c => c.Id), StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var candidates = new List<ClaimDto>(fetched.Count);
+        foreach (var claim in fetched)
+        {
+            if (string.IsNullOrEmpty(claim.Id) || !seen.Add(claim.Id) || approvedIds.Contains(claim.Id))
+                continue;
+            if (claim.Status != ClaimStatus.Denied)
+            {
+                paymentRun.Warnings.Add(
+                    $"Claim {claim.Id} not remitted as a denial: claims-service returned it with status {claim.Status}, not Denied");
+                continue;
+            }
+            candidates.Add(claim);
+        }
+
+        if (candidates.Count == 0)
+            return candidates;
+
+        var ids = candidates.Select(c => c.Id).ToList();
+        var remitted = new HashSet<string>(
+            await _envelopeRepository.GetClaimIdsWithEnvelopeAsync(ids, reversal: false) ?? Array.Empty<string>(),
+            StringComparer.Ordinal);
+        remitted.UnionWith(
+            await _paymentRepository.GetClaimIdsWithPaymentAsync(ids, reversal: false) ?? Array.Empty<string>());
+        if (remitted.Count > 0)
+        {
+            _logger.LogDebug(
+                "{Count} denied claims already remitted; not remitted again by payment run {PaymentRunNumber}",
+                remitted.Count, paymentRun.PaymentRunNumber);
+        }
+
+        var withReason = new List<ClaimDto>(candidates.Count);
+        foreach (var claim in candidates.Where(c => !remitted.Contains(c.Id)))
+        {
+            if (!string.IsNullOrWhiteSpace(claim.AdjudicationResult?.DenialReasonCode)
+                || claim.AdjudicationResult?.AdjustmentReasons is { Count: > 0 })
+            {
+                withReason.Add(claim);
+                continue;
+            }
+
+            paymentRun.DeniedWithoutReasonClaimIds.Add(claim.Id);
+            paymentRun.Warnings.Add(
+                $"Denied claim {claim.Id} not remitted: claims-service returned no denial reason code or adjustment reason, and an 835 denial needs a CARC");
+        }
+
+        return ExcludeUnbalancedServiceLines(withReason, paymentRun, denied: true);
     }
 
     private List<ClaimDto> ExcludeWithoutTradingPartner(
-        List<ClaimDto> claims, IReadOnlyDictionary<string, TradingPartnerSummary> resolved, PaymentRun paymentRun)
+        List<ClaimDto> claims, IReadOnlyDictionary<string, TradingPartnerSummary> resolved, PaymentRun paymentRun, bool denied)
     {
         var payable = new List<ClaimDto>(claims.Count);
         foreach (var claim in claims)
@@ -637,7 +736,8 @@ public class PaymentRunService : IPaymentRunService
 
             paymentRun.NeedsTradingPartnerClaimIds.Add(claim.Id);
             paymentRun.Warnings.Add(
-                $"Claim {claim.Id} not paid: provider NPI {npi} has no trading partner, so no 835 can be sent; it will be picked up once one is configured");
+                (denied ? $"Denied claim {claim.Id} not remitted" : $"Claim {claim.Id} not paid") +
+                $": provider NPI {npi} has no trading partner, so no 835 can be sent; it will be picked up once one is configured");
         }
         return payable;
     }
@@ -793,52 +893,151 @@ public class PaymentRunService : IPaymentRunService
             PostedAt = DateTime.UtcNow,
             RunId = paymentRun.Id,
             RunNumber = paymentRun.PaymentRunNumber,
-            ClaimPayments = claims.Select(claim =>
-            {
-                var snapshot = BuildAdjudicationSnapshot(claim);
-                var headerCas = _carcRarcMapper.MapClaimAdjustments(snapshot);
-                var perLineCas = _carcRarcMapper.MapLineAdjustments(snapshot);
-
-                var serviceLines = (claim.ServiceLines ?? new List<ClaimServiceLineDto>())
-                    .Select(sl => new ServiceLinePayment
-                    {
-                        LineNumber = sl.LineNumber,
-                        ProcedureCode = sl.ProcedureCode,
-                        ChargeAmount = sl.ChargeAmount,
-                        // Never the line charge: the recorded paid amount, or 0
-                        // (ExcludeUnbalancedServiceLines kept the claim only if
-                        // the lines balance to CLP04 with 0 for unpriced lines).
-                        PaymentAmount = sl.LinePaidAmount ?? 0m,
-                        RevenueCode = sl.RevenueCode,
-                        Units = sl.Units,
-                        ServiceDateFrom = sl.ServiceDateFrom,
-                        ServiceDateTo = sl.ServiceDateTo,
-                        Adjustments = perLineCas.TryGetValue(sl.LineNumber, out var lineAdj)
-                            ? lineAdj.ToList()
-                            : new List<ServiceLineAdjustment>()
-                    })
-                    .ToList();
-
-                return new ClaimPayment
-                {
-                    ClaimId = claim.Id,
-                    PatientControlNumber = claim.ClaimNumber,
-                    ClaimStatusCode = headerCas.Any(a => a.GroupCode == "CO" && claim.Status == ClaimStatus.Denied) ? "3" : "1",
-                    // CLP03 total charge, CLP04 plan paid, CLP05 member responsibility.
-                    ChargeAmount = claim.TotalChargeAmount,
-                    PaymentAmount = PlanPaidAmountOf(claim),
-                    PatientResponsibilityAmount = claim.AdjudicationResult?.PatientResponsibility ?? 0m,
-                    PayerClaimControlNumber = claim.PayerClaimControlNumber,
-                    MemberId = claim.MemberId,
-                    RenderingProviderNPI = claim.RenderingProviderNPI,
-                    ClaimAdjustments = headerCas.ToList(),
-                    ServiceLines = serviceLines
-                };
-            }).ToList()
+            ClaimPayments = claims.Select(claim => BuildClaimPayment(claim, denied: false)).ToList()
         };
 
         var created = await _paymentRepository.CreateAsync(payment);
         return created;
+    }
+
+    /// <summary>
+    /// The 835 inputs for the run's denials: per trading partner, one Payment
+    /// that is never persisted (no money moves, nothing to finalize or
+    /// reverse) carrying the denials as zero-pay claims. TRN02 is the
+    /// partner's check number when the run pays it something, else a trace
+    /// number derived from the run number.
+    /// </summary>
+    private List<EraPaymentInput> BuildDenialInputs(
+        List<ClaimDto> denials,
+        IReadOnlyDictionary<string, TradingPartnerSummary> resolved,
+        IReadOnlyDictionary<string, string> checkByTradingPartner,
+        PaymentRun paymentRun)
+    {
+        var inputs = new List<EraPaymentInput>();
+        var traceSequence = 0;
+        var byPartner = denials
+            .Select(d => (Claim: d, Npi: d.PayToProviderNPI ?? d.BillingProviderNPI))
+            .Where(x => !string.IsNullOrEmpty(x.Npi) && resolved.ContainsKey(x.Npi))
+            .GroupBy(x => resolved[x.Npi].TradingPartnerId, StringComparer.Ordinal);
+
+        foreach (var group in byPartner)
+        {
+            var first = group.First();
+            var trace = checkByTradingPartner.TryGetValue(group.Key, out var check)
+                ? check
+                : $"{paymentRun.PaymentRunNumber}-D{++traceSequence}";
+
+            inputs.Add(new EraPaymentInput
+            {
+                TradingPartnerId = group.Key,
+                Payment = new Payment
+                {
+                    CheckNumber = trace,
+                    PaymentMethod = paymentRun.PaymentMethod,
+                    TotalPaymentAmount = 0m,
+                    PaymentDate = paymentRun.PaymentDate,
+                    PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
+                    PayerId = _configuration["Payer:Id"] ?? "CHO",
+                    PayeeName = first.Claim.ProviderName ?? first.Npi,
+                    PayeeNPI = first.Npi,
+                    TradingPartnerId = group.Key,
+                    RunId = paymentRun.Id,
+                    RunNumber = paymentRun.PaymentRunNumber,
+                    ClaimPayments = group.Select(x => BuildClaimPayment(x.Claim, denied: true)).ToList(),
+                },
+            });
+        }
+        return inputs;
+    }
+
+    /// <summary>
+    /// One claim's 2100 loop. A paid claim: CLP02 = 1, CLP04 = its plan-paid
+    /// amount. A denial: CLP02 = 4, CLP04 = 0, its denial CARC in the header
+    /// CAS (carrying the part of the charge no other adjustment explains, so
+    /// CLP03 - CLP04 = the adjustments) and its RARCs in MOA. A claim whose
+    /// lines carry no paid amount is remitted at claim level, without SVC.
+    /// </summary>
+    private ClaimPayment BuildClaimPayment(ClaimDto claim, bool denied)
+    {
+        var snapshot = BuildAdjudicationSnapshot(claim);
+        var headerCas = _carcRarcMapper.MapClaimAdjustments(snapshot).ToList();
+        var perLineCas = _carcRarcMapper.MapLineAdjustments(snapshot);
+
+        var serviceLines = RemitsAtClaimLevel(claim)
+            ? new List<ServiceLinePayment>()
+            : claim.ServiceLines!
+                .Select(sl => new ServiceLinePayment
+                {
+                    LineNumber = sl.LineNumber,
+                    ProcedureCode = sl.ProcedureCode,
+                    ChargeAmount = sl.ChargeAmount,
+                    // Never the line charge: the recorded paid amount, or 0
+                    // (ExcludeUnbalancedServiceLines kept the claim only if
+                    // the lines balance to CLP04 with 0 for unpriced lines).
+                    PaymentAmount = sl.LinePaidAmount ?? 0m,
+                    RevenueCode = sl.RevenueCode,
+                    Units = sl.Units,
+                    ServiceDateFrom = sl.ServiceDateFrom,
+                    ServiceDateTo = sl.ServiceDateTo,
+                    Adjustments = perLineCas.TryGetValue(sl.LineNumber, out var lineAdj)
+                        ? lineAdj.ToList()
+                        : new List<ServiceLineAdjustment>()
+                })
+                .ToList();
+
+        var paid = denied ? 0m : PlanPaidAmountOf(claim);
+        if (denied)
+            headerCas = WithDenialAmount(headerCas, claim, serviceLines);
+
+        return new ClaimPayment
+        {
+            ClaimId = claim.Id,
+            PatientControlNumber = claim.ClaimNumber,
+            // CLP02: 1 = processed as primary, 4 = denied.
+            ClaimStatusCode = denied ? "4" : "1",
+            // CLP03 total charge, CLP04 plan paid (0 for a denial), CLP05 member responsibility.
+            ChargeAmount = claim.TotalChargeAmount,
+            PaymentAmount = paid,
+            PatientResponsibilityAmount = claim.AdjudicationResult?.PatientResponsibility ?? 0m,
+            PayerClaimControlNumber = claim.PayerClaimControlNumber,
+            MemberId = claim.MemberId,
+            RenderingProviderNPI = claim.RenderingProviderNPI,
+            ClaimAdjustments = headerCas,
+            RemarkCodes = denied ? snapshot.RemarkCodes.ToList() : new List<string>(),
+            ServiceLines = serviceLines
+        };
+    }
+
+    /// <summary>
+    /// The mapper emits a header denial CARC with amount 0. On a denial the
+    /// CARC explains the charge the plan did not pay, so it carries what the
+    /// other adjustments leave unexplained (charge - 0 paid - other CAS).
+    /// </summary>
+    private static List<ClaimAdjustment> WithDenialAmount(
+        List<ClaimAdjustment> headerCas, ClaimDto claim, List<ServiceLinePayment> serviceLines)
+    {
+        var code = claim.AdjudicationResult?.DenialReasonCode;
+        if (string.IsNullOrEmpty(code))
+            return headerCas;
+        var index = headerCas.FindIndex(a => a.Amount == 0m && string.Equals(a.ReasonCode, code, StringComparison.Ordinal));
+        if (index < 0)
+            return headerCas;
+
+        var unexplained = claim.TotalChargeAmount
+            - headerCas.Sum(a => a.Amount)
+            - serviceLines.Sum(l => l.Adjustments.Sum(a => a.Amount));
+        if (unexplained <= 0m)
+            return headerCas;
+
+        var denial = headerCas[index];
+        headerCas[index] = new ClaimAdjustment
+        {
+            GroupCode = denial.GroupCode,
+            ReasonCode = denial.ReasonCode,
+            Amount = unexplained,
+            ReasonDescription = denial.ReasonDescription,
+        };
+        return headerCas;
     }
 
     /// <summary>

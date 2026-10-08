@@ -293,6 +293,20 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
                 $"NM1*82*1*****XX*{cp.RenderingProviderNPI}~"));
         }
 
+        // MOA — claim-level remark codes (RARCs) in MOA03-MOA07. A header CAS
+        // carries no RARC (CAS04 is a quantity), so a denial's remarks go here.
+        var remarks = cp.RemarkCodes
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(Esc)
+            .Distinct(StringComparer.Ordinal)
+            .Take(5)
+            .ToList();
+        if (remarks.Count > 0)
+        {
+            sb.Append(Seg(ref segmentCount, true,
+                $"MOA***{string.Join("*", remarks)}~"));
+        }
+
         if (cp.ClaimReceivedDate.HasValue)
         {
             sb.Append(Seg(ref segmentCount, true,

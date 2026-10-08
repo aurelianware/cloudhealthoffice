@@ -396,7 +396,7 @@ public class PaymentRunServiceBatchedTests
         {
             ClaimWithLines("c-ok", 80m, 80m),               // balanced
             ClaimWithLines("c-zero-line", 80m, 80m, null),  // unpriced line = 0 is consistent
-            ClaimWithLines("c-unpriced", 80m, (decimal?)null), // 0 would not balance; was paid at charge 100
+            ClaimWithLines("c-partial", 80m, 50m, null),    // some lines priced, 50 + 0 != 80
             ClaimWithLines("c-mismatch", 80m, 60m),         // lines do not add up
         });
         SetupSinglePartnerPassThrough();
@@ -405,14 +405,261 @@ public class PaymentRunServiceBatchedTests
 
         var result = await CreateService().ExecutePaymentRunAsync(run.Id);
 
-        Assert.Equal(new[] { "c-unpriced", "c-mismatch" }, result.UnbalancedServiceLineClaimIds);
-        Assert.Contains(result.Warnings, w => w.Contains("c-unpriced") && w.Contains("would not balance"));
+        Assert.Equal(new[] { "c-partial", "c-mismatch" }, result.UnbalancedServiceLineClaimIds);
+        Assert.Contains(result.Warnings, w => w.Contains("c-partial") && w.Contains("would not balance"));
         Assert.Equal(new[] { "c-ok", "c-zero-line" }, result.ClaimIds);
-        Assert.DoesNotContain(_reservations.All, r => r.ClaimId is "c-unpriced" or "c-mismatch");
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId is "c-partial" or "c-mismatch");
 
         var lines = Assert.Single(captured).ClaimPayments.Single(cp => cp.ClaimId == "c-zero-line").ServiceLines;
         Assert.Equal(new[] { 80m, 0m }, lines.Select(l => l.PaymentAmount));
         Assert.Equal(160m, result.TotalPaymentAmount);
+    }
+
+    // ── Claim-level-only adjudication (no line paid amounts) ──────────────
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_NoLinePaidAmounts_PaidAtClaimLevel_ClpWithoutSvc_Balances()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(new[]
+        {
+            ClaimWithLines("c-claim-level", 80m, null, null), // payerPayment only, no line results
+            ClaimWithLines("c-lines", 50m, 30m, 20m),
+            ClaimWithLines("c-partial", 80m, 50m, null),      // some lines priced and short: excluded
+        });
+        var (envelopes, payments) = SetupRealGenerator();
+
+        var result = await CreateService(new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance))
+            .ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(new[] { "c-claim-level", "c-lines" }, result.ClaimIds);
+        Assert.Equal(new[] { "c-partial" }, result.UnbalancedServiceLineClaimIds);
+        var claimLevel = Assert.Single(payments).ClaimPayments.Single(cp => cp.ClaimId == "c-claim-level");
+        Assert.Equal(80m, claimLevel.PaymentAmount);
+        Assert.Empty(claimLevel.ServiceLines);
+
+        var segments = Segments(Assert.Single(envelopes).EdiContent);
+        Assert.Empty(SvcOf(segments, "CLM-c-claim-level"));
+        Assert.Equal(new[] { 30m, 20m }, SvcOf(segments, "CLM-c-lines").Select(s => decimal.Parse(s[3])));
+        Assert.Equal(130m, decimal.Parse(segments.Single(s => s[0] == "BPR")[2]));
+        Assert.Equal(130m, segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4])));
+    }
+
+    // ── Denials: zero-pay claims in the run's 835 ─────────────────────────
+
+    private void SetupClaimsResponse(IEnumerable<ClaimDto> approved, IEnumerable<ClaimDto> denied)
+    {
+        _claimsHandler.NextResponse = req =>
+        {
+            if (req.Method == HttpMethod.Get && req.RequestUri!.AbsolutePath.StartsWith("/api/claims/search"))
+            {
+                var list = req.RequestUri.Query.Contains("status=6") ? denied : approved;
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(list.ToList()) };
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        };
+    }
+
+    private (List<EraEnvelopeRecord> Envelopes, List<Payment> Payments) SetupRealGenerator()
+    {
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "NPI-A", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "NPI-B", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-B", X12Config = new X12ConfigDto() });
+        var payments = new List<Payment>();
+        _paymentRepo.CreateAsync(Arg.Do<Payment>(payments.Add)).Returns(call => call.Arg<Payment>());
+        var envelopes = new List<EraEnvelopeRecord>();
+        _envelopeRepo.CreateAsync(Arg.Do<EraEnvelopeRecord>(envelopes.Add))
+            .Returns(call => { var rec = call.Arg<EraEnvelopeRecord>(); rec.Id = "env-" + rec.TradingPartnerId; return rec; });
+        _envelopeRepo.GetClaimIdsWithEnvelopeAsync(default!, default).ReturnsForAnyArgs(Array.Empty<string>());
+        _paymentRepo.GetClaimIdsWithPaymentAsync(default!, default).ReturnsForAnyArgs(Array.Empty<string>());
+        return (envelopes, payments);
+    }
+
+    private PaymentRunService CreateService(IBatchEraGeneratorService generator, ICarcRarcMappingService? mapper = null) => new(
+        _paymentRepo, _runRepo, generator, mapper ?? _mapper, _envelopeRepo, _tpClient, _httpFactory,
+        NullLogger<PaymentRunService>.Instance, _configuration, _actor, _actor.SeparationOfDuties(), _reservations);
+
+    private PaymentRunService CreateRealService() => CreateService(
+        new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
+        new CarcRarcMappingService(NullLogger<CarcRarcMappingService>.Instance));
+
+    private static ClaimDto Denied(string id, string npi = "NPI-A", string? carc = "50", params string[] rarcs) => new()
+    {
+        Id = id, ClaimNumber = "CLM-" + id, BillingProviderNPI = npi, TotalChargeAmount = 200m, MemberId = "m-" + id,
+        Status = ClaimStatus.Denied,
+        AdjudicationResult = new ClaimAdjudicationDto
+        {
+            PayerPayment = 0m, DenialReasonCode = carc, DenialReason = "Not medically necessary", RemarkCodes = rarcs.ToList()
+        },
+        ServiceLines = new List<ClaimServiceLineDto>
+        {
+            new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 200m, Units = 1 }
+        }
+    };
+
+    private static List<string[]> Segments(string edi) =>
+        edi.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
+
+    /// <summary>The segments of one claim's 2100 loop (CLP up to the next CLP / PLB / SE).</summary>
+    private static List<string[]> LoopOf(List<string[]> segments, string patientControlNumber)
+    {
+        var start = segments.FindIndex(s => s[0] == "CLP" && s[1] == patientControlNumber);
+        Assert.True(start >= 0, $"no CLP for {patientControlNumber}");
+        var end = segments.FindIndex(start + 1, s => s[0] is "CLP" or "PLB" or "SE");
+        return segments.Skip(start).Take(end - start).ToList();
+    }
+
+    private static List<string[]> SvcOf(List<string[]> segments, string patientControlNumber) =>
+        LoopOf(segments, patientControlNumber).Where(s => s[0] == "SVC").ToList();
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_Denial_RemittedAsZeroPayClaim_InSameEnvelope_NoPaymentNoReservationNoFinalize()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(new[] { ClaimWithLines("c1", 80m, 80m) }, new[] { Denied("d1", rarcs: "N115") });
+        var (envelopes, payments) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(PaymentRunStatus.Completed, result.Status);
+        Assert.Equal(new[] { "d1" }, result.RemittedDeniedClaimIds);
+        Assert.Equal(new[] { "c1" }, result.ClaimIds);
+        Assert.Equal(80m, result.TotalPaymentAmount);
+        Assert.DoesNotContain(payments.SelectMany(p => p.ClaimPayments), cp => cp.ClaimId == "d1");
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "d1");
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/d1/"));
+        Assert.Contains(_claimsHandler.RecordedRequests, r => r.Uri.Query.Contains("status=6"));
+
+        var envelope = Assert.Single(envelopes);
+        Assert.Equal(new[] { "c1", "d1" }, envelope.ClaimIds);
+        var segments = Segments(envelope.EdiContent);
+        var bpr = segments.Single(s => s[0] == "BPR");
+        Assert.Equal("80.00", bpr[2]); // denial adds 0
+        Assert.Equal(80m, segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4])));
+        Assert.Equal(Assert.Single(payments).CheckNumber, segments.Single(s => s[0] == "TRN")[2]);
+
+        var loop = LoopOf(segments, "CLM-d1");
+        Assert.Equal(new[] { "CLP", "CLM-d1", "4", "200.00", "0.00", "0.00", "HM", "d1" }, loop[0]);
+        Assert.Contains(loop, s => s.SequenceEqual(new[] { "CAS", "CO", "50", "200.00" }));
+        Assert.Contains(loop, s => s.SequenceEqual(new[] { "MOA", "", "", "N115" }));
+        Assert.DoesNotContain(loop, s => s[0] == "SVC"); // no line paid amounts: claim level
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_OnlyDenials_NonPayment835_Bpr02Zero_NoCheckOrPayment()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { Denied("d1"), Denied("d2", npi: "NPI-B") });
+        var (envelopes, payments) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(PaymentRunStatus.Completed, result.Status);
+        Assert.Equal(new[] { "d1", "d2" }, result.RemittedDeniedClaimIds);
+        Assert.Empty(payments);
+        Assert.Empty(result.PaymentIds);
+        Assert.Equal(0m, result.TotalPaymentAmount);
+        Assert.Equal(1000000, result.NextCheckNumber); // no check allocated
+        Assert.Equal(2, envelopes.Count);
+        Assert.Equal(2, result.EraEnvelopeIds.Count);
+
+        var traces = new List<string>();
+        foreach (var envelope in envelopes)
+        {
+            var segments = Segments(envelope.EdiContent);
+            var bpr = segments.Single(s => s[0] == "BPR");
+            Assert.Equal(17, bpr.Length);
+            Assert.Equal("I", bpr[1]);
+            Assert.Equal("0.00", bpr[2]);
+            Assert.Equal("NON", bpr[4]); // run method is ACH, but nothing is paid
+            Assert.All(bpr.Skip(5).Take(11), e => Assert.Equal(string.Empty, e));
+            Assert.Equal("20260504", bpr[16]);
+            var trn = segments.Single(s => s[0] == "TRN");
+            Assert.Equal("1123456789", trn[3]);
+            traces.Add(trn[2]);
+        }
+        Assert.Equal(new[] { "PR-20260501-A1B2-D1", "PR-20260501-A1B2-D2" }, traces.OrderBy(t => t, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DenialAlreadyIn835_NotRemittedAgain()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { Denied("d-old"), Denied("d-new") });
+        var (envelopes, _) = SetupRealGenerator();
+        _envelopeRepo.GetClaimIdsWithEnvelopeAsync(Arg.Any<IReadOnlyCollection<string>>(), false)
+            .Returns(call => call.Arg<IReadOnlyCollection<string>>().Where(id => id == "d-old").ToList());
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(new[] { "d-new" }, result.RemittedDeniedClaimIds);
+        Assert.Equal(new[] { "d-new" }, Assert.Single(envelopes).ClaimIds);
+        await _envelopeRepo.Received().GetClaimIdsWithEnvelopeAsync(
+            Arg.Is<IReadOnlyCollection<string>>(ids => ids.Contains("d-old") && ids.Contains("d-new")), false);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DenialWithoutReason_NotRemitted_Listed()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { Denied("d-no-carc", carc: null) });
+        var (envelopes, _) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(new[] { "d-no-carc" }, result.DeniedWithoutReasonClaimIds);
+        Assert.Empty(result.RemittedDeniedClaimIds);
+        Assert.Empty(envelopes);
+        Assert.Contains(result.Warnings, w => w.Contains("d-no-carc") && w.Contains("CARC"));
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DenialWithLinePaidAmounts_SvcBalanceToZero_ElseExcluded()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var zeroLines = Denied("d-lines");
+        zeroLines.ServiceLines![0].PaidAmount = 0m;
+        var paidLine = Denied("d-paid-line");
+        paidLine.ServiceLines![0].PaidAmount = 40m; // a denial cannot pay a line
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { zeroLines, paidLine });
+        var (envelopes, _) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(new[] { "d-lines" }, result.RemittedDeniedClaimIds);
+        Assert.Equal(new[] { "d-paid-line" }, result.UnbalancedServiceLineClaimIds);
+        var svc = Assert.Single(SvcOf(Segments(Assert.Single(envelopes).EdiContent), "CLM-d-lines"));
+        Assert.Equal("0.00", svc[3]);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_IncludeDeniedClaimsFalse_DoesNotSearchDenials()
+    {
+        var run = PendingRun();
+        run.Criteria.IncludeDeniedClaims = false;
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { Denied("d1") });
+        var (envelopes, _) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Empty(result.RemittedDeniedClaimIds);
+        Assert.Empty(envelopes);
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Uri.Query.Contains("status=6"));
     }
 
     [Fact]

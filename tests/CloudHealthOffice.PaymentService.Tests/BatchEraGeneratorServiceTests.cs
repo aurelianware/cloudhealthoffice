@@ -190,7 +190,8 @@ public class BatchEraGeneratorServiceTests
             partners).Single();
 
         Assert.Contains("CAS*CO*29*0.00~", envelope.EdiContent);
-        Assert.Contains("BPR*I*0.00*C*ACH", envelope.EdiContent);
+        // A zero-pay 835 moves no money: NON, whatever the run's method.
+        Assert.Contains("BPR*I*0.00*C*NON", envelope.EdiContent);
     }
 
     [Fact]

@@ -250,6 +250,12 @@ public class ClaimPayment
     public List<ClaimAdjustment> ClaimAdjustments { get; set; } = new();
 
     /// <summary>
+    /// Claim-level remittance advice remark codes (RARCs), e.g. the remarks
+    /// explaining a denial. 835: MOA03-MOA07 (at most five are emitted).
+    /// </summary>
+    public List<string> RemarkCodes { get; set; } = new();
+
+    /// <summary>
     /// Date claim was received by payer
     /// 835: DTP*050
     /// </summary>

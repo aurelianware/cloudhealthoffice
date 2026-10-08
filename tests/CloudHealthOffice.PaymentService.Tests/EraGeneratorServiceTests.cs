@@ -120,7 +120,8 @@ public class EraGeneratorServiceTests
 
         var era = _generator.Generate835(payment, tp);
 
-        Assert.Contains("BPR*I*0.00*C*ACH", era);
+        // A zero-pay 835 moves no money: NON, whatever the payment method.
+        Assert.Contains("BPR*I*0.00*C*NON", era);
     }
 
     [Fact]

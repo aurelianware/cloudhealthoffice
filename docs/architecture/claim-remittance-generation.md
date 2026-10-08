@@ -49,7 +49,7 @@ Operator: POST /api/payment-runs/execute   (or /api/payment-runs/{id}/execute)
                               ▼
    ┌──────────────────────────────────────────────────────────────┐
    │  PaymentRunService.ExecutePaymentRunAsync                    │
-   │   1. Fetch Approved claims via /api/claims/search            │
+   │   1. Fetch Approved (and Denied) claims via /api/claims/search│
    │      (claims-service returns full Claim model with           │
    │       AdjudicationResult, PendDetails.EditFailures,          │
    │       ServiceLines)                                          │
@@ -230,6 +230,13 @@ Every generated 835 must balance: BPR02 = sum of CLP04 - sum of PLB, and
 for a claim with service lines, sum of SVC03 = CLP04; otherwise generation
 throws.
 
+The BPR/TRN element layout and these configuration checks live in
+`CloudHealthOffice.Infrastructure.Edi.Era835FinancialSegmentBuilder`, shared
+with capitation-service's `CapitationEraService`, which therefore also needs
+`Era:OriginatingCompanyId` (BPR10/TRN03; optional
+`Era:OriginatingCompanySupplementalCode` for BPR11) and fails
+`POST /api/v1/capitation/statements/{id}/era` with 500 without it.
+
 The amount paid (CLP04) is the plan's payment, claims-service's
 `adjudicationResult.payerPayment` (published as PlanPaid, finalized by
 ClaimFinalizationService); never the allowed amount and never the billed
@@ -241,14 +248,65 @@ search returns. A claim without an adjudication result / payer payment is
 never paid: it is excluded before reservation, stays Approved, and is
 listed in `PaymentRun.MissingPlanPaidAmountClaimIds`.
 A line's SVC03 is its paid amount (`claimLines[].adjudicationResult.paidAmount`),
-never its charge; a line with none counts as 0 only when the other lines
-already add up to the payer payment. Otherwise the claim is excluded
-the same way and listed in `PaymentRun.UnbalancedServiceLineClaimIds`.
+never its charge. Service lines are remitted by this rule:
+
+| Lines' paid amounts | 835 |
+|---|---|
+| no service lines, or **no** line carries a paid amount | claim-level remittance: CLP (CLP04 = payer payment) with no SVC loops (005010X221A1: the 2110 loop is situational) |
+| every line carries one and they add up to CLP04 | CLP + one SVC per line |
+| some lines carry one; with 0 for the others they add up to CLP04 | CLP + one SVC per line, SVC03 = 0 for the unpriced lines |
+| anything else | not paid: excluded before reservation, listed in `PaymentRun.UnbalancedServiceLineClaimIds` |
+
 The benefit engine, MPIP and the repository's financial normalization all
 set payerPayment = sum of line paid amounts, so engine-adjudicated claims
-balance; claims adjudicated only at claim level (adjudication or inbound
-remittance endpoints that set payerPayment without line results) do not,
-and land on that list.
+remit with SVC loops; claims adjudicated only at claim level (adjudication
+or inbound remittance endpoints that set payerPayment without line results)
+remit at claim level. Either way CLP04 still adds up to BPR02.
+
+### Denials
+
+Providers receive a remittance for denials too. With
+`PaymentRunCriteria.IncludeDeniedClaims` (default `true`) a run also
+searches `status=6` (claims-service Denied, with the run's other criteria)
+and remits each denied claim not yet remitted as a zero-pay claim in the
+same trading partner's 835:
+
+- CLP02 = `4` (denied), CLP03 = total charge, CLP04 = `0.00`, CLP05 =
+  patient responsibility.
+- Header CAS from the claim's adjudication (`adjustmentReasons`, then
+  `denialReasonCode` as `CO`); the denial CARC carries the charge no other
+  adjustment explains, so CLP03 - CLP04 = the CAS amounts.
+- RARCs (`adjudicationResult.remarkCodes`) in MOA03-MOA07 (at most five; a
+  header CAS cannot carry a RARC).
+- Lines follow the table above with CLP04 = 0: a denied claim whose lines
+  carry no paid amount is remitted at claim level; one whose lines pay more
+  than 0 is not remitted and is listed in `UnbalancedServiceLineClaimIds`.
+
+No Payment, no claim reservation and no claims-service call is made for a
+denial (Denied is final in claims-service). A denial adds 0 to BPR02, and a
+partner's envelope keeps its payment's check number as TRN02. A partner with
+only denials gets a non-payment 835: BPR01 = `I`, BPR02 = `0.00`, BPR04 =
+`NON` (whatever the run's payment method; every zero-amount 835 is NON),
+BPR16 = payment date, TRN02 = `<run number>-D<n>`.
+
+A denial is remitted once: a denied claim already listed in a non-reversal
+835 envelope (`EraEnvelopeRecord.ClaimIds`), or holding a payment, is
+skipped silently. Remitted denials are listed in
+`PaymentRun.RemittedDeniedClaimIds`. A denial without a denial reason code
+or any adjustment reason is not remitted (no CARC is made up) and is listed
+in `PaymentRun.DeniedWithoutReasonClaimIds`; one whose provider has no
+trading partner is listed in `NeedsTradingPartnerClaimIds`. Both are picked
+up by a later run once corrected.
+
+Limits: the "already remitted" check reads the envelope store; there is no
+reservation, so two runs executing at the same moment can both remit the
+same denial (no money moves; the provider receives the denial twice).
+claims-service's search returns at most 1000 claims per status, newest
+submitted first, and Denied claims never leave that status, so scope runs
+(service or submission dates) when the Denied backlog is large. The first
+run after this ships remits every earlier denial its criteria match; set
+`IncludeDeniedClaims = false` or narrow the dates to avoid sending that
+backlog.
 
 A reversal recoups the amount payment-service recorded for the
 predecessor's original claim payment (claim and line amounts, sign-flipped),
