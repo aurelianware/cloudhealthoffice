@@ -51,6 +51,20 @@ public class AppealsController : ControllerBase
     private readonly ILogger<AppealsController> _logger;
     private readonly ICurrentActor _currentActor;
 
+    /// <summary>ProblemDetails type for a create-time deadline override past the regulatory maximum.</summary>
+    public const string TargetResponseDateProblemType =
+        "https://cloudhealthoffice.com/problems/appeal-target-response-date";
+
+    /// <summary>ProblemDetails type for a refused deadline extension.</summary>
+    public const string ExtensionProblemType =
+        "https://cloudhealthoffice.com/problems/appeal-extension";
+
+    /// <summary>
+    /// Clock-skew allowance for <see cref="ExtendDeadlineRequest.WrittenNoticeSentAt"/>:
+    /// a notice "sent" further in the future than this is rejected.
+    /// </summary>
+    private static readonly TimeSpan NoticeClockSkew = TimeSpan.FromMinutes(5);
+
     /// <summary>The token subject. Every write records this as its actor.</summary>
     private string Actor => _currentActor.UserId;
 
@@ -82,6 +96,35 @@ public class AppealsController : ControllerBase
         var actor = Actor;
         var now = DateTime.UtcNow;
 
+        // Default target vs enforceable federal ceiling (see
+        // AppealResponseDeadlinePolicy for citations). Both depend on the
+        // level as well as the type: external review / IRE / State Fair
+        // Hearing run on their own (often longer) clocks. An explicit
+        // override may tighten the deadline but never extend it past a
+        // genuine regulatory maximum — reject rather than silently cap so
+        // the caller learns its date was not honored. Where no federal
+        // ceiling exists (e.g. commercial grievances) the override is
+        // accepted as-is. Lengthening a running clock is the one-time
+        // extension operation (POST /{id}/extend), never a create-time
+        // override.
+        var regulatoryDeadline = AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
+            now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent);
+        var enforceableMaximum = AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
+            now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent);
+        if (request.TargetResponseDate.HasValue
+            && enforceableMaximum.HasValue
+            && request.TargetResponseDate.Value.ToUniversalTime() > enforceableMaximum.Value)
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.TargetResponseDate),
+                $"TargetResponseDate exceeds the regulatory maximum of {enforceableMaximum.Value:o} " +
+                $"for {request.LineOfBusiness} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent}).");
+            return ValidationProblem(
+                detail: null, instance: null, statusCode: StatusCodes.Status400BadRequest,
+                title: "TargetResponseDate exceeds regulatory maximum",
+                type: TargetResponseDateProblemType,
+                modelStateDictionary: ModelState);
+        }
+
         var appeal = new Appeal
         {
             TenantId = TenantId,
@@ -102,7 +145,7 @@ public class AppealsController : ControllerBase
             Status = AppealStatus.Draft,
             Source = request.Source,
             SubmittedDate = now,
-            TargetResponseDate = request.TargetResponseDate ?? now.AddDays(request.IsUrgent ? 30 : 60),
+            TargetResponseDate = request.TargetResponseDate?.ToUniversalTime() ?? regulatoryDeadline,
             SubmittedBy = actor,
             IsUrgent = request.IsUrgent,
             ServiceDate = request.ServiceDate,
@@ -538,6 +581,212 @@ public class AppealsController : ControllerBase
         return Ok(view);
     }
 
+    // ── Deadline extension ──────────────────────────────────────────────
+
+    /// <summary>
+    /// One-time regulatory extension of <see cref="Appeal.TargetResponseDate"/>
+    /// by up to 14 calendar days (42 CFR 422.590(f), 422.564(e)(2),
+    /// 423.564(e)(2), 438.408(c)). Allowed only when
+    /// <see cref="AppealResponseDeadlinePolicy.GetExtensionRule"/> permits it
+    /// for the appeal's line of business / type / level / urgency, only
+    /// while the clock is running (<see cref="AppealStateMachine.IsExtensionAllowed"/>)
+    /// and before the current deadline lapses, and only once. The plan
+    /// must already have sent the enrollee written notice of the extension;
+    /// the caller supplies when. Not a status transition — recorded as an
+    /// <c>AppealDeadlineExtended</c> audit event.
+    ///
+    /// 400: malformed request (missing justification for
+    /// <see cref="AppealExtensionReason.PlanNeedsInfo"/>, notice timestamp
+    /// in the future or before submission).
+    /// 422: the line of business / tier never permits a plan extension
+    /// (commercial / marketplace, Part D redeterminations, expedited MA
+    /// grievances, any external review or State Fair Hearing).
+    /// 409: state-dependent refusal (already extended, status not
+    /// extendable, deadline already lapsed).
+    /// </summary>
+    [HttpPost("{id}/extend")]
+    [ProducesResponseType(typeof(Appeal), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ExtendDeadline(
+        [FromRoute] string id,
+        [FromBody] ExtendDeadlineRequest request,
+        CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
+        if (appeal == null) return NotFound();
+
+        appeal = await MaybeObserveOverdueAsync(appeal, ct);
+
+        var now = DateTime.UtcNow;
+        var reason = request.Reason!.Value;
+        var noticeSentAt = request.WrittenNoticeSentAt!.Value.ToUniversalTime();
+
+        if (!Enum.IsDefined(reason))
+        {
+            ModelState.AddModelError(nameof(ExtendDeadlineRequest.Reason), $"Unknown extension reason {reason}.");
+        }
+        if (reason == AppealExtensionReason.PlanNeedsInfo
+            && string.IsNullOrWhiteSpace(request.Justification))
+        {
+            ModelState.AddModelError(nameof(ExtendDeadlineRequest.Justification),
+                "A plan-initiated extension requires a justification of the information needed " +
+                "and how the delay is in the enrollee's interest.");
+        }
+        if (noticeSentAt > now + NoticeClockSkew)
+        {
+            ModelState.AddModelError(nameof(ExtendDeadlineRequest.WrittenNoticeSentAt),
+                "WrittenNoticeSentAt is in the future; record the extension after the notice is sent.");
+        }
+        else if (noticeSentAt < appeal.SubmittedDate.ToUniversalTime())
+        {
+            ModelState.AddModelError(nameof(ExtendDeadlineRequest.WrittenNoticeSentAt),
+                "WrittenNoticeSentAt precedes the appeal's submission.");
+        }
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+        // Idempotent replay of a successful extend (same EventId) → 200.
+        if (appeal.DeadlineExtension != null)
+        {
+            if (!string.IsNullOrEmpty(request.EventId))
+            {
+                var history = await _events.ListByAppealAsync(TenantId, id, ct);
+                if (history.Any(e => e.EventId == request.EventId
+                                     && e.EventType == AppealEventType.AppealDeadlineExtended))
+                {
+                    return Ok(await DecryptForResponseAsync(appeal, ct));
+                }
+            }
+            return ExtensionRefused(StatusCodes.Status409Conflict, "already-extended", appeal,
+                "The response deadline has already been extended; only one extension is permitted.");
+        }
+
+        var rule = AppealResponseDeadlinePolicy.GetExtensionRule(
+            appeal.LineOfBusiness, appeal.AppealType, appeal.AppealLevel, appeal.IsUrgent);
+        if (!rule.IsPermitted)
+        {
+            return ExtensionRefused(StatusCodes.Status422UnprocessableEntity, "not-permitted", appeal,
+                $"No deadline extension is permitted for {appeal.LineOfBusiness} {appeal.AppealType} " +
+                $"at {appeal.AppealLevel} (urgent: {appeal.IsUrgent}). {rule.RegulatoryBasis}",
+                rule.RegulatoryBasis);
+        }
+
+        if (!AppealStateMachine.IsExtensionAllowed(appeal.Status))
+        {
+            return ExtensionRefused(StatusCodes.Status409Conflict, "invalid-status", appeal,
+                $"A deadline extension is not allowed from status {appeal.Status}.");
+        }
+
+        if (appeal.TargetResponseDate is not { } current || current.ToUniversalTime() <= now)
+        {
+            return ExtensionRefused(StatusCodes.Status409Conflict, "deadline-lapsed", appeal,
+                "The response deadline has already passed; a lapsed timeframe cannot be extended.");
+        }
+
+        current = current.ToUniversalTime();
+        var extended = current.AddDays(request.ExtensionDays);
+        var receivedAt = (appeal.ReceivedDate ?? appeal.SubmittedDate).ToUniversalTime();
+        var ceiling = AppealResponseDeadlinePolicy.ComputeMaxExtendedTargetResponseDate(
+            receivedAt, appeal.LineOfBusiness, appeal.AppealType, appeal.AppealLevel, appeal.IsUrgent);
+        if (ceiling.HasValue && extended > ceiling.Value)
+        {
+            ModelState.AddModelError(nameof(ExtendDeadlineRequest.ExtensionDays),
+                $"Extending by {request.ExtensionDays} days would move the deadline past the extended " +
+                $"regulatory maximum of {ceiling.Value:o}.");
+            return ValidationProblem(
+                detail: null, instance: null, statusCode: StatusCodes.Status400BadRequest,
+                title: "Extension exceeds regulatory maximum", type: ExtensionProblemType,
+                modelStateDictionary: ModelState);
+        }
+
+        var actor = Actor;
+        appeal.TargetResponseDate = extended;
+        appeal.DeadlineExtension = new AppealDeadlineExtension
+        {
+            Reason = reason,
+            ExtensionDays = request.ExtensionDays,
+            PreviousTargetResponseDate = current,
+            NewTargetResponseDate = extended,
+            WrittenNoticeSentAt = noticeSentAt,
+            ExtendedAt = now,
+            ExtendedBy = actor,
+            RegulatoryBasis = rule.RegulatoryBasis
+        };
+        appeal.UpdatedAt = now;
+        appeal.UpdatedBy = actor;
+
+        var auditEvent = BuildEvent(appeal, AppealEventType.AppealDeadlineExtended,
+            fromStatus: null, toStatus: null, actor, request.EventId);
+        auditEvent.Payload = new JsonObject
+        {
+            ["currentStatus"] = appeal.Status.ToString(),
+            ["reason"] = reason.ToString(),
+            ["extensionDays"] = request.ExtensionDays,
+            ["previousTargetResponseDate"] = current.ToString("o"),
+            ["newTargetResponseDate"] = extended.ToString("o"),
+            ["writtenNoticeSentAt"] = noticeSentAt.ToString("o"),
+            ["regulatoryBasis"] = rule.RegulatoryBasis
+        };
+
+        var updated = await _appeals.TryExtendDeadlineAsync(appeal, auditEvent, ct);
+        if (updated == null)
+        {
+            // Lost a race: another writer extended or closed the appeal
+            // between our read and the conditional write.
+            return ExtensionRefused(StatusCodes.Status409Conflict, "already-extended", appeal,
+                "The appeal was extended or closed concurrently; only one extension is permitted.");
+        }
+
+        // The justification is free text (potentially PHI) — encrypted as
+        // an internal note, never on the event payload. Best effort after
+        // the extension itself, same posture as request-info.
+        if (!string.IsNullOrWhiteSpace(request.Justification))
+        {
+            var note = new AppealNote
+            {
+                CreatedBy = actor,
+                NoteText = await _encryptor.EncryptAsync(request.Justification, ct) ?? string.Empty,
+                IsInternal = true
+            };
+            var noteAudit = BuildEvent(updated, AppealEventType.AppealNoteAdded,
+                fromStatus: null, toStatus: null, actor, eventId: null);
+            noteAudit.Payload = new JsonObject
+            {
+                ["noteId"] = note.NoteId,
+                ["author"] = note.CreatedBy,
+                ["isInternal"] = note.IsInternal,
+                ["context"] = "deadline-extension"
+            };
+            updated = await _appeals.AppendNoteAsync(updated, note, noteAudit, ct);
+            await _publisher.PublishNoteAddedAsync(updated, note, actor, HttpContext.TraceIdentifier, ct);
+        }
+
+        await _publisher.PublishDeadlineExtendedAsync(updated, actor, HttpContext.TraceIdentifier, ct);
+
+        return Ok(await DecryptForResponseAsync(updated, ct));
+    }
+
+    private ObjectResult ExtensionRefused(
+        int statusCode, string refusal, Appeal appeal, string detail, string? regulatoryBasis = null)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = statusCode,
+            Title = "Appeal deadline extension refused",
+            Detail = detail,
+            Type = ExtensionProblemType
+        };
+        problem.Extensions["extensionRefusal"] = refusal;
+        problem.Extensions["fromStatus"] = appeal.Status.ToString();
+        problem.Extensions["lineOfBusiness"] = appeal.LineOfBusiness.ToString();
+        if (regulatoryBasis != null) problem.Extensions["regulatoryBasis"] = regulatoryBasis;
+        return StatusCode(statusCode, problem);
+    }
+
     // ── Internal helpers ────────────────────────────────────────────────
 
     private async Task<IActionResult> RunTransitionAsync(
@@ -745,6 +994,7 @@ public class AppealsController : ControllerBase
             SubmittedDate = appeal.SubmittedDate,
             ReceivedDate = appeal.ReceivedDate,
             TargetResponseDate = appeal.TargetResponseDate,
+            DeadlineExtension = appeal.DeadlineExtension,
             DecisionDate = appeal.DecisionDate,
             SubmittedBy = appeal.SubmittedBy,
             Notes = await DecryptNotesAsync(appeal.Notes, ct),
@@ -1049,6 +1299,35 @@ public class AssignReviewerRequest
 
     [StringLength(4000)]
     public string? ReassignmentReason { get; set; }
+
+    public string? EventId { get; set; }
+}
+
+public class ExtendDeadlineRequest
+{
+    [Required]
+    public AppealExtensionReason? Reason { get; set; }
+
+    /// <summary>Calendar days to add to the current deadline. Regulatory cap: 14.</summary>
+    [Range(1, 14)]
+    public int ExtensionDays { get; set; } = 14;
+
+    /// <summary>
+    /// When the written extension notice (reason for the delay; right to
+    /// file a grievance / expedited grievance) was sent to the enrollee.
+    /// </summary>
+    [Required]
+    public DateTime? WrittenNoticeSentAt { get; set; }
+
+    /// <summary>
+    /// Required for <see cref="AppealExtensionReason.PlanNeedsInfo"/>: the
+    /// information needed and how the delay is in the enrollee's interest.
+    /// Free text — stored as an encrypted internal note.
+    /// </summary>
+    [StringLength(4000)]
+    public string? Justification { get; set; }
+
+    // No ExtendedBy: the actor is the token's user (ICurrentActor.UserId).
 
     public string? EventId { get; set; }
 }

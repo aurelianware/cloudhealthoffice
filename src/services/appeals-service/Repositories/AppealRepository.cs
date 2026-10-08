@@ -286,6 +286,40 @@ public sealed class AppealRepository : IAppealRepository
         }
     }
 
+    public async Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        try
+        {
+            var fresh = await _appeals.ReadItemAsync<Appeal>(
+                appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
+
+            if (fresh.Resource.DeadlineExtension is not null) return null;
+            if (fresh.Resource.Status != AppealStatus.Submitted &&
+                fresh.Resource.Status != AppealStatus.InReview &&
+                fresh.Resource.Status != AppealStatus.PendingInfo)
+            {
+                return null;
+            }
+
+            var mutated = fresh.Resource;
+            mutated.TargetResponseDate = appeal.TargetResponseDate;
+            mutated.DeadlineExtension = appeal.DeadlineExtension;
+            mutated.UpdatedAt = appeal.UpdatedAt ?? DateTime.UtcNow;
+            mutated.UpdatedBy = appeal.UpdatedBy;
+
+            var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+            var response = await _appeals.ReplaceItemAsync(
+                mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
+
+            await _events.AppendAsync(auditEvent, ct);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
     public async Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default)
     {
         // Cosmos has no native array-push operator for arbitrary depth. We

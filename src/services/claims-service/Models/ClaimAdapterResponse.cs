@@ -382,6 +382,7 @@ public class AdapterAdjudicationResult
     public decimal CoinsuranceAmount { get; set; }
     public decimal CopayAmount { get; set; }
     public decimal PatientResponsibility { get; set; }
+    public decimal? OopAppliedAmount { get; set; }
     public decimal PayerPayment { get; set; }
     public string? DenialReasonCode { get; set; }
     public string? DenialReason { get; set; }
@@ -398,6 +399,7 @@ public class AdapterAdjudicationResult
         CoinsuranceAmount = src.CoinsuranceAmount,
         CopayAmount = src.CopayAmount,
         PatientResponsibility = src.PatientResponsibility,
+        OopAppliedAmount = src.OopAppliedAmount,
         PayerPayment = src.PayerPayment,
         DenialReasonCode = src.DenialReasonCode,
         DenialReason = src.DenialReason,
@@ -415,6 +417,7 @@ public class AdapterAdjudicationResult
         CoinsuranceAmount = CoinsuranceAmount,
         CopayAmount = CopayAmount,
         PatientResponsibility = PatientResponsibility,
+        OopAppliedAmount = OopAppliedAmount,
         PayerPayment = PayerPayment,
         DenialReasonCode = DenialReasonCode,
         DenialReason = DenialReason,
@@ -431,6 +434,7 @@ public class AdapterLineAdjudicationResult
     public decimal AllowedAmount { get; set; }
     public decimal PaidAmount { get; set; }
     public decimal PatientResponsibility { get; set; }
+    public decimal? OopAppliedAmount { get; set; }
     public List<ClaimAdjustmentReason> AdjustmentReasons { get; set; } = new();
 
     public static AdapterLineAdjudicationResult From(LineAdjudicationResult src) => new()
@@ -438,6 +442,7 @@ public class AdapterLineAdjudicationResult
         AllowedAmount = src.AllowedAmount,
         PaidAmount = src.PaidAmount,
         PatientResponsibility = src.PatientResponsibility,
+        OopAppliedAmount = src.OopAppliedAmount,
         AdjustmentReasons = src.AdjustmentReasons.ToList(),
     };
 
@@ -446,6 +451,7 @@ public class AdapterLineAdjudicationResult
         AllowedAmount = AllowedAmount,
         PaidAmount = PaidAmount,
         PatientResponsibility = PatientResponsibility,
+        OopAppliedAmount = OopAppliedAmount,
         AdjustmentReasons = AdjustmentReasons.ToList(),
     };
 }

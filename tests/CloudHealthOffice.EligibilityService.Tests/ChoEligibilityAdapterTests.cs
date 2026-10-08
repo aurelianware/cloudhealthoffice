@@ -249,6 +249,103 @@ public class ChoEligibilityAdapterTests
     }
 
     [Fact]
+    public async Task VerifyEligibility_TerminatedCoverage_ServiceDateBeforeTermDate_IsEligible()
+    {
+        // A terminated (incl. retro-termed) coverage was in force for its span;
+        // a DOS on or before the termination date must still be eligible.
+        var coverageArray = JsonSerializer.Serialize(new[]
+        {
+            new { id = "cov-term", memberId = "MBR-001", groupNumber = "GRP-100",
+                  planId = "PLAN-PPO-2025", coverageLevel = "FAM",
+                  effectiveDate = "2025-01-01", terminationDate = "2025-06-30",
+                  status = 3, lineOfBusiness = 1 },
+        }, JsonOpts);
+
+        var handler = new SequenceHandler(new[]
+        {
+            new FakeResponse(HttpStatusCode.OK, coverageArray),
+            new FakeResponse(HttpStatusCode.OK, "[]"),
+            new FakeResponse(HttpStatusCode.NotFound, ""),
+            new FakeResponse(HttpStatusCode.NotFound, ""),
+        });
+
+        var adapter = CreateAdapter(handler);
+
+        var result = await adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = "test-tenant",
+            SubscriberId = "MBR-001",
+            ServiceDate = new DateTime(2025, 6, 30),
+        });
+
+        Assert.True(result.IsEligible);
+        Assert.Equal("1", result.StatusCode);
+        Assert.Equal("PLAN-PPO-2025", result.PlanId);
+        Assert.Equal(new DateTime(2025, 6, 30), result.CoverageEndDate);
+    }
+
+    [Fact]
+    public async Task VerifyEligibility_TerminatedCoverageWithoutTerminationDate_ReturnsNotEligible()
+    {
+        // Status=Terminated with no end date fails closed, not open-ended.
+        var coverageArray = JsonSerializer.Serialize(new[]
+        {
+            new { id = "cov-term", memberId = "MBR-001", groupNumber = "GRP-100",
+                  planId = "PLAN-PPO-2025", coverageLevel = "FAM",
+                  effectiveDate = "2025-01-01", terminationDate = (string?)null,
+                  status = 3, lineOfBusiness = 1 },
+        }, JsonOpts);
+
+        var handler = new SequenceHandler(new[]
+        {
+            new FakeResponse(HttpStatusCode.OK, coverageArray),
+        });
+
+        var adapter = CreateAdapter(handler);
+
+        var result = await adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = "test-tenant",
+            SubscriberId = "MBR-001",
+            ServiceDate = new DateTime(2025, 6, 15),
+        });
+
+        Assert.False(result.IsEligible);
+        Assert.Equal("6", result.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(2)] // Pending — may not be effectuated yet (binder payment)
+    [InlineData(4)] // Suspended
+    public async Task VerifyEligibility_PendingOrSuspendedCoverage_ReturnsNotEligible(int status)
+    {
+        var coverageArray = JsonSerializer.Serialize(new[]
+        {
+            new { id = "cov-x", memberId = "MBR-001", groupNumber = "GRP-100",
+                  planId = "PLAN-PPO-2025", coverageLevel = "FAM",
+                  effectiveDate = "2025-01-01", terminationDate = (string?)null,
+                  status, lineOfBusiness = 1 },
+        }, JsonOpts);
+
+        var handler = new SequenceHandler(new[]
+        {
+            new FakeResponse(HttpStatusCode.OK, coverageArray),
+        });
+
+        var adapter = CreateAdapter(handler);
+
+        var result = await adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = "test-tenant",
+            SubscriberId = "MBR-001",
+            ServiceDate = new DateTime(2025, 6, 15),
+        });
+
+        Assert.False(result.IsEligible);
+        Assert.Equal("6", result.StatusCode);
+    }
+
+    [Fact]
     public void Platform_ReturnsCho()
     {
         var handler = new SequenceHandler(Array.Empty<FakeResponse>());

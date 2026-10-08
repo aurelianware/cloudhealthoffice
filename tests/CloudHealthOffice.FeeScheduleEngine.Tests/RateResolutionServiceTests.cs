@@ -711,8 +711,9 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m },
-                new FeeScheduleLine { ProcedureCode = "20610", RateType = FeeScheduleRateType.PercentOfBilled, Rate = 0.80m },
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", RateType = FeeScheduleRateType.PercentOfBilled, Rate = 0.80m,
+                    MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
             ]
         };
         var engine = CreateEngine(schedule);
@@ -741,9 +742,13 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "27447", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m },
-                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },
-                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m },
+                new FeeScheduleLine
+                {
+                    ProcedureCode = "27447", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m,
+                    MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery,
+                },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
             ]
         };
         var engine = CreateEngine(schedule);
@@ -826,9 +831,9 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m }, // Highest
-                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },  // Second
-                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m },  // Third
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery }, // Highest
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },  // Second
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },  // Third
             ]
         };
         var engine = CreateEngine(schedule);
@@ -871,9 +876,9 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "99215", Rate = 900m, MultipleProcedureReductionApplies = false },
-                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },
-                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m },
+                new FeeScheduleLine { ProcedureCode = "99215", Rate = 900m, MultipleProcedureIndicator = MultipleProcedureIndicator.NoReduction },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
             ]
         };
         var engine = CreateEngine(schedule);
@@ -909,7 +914,11 @@ public class RateResolutionServiceTests
             Id = "comm-six", TenantId = Tenant, Name = "Commercial Six",
             Type = FeeScheduleType.Commercial,
             EffectiveDate = new DateTime(2026, 1, 1),
-            Lines = codes.Select((c, i) => new FeeScheduleLine { ProcedureCode = c, Rate = 600m - i * 100m }).ToList()
+            Lines = codes.Select((c, i) => new FeeScheduleLine
+            {
+                ProcedureCode = c, Rate = 600m - i * 100m,
+                MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery,
+            }).ToList()
         };
         var engine = CreateEngine(schedule);
 
@@ -945,8 +954,8 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m },
-                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
             ]
         };
         var engine = CreateEngine(schedule);
@@ -993,9 +1002,9 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m },
-                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },
-                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m },
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
             ]
         };
         var engine = CreateEngine(schedule);
@@ -1017,6 +1026,197 @@ public class RateResolutionServiceTests
         // … so line numbers are unique and can safely key a dictionary.
         var lineNumbers = resultSet.LineResults.Select(r => r.LineNumber).ToList();
         Assert.Equal(lineNumbers.Count, lineNumbers.Distinct().Count());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MPFS MULTIPLE PROCEDURE INDICATOR
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static FeeScheduleLine IndicatorLine(string code, decimal rate, MultipleProcedureIndicator? indicator)
+        => new() { ProcedureCode = code, Rate = rate, MultipleProcedureIndicator = indicator };
+
+    private static FeeSchedule CreateIndicatorSchedule(params FeeScheduleLine[] lines)
+        => new()
+        {
+            Id = "comm-mpi", TenantId = Tenant, Name = "Commercial MPI",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = lines.ToList(),
+        };
+
+    [Fact]
+    public void MultipleProcedureReductionApplies_DerivedFromIndicator()
+    {
+        Assert.True(IndicatorLine("27447", 1m, MultipleProcedureIndicator.StandardSurgery).MultipleProcedureReductionApplies);
+
+        foreach (var indicator in new MultipleProcedureIndicator?[]
+        {
+            null,
+            MultipleProcedureIndicator.NoReduction,
+            MultipleProcedureIndicator.Endoscopy,
+            MultipleProcedureIndicator.DiagnosticImaging,
+            MultipleProcedureIndicator.TherapyServices,
+            MultipleProcedureIndicator.DiagnosticCardiovascular,
+            MultipleProcedureIndicator.DiagnosticOphthalmology,
+            MultipleProcedureIndicator.NotApplicable,
+        })
+        {
+            Assert.False(IndicatorLine("x", 1m, indicator).MultipleProcedureReductionApplies);
+        }
+    }
+
+    /// <summary>
+    /// E&amp;M codes carry MPFS indicator 0 and are never reduced — not by batch
+    /// ranking, not by line position, and not by modifier 51 — and need no warning.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_EmIndicator0_NeverReduced()
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("99215", 300m, MultipleProcedureIndicator.NoReduction),
+            IndicatorLine("99214", 200m, MultipleProcedureIndicator.NoReduction),
+            IndicatorLine("29881", 800m, MultipleProcedureIndicator.StandardSurgery));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("29881", lineNumber: 1, totalLines: 3),
+            CreateRequest("99215", lineNumber: 2, totalLines: 3, modifiers: ["25"]),
+            CreateRequest("99214", lineNumber: 3, totalLines: 3, modifiers: ["51"]),
+        ]);
+
+        Assert.Equal([800m, 300m, 200m], resultSet.LineResults.Select(r => r.AllowedAmount).ToArray());
+        Assert.DoesNotContain(resultSet.LineResults.SelectMany(r => r.Adjustments), a => a.Modifier == "51");
+        Assert.All(resultSet.LineResults, r => Assert.Empty(r.Warnings));
+
+        // Single-line pricing path: secondary line position and modifier 51 do not reduce E&M either
+        var single = await engine.ResolveAsync(CreateRequest("99214", lineNumber: 2, totalLines: 2, modifiers: ["51"]));
+        Assert.Equal(200m, single.AllowedAmount);
+        Assert.Empty(single.Adjustments);
+        Assert.Empty(single.Warnings);
+    }
+
+    /// <summary>
+    /// Indicator 4 (diagnostic imaging) follows a different CMS rule (TC/PC family
+    /// reduction) that is not implemented: imaging lines take no surgery rank, are not
+    /// reduced by the 100/50/50 rule, and are flagged as unsupported.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_ImagingIndicator4_NotReducedBySurgeryRule_Flagged()
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("27447", 1500m, MultipleProcedureIndicator.StandardSurgery),
+            IndicatorLine("29881", 800m, MultipleProcedureIndicator.StandardSurgery),
+            IndicatorLine("73721", 300m, MultipleProcedureIndicator.DiagnosticImaging),
+            IndicatorLine("71046", 50m, MultipleProcedureIndicator.DiagnosticImaging));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("73721", lineNumber: 1, totalLines: 4),
+            CreateRequest("71046", lineNumber: 2, totalLines: 4),
+            CreateRequest("27447", lineNumber: 3, totalLines: 4),
+            CreateRequest("29881", lineNumber: 4, totalLines: 4),
+        ]);
+
+        var mri = resultSet.LineResults.Single(r => r.ProcedureCode == "73721");
+        var xray = resultSet.LineResults.Single(r => r.ProcedureCode == "71046");
+        Assert.Equal(300m, mri.AllowedAmount);
+        Assert.Equal(50m, xray.AllowedAmount);
+        Assert.Empty(mri.Adjustments);
+        Assert.Empty(xray.Adjustments);
+        Assert.Contains(mri.Warnings, w => w.Contains("indicator 4") && w.Contains("not yet supported"));
+        Assert.Contains(xray.Warnings, w => w.Contains("indicator 4") && w.Contains("not yet supported"));
+
+        // Surgeries rank only among themselves: 100% / 50%
+        Assert.Equal(1500m, resultSet.LineResults.Single(r => r.ProcedureCode == "27447").AllowedAmount);
+        Assert.Equal(400m, resultSet.LineResults.Single(r => r.ProcedureCode == "29881").AllowedAmount);
+    }
+
+    [Theory]
+    [InlineData(MultipleProcedureIndicator.Endoscopy)]
+    [InlineData(MultipleProcedureIndicator.TherapyServices)]
+    [InlineData(MultipleProcedureIndicator.DiagnosticCardiovascular)]
+    [InlineData(MultipleProcedureIndicator.DiagnosticOphthalmology)]
+    public async Task MultipleProcedure_UnsupportedIndicators_NotReduced_Flagged(MultipleProcedureIndicator indicator)
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("A0001", 500m, indicator),
+            IndicatorLine("A0002", 400m, indicator));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("A0001", lineNumber: 1, totalLines: 2),
+            CreateRequest("A0002", lineNumber: 2, totalLines: 2),
+        ]);
+
+        Assert.Equal([500m, 400m], resultSet.LineResults.Select(r => r.AllowedAmount).ToArray());
+        Assert.All(resultSet.LineResults, r =>
+            Assert.Contains(r.Warnings, w => w.Contains($"indicator {(byte)indicator}") && w.Contains("not yet supported")));
+    }
+
+    /// <summary>
+    /// No indicator in the source data: default to no reduction (indicator 0
+    /// semantics, so E&amp;M is never wrongly cut) but flag every line on a
+    /// multi-line claim so the missing data is visible.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_UnknownIndicator_NoReduction_Warns()
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("27447", 1500m, null),
+            IndicatorLine("29881", 800m, null));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("27447", lineNumber: 1, totalLines: 2),
+            CreateRequest("29881", lineNumber: 2, totalLines: 2, modifiers: ["51"]),
+        ]);
+
+        Assert.Equal([1500m, 800m], resultSet.LineResults.Select(r => r.AllowedAmount).ToArray());
+        Assert.DoesNotContain(resultSet.LineResults.SelectMany(r => r.Adjustments), a => a.Modifier == "51");
+        Assert.All(resultSet.LineResults, r =>
+            Assert.Contains(r.Warnings, w => w.Contains("No CMS multiple procedure indicator")));
+
+        // Single-line pricing path behaves the same
+        var single = await engine.ResolveAsync(CreateRequest("29881", lineNumber: 2, totalLines: 2));
+        Assert.Equal(800m, single.AllowedAmount);
+        Assert.Contains(single.Warnings, w => w.Contains("No CMS multiple procedure indicator"));
+    }
+
+    /// <summary>
+    /// The indicator only matters when there is more than one line; a single-line
+    /// claim with no indicator is not flagged.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_UnknownIndicator_SingleLineClaim_NoWarning()
+    {
+        var engine = CreateEngine(CreateIndicatorSchedule(IndicatorLine("27447", 1500m, null)));
+
+        var result = await engine.ResolveAsync(CreateRequest("27447"));
+        var batch = await engine.ResolveBatchAsync([CreateRequest("27447")]);
+
+        Assert.Equal(1500m, result.AllowedAmount);
+        Assert.Empty(result.Warnings);
+        Assert.Empty(batch.LineResults.Single().Warnings);
+    }
+
+    /// <summary>
+    /// Single-line pricing of a secondary indicator-2 line still applies the 50% rule.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_SingleLinePath_Indicator2Secondary_Reduced()
+    {
+        var engine = CreateEngine(CreateIndicatorSchedule(
+            IndicatorLine("29881", 800m, MultipleProcedureIndicator.StandardSurgery)));
+
+        var result = await engine.ResolveAsync(CreateRequest("29881", lineNumber: 2, totalLines: 2));
+
+        Assert.Equal(400m, result.AllowedAmount);
+        Assert.Single(result.Adjustments, a => a.Modifier == "51");
+        Assert.Empty(result.Warnings);
     }
 
     // ═══════════════════════════════════════════════════════════════════

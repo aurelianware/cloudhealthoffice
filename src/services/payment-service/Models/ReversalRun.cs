@@ -80,8 +80,25 @@ public class ReversalRun
     /// <summary>Total adjustments processed (success + warning combined).</summary>
     public int TotalAdjustments { get; set; }
 
-    /// <summary>Total reversal amount (negative). Sum of envelope BPR02s.</summary>
+    /// <summary>
+    /// Total reversal amount (negative): the sum of the reversal payments'
+    /// amounts recouped. Not a BPR02: a reversal 835's BPR02 is 0 (see
+    /// <see cref="OutstandingReceivables"/>).
+    /// </summary>
     public decimal TotalReversalAmount { get; set; }
+
+    /// <summary>
+    /// What providers owe after this run's 835s: one entry per envelope whose
+    /// claims netted below zero. Such an 835 carries BPR02 = 0 and a PLB
+    /// forward-balance (FB) adjustment of the negative balance. payment-service
+    /// has no receivable ledger yet; recovering these amounts (a positive FB
+    /// PLB on a later payment 835, or a refund request) is a follow-up, so they
+    /// are recorded here for finance.
+    /// </summary>
+    public List<ProviderReceivable> OutstandingReceivables { get; set; } = new();
+
+    /// <summary>Sum of <see cref="OutstandingReceivables"/> amounts (positive: owed by providers).</summary>
+    public decimal OutstandingReceivableAmount { get; set; }
 
     /// <summary>UTC creation timestamp.</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -138,6 +155,21 @@ public class ReversalRun
     public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Predecessor claims not reversed because payment-service holds no single
+    /// recorded payment for them, so the amount actually paid is unknown. A
+    /// reversal is never computed from the approved or billed amount. Their
+    /// adjustments stay PendingReversal for an operator.
+    /// </summary>
+    public List<string> MissingPaidAmountClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Predecessor claims not reversed because their recorded payment's
+    /// service-line payments do not add up to the claim payment, so the
+    /// reversal 835 would not balance. Their adjustments stay PendingReversal.
+    /// </summary>
+    public List<string> UnbalancedServiceLineClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Predecessor claims whose reversal reservation this run held, released
     /// after it failed or was cancelled without recouping them (automatically,
     /// or by a second approver). A later reversal run may reverse them.
@@ -189,6 +221,24 @@ public class ReversalRunCriteria
     /// Empty list (the default) means "use the filter criteria".
     /// </summary>
     public List<string> AdjustmentIds { get; set; } = new();
+}
+
+/// <summary>
+/// A negative 835 balance carried forward (PLB FB) for a trading partner:
+/// the amount the provider owes the plan after a reversal 835.
+/// </summary>
+public class ProviderReceivable
+{
+    public string TradingPartnerId { get; set; } = string.Empty;
+
+    /// <summary>The <see cref="EraEnvelopeRecord"/> whose PLB carries it.</summary>
+    public string EraEnvelopeId { get; set; } = string.Empty;
+
+    /// <summary>The PLB FB reference (PLB03-2): the 835's trace number (TRN02).</summary>
+    public string? Reference { get; set; }
+
+    /// <summary>Amount owed by the provider (positive).</summary>
+    public decimal Amount { get; set; }
 }
 
 /// <summary>

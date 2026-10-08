@@ -15,7 +15,7 @@ public class FeeScheduleImportCsvWriter
 
     /// <summary>Header row for fee schedule import CSV.</summary>
     public const string FeeScheduleCsvHeader =
-        "FeeScheduleId,ProcedureCode,Modifier,PlaceOfService,AllowedAmount,EffectiveDate,TermDate";
+        "FeeScheduleId,ProcedureCode,Modifier,PlaceOfService,AllowedAmount,EffectiveDate,TermDate,MultipleProcedureIndicator";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FeeScheduleImportCsvWriter"/> class.
@@ -59,7 +59,8 @@ public class FeeScheduleImportCsvWriter
                 sb.Append(EscapeCsv(line.PlaceOfService ?? "")); sb.Append(',');
                 sb.Append(line.AllowedAmount.ToString("F2")); sb.Append(',');
                 sb.Append(line.EffectiveDate.ToString("yyyy-MM-dd")); sb.Append(',');
-                sb.Append(line.TermDate?.ToString("yyyy-MM-dd") ?? "");
+                sb.Append(line.TermDate?.ToString("yyyy-MM-dd") ?? ""); sb.Append(',');
+                sb.Append(line.MultipleProcedureIndicator?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "");
                 sb.AppendLine();
             }
 

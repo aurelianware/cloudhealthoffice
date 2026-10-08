@@ -279,6 +279,34 @@ public class BenefitCalculationEngineTests
     }
 
     [Fact]
+    public async Task NoCategoryMapping_DeniedWithCarc204()
+    {
+        var plan = CreateTestPlan();
+        var engine = CreateUnmappedEngine(plan);
+        var request = CreateRequest(plan.Id, lines: ("ZZZZZ", 75m, 75m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+        var line = result.Lines.Single();
+        Assert.False(line.IsCovered);
+        Assert.Equal("204", line.DenialReasonCode);
+        Assert.Equal(0m, line.PlanPaidAmount);
+    }
+
+    [Fact]
+    public async Task Drg_NoCategoryMapping_DeniedWithCarc204()
+    {
+        var plan = CreateTestPlan(inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateUnmappedEngine(plan);
+        var request = CreateRequest(plan.Id,
+            claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+            lines: ("99223", 8000m, 8000m, "21"));
+
+        var result = await engine.CalculateAsync(request);
+        Assert.False(result.Success);
+        Assert.Equal("204", result.DenialReasonCode);
+    }
+
+    [Fact]
     public async Task VisitLimitExceeded_DeniedWithCarc119()
     {
         var plan = CreateTestPlan();
@@ -486,6 +514,166 @@ public class BenefitCalculationEngineTests
         var line = result.Lines.Single();
         Assert.Equal(10m, line.MemberResponsibility);
         Assert.True(line.OopMaxReduction > 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // OOP APPLIES — cost share excluded from the out-of-pocket max
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Sets <see cref="CostShareRuleConfig.OopApplies"/> on the in-network
+    /// rules of one category; <paramref name="types"/> limits it to those
+    /// rule types (all rules when omitted).
+    /// </summary>
+    private static BenefitPlanConfig WithOopApplies(
+        BenefitPlanConfig plan, string serviceTypeCode, bool oopApplies, params CostShareType[] types)
+        => plan with
+        {
+            Categories = plan.Categories
+                .Select(c => c.ServiceTypeCode != serviceTypeCode ? c : c with
+                {
+                    InNetworkCostSharing = c.InNetworkCostSharing
+                        .Select(r => types.Length == 0 || types.Contains(r.CostShareType)
+                            ? r with { OopApplies = oopApplies }
+                            : r)
+                        .ToList()
+                })
+                .ToList()
+        };
+
+    private static AccumulatorState Snapshot(BenefitResolutionResult result, AccumulatorType type,
+        AccumulatorScope scope = AccumulatorScope.Individual)
+        => result.AccumulatorSnapshot.Single(s =>
+            s.Type == type && s.Scope == scope && s.NetworkTier == NetworkTier.InNetwork);
+
+    [Fact]
+    public void CostShareRuleConfig_OopApplies_DefaultsTrue()
+    {
+        Assert.True(new CostShareRuleConfig().OopApplies);
+    }
+
+    [Fact]
+    public async Task OopApplies_Default_CostShareIncrementsOopAccumulator()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98");
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.Equal(150m, result.Lines.Single().MemberResponsibility);
+        Assert.Equal(150m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(150m, Snapshot(result, AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family).AmountApplied);
+    }
+
+    [Fact]
+    public async Task OopAppliesFalse_OopMaxReached_MemberResponsibilityNotCapped()
+    {
+        var plan = WithOopApplies(CreateTestPlan(individualDeductible: 0, individualOopMax: 3000), "48", false);
+        var engine = CreateEngine(plan, categoryCode: "48", existingOop: 2980m);
+        var request = CreateRequest(plan.Id, lines: ("99223", 5000m, 3000m, "21"));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(600m, line.CoinsuranceAmount);
+        Assert.Equal(600m, line.MemberResponsibility);
+        Assert.Equal(2400m, line.PlanPaidAmount);
+        Assert.Equal(0m, line.OopMaxReduction);
+        Assert.DoesNotContain(line.Adjustments, a => a.GroupCode == "OA" && a.ReasonCode == "23");
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family).AmountApplied);
+    }
+
+    [Fact]
+    public async Task OopAppliesFalse_DeductibleStillAccumulates_OopDoesNot()
+    {
+        var plan = WithOopApplies(CreateTestPlan(individualDeductible: 500), "98", false);
+        var engine = CreateEngine(plan, categoryCode: "98");
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(150m, line.DeductibleAmount);
+        Assert.Equal(150m, line.MemberResponsibility);
+        Assert.Equal(150m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    [Fact]
+    public async Task OopAppliesFalse_OnCoinsuranceOnly_CopayCappedCoinsuranceNot()
+    {
+        // Deductible met; $10 OOP remaining. Copay ($30) counts and is
+        // capped to $10; coinsurance ($24) is excluded and owed in full.
+        var plan = WithOopApplies(CreateTestPlan(individualDeductible: 500, individualOopMax: 3000),
+            "98", false, CostShareType.Coinsurance);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m, existingOop: 2990m);
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(30m, line.CopayAmount);
+        Assert.Equal(24m, line.CoinsuranceAmount);
+        Assert.Equal(20m, line.OopMaxReduction);
+        Assert.Equal(34m, line.MemberResponsibility);
+        Assert.Equal(116m, line.PlanPaidAmount);
+        Assert.Equal(10m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    [Fact]
+    public async Task OopAppliesFalse_AggregateWithAcaCap_NeitherPoolNorCapConsumed()
+    {
+        var plan = WithOopApplies(CreateTestPlan(
+            individualDeductible: 0,
+            familyDeductible: 0,
+            individualOopMax: 0,
+            familyOopMax: 5000,
+            familyModel: FamilyAccumulatorModel.Aggregate), "48", false) with
+        {
+            IsAcaCapEnforced = true,
+            AcaIndividualCap = 9200m
+        };
+        var engine = CreateEngine(plan, categoryCode: "48",
+            familyModel: FamilyAccumulatorModel.Aggregate,
+            familyDeductible: 0,
+            existingFamilyOop: 4990m);
+        var request = CreateRequest(plan.Id, lines: ("99223", 5000m, 3000m, "21"));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(600m, line.MemberResponsibility);
+        Assert.Equal(0m, line.OopMaxReduction);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family).AmountApplied);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.AcaIndividualCap).AmountApplied);
+    }
+
+    [Fact]
+    public async Task OopAppliesTrue_AggregateWithAcaCap_PoolAndCapConsumedTogether()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 0,
+            familyDeductible: 0,
+            individualOopMax: 0,
+            familyOopMax: 5000,
+            familyModel: FamilyAccumulatorModel.Aggregate) with
+        {
+            IsAcaCapEnforced = true,
+            AcaIndividualCap = 9200m
+        };
+        var engine = CreateEngine(plan, categoryCode: "48",
+            familyModel: FamilyAccumulatorModel.Aggregate,
+            familyDeductible: 0,
+            existingFamilyOop: 4990m);
+        var request = CreateRequest(plan.Id, lines: ("99223", 5000m, 3000m, "21"));
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.Equal(10m, result.Lines.Single().MemberResponsibility);
+        Assert.Equal(10m, Snapshot(result, AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family).AmountApplied);
+        Assert.Equal(10m, Snapshot(result, AccumulatorType.AcaIndividualCap).AmountApplied);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -989,6 +1177,14 @@ public class BenefitCalculationEngineTests
             categoryResolver, planProvider, accumulatorService, ruleGate,
             NullLogger<BenefitCalculationEngine>.Instance);
     }
+
+    private static BenefitCalculationEngine CreateUnmappedEngine(BenefitPlanConfig plan)
+        => new(
+            new UnmappedCategoryResolver(),
+            new InMemoryBenefitPlanProvider(plan),
+            new InMemoryAccumulatorService(plan, 0, 0, 0, "98"),
+            new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
+            NullLogger<BenefitCalculationEngine>.Instance);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1201,4 +1397,16 @@ internal class CountingAccumulatorService : IAccumulatorService
 
     public Task ResetForPlanYearAsync(Guid benefitPlanId, string planYear, CancellationToken ct)
         => _inner.ResetForPlanYearAsync(benefitPlanId, planYear, ct);
+}
+
+/// <summary>
+/// Resolver with no mapping for any procedure code.
+/// </summary>
+internal class UnmappedCategoryResolver : IServiceCategoryResolver
+{
+    public Task<ServiceCategoryMatch?> ResolveAsync(
+        string tenantId, Guid benefitPlanId, DateOnly serviceDate,
+        string procedureCode, string codeType, string placeOfService,
+        IReadOnlyList<string> modifiers, string? revenueCode, CancellationToken ct)
+        => Task.FromResult<ServiceCategoryMatch?>(null);
 }

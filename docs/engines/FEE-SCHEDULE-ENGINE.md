@@ -140,9 +140,9 @@ Modifiers are applied sequentially in this order. Each step records a `RateAdjus
 | Co-surgery | `62` | `AllowedAmount × 0.625` (each surgeon) |
 | Assistant surgeon | `80` | `AllowedAmount × 0.16` (applies only if `AssistantAtSurgeryAllowed = true`) |
 | Assistant-at-surgery (PA/NP/CRNA) | `AS` | `AssistantRate × 0.85` = 13.6% of primary rate |
-| Multiple procedures | `51` | `AllowedAmount × 0.50` for secondary lines (line 2+) |
+| Multiple procedures | `51` | `AllowedAmount × 0.50` for secondary lines — only when `FeeScheduleLine.MultipleProcedureIndicator = 2` |
 
-The multiple procedure reduction (`51`) is also applied automatically when `LineNumber > 1` and `TotalLineCount > 1`, without requiring the modifier to be present on the claim.
+Multiple procedure reduction is driven by the CMS MPFS multiple procedure indicator (`MULT PROC` in the PPRRVU file), stored on each line as `multipleProcedureIndicator`. Only indicator `2` (standard multiple surgery) is reduced: batch pricing ranks those lines by allowed amount at 100% / 50% (2nd–5th; 6th+ priced at 50% and flagged "by report"). Indicators `0` (e.g. E&M) and `9` are never reduced. Indicators `3`–`7` (endoscopy, imaging, therapy, cardiovascular, ophthalmology) use separate CMS rules that are not yet implemented — those lines are not reduced and are flagged in `PricingResult.Warnings`. A line with no indicator is not reduced and is flagged the same way on multi-line claims, so seed and import data should always supply it.
 
 `AllowedAmount` is floored at `$0.00` — modifiers cannot produce a negative payment.
 

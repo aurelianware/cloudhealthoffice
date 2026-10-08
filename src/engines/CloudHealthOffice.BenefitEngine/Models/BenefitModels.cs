@@ -191,6 +191,17 @@ public record LineBenefitResult
     public decimal CoinsurancePercent { get; init; }
     public decimal OopMaxReduction { get; init; }
     public decimal MemberResponsibility { get; init; }
+
+    /// <summary>
+    /// Portion of <see cref="MemberResponsibility"/> that counts toward the
+    /// out-of-pocket maximum (what the engine added to the OOP accumulators).
+    /// Lower than <see cref="MemberResponsibility"/> when a cost-share rule
+    /// has <see cref="Services.CostShareRuleConfig.OopApplies"/> = false.
+    /// Downstream OOP accumulation (ClaimFinalizedEvent.OopApplied) must use
+    /// this, not member responsibility.
+    /// </summary>
+    public decimal OopAppliedAmount { get; init; }
+
     public decimal PlanPaidAmount { get; init; }
     public List<AdjustmentReason> Adjustments { get; init; } = [];
     public string? DenialReasonCode { get; init; }
@@ -222,6 +233,10 @@ public record ClaimTotals
     public decimal TotalCoinsurance { get; init; }
     public decimal TotalOopMaxReduction { get; init; }
     public decimal TotalMemberResponsibility { get; init; }
+
+    /// <summary>Sum of <see cref="LineBenefitResult.OopAppliedAmount"/>.</summary>
+    public decimal TotalOopApplied { get; init; }
+
     public decimal TotalPlanPaid { get; init; }
 }
 
