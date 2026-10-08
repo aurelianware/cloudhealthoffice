@@ -111,6 +111,10 @@ public class PaymentRunBatchedEndToEndTests
                 Status = ClaimStatus.Approved,
                 TotalChargeAmount = 100m + i,
                 AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m + i, PatientResponsibility = 20m },
+                ServiceLines = new List<ClaimServiceLineDto>
+                {
+                    new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 100m + i, PaidAmount = 80m + i, Units = 1 }
+                },
                 ServiceDateFrom = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
             });
         }

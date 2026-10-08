@@ -115,7 +115,7 @@ public class CapitationEra835FinancialSegmentTests
     {
         var bpr = Segment(Service().Generate835ForStatement(Statement(net: 0m), Contract, Ach()), "BPR");
 
-        Assert.Equal(new[] { "I", "0.00", "C", "NON" }, bpr.Skip(1).Take(4));
+        Assert.Equal(new[] { "H", "0.00", "C", "NON" }, bpr.Skip(1).Take(4));
         Assert.All(bpr.Skip(5).Take(11), e => Assert.Equal(string.Empty, e));
         Assert.Equal("20260401", bpr[16]);
     }

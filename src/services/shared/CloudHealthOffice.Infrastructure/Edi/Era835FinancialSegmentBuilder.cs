@@ -40,8 +40,9 @@ public sealed class Era835BankDetails
 ///   BPR08 sender account qualifier (DA)  BPR16 check issue / EFT effective date
 ///
 /// For CHK and NON, BPR05-BPR15 are empty and BPR16 carries the date. A
-/// zero-amount 835 moves no money: it is always NON with BPR01 = I
-/// (remittance information only), whatever payment method was asked for.
+/// zero-amount 835 moves no money: it is always NON with BPR01 = H
+/// (notification only), whatever payment method was asked for, and needs no
+/// bank details.
 ///
 /// TRN03 (required for every payment method) is the originating company
 /// identifier, identical to BPR10 on an ACH BPR. It is never synthesised,
@@ -126,8 +127,9 @@ public static class Era835FinancialSegmentBuilder
         var method = ResolvePaymentMethod(totalAmount, paymentMethod, details);
         EnsureCanBeBuilt(method, details);
 
-        // BPR01: C = payment accompanies remittance, I = remittance only (zero-pay ERA)
-        var handlingCode = totalAmount > 0 ? "C" : "I";
+        // BPR01: C = payment accompanies remittance; H = notification only
+        // (BPR02 = 0, BPR04 = NON).
+        var handlingCode = totalAmount > 0 ? "C" : "H";
 
         var e = new string[17];
         e[0] = "BPR";

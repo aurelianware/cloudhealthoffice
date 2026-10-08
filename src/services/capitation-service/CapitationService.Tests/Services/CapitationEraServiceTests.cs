@@ -253,7 +253,7 @@ public class CapitationEraServiceTests
 
         var bpr = Elements(_service.Generate835ForStatement(stmt, CreateContract(), _defaultTp), "BPR");
 
-        bpr[1].Should().Be("I");
+        bpr[1].Should().Be("H");
         bpr[2].Should().Be("0.00");
         bpr[4].Should().Be("NON");
         bpr[16].Should().Be("20260401");
@@ -319,7 +319,7 @@ public class CapitationEraServiceTests
         var segments = edi.Split('~');
 
         var bpr = segments.First(s => s.StartsWith("BPR*"));
-        bpr.Should().StartWith("BPR*I*"); // Remittance info only
+        bpr.Should().StartWith("BPR*H*0.00*C*NON*"); // Notification only
     }
 
     #endregion

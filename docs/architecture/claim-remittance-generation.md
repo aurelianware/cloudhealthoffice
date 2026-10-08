@@ -226,6 +226,15 @@ paying any claim, and generation throws, rather than emitting a
 misaligned BPR or a made-up TRN03. Payment method "Check" (any case) is
 emitted as CHK.
 
+A zero-pay ERA (BPR02 = 0) is notification only: BPR01 = H and BPR04 =
+NON whatever the run's payment method, with no bank details.
+
+A claim with a negative payerPayment is never paid
+(`PaymentRun.NegativePlanPaidClaimIds`); zero-pay claims are paid as zero.
+A claim with no service lines, or whose lines carry no paid amount
+(claim-level-only adjudication), is paid and remitted at claim level, CLP
+without SVC loops (see the service-line rule below).
+
 Every generated 835 must balance: BPR02 = sum of CLP04 - sum of PLB, and
 for a claim with service lines, sum of SVC03 = CLP04; otherwise generation
 throws.
@@ -285,7 +294,7 @@ same trading partner's 835:
 No Payment, no claim reservation and no claims-service call is made for a
 denial (Denied is final in claims-service). A denial adds 0 to BPR02, and a
 partner's envelope keeps its payment's check number as TRN02. A partner with
-only denials gets a non-payment 835: BPR01 = `I`, BPR02 = `0.00`, BPR04 =
+only denials gets a non-payment 835: BPR01 = `H`, BPR02 = `0.00`, BPR04 =
 `NON` (whatever the run's payment method; every zero-amount 835 is NON),
 BPR16 = payment date, TRN02 = `<run number>-D<n>`.
 

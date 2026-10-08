@@ -26,6 +26,13 @@ public static class Era835FinancialSegments
         => Era835FinancialSegmentBuilder.ResolvePaymentMethod(paymentMethod, BankDetails(tp));
 
     /// <summary>
+    /// The BPR04 code for an ERA of <paramref name="totalAmount"/>: NON when
+    /// nothing is paid (BPR02 = 0), otherwise the run's method.
+    /// </summary>
+    public static string ResolveBprPaymentMethod(decimal totalAmount, string? paymentMethod, TradingPartnerInfo tp)
+        => Era835FinancialSegmentBuilder.ResolvePaymentMethod(totalAmount, paymentMethod, BankDetails(tp));
+
+    /// <summary>
     /// The configuration problems that keep BPR/TRN from being built for
     /// <paramref name="paymentMethod"/>. Empty when both segments can be built.
     /// </summary>
@@ -44,7 +51,7 @@ public static class Era835FinancialSegments
 
     /// <summary>
     /// The BPR segment, terminator included. A zero-amount 835 (e.g. denials
-    /// only) is NON with BPR01 = I.
+    /// only) is NON with BPR01 = H.
     /// </summary>
     public static string BuildBpr(decimal totalAmount, string? paymentMethod, DateTime paymentDate, TradingPartnerInfo tp)
         => Era835FinancialSegmentBuilder.BuildBpr(totalAmount, paymentMethod, paymentDate, BankDetails(tp));
