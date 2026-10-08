@@ -55,8 +55,19 @@ public class EraEnvelopeRecord
     /// <summary>Number of CLP loops within the envelope.</summary>
     public int ClaimCount { get; set; }
 
-    /// <summary>BPR02 — sum of payment amounts across all claims in the envelope.</summary>
+    /// <summary>
+    /// BPR02 — sum of CLP04 less PLB across the envelope; never negative. A
+    /// net-negative envelope (reversal recoupment) records 0 here and the
+    /// negative balance in <see cref="ForwardBalanceAmount"/>.
+    /// </summary>
     public decimal TotalPaymentAmount { get; set; }
+
+    /// <summary>
+    /// The negative balance this 835 carried forward in a PLB forward-balance
+    /// (FB) adjustment, i.e. what the provider owes the plan; 0 when none.
+    /// No ledger recovers it yet: a later 835's positive FB is a follow-up.
+    /// </summary>
+    public decimal ForwardBalanceAmount { get; set; }
 
     /// <summary>ISA13 / IEA02 control number (9-digit zero-padded).</summary>
     [Required]

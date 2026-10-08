@@ -159,6 +159,48 @@ public class PaymentRun
     public List<string> NeedsTradingPartnerClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Claims not paid because claims-service returned them without a plan-paid
+    /// amount (<c>adjudicationResult.payerPayment</c>; no adjudication result).
+    /// A claim is never paid at its billed charges or allowed amount: it is not
+    /// reserved, stays Approved in claims-service, and is picked up by a run
+    /// once it carries an adjudication result.
+    /// </summary>
+    public List<string> MissingPlanPaidAmountClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims not paid because their plan-paid amount is negative. A plan
+    /// payment is never negative (a recoupment is a reversal run); zero is paid
+    /// as a zero-pay remittance. They stay Approved in claims-service.
+    /// </summary>
+    public List<string> NegativePlanPaidClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Claims not paid because their service-line paid amounts (SVC03) do not
+    /// add up to their plan-paid amount (CLP04), so their 835 would not balance.
+    /// A line with no paid amount counts as 0. A claim with no service lines
+    /// (claim-level-only adjudication) is listed here too. They stay Approved in
+    /// claims-service and are picked up once their line amounts are corrected.
+    /// </summary>
+    public List<string> UnbalancedServiceLineClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Denied claims this run remitted: each appears in this run's 835 as a
+    /// zero-pay claim (CLP02 = 4, CLP04 = 0, CAS with its denial CARC, MOA with
+    /// its RARCs). No payment or reservation is created for them. A denied
+    /// claim is remitted once: one already listed in a (non-reversal) 835, or
+    /// with a payment, is not remitted again.
+    /// </summary>
+    public List<string> RemittedDeniedClaimIds { get; set; } = new();
+
+    /// <summary>
+    /// Denied claims not remitted because claims-service returned them without
+    /// a denial reason (<c>adjudicationResult.denialReasonCode</c>) or any
+    /// adjustment reason: an 835 denial needs a CARC, and none is made up.
+    /// They are picked up once their adjudication carries one.
+    /// </summary>
+    public List<string> DeniedWithoutReasonClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Claims whose payment reservation this run held, and which were released
     /// after it failed or was cancelled without paying them: automatically (no
     /// payment and no 835 in payment-service) or by a second approver. A later
@@ -266,23 +308,33 @@ public class PaymentRunCriteria
     /// Maximum claims per payment
     /// </summary>
     public int? MaxClaimsPerPayment { get; set; }
+
+    /// <summary>
+    /// Also remit denied claims (claims-service status Denied) that have not
+    /// been remitted yet, as zero-pay claims in the run's 835s. Default true:
+    /// providers must receive a remittance for denials. The same criteria
+    /// (dates, provider, amounts, include/exclude lists) select them.
+    /// </summary>
+    public bool IncludeDeniedClaims { get; set; } = true;
 }
 
 /// <summary>
-/// Claim status enumeration (mirrored from claims-service)
+/// Claim status, mirrored value for value from claims-service's
+/// <c>ClaimsService.Models.ClaimStatus</c>: claims-service serializes it as a
+/// number, so the numbers must match (they previously did not, and 5 —
+/// claims-service Approved — read here as Denied).
 /// </summary>
 public enum ClaimStatus
 {
-    Draft,
-    Submitted,
-    Acknowledged,
-    InReview,
-    Approved,
-    Denied,
-    PartiallyApproved,
-    Paid,
-    Appealed,
-    Finalized
+    Submitted = 1,
+    Received = 2,
+    InAdjudication = 3,
+    Pended = 4,
+    Approved = 5,
+    Denied = 6,
+    Paid = 7,
+    Voided = 8,
+    PartiallyPaid = 9
 }
 
 /// <summary>

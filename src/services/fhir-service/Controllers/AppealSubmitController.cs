@@ -81,6 +81,18 @@ public sealed class AppealSubmitController : FhirControllerBase
         {
             dto = BuildSubmitBundle(bundle);
         }
+        catch (AppealSubmitValueException ex)
+        {
+            // A recognizable Bundle carrying a coded value we cannot map
+            // (unknown line of business / appeal level / type). Defaulting
+            // it would put the appeal on the wrong regulatory clock, so the
+            // caller gets an OperationOutcome instead.
+            return UnprocessableEntity(BuildOutcome(
+                OperationOutcome.IssueSeverity.Error,
+                OperationOutcome.IssueType.CodeInvalid,
+                ex.Message,
+                ex.Location));
+        }
         catch (InvalidOperationException ex)
         {
             return UnprocessableEntity(BuildOutcome(
@@ -232,19 +244,19 @@ public sealed class AppealSubmitController : FhirControllerBase
         // targetResponseDate / urgentFlag presence, Task.code binding)
         // lands in a future PR.
 
+        var (appealType, appealLevel) = ResolveTypeAndLevel(task);
+
         return new AppealDto
         {
             Id = task.Id ?? string.Empty,
             MemberId = memberId!,
             ClaimId = claimId!,
             ProviderNPI = providerNpi!,
-            AppealType = ParseEnumOrDefault(task.Code?.Coding.FirstOrDefault()?.Code,
-                AppealType.Reconsideration),
-            AppealLevel = ParseExtensionEnumOrDefault(task,
-                FhirAppealMapper.AppealLevelExtensionUrl, AppealLevel.FirstLevel),
-            LineOfBusiness = ParseExtensionEnumOrDefault(task,
+            AppealType = appealType,
+            AppealLevel = appealLevel,
+            LineOfBusiness = ParseCodedExtension(task,
                 FhirAppealMapper.AppealLineOfBusinessExtensionUrl,
-                LineOfBusiness.Commercial),
+                LineOfBusiness.Commercial, LineOfBusinessAliases),
             Status = AppealStatus.Draft,
             Source = AppealSource.ProviderPortal,
             AppealReason = task.Description ?? string.Empty,
@@ -256,6 +268,109 @@ public sealed class AppealSubmitController : FhirControllerBase
                 FhirAppealMapper.AppealTargetResponseDateExtensionUrl),
             AssignedReviewerId = StripPrefix("Practitioner/", task.Owner?.Reference)
         };
+    }
+
+    // ── Coded-value mapping ─────────────────────────────────────────────
+    //
+    // Task.code and the appealLevel / lineOfBusiness extensions drive the
+    // regulatory response clock in appeals-service
+    // (AppealResponseDeadlinePolicy). A value that silently fell back to
+    // the default (Reconsideration / FirstLevel / Commercial) would put an
+    // external review, State Fair Hearing or Part D appeal on the internal
+    // commercial clock and get its legitimate TargetResponseDate rejected.
+    // So: absent → default; present but unrecognized → 422.
+    //
+    // Matching is case-insensitive and ignores '-', '_' and spaces, so
+    // "ExternalReview", "external-review" and "EXTERNAL_REVIEW" all map.
+
+    private static readonly IReadOnlyDictionary<string, AppealType> AppealTypeAliases =
+        new Dictionary<string, AppealType>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ire"] = AppealType.ExternalReview,
+            ["independentreview"] = AppealType.ExternalReview,
+            ["statefairhearing"] = AppealType.ExternalReview,
+            ["fairhearing"] = AppealType.ExternalReview,
+            ["redetermination"] = AppealType.Reconsideration
+        };
+
+    private static readonly IReadOnlyDictionary<string, AppealLevel> AppealLevelAliases =
+        new Dictionary<string, AppealLevel>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["first"] = AppealLevel.FirstLevel,
+            ["second"] = AppealLevel.SecondLevel,
+            ["external"] = AppealLevel.ExternalReview,
+            ["ire"] = AppealLevel.ExternalReview,
+            ["independentreview"] = AppealLevel.ExternalReview,
+            ["statefairhearing"] = AppealLevel.ExternalReview,
+            ["fairhearing"] = AppealLevel.ExternalReview
+        };
+
+    private static readonly IReadOnlyDictionary<string, LineOfBusiness> LineOfBusinessAliases =
+        new Dictionary<string, LineOfBusiness>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["medicareadvantage"] = LineOfBusiness.Medicare,
+            ["ma"] = LineOfBusiness.Medicare,
+            ["partc"] = LineOfBusiness.Medicare,
+            ["medicarepartc"] = LineOfBusiness.Medicare,
+            ["partd"] = LineOfBusiness.MedicarePartD,
+            ["pdp"] = LineOfBusiness.MedicarePartD,
+            ["exchange"] = LineOfBusiness.Marketplace,
+            ["qhp"] = LineOfBusiness.Marketplace
+        };
+
+    /// <summary>
+    /// Map Task.code → <see cref="AppealType"/> and the appealLevel
+    /// extension → <see cref="AppealLevel"/>, then reconcile: either one
+    /// marking external review makes the other external review too when
+    /// it was absent, so the submission lands on the external-review clock
+    /// regardless of which of the two the client populated. A grievance is
+    /// never promoted to external review.
+    /// </summary>
+    internal static (AppealType Type, AppealLevel Level) ResolveTypeAndLevel(Hl7.Fhir.Model.Task task)
+    {
+        var typeCode = task.Code?.Coding.FirstOrDefault()?.Code;
+        var appealType = ParseCode(typeCode, AppealType.Reconsideration, AppealTypeAliases, "Task.code");
+
+        var levelExt = task.Extension.FirstOrDefault(e => e.Url == FhirAppealMapper.AppealLevelExtensionUrl);
+        var levelCode = (levelExt?.Value as Code)?.Value;
+        var appealLevel = ParseCode(levelCode, AppealLevel.FirstLevel, AppealLevelAliases,
+            $"Task.extension('{FhirAppealMapper.AppealLevelExtensionUrl}')");
+
+        if (appealType == AppealType.ExternalReview && string.IsNullOrEmpty(levelCode))
+            appealLevel = AppealLevel.ExternalReview;
+        else if (appealLevel == AppealLevel.ExternalReview && string.IsNullOrEmpty(typeCode))
+            appealType = AppealType.ExternalReview;
+
+        return (appealType, appealLevel);
+    }
+
+    private static TEnum ParseCodedExtension<TEnum>(
+        Hl7.Fhir.Model.Task task, string extensionUrl, TEnum fallback,
+        IReadOnlyDictionary<string, TEnum> aliases) where TEnum : struct, Enum
+    {
+        var ext = task.Extension.FirstOrDefault(e => e.Url == extensionUrl);
+        return ParseCode((ext?.Value as Code)?.Value, fallback, aliases, $"Task.extension('{extensionUrl}')");
+    }
+
+    internal static TEnum ParseCode<TEnum>(
+        string? value, TEnum fallback, IReadOnlyDictionary<string, TEnum> aliases, string location)
+        where TEnum : struct, Enum
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+
+        var normalized = new string(value.Where(c => c is not ('-' or '_' or ' ')).ToArray());
+        if (!int.TryParse(normalized, out _)
+            && Enum.TryParse<TEnum>(normalized, ignoreCase: true, out var parsed)
+            && Enum.IsDefined(parsed))
+        {
+            return parsed;
+        }
+        if (aliases.TryGetValue(normalized, out var aliased)) return aliased;
+
+        throw new AppealSubmitValueException(
+            $"Unrecognized {typeof(TEnum).Name} code '{value}'. Allowed: " +
+            string.Join(", ", Enum.GetNames<TEnum>()) + ".",
+            location);
     }
 
     internal static AppealNoteDto CommunicationToNoteDto(Communication communication)
@@ -390,20 +505,6 @@ public sealed class AppealSubmitController : FhirControllerBase
             : value;
     }
 
-    private static TEnum ParseEnumOrDefault<TEnum>(string? value, TEnum fallback)
-        where TEnum : struct
-    {
-        if (string.IsNullOrEmpty(value)) return fallback;
-        return Enum.TryParse<TEnum>(value, ignoreCase: true, out var parsed) ? parsed : fallback;
-    }
-
-    private static TEnum ParseExtensionEnumOrDefault<TEnum>(
-        Hl7.Fhir.Model.Task task, string extensionUrl, TEnum fallback) where TEnum : struct
-    {
-        var ext = task.Extension.FirstOrDefault(e => e.Url == extensionUrl);
-        return ParseEnumOrDefault((ext?.Value as Code)?.Value, fallback);
-    }
-
     private static bool HasExtensionTrue(Hl7.Fhir.Model.Task task, string extensionUrl)
     {
         var ext = task.Extension.FirstOrDefault(e => e.Url == extensionUrl);
@@ -423,16 +524,33 @@ public sealed class AppealSubmitController : FhirControllerBase
     private static OperationOutcome BuildOutcome(
         OperationOutcome.IssueSeverity severity,
         OperationOutcome.IssueType code,
-        string diagnostics) => new()
+        string diagnostics,
+        string? location = null)
+    {
+        var issue = new OperationOutcome.IssueComponent
         {
-            Issue =
-            [
-                new OperationOutcome.IssueComponent
-                {
-                    Severity = severity,
-                    Code = code,
-                    Diagnostics = diagnostics
-                }
-            ]
+            Severity = severity,
+            Code = code,
+            Diagnostics = diagnostics
         };
+        if (!string.IsNullOrEmpty(location)) issue.Expression = [location];
+        return new OperationOutcome { Issue = [issue] };
+    }
+}
+
+/// <summary>
+/// A coded value in the submitted Task (Task.code, appealLevel or
+/// lineOfBusiness extension) that does not map to an appeals-service
+/// enum. Surfaces as a 422 OperationOutcome with
+/// <c>issue.code = code-invalid</c> and the FHIRPath of the offending
+/// element in <c>issue.expression</c>.
+/// </summary>
+internal sealed class AppealSubmitValueException : InvalidOperationException
+{
+    public string Location { get; }
+
+    public AppealSubmitValueException(string message, string location) : base(message)
+    {
+        Location = location;
+    }
 }

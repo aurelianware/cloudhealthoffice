@@ -77,11 +77,23 @@ public class HttpMemberServiceClient : IMemberServiceClient
 
     public async Task TerminateAsync(string tenantId, string memberId, TerminateMemberRequestDto request, CancellationToken ct = default)
     {
+        // Member-only termination (DELETE /members/{id}). NOT the POST
+        // /members/{id}/terminate variant: that one also bulk-terminates every
+        // active coverage via coverage-service (and returns 503 after already
+        // changing the member when there is none). The importer reconciles
+        // coverage itself, line by line, from the 834's own HD/DTP*349.
         var client = _httpClientFactory.CreateClient(HttpClientName);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/members/{Uri.EscapeDataString(memberId)}/terminate")
+        var url = $"/api/v1/members/{Uri.EscapeDataString(memberId)}" +
+                  $"?terminationDate={request.TerminationDate:yyyy-MM-dd}";
+        if (!string.IsNullOrEmpty(request.ReasonCode))
         {
-            Content = JsonContent.Create(request)
-        };
+            url += $"&reasonCode={Uri.EscapeDataString(request.ReasonCode)}";
+        }
+        if (!string.IsNullOrEmpty(request.EventId))
+        {
+            url += $"&eventId={Uri.EscapeDataString(request.EventId)}";
+        }
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Delete, url);
         httpRequest.Headers.Add("X-Tenant-ID", tenantId);
 
         using var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);

@@ -174,7 +174,7 @@ Representative line/claim codes:
 | `PRIOR_AUTH_REQUIRED`      | warning  | Service typically requires prior authorization.     |
 | `NON_COVERED_SERVICE`      | denial   | Service not covered under the plan (CARC 96).       |
 | `FREQUENCY_LIMITATION`     | denial   | Visit/day/dollar limit exceeded (CARC 119).         |
-| `NO_BENEFIT_MAPPING`       | denial   | Procedure has no benefit category (CARC 16/18).     |
+| `NO_BENEFIT_MAPPING`       | denial   | Procedure has no benefit category (CARC 16/204).    |
 | `PROVIDER_EXCLUDED`        | warning  | Provider on a federal exclusion list.               |
 
 Line `status` is one of `payable`, `not_covered`, `denied`, `needs_review`.

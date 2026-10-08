@@ -153,6 +153,9 @@ public class CosmosDbSeeder
                 rateType = l.RateType,
                 effectiveDate = l.EffectiveDate,
                 termDate = l.TermDate,
+                maxUnitsPerDay = l.MaxUnitsPerDay,
+                bilateralAdjustmentApplies = l.BilateralAdjustmentApplies,
+                multipleProcedureIndicator = l.MultipleProcedureIndicator,
             }),
         }).ToList();
 

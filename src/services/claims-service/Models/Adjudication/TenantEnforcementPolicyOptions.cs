@@ -26,6 +26,26 @@ public class TenantEnforcementPolicyOptions
         = CredentialingEnforcementMode.FailClosed;
 
     /// <summary>
+    /// Posture for exact duplicates detected by
+    /// <see cref="Services.Adjudication.Stages.DuplicateClaimStage"/> (same
+    /// member, billing provider, DOS, code + modifiers, units and charge as a
+    /// prior live claim). Default <see cref="DuplicateClaimEnforcementMode.Deny"/>
+    /// with CARC 18.
+    /// </summary>
+    public DuplicateClaimEnforcementMode ExactDuplicateMode { get; set; }
+        = DuplicateClaimEnforcementMode.Deny;
+
+    /// <summary>
+    /// Posture for suspect duplicates (same member, DOS and code as a prior
+    /// live claim but a different provider, modifiers, units or charge).
+    /// Default <see cref="DuplicateClaimEnforcementMode.PendForReview"/> —
+    /// these are frequently legitimate (bilateral, repeat, or split-billed
+    /// services), so they need an examiner rather than an auto-denial.
+    /// </summary>
+    public DuplicateClaimEnforcementMode SuspectDuplicateMode { get; set; }
+        = DuplicateClaimEnforcementMode.PendForReview;
+
+    /// <summary>
     /// Posture for NCCI / MUE edit failures (capability 5.7). Default
     /// <see cref="NcciEnforcementMode.PendForReview"/> diverges from the
     /// other modes' FailClosed default because NCCI failures often have

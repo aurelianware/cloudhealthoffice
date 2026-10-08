@@ -159,7 +159,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         var workingAccumulators = MeasureStage(
             "workingSet",
-            () => new AccumulatorWorkingSet(accumulators, plan));
+            () => new AccumulatorWorkingSet(accumulators, plan, _logger));
 
         // ── Step 3: Check for DRG/per-diem inpatient pricing ──
         var inpatientMethod = DetermineInpatientPricingMethod(request, plan);
@@ -396,7 +396,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             return new BenefitResolutionResult
             {
                 Success = false,
-                DenialReasonCode = "18",
+                // CARC 204 — same no-mapping condition as the per-line path.
+                DenialReasonCode = "204",
                 DenialReasonDescription = "No benefit category mapping for DRG claim"
             };
         }
@@ -472,6 +473,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 CoinsurancePercent = drgCostShare.CoinsurancePercent,
                 OopMaxReduction = Math.Round(drgCostShare.OopMaxReduction * proportion, 2),
                 MemberResponsibility = Math.Round(drgCostShare.MemberResponsibility * proportion, 2),
+                OopAppliedAmount = Math.Round(drgCostShare.OopApplied * proportion, 2),
                 PlanPaidAmount = Math.Round(drgCostShare.PlanPaid * proportion, 2),
                 IsDrgPriced = true,
                 Adjustments = [] // Adjustments are at the claim level for DRG
@@ -533,10 +535,13 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             line.PlaceOfService, line.Modifiers,
             line.RevenueCode, ct);
 
+        // CARC 204 (not covered under the patient's current benefit plan):
+        // the procedure maps to no benefit category on this plan. 96 is
+        // reserved for categories the plan configures but excludes.
         if (categoryMatch is null)
         {
             return CreateDeniedLine(line, billedAmount, allowedAmount,
-                "18", "Exact duplicate claim/service",
+                "204", "This service/equipment/drug is not covered under the patient's current benefit plan",
                 "No benefit category mapping for procedure code");
         }
 
@@ -654,6 +659,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             CoinsurancePercent = costShareResult.CoinsurancePercent,
             OopMaxReduction = costShareResult.OopMaxReduction,
             MemberResponsibility = costShareResult.MemberResponsibility,
+            OopAppliedAmount = costShareResult.OopApplied,
             PlanPaidAmount = costShareResult.PlanPaid,
             Adjustments = costShareResult.Adjustments
         };
@@ -819,29 +825,46 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         }
 
         // ── 5. Raw member responsibility ──
-        var rawMemberResponsibility = deductibleAmount + finalCopay + coinsuranceAmount;
+        // Split by whether each component counts toward the OOP max. A rule
+        // with OopApplies=false contributes cost share that neither consumes
+        // nor is capped by the OOP max. Absent rules (e.g. the HDHP-forced
+        // deductible) default to counting.
+        var deductibleCountsToOop = deductibleRule?.OopApplies ?? true;
+        var copayCountsToOop = copayRule?.OopApplies ?? true;
+        var coinsuranceCountsToOop = coinsuranceRule?.OopApplies ?? true;
 
-        // ── 6. OOP max cap ──
+        var oopEligible =
+            (deductibleCountsToOop ? deductibleAmount : 0)
+            + (copayCountsToOop ? finalCopay : 0)
+            + (coinsuranceCountsToOop ? coinsuranceAmount : 0);
+        var oopExcluded = deductibleAmount + finalCopay + coinsuranceAmount - oopEligible;
+
+        // ── 6. OOP max cap (OOP-eligible portion only) ──
         decimal oopMaxReduction = 0;
-        var oopRemaining = accumulators.GetRemainingOopMax(effectiveNetworkTier);
-
-        if (rawMemberResponsibility > oopRemaining && oopRemaining >= 0)
+        if (oopEligible > 0)
         {
-            oopMaxReduction = rawMemberResponsibility - oopRemaining;
-            rawMemberResponsibility = oopRemaining;
+            var oopRemaining = accumulators.GetRemainingOopMax(effectiveNetworkTier);
 
-            if (oopMaxReduction > 0)
+            if (oopEligible > oopRemaining && oopRemaining >= 0)
             {
-                adjustments.Add(new AdjustmentReason
+                oopMaxReduction = oopEligible - oopRemaining;
+                oopEligible = oopRemaining;
+
+                if (oopMaxReduction > 0)
                 {
-                    GroupCode = "OA",
-                    ReasonCode = "23",
-                    Amount = -oopMaxReduction
-                });
+                    adjustments.Add(new AdjustmentReason
+                    {
+                        GroupCode = "OA",
+                        ReasonCode = "23",
+                        Amount = -oopMaxReduction
+                    });
+                }
             }
+
+            accumulators.ApplyOopMax(oopEligible, effectiveNetworkTier);
         }
 
-        accumulators.ApplyOopMax(rawMemberResponsibility, effectiveNetworkTier);
+        var rawMemberResponsibility = oopEligible + oopExcluded;
 
         var memberResponsibility = rawMemberResponsibility;
         var planPaid = allowedAmount - memberResponsibility;
@@ -855,6 +878,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             CoinsurancePercent = coinsurancePercent,
             OopMaxReduction = oopMaxReduction,
             MemberResponsibility = memberResponsibility,
+            OopApplied = oopEligible,
             PlanPaid = planPaid,
             Adjustments = adjustments
         };
@@ -1025,6 +1049,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             TotalCoinsurance = lines.Sum(l => l.CoinsuranceAmount),
             TotalOopMaxReduction = lines.Sum(l => l.OopMaxReduction),
             TotalMemberResponsibility = lines.Sum(l => l.MemberResponsibility),
+            TotalOopApplied = lines.Sum(l => l.OopAppliedAmount),
             TotalPlanPaid = lines.Sum(l => l.PlanPaidAmount)
         };
     }
@@ -1053,6 +1078,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         public decimal CoinsurancePercent { get; init; }
         public decimal OopMaxReduction { get; init; }
         public decimal MemberResponsibility { get; init; }
+        public decimal OopApplied { get; init; }
         public decimal PlanPaid { get; init; }
         public List<AdjustmentReason> Adjustments { get; init; } = [];
     }

@@ -29,6 +29,7 @@ public class BatchEraGeneratorReversalTests
                 InterchangeReceiverId = "R",
                 ApplicationSenderId = "S",
                 ApplicationReceiverId = "R",
+                OriginatingCompanyId = "1123456789",
             },
         };
 
@@ -78,21 +79,95 @@ public class BatchEraGeneratorReversalTests
 
         Assert.Single(envelopes);
         Assert.True(envelopes[0].IsReversal);
-        Assert.Equal(-800m, envelopes[0].TotalPaymentAmount);
+        Assert.Equal(0m, envelopes[0].TotalPaymentAmount);       // BPR02 is never negative
+        Assert.Equal(-800m, envelopes[0].ForwardBalanceAmount);  // carried forward (PLB FB)
+    }
+
+    private static List<string[]> Segments(string edi) =>
+        edi.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
+
+    /// <summary>(code, reference, amount) of every PLB adjustment pair.</summary>
+    private static List<(string Code, string Reference, decimal Amount)> Plbs(List<string[]> segments) =>
+        segments.Where(s => s[0] == "PLB")
+            .SelectMany(s => Enumerable.Range(0, (s.Length - 3) / 2)
+                .Select(k => (Id: s[3 + 2 * k].Split(':'), Amount: decimal.Parse(s[4 + 2 * k])))
+                .Select(x => (x.Id[0], x.Id.Length > 1 ? x.Id[1] : string.Empty, x.Amount)))
+            .ToList();
+
+    private static void AssertBalanced(List<string[]> segments, decimal expectedBpr02)
+    {
+        var bpr02 = decimal.Parse(segments.Single(s => s[0] == "BPR")[2]);
+        Assert.Equal(expectedBpr02, bpr02);
+        Assert.True(bpr02 >= 0m);
+        var clp04 = segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4]));
+        Assert.Equal(bpr02, clp04 - Plbs(segments).Sum(p => p.Amount));
+    }
+
+    private static EraPaymentInput PaymentInput(string tpId, decimal amount) => new()
+    {
+        TradingPartnerId = tpId,
+        Payment = new Payment
+        {
+            CheckNumber = "0001000001",
+            PaymentMethod = "ACH",
+            TotalPaymentAmount = amount,
+            PaymentDate = new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc),
+            PayeeNPI = "1234567890",
+            ClaimPayments = new List<ClaimPayment>
+            {
+                new() { ClaimId = "c-pay", PatientControlNumber = "CLM-PAY", ClaimStatusCode = "1", ChargeAmount = 1000m, PaymentAmount = amount },
+            },
+        },
+    };
+
+    [Fact]
+    public void GenerateBatch_PureReversal_Bpr02Zero_NotificationOnly_BalanceForwardInPlb()
+    {
+        var inputs = new[] { ReversalInput("TP-A", -800m) };
+
+        var segments = Segments(_generator.GenerateBatch(inputs, Partners("TP-A")).Single().EdiContent);
+
+        var bpr = segments.Single(s => s[0] == "BPR");
+        Assert.Equal(new[] { "BPR", "H", "0.00", "C", "NON" }, bpr.Take(5));
+        Assert.Equal(17, bpr.Length);
+        Assert.Contains(segments, s => s[0] == "CLP" && s[2] == "22" && s[4] == "-800.00");
+        Assert.Equal(new[] { ("FB", "R-CHK001", -800m) }, Plbs(segments));
+        AssertBalanced(segments, 0m);
     }
 
     [Fact]
-    public void GenerateBatch_NegativeBpr_EmitsInformationalCode()
+    public void GenerateBatch_MixedNetNegative_Bpr02Zero_ForwardBalanceIsTheNet()
     {
-        // Per existing line 176 logic in BatchEraGeneratorService, BPR01
-        // branches on amount sign: positive → "C" (Credit), zero/negative
-        // → "I" (Informational). Reversal envelopes naturally sit on the
-        // "I" branch.
-        var inputs = new[] { ReversalInput("TP-A", -800m) };
+        // A partner paid 500 and recouped 800 in the same 835: owes 300.
+        var payment = PaymentInput("TP-A", 500m);
+        var reversal = ReversalInput("TP-A", -800m);
+        reversal.IsReversal = false; // same envelope, mixed
 
-        var envelopes = _generator.GenerateBatch(inputs, Partners("TP-A"));
+        var envelope = _generator.GenerateBatch(new[] { payment, reversal }, Partners("TP-A")).Single();
+        var segments = Segments(envelope.EdiContent);
 
-        Assert.Contains("BPR*I*-800.00", envelopes[0].EdiContent);
+        Assert.Equal(0m, envelope.TotalPaymentAmount);
+        Assert.Equal(-300m, envelope.ForwardBalanceAmount);
+        Assert.Equal(new[] { ("FB", "0001000001", -300m) }, Plbs(segments));
+        Assert.Equal("H", segments.Single(s => s[0] == "BPR")[1]);
+        AssertBalanced(segments, 0m);
+    }
+
+    [Fact]
+    public void GenerateBatch_MixedNetPositive_PaysTheNet_NoForwardBalance()
+    {
+        var payment = PaymentInput("TP-A", 1000m);
+        var reversal = ReversalInput("TP-A", -800m);
+        reversal.IsReversal = false;
+
+        var envelope = _generator.GenerateBatch(new[] { payment, reversal }, Partners("TP-A")).Single();
+        var segments = Segments(envelope.EdiContent);
+
+        Assert.Equal(200m, envelope.TotalPaymentAmount);
+        Assert.Equal(0m, envelope.ForwardBalanceAmount);
+        Assert.Empty(Plbs(segments));
+        Assert.Equal("C", segments.Single(s => s[0] == "BPR")[1]);
+        AssertBalanced(segments, 200m);
     }
 
     [Fact]

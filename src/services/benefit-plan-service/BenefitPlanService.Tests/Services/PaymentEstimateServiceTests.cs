@@ -256,12 +256,14 @@ public class PaymentEstimateServiceTests
         line.Messages.Should().Contain(m => m.Code == "NON_COVERED_SERVICE" && m.Severity == EstimateMessageSeverity.Denial);
     }
 
-    [Fact]
-    public async Task InvalidProcedureCode_NoBenefitMapping_NeedsReview()
+    [Theory]
+    [InlineData("16")]
+    [InlineData("204")]
+    public async Task InvalidProcedureCode_NoBenefitMapping_NeedsReview(string carc)
     {
         var h = new Harness();
         h.SetupPricing(Pricing((1, 100m, 100m, RateSource.BilledCharges)));
-        h.SetupBenefit(Benefit(false, DeniedLine(1, 100m, "16", "No benefit category mapping for procedure code")));
+        h.SetupBenefit(Benefit(false, DeniedLine(1, 100m, carc, "No benefit category mapping for procedure code")));
 
         var resp = await h.Build().EstimateAsync(Tenant, Request(Line(1, "ZZZZZ", 100m)));
 
@@ -282,6 +284,29 @@ public class PaymentEstimateServiceTests
         resp.Lines.Single().Messages.Should().Contain(m => m.Code == "BILLED_CHARGES_USED");
         resp.Confidence.MissingData.Should().Contain(d => d.Contains("Fee schedule for line 1"));
         resp.Confidence.Level.Should().NotBe(EstimateConfidenceLevel.High);
+    }
+
+    [Fact]
+    public async Task PricingWarnings_SurfacedAsLineMessages()
+    {
+        const string warning = "No CMS multiple procedure indicator on the fee schedule line for 29881; " +
+                               "multiple procedure reduction not applied";
+        var pricing = Pricing((1, 900m, 800m, RateSource.ContractedRate));
+        pricing = pricing with
+        {
+            LineResults = [pricing.LineResults[0] with { Warnings = [warning] }]
+        };
+
+        var h = new Harness();
+        h.SetupPricing(pricing);
+        h.SetupBenefit(Benefit(true, PayableLine(1, 800m)));
+
+        var resp = await h.Build().EstimateAsync(Tenant, Request(Line(1, "29881", 900m)));
+
+        resp.Lines.Single().Messages.Should().Contain(m => m.Code == "PRICING_WARNING"
+            && m.Severity == EstimateMessageSeverity.Warning
+            && m.Description == warning);
+        resp.Lines.Single().Messages.Should().Contain(m => m.Code == "FEE_SCHEDULE_APPLIED");
     }
 
     [Fact]

@@ -829,7 +829,11 @@ public class ClaimRepositoryMongo : IClaimRepository
                     DeductibleAmount = g.Sum(c => c.AdjudicationResult!.DeductibleAmount),
                     CoinsuranceAmount = g.Sum(c => c.AdjudicationResult!.CoinsuranceAmount),
                     CopayAmount = g.Sum(c => c.AdjudicationResult!.CopayAmount),
-                    PatientResponsibility = g.Sum(c => c.AdjudicationResult!.PatientResponsibility)
+                    PatientResponsibility = g.Sum(c => c.AdjudicationResult!.PatientResponsibility),
+                    // OOP-eligible amount; legacy rows without it count full
+                    // patient responsibility.
+                    OopAppliedAmount = g.Sum(c => c.AdjudicationResult!.OopAppliedAmount
+                        ?? c.AdjudicationResult!.PatientResponsibility)
                 })
             .ToListAsync(ct);
 
@@ -845,7 +849,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         {
             var tier = row.NetworkTier ?? "InNetwork";
             deductible[tier]  = deductible.GetValueOrDefault(tier)  + row.DeductibleAmount;
-            oop[tier]         = oop.GetValueOrDefault(tier)         + row.PatientResponsibility;
+            oop[tier]         = oop.GetValueOrDefault(tier)         + row.OopAppliedAmount;
             coinsurance[tier] = coinsurance.GetValueOrDefault(tier) + row.CoinsuranceAmount;
             copay[tier]       = copay.GetValueOrDefault(tier)       + row.CopayAmount;
         }
@@ -870,6 +874,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         public decimal CoinsuranceAmount { get; set; }
         public decimal CopayAmount { get; set; }
         public decimal PatientResponsibility { get; set; }
+        public decimal OopAppliedAmount { get; set; }
     }
 
     public async Task<bool> MarkSupersededProjectionAsync(
@@ -916,5 +921,45 @@ public class ClaimRepositoryMongo : IClaimRepository
 
         var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
         return result.MatchedCount > 0;
+    }
+
+    public async Task<IReadOnlyList<Claim>> FindDuplicateCandidatesAsync(
+        string tenantId,
+        string memberId,
+        DateTime serviceDateFrom,
+        DateTime serviceDateTo,
+        string excludeClaimVersionId,
+        CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+
+        // Leading equality + range predicates ride the
+        // (TenantId, MemberId, ServiceDateFrom) index created by
+        // ClaimIndexInitializer; the remaining predicates are residual
+        // filters over that bounded member/date slice. Ne/Nin also match
+        // documents missing the field, so legacy rows stay visible.
+        var filter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.MemberId, memberId),
+            b.Lte(c => c.ServiceDateFrom, serviceDateTo),
+            b.Gte(c => c.ServiceDateTo, serviceDateFrom),
+            b.Ne(c => c.Id, excludeClaimVersionId),
+            b.Ne(c => c.ClaimVersionId, excludeClaimVersionId),
+            b.Nin(c => c.Status, new[] { ClaimStatus.Denied, ClaimStatus.Voided }),
+            b.Nin(c => c.VersionState, new[]
+            {
+                ClaimVersionState.Draft,
+                ClaimVersionState.Denied,
+                ClaimVersionState.Voided,
+                ClaimVersionState.Adjusted,
+            }),
+            b.Eq(c => c.SupersededAt, (DateTime?)null),
+            b.Ne(c => c.ClaimFrequencyCode, "8"));
+
+        var items = await _collection.Find(filter)
+            .Limit(ClaimRepository.MaxDuplicateCandidates)
+            .ToListAsync(ct);
+
+        return items.Select(Hydrate).ToList();
     }
 }
