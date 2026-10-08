@@ -191,13 +191,13 @@ public class OopAppliedFinalizationSeamTests
             TenantId = "tenant-1",
             ClaimVersionId = adapterClaim.Id,
             Claim = adapterClaim,
-            // BenefitCalculationStage fails closed without fee-schedule
-            // allowed amounts (#1235); price at billed for this seam.
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+            // PricingStage (Order 250) supplies allowed amounts; the benefit
+            // stage pends without them.
             PricingResult = new PricingOutcome
             {
-                AllowedAmounts = adapterClaim.ClaimLines.ToDictionary(l => l.LineNumber, l => l.ChargeAmount),
+                AllowedAmounts = adapterClaim.ClaimLines.ToDictionary(l => l.LineNumber, _ => 100m),
             },
-            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
         var stageResult = await stage.ExecuteAsync(ctx, CancellationToken.None);
