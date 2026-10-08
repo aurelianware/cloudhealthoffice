@@ -24,7 +24,7 @@ public class EnrollmentImportServiceTests
     {
         var coverageClient = new Mock<ICoverageServiceClient>();
         coverageClient.Setup(c => c.CreateAsync(It.IsAny<string>(), It.IsAny<CreateCoverageRequestDto>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((string?)null);
 
         var memberClient = new Mock<IMemberServiceClient>();
         // No pre-existing member, so imports take the "create new" path.

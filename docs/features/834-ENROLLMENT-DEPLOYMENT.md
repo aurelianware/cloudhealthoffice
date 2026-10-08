@@ -634,24 +634,27 @@ await _kafkaProducer.ProduceAsync("enrollment-import", new Message<string, Enrol
 
 ### Sample 834 File Structure
 
-The `test-x12-834-enrollment-sample.edi` file demonstrates:
+The `test-x12-834-enrollment-sample.edi` file follows the 005010X220A1 loop
+structure: every member — subscriber or dependent — is its own Loop 2000
+starting at `INS` (INS01 `Y`/`N`, INS02 relationship), dependents carry the
+subscriber's `REF*0F`, coverage dates are per `HD` (Loop 2300 `DTP*348`/`349`),
+and `LS*2700`…`LE*2700` wraps member reporting categories (not dependents).
 
-**Member 1: John Smith (Employee, Active, Family Coverage)**
+**Family 1: John Smith — 021 (Addition)**
 - SubscriberId: BSCA123456789
-- Coverage: Health (PPO) + Dental (Basic) + Vision (Standard)
-- Dependents: Jane Smith (spouse), Michael Smith (child)
-- MaintenanceType: 021 (Addition)
+- Coverage: Health (PPO) + Dental (Basic) + Vision (Standard), benefit begin 2026-02-01
+- Dependents (own INS loops): Jane Smith (INS02 01 spouse, REF*23), Michael Smith (INS02 19 child)
+- Also carries a 2100C mailing address, a 2310 PCP and a 2700 reporting category
 
-**Member 2: Sarah Johnson (Employee, Active, Employee+Spouse)**
+**Family 2: Sarah Johnson — 001 (Change)**
 - SubscriberId: BSCA987654321
 - Coverage: Health (HMO)
-- Dependent: Robert Johnson (spouse)
-- MaintenanceType: 021 (Addition)
+- Dependent: Robert Johnson (INS02 01 spouse), also 001
 
-**Member 3: Robert Williams (Employee, Terminated)**
+**Family 3: Robert Williams — 024 (Termination)**
 - SubscriberId: BSCA555666777
-- Enrollment: 2025-01-15, Termination: 2026-01-31
-- MaintenanceType: 001 (Change), BenefitStatus: T (Terminated)
+- Coverage: Health (PPO) 2025-01-15 through DTP*349 2026-01-31
+- Dependent: Emma Williams (INS02 19 child), also 024 with DTP*349
 
 ### Cosmos DB Schema
 

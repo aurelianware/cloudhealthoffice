@@ -35,7 +35,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 BENEFIT_PLAN_URL="${BENEFIT_PLAN_URL:-http://localhost:5002}"
 ENROLLMENT_IMPORT_URL="${ENROLLMENT_IMPORT_URL:-http://localhost:5011}"
 CLAIMS_URL="${CLAIMS_URL:-http://localhost:5001}"
-TENANT_ID="${TENANT_ID:-tenant-smoke-834-837}"
+# Fresh tenant per run by default: the fixture's target family is a 021
+# (addition), which is correctly skipped — no coverage written — when the
+# member already exists from a previous run against the same tenant.
+TENANT_ID="${TENANT_ID:-tenant-smoke-834-837-$(date +%s)-$$}"
 POLL_TIMEOUT_SECONDS="${POLL_TIMEOUT_SECONDS:-60}"
 
 FIXTURE_834="${REPO_ROOT}/docs/testing/test-x12-834-enrollment-sample.edi"
@@ -129,7 +132,7 @@ import834_response=$(curl -sS -f -X POST "${ENROLLMENT_IMPORT_URL}/api/v1/enroll
   -F "file=@${FIXTURE_834}")
 echo "$import834_response" | jq '{successCount, failedCount, coverageRecordsCreated, coverageMappingsUnresolved}'
 
-# The fixture carries three subscribers across four distinct
+# The fixture carries three families across four distinct
 # group/insurance-line/plan-code combinations (HLT/PPO, DEN, VIS, and a
 # second subscriber's HLT/HMO) -- step 2 above deliberately seeds only the
 # one this smoke test's target member (FIXTURE_MEMBER_ID) actually needs.
