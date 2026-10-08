@@ -516,6 +516,10 @@ components:
         chargeAmount:
           type: number
           format: decimal
+          description: >-
+            Line-item charge: the TOTAL billed for this service line across
+            all `units` (837 SV102/SV203), not a per-unit price. The
+            encounter total charge is the sum of line chargeAmount values.
         serviceDateFrom:
           type: string
           format: date-time

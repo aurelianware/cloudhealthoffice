@@ -29,6 +29,10 @@ COPY src/engines/CloudHealthOffice.NcciEngine/CloudHealthOffice.NcciEngine.cspro
 # 5.8 — CoordinationOfBenefitsStage uses the CobEngine class library
 # for payer-order rule labelling at adjudication pipeline Order=500.
 COPY src/engines/CloudHealthOffice.CobEngine/CloudHealthOffice.CobEngine.csproj src/engines/CloudHealthOffice.CobEngine/
+# PricingStage (Order=250) — fee schedule engine wire contract
+# (PricingRequest / PricingResultSet) + its ReferenceData dependency.
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet restore src/services/claims-service/claims-service.csproj
 
 # Copy source code and build
@@ -40,6 +44,8 @@ COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/ src/engines/CloudHealthOffice.ClaimsScrubEngine/
 COPY src/engines/CloudHealthOffice.NcciEngine/ src/engines/CloudHealthOffice.NcciEngine/
 COPY src/engines/CloudHealthOffice.CobEngine/ src/engines/CloudHealthOffice.CobEngine/
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet build src/services/claims-service/claims-service.csproj -c Release --no-restore
 
 # Publish stage

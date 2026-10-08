@@ -480,8 +480,12 @@ public class ClaimLine
     public decimal Units { get; set; } = 1;
 
     /// <summary>
-    /// Charge amount per unit
-    /// 837: SV102 (professional) or SV202 (institutional)
+    /// Line-item charge amount: the TOTAL billed for this line across all
+    /// <see cref="Units"/> (NOT a per-unit price). Σ ChargeAmount over all
+    /// lines must equal the claim's <see cref="Claim.TotalChargeAmount"/>
+    /// (CLM02 balancing, scrub rule AL002) and flows unchanged to the
+    /// 835 SVC02.
+    /// 837: SV102 (professional) or SV203 (institutional)
     /// </summary>
     [Required]
     [Range(0, 999999.99)]
@@ -782,7 +786,7 @@ public class PendDetails
 {
     /// <summary>
     /// Short pend reason code consumed by the work queue categorizer.
-    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN.
+    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN, PRICING.
     /// </summary>
     [Required]
     [StringLength(20)]

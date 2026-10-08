@@ -163,9 +163,12 @@ public class ClaimSubmissionService : IClaimSubmissionService
         // Compute total charge from the lines BEFORE validating, so the
         // caller-supplied total doesn't influence the validation outcome
         // (legacy POST has always recomputed; preserve that semantic).
+        // ChargeAmount is the line TOTAL (837 SV102/SV203), so the claim
+        // total is a plain sum -- multiplying by Units would overstate
+        // multi-unit lines and fail CLM02 balancing (scrub rule AL002).
         if (claim.ClaimLines is { Count: > 0 })
         {
-            claim.TotalChargeAmount = claim.ClaimLines.Sum(l => l.ChargeAmount * l.Units);
+            claim.TotalChargeAmount = claim.ClaimLines.Sum(l => l.ChargeAmount);
         }
 
         var validationErrors = Validate(claim);

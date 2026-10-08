@@ -320,6 +320,10 @@ public class EncounterServiceLine
     [Range(0, 9999)]
     public decimal Units { get; set; } = 1;
 
+    /// <summary>
+    /// Line-item charge: the total billed for this line across all
+    /// <see cref="Units"/> (837 SV102/SV203), not a per-unit price.
+    /// </summary>
     [Required]
     [Range(0, 999999.99)]
     public decimal ChargeAmount { get; set; }

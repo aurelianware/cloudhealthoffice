@@ -89,6 +89,16 @@ public class ClaimAdjudicationContext
     public ResolvedNetworkTier? MatchedNetworkTier { get; set; }
 
     /// <summary>
+    /// Per-line fee-schedule pricing populated by
+    /// <see cref="Stages.PricingStage"/> (Order=250). Null until that stage
+    /// runs (or when it is disabled). <see cref="Stages.BenefitCalculationStage"/>
+    /// only calculates when this is present and
+    /// <see cref="PricingOutcome.IsFullyPriced"/> — it never lets the engine
+    /// fall back to allowed = billed.
+    /// </summary>
+    public PricingOutcome? PricingResult { get; set; }
+
+    /// <summary>
     /// Per-check enforcement outcomes accumulated by
     /// <see cref="Stages.NetworkCredentialingStage"/>. Surfaced on the
     /// audit trail and consumed by remittance generation (capability 5.10)

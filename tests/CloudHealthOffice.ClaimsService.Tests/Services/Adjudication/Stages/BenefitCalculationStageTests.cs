@@ -1,7 +1,9 @@
 using ClaimsService.Models;
+using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
 using ClaimsService.Services.Resolution;
+using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,6 +39,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -85,6 +88,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
             AdjudicationResult = new AdjudicationResult
             {
@@ -134,6 +138,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
         };
 
         var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
@@ -152,6 +157,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedPlan = new ResolvedBenefitPlan { Id = "legacy-plan-A", PlanGuid = null },
         };
 
@@ -171,6 +177,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
             ResolvedPlan = new ResolvedBenefitPlan { Id = "PLAN-FRIENDLY-NAME", PlanGuid = resolvedGuid },
         };
@@ -198,6 +205,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -219,6 +227,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -247,6 +256,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember
             {
                 MemberId = "MEM-1",
@@ -276,6 +286,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember
             {
                 MemberId = "MEM-1",
@@ -303,6 +314,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember
             {
                 MemberId = "MEM-1",
@@ -334,6 +346,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -357,6 +370,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -379,6 +393,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember
             {
                 MemberId = "MEM-1",
@@ -407,6 +422,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember
             {
                 MemberId = "MEM-1",
@@ -440,6 +456,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -468,6 +485,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -495,6 +513,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -528,6 +547,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -571,6 +591,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
         };
 
@@ -601,6 +622,7 @@ public class BenefitCalculationStageTests
             TenantId = "tenant-1",
             ClaimVersionId = claim.Id,
             Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
         };
         _memberResolver.GetMemberAsync("tenant-1", "MEM-1", Arg.Any<CancellationToken>())
             .Returns(new ResolvedMember { MemberId = "MEM-1", SubscriberMemberId = "SUB-7" });
@@ -617,6 +639,188 @@ public class BenefitCalculationStageTests
 
         Assert.Equal("SUB-7", captured!.SubscriberId);
     }
+
+    [Fact]
+    public async Task Execute_PricedLines_FlowIntoEngineAsAllowedAmounts_NotBilled()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+        };
+
+        BenefitResolutionRequest? captured = null;
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.Arg<BenefitResolutionRequest>();
+                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.NotNull(captured);
+        Assert.Equal(100m, captured!.Lines.Single().BilledAmount);
+        Assert.Equal(72m, captured.AllowedAmounts[1]);
+        Assert.Single(captured.AllowedAmounts);
+    }
+
+    [Fact]
+    public async Task Execute_MultiUnitLine_SendsLineTotalAsBilled()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.ClaimLines[0].ChargeAmount = 300m;
+        claim.ClaimLines[0].Units = 3m;
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 210m),
+        };
+
+        BenefitResolutionRequest? captured = null;
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.Arg<BenefitResolutionRequest>();
+                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+            });
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        var line = captured!.Lines.Single();
+        Assert.Equal(300m, line.BilledAmount);
+        Assert.Equal(3m, line.Units);
+        Assert.Equal(210m, captured.AllowedAmounts[1]);
+    }
+
+    [Fact]
+    public async Task Execute_PricingDidNotRun_PendsWithoutEngineCall()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(BenefitCalculationStage.PricingRequiredPendCode, ctx.PendDetails!.PendCode);
+        Assert.Equal(0m, ctx.AdjudicationResult.AllowedAmount);
+        await _engine.DidNotReceive().CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_PricingIncomplete_PendsWithoutEngineCall_AndKeepsPricingPendDetails()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var pricingPend = new PendDetails { PendCode = PricingStage.NoContractPendCode, PendReason = "line 1 unpriced" };
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PendDetails = pricingPend,
+            PricingResult = new PricingOutcome
+            {
+                UnpricedLines = new[] { new UnpricedLine(1, "99213", "no rate") },
+            },
+        };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Same(pricingPend, ctx.PendDetails);
+        await _engine.DidNotReceive().CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_MembershipEvaluatedWithoutMatchedTier_SendsOutOfNetwork()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+        };
+        // NetworkCredentialingStage ran (SoftValidation) but no tier matched.
+        ctx.EnforcementOutcomes.Add(new EnforcementOutcome(
+            EnforcementCheck.Membership, EnforcementDecision.Observe, "SoftValidation",
+            "Billing provider is not an active member of any plan tier on the service date.",
+            claim.ServiceDateFrom));
+
+        BenefitResolutionRequest? captured = null;
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.Arg<BenefitResolutionRequest>();
+                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+            });
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(NetworkTier.OutOfNetwork, captured!.NetworkTier);
+        Assert.Equal("OutOfNetwork", ctx.AdjudicationResult.NetworkTier);
+    }
+
+    [Fact]
+    public async Task Execute_MatchedNetworkTier_SendsInNetwork()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            MatchedNetworkTier = new ResolvedNetworkTier { TierName = "Tier 1", TierLevel = 1, NetworkId = "NET-1" },
+        };
+        ctx.EnforcementOutcomes.Add(new EnforcementOutcome(
+            EnforcementCheck.Membership, EnforcementDecision.Allow, "FailClosed", null,
+            claim.ServiceDateFrom, "NET-1", "Tier 1", 1));
+
+        BenefitResolutionRequest? captured = null;
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.Arg<BenefitResolutionRequest>();
+                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+            });
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(NetworkTier.InNetwork, captured!.NetworkTier);
+        Assert.Equal("InNetwork", ctx.AdjudicationResult.NetworkTier);
+    }
+
+    [Fact]
+    public void ResolveNetworkTier_NetworkStageDidNotRun_DefaultsInNetwork()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+        };
+
+        Assert.Equal(NetworkTier.InNetwork, BenefitCalculationStage.ResolveNetworkTier(ctx));
+    }
+
+    private static PricingOutcome PricedAt(AdapterClaim claim, decimal allowedPerLine) => new()
+    {
+        AllowedAmounts = claim.ClaimLines.ToDictionary(l => l.LineNumber, _ => allowedPerLine),
+    };
 
     private static AdapterClaim BuildClaim(string? planId)
     {

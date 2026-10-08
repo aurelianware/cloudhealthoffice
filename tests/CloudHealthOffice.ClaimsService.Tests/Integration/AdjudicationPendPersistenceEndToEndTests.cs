@@ -137,6 +137,59 @@ public class AdjudicationPendPersistenceEndToEndTests
         Assert.Equal(ClaimStatus.Denied, state.Status);
     }
 
+    [Fact]
+    public async Task Unpriced_line_orchestrator_run_persists_Pended_NOCONTRACT_without_calling_benefit_engine()
+    {
+        // No contracted / plan-default rate for the line: the fee schedule
+        // engine falls back to billed charges. The pipeline must pend instead
+        // of paying billed — BenefitCalculationStage never reaches the engine
+        // (no accumulator write, no allowed = billed).
+        var claim = BuildCobClaim();
+        claim.BenefitPlanId = Guid.NewGuid().ToString();
+        SetupAdapterReturningClaim(claim);
+
+        var pricingClient = Substitute.For<IFeeSchedulePricingClient>();
+        pricingClient.ResolveBatchAsync(TenantId, Arg.Any<IReadOnlyList<CloudHealthOffice.FeeScheduleEngine.Models.PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(new CloudHealthOffice.FeeScheduleEngine.Models.PricingResultSet
+            {
+                LineResults = new[]
+                {
+                    new CloudHealthOffice.FeeScheduleEngine.Models.PricingResult
+                    {
+                        LineNumber = 1,
+                        ProcedureCode = "99213",
+                        AllowedAmount = 100m,
+                        BilledAmount = 100m,
+                        RateSource = CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.BilledCharges,
+                        FeeScheduleType = CloudHealthOffice.FeeScheduleEngine.Domain.FeeScheduleType.Ucr,
+                    },
+                },
+            });
+        var engine = Substitute.For<CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine>();
+
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new PricingStage(pricingClient, NullLogger<PricingStage>.Instance),
+            new BenefitCalculationStage(
+                engine,
+                _memberResolver,
+                Substitute.For<IAuthorizationValidationClient>(),
+                NullLogger<BenefitCalculationStage>.Instance),
+        };
+
+        var state = new FakeClaimState();
+        var orch = BuildOrchestrator(stages, state);
+
+        await orch.AdjudicateAsync(BuildSubmittedMessage("ver-persist-pricing"), BuildMessageContext("ver-persist-pricing"), CancellationToken.None);
+
+        Assert.Equal(ClaimStatus.Pended, state.Status);
+        Assert.Equal(PricingStage.NoContractPendCode, state.PendDetails!.PendCode);
+        Assert.Contains("line 1", state.PendDetails.PendReason);
+        await engine.DidNotReceive().CalculateAsync(
+            Arg.Any<CloudHealthOffice.BenefitEngine.Models.BenefitResolutionRequest>(),
+            Arg.Any<CancellationToken>());
+    }
+
     private void SetupAdapterReturningClaim(AdapterClaim claim) =>
         _adapter.GetClaimAsync(Arg.Any<ClaimAdapterRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ClaimAdapterResponse { Platform = "cho", Claim = claim });
@@ -179,7 +232,8 @@ public class AdjudicationPendPersistenceEndToEndTests
                 Arg.Any<CancellationToken>(),
                 Arg.Any<PendDetails?>(),
                 Arg.Any<bool>(),
-                Arg.Any<ClaimStatus?>())
+                Arg.Any<ClaimStatus?>(),
+                Arg.Any<string?>())
             .Returns(ci =>
             {
                 var pendDetails = ci.ArgAt<PendDetails?>(5);
