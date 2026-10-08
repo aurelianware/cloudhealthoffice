@@ -124,6 +124,15 @@ public class Coverage
     [StringLength(3)]
     public string? MaintenanceReasonCode { get; set; }
 
+    /// <summary>
+    /// The termination date the last reinstatement (834 025, <see cref="Reinstate"/>)
+    /// cleared, or null. Lets enrollment-import finish a member-level
+    /// reinstatement that stopped part-way: the lines already reinstated still
+    /// say which termination they reversed, so a replay reinstates the other
+    /// lines ended on that same date and nothing else.
+    /// </summary>
+    public DateTime? ReinstatedTerminationDate { get; set; }
+
     // ── PCP (Primary Care Provider) Assignment ──
 
     /// <summary>
@@ -179,21 +188,117 @@ public class Coverage
     public string? LastUpdatedBy { get; set; }
 
     /// <summary>
-    /// Statuses whose coverage was in force for its effective/termination span.
+    /// Statuses whose coverage is in force for its effective/termination span.
     /// Date-of-service eligibility is decided by the span, not by the current
     /// status: a Terminated coverage still covers service dates on or before its
-    /// termination date (including after a retro-term). Pending is excluded: it
-    /// can mean "not yet effectuated" (e.g. ACA binder payment outstanding), so
-    /// treating it as in force would fail open. Suspended (payment hold with no
-    /// span of its own) is excluded too, as is any status not listed here, so a
-    /// future void/cancel status cannot leak into eligibility.
+    /// termination date (including after a retro-term), and a Pending coverage
+    /// covers service dates from its effective date — so a future-dated add is
+    /// eligible on its effective date without waiting for
+    /// <see cref="Services.CoverageStatusSweepJob"/> to promote it, and the span
+    /// check still rejects every date before it.
+    /// <para>
+    /// Pending here is ONLY the auto-assigned "not yet effective" state:
+    /// CoverageController.CreateCoverage sets it solely for a future effective
+    /// date, and UpdateCoverage refuses it otherwise. Any future "awaiting
+    /// effectuation" state (e.g. ACA binder payment outstanding) must be a
+    /// distinct status that stays out of this list — reusing Pending for it
+    /// would fail open.
+    /// </para>
+    /// Suspended (payment hold with no span of its own) is excluded, as is any
+    /// status not listed here, so a future void/cancel status cannot leak into
+    /// eligibility.
     /// </summary>
     public static readonly IReadOnlyList<CoverageStatus> DateOfServiceStatuses = new[]
     {
         CoverageStatus.Active,
+        CoverageStatus.Pending,
         CoverageStatus.Terminated,
         CoverageStatus.COBRA
     };
+
+    /// <summary>
+    /// Sets the termination date (inclusive last day of coverage, 834 DTP*349)
+    /// and derives the current status from it: Terminated once the date is
+    /// today or past; a future-dated termination leaves the coverage in its
+    /// current in-force status until <see cref="Services.CoverageStatusSweepJob"/>
+    /// flips it on that date. Moving the date of an already-Terminated
+    /// coverage into the future puts it back in force. Date-of-service
+    /// eligibility does not depend on this: it is decided by the span.
+    /// </summary>
+    public void ApplyTermination(DateTime terminationDate, DateTime today)
+    {
+        TerminationDate = terminationDate.Date;
+        if (terminationDate.Date <= today.Date)
+        {
+            Status = CoverageStatus.Terminated;
+        }
+        else if (Status == CoverageStatus.Terminated)
+        {
+            Status = InForceStatus;
+        }
+    }
+
+    /// <summary>
+    /// Reinstatement (834 INS03=025): the termination is reversed, as if it
+    /// had not happened — the termination date is cleared and a Terminated or
+    /// Suspended coverage returns to its in-force status. The original
+    /// effective date is kept, so the span is continuous.
+    /// </summary>
+    public void Reinstate()
+    {
+        if (TerminationDate.HasValue) ReinstatedTerminationDate = TerminationDate.Value.Date;
+        TerminationDate = null;
+        if (Status is CoverageStatus.Terminated or CoverageStatus.Suspended)
+        {
+            Status = InForceStatus;
+        }
+    }
+
+    /// <summary>
+    /// Statuses that end in Terminated on their own once the termination date
+    /// is reached: the in-force ones. Suspended (a payment hold) and any status
+    /// not listed stay as they are — turning them into Terminated would make
+    /// the span eligible for its dates of service again without a
+    /// reinstatement.
+    /// </summary>
+    public static readonly IReadOnlyList<CoverageStatus> AutoTerminatedStatuses = new[]
+    {
+        CoverageStatus.Active,
+        CoverageStatus.Pending,
+        CoverageStatus.COBRA
+    };
+
+    /// <summary>
+    /// The status this coverage's date span has moved it to as of
+    /// <paramref name="today"/>, or null when it needs no change: an in-force
+    /// coverage (<see cref="AutoTerminatedStatuses"/>) whose termination date
+    /// is today or past is Terminated, and a Pending
+    /// coverage whose effective date has arrived is in force (Active, or COBRA
+    /// for COBRA coverage). Pending only ever means "not yet effective" here:
+    /// CoverageController.CreateCoverage sets it solely for a future effective
+    /// date, so the arrival of that date is what effectuates it.
+    /// </summary>
+    public CoverageStatus? DueStatusTransition(DateTime today)
+    {
+        if (AutoTerminatedStatuses.Contains(Status)
+            && TerminationDate.HasValue && TerminationDate.Value.Date <= today.Date)
+        {
+            return CoverageStatus.Terminated;
+        }
+        if (Status == CoverageStatus.Pending && EffectiveDate.Date <= today.Date)
+        {
+            return InForceStatus;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The status as of <paramref name="today"/>, whether or not the daily
+    /// status sweep has stored it yet.
+    /// </summary>
+    public CoverageStatus CurrentStatus(DateTime today) => DueStatusTransition(today) ?? Status;
+
+    private CoverageStatus InForceStatus => IsCOBRA ? CoverageStatus.COBRA : CoverageStatus.Active;
 
     /// <summary>
     /// Check if coverage is in force on a specific date of service. A Terminated

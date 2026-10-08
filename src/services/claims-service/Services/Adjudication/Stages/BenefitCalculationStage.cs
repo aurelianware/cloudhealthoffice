@@ -636,15 +636,131 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             PaymentDate = existing.PaymentDate,
         };
 
-        context.LineAdjudicationResults = result.Lines
-            .Select(l => new ClaimsLineAdj
+        // Line CAS is load-bearing downstream: ClaimEventPublisher derives
+        // each finalized line's deductible / coinsurance / copay from PR-1 /
+        // PR-2 / PR-3 here, and accumulator-service prefers those line
+        // amounts over the claim-level totals. Leaving the list empty
+        // published a deductible delta of 0 for every engine-adjudicated
+        // claim.
+        var priorLines = context.LineAdjudicationResults;
+        context.LineAdjudicationResults = OrderByClaimLines(context.Claim, result.Lines)
+            .Select((l, i) => new ClaimsLineAdj
             {
                 AllowedAmount = l.AllowedAmount,
                 PaidAmount = l.PlanPaidAmount,
                 PatientResponsibility = l.MemberResponsibility,
                 OopAppliedAmount = l.OopAppliedAmount,
-                AdjustmentReasons = new List<ClaimAdjustmentReason>(),
+                AdjustmentReasons = MergeAdjustments(
+                    MapLineAdjustments(l),
+                    i < priorLines.Count ? priorLines[i].AdjustmentReasons : null),
             })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Orders engine line results to match <c>Claim.ClaimLines</c>:
+    /// <see cref="PersistenceStage"/> writes line results onto the head
+    /// row's claim lines positionally, while the engine emits them sorted
+    /// by line number. Falls back to engine order when the two sets don't
+    /// correspond one-to-one by line number.
+    /// </summary>
+    private static IReadOnlyList<LineBenefitResult> OrderByClaimLines(
+        AdapterClaim claim,
+        IReadOnlyList<LineBenefitResult> engineLines)
+    {
+        if (claim.ClaimLines.Count != engineLines.Count) return engineLines;
+
+        var byNumber = new Dictionary<int, LineBenefitResult>();
+        foreach (var line in engineLines)
+        {
+            if (!byNumber.TryAdd(line.LineNumber, line)) return engineLines;
+        }
+
+        var ordered = new List<LineBenefitResult>(engineLines.Count);
+        foreach (var claimLine in claim.ClaimLines)
+        {
+            if (!byNumber.TryGetValue(claimLine.LineNumber, out var match)) return engineLines;
+            ordered.Add(match);
+        }
+        return ordered;
+    }
+
+    /// <summary>
+    /// Maps one engine line onto 835-style line CAS. The engine's own
+    /// <see cref="LineBenefitResult.Adjustments"/> (CO-45 contractual,
+    /// PR-1/2/3 cost share, OA-23 OOP-max / COB reductions, CO-denial) are
+    /// carried verbatim. Two engine shapes need filling in so the line
+    /// still balances (charge − ΣCAS = paid) and carries its cost share:
+    /// <list type="bullet">
+    ///   <item><description>DRG / per-diem lines, whose adjustments live
+    ///     on the claim-level <see cref="DrgCostShareResult"/>: synthesized
+    ///     from the line's allocated amounts, with an OA-23 entry absorbing
+    ///     the OOP-max reduction and allocation rounding.</description></item>
+    ///   <item><description>Denied lines, which carry only the CO-denial
+    ///     against the allowed amount: the billed-over-allowed contractual
+    ///     reduction is added as CO-45.</description></item>
+    /// </list>
+    /// Zero-amount entries are dropped.
+    /// </summary>
+    internal static List<ClaimAdjustmentReason> MapLineAdjustments(LineBenefitResult line)
+    {
+        var reasons = new List<ClaimAdjustmentReason>();
+
+        reasons.AddRange(line.Adjustments.Select(a => new ClaimAdjustmentReason
+        {
+            GroupCode = a.GroupCode,
+            ReasonCode = a.ReasonCode,
+            RemarkCode = a.RemarkCode,
+            Amount = a.Amount,
+        }));
+
+        if (line.IsDrgPriced && line.Adjustments.Count == 0)
+        {
+            AddIfNonZero(reasons, "PR", "1", line.DeductibleAmount);
+            AddIfNonZero(reasons, "PR", "3", line.CopayAmount);
+            AddIfNonZero(reasons, "PR", "2", line.CoinsuranceAmount);
+            var costShare = line.DeductibleAmount + line.CopayAmount + line.CoinsuranceAmount;
+            var memberPortion = line.AllowedAmount - line.PlanPaidAmount;
+            AddIfNonZero(reasons, "OA", "23", memberPortion - costShare);
+        }
+
+        if (!reasons.Any(r => r.GroupCode == "CO" && r.ReasonCode == "45"))
+        {
+            reasons.Insert(0, new ClaimAdjustmentReason
+            {
+                GroupCode = "CO",
+                ReasonCode = "45",
+                Amount = line.ContractualAdjustment,
+            });
+        }
+
+        return reasons.Where(r => r.Amount != 0m).ToList();
+    }
+
+    private static void AddIfNonZero(
+        List<ClaimAdjustmentReason> reasons, string group, string carc, decimal amount)
+    {
+        if (amount == 0m) return;
+        reasons.Add(new ClaimAdjustmentReason { GroupCode = group, ReasonCode = carc, Amount = amount });
+    }
+
+    /// <summary>
+    /// The engine is authoritative for the group/CARC pairs it emits; an
+    /// adjustment an earlier stage already wrote on the same line survives
+    /// only when the engine didn't emit that pair, so re-deriving cost
+    /// share never double counts it.
+    /// </summary>
+    private static List<ClaimAdjustmentReason> MergeAdjustments(
+        List<ClaimAdjustmentReason> engine,
+        IReadOnlyList<ClaimAdjustmentReason>? prior)
+    {
+        if (prior is null || prior.Count == 0) return engine;
+
+        var enginePairs = engine
+            .Select(r => (r.GroupCode, r.ReasonCode))
+            .ToHashSet();
+        return engine
+            .Concat(prior.Where(r => !enginePairs.Contains((r.GroupCode, r.ReasonCode))))
             .ToList();
     }
 

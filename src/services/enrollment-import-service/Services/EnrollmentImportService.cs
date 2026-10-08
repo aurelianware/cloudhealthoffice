@@ -176,6 +176,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 DependentsFailed = result.DependentsFailed,
                 CoverageRecordsCreated = result.CoverageRecordsCreated,
                 CoverageRecordsUpdated = result.CoverageRecordsUpdated,
+                CoverageRecordsReinstated = result.CoverageRecordsReinstated,
                 CoverageRecordsTerminated = result.CoverageRecordsTerminated,
                 CoverageMappingsUnresolved = result.CoverageMappingsUnresolved,
                 Errors = result.Errors
@@ -757,6 +758,10 @@ public class EnrollmentImportService : IEnrollmentImportService
                     await TerminateCoverageAsync(open, termDate, maintenanceReason, ctx);
                 }
             }
+            else if (memberMaintenanceType == "025")
+            {
+                await ReinstateMemberCoverageAsync(memberId, maintenanceReason, memberEffectiveDate, await Existing(), ctx);
+            }
             return;
         }
 
@@ -837,7 +842,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// span, so re-importing the same file is a no-op:
     /// <list type="bullet">
     /// <item>021 creates only if no matching coverage exists.</item>
-    /// <item>001/025 change the matching coverage (falling back to the single
+    /// <item>001 changes the matching coverage (falling back to the single
     /// coverage on the same insurance line open on the change's effective
     /// date, for a plan change). A plan/level change effective after the
     /// matched span began closes that span the day before and opens a new
@@ -845,6 +850,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// correction to the same span is updated in place. An HD end date
     /// (DTP*349) is applied as a termination date. Creates only when nothing
     /// matches.</item>
+    /// <item>025 reinstates: see <see cref="ApplyReinstatementAsync"/>.</item>
     /// <item>024 (on the HD or the member) sets the termination date of the
     /// matching coverage that is in force on that date — it never creates
     /// coverage, and is rejected when no termination date was sent.</item>
@@ -891,24 +897,28 @@ public class EnrollmentImportService : IEnrollmentImportService
                 return;
             }
 
-            case "001":
             case "025":
+            {
+                // Never a span that starts after the reinstatement begins:
+                // that is a later span, not the coverage being reinstated.
+                var match = existing.Where(e => SameKey(e)
+                                                && (effective is null || e.EffectiveDate.Date <= effective.Value.Date)
+                                                && Overlaps(e, effective, end))
+                    .OrderByDescending(e => e.EffectiveDate)
+                    .FirstOrDefault();
+                await ApplyReinstatementAsync(
+                    memberId, line, planId, groupNumber, maintenanceReason, effective, end, key, match, existing, ctx);
+                return;
+            }
+
+            case "001":
             {
                 var match = existing.Where(e => SameKey(e) && Overlaps(e, effective, end))
                     .OrderByDescending(e => e.EffectiveDate)
                     .FirstOrDefault();
-                if (match is null)
-                {
-                    // A plan change sent as 001: the one coverage on the same
-                    // insurance line that is open on the change's effective
-                    // date (not on the day the file happens to be processed).
-                    var asOf = (effective ?? DateTime.UtcNow).Date;
-                    var sameLine = existing
-                        .Where(e => string.Equals(e.InsuranceLineCode, line.InsuranceLineCode, StringComparison.OrdinalIgnoreCase)
-                                    && OpenOn(e, asOf))
-                        .ToList();
-                    match = sameLine.Count == 1 ? sameLine[0] : null;
-                }
+                // A plan change sent as 001: the one coverage on the same
+                // insurance line that is open on the change's effective date.
+                match ??= SingleOpenOnSameLine(existing, line.InsuranceLineCode, effective);
                 if (match is null)
                 {
                     await CreateCoverageAsync(memberId, line, planId, groupNumber, effective, end, maintenanceType,
@@ -991,6 +1001,278 @@ public class EnrollmentImportService : IEnrollmentImportService
     }
 
     /// <summary>
+    /// 834 INS03/HD01 = 025 (reinstatement). A reinstatement reverses a
+    /// termination as if it had not happened, so when it continues a
+    /// terminated coverage — no begin date, or one on or before the day after
+    /// that coverage's termination date — the same coverage record is
+    /// reinstated in coverage-service (termination date cleared, status back
+    /// to Active; its original effective date keeps the span unbroken). When
+    /// the 025 begins after a gap, the gap was genuinely uncovered, and
+    /// reinstating the old record would make it eligible: a new coverage span
+    /// is created from that date instead, on the predecessor's coverage level
+    /// unless the HD sends one. A coverage that starts after the begin date is
+    /// a later span, never the one reinstated, and a reinstated span with no
+    /// end date ends the day before such a later span on the same insurance
+    /// line instead of overlapping it.
+    /// <para>
+    /// A plan change (the 025's plan differs from the one coverage on the same
+    /// insurance line open on the begin date) follows the 001 rule: that
+    /// coverage keeps its plan and ends the day before, and a new span opens
+    /// from the begin date. A coverage-level change effective after the
+    /// matched span began does the same; a same-span correction is updated in
+    /// place. An HD end date (DTP*349) is then applied as the termination
+    /// date, as for a change.
+    /// </para>
+    /// Replaying the file changes nothing: the reinstated coverage is open (or
+    /// already ends on its end date), and a span created after a gap or by a
+    /// change is found by the overlap match.
+    /// </summary>
+    private async Task ApplyReinstatementAsync(
+        string memberId,
+        CoverageDetail line,
+        string planId,
+        string groupNumber,
+        string? maintenanceReason,
+        DateTime? begin,
+        DateTime? end,
+        string key,
+        CoverageRecordDto? match,
+        List<CoverageRecordDto> existing,
+        BatchContext ctx)
+    {
+        if (match is null)
+        {
+            // A plan change: no same-plan coverage continues, but the line has
+            // one coverage (on another plan) open on the begin date.
+            var openOnLine = SingleOpenOnSameLine(existing, line.InsuranceLineCode, begin);
+            if (openOnLine is not null && !string.Equals(openOnLine.PlanId, planId, StringComparison.Ordinal))
+            {
+                match = openOnLine;
+            }
+        }
+
+        if (match is null)
+        {
+            // Nothing overlaps the reinstated span; the coverage it continues
+            // is the latest same-key one that ended before it (bounded by the
+            // requested dates, so never a later span).
+            var latestStart = (begin ?? end ?? DateTime.MaxValue).Date;
+            var previous = existing
+                .Where(e => !string.IsNullOrEmpty(e.Id)
+                            && BuildCoverageKey(memberId, e.InsuranceLineCode, e.PlanId) == key
+                            && e.TerminationDate is not null
+                            && e.EffectiveDate.Date <= latestStart
+                            && (begin is null || e.TerminationDate.Value.Date < begin.Value.Date))
+                .OrderByDescending(e => e.EffectiveDate)
+                .FirstOrDefault();
+
+            if (previous is null || BeginsAfterGap(begin, previous.TerminationDate!.Value))
+            {
+                if (previous is not null)
+                {
+                    _logger.LogInformation(
+                        "Reinstatement {CoverageKey} for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
+                        key, SanitizeForLog(memberId), begin, previous.TerminationDate);
+                }
+                var newEnd = end ?? (begin is null ? null : DayBeforeNextSpan(existing, line.InsuranceLineCode, begin.Value, null));
+                await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, newEnd, "025",
+                    line.CoverageLevel ?? previous?.CoverageLevel, existing, ctx);
+                return;
+            }
+            match = previous;
+        }
+
+        if (!HasId(match, memberId, ctx))
+        {
+            return;
+        }
+
+        var level = line.CoverageLevel ?? match.CoverageLevel;
+        var changed = !string.Equals(match.PlanId, planId, StringComparison.Ordinal)
+                      || !string.Equals(match.CoverageLevel, level, StringComparison.Ordinal);
+        if (changed && begin is not null && begin.Value.Date > match.EffectiveDate.Date)
+        {
+            // Effective-dated change: the earlier span keeps its plan/level and
+            // ends the day before (unless it already ended earlier — the
+            // reinstatement continues it without a gap); the reinstated
+            // coverage is a new span from the change.
+            if (match.TerminationDate is null || match.TerminationDate.Value.Date >= begin.Value.Date)
+            {
+                await TerminateCoverageAsync(match, begin.Value.AddDays(-1), maintenanceReason, ctx);
+            }
+            // Reinstated: open-ended unless the HD sends an end date or a
+            // later span on the line bounds it.
+            var newEnd = end ?? DayBeforeNextSpan(existing, line.InsuranceLineCode, begin.Value, match);
+            await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, newEnd, "025", level, existing, ctx);
+            return;
+        }
+        if (changed)
+        {
+            await _coverageClient.UpdateAsync(ctx.TenantId, match.Id, new UpdateCoverageRequestDto
+            {
+                PlanId = planId,
+                CoverageLevel = level
+            });
+            match.PlanId = planId;
+            match.CoverageLevel = level;
+            ctx.Result.CoverageRecordsUpdated++;
+        }
+
+        // A later span on the line bounds the reinstated one.
+        end ??= DayBeforeNextSpan(existing, line.InsuranceLineCode, begin ?? match.EffectiveDate, match);
+        if (end is not null)
+        {
+            // Reinstated through an end date: moving the termination date is
+            // the whole change (coverage-service derives the status from it).
+            if (match.TerminationDate?.Date != end.Value.Date)
+            {
+                await TerminateCoverageAsync(match, end.Value, maintenanceReason, ctx);
+            }
+            return;
+        }
+
+        if (match.TerminationDate is not null)
+        {
+            await ReinstateAsync(match, maintenanceReason, ctx);
+        }
+    }
+
+    private async Task ReinstateAsync(CoverageRecordDto coverage, string? maintenanceReason, BatchContext ctx)
+    {
+        await _coverageClient.ReinstateAsync(ctx.TenantId, coverage.Id, maintenanceReason);
+        coverage.ReinstatedTerminationDate = coverage.TerminationDate?.Date;
+        coverage.TerminationDate = null;
+        coverage.MaintenanceTypeCode = "025";
+        ctx.Result.CoverageRecordsReinstated++;
+    }
+
+    /// <summary>
+    /// Member-level 025 with no HD loop: reverses the member's most recent
+    /// termination. It applies only while the member is terminated (every
+    /// insurance line's latest coverage has a termination date); the lines
+    /// whose latest coverage ends on the most recent of those dates — the ones
+    /// a member-level 024 ended together — are reinstated with the same rule as
+    /// an HD 025 (<see cref="ApplyReinstatementAsync"/>): the same record when
+    /// the member's begin date (or none) continues the span, a new span from
+    /// that date after a gap. Lines ended earlier, by an unrelated termination,
+    /// stay ended, and a replay changes nothing (lines are open by then).
+    /// <para>
+    /// A run that stopped part-way (say health reinstated, then the dental
+    /// call failed) is finished by replaying the file: a line this 025 already
+    /// restored is open with its last maintenance a reinstatement, and still
+    /// says which termination it reversed (coverage-service keeps the cleared
+    /// date; a span opened after a gap follows its predecessor's). Those lines
+    /// pin the termination being reversed, so the replay reinstates the
+    /// remaining lines ended on that same date — and nothing ended on any
+    /// other date.
+    /// </para>
+    /// </summary>
+    private async Task ReinstateMemberCoverageAsync(
+        string memberId,
+        string? maintenanceReason,
+        string? memberEffectiveDate,
+        List<CoverageRecordDto> existing,
+        BatchContext ctx)
+    {
+        var begin = ParseDate(memberEffectiveDate);
+        var lines = existing
+            .Where(e => !string.IsNullOrEmpty(e.Id))
+            .GroupBy(e => (e.InsuranceLineCode ?? string.Empty).Trim().ToUpperInvariant())
+            .Select(g => (Latest: g.OrderByDescending(e => e.EffectiveDate).First(), Spans: g.ToList()))
+            .ToList();
+
+        var terminated = lines.Select(l => l.Latest).Where(e => e.TerminationDate is not null).ToList();
+        var restored = lines
+            .Select(l => ReversedTermination(l.Latest, l.Spans, begin))
+            .Where(d => d is not null)
+            .Select(d => d!.Value)
+            .ToList();
+
+        // A member-level termination ends every line, so it is only in effect
+        // while no line is open — other than lines this reinstatement already
+        // restored. Any other open line means the member is not terminated.
+        if (terminated.Count == 0 || terminated.Count + restored.Count < lines.Count)
+        {
+            _logger.LogInformation(
+                "Reinstatement for member {MemberId} with no HD: member has open coverage or none terminated; nothing to reinstate",
+                SanitizeForLog(memberId));
+            return;
+        }
+
+        DateTime lastTermination;
+        if (restored.Count > 0)
+        {
+            var reversed = restored.Distinct().ToList();
+            if (reversed.Count != 1)
+            {
+                ctx.Result.Errors.Add(
+                    $"Member {memberId}: member-level reinstatement (025) found lines reinstated from different terminations; remaining lines not reinstated");
+                return;
+            }
+            lastTermination = reversed[0];
+        }
+        else
+        {
+            lastTermination = terminated.Max(e => e.TerminationDate!.Value.Date);
+        }
+
+        foreach (var previous in terminated.Where(e => e.TerminationDate!.Value.Date == lastTermination))
+        {
+            if (BeginsAfterGap(begin, previous.TerminationDate!.Value))
+            {
+                _logger.LogInformation(
+                    "Reinstatement for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
+                    SanitizeForLog(memberId), begin, previous.TerminationDate);
+                var line = new CoverageDetail { InsuranceLineCode = previous.InsuranceLineCode ?? string.Empty };
+                await CreateCoverageAsync(memberId, line, previous.PlanId, previous.GroupNumber, begin, null, "025",
+                    previous.CoverageLevel, existing, ctx);
+                continue;
+            }
+
+            await ReinstateAsync(previous, maintenanceReason, ctx);
+        }
+    }
+
+    /// <summary>
+    /// The termination date a line's latest coverage shows a reinstatement
+    /// reversed: open, last maintained by a 025, and either reinstated in
+    /// place (coverage-service's cleared date) or opened by the 025 on
+    /// <paramref name="begin"/> after a gap (its predecessor's termination
+    /// date). Null for any other line.
+    /// </summary>
+    private static DateTime? ReversedTermination(
+        CoverageRecordDto latest, List<CoverageRecordDto> spans, DateTime? begin)
+    {
+        if (latest.TerminationDate is not null || latest.MaintenanceTypeCode != "025")
+        {
+            return null;
+        }
+        if (latest.ReinstatedTerminationDate is not null)
+        {
+            return latest.ReinstatedTerminationDate.Value.Date;
+        }
+        if (begin is null || latest.EffectiveDate.Date != begin.Value.Date)
+        {
+            return null;
+        }
+        return spans
+            .Where(e => !ReferenceEquals(e, latest)
+                        && e.TerminationDate is not null
+                        && e.TerminationDate.Value.Date < latest.EffectiveDate.Date)
+            .OrderByDescending(e => e.EffectiveDate)
+            .Select(e => e.TerminationDate?.Date)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// A reinstatement beginning on <paramref name="begin"/> leaves a gap after
+    /// a coverage ending on <paramref name="terminationDate"/> (inclusive last
+    /// day) when it begins later than the day after. No begin date = no gap.
+    /// </summary>
+    private static bool BeginsAfterGap(DateTime? begin, DateTime terminationDate) =>
+        begin is not null && begin.Value.Date > terminationDate.Date.AddDays(1);
+
+    /// <summary>
     /// A coverage created earlier in this pass whose id coverage-service did
     /// not return can't be changed or terminated; report it rather than
     /// silently dropping the later HD line.
@@ -1038,7 +1320,8 @@ public class EnrollmentImportService : IEnrollmentImportService
             InsuranceLineCode = line.InsuranceLineCode,
             CoverageLevel = request.CoverageLevel,
             EffectiveDate = request.EffectiveDate,
-            TerminationDate = end
+            TerminationDate = end,
+            MaintenanceTypeCode = maintenanceType
         });
     }
 
@@ -1048,6 +1331,45 @@ public class EnrollmentImportService : IEnrollmentImportService
         await _coverageClient.TerminateAsync(ctx.TenantId, coverage.Id, terminationDate.Date, reasonCode);
         coverage.TerminationDate = terminationDate.Date;
         ctx.Result.CoverageRecordsTerminated++;
+    }
+
+    /// <summary>
+    /// The one coverage on <paramref name="insuranceLineCode"/> open on
+    /// <paramref name="asOf"/> (the change's effective date, not the day the
+    /// file happens to be processed; today when the file sent none), or null
+    /// when there is none or more than one.
+    /// </summary>
+    private static CoverageRecordDto? SingleOpenOnSameLine(
+        List<CoverageRecordDto> existing, string? insuranceLineCode, DateTime? asOf)
+    {
+        var date = (asOf ?? DateTime.UtcNow).Date;
+        var sameLine = existing
+            .Where(e => SameLine(e, insuranceLineCode) && OpenOn(e, date))
+            .ToList();
+        return sameLine.Count == 1 ? sameLine[0] : null;
+    }
+
+    private static bool SameLine(CoverageRecordDto e, string? insuranceLineCode) =>
+        string.Equals(
+            (e.InsuranceLineCode ?? string.Empty).Trim(), (insuranceLineCode ?? string.Empty).Trim(),
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The day before the next coverage on the same insurance line that starts
+    /// after <paramref name="after"/>, or null when there is none. A
+    /// reinstated span is bounded by it so it never overlaps a later span
+    /// already on file.
+    /// </summary>
+    private static DateTime? DayBeforeNextSpan(
+        List<CoverageRecordDto> existing, string? insuranceLineCode, DateTime after, CoverageRecordDto? exclude)
+    {
+        var next = existing
+            .Where(e => !ReferenceEquals(e, exclude)
+                        && SameLine(e, insuranceLineCode)
+                        && e.EffectiveDate.Date > after.Date)
+            .Select(e => (DateTime?)e.EffectiveDate.Date)
+            .Min();
+        return next?.AddDays(-1);
     }
 
     private static bool OpenOn(CoverageRecordDto e, DateTime date) =>
@@ -1342,6 +1664,7 @@ public class ImportResult
     public int DependentsFailed { get; set; }
     public int CoverageRecordsCreated { get; set; }
     public int CoverageRecordsUpdated { get; set; }
+    public int CoverageRecordsReinstated { get; set; }
     public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
