@@ -169,6 +169,28 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         }
     }
 
+    public Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            var key = Key(appeal.TenantId, appeal.Id);
+            if (!_appeals.TryGetValue(key, out var current)) return Task.FromResult<Appeal?>(null);
+            if (current.DeadlineExtension is not null) return Task.FromResult<Appeal?>(null);
+            if (current.Status != AppealStatus.Submitted
+                && current.Status != AppealStatus.InReview
+                && current.Status != AppealStatus.PendingInfo)
+                return Task.FromResult<Appeal?>(null);
+
+            current.TargetResponseDate = appeal.TargetResponseDate;
+            current.DeadlineExtension = appeal.DeadlineExtension is null ? null : CloneExtension(appeal.DeadlineExtension);
+            current.UpdatedAt = appeal.UpdatedAt ?? DateTime.UtcNow;
+            current.UpdatedBy = appeal.UpdatedBy;
+            _appeals[key] = current;
+            AppendEventInternal(auditEvent);
+            return Task.FromResult<Appeal?>(Clone(current));
+        }
+    }
+
     public Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default)
     {
         lock (_sync)
@@ -365,6 +387,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         SubmittedDate = a.SubmittedDate,
         ReceivedDate = a.ReceivedDate,
         TargetResponseDate = a.TargetResponseDate,
+        DeadlineExtension = a.DeadlineExtension == null ? null : CloneExtension(a.DeadlineExtension),
         DecisionDate = a.DecisionDate,
         SubmittedBy = a.SubmittedBy,
         Notes = a.Notes.Select(CloneNote).ToList(),
@@ -382,6 +405,18 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         ClosedBy = a.ClosedBy,
         ClosureReasonCode = a.ClosureReasonCode,
         OverdueAuditEmitted = a.OverdueAuditEmitted
+    };
+
+    private static AppealDeadlineExtension CloneExtension(AppealDeadlineExtension e) => new()
+    {
+        Reason = e.Reason,
+        ExtensionDays = e.ExtensionDays,
+        PreviousTargetResponseDate = e.PreviousTargetResponseDate,
+        NewTargetResponseDate = e.NewTargetResponseDate,
+        WrittenNoticeSentAt = e.WrittenNoticeSentAt,
+        ExtendedAt = e.ExtendedAt,
+        ExtendedBy = e.ExtendedBy,
+        RegulatoryBasis = e.RegulatoryBasis
     };
 
     private static AppealAttachment CloneAttachment(AppealAttachment a) => new()
