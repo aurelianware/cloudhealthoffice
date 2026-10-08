@@ -166,7 +166,7 @@ public class PaymentRunService : IPaymentRunService
             {
                 paymentRun.Warnings.Add(fetched.Count == 0
                     ? "No approved claims found matching criteria"
-                    : "No approved claims left to pay after excluding paid, reserved, trading-partner-less, not-approved, missing-plan-paid-amount and unbalanced-service-line claims");
+                    : "No approved claims left to pay after excluding paid, reserved, trading-partner-less, not-approved, missing- or negative-plan-paid-amount and unbalanced-service-line claims");
                 paymentRun.Status = PaymentRunStatus.Completed;
                 paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
                 paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
@@ -459,14 +459,6 @@ public class PaymentRunService : IPaymentRunService
     }
 
     /// <summary>
-    /// The duplicate-selection guard. Drops repeated claim ids, then every claim
-    /// that already appears in a (non-reversal) payment in payment-service,
-    /// whatever claims-service says its status is: a claim whose finalize failed
-    /// is still Approved there, and must not be paid a second time. For such a
-    /// claim whose earlier finalize is pending, the finalize is retried now
-    /// (idempotent, same check number, no new payment).
-    /// </summary>
-    /// <summary>
     /// claims-service's numeric <c>LineOfBusiness</c> for payment-service's
     /// (whose values start at 0 and are persisted on runs, so are not renumbered).
     /// </summary>
@@ -479,6 +471,14 @@ public class PaymentRunService : IPaymentRunService
         _ => throw new ArgumentOutOfRangeException(nameof(lob), lob, "Unknown line of business"),
     };
 
+    /// <summary>
+    /// The duplicate-selection guard. Drops repeated claim ids, then every claim
+    /// that already appears in a (non-reversal) payment in payment-service,
+    /// whatever claims-service says its status is: a claim whose finalize failed
+    /// is still Approved there, and must not be paid a second time. For such a
+    /// claim whose earlier finalize is pending, the finalize is retried now
+    /// (idempotent, same check number, no new payment).
+    /// </summary>
     private async Task<List<ClaimDto>> ExcludeAlreadyPaidAsync(List<ClaimDto> fetched, PaymentRun paymentRun)
     {
         var unique = new List<ClaimDto>(fetched.Count);
@@ -573,6 +573,19 @@ public class PaymentRunService : IPaymentRunService
                 continue;
             }
 
+            if (claim.PlanPaidAmount < 0m)
+            {
+                // A plan payment is never negative (recoupment is a reversal
+                // run); claims-service can persist an arbitrary inbound amount.
+                paymentRun.NegativePlanPaidClaimIds.Add(claim.Id);
+                paymentRun.Warnings.Add(
+                    $"Claim {claim.Id} not paid: its plan-paid amount (adjudicationResult.payerPayment) is negative ({claim.PlanPaidAmount:F2})");
+                _logger.LogWarning(
+                    "Claim {ClaimId} has a negative plan-paid amount; excluded from payment run {PaymentRunNumber}",
+                    SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                continue;
+            }
+
             if (claim.PlanPaidAmount.HasValue)
             {
                 payable.Add(claim);
@@ -593,8 +606,10 @@ public class PaymentRunService : IPaymentRunService
     /// Drops every claim whose service-line paid amounts (SVC03) do not add up
     /// to its plan-paid amount (CLP04): its 835 would not balance. A line with no
     /// paid amount counts as 0, which is only accepted when the other lines
-    /// already make up the approved amount. Such a claim is not reserved or
-    /// paid, stays Approved in claims-service, and is listed on the run.
+    /// already make up the plan-paid amount. A claim with no service lines at
+    /// all (claim-level-only adjudication) is not supported here and is
+    /// excluded too. Such a claim is not reserved or paid, stays Approved in
+    /// claims-service, and is listed on the run.
     /// </summary>
     private List<ClaimDto> ExcludeUnbalancedServiceLines(List<ClaimDto> claims, PaymentRun paymentRun)
     {
@@ -603,14 +618,24 @@ public class PaymentRunService : IPaymentRunService
         {
             var lines = claim.ServiceLines ?? new List<ClaimServiceLineDto>();
             var linePaid = lines.Sum(sl => sl.LinePaidAmount ?? 0m);
-            if (lines.Count == 0 || linePaid == claim.PlanPaidAmount)
+            if (lines.Count > 0 && linePaid == claim.PlanPaidAmount)
             {
                 payable.Add(claim);
                 continue;
             }
 
-            var unpriced = lines.Count(sl => sl.LinePaidAmount is null);
             paymentRun.UnbalancedServiceLineClaimIds.Add(claim.Id);
+            if (lines.Count == 0)
+            {
+                paymentRun.Warnings.Add(
+                    $"Claim {claim.Id} not paid: it has no service lines, so its plan-paid amount {claim.PlanPaidAmount:F2} (CLP04) cannot be balanced by SVC03; claim-level-only adjudications are not paid by this run");
+                _logger.LogWarning(
+                    "Claim {ClaimId} has no service lines; excluded from payment run {PaymentRunNumber}",
+                    SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+                continue;
+            }
+
+            var unpriced = lines.Count(sl => sl.LinePaidAmount is null);
             paymentRun.Warnings.Add(
                 $"Claim {claim.Id} not paid: its service-line paid amounts total {linePaid:F2} " +
                 (unpriced > 0 ? $"({unpriced} line(s) with no paid amount) " : string.Empty) +

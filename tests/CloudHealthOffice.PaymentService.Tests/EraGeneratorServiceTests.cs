@@ -120,7 +120,8 @@ public class EraGeneratorServiceTests
 
         var era = _generator.Generate835(payment, tp);
 
-        Assert.Contains("BPR*I*0.00*C*ACH", era);
+        // Zero pay moves no money: notification only, NON, whatever the run method.
+        Assert.Contains("BPR*H*0.00*C*NON*", era);
     }
 
     [Fact]
@@ -326,6 +327,30 @@ public class EraGeneratorServiceTests
         Assert.Equal("DA", bpr[14]);            // receiver account qualifier
         Assert.Equal("987654321", bpr[15]);     // receiver account
         Assert.Equal("20260315", bpr[16]);      // EFT effective date
+    }
+
+    [Theory]
+    [InlineData("ACH")]
+    [InlineData("CHK")]
+    public void Generate835_ZeroPay_BprIsNotificationOnly_NonWithNoBankDetails(string runMethod)
+    {
+        var payment = CreateTestPayment();
+        payment.PaymentMethod = runMethod;
+        payment.TotalPaymentAmount = 0m;
+        payment.ClaimPayments[0].PaymentAmount = 0m;
+        payment.ClaimPayments[0].ServiceLines[0].PaymentAmount = 0m;
+        var tp = CreateTestTradingPartner();
+        tp.PayeeAccountNumber = null; // not needed: no money moves
+
+        var bpr = SegmentElements(_generator.Generate835(payment, tp), "BPR");
+
+        Assert.Equal(17, bpr.Length);
+        Assert.Equal("H", bpr[1]);
+        Assert.Equal("0.00", bpr[2]);
+        Assert.Equal("NON", bpr[4]);
+        for (var i = 5; i <= 15; i++)
+            Assert.Equal(string.Empty, bpr[i]);
+        Assert.Equal("20260315", bpr[16]);
     }
 
     [Fact]

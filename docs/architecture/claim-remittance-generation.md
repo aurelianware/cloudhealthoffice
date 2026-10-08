@@ -226,6 +226,14 @@ paying any claim, and generation throws, rather than emitting a
 misaligned BPR or a made-up TRN03. Payment method "Check" (any case) is
 emitted as CHK.
 
+A zero-pay ERA (BPR02 = 0) is notification only: BPR01 = H and BPR04 =
+NON whatever the run's payment method, with no bank details.
+
+A claim with a negative payerPayment is never paid
+(`PaymentRun.NegativePlanPaidClaimIds`); zero-pay claims are paid as zero.
+A claim with no service lines (claim-level-only adjudication) is not paid
+by a run and is listed in `PaymentRun.UnbalancedServiceLineClaimIds`.
+
 Every generated 835 must balance: BPR02 = sum of CLP04 - sum of PLB, and
 for a claim with service lines, sum of SVC03 = CLP04; otherwise generation
 throws.

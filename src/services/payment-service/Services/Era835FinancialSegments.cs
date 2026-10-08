@@ -19,6 +19,8 @@ namespace PaymentService.Services;
 ///   BPR08 sender account qualifier (DA)  BPR16 check issue / EFT effective date
 ///
 /// For CHK and NON, BPR05-BPR15 are empty and BPR16 carries the date.
+/// A zero-pay ERA (BPR02 = 0) moves no money: BPR01 = H (notification only)
+/// and BPR04 = NON, whatever the run's payment method.
 ///
 /// TRN03 (required for every payment method) is the originating company
 /// identifier, "1" + the payer's TIN, identical to BPR10 on an ACH BPR. It
@@ -33,7 +35,17 @@ public static class Era835FinancialSegments
     /// the 835 is remittance-only (NON), as before. "CHK" and "Check" (any
     /// case) are checks.
     /// </summary>
-    public static string ResolveBprPaymentMethod(string? paymentMethod, TradingPartnerInfo tp)
+    public static string ResolveBprPaymentMethod(string? paymentMethod, TradingPartnerInfo tp) =>
+        ResolveConfiguredMethod(paymentMethod, tp);
+
+    /// <summary>
+    /// The BPR04 code for an ERA of <paramref name="totalAmount"/>: NON when
+    /// nothing is paid (BPR02 = 0), otherwise the run's method.
+    /// </summary>
+    public static string ResolveBprPaymentMethod(decimal totalAmount, string? paymentMethod, TradingPartnerInfo tp) =>
+        totalAmount == 0m ? "NON" : ResolveConfiguredMethod(paymentMethod, tp);
+
+    private static string ResolveConfiguredMethod(string? paymentMethod, TradingPartnerInfo tp)
     {
         if (string.Equals(paymentMethod, "CHK", StringComparison.OrdinalIgnoreCase)
             || string.Equals(paymentMethod, "Check", StringComparison.OrdinalIgnoreCase))
@@ -95,11 +107,14 @@ public static class Era835FinancialSegments
     /// <summary>The BPR segment, terminator included.</summary>
     public static string BuildBpr(decimal totalAmount, string? paymentMethod, DateTime paymentDate, TradingPartnerInfo tp)
     {
-        EnsureBprCanBeBuilt(paymentMethod, tp);
+        // A zero-pay ERA moves no money: NON, whatever the run's method.
+        var method = ResolveBprPaymentMethod(totalAmount, paymentMethod, tp);
+        EnsureBprCanBeBuilt(method, tp);
 
-        // BPR01: C = payment accompanies remittance, I = remittance only (zero-pay ERA)
-        var handlingCode = totalAmount > 0 ? "C" : "I";
-        var method = ResolveBprPaymentMethod(paymentMethod, tp);
+        // BPR01: C = payment accompanies remittance; H = notification only
+        // (BPR02 = 0, BPR04 = NON); I = remittance information only (a
+        // negative reversal total, unchanged here).
+        var handlingCode = totalAmount > 0 ? "C" : totalAmount == 0m ? "H" : "I";
 
         var e = new string[17];
         e[0] = "BPR";

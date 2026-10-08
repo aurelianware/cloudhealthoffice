@@ -168,9 +168,17 @@ public class PaymentRun
     public List<string> MissingPlanPaidAmountClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Claims not paid because their plan-paid amount is negative. A plan
+    /// payment is never negative (a recoupment is a reversal run); zero is paid
+    /// as a zero-pay remittance. They stay Approved in claims-service.
+    /// </summary>
+    public List<string> NegativePlanPaidClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Claims not paid because their service-line paid amounts (SVC03) do not
     /// add up to their plan-paid amount (CLP04), so their 835 would not balance.
-    /// A line with no paid amount counts as 0. They stay Approved in
+    /// A line with no paid amount counts as 0. A claim with no service lines
+    /// (claim-level-only adjudication) is listed here too. They stay Approved in
     /// claims-service and are picked up once their line amounts are corrected.
     /// </summary>
     public List<string> UnbalancedServiceLineClaimIds { get; set; } = new();
