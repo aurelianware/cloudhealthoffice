@@ -159,7 +159,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         var workingAccumulators = MeasureStage(
             "workingSet",
-            () => new AccumulatorWorkingSet(accumulators, plan));
+            () => new AccumulatorWorkingSet(accumulators, plan, _logger));
 
         // ── Step 3: Check for DRG/per-diem inpatient pricing ──
         var inpatientMethod = DetermineInpatientPricingMethod(request, plan);

@@ -1,4 +1,5 @@
 using BenefitPlanService.Models;
+using BenefitPlanService.Models.Benefits;
 using BenefitPlanService.Repositories;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Services;
@@ -148,6 +149,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             AcaIndividualCap = acaCaps?.IndividualCap,
             IsAcaCapEnforced = ResolveIsAcaCapEnforced(plan),
             IsHdhp = plan.PlanType == ModelPlanType.HDHP,
+            HdhpDeductibleExemptServices = ResolveHdhpExemptServices(plan),
             Categories = categories
         };
     }
@@ -159,6 +161,20 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
     /// </summary>
     private static bool ResolveIsAcaCapEnforced(BenefitPlan plan)
         => AcaCapEnforcementPolicy.IsEnforced(plan);
+
+    /// <summary>
+    /// Service type codes the HDHP deductible-first rule skips (IRS Notice
+    /// 2004-23 preventive safe harbor). The engine exempts by code, so a
+    /// code is listed only when every benefit sharing it is ACA preventive —
+    /// exempting a non-preventive service would cost the plan its HSA
+    /// eligibility.
+    /// </summary>
+    private static HashSet<string> ResolveHdhpExemptServices(BenefitPlan plan)
+        => plan.Benefits
+            .GroupBy(b => b.ServiceCategory, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.All(IsAcaPreventive))
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Capability BP 5.10 — project the originating
@@ -229,8 +245,45 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
         return rules;
     }
 
+    /// <summary>
+    /// ACA §2713 / 45 CFR 147.130 preventive service: covered in-network with
+    /// no cost sharing. A typed <see cref="PreventiveBenefit"/> qualifies by
+    /// its <see cref="PreventiveBenefit.IsAcaPreventive"/> flag or a USPSTF
+    /// A/B grade; any benefit whose category resolves to
+    /// <see cref="BenefitCategoryMap.Preventive"/> qualifies by category so
+    /// the <c>DeductibleApplies = true</c> default can't put a deductible on
+    /// it. The plan model has no grandfathered-plan flag, so every plan is
+    /// treated as non-grandfathered.
+    /// </summary>
+    internal static bool IsAcaPreventive(Benefit b)
+    {
+        if (b is PreventiveBenefit p
+            && (p.IsAcaPreventive
+                || string.Equals(p.UspstfRecommendationGrade, "A", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.UspstfRecommendationGrade, "B", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return BenefitCategoryMap.Resolve(b.ServiceCategory).Category == BenefitCategoryMap.Preventive;
+    }
+
+    /// <summary>
+    /// Stored coinsurance values exist in both scales: the model documents a
+    /// fraction (0.20) and the portal writes one, but legacy
+    /// <c>CoinsurancePercentage</c> and the demo seed store percents (20).
+    /// The engine multiplies by the value directly, so normalize the same
+    /// way the FHIR projector reads it: values above 1 are percents.
+    /// </summary>
+    internal static decimal NormalizeCoinsurance(decimal value)
+        => value > 1m ? value / 100m : value;
+
     private static IReadOnlyList<CostShareRuleConfig> BuildInNetworkCostSharing(Benefit b)
     {
+        // In-network ACA preventive: no deductible, copay or coinsurance.
+        if (IsAcaPreventive(b))
+            return [];
+
         var rules = StartCostSharing(b);
 
         var copay = b.InNetworkCopay ?? b.CopayAmount;
@@ -253,7 +306,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             rules.Add(new CostShareRuleConfig
             {
                 CostShareType = CostShareType.Coinsurance,
-                CoinsurancePercent = coins.Value,
+                CoinsurancePercent = NormalizeCoinsurance(coins.Value),
                 DeductibleApplies = b.DeductibleApplies
             });
         }
@@ -280,7 +333,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             rules.Add(new CostShareRuleConfig
             {
                 CostShareType = CostShareType.Coinsurance,
-                CoinsurancePercent = b.OutNetworkCoinsurance.Value,
+                CoinsurancePercent = NormalizeCoinsurance(b.OutNetworkCoinsurance.Value),
                 DeductibleApplies = b.DeductibleApplies
             });
         }
