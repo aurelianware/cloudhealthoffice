@@ -111,9 +111,11 @@ public static class Era835ClaimLoops
             }
         }
 
-        // LQ*HE — line remark codes (one per segment), after the line CAS.
+        // LQ*HE — line remark codes (one per segment, each distinct code
+        // once), after the line CAS: the adjustments' and the line's own.
         foreach (var rarc in sl.Adjustments
                      .Select(a => a.RemarkCode)
+                     .Concat(sl.RemarkCodes)
                      .Where(r => !string.IsNullOrWhiteSpace(r))
                      .Select(r => Esc(r))
                      .Distinct(StringComparer.Ordinal))

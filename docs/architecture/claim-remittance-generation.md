@@ -192,13 +192,14 @@ the 835's adjustments:
   an adjustment (`remarkCode`, read when claims-service sends it) goes in
   `LQ*HE` after the line's CAS.
 - NCCI edit CARCs for the line are added only when the line does not
-  already carry that group and CARC (a matching edit's RARC is kept on
-  the adjustment); they never double count.
+  already carry that group and CARC; they never double count the money,
+  and every distinct RARC of a matching edit still reaches `LQ*HE`.
 - **Fallback for lines without adjustment detail** (claims adjudicated
   before claims-service populated line adjustments): on a single-line
   claim the claim-level adjustments become that line's CAS; whatever
-  SVC02 - SVC03 is still unexplained goes to the line's NCCI edit CARC if
-  it has one, else to one `CO-45` (on a denial, CO with the denial CARC).
+  SVC02 - SVC03 is still unexplained goes to the adjustment carrying the
+  line's NCCI edit CARC (matched by group and CARC) if it has one, else to
+  one `CO-45` (on a denial, CO with the denial CARC).
   So every line balances, at the cost of reporting member cost share on
   such older multi-line claims as CO-45.
 - When the lines carry CAS, the claim-level adjustments (the claim's

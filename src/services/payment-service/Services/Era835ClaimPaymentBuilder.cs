@@ -77,6 +77,11 @@ public static class Era835ClaimPaymentBuilder
                     // (the run kept the claim only if the lines balance to
                     // CLP04 with 0 for unpriced lines).
                     var paid = sl.LinePaidAmount ?? 0m;
+                    var adjustments = LineAdjustments(
+                        sl, paid, claimLevelForSingleLine,
+                        editCas.TryGetValue(sl.LineNumber, out var edits) ? edits : Array.Empty<ServiceLineAdjustment>(),
+                        denied && !string.IsNullOrWhiteSpace(denialCode) ? denialCode! : "45",
+                        out var extraRemarks);
                     return new ServiceLinePayment
                     {
                         LineNumber = sl.LineNumber,
@@ -87,10 +92,8 @@ public static class Era835ClaimPaymentBuilder
                         Units = sl.Units,
                         ServiceDateFrom = sl.ServiceDateFrom,
                         ServiceDateTo = sl.ServiceDateTo,
-                        Adjustments = LineAdjustments(
-                            sl, paid, claimLevelForSingleLine,
-                            editCas.TryGetValue(sl.LineNumber, out var edits) ? edits : Array.Empty<ServiceLineAdjustment>(),
-                            denied && !string.IsNullOrWhiteSpace(denialCode) ? denialCode! : "45"),
+                        Adjustments = adjustments,
+                        RemarkCodes = extraRemarks,
                     };
                 })
                 .ToList();
@@ -144,8 +147,9 @@ public static class Era835ClaimPaymentBuilder
     /// </summary>
     private static List<ServiceLineAdjustment> LineAdjustments(
         ClaimServiceLineDto line, decimal paid, List<ClaimLineAdjustmentReasonDto>? claimLevelForSingleLine,
-        IReadOnlyList<ServiceLineAdjustment> edits, string fallbackCarc)
+        IReadOnlyList<ServiceLineAdjustment> edits, string fallbackCarc, out List<string> extraRemarks)
     {
+        extraRemarks = new List<string>();
         var reasons = line.AdjudicationResult?.AdjustmentReasons is { Count: > 0 } own
             ? own
             : claimLevelForSingleLine ?? new List<ClaimLineAdjustmentReasonDto>();
@@ -172,7 +176,16 @@ public static class Era835ClaimPaymentBuilder
                 && string.Equals(a.ReasonCode, edit.ReasonCode, StringComparison.Ordinal));
             if (same is not null)
             {
-                same.RemarkCode ??= edit.RemarkCode;
+                // The money is counted once (the matching adjustment); the
+                // edit's RARC is kept: on the adjustment if it has none, else
+                // with the line's other remarks (every distinct RARC reaches LQ*HE).
+                if (string.IsNullOrWhiteSpace(edit.RemarkCode))
+                    continue;
+                if (same.RemarkCode is null)
+                    same.RemarkCode = edit.RemarkCode;
+                else if (!string.Equals(same.RemarkCode, edit.RemarkCode, StringComparison.Ordinal)
+                         && !extraRemarks.Contains(edit.RemarkCode!, StringComparer.Ordinal))
+                    extraRemarks.Add(edit.RemarkCode!);
                 continue;
             }
             adjustments.Add(new ServiceLineAdjustment
@@ -188,12 +201,16 @@ public static class Era835ClaimPaymentBuilder
         if (!fromAdjudication)
         {
             var unexplained = line.ChargeAmount - paid - adjustments.Sum(a => a.Amount);
-            // An NCCI edit on the line (amount 0 placeholder) is why it was cut:
-            // it carries the unexplained amount. Otherwise one CO fallback.
-            var edit = adjustments.FindIndex(a => a.Amount == 0m);
+            // An NCCI edit on the line is why it was cut: the first adjustment
+            // whose group and CARC an edit names carries the unexplained
+            // amount (never some other zero-amount adjustment, e.g. an OA-23).
+            // Otherwise one CO fallback.
+            var edit = adjustments.FindIndex(a => edits.Any(e =>
+                string.Equals(e.GroupCode, a.GroupCode, StringComparison.Ordinal)
+                && string.Equals(e.ReasonCode, a.ReasonCode, StringComparison.Ordinal)));
             if (unexplained != 0m && edit >= 0)
             {
-                adjustments[edit].Amount = unexplained;
+                adjustments[edit].Amount += unexplained;
             }
             else if (unexplained != 0m)
             {
