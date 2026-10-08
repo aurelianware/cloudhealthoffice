@@ -310,6 +310,60 @@ public class FhirCallerAuthTests : IClassFixture<FhirTestWebAppFactory>
         appeals.Submitted.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task AppealSubmit_ExternalReviewTask_IsForwardedOnTheExternalReviewTier()
+    {
+        var appeals = new RecordingAppealAdapter();
+        var host = _factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
+        {
+            s.RemoveAll<IFhirAppealAdapter>();
+            s.AddSingleton<IFhirAppealAdapter>(appeals);
+        }));
+        var target = new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var response = await SendAsync(host, HttpMethod.Post, "/fhir/r4/$cho-appeal-submit",
+            ChoUser(Tenant, ChoRolePermissions.UMCoordinator),
+            content: AppealBundle("pat-001", sender: "Practitioner/p1", configureTask: t =>
+            {
+                // Only Task.code marks the tier; no appealLevel extension.
+                t.Code = new CodeableConcept(null, "external-review");
+                t.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, new Code("Marketplace")));
+                t.Extension.Add(new Extension(FhirAppealMapper.AppealTargetResponseDateExtensionUrl, new FhirDateTime(target)));
+            }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var appeal = appeals.Submitted.Should().ContainSingle().Subject.Appeal;
+        appeal.AppealType.Should().Be(AppealType.ExternalReview);
+        appeal.AppealLevel.Should().Be(AppealLevel.ExternalReview);
+        appeal.LineOfBusiness.Should().Be(LineOfBusiness.Marketplace);
+        appeal.TargetResponseDate.Should().Be(target.UtcDateTime);
+    }
+
+    [Fact]
+    public async Task AppealSubmit_UnrecognizedLineOfBusiness_Is422OperationOutcome()
+    {
+        var appeals = new RecordingAppealAdapter();
+        var host = _factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
+        {
+            s.RemoveAll<IFhirAppealAdapter>();
+            s.AddSingleton<IFhirAppealAdapter>(appeals);
+        }));
+
+        var response = await SendAsync(host, HttpMethod.Post, "/fhir/r4/$cho-appeal-submit",
+            ChoUser(Tenant, ChoRolePermissions.UMCoordinator),
+            content: AppealBundle("pat-001", sender: "Practitioner/p1", configureTask: t =>
+                t.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, new Code("Tricare")))));
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var body = await response.Content.ReadAsStringAsync();
+        var outcome = JsonSerializer.Deserialize<OperationOutcome>(body, FhirJson)!;
+        var issue = outcome.Issue.Should().ContainSingle().Subject;
+        issue.Code.Should().Be(OperationOutcome.IssueType.CodeInvalid);
+        issue.Diagnostics.Should().Contain("Tricare");
+        issue.Expression.Should().ContainSingle().Which.Should().Contain(FhirAppealMapper.AppealLineOfBusinessExtensionUrl);
+        appeals.Submitted.Should().BeEmpty("a value that would pick the wrong regulatory clock is never forwarded");
+    }
+
     // ── Payer-to-Payer $initiate: payer-to-payer:initiate ─────────────────────
 
     private async Task<(HttpResponseMessage Response, RecordingOutboundService Outbound)> InitiateAsync(string token)
@@ -415,7 +469,8 @@ public class FhirCallerAuthTests : IClassFixture<FhirTestWebAppFactory>
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static StringContent AppealBundle(string memberId, string sender)
+    private static StringContent AppealBundle(
+        string memberId, string sender, Action<Hl7.Fhir.Model.Task>? configureTask = null)
     {
         var bundle = new Bundle
         {
@@ -453,6 +508,7 @@ public class FhirCallerAuthTests : IClassFixture<FhirTestWebAppFactory>
                 },
             ],
         };
+        configureTask?.Invoke((Hl7.Fhir.Model.Task)bundle.Entry[0].Resource);
         return new StringContent(JsonSerializer.Serialize(bundle, FhirJson), Encoding.UTF8, "application/fhir+json");
     }
 

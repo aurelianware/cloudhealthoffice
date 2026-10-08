@@ -20,6 +20,7 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
     public readonly ConcurrentQueue<OverdueCall> OverdueObserved = new();
     public readonly ConcurrentQueue<AssignedCall> Assigned = new();
     public readonly ConcurrentQueue<MigratedCall> Migrated = new();
+    public readonly ConcurrentQueue<DeadlineExtendedCall> DeadlineExtended = new();
 
     /// <summary>
     /// Drain every queue. Used by the
@@ -38,6 +39,7 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
         while (OverdueObserved.TryDequeue(out _)) { }
         while (Assigned.TryDequeue(out _)) { }
         while (Migrated.TryDequeue(out _)) { }
+        while (DeadlineExtended.TryDequeue(out _)) { }
     }
 
     public Task PublishCreatedAsync(Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
@@ -109,6 +111,15 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
         return Task.CompletedTask;
     }
 
+    public Task PublishDeadlineExtendedAsync(
+        Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
+    {
+        DeadlineExtended.Enqueue(new DeadlineExtendedCall(
+            appeal.Id, appeal.TenantId, appeal.DeadlineExtension?.Reason,
+            appeal.DeadlineExtension?.ExtensionDays, appeal.TargetResponseDate, actor, correlationId));
+        return Task.CompletedTask;
+    }
+
     public sealed record CreatedCall(string AppealId, string TenantId, string Actor, string? CorrelationId);
     public sealed record StatusChangedCall(string AppealId, string TenantId, AppealStatus From, AppealStatus To, string Actor, string? CorrelationId);
     public sealed record ClosedCall(string AppealId, string TenantId, AppealStatus From, AppealClosureReasonCode? Reason, AppealDecisionType? DecisionType, decimal? ApprovedAmount, string Actor, string? CorrelationId);
@@ -117,5 +128,6 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
     public sealed record AttachmentAckCall(string AppealId, string TenantId, string AttachmentId, bool AcknowledgmentReceived, string Actor, string? CorrelationId);
     public sealed record OverdueCall(string AppealId, string TenantId, AppealStatus Status, DateTime? TargetResponseDate, string Actor, string? CorrelationId);
     public sealed record AssignedCall(string AppealId, string TenantId, string? AssignedReviewerId, string? PreviousReviewerId, string Actor, string? CorrelationId);
+    public sealed record DeadlineExtendedCall(string AppealId, string TenantId, AppealExtensionReason? Reason, int? ExtensionDays, DateTime? TargetResponseDate, string Actor, string? CorrelationId);
     public sealed record MigratedCall(string AppealId, string TenantId, string LegacyStatus, AppealClosureReasonCode MappedReasonCode, string Actor, string? CorrelationId);
 }

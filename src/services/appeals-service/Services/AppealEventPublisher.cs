@@ -13,7 +13,7 @@ namespace AppealsService.Services;
 /// - <see cref="IHostedService"/> + <see cref="IAsyncDisposable"/>.
 /// - Degraded mode when <c>Kafka:BootstrapServers</c> is unset — publish
 ///   becomes a no-op; service still boots. DB is the source of truth.
-/// - Single topic, nine event types distinguished by the <c>event-type</c>
+/// - Single topic, ten event types distinguished by the <c>event-type</c>
 ///   header.
 /// - Partition key = <c>appealId</c> (per-appeal ordering preserved).
 /// - Headers: <c>tenant-id</c>, <c>event-type</c>, <c>event-version</c>.
@@ -32,6 +32,7 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
     public const string AppealOverdueObservedType = "AppealOverdueObserved";
     public const string AppealAssignedType = "AppealAssigned";
     public const string AppealStatusMigratedType = "AppealStatusMigrated";
+    public const string AppealDeadlineExtendedType = "AppealDeadlineExtended";
 
     private readonly ILogger<AppealEventPublisher> _logger;
     private readonly IConfiguration _configuration;
@@ -166,6 +167,13 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
     {
         var evt = BuildAssignedPayload(appeal, previousReviewerId, actor, correlationId);
         return ProduceAsync(appeal, AppealAssignedType, evt, ct);
+    }
+
+    public Task PublishDeadlineExtendedAsync(
+        Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
+    {
+        var evt = BuildDeadlineExtendedPayload(appeal, actor, correlationId);
+        return ProduceAsync(appeal, AppealDeadlineExtendedType, evt, ct);
     }
 
     public Task PublishStatusMigratedAsync(
@@ -371,6 +379,27 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
         CorrelationId = correlationId
     };
 
+    internal static AppealDeadlineExtendedEventPayload BuildDeadlineExtendedPayload(
+        Appeal a, string actor, string? correlationId) => new()
+    {
+        EventId = Guid.NewGuid().ToString(),
+        EventType = AppealDeadlineExtendedType,
+        EventVersion = EventVersion,
+        OccurredAt = DateTime.UtcNow,
+        TenantId = a.TenantId,
+        AppealId = a.Id,
+        CurrentStatus = a.Status.ToString(),
+        LineOfBusiness = a.LineOfBusiness.ToString(),
+        Reason = a.DeadlineExtension?.Reason.ToString(),
+        ExtensionDays = a.DeadlineExtension?.ExtensionDays,
+        PreviousTargetResponseDate = a.DeadlineExtension?.PreviousTargetResponseDate,
+        TargetResponseDate = a.TargetResponseDate,
+        WrittenNoticeSentAt = a.DeadlineExtension?.WrittenNoticeSentAt,
+        RegulatoryBasis = a.DeadlineExtension?.RegulatoryBasis,
+        Actor = actor,
+        CorrelationId = correlationId
+    };
+
     public async ValueTask DisposeAsync()
     {
         await StopAsync(CancellationToken.None);
@@ -523,6 +552,26 @@ public sealed record AppealStatusMigratedEventPayload
     public string AppealId { get; init; } = string.Empty;
     public string LegacyStatus { get; init; } = string.Empty;
     public string MappedReasonCode { get; init; } = string.Empty;
+    public string Actor { get; init; } = string.Empty;
+    public string? CorrelationId { get; init; }
+}
+
+public sealed record AppealDeadlineExtendedEventPayload
+{
+    public string EventId { get; init; } = string.Empty;
+    public string EventType { get; init; } = string.Empty;
+    public string EventVersion { get; init; } = string.Empty;
+    public DateTime OccurredAt { get; init; }
+    public string TenantId { get; init; } = string.Empty;
+    public string AppealId { get; init; } = string.Empty;
+    public string CurrentStatus { get; init; } = string.Empty;
+    public string LineOfBusiness { get; init; } = string.Empty;
+    public string? Reason { get; init; }
+    public int? ExtensionDays { get; init; }
+    public DateTime? PreviousTargetResponseDate { get; init; }
+    public DateTime? TargetResponseDate { get; init; }
+    public DateTime? WrittenNoticeSentAt { get; init; }
+    public string? RegulatoryBasis { get; init; }
     public string Actor { get; init; } = string.Empty;
     public string? CorrelationId { get; init; }
 }

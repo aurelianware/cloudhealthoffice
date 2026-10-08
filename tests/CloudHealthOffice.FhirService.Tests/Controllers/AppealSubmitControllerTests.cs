@@ -232,6 +232,119 @@ public class AppealSubmitControllerTests
             "cho-appeal-child-ref extension must carry the ChildRef value");
     }
 
+    // ── Coded-value mapping (regulatory clock selection) ────────────────
+
+    [Fact]
+    public void TaskToAppealDto_defaults_when_codes_absent()
+    {
+        var task = BuildValidTask();
+        task.Code = null;
+
+        var dto = AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        dto.AppealType.Should().Be(AppealType.Reconsideration);
+        dto.AppealLevel.Should().Be(AppealLevel.FirstLevel);
+        dto.LineOfBusiness.Should().Be(LineOfBusiness.Commercial);
+    }
+
+    [Theory]
+    [InlineData("ExternalReview")]
+    [InlineData("external-review")]
+    [InlineData("EXTERNAL_REVIEW")]
+    [InlineData("ire")]
+    [InlineData("state-fair-hearing")]
+    public void ExternalReview_Task_code_without_level_extension_lands_on_external_review_level(string code)
+    {
+        var task = BuildValidTask();
+        task.Code = new CodeableConcept(null, code);
+
+        var (type, level) = AppealSubmitController.ResolveTypeAndLevel(task);
+
+        type.Should().Be(AppealType.ExternalReview);
+        level.Should().Be(AppealLevel.ExternalReview,
+            "without the level the appeal would be held to the internal-appeal clock and a legitimate external-review date rejected");
+    }
+
+    [Fact]
+    public void ExternalReview_level_extension_without_Task_code_lands_on_external_review_type()
+    {
+        var task = BuildValidTask();
+        task.Code = null;
+        task.Extension.Add(new Extension(FhirAppealMapper.AppealLevelExtensionUrl, new Code("external-review")));
+
+        var (type, level) = AppealSubmitController.ResolveTypeAndLevel(task);
+
+        type.Should().Be(AppealType.ExternalReview);
+        level.Should().Be(AppealLevel.ExternalReview);
+    }
+
+    [Fact]
+    public void Explicit_type_and_level_are_not_rewritten()
+    {
+        var task = BuildValidTask();
+        task.Code = new CodeableConcept(null, "Reconsideration");
+        task.Extension.Add(new Extension(FhirAppealMapper.AppealLevelExtensionUrl, new Code("ExternalReview")));
+
+        var (type, level) = AppealSubmitController.ResolveTypeAndLevel(task);
+
+        type.Should().Be(AppealType.Reconsideration);
+        level.Should().Be(AppealLevel.ExternalReview);
+    }
+
+    [Fact]
+    public void Grievance_is_never_promoted_to_external_review()
+    {
+        var task = BuildValidTask();
+        task.Code = new CodeableConcept(null, "Grievance");
+
+        var (type, level) = AppealSubmitController.ResolveTypeAndLevel(task);
+
+        type.Should().Be(AppealType.Grievance);
+        level.Should().Be(AppealLevel.FirstLevel);
+    }
+
+    [Theory]
+    [InlineData("MedicarePartD", LineOfBusiness.MedicarePartD)]
+    [InlineData("medicare-part-d", LineOfBusiness.MedicarePartD)]
+    [InlineData("PartD", LineOfBusiness.MedicarePartD)]
+    [InlineData("Medicare", LineOfBusiness.Medicare)]
+    [InlineData("medicare-advantage", LineOfBusiness.Medicare)]
+    [InlineData("Medicaid", LineOfBusiness.Medicaid)]
+    [InlineData("exchange", LineOfBusiness.Marketplace)]
+    public void LineOfBusiness_extension_maps_including_PartD(string code, LineOfBusiness expected)
+    {
+        var task = BuildValidTask();
+        task.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, new Code(code)));
+
+        AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null)
+            .LineOfBusiness.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, "Tricare")]
+    [InlineData(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, "5")]
+    [InlineData(FhirAppealMapper.AppealLevelExtensionUrl, "ThirdLevel")]
+    public void Unrecognized_coded_extension_is_rejected_not_defaulted(string url, string code)
+    {
+        var task = BuildValidTask();
+        task.Extension.Add(new Extension(url, new Code(code)));
+
+        Action act = () => AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage($"*'{code}'*");
+    }
+
+    [Fact]
+    public void Unrecognized_Task_code_is_rejected_not_defaulted()
+    {
+        var task = BuildValidTask();
+        task.Code = new CodeableConcept(null, "Arbitration");
+
+        Action act = () => AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*AppealType*Arbitration*");
+    }
+
     private static Hl7.Fhir.Model.Task BuildValidTask() => new()
     {
         Id = "apl-new",

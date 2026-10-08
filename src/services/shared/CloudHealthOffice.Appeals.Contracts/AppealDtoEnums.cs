@@ -56,7 +56,14 @@ public enum LineOfBusiness
     Commercial = 1,
     Medicare = 2,
     Medicaid = 3,
-    Marketplace = 4
+    Marketplace = 4,
+    MedicarePartD = 5
+}
+
+public enum AppealExtensionReason
+{
+    EnrolleeRequested = 1,
+    PlanNeedsInfo = 2
 }
 
 public enum AppealClosureReasonCode

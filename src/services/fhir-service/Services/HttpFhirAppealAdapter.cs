@@ -313,8 +313,21 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
                 if (root.TryGetProperty("fromStatus", out var fs)) parts.Add($"fromStatus={fs}");
                 if (root.TryGetProperty("toStatus", out var ts)) parts.Add($"toStatus={ts}");
                 if (root.TryGetProperty("closureReasonCode", out var cr)) parts.Add($"closureReasonCode={cr}");
-                // Deliberately DROP: detail, message, errors — these may
-                // carry free-text inputs that echo PHI back.
+                if (root.TryGetProperty("extensionRefusal", out var er)) parts.Add($"extensionRefusal={er}");
+                // ValidationProblemDetails.errors: keep the offending field
+                // NAMES (e.g. TargetResponseDate) so the caller can tell
+                // which input to fix — never the messages, which may echo
+                // input values.
+                if (root.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Object)
+                {
+                    var fields = errs.EnumerateObject()
+                        .Select(p => p.Name)
+                        .Where(IsSafeFieldName)
+                        .ToList();
+                    if (fields.Count > 0) parts.Add($"errorFields={string.Join(",", fields)}");
+                }
+                // Deliberately DROP: detail, message, error messages — these
+                // may carry free-text inputs that echo PHI back.
                 return string.Join("; ", parts);
             }
         }
@@ -325,6 +338,15 @@ public sealed class HttpFhirAppealAdapter : IFhirAppealAdapter
 
         return header;
     }
+
+    /// <summary>
+    /// A ModelState key is a property path (<c>TargetResponseDate</c>,
+    /// <c>$.appealLevel</c>, <c>Notes[0].NoteText</c>). Anything with other
+    /// characters, or implausibly long, is dropped rather than echoed.
+    /// </summary>
+    private static bool IsSafeFieldName(string name) =>
+        name.Length is > 0 and <= 100
+        && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '$' or '[' or ']');
 
     // ── Query-string assembly ───────────────────────────────────────────
 

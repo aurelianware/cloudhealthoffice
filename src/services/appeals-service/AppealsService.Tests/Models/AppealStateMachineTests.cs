@@ -138,4 +138,15 @@ public class AppealStateMachineTests
     {
         AppealStateMachine.IsClosureReasonAllowed(from, reason).Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData(AppealStatus.Draft, false)]
+    [InlineData(AppealStatus.Submitted, true)]
+    [InlineData(AppealStatus.InReview, true)]
+    [InlineData(AppealStatus.PendingInfo, true)]
+    [InlineData(AppealStatus.Closed, false)]
+    public void Extension_Only_While_Clock_Is_Running(AppealStatus from, bool allowed)
+    {
+        AppealStateMachine.IsExtensionAllowed(from).Should().Be(allowed);
+    }
 }

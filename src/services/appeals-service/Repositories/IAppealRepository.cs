@@ -68,6 +68,18 @@ public interface IAppealRepository
     /// </summary>
     Task<Appeal?> TryTransitionToOverdueAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default);
 
+    /// <summary>
+    /// Race-safe one-time deadline extension. Caller sets
+    /// <c>appeal.TargetResponseDate</c> and <c>appeal.DeadlineExtension</c>
+    /// (after validating against <c>AppealResponseDeadlinePolicy</c>)
+    /// before calling. Conditional on the persisted
+    /// <c>DeadlineExtension == null</c> AND
+    /// <c>Status ∈ {Submitted, InReview, PendingInfo}</c>. Returns the
+    /// updated appeal on win (audit event appended); <c>null</c> on loss —
+    /// already extended, closed, or not found.
+    /// </summary>
+    Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default);
+
     /// <summary>Atomic note append + audit event.</summary>
     Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default);
 

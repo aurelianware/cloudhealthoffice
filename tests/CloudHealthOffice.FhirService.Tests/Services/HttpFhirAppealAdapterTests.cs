@@ -213,4 +213,29 @@ public class HttpFhirAppealAdapterTests
         diag.Should().NotContain("John Doe",
             "PHI-adjacent fields (detail, errors values) must be redacted from the diagnostic excerpt");
     }
+
+    [Fact]
+    public async Task BuildRedactedDiagnostics_surfaces_deadline_violation_type_and_field_names_only()
+    {
+        // appeals-service's 400 for a TargetResponseDate past the regulatory
+        // maximum: the caller must learn WHICH field and WHICH rule, never
+        // the message text.
+        var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(
+                "{\"type\":\"https://cloudhealthoffice.com/problems/appeal-target-response-date\"," +
+                "\"title\":\"TargetResponseDate exceeds regulatory maximum\",\"status\":400," +
+                "\"errors\":{\"TargetResponseDate\":[\"exceeds the maximum for Jane Doe\"]," +
+                "\"bad key; John Doe\":[\"x\"]}}",
+                System.Text.Encoding.UTF8,
+                "application/problem+json")
+        };
+
+        var diag = await HttpFhirAppealAdapter.BuildRedactedDiagnosticsAsync(response, CancellationToken.None);
+
+        diag.Should().Contain("type=https://cloudhealthoffice.com/problems/appeal-target-response-date");
+        diag.Should().Contain("errorFields=TargetResponseDate");
+        diag.Should().NotContain("Jane Doe");
+        diag.Should().NotContain("John Doe", "keys that are not plain property paths are dropped");
+    }
 }

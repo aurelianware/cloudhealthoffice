@@ -73,6 +73,14 @@ public class AppealDtoDriftTests
             + string.Join("\n  ", mismatches));
     }
 
+    [Fact]
+    public void Every_domain_AppealDeadlineExtension_property_has_equivalent_DTO_property()
+    {
+        var mismatches = CompareShapes(typeof(AppealDeadlineExtension), typeof(AppealDeadlineExtensionDto)).ToList();
+        mismatches.Should().BeEmpty("AppealDeadlineExtensionDto must mirror AppealDeadlineExtension. Mismatches:\n  "
+            + string.Join("\n  ", mismatches));
+    }
+
     [Theory]
     [InlineData(typeof(AppealsService.Models.AppealType), typeof(AppealType))]
     [InlineData(typeof(AppealsService.Models.AppealLevel), typeof(AppealLevel))]
@@ -82,6 +90,7 @@ public class AppealDtoDriftTests
     [InlineData(typeof(AppealsService.Models.LineOfBusiness), typeof(LineOfBusiness))]
     [InlineData(typeof(AppealsService.Models.AppealClosureReasonCode), typeof(AppealClosureReasonCode))]
     [InlineData(typeof(AppealsService.Models.AppealSource), typeof(AppealSource))]
+    [InlineData(typeof(AppealsService.Models.AppealExtensionReason), typeof(AppealExtensionReason))]
     public void Parallel_enums_have_same_underlying_type_and_members(Type domainEnum, Type contractsEnum)
     {
         domainEnum.IsEnum.Should().BeTrue($"{domainEnum.FullName} must be an enum");

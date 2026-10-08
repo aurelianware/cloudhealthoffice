@@ -240,6 +240,38 @@ public class AppealEventPublisherTests
         AssertNoEncryptedFieldValues(payload);
     }
 
+    [Fact]
+    public void AppealDeadlineExtended_FieldWhitelist()
+    {
+        var a = NewAppeal();
+        a.LineOfBusiness = LineOfBusiness.Medicare;
+        a.DeadlineExtension = new AppealDeadlineExtension
+        {
+            Reason = AppealExtensionReason.PlanNeedsInfo,
+            ExtensionDays = 14,
+            PreviousTargetResponseDate = a.TargetResponseDate!.Value,
+            NewTargetResponseDate = a.TargetResponseDate!.Value.AddDays(14),
+            WrittenNoticeSentAt = new DateTime(2026, 4, 20, 0, 0, 0, DateTimeKind.Utc),
+            ExtendedBy = "user1",
+            RegulatoryBasis = "42 CFR 422.590(f)"
+        };
+        a.TargetResponseDate = a.DeadlineExtension.NewTargetResponseDate;
+
+        var payload = AppealEventPublisher.BuildDeadlineExtendedPayload(a, "user1", "corr1");
+        JsonFields(payload).Should().BeEquivalentTo(new[]
+        {
+            "eventId", "eventType", "eventVersion", "occurredAt",
+            "tenantId", "appealId",
+            "currentStatus", "lineOfBusiness", "reason", "extensionDays",
+            "previousTargetResponseDate", "targetResponseDate", "writtenNoticeSentAt",
+            "regulatoryBasis",
+            "actor", "correlationId"
+        });
+        payload.Reason.Should().Be("PlanNeedsInfo");
+        payload.ExtensionDays.Should().Be(14);
+        AssertNoEncryptedFieldValues(payload);
+    }
+
     // ── Degraded mode ───────────────────────────────────────────────────
 
     [Fact]

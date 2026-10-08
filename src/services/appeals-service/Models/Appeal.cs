@@ -130,8 +130,22 @@ public class Appeal
 
     public DateTime? ReceivedDate { get; set; }
 
-    /// <summary>Regulatory deadline. Drives the read-time overdue projection.</summary>
+    /// <summary>
+    /// Regulatory deadline. Drives the read-time overdue projection.
+    /// Computed by <see cref="Services.AppealResponseDeadlinePolicy"/>;
+    /// moved later only by the one-time extension operation, which records
+    /// the prior value on <see cref="DeadlineExtension"/>.
+    /// </summary>
     public DateTime? TargetResponseDate { get; set; }
+
+    /// <summary>
+    /// The one-time regulatory extension of <see cref="TargetResponseDate"/>
+    /// (42 CFR 422.590(f), 422.564(e)(2), 423.564(e)(2), 438.408(c)).
+    /// <c>null</c> until the <c>POST /{id}/extend</c> endpoint succeeds; a
+    /// non-null value blocks a second extension. Non-PHI — the plan's
+    /// free-text justification lives in an encrypted note.
+    /// </summary>
+    public AppealDeadlineExtension? DeadlineExtension { get; set; }
 
     public DateTime? DecisionDate { get; set; }
 
@@ -336,6 +350,40 @@ public class AppealDecision
     public string? ReviewerNotes { get; set; }
 }
 
+/// <summary>
+/// Record of the one-time deadline extension. Enum-, date- and citation-
+/// valued only (no PHI), so it is safe to mirror into audit payloads.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class AppealDeadlineExtension
+{
+    [Required]
+    public AppealExtensionReason Reason { get; set; }
+
+    /// <summary>Calendar days added to the deadline (1–14).</summary>
+    public int ExtensionDays { get; set; }
+
+    public DateTime PreviousTargetResponseDate { get; set; }
+
+    public DateTime NewTargetResponseDate { get; set; }
+
+    /// <summary>
+    /// When the plan sent the enrollee the required written notice of the
+    /// extension (reason for delay; right to file a grievance /
+    /// expedited grievance).
+    /// </summary>
+    public DateTime WrittenNoticeSentAt { get; set; }
+
+    public DateTime ExtendedAt { get; set; } = DateTime.UtcNow;
+
+    [StringLength(200)]
+    public string ExtendedBy { get; set; } = string.Empty;
+
+    /// <summary>Regulatory citation the extension was taken under.</summary>
+    [StringLength(200)]
+    public string RegulatoryBasis { get; set; } = string.Empty;
+}
+
 /// <summary>Appeal note / comment.</summary>
 [BsonIgnoreExtraElements]
 public class AppealNote
@@ -401,12 +449,36 @@ public enum AttachmentStatus
     Error = 5
 }
 
+/// <summary>
+/// <see cref="Medicare"/> is Medicare Advantage (Part C).
+/// <see cref="MedicarePartD"/> is Part D prescription drug coverage
+/// (stand-alone PDP or the drug benefit of an MA-PD), which runs on
+/// different appeal clocks (42 CFR 423.590).
+/// </summary>
 public enum LineOfBusiness
 {
     Commercial = 1,
     Medicare = 2,
     Medicaid = 3,
-    Marketplace = 4
+    Marketplace = 4,
+    MedicarePartD = 5
+}
+
+/// <summary>
+/// Grounds for the one-time deadline extension. Both grounds are the
+/// only two the regulations recognize (42 CFR 422.590(f)(1),
+/// 438.408(c)(1)).
+/// </summary>
+public enum AppealExtensionReason
+{
+    /// <summary>The enrollee asked for more time.</summary>
+    EnrolleeRequested = 1,
+
+    /// <summary>
+    /// The plan needs additional information and the delay is in the
+    /// enrollee's interest. Requires a written justification.
+    /// </summary>
+    PlanNeedsInfo = 2
 }
 
 /// <summary>
