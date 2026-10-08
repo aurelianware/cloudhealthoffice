@@ -1,6 +1,7 @@
 extern alias accumulator;
 
 using ClaimsService.Models;
+using ClaimsService.Models.Adjudication;
 using ClaimsService.Services;
 using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Adjudication.Stages;
@@ -189,11 +190,11 @@ public class OopAppliedFinalizationSeamTests
             ClaimVersionId = adapterClaim.Id,
             Claim = adapterClaim,
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
-            // BenefitCalculationStage fails closed without pricing (#1235):
-            // supply the priced allowed amount PricingStage would set.
-            PricingResult = new global::ClaimsService.Models.Adjudication.PricingOutcome
+            // PricingStage (Order 250) supplies allowed amounts; the benefit
+            // stage pends without them.
+            PricingResult = new PricingOutcome
             {
-                AllowedAmounts = new Dictionary<int, decimal> { [1] = 100m },
+                AllowedAmounts = adapterClaim.ClaimLines.ToDictionary(l => l.LineNumber, _ => 100m),
             },
         };
 
