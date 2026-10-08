@@ -33,7 +33,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
         // 1. Check active coverage
         var coverage = await GetActiveCoverageAsync(request.TenantId, request.SubscriberId, request.ServiceDate);
 
-        if (coverage == null || !coverage.IsActive)
+        if (coverage == null || !coverage.IsInForceOn(request.ServiceDate))
         {
             return new EligibilityAdapterResponse
             {
@@ -87,7 +87,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
         // The /active endpoint returns a List<Coverage> — take the first active entry
         var coverages = await response.Content.ReadFromJsonAsync<List<ChoCoverageDto>>();
-        return coverages?.FirstOrDefault(c => c.IsActive);
+        return coverages?.FirstOrDefault(c => c.IsInForceOn(serviceDate));
     }
 
     private async Task<List<EligibilityBenefit>> GetBenefitsAsync(string tenantId, string benefitPlanId, string? serviceType)
@@ -219,9 +219,23 @@ internal class ChoCoverageDto
     public int Status { get; set; }
     public int LineOfBusiness { get; set; } = 1;
 
-    /// <summary>Coverage is active if Status == 1 (Active) or 5 (COBRA)</summary>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public bool IsActive => Status is 1 or 5;
+    /// <summary>
+    /// Coverage is in force on a date of service when the date falls within its
+    /// effective/termination span and its status is one that was in force for
+    /// that span: 1 (Active), 3 (Terminated — still covers dates on or before
+    /// the termination date) or 5 (COBRA). 2 (Pending — may not be effectuated
+    /// yet), 4 (Suspended) and unknown statuses are excluded, as is a 3 with no
+    /// termination date (fails closed rather than open-ended). Mirrors
+    /// coverage-service <c>Coverage.IsActiveOn</c>.
+    /// </summary>
+    public bool IsInForceOn(DateTime serviceDate)
+    {
+        var date = serviceDate.Date;
+        if (Status is not (1 or 3 or 5)) return false;
+        if (Status == 3 && !TerminationDate.HasValue) return false;
+        return date >= EffectiveDate.Date
+            && (!TerminationDate.HasValue || date <= TerminationDate.Value.Date);
+    }
 
     /// <summary>Maps PlanId to BenefitPlanId for eligibility adapter</summary>
     [System.Text.Json.Serialization.JsonIgnore]

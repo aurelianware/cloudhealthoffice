@@ -366,6 +366,8 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
             PayeeName = "Clinic",
             PayeeNPI = "1234567893",
             Status = status,
+            // Balanced 835: BPR02 = CLP04.
+            ClaimPayments = { new ClaimPayment { ClaimId = "clm-1", PatientControlNumber = "CLM-1", ClaimStatusCode = "1", ChargeAmount = 300m, PaymentAmount = 250m } },
         };
         _f.Payments.GetByIdAsync(id).Returns(payment);
         return payment;

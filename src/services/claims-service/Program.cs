@@ -316,6 +316,11 @@ builder.Services.AddScoped<ICredentialingStatusClient>(sp =>
 // already fast on a cache hit.
 builder.Services.AddScoped<IProviderIntegrityClient, HttpProviderIntegrityClient>();
 
+// PricingStage (Order=250) — fee schedule resolution via benefit-plan-service's
+// resolve-rates endpoint (same IRateResolutionService the sync Adjudicate path
+// uses). Reuses the BenefitPlanService named HttpClient; never fails open.
+builder.Services.AddScoped<IFeeSchedulePricingClient, HttpFeeSchedulePricingClient>();
+
 // 5.4 — Claims Scrub Engine (class library). Default standard rule set;
 // per-tenant rule overrides remain a Phase 2 surface.
 builder.Services.AddClaimsScrubEngine();
@@ -394,8 +399,10 @@ builder.Services.AddScoped<IAuthorizationValidationClient, HttpAuthorizationVali
 // closing a gap the original 5.5 stage scope never covered — see the
 // stage's own doc comment and docs/architecture/claim-adjudication-pipeline.md.
 builder.Services.AddScoped<IClaimAdjudicationStage, ScrubbingStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, DuplicateClaimStage>(); // Order=120
 builder.Services.AddScoped<IClaimAdjudicationStage, ProviderIntegrityStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NetworkCredentialingStage>();
+builder.Services.AddScoped<IClaimAdjudicationStage, PricingStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, BenefitCalculationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, NcciEditsStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>();

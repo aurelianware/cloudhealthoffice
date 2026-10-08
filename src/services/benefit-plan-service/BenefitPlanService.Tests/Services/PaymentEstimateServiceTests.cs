@@ -256,12 +256,14 @@ public class PaymentEstimateServiceTests
         line.Messages.Should().Contain(m => m.Code == "NON_COVERED_SERVICE" && m.Severity == EstimateMessageSeverity.Denial);
     }
 
-    [Fact]
-    public async Task InvalidProcedureCode_NoBenefitMapping_NeedsReview()
+    [Theory]
+    [InlineData("16")]
+    [InlineData("204")]
+    public async Task InvalidProcedureCode_NoBenefitMapping_NeedsReview(string carc)
     {
         var h = new Harness();
         h.SetupPricing(Pricing((1, 100m, 100m, RateSource.BilledCharges)));
-        h.SetupBenefit(Benefit(false, DeniedLine(1, 100m, "16", "No benefit category mapping for procedure code")));
+        h.SetupBenefit(Benefit(false, DeniedLine(1, 100m, carc, "No benefit category mapping for procedure code")));
 
         var resp = await h.Build().EstimateAsync(Tenant, Request(Line(1, "ZZZZZ", 100m)));
 
@@ -282,6 +284,57 @@ public class PaymentEstimateServiceTests
         resp.Lines.Single().Messages.Should().Contain(m => m.Code == "BILLED_CHARGES_USED");
         resp.Confidence.MissingData.Should().Contain(d => d.Contains("Fee schedule for line 1"));
         resp.Confidence.Level.Should().NotBe(EstimateConfidenceLevel.High);
+    }
+
+    [Fact]
+    public async Task UnresolvedRate_AddsWarningAndLowersConfidence()
+    {
+        var h = new Harness();
+        h.SetupPricing(Pricing((1, 200m, 0m, RateSource.Unresolved)));
+        h.SetupBenefit(Benefit(true, PayableLine(1, 0m)));
+
+        var resp = await h.Build().EstimateAsync(Tenant, Request(Line(1, "99213", 200m)));
+
+        resp.Lines.Single().Messages.Should().Contain(m => m.Code == "RATE_UNRESOLVED"
+            && m.Severity == EstimateMessageSeverity.Warning);
+        resp.Lines.Single().Messages.Should().NotContain(m => m.Code == "FEE_SCHEDULE_APPLIED");
+        resp.Confidence.MissingData.Should().Contain(d => d.Contains("line 1") && d.Contains("could not be resolved"));
+        resp.Confidence.Reasons.Should().NotContain("Provider fee schedule resolved");
+        resp.Confidence.Level.Should().NotBe(EstimateConfidenceLevel.High);
+    }
+
+    [Fact]
+    public async Task UnresolvedRate_LineNeedsReview_NoAmountsDerivedFromSentinel_ExcludedFromTotals()
+    {
+        var h = new Harness();
+        h.SetupPricing(Pricing(
+            (1, 200m, 150m, RateSource.ContractedRate),
+            (2, 300m, 0m, RateSource.Unresolved)));
+        // Benefit engine ran on the $0 sentinel and still produced a (meaningless) copay.
+        h.SetupBenefit(Benefit(true,
+            PayableLine(1, 150m, coinsurance: 30m),
+            PayableLine(2, 0m, copay: 20m, planPaid: 0m)));
+
+        var resp = await h.Build().EstimateAsync(Tenant,
+            Request(Line(1, "99213", 200m), Line(2, "27447", 300m)));
+
+        var unresolved = resp.Lines.Single(l => l.LineNumber == 2);
+        unresolved.Status.Should().Be("needs_review");
+        unresolved.BilledAmount.Should().Be(300m);
+        unresolved.AllowedAmount.Should().Be(0m);
+        unresolved.ContractualAdjustment.Should().Be(0m);
+        unresolved.PayerResponsibility.Should().Be(0m);
+        unresolved.PatientResponsibility.Should().Be(0m);
+        unresolved.CopayAmount.Should().Be(0m);
+        unresolved.Messages.Should().NotContain(m => m.Code == "CONTRACTUAL_ADJUSTMENT" || m.Code == "COPAY_APPLIED");
+
+        // Totals reflect only the resolved line's derived amounts (billed is still real).
+        resp.Totals.BilledAmount.Should().Be(500m);
+        resp.Totals.AllowedAmount.Should().Be(150m);
+        resp.Totals.ContractualAdjustment.Should().Be(50m);
+        resp.Totals.CopayAmount.Should().Be(0m);
+        resp.Totals.CoinsuranceAmount.Should().Be(30m);
+        resp.Confidence.Level.Should().Be(EstimateConfidenceLevel.Low);
     }
 
     [Fact]
