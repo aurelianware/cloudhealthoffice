@@ -82,6 +82,26 @@ public class AppealsController : ControllerBase
         var actor = Actor;
         var now = DateTime.UtcNow;
 
+        // Default target vs enforceable federal ceiling (see
+        // AppealResponseDeadlinePolicy for citations). An explicit override may
+        // tighten the deadline but never extend it past a genuine regulatory
+        // maximum — reject rather than silently cap so the caller learns its
+        // date was not honored. Where no federal ceiling exists (e.g.
+        // commercial grievances) the override is accepted as-is.
+        var regulatoryDeadline = AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
+            now, request.LineOfBusiness, request.AppealType, request.IsUrgent);
+        var enforceableMaximum = AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
+            now, request.LineOfBusiness, request.AppealType, request.IsUrgent);
+        if (request.TargetResponseDate.HasValue
+            && enforceableMaximum.HasValue
+            && request.TargetResponseDate.Value.ToUniversalTime() > enforceableMaximum.Value)
+        {
+            ModelState.AddModelError(nameof(CreateAppealRequest.TargetResponseDate),
+                $"TargetResponseDate exceeds the regulatory maximum of {enforceableMaximum.Value:o} " +
+                $"for {request.LineOfBusiness} {request.AppealType} (urgent: {request.IsUrgent}).");
+            return ValidationProblem(ModelState);
+        }
+
         var appeal = new Appeal
         {
             TenantId = TenantId,
@@ -102,7 +122,7 @@ public class AppealsController : ControllerBase
             Status = AppealStatus.Draft,
             Source = request.Source,
             SubmittedDate = now,
-            TargetResponseDate = request.TargetResponseDate ?? now.AddDays(request.IsUrgent ? 30 : 60),
+            TargetResponseDate = request.TargetResponseDate?.ToUniversalTime() ?? regulatoryDeadline,
             SubmittedBy = actor,
             IsUrgent = request.IsUrgent,
             ServiceDate = request.ServiceDate,
