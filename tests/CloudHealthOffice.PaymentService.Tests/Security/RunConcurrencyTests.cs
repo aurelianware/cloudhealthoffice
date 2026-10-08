@@ -73,7 +73,8 @@ public sealed class RunConcurrencyTests : IDisposable
 
         Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
         Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Conflict);
-        Assert.Single(_host.Claims.Calls, c => c.Path == "/api/claims/search");
+        // The executing run searches twice (Approved claims, Denied claims); the other run never searches.
+        Assert.Equal(2, _host.Claims.Calls.Count(c => c.Path == "/api/claims/search"));
         Assert.Single(PaymentsFor("clm-1"));
         Assert.Equal(1, _host.Claims.Get("clm-1").FinalizeCount);
     }
@@ -83,6 +84,7 @@ public sealed class RunConcurrencyTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         var runId = await CreateAsync("/api/reversalruns");
         _host.ReversalRuns.AfterGet = Rendezvous(2);
 
@@ -152,6 +154,7 @@ public sealed class RunConcurrencyTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         var runA = await CreateAsync("/api/reversalruns");
         var runB = await CreateAsync("/api/reversalruns");
         _host.Payments.AfterPaidLookup = Rendezvous(2);
@@ -208,6 +211,7 @@ public sealed class RunConcurrencyTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid", npi: "9999999992");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         _host.TradingPartners.MissingNpis.Add("9999999992");
 
         var response = await Approver(ApproverA).PostAsync($"/api/reversalruns/{await CreateAsync("/api/reversalruns")}/execute", null);

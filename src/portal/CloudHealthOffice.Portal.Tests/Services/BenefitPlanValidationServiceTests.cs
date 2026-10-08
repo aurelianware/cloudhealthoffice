@@ -51,6 +51,51 @@ public class BenefitPlanValidationServiceTests
     }
 
     [Fact]
+    public async Task ValidateAsync_CoveredBenefitExcludedFromOop_WarnsUnderAca156130WithoutBlocking()
+    {
+        var planService = new Mock<IBenefitPlanService>();
+        planService.Setup(service => service.GetMemberViewAsync("PLAN-1", It.IsAny<DateTime>()))
+            .ReturnsAsync(new MemberBenefitView
+            {
+                PlanId = "PLAN-1",
+                PlanVersion = "v3",
+                Categories = [new CategorizedBenefit { Category = "medical" }]
+            });
+        var plan = CompletePlan();
+        plan.Benefits.Add(new PlanBenefit
+        {
+            BenefitId = "BEN-2",
+            Description = "Cosmetic Dermatology",
+            IsCovered = true,
+            OopApplies = false
+        });
+        plan.Exclusions[0].OopApplies = false; // not covered → not in scope
+        var sut = CreateService(planService.Object, Environments.Production);
+
+        var result = await sut.ValidateAsync(plan, new DateTime(2026, 8, 1));
+
+        result.IsValid.Should().BeTrue();
+        var check = result.Checks.Single(c => c.Name == "Out-of-pocket max");
+        check.Severity.Should().Be("Warning");
+        check.Message.Should().Contain("1 covered benefit(s)")
+            .And.Contain("Cosmetic Dermatology")
+            .And.Contain("156.130");
+    }
+
+    [Fact]
+    public async Task ValidateAsync_AllBenefitsCountTowardOop_OopCheckSucceeds()
+    {
+        var planService = new Mock<IBenefitPlanService>();
+        planService.Setup(service => service.GetMemberViewAsync("PLAN-1", It.IsAny<DateTime>()))
+            .ReturnsAsync((MemberBenefitView?)null);
+        var sut = CreateService(planService.Object, Environments.Production);
+
+        var result = await sut.ValidateAsync(CompletePlan(), new DateTime(2026, 8, 1));
+
+        result.Checks.Should().Contain(check => check.Name == "Out-of-pocket max" && check.Severity == "Success");
+    }
+
+    [Fact]
     public void SyntheticClaimsEnabled_IsDevelopmentOrExplicitDemoFeatureOnly()
     {
         var planService = Mock.Of<IBenefitPlanService>();

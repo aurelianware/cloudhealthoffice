@@ -9,7 +9,7 @@ namespace AppealsService.Models;
 /// <summary>
 /// Append-only audit row for <see cref="Appeal"/>. One row per lifecycle
 /// action (created, status-changed, closed, note-added, attachment-added,
-/// attachment-acknowledged, overdue-observed, assigned, migrated from
+/// attachment-acknowledged, overdue-observed, assigned, deadline-extended, migrated from
 /// pre-modernization status values). Partition key is
 /// <c>{tenantId}:{appealId}</c> so the full audit trail for an appeal lives
 /// in a single partition and scans cheaply.
@@ -98,5 +98,15 @@ public enum AppealEventType
     /// <c>mappedReasonCode</c> so the audit trail remains coherent after
     /// the migration.
     /// </summary>
-    AppealStatusMigrated = 9
+    AppealStatusMigrated = 9,
+
+    /// <summary>
+    /// The one-time regulatory extension of
+    /// <see cref="Appeal.TargetResponseDate"/>. Not a status transition —
+    /// <c>FromStatus</c>/<c>ToStatus</c> are null. Payload carries
+    /// <c>reason</c>, <c>extensionDays</c>, <c>previousTargetResponseDate</c>,
+    /// <c>newTargetResponseDate</c>, <c>writtenNoticeSentAt</c>,
+    /// <c>regulatoryBasis</c> and <c>currentStatus</c>.
+    /// </summary>
+    AppealDeadlineExtended = 10
 }

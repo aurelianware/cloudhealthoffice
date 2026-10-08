@@ -12,6 +12,24 @@ public class NcciEditResult
     public string? ResolutionApplied { get; set; }
 }
 
+/// <summary>
+/// One service line flagged as an exact or suspect duplicate of a prior
+/// claim line. Reported separately from <see cref="NcciEditResult"/> —
+/// duplicates are not NCCI edits.
+/// </summary>
+public class DuplicateEditResult
+{
+    public string EditCode { get; set; } = string.Empty;
+    public string DuplicateType { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public bool Passed { get; set; }
+    public string? FailureReason { get; set; }
+    public int LineNumber { get; set; }
+    public string? MatchedClaimId { get; set; }
+    public string? MatchedClaimNumber { get; set; }
+    public int? MatchedLineNumber { get; set; }
+}
+
 public class FeeScheduleResult
 {
     public string ProcedureCode { get; set; } = string.Empty;
@@ -69,6 +87,7 @@ public class AdjudicationTransparencyData
 {
     public List<AdjudicationStep> Steps { get; set; } = new();
     public List<NcciEditResult> NcciResults { get; set; } = new();
+    public List<DuplicateEditResult> DuplicateResults { get; set; } = new();
     public List<FeeScheduleResult> FeeScheduleResults { get; set; } = new();
     public BenefitCalculationResult? BenefitCalculation { get; set; }
 }

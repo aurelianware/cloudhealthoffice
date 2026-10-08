@@ -45,6 +45,13 @@
          Decision 1b). Phase 1 exercises only IPayerOrderService for
          audit-trail rule labelling on detected CHO-secondary scenarios. -->
     <ProjectReference Include="../../engines/CloudHealthOffice.CobEngine/CloudHealthOffice.CobEngine.csproj" />
+    <!-- PricingStage (Order=250) prices every line through the fee
+         schedule engine's resolve-rates surface on benefit-plan-service.
+         Referenced for the wire contract only (PricingRequest /
+         PricingResultSet) so both sides of the HTTP hop share one model;
+         the engine itself runs in benefit-plan-service, the same posture
+         as BenefitEngine + HttpBenefitCalculationEngineClient. -->
+    <ProjectReference Include="../../engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

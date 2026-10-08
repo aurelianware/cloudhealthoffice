@@ -506,7 +506,8 @@ public class PaymentEstimateService : IPaymentEstimateService
     {
         "96" => ("NON_COVERED_SERVICE", "not_covered"),
         "119" => ("FREQUENCY_LIMITATION", "denied"),
-        "16" or "18" => ("NO_BENEFIT_MAPPING", "needs_review"),
+        // 204 is the engine's no-category-mapping denial.
+        "16" or "204" => ("NO_BENEFIT_MAPPING", "needs_review"),
         null => ("NO_BENEFIT_MAPPING", "needs_review"),
         _ => ("SERVICE_DENIED", "denied")
     };

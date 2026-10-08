@@ -75,6 +75,48 @@ public sealed class AdjudicationTransparencyBuilderTests
     }
 
     [Fact]
+    public void Build_ForDuplicatePend_ReportsDuplicateResults_NotNcciResults()
+    {
+        var claim = CreateClaim();
+        claim.Status = ClaimStatus.Pended;
+        claim.PendDetails = new PendDetails
+        {
+            PendCode = "DUPLICATE",
+            PendReason = "Suspect duplicate: line 1 matches claim CN-PRIOR line 1 (different billing provider).",
+            PendedAt = new DateTime(2026, 7, 9, 12, 0, 0, DateTimeKind.Utc),
+            DuplicateFindings = new List<DuplicateFindingSnapshot>
+            {
+                new()
+                {
+                    DuplicateType = "Suspect",
+                    RuleId = "DUP002",
+                    Message = "Line 1 vs claim CN-PRIOR (prior-1) line 1: different billing provider",
+                    LineNumber = 1,
+                    MatchedClaimId = "prior-1",
+                    MatchedClaimNumber = "CN-PRIOR",
+                    MatchedLineNumber = 1,
+                    SuggestedCarc = "18"
+                }
+            }
+        };
+
+        var result = AdjudicationTransparencyBuilder.Build(claim);
+
+        Assert.NotNull(result);
+        Assert.Empty(result!.NcciResults);
+        var duplicate = Assert.Single(result.DuplicateResults);
+        Assert.Equal("DUP002", duplicate.EditCode);
+        Assert.Equal("Suspect", duplicate.DuplicateType);
+        Assert.False(duplicate.Passed);
+        Assert.Equal("Suggested CARC 18", duplicate.FailureReason);
+        Assert.Equal(1, duplicate.LineNumber);
+        Assert.Equal("CN-PRIOR", duplicate.MatchedClaimNumber);
+        Assert.Equal("prior-1", duplicate.MatchedClaimId);
+        Assert.Equal(1, duplicate.MatchedLineNumber);
+        Assert.Contains(result.Steps, s => s.StepName == "Pend Review" && s.Summary!.StartsWith("DUPLICATE:"));
+    }
+
+    [Fact]
     public void Build_ForClaimWithoutPersistedProjection_ReturnsNull()
     {
         var claim = CreateClaim();

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using BenefitRulePredicate = CloudHealthOffice.BenefitEngine.Domain.BenefitRulePredicate;
+using CostShareType = CloudHealthOffice.BenefitEngine.Domain.CostShareType;
 using EngineFamilyAccumulatorModel = CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel;
 using ModelFamilyAccumulatorModel = BenefitPlanService.Models.FamilyAccumulatorModel;
 
@@ -242,6 +243,74 @@ public sealed class ChoBenefitPlanProviderModelMappingTests
 
         config.IsAcaCapEnforced.Should().BeFalse();
     }
+
+    [Fact]
+    public void MapToConfig_HdhpExemptServices_OnlyCodesWhereEveryBenefitIsPreventive()
+    {
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit { ServiceCategory = "Preventive", Description = "Preventive Care" });
+        plan.Benefits.Add(new PreventiveBenefit { ServiceCategory = "WELL", IsAcaPreventive = true });
+        // Shared code: one preventive, one not — must stay deductible-first.
+        plan.Benefits.Add(new PreventiveBenefit { ServiceCategory = "98", IsAcaPreventive = true });
+        plan.Benefits.Add(new MedicalBenefit { ServiceCategory = "98", Description = "Office Visit" });
+
+        var config = provider.MapToConfig(plan);
+
+        config.HdhpDeductibleExemptServices.Should().BeEquivalentTo(new[] { "Preventive", "WELL" });
+    }
+
+    [Fact]
+    public void MapToConfig_AcaPreventive_InNetworkHasNoCostShareRules_OutOfNetworkKeepsDeductible()
+    {
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit
+        {
+            ServiceCategory = "Preventive",
+            InNetworkCopay = 20m,
+            OutNetworkCoinsurance = 0.40m,
+        });
+
+        var category = provider.MapToConfig(plan).GetCategories("Preventive").Single();
+
+        category.InNetworkCostSharing.Should().BeEmpty();
+        category.OutOfNetworkCostSharing.Should().Contain(r => r.CostShareType == CostShareType.Deductible);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MapToConfig_ProjectsOopApplies_ToEveryRuleInBothTiers(bool oopApplies)
+    {
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit
+        {
+            ServiceCategory = "OOPX",
+            InNetworkCopay = 30m,
+            InNetworkCoinsurance = 0.20m,
+            OutNetworkCopay = 60m,
+            OutNetworkCoinsurance = 0.40m,
+            DeductibleApplies = true,
+            OopApplies = oopApplies,
+        });
+
+        var category = provider.MapToConfig(plan).GetCategories("OOPX").Single();
+
+        category.InNetworkCostSharing.Should().HaveCount(3)
+            .And.OnlyContain(r => r.OopApplies == oopApplies);
+        category.OutOfNetworkCostSharing.Should().HaveCount(3)
+            .And.OnlyContain(r => r.OopApplies == oopApplies);
+    }
+
+    [Theory]
+    [InlineData(0.20, 0.20)]
+    [InlineData(20, 0.20)]
+    [InlineData(1, 1)]
+    [InlineData(0, 0)]
+    public void NormalizeCoinsurance_ReadsValuesAboveOneAsPercent(decimal stored, decimal expected)
+        => ChoBenefitPlanProvider.NormalizeCoinsurance(stored).Should().Be(expected);
 
     private sealed class StubTenantContext : IBenefitEngineTenantContext
     {

@@ -73,6 +73,18 @@ public interface IAppealEventPublisher
         CancellationToken ct = default);
 
     /// <summary>
+    /// One-time regulatory extension of <see cref="Appeal.TargetResponseDate"/>.
+    /// Reads the extension record from <see cref="Appeal.DeadlineExtension"/>;
+    /// the plan's free-text justification (an encrypted note) is NOT in
+    /// the payload.
+    /// </summary>
+    Task PublishDeadlineExtendedAsync(
+        Appeal appeal,
+        string actor,
+        string? correlationId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Emitted by the status-migration hosted service for records
     /// carrying pre-modernization terminal status values that were rewritten
     /// to <c>Status=Closed</c> + <see cref="Appeal.ClosureReasonCode"/>. One
