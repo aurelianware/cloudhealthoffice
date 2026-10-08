@@ -108,7 +108,7 @@ public static class DuplicateMatchBuilder
 
         var fields = line is not null && prior is not null && priorLine is not null
             ? CompareLines(claim, line, prior, priorLine)
-            : ImpliedFields(finding.DuplicateType);
+            : ImpliedFields(finding.DuplicateType, line);
 
         return new ClaimDuplicateLineMatch
         {
@@ -150,9 +150,32 @@ public static class DuplicateMatchBuilder
         return fields;
     }
 
-    private static List<string> ImpliedFields(string duplicateType) => IsExact(duplicateType)
-        ? FieldOrder.ToList()
-        : new List<string> { FieldMember, FieldServiceDates, FieldProcedureCode };
+    /// <summary>
+    /// Fields a match of this type must have shared, for when the prior line
+    /// can't be compared. Mirrors DuplicateClaimStage.LineKey: a suspect
+    /// match keys on the procedure code, or on the revenue code when the line
+    /// has no procedure code; an exact match compares both codes, so only the
+    /// ones this line actually carries are listed (as <see cref="CompareLines"/> does).
+    /// </summary>
+    internal static List<string> ImpliedFields(string duplicateType, ClaimLine? line)
+    {
+        var hasProcedure = line is null || Normalize(line.ProcedureCode).Length > 0;
+        var hasRevenue = line is not null && Normalize(line.RevenueCode).Length > 0;
+
+        if (IsExact(duplicateType))
+        {
+            return FieldOrder
+                .Where(f => (f != FieldProcedureCode || hasProcedure) && (f != FieldRevenueCode || hasRevenue))
+                .ToList();
+        }
+
+        return new List<string>
+        {
+            FieldMember,
+            FieldServiceDates,
+            hasProcedure ? FieldProcedureCode : FieldRevenueCode,
+        };
+    }
 
     private static bool IsExact(string? type) =>
         string.Equals(type, DuplicateClaimStage.ExactDuplicateType, StringComparison.OrdinalIgnoreCase);

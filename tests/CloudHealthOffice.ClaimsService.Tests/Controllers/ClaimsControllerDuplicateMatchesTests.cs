@@ -204,6 +204,40 @@ public class ClaimsControllerDuplicateMatchesTests : IClassFixture<ClaimsApiFact
     }
 
     [Fact]
+    public void Builder_fallback_suspect_on_revenue_only_line_reports_revenue_code()
+    {
+        // Mirrors DuplicateClaimStage.LineKey.SuspectCode: with no procedure
+        // code the suspect match keyed on the revenue code.
+        var claim = PendedDuplicateClaim("dup-rev", Finding("Suspect", 1, "prior-gone", "CLM-GONE", 1));
+        claim.ClaimLines[0].ProcedureCode = string.Empty;
+        claim.ClaimLines[0].RevenueCode = "0450";
+
+        var match = Assert.Single(DuplicateMatchBuilder.Build(claim, new Dictionary<string, Claim>()));
+
+        Assert.False(match.MatchedClaimFound);
+        Assert.Equal(new[] { "Member", "Service dates", "Revenue code" }, match.MatchedFields);
+    }
+
+    [Fact]
+    public void Builder_fallback_exact_lists_only_codes_the_line_carries()
+    {
+        var procedureOnly = PendedDuplicateClaim("dup-exact-p", Finding("Exact", 1, "prior-gone", "CLM-GONE", 1));
+        var revenueOnly = PendedDuplicateClaim("dup-exact-r", Finding("Exact", 1, "prior-gone", "CLM-GONE", 1));
+        revenueOnly.ClaimLines[0].ProcedureCode = string.Empty;
+        revenueOnly.ClaimLines[0].RevenueCode = "0450";
+
+        var p = Assert.Single(DuplicateMatchBuilder.Build(procedureOnly, new Dictionary<string, Claim>()));
+        var r = Assert.Single(DuplicateMatchBuilder.Build(revenueOnly, new Dictionary<string, Claim>()));
+
+        Assert.Equal(
+            new[] { "Member", "Billing provider", "Service dates", "Procedure code", "Modifiers", "Units", "Charge" },
+            p.MatchedFields);
+        Assert.Equal(
+            new[] { "Member", "Billing provider", "Service dates", "Revenue code", "Modifiers", "Units", "Charge" },
+            r.MatchedFields);
+    }
+
+    [Fact]
     public void Builder_caps_distinct_matched_claims()
     {
         var findings = Enumerable.Range(1, DuplicateMatchBuilder.MaxMatchedClaims + 5)
