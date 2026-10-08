@@ -18,6 +18,8 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 ///              is true and <see cref="BenefitPlanConfig.AcaIndividualCap"/>
 ///              is set; legacy plans pre-5.7 hydrate with both false / null
 ///              and behave exactly as before (single shared family pool).
+///              When a family limit is unset, the member's individual limit
+///              is the pool for that accumulator.
 ///
 /// QNXT equivalent: The in-memory accumulator state that QNXT's
 /// adjudication engine maintains during claim processing, then writes
@@ -82,6 +84,16 @@ public class AccumulatorWorkingSet
                 NetworkTier.InNetwork, plan.FamilyOopMax);
             SeedOopMax(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family,
                 NetworkTier.OutOfNetwork, plan.FamilyOopMaxOon ?? plan.FamilyOopMax);
+
+            // No family limit configured (e.g. employee-only coverage): the
+            // member's individual limit is the pool, so a configured
+            // individual deductible / OOP max is not silently dropped.
+            // Seeded per tier only where the family limit is unset.
+            SeedAggregateIndividualFallback(NetworkTier.InNetwork,
+                plan.IndividualDeductible, plan.IndividualOopMax);
+            SeedAggregateIndividualFallback(NetworkTier.OutOfNetwork,
+                plan.IndividualDeductibleOon ?? plan.IndividualDeductible,
+                plan.IndividualOopMaxOon ?? plan.IndividualOopMax);
 
             // ACA 45 CFR §156.130 individual cap. Gated by IsAcaCapEnforced
             // so legacy Aggregate plans don't surprise-cap mid-year. The
@@ -159,6 +171,49 @@ public class AccumulatorWorkingSet
         EnsureAccumulator(type, scope, tier, limit.Value);
     }
 
+    private void SeedAggregateIndividualFallback(
+        NetworkTier tier, decimal? individualDeductible, decimal? individualOopMax)
+    {
+        if (IsFamilyUnset(AccumulatorType.FamilyDeductible, tier))
+            SeedDeductible(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual,
+                tier, individualDeductible);
+        if (IsFamilyUnset(AccumulatorType.FamilyOutOfPocketMax, tier))
+            SeedOopMax(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual,
+                tier, individualOopMax);
+    }
+
+    private bool IsFamilyUnset(AccumulatorType familyType, NetworkTier tier)
+        => _unsetLimits.Contains(MakeKey(familyType, AccumulatorScope.Family, tier));
+
+    /// <summary>
+    /// Aggregate-mode pool for <paramref name="familyType"/>: the family
+    /// accumulator, or — only when the plan leaves the family limit unset —
+    /// the member's individual accumulator.
+    /// </summary>
+    private AccumulatorEntry? GetAggregatePool(
+        AccumulatorType familyType, AccumulatorType individualType, NetworkTier tier)
+    {
+        var family = GetLimitingEntry(MakeKey(familyType, AccumulatorScope.Family, tier));
+        if (family is not null || !IsFamilyUnset(familyType, tier)) return family;
+        return GetLimitingEntry(MakeKey(individualType, AccumulatorScope.Individual, tier));
+    }
+
+    /// <summary>
+    /// Records <paramref name="amount"/> against the individual fallback
+    /// pool when the Aggregate plan leaves the family limit unset.
+    /// </summary>
+    private void ApplyAggregateIndividualFallback(
+        AccumulatorType familyType, AccumulatorType individualType,
+        NetworkTier tier, decimal amount, string source)
+    {
+        if (!IsFamilyUnset(familyType, tier)) return;
+        if (_entries.TryGetValue(MakeKey(individualType, AccumulatorScope.Individual, tier), out var ind))
+        {
+            ind.CurrentAccumulated += amount;
+            RecordUpdate(ind, amount, source);
+        }
+    }
+
     /// <summary>
     /// Returns the entry for <paramref name="key"/> when it constrains the
     /// member: present, and not a zero-limit placeholder for a limit the
@@ -182,11 +237,11 @@ public class AccumulatorWorkingSet
     {
         if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
-            // Aggregate: only family pool exists — no individual sub-limit
-            var familyKey = MakeKey(AccumulatorType.FamilyDeductible,
-                AccumulatorScope.Family, networkTier);
-            var family = GetLimitingEntry(familyKey);
-            return family is null ? 0 : Remaining(family);
+            // Aggregate: single pool — no individual sub-limit, except as
+            // the fallback pool when no family deductible is configured.
+            var pool = GetAggregatePool(AccumulatorType.FamilyDeductible,
+                AccumulatorType.IndividualDeductible, networkTier);
+            return pool is null ? 0 : Remaining(pool);
         }
 
         // Embedded model: the member owes toward the deductible until either
@@ -217,6 +272,8 @@ public class AccumulatorWorkingSet
                 family.CurrentAccumulated += amount;
                 RecordUpdate(family, amount, "Deductible-Family-Aggregate");
             }
+            ApplyAggregateIndividualFallback(AccumulatorType.FamilyDeductible,
+                AccumulatorType.IndividualDeductible, networkTier, amount, "Deductible");
             return;
         }
 
@@ -249,10 +306,9 @@ public class AccumulatorWorkingSet
         {
             // Aggregate: family pool is primary; ACA per-member cap (when
             // enforced) clamps how much of the pool one member may absorb.
-            var familyKey = MakeKey(AccumulatorType.FamilyOutOfPocketMax,
-                AccumulatorScope.Family, networkTier);
-            var family = GetLimitingEntry(familyKey);
-            var familyRemaining = family is null ? decimal.MaxValue : Remaining(family);
+            var pool = GetAggregatePool(AccumulatorType.FamilyOutOfPocketMax,
+                AccumulatorType.IndividualOutOfPocketMax, networkTier);
+            var familyRemaining = pool is null ? decimal.MaxValue : Remaining(pool);
 
             var capRemaining = GetAcaIndividualCapRemaining(networkTier);
             return capRemaining is decimal c ? Math.Min(familyRemaining, c) : familyRemaining;
@@ -284,6 +340,8 @@ public class AccumulatorWorkingSet
                 family.CurrentAccumulated += memberResponsibility;
                 RecordUpdate(family, memberResponsibility, "OOP-Family-Aggregate");
             }
+            ApplyAggregateIndividualFallback(AccumulatorType.FamilyOutOfPocketMax,
+                AccumulatorType.IndividualOutOfPocketMax, networkTier, memberResponsibility, "OOP");
 
             // ACA per-member cap accumulates in lockstep with family pool
             // when enforced. Mirrors the Embedded dual-update pattern below.

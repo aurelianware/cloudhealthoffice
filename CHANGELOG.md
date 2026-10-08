@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accumulators that read as "met", so members owed nothing. Unset (null) limits
   now mean "no limit"; an explicit $0 deductible still means no deductible; a
   zero OOP max is treated as unset and logged. Embedded remaining amounts are
-  now bounded by the closer of the individual and family limits.
+  now bounded by the closer of the individual and family limits. Aggregate plans
+  with no family limit use the member's individual deductible / OOP max as the
+  pool instead of dropping it.
 - **ACA preventive services carry no in-network cost share** (§2713 /
   45 CFR 147.130) regardless of the `DeductibleApplies` default, and HDHP plans
   exempt them from deductible-first (IRS Notice 2004-23).

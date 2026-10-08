@@ -132,6 +132,48 @@ public class AccumulatorWorkingSetLimitTests
     }
 
     [Fact]
+    public void Aggregate_NullFamilyLimits_IndividualLimitsArePool()
+    {
+        var ws = new AccumulatorWorkingSet(
+            [
+                ZeroPlaceholder(AccumulatorType.FamilyDeductible, AccumulatorScope.Family),
+                ZeroPlaceholder(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family),
+            ],
+            Plan(FamilyAccumulatorModel.Aggregate, indDed: 1_000m, indOop: 4_000m));
+
+        Assert.Equal(1_000m, ws.GetRemainingDeductible(NetworkTier.InNetwork));
+        Assert.Equal(4_000m, ws.GetRemainingOopMax(NetworkTier.InNetwork));
+
+        ws.ApplyDeductible(600m, NetworkTier.InNetwork);
+        ws.ApplyOopMax(600m, NetworkTier.InNetwork);
+
+        Assert.Equal(400m, ws.GetRemainingDeductible(NetworkTier.InNetwork));
+        Assert.Equal(3_400m, ws.GetRemainingOopMax(NetworkTier.InNetwork));
+        Assert.Contains(ws.GetPendingUpdates(), u =>
+            u.Type == AccumulatorType.IndividualDeductible && u.Amount == 600m);
+    }
+
+    [Fact]
+    public void Aggregate_FamilyConfigured_IndividualLimitIgnored()
+    {
+        var ws = new AccumulatorWorkingSet([],
+            Plan(FamilyAccumulatorModel.Aggregate, indDed: 1_000m, famDed: 3_000m,
+                indOop: 4_000m, famOop: 8_000m));
+
+        Assert.Equal(3_000m, ws.GetRemainingDeductible(NetworkTier.InNetwork));
+        Assert.Equal(8_000m, ws.GetRemainingOopMax(NetworkTier.InNetwork));
+    }
+
+    [Fact]
+    public void Aggregate_NullFamilyOop_IndividualOopAndAcaCap_TighterWins()
+    {
+        var ws = new AccumulatorWorkingSet([],
+            Plan(FamilyAccumulatorModel.Aggregate, indOop: 12_000m, acaCap: 9_200m, acaEnforced: true));
+
+        Assert.Equal(9_200m, ws.GetRemainingOopMax(NetworkTier.InNetwork));
+    }
+
+    [Fact]
     public void Aggregate_AcaCapEnforcedWithoutCap_ZeroPlaceholderDoesNotCapToZero()
     {
         var ws = new AccumulatorWorkingSet(

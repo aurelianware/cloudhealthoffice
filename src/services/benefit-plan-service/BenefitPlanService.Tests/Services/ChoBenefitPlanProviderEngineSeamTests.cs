@@ -225,6 +225,25 @@ public sealed class ChoBenefitPlanProviderEngineSeamTests
         large.MemberResponsibility.Should().Be(9_200m);
     }
 
+    [Fact]
+    public async Task Aggregate_NoFamilyLimits_IndividualDeductibleAndOopApply()
+    {
+        // Employee-only coverage authored with individual limits only.
+        var stored = Plan(
+            new CostSharing { IndividualDeductible = 1_000m, IndividualOutOfPocketMax = 2_000m },
+            model: ModelFamilyAccumulatorModel.Aggregate,
+            benefits: OfficeVisitBenefit());
+
+        var small = (await AdjudicateAsync(stored, NetworkTier.InNetwork, 800m)).Lines.Single();
+        small.DeductibleAmount.Should().Be(800m);
+        small.MemberResponsibility.Should().Be(800m);
+
+        // 1000 + 30 + 20% of 8,970 = 2,824 raw; individual OOP max is 2,000.
+        var large = (await AdjudicateAsync(stored, NetworkTier.InNetwork, 10_000m)).Lines.Single();
+        large.DeductibleAmount.Should().Be(1_000m);
+        large.MemberResponsibility.Should().Be(2_000m);
+    }
+
     // ── ACA preventive ─────────────────────────────────────────────────
 
     private static CostSharing StandardCostSharing() => new()
