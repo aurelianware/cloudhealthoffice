@@ -143,6 +143,11 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
                 throw new InvalidAppealTransitionException(actual, appeal.Status);
             }
 
+            // Mirror the Cosmos / Mongo repos: extension fields are owned by
+            // TryExtendDeadlineAsync, so the persisted values win over a
+            // stale snapshot.
+            appeal.TargetResponseDate = current.TargetResponseDate;
+            appeal.DeadlineExtension = current.DeadlineExtension is null ? null : CloneExtension(current.DeadlineExtension);
             _appeals[key] = Clone(appeal);
             AppendEventInternal(auditEvent);
         }
@@ -169,24 +174,36 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         }
     }
 
-    public Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    public Task<Appeal?> TryExtendDeadlineAsync(
+        Appeal appeal, AppealNote? justificationNote, IReadOnlyList<AppealEvent> auditEvents,
+        CancellationToken ct = default)
     {
         lock (_sync)
         {
             var key = Key(appeal.TenantId, appeal.Id);
             if (!_appeals.TryGetValue(key, out var current)) return Task.FromResult<Appeal?>(null);
-            if (current.DeadlineExtension is not null) return Task.FromResult<Appeal?>(null);
-            if (current.Status != AppealStatus.Submitted
-                && current.Status != AppealStatus.InReview
-                && current.Status != AppealStatus.PendingInfo)
-                return Task.FromResult<Appeal?>(null);
 
-            current.TargetResponseDate = appeal.TargetResponseDate;
-            current.DeadlineExtension = appeal.DeadlineExtension is null ? null : CloneExtension(appeal.DeadlineExtension);
-            current.UpdatedAt = appeal.UpdatedAt ?? DateTime.UtcNow;
-            current.UpdatedBy = appeal.UpdatedBy;
-            _appeals[key] = current;
-            AppendEventInternal(auditEvent);
+            if (current.DeadlineExtension is null)
+            {
+                if (current.Status != AppealStatus.Submitted
+                    && current.Status != AppealStatus.InReview
+                    && current.Status != AppealStatus.PendingInfo)
+                    return Task.FromResult<Appeal?>(null);
+
+                current.TargetResponseDate = appeal.TargetResponseDate;
+                current.DeadlineExtension = appeal.DeadlineExtension is null ? null : CloneExtension(appeal.DeadlineExtension);
+                if (justificationNote is not null) current.Notes.Add(CloneNote(justificationNote));
+                current.UpdatedAt = appeal.UpdatedAt ?? DateTime.UtcNow;
+                current.UpdatedBy = appeal.UpdatedBy;
+                _appeals[key] = current;
+            }
+            else if (!(current.DeadlineExtension.EventId is { Length: > 0 } stored
+                       && stored == appeal.DeadlineExtension?.EventId))
+            {
+                return Task.FromResult<Appeal?>(null);
+            }
+
+            foreach (var evt in auditEvents) AppendEventInternal(evt);
             return Task.FromResult<Appeal?>(Clone(current));
         }
     }
@@ -416,7 +433,9 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         WrittenNoticeSentAt = e.WrittenNoticeSentAt,
         ExtendedAt = e.ExtendedAt,
         ExtendedBy = e.ExtendedBy,
-        RegulatoryBasis = e.RegulatoryBasis
+        RegulatoryBasis = e.RegulatoryBasis,
+        EventId = e.EventId,
+        JustificationNoteId = e.JustificationNoteId
     };
 
     private static AppealAttachment CloneAttachment(AppealAttachment a) => new()

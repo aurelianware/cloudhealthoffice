@@ -649,17 +649,16 @@ public class AppealsController : ControllerBase
         }
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        // Idempotent replay of a successful extend (same EventId) → 200.
+        // Same-EventId replay of an extension that already committed → finish
+        // any steps a failed attempt left undone (audit rows are idempotent
+        // on EventId; the justification note was committed atomically with
+        // the extension) and re-publish, then 200.
         if (appeal.DeadlineExtension != null)
         {
-            if (!string.IsNullOrEmpty(request.EventId))
+            if (!string.IsNullOrEmpty(request.EventId)
+                && appeal.DeadlineExtension.EventId == request.EventId)
             {
-                var history = await _events.ListByAppealAsync(TenantId, id, ct);
-                if (history.Any(e => e.EventId == request.EventId
-                                     && e.EventType == AppealEventType.AppealDeadlineExtended))
-                {
-                    return Ok(await DecryptForResponseAsync(appeal, ct));
-                }
+                return await CompleteExtensionAsync(appeal, justificationNote: null, ct);
             }
             return ExtensionRefused(StatusCodes.Status409Conflict, "already-extended", appeal,
                 "The response deadline has already been extended; only one extension is permitted.");
@@ -704,6 +703,23 @@ public class AppealsController : ControllerBase
         }
 
         var actor = Actor;
+
+        // The justification is free text (potentially PHI): encrypt it BEFORE
+        // committing so a failure leaves nothing behind, then persist it as an
+        // internal note in the same guarded write as the extension — an
+        // extension can never exist without its required justification.
+        AppealNote? justificationNote = null;
+        if (!string.IsNullOrWhiteSpace(request.Justification))
+        {
+            justificationNote = new AppealNote
+            {
+                CreatedBy = actor,
+                CreatedAt = now,
+                NoteText = await _encryptor.EncryptAsync(request.Justification, ct) ?? string.Empty,
+                IsInternal = true
+            };
+        }
+
         appeal.TargetResponseDate = extended;
         appeal.DeadlineExtension = new AppealDeadlineExtension
         {
@@ -714,25 +730,29 @@ public class AppealsController : ControllerBase
             WrittenNoticeSentAt = noticeSentAt,
             ExtendedAt = now,
             ExtendedBy = actor,
-            RegulatoryBasis = rule.RegulatoryBasis
+            RegulatoryBasis = rule.RegulatoryBasis,
+            EventId = string.IsNullOrEmpty(request.EventId) ? Guid.NewGuid().ToString() : request.EventId,
+            JustificationNoteId = justificationNote?.NoteId
         };
         appeal.UpdatedAt = now;
         appeal.UpdatedBy = actor;
 
-        var auditEvent = BuildEvent(appeal, AppealEventType.AppealDeadlineExtended,
-            fromStatus: null, toStatus: null, actor, request.EventId);
-        auditEvent.Payload = new JsonObject
-        {
-            ["currentStatus"] = appeal.Status.ToString(),
-            ["reason"] = reason.ToString(),
-            ["extensionDays"] = request.ExtensionDays,
-            ["previousTargetResponseDate"] = current.ToString("o"),
-            ["newTargetResponseDate"] = extended.ToString("o"),
-            ["writtenNoticeSentAt"] = noticeSentAt.ToString("o"),
-            ["regulatoryBasis"] = rule.RegulatoryBasis
-        };
+        return await CompleteExtensionAsync(appeal, justificationNote, ct);
+    }
 
-        var updated = await _appeals.TryExtendDeadlineAsync(appeal, auditEvent, ct);
+    /// <summary>
+    /// Commit (or, for a same-EventId replay, re-drive) an extension:
+    /// guarded write of the extension + justification note, idempotent audit
+    /// appends, then the Kafka publishes. Every step is safe to repeat, so a
+    /// retry after a partial failure completes whatever was left undone.
+    /// </summary>
+    private async Task<IActionResult> CompleteExtensionAsync(
+        Appeal appeal, AppealNote? justificationNote, CancellationToken ct)
+    {
+        var extension = appeal.DeadlineExtension!;
+        var auditEvents = BuildExtensionAuditEvents(appeal, extension);
+
+        var updated = await _appeals.TryExtendDeadlineAsync(appeal, justificationNote, auditEvents, ct);
         if (updated == null)
         {
             // Lost a race: another writer extended or closed the appeal
@@ -741,33 +761,56 @@ public class AppealsController : ControllerBase
                 "The appeal was extended or closed concurrently; only one extension is permitted.");
         }
 
-        // The justification is free text (potentially PHI) — encrypted as
-        // an internal note, never on the event payload. Best effort after
-        // the extension itself, same posture as request-info.
-        if (!string.IsNullOrWhiteSpace(request.Justification))
+        var note = extension.JustificationNoteId is { } noteId
+            ? updated.Notes.FirstOrDefault(n => n.NoteId == noteId)
+            : null;
+        if (note != null)
         {
-            var note = new AppealNote
-            {
-                CreatedBy = actor,
-                NoteText = await _encryptor.EncryptAsync(request.Justification, ct) ?? string.Empty,
-                IsInternal = true
-            };
-            var noteAudit = BuildEvent(updated, AppealEventType.AppealNoteAdded,
-                fromStatus: null, toStatus: null, actor, eventId: null);
-            noteAudit.Payload = new JsonObject
-            {
-                ["noteId"] = note.NoteId,
-                ["author"] = note.CreatedBy,
-                ["isInternal"] = note.IsInternal,
-                ["context"] = "deadline-extension"
-            };
-            updated = await _appeals.AppendNoteAsync(updated, note, noteAudit, ct);
-            await _publisher.PublishNoteAddedAsync(updated, note, actor, HttpContext.TraceIdentifier, ct);
+            await _publisher.PublishNoteAddedAsync(updated, note, extension.ExtendedBy, HttpContext.TraceIdentifier, ct);
         }
-
-        await _publisher.PublishDeadlineExtendedAsync(updated, actor, HttpContext.TraceIdentifier, ct);
+        await _publisher.PublishDeadlineExtendedAsync(updated, extension.ExtendedBy, HttpContext.TraceIdentifier, ct);
 
         return Ok(await DecryptForResponseAsync(updated, ct));
+    }
+
+    /// <summary>
+    /// Deterministic audit rows for an extension — rebuilt identically from
+    /// the stored extension record on replay, so the idempotent EventId
+    /// append fills in whatever a failed attempt did not write.
+    /// </summary>
+    private static List<AppealEvent> BuildExtensionAuditEvents(Appeal appeal, AppealDeadlineExtension extension)
+    {
+        var extensionEvent = BuildEvent(appeal, AppealEventType.AppealDeadlineExtended,
+            fromStatus: null, toStatus: null, extension.ExtendedBy, extension.EventId);
+        extensionEvent.OccurredAt = extension.ExtendedAt;
+        extensionEvent.Payload = new JsonObject
+        {
+            ["currentStatus"] = appeal.Status.ToString(),
+            ["reason"] = extension.Reason.ToString(),
+            ["extensionDays"] = extension.ExtensionDays,
+            ["previousTargetResponseDate"] = extension.PreviousTargetResponseDate.ToUniversalTime().ToString("o"),
+            ["newTargetResponseDate"] = extension.NewTargetResponseDate.ToUniversalTime().ToString("o"),
+            ["writtenNoticeSentAt"] = extension.WrittenNoticeSentAt.ToUniversalTime().ToString("o"),
+            ["regulatoryBasis"] = extension.RegulatoryBasis
+        };
+        var events = new List<AppealEvent> { extensionEvent };
+
+        if (extension.JustificationNoteId is { } noteId)
+        {
+            var noteEvent = BuildEvent(appeal, AppealEventType.AppealNoteAdded,
+                fromStatus: null, toStatus: null, extension.ExtendedBy, $"{extension.EventId}:justification-note");
+            noteEvent.OccurredAt = extension.ExtendedAt;
+            noteEvent.Payload = new JsonObject
+            {
+                ["noteId"] = noteId,
+                ["author"] = extension.ExtendedBy,
+                ["isInternal"] = true,
+                ["context"] = "deadline-extension"
+            };
+            events.Add(noteEvent);
+        }
+
+        return events;
     }
 
     private ObjectResult ExtensionRefused(

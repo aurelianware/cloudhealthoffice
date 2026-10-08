@@ -29,7 +29,7 @@ public class CodeSystemConceptTests
             new object[]
             {
                 "CodeSystem-cho-appeal-line-of-business.json",
-                new[] { "commercial", "medicare", "medicaid", "marketplace" }
+                new[] { "commercial", "medicare", "medicaid", "marketplace", "medicare-part-d" }
             },
             new object[]
             {

@@ -233,4 +233,107 @@ public class AppealAtomicityTests
         try { await Task.Run(call); return (true, null); }
         catch (Exception ex) { return (false, ex); }
     }
+
+    [Fact]
+    public async Task Stale_Transition_After_Extension_Preserves_It_And_Blocks_A_Second_Extension()
+    {
+        var repo = new InMemoryAppealRepository();
+        var appeal = NewAppeal(AppealStatus.Submitted);
+        appeal.LineOfBusiness = LineOfBusiness.Medicare;
+        var originalTarget = DateTime.UtcNow.AddDays(20);
+        appeal.TargetResponseDate = originalTarget;
+        await repo.CreateAsync(appeal, new AppealEvent
+        {
+            TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = Guid.NewGuid().ToString(),
+            EventType = AppealEventType.AppealCreated, ToStatus = AppealStatus.Submitted, ActorId = "user1"
+        });
+
+        // 1. begin-review reads its snapshot BEFORE the extension.
+        var staleSnapshot = (await repo.GetByIdAsync(appeal.TenantId, appeal.Id))!;
+
+        // 2. The extension commits.
+        var extended = await repo.TryExtendDeadlineAsync(
+            WithExtension(await repo.GetByIdAsync(appeal.TenantId, appeal.Id), originalTarget, "ext-1"),
+            justificationNote: null, auditEvents: [], default);
+        extended.Should().NotBeNull();
+
+        // 3. begin-review commits its stale snapshot.
+        staleSnapshot.Status = AppealStatus.InReview;
+        var transitioned = await repo.TransitionStatusAsync(
+            staleSnapshot, StatusChangeEvent(staleSnapshot, AppealStatus.Submitted, AppealStatus.InReview));
+
+        transitioned.Status.Should().Be(AppealStatus.InReview);
+        transitioned.DeadlineExtension.Should().NotBeNull("a stale snapshot must not erase a committed extension");
+        transitioned.TargetResponseDate.Should().Be(originalTarget.AddDays(14));
+
+        var stored = (await repo.GetByIdAsync(appeal.TenantId, appeal.Id))!;
+        stored.DeadlineExtension!.EventId.Should().Be("ext-1");
+        stored.TargetResponseDate.Should().Be(originalTarget.AddDays(14));
+
+        // 4. A second extension (different request) must still be refused.
+        var second = await repo.TryExtendDeadlineAsync(
+            WithExtension(stored, stored.TargetResponseDate!.Value, "ext-2"),
+            justificationNote: null, auditEvents: [], default);
+        second.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TryExtendDeadline_Commits_Justification_Note_Atomically_And_Replay_Completes_Audit()
+    {
+        var repo = new InMemoryAppealRepository();
+        var appeal = NewAppeal(AppealStatus.Submitted);
+        appeal.LineOfBusiness = LineOfBusiness.Medicaid;
+        var target = DateTime.UtcNow.AddDays(20);
+        appeal.TargetResponseDate = target;
+        await repo.CreateAsync(appeal, new AppealEvent
+        {
+            TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = Guid.NewGuid().ToString(),
+            EventType = AppealEventType.AppealCreated, ToStatus = AppealStatus.Submitted, ActorId = "user1"
+        });
+
+        var request = WithExtension(await repo.GetByIdAsync(appeal.TenantId, appeal.Id), target, "ext-1");
+        var note = new AppealNote { NoteId = "note-1", NoteText = "enc::why", CreatedBy = "user1" };
+        request.DeadlineExtension!.JustificationNoteId = note.NoteId;
+        var auditEvents = new[]
+        {
+            new AppealEvent { TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = "ext-1",
+                EventType = AppealEventType.AppealDeadlineExtended, ActorId = "user1" },
+            new AppealEvent { TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = "ext-1:justification-note",
+                EventType = AppealEventType.AppealNoteAdded, ActorId = "user1" }
+        };
+
+        repo.FailAuditAppendOnce();
+        Func<Task> first = () => repo.TryExtendDeadlineAsync(request, note, auditEvents, default);
+        await first.Should().ThrowAsync<InvalidOperationException>();
+
+        var afterFailure = (await repo.GetByIdAsync(appeal.TenantId, appeal.Id))!;
+        afterFailure.DeadlineExtension.Should().NotBeNull();
+        afterFailure.Notes.Should().ContainSingle(n => n.NoteId == "note-1",
+            "the justification is committed in the same write as the extension");
+
+        var replay = await repo.TryExtendDeadlineAsync(afterFailure, null, auditEvents, default);
+        replay.Should().NotBeNull();
+        replay!.Notes.Should().ContainSingle();
+        repo.SnapshotEvents().Select(e => e.EventId).Should().Contain(new[] { "ext-1", "ext-1:justification-note" });
+
+        await repo.TryExtendDeadlineAsync(afterFailure, null, auditEvents, default);
+        repo.SnapshotEvents().Count(e => e.EventId == "ext-1").Should().Be(1, "audit appends are idempotent");
+    }
+
+    private static Appeal WithExtension(Appeal? appeal, DateTime previousTarget, string eventId)
+    {
+        appeal!.TargetResponseDate = previousTarget.AddDays(14);
+        appeal.DeadlineExtension = new AppealDeadlineExtension
+        {
+            Reason = AppealExtensionReason.EnrolleeRequested,
+            ExtensionDays = 14,
+            PreviousTargetResponseDate = previousTarget,
+            NewTargetResponseDate = previousTarget.AddDays(14),
+            WrittenNoticeSentAt = DateTime.UtcNow,
+            ExtendedBy = "user1",
+            RegulatoryBasis = "42 CFR 422.590(f)",
+            EventId = eventId
+        };
+        return appeal;
+    }
 }

@@ -267,7 +267,6 @@ public class AppealResponseDeadlinePolicyTests
     [InlineData(LineOfBusiness.Commercial, AppealType.ExternalReview, AppealLevel.ExternalReview, false, 45 * 24)]  // 147.136(d)
     [InlineData(LineOfBusiness.Marketplace, AppealType.Reconsideration, AppealLevel.ExternalReview, true, 72)]
     [InlineData(LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.ExternalReview, false, 90 * 24)]   // 431.244(f)(1)
-    [InlineData(LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.ExternalReview, true, 5 * 24)]     // 3 working days
     public void EnforceableMaximum_Covers_PartD_And_External_Review(
         LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, int hours)
     {
@@ -318,5 +317,49 @@ public class AppealResponseDeadlinePolicyTests
         AppealResponseDeadlinePolicy.ComputeMaxExtendedTargetResponseDate(
                 Received, LineOfBusiness.Commercial, AppealType.Grievance, AppealLevel.FirstLevel, isUrgent: false)
             .Should().BeNull();
+    }
+
+    // ── Expedited State Fair Hearing: 3 working days ────────────────────
+
+    [Theory]
+    [InlineData("2026-10-05T09:00:00Z", "2026-10-08T09:00:00Z")] // Monday   -> Thursday
+    [InlineData("2026-10-08T14:30:00Z", "2026-10-13T14:30:00Z")] // Thursday -> Tuesday (spans weekend)
+    [InlineData("2026-10-09T10:00:00Z", "2026-10-14T10:00:00Z")] // Friday   -> Wednesday
+    [InlineData("2026-10-10T10:00:00Z", "2026-10-14T10:00:00Z")] // Saturday -> Wednesday
+    [InlineData("2026-10-11T10:00:00Z", "2026-10-14T10:00:00Z")] // Sunday   -> Wednesday
+    public void Expedited_State_Fair_Hearing_Ceiling_Is_Three_Working_Days(string received, string expected)
+    {
+        var receivedAt = DateTime.Parse(received, null, System.Globalization.DateTimeStyles.AdjustToUniversal);
+        var expectedAt = DateTime.Parse(expected, null, System.Globalization.DateTimeStyles.AdjustToUniversal);
+
+        AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
+                receivedAt, LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.ExternalReview, isUrgent: true)
+            .Should().Be(expectedAt);
+    }
+
+    [Fact]
+    public void Expedited_State_Fair_Hearing_Monday_Receipt_Rejects_Saturday()
+    {
+        // The old fixed 5-calendar-day bound accepted Saturday for a Monday receipt.
+        var monday = new DateTime(2026, 10, 5, 9, 0, 0, DateTimeKind.Utc);
+        var max = AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
+            monday, LineOfBusiness.Medicaid, AppealType.ExternalReview, AppealLevel.ExternalReview, isUrgent: true)!.Value;
+
+        max.DayOfWeek.Should().Be(DayOfWeek.Thursday);
+        monday.AddDays(5).Should().BeAfter(max);
+    }
+
+    [Fact]
+    public void Expedited_State_Fair_Hearing_Default_Never_Exceeds_Working_Day_Ceiling()
+    {
+        var start = new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Utc);
+        for (var hour = 0; hour < 7 * 24; hour += 5)
+        {
+            var receivedAt = start.AddHours(hour);
+            AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
+                    receivedAt, LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.ExternalReview, isUrgent: true)
+                .Should().BeOnOrBefore(AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
+                    receivedAt, LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.ExternalReview, isUrgent: true)!.Value);
+        }
     }
 }

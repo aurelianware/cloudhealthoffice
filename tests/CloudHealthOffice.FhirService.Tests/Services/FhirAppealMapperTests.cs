@@ -184,4 +184,53 @@ public class FhirAppealMapperTests
             .Value as ResourceReference;
         taskRef!.Reference.Should().Be("Task/apl-001");
     }
+
+    [Theory]
+    [InlineData(LineOfBusiness.Commercial, "commercial")]
+    [InlineData(LineOfBusiness.Medicare, "medicare")]
+    [InlineData(LineOfBusiness.Medicaid, "medicaid")]
+    [InlineData(LineOfBusiness.Marketplace, "marketplace")]
+    [InlineData(LineOfBusiness.MedicarePartD, "medicare-part-d")]
+    public void LineOfBusiness_extension_is_profile_valueCoding_with_canonical_code(LineOfBusiness lob, string code)
+    {
+        var appeal = NewAppeal();
+        appeal.LineOfBusiness = lob;
+
+        var ext = Mapper.ToAppealTask(appeal).Extension
+            .Single(e => e.Url == FhirAppealMapper.AppealLineOfBusinessExtensionUrl);
+
+        var coding = ext.Value.Should().BeOfType<Coding>().Subject;
+        coding.System.Should().Be(FhirAppealMapper.AppealLineOfBusinessCodeSystem);
+        coding.Code.Should().Be(code);
+    }
+
+    [Theory]
+    [InlineData(AppealLevel.FirstLevel, "first-level")]
+    [InlineData(AppealLevel.SecondLevel, "second-level")]
+    [InlineData(AppealLevel.ExternalReview, "external-review")]
+    public void AppealLevel_extension_is_profile_valueCoding_with_canonical_code(AppealLevel level, string code)
+    {
+        var appeal = NewAppeal();
+        appeal.AppealLevel = level;
+
+        var ext = Mapper.ToAppealTask(appeal).Extension
+            .Single(e => e.Url == FhirAppealMapper.AppealLevelExtensionUrl);
+
+        var coding = ext.Value.Should().BeOfType<Coding>().Subject;
+        coding.System.Should().Be(FhirAppealMapper.AppealLevelCodeSystem);
+        coding.Code.Should().Be(code);
+    }
+
+    [Fact]
+    public void Every_LineOfBusiness_maps_to_a_concept_in_the_published_CodeSystem()
+    {
+        var path = Path.Combine(CloudHealthOffice.FhirService.Tests.FhirArtifacts.TestArtifactFiles.ProfilesDirectory,
+            "CodeSystem-cho-appeal-line-of-business.json");
+        var cs = new Hl7.Fhir.Serialization.FhirJsonParser().Parse<CodeSystem>(
+            CloudHealthOffice.FhirService.Tests.FhirArtifacts.TestArtifactFiles.ReadAllText(path));
+        var codes = cs.Concept.Select(c => c.Code).ToHashSet();
+
+        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+            codes.Should().Contain(FhirAppealMapper.ToCanonicalCode(lob), $"{lob} must be representable");
+    }
 }

@@ -56,7 +56,7 @@ profiles under a CHO-owned canonical namespace.
 
 - `CodeSystem-cho-appeal-type.json` — reconsideration, peer-review, external-review, grievance
 - `CodeSystem-cho-appeal-level.json` — first-level, second-level, external-review
-- `CodeSystem-cho-appeal-line-of-business.json` — commercial, medicare, medicaid, marketplace
+- `CodeSystem-cho-appeal-line-of-business.json` — commercial, medicare (Medicare Advantage / Part C), medicaid, marketplace, medicare-part-d
 - `CodeSystem-cho-appeal-x12-275-transmission-code.json` — X12 PWK02 codes (AA, BM, EL, FT, FX, IL, OZ)
 - `CodeSystem-cho-appeal-communication-category.json` — appeal-argument, reviewer-note, decision-rationale
 - `CodeSystem-cho-appeal-attachment-type.json` — CHO-specific attachment categories

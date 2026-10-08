@@ -140,19 +140,36 @@ public sealed class AppealRepositoryMongo : IAppealRepository
         }
         var expectedFromStatus = auditEvent.FromStatus.Value;
 
-        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
-                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
-                   & Builders<Appeal>.Filter.Eq(a => a.Status, expectedFromStatus);
-
-        appeal.UpdatedAt = DateTime.UtcNow;
-        var replaceResult = await _appeals.ReplaceOneAsync(filter, appeal, cancellationToken: ct);
-        if (replaceResult.MatchedCount == 0)
+        // Extension fields are owned by TryExtendDeadlineAsync. Carry the
+        // persisted values onto the replacement, and pin "no extension yet"
+        // in the filter when there was none, so a snapshot read before a
+        // concurrent extension can never erase it. One retry covers an
+        // extension that lands between the read and the replace.
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
+            var idFilter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                         & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
+                         & Builders<Appeal>.Filter.Eq(a => a.Status, expectedFromStatus);
+
+            var persisted = await _appeals.Find(idFilter).FirstOrDefaultAsync(ct)
+                ?? throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
+
+            appeal.TargetResponseDate = persisted.TargetResponseDate;
+            appeal.DeadlineExtension = persisted.DeadlineExtension;
+
+            var filter = persisted.DeadlineExtension is null
+                ? idFilter & Builders<Appeal>.Filter.Eq(a => a.DeadlineExtension, null)
+                : idFilter;
+
+            appeal.UpdatedAt = DateTime.UtcNow;
+            var replaceResult = await _appeals.ReplaceOneAsync(filter, appeal, cancellationToken: ct);
+            if (replaceResult.MatchedCount == 0) continue;
+
+            await _events.AppendAsync(auditEvent, ct);
+            return appeal;
         }
 
-        await _events.AppendAsync(auditEvent, ct);
-        return appeal;
+        throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
     }
 
     public async Task<Appeal?> TryTransitionToOverdueAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
@@ -177,14 +194,18 @@ public sealed class AppealRepositoryMongo : IAppealRepository
         return updated;
     }
 
-    public async Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    public async Task<Appeal?> TryExtendDeadlineAsync(
+        Appeal appeal, AppealNote? justificationNote, IReadOnlyList<AppealEvent> auditEvents,
+        CancellationToken ct = default)
     {
         var nonTerminalStatuses = new[] { AppealStatus.Submitted, AppealStatus.InReview, AppealStatus.PendingInfo };
+        var idFilter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                     & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id);
 
         // Filter on DeadlineExtension == null makes the extension one-shot
         // under concurrency: a second writer's filter no longer matches.
-        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
-                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
+        // The justification note rides in the same single-document update.
+        var filter = idFilter
                    & Builders<Appeal>.Filter.Eq(a => a.DeadlineExtension, null)
                    & Builders<Appeal>.Filter.In(a => a.Status, nonTerminalStatuses);
 
@@ -193,13 +214,21 @@ public sealed class AppealRepositoryMongo : IAppealRepository
             .Set(a => a.DeadlineExtension, appeal.DeadlineExtension)
             .Set(a => a.UpdatedAt, appeal.UpdatedAt ?? DateTime.UtcNow)
             .Set(a => a.UpdatedBy, appeal.UpdatedBy);
+        if (justificationNote is not null) update = update.Push(a => a.Notes, justificationNote);
 
         var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
-
         var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct);
-        if (updated is null) return null;
 
-        await _events.AppendAsync(auditEvent, ct);
+        if (updated is null)
+        {
+            // Not written: either a different extension / closed appeal, or
+            // a replay of this very extension whose follow-up steps failed.
+            var persisted = await _appeals.Find(idFilter).FirstOrDefaultAsync(ct);
+            if (persisted is null || !AppealRepository.IsSameExtension(persisted, appeal)) return null;
+            updated = persisted;
+        }
+
+        foreach (var evt in auditEvents) await _events.AppendAsync(evt, ct);
         return updated;
     }
 

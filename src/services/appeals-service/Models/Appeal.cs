@@ -382,6 +382,20 @@ public class AppealDeadlineExtension
     /// <summary>Regulatory citation the extension was taken under.</summary>
     [StringLength(200)]
     public string RegulatoryBasis { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Idempotency key of the extend request (client-supplied or server-
+    /// generated). A replay with the same key re-drives the audit appends
+    /// and publishes instead of being refused as a second extension.
+    /// </summary>
+    public string? EventId { get; set; }
+
+    /// <summary>
+    /// Id of the encrypted internal note holding the plan's justification,
+    /// committed in the same write as the extension. <c>null</c> when no
+    /// justification was given.
+    /// </summary>
+    public string? JustificationNoteId { get; set; }
 }
 
 /// <summary>Appeal note / comment.</summary>
