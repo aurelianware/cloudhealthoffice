@@ -152,7 +152,7 @@ public class CapitationEraService : ICapitationEraService
         // ── 2100 loops — one CLP per member-month ────────────────────────
         foreach (var lineItem in statement.LineItems)
         {
-            sb.Append(BuildMemberCapitationLoop(lineItem, contract, ref segmentCount));
+            sb.Append(BuildMemberCapitationLoop(lineItem, contract, statement.CapitationPeriodStart, ref segmentCount));
         }
 
         // ── PLB — Provider Level Adjustments ─────────────────────────────
@@ -237,7 +237,7 @@ public class CapitationEraService : ICapitationEraService
     /// No SVC service lines — capitation is not per-service.
     /// </summary>
     private static string BuildMemberCapitationLoop(
-        CapitationLineItem li, CapitationContract contract, ref int segmentCount)
+        CapitationLineItem li, CapitationContract contract, DateTime periodStart, ref int segmentCount)
     {
         var sb = new StringBuilder();
 
@@ -274,10 +274,11 @@ public class CapitationEraService : ICapitationEraService
                 $"NM1*QC*1*{lastName}*{firstName}****MI*{li.MemberId}~"));
         }
 
-        // DTM*232 — claim statement period start (the capitation period
-        // start for this member; 150 is a 2110 service-date qualifier).
+        // DTM*232 — claim statement period start: the statement's capitation
+        // period start, not the member's assignment date (150 is a 2110
+        // service-date qualifier).
         sb.Append(Seg(ref segmentCount, true,
-            $"DTM*232*{FormatDate(li.AssignmentEffectiveDate)}~"));
+            $"DTM*232*{FormatDate(periodStart)}~"));
 
         // AMT — Supplemental amount: base PMPM before risk adjustment
         sb.Append(Seg(ref segmentCount, true,

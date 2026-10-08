@@ -259,8 +259,12 @@ public class PaymentRunBatchedEndToEndTests
         var result = await CreateService().ExecutePaymentRunAsync(run.Id);
 
         var envelope = Assert.Single(await _envelopeRepo.GetByPaymentRunIdAsync(run.Id));
-        Assert.Contains("CAS*PR*1*200.00~", envelope.EdiContent); // header CAS for paid
-        Assert.Contains("CAS*CO*236*0.00~LQ*HE*M86~", envelope.EdiContent); // line CAS (suggested CARC), RARC in LQ*HE
+        // Paid single-line claim without line detail: its claim-level PR-1 is the line's CAS.
+        Assert.Contains("SVC*HC:99213*1000.00*800.00**1~CAS*PR*1*200.00~", envelope.EdiContent);
+        // Bundled line: the NCCI CARC carries the unpaid charge; RARC in LQ*HE.
+        Assert.Contains("SVC*HC:27486*250.00*0.00**1~CAS*CO*236*250.00~LQ*HE*M86~", envelope.EdiContent);
+        // The other line, no detail: CO-45 fallback for charge less payment.
+        Assert.Contains("SVC*HC:27447*250.00*0.00**1~CAS*CO*45*250.00~", envelope.EdiContent);
         Assert.Equal(2, envelope.ClaimCount);
     }
 }
