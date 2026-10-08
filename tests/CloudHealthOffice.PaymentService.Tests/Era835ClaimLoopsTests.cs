@@ -35,18 +35,16 @@ public class Era835ClaimLoopsTests
         ClaimAdjustments = new List<ClaimAdjustment>
         {
             new() { GroupCode = "PR", ReasonCode = "1", Amount = 50m },
-            new() { GroupCode = "CO", ReasonCode = "45", Amount = 100m },
         },
         ServiceLines = new List<ServiceLinePayment>
         {
             new()
             {
-                LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 300m, PaymentAmount = 150m, Units = 1,
+                LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 250m, PaymentAmount = 150m, Units = 1,
                 ServiceDateFrom = new DateTime(2026, 3, 1),
                 Adjustments = new List<ServiceLineAdjustment>
                 {
                     new() { GroupCode = "CO", ReasonCode = "45", Amount = 100m, RemarkCode = "M15" },
-                    new() { GroupCode = "PR", ReasonCode = "1", Amount = 50m },
                 },
             },
         },
@@ -93,8 +91,8 @@ public class Era835ClaimLoopsTests
         Assert.Equal(
             new[]
             {
-                "CLP", "CAS", "CAS", "NM1*QC", "NM1*82", "MOA", "DTM*050",
-                "SVC", "DTM*472", "CAS", "CAS", "LQ*HE",
+                "CLP", "CAS", "NM1*QC", "NM1*82", "MOA", "DTM*050",
+                "SVC", "DTM*472", "CAS", "LQ*HE",
             },
             ids);
     }
@@ -134,6 +132,54 @@ public class Era835ClaimLoopsTests
 
         Assert.Equal(24, mia.Length);
         Assert.Equal(new[] { "A", "B", "C", "D", "E" }, new[] { mia[5], mia[20], mia[21], mia[22], mia[23] });
+    }
+
+    [Theory]
+    [MemberData(nameof(Generators))]
+    public void CasRepetitions_AreReasonAmountQuantityTriplets_AtClaimAndLineLevel(string generator)
+    {
+        var cp = Claim();
+        cp.ChargeAmount = 400m;
+        cp.ClaimAdjustments = new List<ClaimAdjustment>
+        {
+            new() { GroupCode = "PR", ReasonCode = "1", Amount = 30m },
+            new() { GroupCode = "PR", ReasonCode = "2", Amount = 20m },
+        };
+        var line = cp.ServiceLines[0];
+        line.ChargeAmount = 350m;
+        line.Adjustments = new List<ServiceLineAdjustment>
+        {
+            new() { GroupCode = "CO", ReasonCode = "45", Amount = 100m },
+            new() { GroupCode = "CO", ReasonCode = "253", Amount = 100m },
+        };
+
+        var segments = Generate(generator, cp).Split('~').Select(s => s.Split('*')).ToList();
+
+        // CAS01 group, then reason/amount/quantity: the quantity (CAS04) is empty.
+        Assert.Contains(segments, s => s.SequenceEqual(new[] { "CAS", "PR", "1", "30.00", "", "2", "20.00" }));
+        Assert.Contains(segments, s => s.SequenceEqual(new[] { "CAS", "CO", "45", "100.00", "", "253", "100.00" }));
+    }
+
+    [Fact]
+    public void Cas_SixAdjustments_FillCas02To19()
+    {
+        var cas = Era835ClaimLoops.Cas("CO", Enumerable.Range(1, 6).Select(i => ($"{i}", (decimal)i))).Split('*');
+
+        Assert.Equal(19, cas.Length); // CAS + CAS01 + 6 triplets, last quantity omitted
+        Assert.Equal(new[] { "6", "6.00" }, cas[17..19]);
+        Assert.All(new[] { 4, 7, 10, 13, 16 }, i => Assert.Equal(string.Empty, cas[i]));
+    }
+
+    [Fact]
+    public void LineCasNotBalancing_FailsGeneration()
+    {
+        var cp = Claim();
+        cp.ServiceLines[0].Adjustments[0].Amount = 90m; // 250 - 90 != 150
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Batch(cp));
+
+        Assert.Contains("line 1", ex.Message);
+        Assert.Contains("SVC03", ex.Message);
     }
 
     [Fact]

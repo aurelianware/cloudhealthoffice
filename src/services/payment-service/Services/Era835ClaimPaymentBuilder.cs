@@ -1,0 +1,296 @@
+using PaymentService.Models;
+
+namespace PaymentService.Services;
+
+/// <summary>
+/// Builds one claim's 835 2100/2110 data (<see cref="ClaimPayment"/>) from
+/// claims-service's claim. Pure (no I/O) so payment runs, the run-time
+/// balance pre-check and contract tests build exactly the same thing.
+///
+/// Adjustments:
+/// <list type="bullet">
+/// <item>Lines remitted with SVC loops carry their own CAS: the line's
+/// adjudication adjustments (<c>claimLines[].adjudicationResult.adjustmentReasons</c>:
+/// CO-45, PR-1/2/3, OA-23, CO denial CARCs, with an optional RARC that goes
+/// to LQ*HE). NCCI edit CARCs for the line (<c>pendDetails.editFailures</c>)
+/// are added only when the line does not already carry that group and CARC
+/// (their RARC is kept on the matching adjustment). A line with no
+/// adjudication adjustments (claims adjudicated before claims-service
+/// populated them) gets, on a single-line claim, the claim-level
+/// adjustments; otherwise the amount SVC02 - SVC03 leaves unexplained goes
+/// to the line's NCCI edit CARC if it has one, else to one CO adjustment
+/// (CO-45, or CO with the denial CARC on a denied claim) so it balances.</item>
+/// <item>When lines carry the adjustments, the claim-level adjustments
+/// (<c>adjudicationResult.adjustmentReasons</c>, the claim's totals of the
+/// same amounts) are not repeated in the header CAS; only a denial CARC no
+/// line carries stays there. So CLP03 - sum(CAS, claim and lines) = CLP04.</item>
+/// <item>A claim remitted at claim level (no SVC) keeps the claim-level
+/// adjustments in its header CAS.</item>
+/// </list>
+/// </summary>
+public static class Era835ClaimPaymentBuilder
+{
+    /// <summary>
+    /// True when the claim is remitted at claim level, without SVC loops: it
+    /// has no service lines, or none of them carries a paid amount (the claim
+    /// was adjudicated at claim level only: payerPayment without line results).
+    /// </summary>
+    public static bool RemitsAtClaimLevel(ClaimDto claim) =>
+        claim.ServiceLines is not { Count: > 0 } lines || lines.All(sl => sl.LinePaidAmount is null);
+
+    /// <summary>
+    /// One claim's 2100 loop. A paid claim: CLP02 = 1, CLP04 = its plan-paid
+    /// amount. A denial: CLP02 = 4, CLP04 = 0, its denial CARC carrying the
+    /// part of the charge no other adjustment explains, RARCs in MIA/MOA.
+    /// </summary>
+    public static ClaimPayment Build(ClaimDto claim, bool denied, ICarcRarcMappingService mapper)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        ArgumentNullException.ThrowIfNull(mapper);
+
+        var snapshot = BuildAdjudicationSnapshot(claim);
+        var headerCas = mapper.MapClaimAdjustments(snapshot).ToList();
+        var editCas = mapper.MapLineAdjustments(snapshot);
+        var denialCode = claim.AdjudicationResult?.DenialReasonCode;
+
+        // An older single-line claim without line adjustment detail: its
+        // claim-level adjustments are that line's adjustments.
+        var claimLevelForSingleLine =
+            !RemitsAtClaimLevel(claim)
+            && claim.ServiceLines!.Count == 1
+            && claim.ServiceLines[0].AdjudicationResult?.AdjustmentReasons is not { Count: > 0 }
+            && claim.AdjudicationResult?.AdjustmentReasons is { Count: > 0 }
+                ? claim.AdjudicationResult.AdjustmentReasons
+                    .Select(r => new ClaimLineAdjustmentReasonDto
+                    {
+                        GroupCode = r.GroupCode, ReasonCode = r.ReasonCode, Amount = r.Amount, Description = r.Description,
+                    })
+                    .ToList()
+                : null;
+
+        var serviceLines = RemitsAtClaimLevel(claim)
+            ? new List<ServiceLinePayment>()
+            : claim.ServiceLines!
+                .Select(sl =>
+                {
+                    // Never the line charge: the recorded paid amount, or 0
+                    // (the run kept the claim only if the lines balance to
+                    // CLP04 with 0 for unpriced lines).
+                    var paid = sl.LinePaidAmount ?? 0m;
+                    return new ServiceLinePayment
+                    {
+                        LineNumber = sl.LineNumber,
+                        ProcedureCode = sl.ProcedureCode,
+                        ChargeAmount = sl.ChargeAmount,
+                        PaymentAmount = paid,
+                        RevenueCode = sl.RevenueCode,
+                        Units = sl.Units,
+                        ServiceDateFrom = sl.ServiceDateFrom,
+                        ServiceDateTo = sl.ServiceDateTo,
+                        Adjustments = LineAdjustments(
+                            sl, paid, claimLevelForSingleLine,
+                            editCas.TryGetValue(sl.LineNumber, out var edits) ? edits : Array.Empty<ServiceLineAdjustment>(),
+                            denied && !string.IsNullOrWhiteSpace(denialCode) ? denialCode! : "45"),
+                    };
+                })
+                .ToList();
+
+        if (serviceLines.Count > 0)
+        {
+            // The lines explain the charge; keep only a denial CARC no line carries.
+            var lineCodes = new HashSet<string>(
+                serviceLines.SelectMany(l => l.Adjustments).Select(a => a.ReasonCode), StringComparer.Ordinal);
+            var claimLevelCodes = new HashSet<string>(
+                snapshot.AdjustmentReasons.Select(r => r.ReasonCode), StringComparer.Ordinal);
+            headerCas = headerCas
+                .Where(a => !string.IsNullOrEmpty(denialCode)
+                    && string.Equals(a.ReasonCode, denialCode, StringComparison.Ordinal)
+                    && !claimLevelCodes.Contains(a.ReasonCode)
+                    && !lineCodes.Contains(a.ReasonCode))
+                .ToList();
+        }
+
+        var claimPaid = denied ? 0m : PlanPaidAmountOf(claim);
+        if (denied)
+            headerCas = WithDenialAmount(headerCas, claim, serviceLines);
+        if (serviceLines.Count > 0)
+            headerCas.RemoveAll(a => a.Amount == 0m); // the lines already explain the charge
+
+        return new ClaimPayment
+        {
+            ClaimId = claim.Id,
+            PatientControlNumber = claim.ClaimNumber,
+            // CLP02: 1 = processed as primary, 4 = denied.
+            ClaimStatusCode = denied ? "4" : "1",
+            // CLP03 total charge, CLP04 plan paid (0 for a denial), CLP05 member responsibility.
+            ChargeAmount = claim.TotalChargeAmount,
+            PaymentAmount = claimPaid,
+            PatientResponsibilityAmount = claim.AdjudicationResult?.PatientResponsibility ?? 0m,
+            PayerClaimControlNumber = claim.PayerClaimControlNumber,
+            IsInstitutional = claim.ClaimType == ClaimFormType.Institutional,
+            MemberId = claim.MemberId,
+            RenderingProviderNPI = claim.RenderingProviderNPI,
+            ClaimAdjustments = headerCas,
+            RemarkCodes = denied ? snapshot.RemarkCodes.ToList() : new List<string>(),
+            ServiceLines = serviceLines
+        };
+    }
+
+    /// <summary>
+    /// A line's CAS: its adjudication adjustments, plus NCCI edit CARCs it does
+    /// not already carry; with no adjudication adjustments, one CO
+    /// (<paramref name="fallbackCarc"/>) for whatever SVC02 - SVC03 the edits
+    /// leave unexplained.
+    /// </summary>
+    private static List<ServiceLineAdjustment> LineAdjustments(
+        ClaimServiceLineDto line, decimal paid, List<ClaimLineAdjustmentReasonDto>? claimLevelForSingleLine,
+        IReadOnlyList<ServiceLineAdjustment> edits, string fallbackCarc)
+    {
+        var reasons = line.AdjudicationResult?.AdjustmentReasons is { Count: > 0 } own
+            ? own
+            : claimLevelForSingleLine ?? new List<ClaimLineAdjustmentReasonDto>();
+        var adjustments = reasons
+            .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.GroupCode) && !string.IsNullOrWhiteSpace(r.ReasonCode))
+            .Select(r => new ServiceLineAdjustment
+            {
+                GroupCode = r.GroupCode,
+                ReasonCode = r.ReasonCode,
+                Amount = r.Amount,
+                RemarkCode = string.IsNullOrWhiteSpace(r.RemarkCode) ? null : r.RemarkCode,
+                ReasonDescription = r.Description,
+            })
+            .ToList();
+        // Only the line's own adjudication adjustments are complete; anything
+        // else (claim-level ones moved onto a single line, NCCI edits) gets
+        // the fallback for what it leaves unexplained.
+        var fromAdjudication = line.AdjudicationResult?.AdjustmentReasons is { Count: > 0 };
+
+        foreach (var edit in edits)
+        {
+            var same = adjustments.FirstOrDefault(a =>
+                string.Equals(a.GroupCode, edit.GroupCode, StringComparison.Ordinal)
+                && string.Equals(a.ReasonCode, edit.ReasonCode, StringComparison.Ordinal));
+            if (same is not null)
+            {
+                same.RemarkCode ??= edit.RemarkCode;
+                continue;
+            }
+            adjustments.Add(new ServiceLineAdjustment
+            {
+                GroupCode = edit.GroupCode,
+                ReasonCode = edit.ReasonCode,
+                Amount = edit.Amount,
+                RemarkCode = edit.RemarkCode,
+                ReasonDescription = edit.ReasonDescription,
+            });
+        }
+
+        if (!fromAdjudication)
+        {
+            var unexplained = line.ChargeAmount - paid - adjustments.Sum(a => a.Amount);
+            // An NCCI edit on the line (amount 0 placeholder) is why it was cut:
+            // it carries the unexplained amount. Otherwise one CO fallback.
+            var edit = adjustments.FindIndex(a => a.Amount == 0m);
+            if (unexplained != 0m && edit >= 0)
+            {
+                adjustments[edit].Amount = unexplained;
+            }
+            else if (unexplained != 0m)
+            {
+                adjustments.Add(new ServiceLineAdjustment
+                {
+                    GroupCode = "CO",
+                    ReasonCode = fallbackCarc,
+                    Amount = unexplained,
+                    ReasonDescription = "Line adjudicated without adjustment detail: charge less payment",
+                });
+            }
+        }
+
+        return adjustments;
+    }
+
+    /// <summary>
+    /// On a denial the denial CARC explains the charge the plan did not pay:
+    /// the header entry with that CARC, whatever amount it arrived with (the
+    /// mapper's synthetic 0, or a claim-level adjustment carrying the same
+    /// CARC), carries what the other adjustments leave unexplained (charge -
+    /// 0 paid - the other CAS, claim and lines), so the CAS balances.
+    /// </summary>
+    public static List<ClaimAdjustment> WithDenialAmount(
+        List<ClaimAdjustment> headerCas, ClaimDto claim, List<ServiceLinePayment> serviceLines)
+    {
+        var code = claim.AdjudicationResult?.DenialReasonCode;
+        if (string.IsNullOrEmpty(code))
+            return headerCas;
+        var index = headerCas.FindIndex(a => string.Equals(a.ReasonCode, code, StringComparison.Ordinal));
+        if (index < 0)
+            return headerCas;
+
+        var others = headerCas.Where((_, i) => i != index).Sum(a => a.Amount);
+        var unexplained = claim.TotalChargeAmount
+            - others
+            - serviceLines.Sum(l => l.Adjustments.Sum(a => a.Amount));
+
+        var denial = headerCas[index];
+        headerCas[index] = new ClaimAdjustment
+        {
+            GroupCode = denial.GroupCode,
+            ReasonCode = denial.ReasonCode,
+            Amount = Math.Max(unexplained, 0m),
+            ReasonDescription = denial.ReasonDescription,
+        };
+        return headerCas;
+    }
+
+    /// <summary>
+    /// The amount a claim is paid: the plan's payment. Claims without one are
+    /// excluded before reservation; reaching here without one is a bug, and
+    /// the run fails rather than paying billed charges.
+    /// </summary>
+    public static decimal PlanPaidAmountOf(ClaimDto claim) =>
+        claim.PlanPaidAmount
+        ?? throw new InvalidOperationException(
+            $"Claim {claim.Id} has no plan-paid amount; it is never paid at billed charges");
+
+    private static ClaimAdjudicationSnapshot BuildAdjudicationSnapshot(ClaimDto claim)
+    {
+        var snapshot = new ClaimAdjudicationSnapshot
+        {
+            ClaimId = claim.Id,
+            DenialReasonCode = claim.AdjudicationResult?.DenialReasonCode,
+            DenialReason = claim.AdjudicationResult?.DenialReason,
+        };
+
+        if (claim.AdjudicationResult?.AdjustmentReasons is { Count: > 0 } reasons)
+        {
+            snapshot.AdjustmentReasons = reasons.Select(r => new ClaimAdjustmentReasonView
+            {
+                GroupCode = r.GroupCode,
+                ReasonCode = r.ReasonCode,
+                Amount = r.Amount,
+                Description = r.Description
+            }).ToList();
+        }
+
+        if (claim.AdjudicationResult?.RemarkCodes is { Count: > 0 } remarks)
+        {
+            snapshot.RemarkCodes = remarks.ToList();
+        }
+
+        if (claim.PendDetails?.EditFailures is { Count: > 0 } failures)
+        {
+            snapshot.EditFailures = failures.Select(f => new EditFailureView
+            {
+                EditType = f.EditType,
+                RuleId = f.RuleId,
+                Message = f.Message,
+                AffectedLineNumbers = f.AffectedLineNumbers?.ToList() ?? new List<int>(),
+                SuggestedCarc = f.SuggestedCarc,
+                SuggestedRarc = f.SuggestedRarc
+            }).ToList();
+        }
+
+        return snapshot;
+    }
+}

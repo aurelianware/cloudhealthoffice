@@ -37,15 +37,8 @@ public class EraGeneratorServiceTests
                     MemberId = "MEM100",
                     RenderingProviderNPI = "1098765432",
                     ClaimReceivedDate = new DateTime(2026, 2, 28),
-                    ClaimAdjustments =
-                    [
-                        new ClaimAdjustment
-                        {
-                            GroupCode = "CO",
-                            ReasonCode = "45",
-                            Amount = 50.00m
-                        }
-                    ],
+                    // The line carries the adjustments (SVC02 - CAS = SVC03), so the
+                    // header repeats none (CLP03 - all CAS = CLP04).
                     ServiceLines =
                     [
                         new ServiceLinePayment
@@ -58,6 +51,12 @@ public class EraGeneratorServiceTests
                             ServiceDateFrom = new DateTime(2026, 2, 27),
                             Adjustments =
                             [
+                                new ServiceLineAdjustment
+                                {
+                                    GroupCode = "CO",
+                                    ReasonCode = "45",
+                                    Amount = 30.00m
+                                },
                                 new ServiceLineAdjustment
                                 {
                                     GroupCode = "PR",
@@ -104,7 +103,7 @@ public class EraGeneratorServiceTests
         Assert.Contains("N1*PE*Test Clinic*XX*1234567890~", edi);
         Assert.Contains("CLP*CLM-0001*1*200.00*150.00*50.00*HM*PCN123~", edi);
         Assert.Contains("SVC*HC:99213*200.00*150.00**1~", edi);
-        Assert.Contains("CAS*CO*45*50.00~", edi);
+        Assert.Contains("SVC*HC:99213*200.00*150.00**1~DTM*472*20260227~CAS*CO*45*30.00~CAS*PR*1*20.00~", edi);
         Assert.Contains("CAS*PR*1*20.00~LQ*HE*N620~", edi); // RARC in LQ*HE, not CAS04 (a quantity)
         Assert.Contains("PLB*1234567890*20260331*FB:WITHHOLD*10.00~", edi);
 

@@ -31,13 +31,12 @@ public static class Era835ClaimLoops
             $"*{cp.ChargeAmount:F2}*{cp.PaymentAmount:F2}*{cp.PatientResponsibilityAmount:F2}" +
             $"*HM*{cp.PayerClaimControlNumber ?? cp.ClaimId}");
 
-        // CAS — claim adjustments, directly after CLP. Up to 6 CARC/amount pairs per segment.
+        // CAS — claim adjustments, directly after CLP. Up to 6 adjustment triplets per segment.
         foreach (var casGroup in cp.ClaimAdjustments.GroupBy(a => a.GroupCode))
         {
             foreach (var chunk in casGroup.Chunk(6))
             {
-                var pairs = string.Concat(chunk.Select(adj => $"*{adj.ReasonCode}*{adj.Amount:F2}"));
-                Append(sb, ref segmentCount, $"CAS*{casGroup.Key}{pairs}");
+                Append(sb, ref segmentCount, Cas(casGroup.Key, chunk.Select(a => (a.ReasonCode, a.Amount))));
             }
         }
 
@@ -108,8 +107,7 @@ public static class Era835ClaimLoops
         {
             foreach (var chunk in casGroup.Chunk(6))
             {
-                var pairs = string.Concat(chunk.Select(adj => $"*{adj.ReasonCode}*{adj.Amount:F2}"));
-                Append(sb, ref segmentCount, $"CAS*{casGroup.Key}{pairs}");
+                Append(sb, ref segmentCount, Cas(casGroup.Key, chunk.Select(a => (a.ReasonCode, a.Amount))));
             }
         }
 
@@ -125,6 +123,14 @@ public static class Era835ClaimLoops
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// One CAS segment. Each adjustment is a reason/amount/quantity triplet
+    /// (CAS02-04, 05-07, ... 17-19): no quantity is sent, so repetitions are
+    /// separated by an empty quantity element, e.g. CAS*CO*45*100.00**253*50.00.
+    /// </summary>
+    public static string Cas(string groupCode, IEnumerable<(string ReasonCode, decimal Amount)> adjustments) =>
+        $"CAS*{groupCode}*" + string.Join("**", adjustments.Select(a => $"{a.ReasonCode}*{a.Amount:F2}"));
 
     private static void Append(StringBuilder sb, ref int segmentCount, string segment)
     {

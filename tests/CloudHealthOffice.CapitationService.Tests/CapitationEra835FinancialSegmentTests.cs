@@ -233,6 +233,23 @@ public class CapitationEra835FinancialSegmentTests
     }
 
     [Fact]
+    public void Dtm232_IsTheStatementCapitationPeriodStart_NotTheAssignmentDate()
+    {
+        var statement = Statement(net: 0m);
+        statement.LineItems.Add(new CapitationLineItem
+        {
+            MemberId = "MEM001", GrossAmount = 100m, WithholdAmount = 0m, NetAmount = 100m,
+            BasePMPM = 100m, RiskScore = 1.0m,
+            AssignmentEffectiveDate = new DateTime(2024, 7, 15), // assigned long before this period
+        });
+        statement.RecalculateTotals();
+
+        var dtm = Segment(Service().Generate835ForStatement(statement, Contract, Ach()), "DTM*232");
+
+        Assert.Equal(new[] { "DTM", "232", "20260301" }, dtm); // CapitationPeriodStart
+    }
+
+    [Fact]
     public void UnbalancedStatement_Throws()
     {
         var statement = Statement(net: 0m);
