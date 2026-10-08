@@ -186,12 +186,26 @@ public static class ClaimToX12837Mapper
                 Code = d.Code,
                 Qualifier = string.IsNullOrWhiteSpace(d.CodeQualifier) ? "ABK" : d.CodeQualifier,
                 Pointer = d.PointerNumber == 0 ? null : d.PointerNumber,
+                PresentOnAdmission = d.PresentOnAdmission,
             })
             .ToList(),
         PrincipalDiagnosisCode = claim.DiagnosisCodes
             .OrderBy(d => d.PointerNumber)
             .FirstOrDefault()?.Code,
         PriorAuthorizationNumber = claim.PriorAuthorizationNumber,
+        // Institutional header — feeds the 837I-only scrub rules (DL003
+        // discharge-after-admission). A discharged inpatient's discharge
+        // date is the statement-through date; 837I has no discharge DTP.
+        FacilityTypeCode = claim.Institutional?.FacilityTypeCode,
+        AdmissionDate = FormatD8(claim.Institutional?.AdmissionDate),
+        DischargeDate = FormatD8(claim.Institutional?.DischargeDate ?? claim.Institutional?.StatementToDate),
+        AdmissionTypeCode = claim.Institutional?.AdmissionTypeCode,
+        AdmittingDiagnosisCode = claim.DiagnosisCodes
+            .FirstOrDefault(d => d.CodeQualifier is "ABJ" or "BJ")?.Code,
+        StatementFromDate = FormatD8(claim.Institutional?.StatementFromDate),
+        StatementToDate = FormatD8(claim.Institutional?.StatementToDate),
+        PatientStatusCode = claim.Institutional?.PatientStatusCode,
+        DrgCode = claim.Institutional?.DrgCode,
     };
 
     private static EngineModels.ServiceLine MapServiceLine(AdapterClaimLine line) => new()
@@ -214,7 +228,13 @@ public static class ClaimToX12837Mapper
         PlaceOfService = line.PlaceOfServiceCode,
         RevenueCode = line.RevenueCode,
         DiagnosisPointers = line.DiagnosisPointers?.Where(p => p > 0).ToList(),
+        NationalDrugCode = line.NationalDrugCode,
+        DrugQuantity = line.DrugQuantity,
+        DrugUnitOfMeasure = line.DrugUnitOfMeasure,
     };
+
+    private static string? FormatD8(DateTime? date)
+        => date is { } d ? d.ToString("yyyyMMdd") : null;
 
     private static string FormatDob(DateTime? dob)
         => dob is { } d ? d.ToString("yyyyMMdd") : string.Empty;

@@ -105,9 +105,10 @@ public class EncounterTransformer : IEncounterTransformer
             seg.Add("HI*" + string.Join("*", hiParts));
         }
 
-        // DRG (institutional)
-        if (!string.IsNullOrWhiteSpace(input.DrgCode))
-            seg.Add($"HI*BG:{input.DrgCode}");
+        // DRG (institutional) — 005010X223A2 2300 HI "Diagnosis Related Group
+        // (DRG) Information", qualifier DR. (BG is the condition-code qualifier.)
+        if (input.FormType == ClaimFormType.Institutional && !string.IsNullOrWhiteSpace(input.DrgCode))
+            seg.Add($"HI*DR:{EscapeX12(input.DrgCode.Trim())}");
 
         // AMT — total claim-level amounts for encounter reporting
         seg.Add($"AMT*AU*{totalPlanPaid:0.00}");    // AU = covered amount (plan paid)

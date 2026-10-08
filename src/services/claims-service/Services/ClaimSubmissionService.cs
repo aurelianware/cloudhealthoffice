@@ -353,13 +353,20 @@ public class ClaimSubmissionService : IClaimSubmissionService
             for (var i = 0; i < claim.ClaimLines.Count; i++)
             {
                 var line = claim.ClaimLines[i];
-                if (string.IsNullOrWhiteSpace(line.ProcedureCode))
+                // An institutional line may be identified by revenue code
+                // alone (837I SV201; SV202 HCPCS is situational — e.g. room
+                // and board, pharmacy). Every other line needs a procedure.
+                var revenueCodeOnly = claim.ClaimType == ClaimType.Institutional
+                    && !string.IsNullOrWhiteSpace(line.RevenueCode);
+                if (string.IsNullOrWhiteSpace(line.ProcedureCode) && !revenueCodeOnly)
                 {
                     errors.Add(new ValidationError
                     {
                         Field = $"{nameof(AdapterClaim.ClaimLines)}[{i}].{nameof(AdapterClaimLine.ProcedureCode)}",
                         Code = "Required",
-                        Message = "ProcedureCode is required on every service line"
+                        Message = claim.ClaimType == ClaimType.Institutional
+                            ? "ProcedureCode or RevenueCode is required on every institutional service line"
+                            : "ProcedureCode is required on every service line"
                     });
                 }
             }

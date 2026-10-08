@@ -167,6 +167,51 @@ public class ClaimSubmissionServiceTests
     }
 
     [Fact]
+    public async Task Submit_InstitutionalRevenueCodeOnlyLine_PassesValidation()
+    {
+        // 837I room and board / pharmacy lines carry SV201 revenue code
+        // without an SV202 HCPCS.
+        var inbound = BuildClaim();
+        inbound.ClaimType = ClaimType.Institutional;
+        inbound.ClaimLines[0].ProcedureCode = string.Empty;
+        inbound.ClaimLines[0].RevenueCode = "0120";
+        _adapter
+            .SubmitClaimAsync(Arg.Any<ClaimSubmissionAdapterRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new ClaimAdapterResponse { Platform = "cho", Claim = ci.Arg<ClaimSubmissionAdapterRequest>().Claim });
+
+        var result = await _sut.SubmitAsync(inbound, "tenant-1", "actor", null);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
+    public async Task Submit_InstitutionalLineWithNeitherProcedureNorRevenueCode_ReturnsValidationFailure()
+    {
+        var inbound = BuildClaim();
+        inbound.ClaimType = ClaimType.Institutional;
+        inbound.ClaimLines[0].ProcedureCode = string.Empty;
+        inbound.ClaimLines[0].RevenueCode = null;
+
+        var result = await _sut.SubmitAsync(inbound, "tenant-1", "actor", null);
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, e =>
+            e.Field == "ClaimLines[0].ProcedureCode" && e.Code == "Required");
+    }
+
+    [Fact]
+    public async Task Submit_ProfessionalRevenueCodeOnlyLine_StillRequiresProcedureCode()
+    {
+        var inbound = BuildClaim();
+        inbound.ClaimLines[0].ProcedureCode = string.Empty;
+        inbound.ClaimLines[0].RevenueCode = "0120";
+
+        var result = await _sut.SubmitAsync(inbound, "tenant-1", "actor", null);
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
     public async Task Submit_ServiceDateFromAfterServiceDateTo_ReturnsValidationFailure()
     {
         var inbound = BuildClaim();

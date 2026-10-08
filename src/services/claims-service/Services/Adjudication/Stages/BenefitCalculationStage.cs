@@ -222,6 +222,22 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
 
         context.BenefitResolutionResult = result;
+
+        // The engine could not produce a balanced result (e.g. a per-stay
+        // allocation allowing a line more than it billed). It wrote no
+        // accumulators; pend for review instead of denying.
+        if (result.RequiresReview)
+        {
+            var reviewReason = result.PendReason ?? "Benefit calculation requires manual review.";
+            context.PendDetails ??= new PendDetails
+            {
+                PendCode = result.PendReasonCode ?? PricingRequiredPendCode,
+                PendReason = reviewReason,
+                PendedAt = DateTime.UtcNow,
+            };
+            return ClaimAdjudicationStageResult.Pend(StageName, reviewReason);
+        }
+
         ApplyToContext(context, result);
 
         if (!result.Success)
@@ -429,6 +445,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             .Where(d => !string.IsNullOrWhiteSpace(d.Code))
             .ToDictionary(d => d.PointerNumber, d => d.Code);
 
+        var perStay = ResolvePerStayPricing(context);
+
         return new BenefitResolutionRequest
         {
             ClaimId = claim.Id,
@@ -444,7 +462,58 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             ClaimType = MapClaimType(claim.ClaimType),
             LineOfBusiness = (int)claim.LineOfBusiness,
             Member = BuildMemberContext(context.ResolvedMember, claim, serviceDate),
+            // DRG / all-inclusive per-diem stays: cost share once per stay.
+            DrgCode = perStay?.DrgCode,
+            DrgAllowedAmount = perStay?.ClaimAllowed,
+            LengthOfStay = perStay?.LengthOfStay,
+            InpatientPricingMethod = perStay?.Method,
         };
+    }
+
+    private sealed record PerStayPricing(
+        InpatientPricingMethod Method, decimal ClaimAllowed, string? DrgCode, int? LengthOfStay);
+
+    /// <summary>
+    /// When <see cref="PricingStage"/> priced an institutional claim as one
+    /// claim-level amount (a DRG case rate or an all-inclusive per diem,
+    /// allocated across the lines by billed charges — see
+    /// <c>PricingResult.IsPerStayRate</c>), routes the claim through the
+    /// benefit engine's claim-level inpatient path: cost sharing (one
+    /// inpatient copay, deductible and coinsurance once) is computed on the
+    /// claim's total allowed — every priced line, including any carve-out
+    /// line priced off another schedule — under the stay's inpatient
+    /// benefit, accumulators are written once, and the result is allocated
+    /// back to the lines. Per-line pricing returns null (per-line path, as
+    /// before).
+    /// </summary>
+    private static PerStayPricing? ResolvePerStayPricing(ClaimAdjudicationContext context)
+    {
+        var claim = context.Claim;
+        if (claim.ClaimType != ClaimsService.Models.ClaimType.Institutional
+            || context.PricingResult is not { IsFullyPriced: true } pricing
+            || pricing.RawResult is null)
+        {
+            return null;
+        }
+
+        var perStayLines = pricing.RawResult.LineResults.Where(r => r.IsPerStayRate).ToList();
+        if (perStayLines.Count == 0)
+        {
+            return null;
+        }
+
+        var method = perStayLines.Any(r => r.FeeScheduleType == CloudHealthOffice.FeeScheduleEngine.Domain.FeeScheduleType.Drg)
+            ? InpatientPricingMethod.DrgCaseRate
+            : InpatientPricingMethod.PerDiem;
+        var drgCode = string.IsNullOrWhiteSpace(claim.Institutional?.DrgCode)
+            ? null
+            : claim.Institutional!.DrgCode!.Trim();
+
+        return new PerStayPricing(
+            method,
+            pricing.AllowedAmounts.Values.Sum(),
+            drgCode,
+            claim.Institutional?.CalculateLengthOfStay());
     }
 
     /// <summary>

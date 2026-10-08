@@ -135,6 +135,62 @@ public record ClaimHeader
     public string? AdmissionTypeCode { get; init; }
     public string? PriorAuthorizationNumber { get; init; }
     public RenderingProviderInfo? RenderingProvider { get; init; }
+
+    // ── Institutional (837I 2300) ─────────────────────────────────
+
+    /// <summary>DTP*435 admission hour (HHMM) when sent in DT format.</summary>
+    public string? AdmissionHour { get; init; }
+
+    /// <summary>DTP*096 discharge hour (HHMM).</summary>
+    public string? DischargeHour { get; init; }
+
+    /// <summary>DTP*434 statement covers period start (CCYYMMDD).</summary>
+    public string? StatementFromDate { get; init; }
+
+    /// <summary>DTP*434 statement covers period end (CCYYMMDD).</summary>
+    public string? StatementToDate { get; init; }
+
+    /// <summary>CL102 point of origin for admission or visit.</summary>
+    public string? AdmissionSourceCode { get; init; }
+
+    /// <summary>CL103 patient (discharge) status.</summary>
+    public string? PatientStatusCode { get; init; }
+
+    /// <summary>HI*DR diagnosis related group code, as billed.</summary>
+    public string? DrgCode { get; init; }
+
+    /// <summary>HI*BBR (ICD-10-PCS) principal procedure.</summary>
+    public InstitutionalCode? PrincipalProcedure { get; init; }
+
+    /// <summary>HI*BBQ (ICD-10-PCS) other procedures.</summary>
+    public List<InstitutionalCode>? OtherProcedures { get; init; }
+
+    /// <summary>HI*BH occurrence codes (code + D8 date).</summary>
+    public List<InstitutionalCode>? OccurrenceCodes { get; init; }
+
+    /// <summary>HI*BI occurrence span codes (code + RD8 period).</summary>
+    public List<InstitutionalCode>? OccurrenceSpanCodes { get; init; }
+
+    /// <summary>HI*BE value codes (code + amount).</summary>
+    public List<InstitutionalCode>? ValueCodes { get; init; }
+
+    /// <summary>HI*BG condition codes.</summary>
+    public List<InstitutionalCode>? ConditionCodes { get; init; }
+}
+
+/// <summary>
+/// One 837I HI composite that is not a diagnosis: occurrence, occurrence
+/// span, value, condition or ICD-10-PCS procedure code. Which of
+/// <see cref="Date"/>/<see cref="DateEnd"/>/<see cref="Amount"/> is set
+/// depends on the qualifier (HI0x-4 date or RD8 period, HI0x-5 amount).
+/// </summary>
+public record InstitutionalCode
+{
+    public string Qualifier { get; init; } = default!;
+    public string Code { get; init; } = default!;
+    public string? Date { get; init; }
+    public string? DateEnd { get; init; }
+    public decimal? Amount { get; init; }
 }
 
 public record RenderingProviderInfo
@@ -160,6 +216,15 @@ public record ServiceLine
     public string? RevenueCode { get; init; }
     public List<int>? DiagnosisPointers { get; init; }
     public string? PriorAuthorizationNumber { get; init; }
+
+    /// <summary>LIN*N4 National Drug Code (2410), 11-digit 5-4-2.</summary>
+    public string? NationalDrugCode { get; init; }
+
+    /// <summary>CTP04 drug quantity (2410).</summary>
+    public decimal? DrugQuantity { get; init; }
+
+    /// <summary>CTP05-1 drug unit of measure (F2, GR, ME, ML, UN).</summary>
+    public string? DrugUnitOfMeasure { get; init; }
 }
 
 // ============================================================================

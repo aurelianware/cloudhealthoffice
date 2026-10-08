@@ -512,7 +512,14 @@ public class AdjudicationController : ControllerBase
                 PlanId = request.BenefitPlanId.ToString(),
                 BilledAmount = line.BilledAmount,
                 Units = line.Units,
-                LineNumber = line.LineNumber
+                LineNumber = line.LineNumber,
+                // Institutional: the engine pays a DRG case rate / all-inclusive
+                // per diem once per claim, so the claim-level DRG and length of
+                // stay are sent on every line.
+                DrgCode = string.IsNullOrWhiteSpace(request.DrgCode) ? null : request.DrgCode.Trim(),
+                LengthOfStay = request.LengthOfStay,
+                RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode,
+                BillType = request.BillType,
             }).ToList();
 
             pricingResults = await MeasureStageAsync(
@@ -565,11 +572,11 @@ public class AdjudicationController : ControllerBase
             claimType: claimTypeCode,
             memberId: request.MemberId))
         {
+            // Original billed charges stay on the lines; the priced allowed
+            // amounts go through AllowedAmounts (the engine's contractual
+            // adjustment is billed − allowed).
             var benefitLines = request.Lines.Select(line =>
             {
-                var priced = pricingResults.LineResults
-                    .FirstOrDefault(p => p.LineNumber == line.LineNumber);
-
                 return new ClaimLineInput
                 {
                     LineNumber = line.LineNumber,
@@ -578,12 +585,13 @@ public class AdjudicationController : ControllerBase
                     Modifiers = line.Modifiers,
                     RevenueCode = line.RevenueCode,
                     PlaceOfService = line.PlaceOfService,
-                    BilledAmount = priced?.AllowedAmount ?? line.BilledAmount,
+                    BilledAmount = line.BilledAmount,
                     Units = line.Units,
                     DiagnosisCodes = line.DiagnosisCodes
                 };
             }).ToList();
 
+            var perStay = ResolvePerStayPricing(claimTypeCode, request, pricingResults);
             var benefitRequest = new BenefitResolutionRequest
             {
                 MemberId = request.MemberId,
@@ -593,7 +601,18 @@ public class AdjudicationController : ControllerBase
                 NetworkTier = request.NetworkTier,
                 LineOfBusiness = request.LineOfBusiness,
                 ClaimId = request.ClaimId,
+                ClaimType = claimTypeCode,
                 Lines = benefitLines,
+                AllowedAmounts = pricingResults.LineResults
+                    .GroupBy(p => p.LineNumber)
+                    .ToDictionary(g => g.Key, g => g.First().AllowedAmount),
+                // DRG / all-inclusive per-diem stays: cost share once per stay,
+                // on the claim's total allowed (same rule as the async
+                // BenefitCalculationStage).
+                DrgCode = perStay?.DrgCode,
+                DrgAllowedAmount = perStay?.ClaimAllowed,
+                LengthOfStay = perStay?.LengthOfStay,
+                InpatientPricingMethod = perStay?.Method,
                 Cob = request.Cob is null ? null : new CobInfo
                 {
                     PayerSequence              = request.Cob.PayerSequence,
@@ -627,6 +646,30 @@ public class AdjudicationController : ControllerBase
             benefitSpan?.SetTag("cho.benefit.discrepancy_count", augmentDiscrepancies.Length);
             if (benefitResult.DenialReasonCode is not null)
                 benefitSpan?.SetTag("cho.benefit.denial_code", benefitResult.DenialReasonCode);
+        }
+
+        // The engine could not produce a balanced result (e.g. a per-stay
+        // allocation allowing a line more than it billed) and wrote no
+        // accumulators: pend for review, as an unresolved price does.
+        if (benefitResult.RequiresReview)
+        {
+            adjudicationSpan?.SetTag("cho.outcome", "pricing_review");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Benefit calculation requires review");
+
+            RecordLatency(sw, claimTypeCode, "pricing_review");
+
+            _logger.LogWarning(
+                "Claim {ClaimId} pended: benefit calculation requires review ({PendCode})",
+                SanitizeForLog(request.ClaimId), SanitizeForLog(benefitResult.PendReasonCode));
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "PRICING_REVIEW",
+                pendCode = benefitResult.PendReasonCode,
+                message = benefitResult.PendReason ?? "Benefit calculation requires manual review",
+                timings = stageTimings,
+            });
         }
 
         // ── Step 2b: COB (if applicable) ──
@@ -1001,6 +1044,38 @@ public class AdjudicationController : ControllerBase
     // Helper: Normalize claim type string → X12 transaction code
     // ═══════════════════════════════════════════════════════════════════
 
+    private sealed record PerStayPricing(
+        InpatientPricingMethod Method, decimal ClaimAllowed, string? DrgCode, int? LengthOfStay);
+
+    /// <summary>
+    /// When the fee schedule engine priced an institutional claim as one
+    /// claim-level amount (a DRG case rate or an all-inclusive per diem,
+    /// allocated across the lines — <c>PricingResult.IsPerStayRate</c>), the
+    /// benefit engine must take its claim-level inpatient path: one inpatient
+    /// copay, deductible and coinsurance once, on the claim's total allowed.
+    /// Null for per-line pricing.
+    /// </summary>
+    private static PerStayPricing? ResolvePerStayPricing(
+        string claimTypeCode, AdjudicationRequest request, PricingResultSet pricingResults)
+    {
+        if (claimTypeCode != "837I")
+            return null;
+
+        var perStayLines = pricingResults.LineResults.Where(r => r.IsPerStayRate).ToList();
+        if (perStayLines.Count == 0)
+            return null;
+
+        var method = perStayLines.Any(r => r.FeeScheduleType == CloudHealthOffice.FeeScheduleEngine.Domain.FeeScheduleType.Drg)
+            ? InpatientPricingMethod.DrgCaseRate
+            : InpatientPricingMethod.PerDiem;
+
+        return new PerStayPricing(
+            method,
+            pricingResults.LineResults.Sum(r => r.AllowedAmount),
+            string.IsNullOrWhiteSpace(request.DrgCode) ? null : request.DrgCode.Trim(),
+            request.LengthOfStay);
+    }
+
     private static string NormalizeClaimType(string? claimType)
     {
         return claimType?.Trim() switch
@@ -1207,6 +1282,25 @@ public record AdjudicationRequest
     /// Cross-referenced during PA rule evaluation.
     /// </summary>
     public string? PriorAuthorizationNumber { get; init; }
+
+    /// <summary>
+    /// Institutional: DRG billed on the claim (837I HI*DR). Required for
+    /// DRG-contracted pricing — there is no grouper; without it a DRG
+    /// schedule finds no rate.
+    /// </summary>
+    public string? DrgCode { get; init; }
+
+    /// <summary>
+    /// Institutional: length of stay in days (discharge − admission, or the
+    /// statement covers period). Drives per-diem pricing.
+    /// </summary>
+    public int? LengthOfStay { get; init; }
+
+    /// <summary>
+    /// Institutional: three-character type of bill (CLM05-1 facility type +
+    /// CLM05-3 frequency). Informational; passed through to pricing.
+    /// </summary>
+    public string? BillType { get; init; }
 
     public List<AdjudicationLineRequest> Lines { get; init; } = [];
 
