@@ -572,6 +572,16 @@ public class AdjudicationResult
     public decimal PatientResponsibility { get; set; }
 
     /// <summary>
+    /// Portion of <see cref="PatientResponsibility"/> that counts toward the
+    /// out-of-pocket maximum, as computed by the benefit engine. Lower than
+    /// patient responsibility when the benefit excludes cost share from the
+    /// OOP max (<c>OopApplies = false</c>). Null on claims adjudicated before
+    /// the field existed or by a path that doesn't compute it; readers fall
+    /// back to <see cref="PatientResponsibility"/>, the prior behavior.
+    /// </summary>
+    public decimal? OopAppliedAmount { get; set; }
+
+    /// <summary>
     /// Payer payment amount (what payer will pay provider)
     /// 835: CLP04 - patient responsibility
     /// </summary>
@@ -638,6 +648,16 @@ public class LineAdjudicationResult
     /// Patient responsibility for this line
     /// </summary>
     public decimal PatientResponsibility { get; set; }
+
+    /// <summary>
+    /// Portion of <see cref="PatientResponsibility"/> that counts toward the
+    /// out-of-pocket maximum, as computed by the benefit engine. Lower than
+    /// patient responsibility when the benefit excludes cost share from the
+    /// OOP max (<c>OopApplies = false</c>). Null on claims adjudicated before
+    /// the field existed or by a path that doesn't compute it; readers fall
+    /// back to <see cref="PatientResponsibility"/>, the prior behavior.
+    /// </summary>
+    public decimal? OopAppliedAmount { get; set; }
 
     /// <summary>
     /// Adjustment reasons for this line

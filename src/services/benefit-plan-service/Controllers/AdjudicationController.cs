@@ -633,6 +633,7 @@ public class AdjudicationController : ControllerBase
                 CopayAmount = benefitResult.Totals.TotalCopay,
                 CoinsuranceAmount = benefitResult.Totals.TotalCoinsurance,
                 MemberResponsibility = benefitResult.Totals.TotalMemberResponsibility,
+                OopAppliedAmount = benefitResult.Totals.TotalOopApplied,
                 PlanPayment = benefitResult.Totals.TotalPlanPaid,
                 ContractualAdjustment = request.Lines.Sum(l => l.BilledAmount)
                     - benefitResult.Totals.TotalAllowed
@@ -653,6 +654,7 @@ public class AdjudicationController : ControllerBase
                     CopayAmount = bl.CopayAmount,
                     CoinsuranceAmount = bl.CoinsuranceAmount,
                     MemberResponsibility = bl.MemberResponsibility,
+                    OopAppliedAmount = bl.OopAppliedAmount,
                     PlanPayment = bl.PlanPaidAmount,
                     ContractualAdjustment = priced?.ContractualAdjustment ?? 0,
                     FeeScheduleType = priced?.FeeScheduleType.ToString(),
@@ -1273,6 +1275,10 @@ public record AdjudicationTotals
     public decimal CopayAmount { get; init; }
     public decimal CoinsuranceAmount { get; init; }
     public decimal MemberResponsibility { get; init; }
+
+    /// <summary>Portion of member responsibility that counts toward the OOP max.</summary>
+    public decimal OopAppliedAmount { get; init; }
+
     public decimal PlanPayment { get; init; }
 }
 
@@ -1287,6 +1293,10 @@ public record AdjudicationLineResponse
     public decimal CopayAmount { get; init; }
     public decimal CoinsuranceAmount { get; init; }
     public decimal MemberResponsibility { get; init; }
+
+    /// <summary>Portion of member responsibility that counts toward the OOP max.</summary>
+    public decimal OopAppliedAmount { get; init; }
+
     public decimal PlanPayment { get; init; }
     public string? FeeScheduleType { get; init; }
     public string? FeeScheduleId { get; init; }

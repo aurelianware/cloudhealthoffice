@@ -9,6 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- ComputeDeltas is exercised by the claims-service → accumulator
+         finalization seam test. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>CloudHealthOffice.ClaimsService.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.Events\CloudHealthOffice.Events.csproj" />
   </ItemGroup>

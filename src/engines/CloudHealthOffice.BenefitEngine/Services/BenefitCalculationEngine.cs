@@ -473,6 +473,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 CoinsurancePercent = drgCostShare.CoinsurancePercent,
                 OopMaxReduction = Math.Round(drgCostShare.OopMaxReduction * proportion, 2),
                 MemberResponsibility = Math.Round(drgCostShare.MemberResponsibility * proportion, 2),
+                OopAppliedAmount = Math.Round(drgCostShare.OopApplied * proportion, 2),
                 PlanPaidAmount = Math.Round(drgCostShare.PlanPaid * proportion, 2),
                 IsDrgPriced = true,
                 Adjustments = [] // Adjustments are at the claim level for DRG
@@ -658,6 +659,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             CoinsurancePercent = costShareResult.CoinsurancePercent,
             OopMaxReduction = costShareResult.OopMaxReduction,
             MemberResponsibility = costShareResult.MemberResponsibility,
+            OopAppliedAmount = costShareResult.OopApplied,
             PlanPaidAmount = costShareResult.PlanPaid,
             Adjustments = costShareResult.Adjustments
         };
@@ -876,6 +878,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             CoinsurancePercent = coinsurancePercent,
             OopMaxReduction = oopMaxReduction,
             MemberResponsibility = memberResponsibility,
+            OopApplied = oopEligible,
             PlanPaid = planPaid,
             Adjustments = adjustments
         };
@@ -1046,6 +1049,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             TotalCoinsurance = lines.Sum(l => l.CoinsuranceAmount),
             TotalOopMaxReduction = lines.Sum(l => l.OopMaxReduction),
             TotalMemberResponsibility = lines.Sum(l => l.MemberResponsibility),
+            TotalOopApplied = lines.Sum(l => l.OopAppliedAmount),
             TotalPlanPaid = lines.Sum(l => l.PlanPaidAmount)
         };
     }
@@ -1074,6 +1078,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         public decimal CoinsurancePercent { get; init; }
         public decimal OopMaxReduction { get; init; }
         public decimal MemberResponsibility { get; init; }
+        public decimal OopApplied { get; init; }
         public decimal PlanPaid { get; init; }
         public List<AdjustmentReason> Adjustments { get; init; } = [];
     }
