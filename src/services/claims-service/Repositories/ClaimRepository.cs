@@ -291,6 +291,35 @@ public interface IClaimRepository
         DateTime voidedAt,
         string? actorId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Candidate prior claims for duplicate detection
+    /// (<see cref="Services.Adjudication.Stages.DuplicateClaimStage"/>).
+    /// Returns live versions for <paramref name="tenantId"/> +
+    /// <paramref name="memberId"/> whose service period overlaps
+    /// [<paramref name="serviceDateFrom"/>, <paramref name="serviceDateTo"/>],
+    /// excluding every row of the version chain
+    /// <paramref name="excludeClaimVersionId"/> (the claim being adjudicated
+    /// and its predecessors/successors).
+    ///
+    /// <para>
+    /// "Live" excludes Draft, Denied, Voided and superseded
+    /// (<c>Adjusted</c> / <c>SupersededAt</c> set) versions and void
+    /// requests (frequency code 8) — none of those represent a service the
+    /// payer is still on the hook for. Filter shape is
+    /// tenant + member equality with a service-date range so it rides the
+    /// <c>(TenantId, MemberId, ServiceDateFrom)</c> Mongo index and stays
+    /// single-partition on Cosmos. Capped at
+    /// <see cref="ClaimRepository.MaxDuplicateCandidates"/> rows.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<Claim>> FindDuplicateCandidatesAsync(
+        string tenantId,
+        string memberId,
+        DateTime serviceDateFrom,
+        DateTime serviceDateTo,
+        string excludeClaimVersionId,
+        CancellationToken ct = default);
 }
 
 public class ClaimRepository : IClaimRepository
@@ -1603,6 +1632,17 @@ public class ClaimRepository : IClaimRepository
     private static string CosmosStatusLiteral(ClaimStatus status) =>
         JsonNamingPolicy.CamelCase.ConvertName(status.ToString());
 
+    /// <summary>
+    /// Both spellings of each enum name — the serializer's camelCase form
+    /// (see <see cref="CosmosStatusLiteral"/>) and PascalCase — for
+    /// exclusion filters that must never let a dead row through.
+    /// </summary>
+    internal static IReadOnlyList<string> DuplicateExclusionLiterals(IEnumerable<string> enumNames) =>
+        enumNames
+            .SelectMany(n => new[] { JsonNamingPolicy.CamelCase.ConvertName(n), n })
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
     public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
         string ownerId,
         string scope,
@@ -1805,6 +1845,86 @@ public class ClaimRepository : IClaimRepository
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Upper bound on rows <see cref="FindDuplicateCandidatesAsync"/> returns.
+    /// A member's live claims overlapping one service period are normally a
+    /// handful; the cap keeps a pathological member (or a bad date range)
+    /// from turning one adjudication into an unbounded scan.
+    /// </summary>
+    public const int MaxDuplicateCandidates = 200;
+
+    public async Task<IReadOnlyList<Claim>> FindDuplicateCandidatesAsync(
+        string tenantId,
+        string memberId,
+        DateTime serviceDateFrom,
+        DateTime serviceDateTo,
+        string excludeClaimVersionId,
+        CancellationToken ct = default)
+    {
+        // Single-partition (/tenantId) query: equality on memberId plus a
+        // service-period overlap range — served by the container's default
+        // range indexes. Undefined-vs-anything comparisons evaluate to
+        // undefined in Cosmos SQL (≠ true), so each optional/legacy field is
+        // guarded with NOT IS_DEFINED / null to keep legacy rows visible.
+        //
+        // Dead-row exclusion must match the persisted enum spelling, or dead
+        // rows survive the filter and can fill the TOP cap ahead of a live
+        // duplicate. The Cosmos serializer writes enums camelCase
+        // (CosmosStatusLiteral); PascalCase is also excluded so rows written
+        // by older serializers (and the PascalCase literals other queries
+        // here still compare against) can never leak through.
+        var deadStatuses = DuplicateExclusionLiterals(
+            new[] { ClaimStatus.Denied, ClaimStatus.Voided }.Select(s => s.ToString()));
+        var deadVersionStates = DuplicateExclusionLiterals(
+            new[]
+            {
+                ClaimVersionState.Draft,
+                ClaimVersionState.Denied,
+                ClaimVersionState.Voided,
+                ClaimVersionState.Adjusted,
+            }.Select(s => s.ToString()));
+
+        var statusParams = deadStatuses.Select((_, i) => $"@deadStatus{i}").ToList();
+        var versionStateParams = deadVersionStates.Select((_, i) => $"@deadVersionState{i}").ToList();
+
+        var query = new QueryDefinition($@"
+            SELECT TOP {MaxDuplicateCandidates} *
+            FROM c
+            WHERE c.tenantId = @tenantId
+              AND c.memberId = @memberId
+              AND c.serviceDateFrom <= @serviceDateTo
+              AND c.serviceDateTo >= @serviceDateFrom
+              AND c.id != @excludeChain
+              AND (NOT IS_DEFINED(c.claimVersionId) OR c.claimVersionId = null OR c.claimVersionId != @excludeChain)
+              AND NOT (c.status IN ({string.Join(", ", statusParams)}))
+              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null
+                   OR NOT (c.versionState IN ({string.Join(", ", versionStateParams)})))
+              AND (NOT IS_DEFINED(c.supersededAt) OR c.supersededAt = null)
+              AND (NOT IS_DEFINED(c.claimFrequencyCode) OR c.claimFrequencyCode = null OR c.claimFrequencyCode != '8')")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@memberId", memberId)
+            .WithParameter("@serviceDateFrom", serviceDateFrom)
+            .WithParameter("@serviceDateTo", serviceDateTo)
+            .WithParameter("@excludeChain", excludeClaimVersionId);
+        for (var i = 0; i < deadStatuses.Count; i++)
+            query = query.WithParameter(statusParams[i], deadStatuses[i]);
+        for (var i = 0; i < deadVersionStates.Count; i++)
+            query = query.WithParameter(versionStateParams[i], deadVersionStates[i]);
+
+        var iterator = _container.GetItemQueryIterator<Claim>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+
+        var items = new List<Claim>();
+        while (iterator.HasMoreResults && items.Count < MaxDuplicateCandidates)
+        {
+            var page = await iterator.ReadNextAsync(ct);
+            items.AddRange(page);
+        }
+
+        return items.Take(MaxDuplicateCandidates).Select(Hydrate).ToList();
     }
 
     private sealed class HeadIdResult

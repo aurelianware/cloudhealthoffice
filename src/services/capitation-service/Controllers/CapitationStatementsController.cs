@@ -179,6 +179,7 @@ public class CapitationStatementsController : ControllerBase
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK, "text/plain")]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult> GenerateEra(string id, [FromBody] CapitationEraTradingPartnerInfo? tradingPartner = null)
     {
         var statement = await _statementRepository.GetByIdAsync(id);
@@ -195,7 +196,19 @@ public class CapitationStatementsController : ControllerBase
             PayerId = "CHO"
         };
 
-        var edi = _eraService.Generate835ForStatement(statement, contract, tp);
+        string edi;
+        try
+        {
+            edi = _eraService.Generate835ForStatement(statement, contract, tp);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A BPR/TRN configuration cannot fill (e.g. no Era:OriginatingCompanyId
+            // for TRN03/BPR10) is refused, never emitted misaligned.
+            _logger.LogError(ex, "Cannot generate 835 for capitation statement {StatementId}", id.Replace("\r", "").Replace("\n", ""));
+            return Problem(title: "835 cannot be generated", detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
 
         return Content(edi, "text/plain");
     }

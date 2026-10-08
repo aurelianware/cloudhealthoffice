@@ -1,4 +1,5 @@
 using ClaimsService.Models;
+using ClaimsService.Models.Adjudication;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
@@ -27,10 +28,16 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// </para>
 ///
 /// <para>
-/// Network tier defaults to <see cref="NetworkTier.InNetwork"/> while
-/// <see cref="NetworkCredentialingStubStage"/> is in place. Capability 5.6
-/// replaces that stub with real network resolution and writes the real
-/// tier onto the context before this stage runs (Order 200 → Order 300).
+/// <b>Allowed amounts</b> come from <see cref="PricingStage"/> (Order 250)
+/// via <see cref="ClaimAdjudicationContext.PricingResult"/>. When pricing
+/// is missing or incomplete the stage pends without calling the engine —
+/// an empty <c>AllowedAmounts</c> map would make the engine fall back to
+/// allowed = billed (and write accumulators on that basis).
+/// </para>
+///
+/// <para>
+/// <b>Network tier</b> comes from <see cref="NetworkCredentialingStage"/>
+/// (Order 200) — see <see cref="ResolveNetworkTier"/>.
 /// </para>
 /// </summary>
 public sealed class BenefitCalculationStage : IClaimAdjudicationStage
@@ -66,6 +73,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// Medicaid coverage isn't confirmed active for this period yet.
     /// </summary>
     public const string MedicaidSpendDownPendCode = "SPENDDOWN";
+
+    /// <summary>
+    /// <see cref="PendDetails.PendCode"/> used when the claim reaches this
+    /// stage without complete pricing and no earlier stage recorded a
+    /// structured pend (e.g. the Pricing stage was disabled). Matches
+    /// <see cref="PricingStage.PricingUnavailablePendCode"/>.
+    /// </summary>
+    public const string PricingRequiredPendCode = PricingStage.PricingUnavailablePendCode;
 
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
@@ -168,6 +183,24 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Deny(
                 StageName,
                 priorAuthorizationDenialReason);
+        }
+
+        // Fail closed on pricing: never let the engine fall back to
+        // allowed = billed. PricingStage already pended with the specific
+        // reason when it ran; this guard also covers the stage being
+        // disabled via EnabledStages.
+        if (context.PricingResult is not { IsFullyPriced: true })
+        {
+            var pricingReason = context.PricingResult is null
+                ? "Claim lines were not priced (Pricing stage did not run); benefit calculation requires fee-schedule allowed amounts."
+                : "Claim lines could not be fully priced; benefit calculation deferred until allowed amounts resolve.";
+            context.PendDetails ??= new PendDetails
+            {
+                PendCode = PricingRequiredPendCode,
+                PendReason = pricingReason,
+                PendedAt = DateTime.UtcNow,
+            };
+            return ClaimAdjudicationStageResult.Pend(StageName, pricingReason);
         }
 
         var subscriberId = await ResolveSubscriberIdAsync(context, ct).ConfigureAwait(false);
@@ -403,9 +436,11 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             SubscriberId = subscriberId,
             BenefitPlanId = planGuid,
             ServiceDate = serviceDate,
-            NetworkTier = NetworkTier.InNetwork,
+            NetworkTier = ResolveNetworkTier(context),
             Lines = claim.ClaimLines.Select(l => BuildLine(l, claim, pointerToCode)).ToList(),
-            AllowedAmounts = new Dictionary<int, decimal>(),
+            AllowedAmounts = context.PricingResult is { } pricing
+                ? new Dictionary<int, decimal>(pricing.AllowedAmounts)
+                : new Dictionary<int, decimal>(),
             ClaimType = MapClaimType(claim.ClaimType),
             LineOfBusiness = (int)claim.LineOfBusiness,
             Member = BuildMemberContext(context.ResolvedMember, claim, serviceDate),
@@ -457,7 +492,11 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             Modifiers = line.Modifiers.ToList(),
             RevenueCode = line.RevenueCode,
             PlaceOfService = pos ?? string.Empty,
-            BilledAmount = line.ChargeAmount * line.Units,
+            // ChargeAmount is the LINE TOTAL (X12 837 SV102 / SV203, mapped
+            // verbatim by X12837ClaimMapper; scrub rule AL002 sums it
+            // without units against CLM02). Multiplying by units overstated
+            // billed for any multi-unit line.
+            BilledAmount = line.ChargeAmount,
             Units = line.Units,
             DiagnosisCodes = diagnosesForLine,
         };
@@ -512,7 +551,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         context.AdjudicationResult = new ClaimsAdj
         {
-            NetworkTier = NormalizeTier(NetworkTier.InNetwork),
+            NetworkTier = NormalizeTier(ResolveNetworkTier(context)),
             AllowedAmount = totals.TotalAllowed,
             DeductibleAmount = totals.TotalDeductible,
             CoinsuranceAmount = totals.TotalCoinsurance,
@@ -538,6 +577,31 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 AdjustmentReasons = new List<ClaimAdjustmentReason>(),
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// Maps the network stage's result onto the engine's cost-share tier:
+    /// <list type="bullet">
+    ///   <item><description>A matched plan tier
+    ///     (<see cref="ClaimAdjudicationContext.MatchedNetworkTier"/>) →
+    ///     <see cref="NetworkTier.InNetwork"/>.</description></item>
+    ///   <item><description>Membership was evaluated but no tier matched
+    ///     (out-of-network, including degraded lookups under
+    ///     FailOpen/SoftValidation) → <see cref="NetworkTier.OutOfNetwork"/>.
+    ///     Unverified membership is never paid at in-network cost-share.</description></item>
+    ///   <item><description>No membership evaluation at all (network stage
+    ///     disabled via <c>EnabledStages</c>) →
+    ///     <see cref="NetworkTier.InNetwork"/>, the pre-5.6 posture an
+    ///     operator opts into by disabling the stage.</description></item>
+    /// </list>
+    /// </summary>
+    internal static NetworkTier ResolveNetworkTier(ClaimAdjudicationContext context)
+    {
+        if (context.MatchedNetworkTier is not null) return NetworkTier.InNetwork;
+
+        var membershipEvaluated = context.EnforcementOutcomes
+            .Any(o => o.Check == EnforcementCheck.Membership);
+        return membershipEvaluated ? NetworkTier.OutOfNetwork : NetworkTier.InNetwork;
     }
 
     private static string NormalizeTier(NetworkTier tier) => tier.ToString();

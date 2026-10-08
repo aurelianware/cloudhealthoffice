@@ -351,7 +351,49 @@ public class PaymentEstimateService : IPaymentEstimateService
         var messages = new List<EstimateMessage>();
 
         // Fee schedule / rate explainability.
-        if (priced is not null)
+        if (priced is { RateSource: RateSource.Unresolved })
+        {
+            messages.Add(new EstimateMessage
+            {
+                Code = "RATE_UNRESOLVED",
+                Severity = EstimateMessageSeverity.Warning,
+                Description = $"Allowed amount could not be determined from {DescribeFeeSchedule(priced)}" +
+                    (priced.UnresolvedReason is null ? "." : $": {priced.UnresolvedReason}.")
+            });
+
+            // The engine's $0 allowed is a sentinel, not a rate: derive no contractual
+            // adjustment or cost-share from it. Zeroed amounts keep the line out of the
+            // claim totals (totals == Σ lines) and needs_review marks it unknown.
+            if (benefitLine is not null
+                && (!benefitLine.IsCovered || benefitLine.DenialReasonCode is not null))
+            {
+                messages.Add(new EstimateMessage
+                {
+                    Code = MapDenial(benefitLine.DenialReasonCode).code,
+                    Severity = EstimateMessageSeverity.Denial,
+                    Description = benefitLine.DenialReasonDescription
+                        ?? "Service is not expected to pay as submitted."
+                });
+            }
+
+            return new EstimateLine
+            {
+                LineNumber = reqLine.LineNumber,
+                ProcedureCode = reqLine.ProcedureCode,
+                ToothNumber = reqLine.ToothNumber,
+                BilledAmount = billed,
+                AllowedAmount = 0m,
+                ContractualAdjustment = 0m,
+                PayerResponsibility = 0m,
+                PatientResponsibility = 0m,
+                DeductibleAmount = 0m,
+                CopayAmount = 0m,
+                CoinsuranceAmount = 0m,
+                Status = "needs_review",
+                Messages = messages
+            };
+        }
+        else if (priced is not null)
         {
             var rateResolved = priced.RateSource != RateSource.BilledCharges;
             messages.Add(new EstimateMessage
@@ -508,10 +550,18 @@ public class PaymentEstimateService : IPaymentEstimateService
             .Select(p => p.LineNumber)
             .ToList();
 
-        if (unpriced.Count == 0 && pricing.LineResults.Count > 0)
+        var unresolved = pricing.LineResults
+            .Where(p => p.RateSource == RateSource.Unresolved)
+            .Select(p => p.LineNumber)
+            .ToList();
+
+        if (unpriced.Count == 0 && unresolved.Count == 0 && pricing.LineResults.Count > 0)
             reasons.Add("Provider fee schedule resolved");
         else
+        {
             missing.AddRange(unpriced.Select(n => $"Fee schedule for line {n} (billed charges used)"));
+            missing.AddRange(unresolved.Select(n => $"Fee schedule rate for line {n} (could not be resolved)"));
+        }
 
         // Provider integrity.
         if (integrity is null)

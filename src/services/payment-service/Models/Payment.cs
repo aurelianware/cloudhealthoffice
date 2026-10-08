@@ -250,6 +250,18 @@ public class ClaimPayment
     public List<ClaimAdjustment> ClaimAdjustments { get; set; } = new();
 
     /// <summary>
+    /// Claim-level remittance advice remark codes (RARCs), e.g. the remarks
+    /// explaining a denial. 835: MOA03-MOA07 (at most five are emitted).
+    /// </summary>
+    public List<string> RemarkCodes { get; set; } = new();
+
+    /// <summary>
+    /// The claim is institutional (837I). Its remark codes go in MIA
+    /// (MIA05, MIA20-MIA23); a professional or dental claim's in MOA.
+    /// </summary>
+    public bool IsInstitutional { get; set; }
+
+    /// <summary>
     /// Date claim was received by payer
     /// 835: DTP*050
     /// </summary>

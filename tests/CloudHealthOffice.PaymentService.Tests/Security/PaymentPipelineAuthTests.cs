@@ -249,10 +249,15 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
         await _f.Runs.Received().UpdateAsync(Arg.Is<PaymentRun>(r => r.ExecutedBy == Approver));
         // After approval, claims-service is asked with payment-service's own
         // service token for the run's tenant, never the approver's token.
-        var search = Assert.Single(_f.Claims.Requests);
-        Assert.Equal("/api/claims/search", search.RequestUri!.AbsolutePath);
-        Assert.Equal((Tenant, "payment-service"), NoCallerHost.TokenOf(search));
-        Assert.Equal(Tenant, search.Headers.GetValues("X-Tenant-ID").Single());
+        // Two searches: Approved claims to pay, Denied claims to remit.
+        Assert.Equal(new[] { "?status=5&pageSize=5000", "?status=6&pageSize=5000" },
+            _f.Claims.Requests.Select(r => r.RequestUri!.Query));
+        foreach (var search in _f.Claims.Requests)
+        {
+            Assert.Equal("/api/claims/search", search.RequestUri!.AbsolutePath);
+            Assert.Equal((Tenant, "payment-service"), NoCallerHost.TokenOf(search));
+            Assert.Equal(Tenant, search.Headers.GetValues("X-Tenant-ID").Single());
+        }
     }
 
     [Fact]
@@ -366,6 +371,8 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
             PayeeName = "Clinic",
             PayeeNPI = "1234567893",
             Status = status,
+            // Balanced 835: BPR02 = CLP04.
+            ClaimPayments = { new ClaimPayment { ClaimId = "clm-1", PatientControlNumber = "CLM-1", ClaimStatusCode = "1", ChargeAmount = 300m, PaymentAmount = 250m } },
         };
         _f.Payments.GetByIdAsync(id).Returns(payment);
         return payment;

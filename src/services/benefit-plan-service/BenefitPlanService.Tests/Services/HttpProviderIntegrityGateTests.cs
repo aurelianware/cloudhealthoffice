@@ -283,7 +283,45 @@ public sealed class HttpProviderIntegrityGateTests
     }
 
     [Fact]
-    public async Task CheckAsync_ExcludedRating_OnCachedProjection_DenialCodeSurfaces()
+    public async Task CheckAsync_BlockedRatingOnCachedProjection_LiveConfirmsExcluded_DenialCodeSurfaces()
+    {
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 0, rating: "Blocked", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 0, rating: "Blocked", status: "Excluded"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeTrue();
+        result.DenialCode.Should().Be("B7");
+        verificationHandler.RequestCount.Should().Be(1,
+            "a cached Blocked rating cannot distinguish exclusion from a low composite, so it is re-checked live");
+    }
+
+    [Fact]
+    public async Task CheckAsync_BlockedRatingOnCachedProjection_LiveNotExcluded_RequiresManualReview_NotB7()
+    {
+        // Unscreened provider whose NPI failed validation: the projection
+        // only says "Blocked"; live says ManualReviewRequired, not Excluded.
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 0, rating: "Blocked", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 0, rating: "Unknown", status: "Failed",
+                flagCodes: ["NPI_NOT_FOUND", "EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeFalse("no exclusion was found -- this must not be denied as federally excluded");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().NotBe("B7");
+    }
+
+    [Fact]
+    public async Task CheckAsync_BlockedRatingOnCachedProjection_LiveUnavailable_RequiresManualReview_NotB7()
     {
         var providerHandler = FakeHttpMessageHandler.Json(
             ProviderJson(score: 5, rating: "Blocked", lastVerifiedAt: DateTimeOffset.UtcNow));
@@ -292,11 +330,27 @@ public sealed class HttpProviderIntegrityGateTests
 
         var result = await gate.CheckAsync(Npi, Tenant);
 
+        result.Passed.Should().BeFalse("never pay a provider whose cached rating is Blocked");
+        result.IsExcluded.Should().BeFalse("the cached projection alone cannot confirm a federal exclusion");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
+        verificationHandler.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CheckAsync_StaleBlockedRating_LiveUnavailable_RequiresManualReview_NotB7()
+    {
+        var stale = DateTimeOffset.UtcNow - TimeSpan.FromDays(30);
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 5, rating: "Blocked", lastVerifiedAt: stale));
+        var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
         result.Passed.Should().BeFalse();
-        result.IsExcluded.Should().BeTrue();
-        result.DenialCode.Should().Be("B7");
-        verificationHandler.RequestCount.Should().Be(0,
-            "Blocked on cached projection is sufficient — the gate should not call verification-service");
+        result.IsExcluded.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
     }
 
     [Fact]
@@ -316,6 +370,122 @@ public sealed class HttpProviderIntegrityGateTests
 
         result.IntegrityScore.Should().Be(85, "threshold=0 disables the stale-fallback path");
         verificationHandler.RequestCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CheckAsync_UnknownRatingOnCachedProjection_FallsBackToLive_NotTreatedAsClear()
+    {
+        // The verification engine rates a provider Unknown when no real
+        // OIG/LEIE/SAM screen was performed. A fresh projection carrying
+        // that rating must not short-circuit to a pass.
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 100, rating: "Unknown", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 100, rating: "Unknown", status: "ManualReviewRequired",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse("an unscreened provider is not screened-clear");
+        result.IsExcluded.Should().BeFalse("not screened is not a confirmed exclusion");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialReason.Should().Contain("not screened");
+        verificationHandler.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CheckAsync_UnknownRatingOnCachedProjection_LiveUnavailable_ReturnsUnavailableForReview()
+    {
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 100, rating: "Unknown", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveExclusionNotScreenedFlag_RequiresManualReview_EvenIfStatusLooksVerified()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 95, rating: "Clear", status: "Verified",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveUnknownRating_RequiresManualReview()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 90, rating: "Unknown", status: "Pending"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveNotScreenedResult_IsNotCached()
+    {
+        // LEIE/SAM not screened (Unknown + EXCLUSION_NOT_SCREENED): once the
+        // sources recover, the next claim must see the real result instead of
+        // pending for the rest of the cache TTL.
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 90, rating: "Unknown", status: "ManualReviewRequired",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        (await gate.CheckAsync(Npi, Tenant)).RequiresManualReview.Should().BeTrue();
+        await gate.CheckAsync(Npi, Tenant);
+
+        verificationHandler.RequestCount.Should().Be(2,
+            "a not-screened result is not cached, so the second call re-checks live");
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveNotScreenedFlagWithKnownRating_IsNotCached()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 95, rating: "Clear", status: "Verified",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        await gate.CheckAsync(Npi, Tenant);
+        await gate.CheckAsync(Npi, Tenant);
+
+        verificationHandler.RequestCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveScreenedClearResult_IsCached()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 95, rating: "Clear", status: "Verified"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        (await gate.CheckAsync(Npi, Tenant)).Passed.Should().BeTrue();
+        await gate.CheckAsync(Npi, Tenant);
+
+        verificationHandler.RequestCount.Should().Be(1, "a real screened result is still cached");
     }
 
     private static HttpProviderIntegrityGate BuildGate(
@@ -359,6 +529,15 @@ public sealed class HttpProviderIntegrityGateTests
         $"\"CompositeScore\":{compositeScore}," +
         $"\"Rating\":{ratingToken}," +
         $"\"Status\":{statusToken}," +
+        $"\"VerifiedAt\":\"{DateTimeOffset.UtcNow:O}\"" +
+        "}";
+
+    private static string VerificationJsonWithFlags(int compositeScore, string rating, string status, string[] flagCodes) =>
+        "{" +
+        $"\"CompositeScore\":{compositeScore}," +
+        $"\"Rating\":\"{rating}\"," +
+        $"\"Status\":\"{status}\"," +
+        $"\"Flags\":[{string.Join(",", flagCodes.Select(c => $"{{\"code\":\"{c}\",\"severity\":1}}"))}]," +
         $"\"VerifiedAt\":\"{DateTimeOffset.UtcNow:O}\"" +
         "}";
 

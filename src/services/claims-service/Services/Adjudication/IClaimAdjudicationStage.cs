@@ -35,7 +35,8 @@ public interface IClaimAdjudicationStage
 
     /// <summary>
     /// Position in the pipeline. Conventional ordering:
-    /// 100 Scrubbing, 200 NetworkCredentialing, 300 BenefitCalculation,
+    /// 100 Scrubbing, 150 ProviderIntegrity, 200 NetworkCredentialing,
+    /// 250 Pricing, 300 BenefitCalculation,
     /// 400 NcciEdits, 500 CoordinationOfBenefits, 600 AiExamination,
     /// 999 Persistence.
     /// </summary>
