@@ -25,7 +25,7 @@ namespace PaymentService.Services;
 ///   N1   — Payee identification (1000B loop)
 ///   [CLP — Claim payment    ] 2100 loop, one per claim in the batch
 ///   [SVC — Service line     ] 2110 loop, one per service line
-///   [CAS — Adjustments      ] within 2100 and 2110
+///   [CAS — Adjustments      ] within 2100 and 2110 (loop order: Era835ClaimLoops)
 ///   PLB  — Provider-level balance adjustment (optional)
 ///   SE   — Transaction set trailer (segment count includes ST and SE)
 ///   GE   — Functional group trailer
@@ -89,6 +89,10 @@ public class EraPaymentInput
 /// <c>EraEnvelopesController</c>. The <c>IsReversal</c> flag is the
 /// caller's signal to set <see cref="EraEnvelopeRecord.ReversalRunId"/>
 /// rather than <see cref="EraEnvelopeRecord.PaymentRunId"/>.
+/// <para><c>TotalPaymentAmount</c> is BPR02, never negative. When the
+/// envelope's claims net to less than zero (a reversal recoupment),
+/// BPR02 is 0 and <c>ForwardBalanceAmount</c> is the negative balance
+/// carried forward in the PLB FB adjustment: what the provider owes.</para>
 /// </summary>
 public record EraEnvelope(
     string TradingPartnerId,
@@ -97,7 +101,8 @@ public record EraEnvelope(
     decimal TotalPaymentAmount,
     string ControlNumber,
     IReadOnlyList<string> ClaimIds,
-    bool IsReversal);
+    bool IsReversal,
+    decimal ForwardBalanceAmount = 0m);
 
 public class BatchEraGeneratorService : IBatchEraGeneratorService
 {
@@ -157,7 +162,7 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         var sb = new StringBuilder();
         int segmentCount = 0;
 
-        var totalAmount = inputs.Sum(i => i.Payment.TotalPaymentAmount);
+        var netAmount = inputs.Sum(i => i.Payment.TotalPaymentAmount);
         var claimCount = inputs.Sum(i => i.Payment.ClaimPayments.Count);
         var claimIds = inputs
             .SelectMany(i => i.Payment.ClaimPayments.Select(cp => cp.ClaimId))
@@ -170,11 +175,16 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         var paymentDate = first.PaymentDate;
         var traceCheckNumber = first.CheckNumber;
 
+        // BPR02 is never negative: a net-negative envelope (reversals) is
+        // BPR02 = 0 with the balance carried forward in a PLB FB adjustment.
+        var (totalAmount, allPlbs, forwardBalance) = Era835FinancialSegments.WithForwardBalance(
+            netAmount, inputs.SelectMany(i => i.Payment.ProviderAdjustments), traceCheckNumber, now);
+
         // BPR02 = sum(CLP04) - sum(PLB); sum(SVC03) = CLP04 per claim.
         Era835FinancialSegments.EnsureBalanced(
             totalAmount,
             inputs.SelectMany(i => i.Payment.ClaimPayments),
-            inputs.SelectMany(i => i.Payment.ProviderAdjustments));
+            allPlbs);
 
         // ── ISA ────────────────────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, false,
@@ -220,12 +230,11 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         {
             foreach (var claimPay in input.Payment.ClaimPayments)
             {
-                sb.Append(BuildClaimLoop(claimPay, ref segmentCount));
+                sb.Append(Era835ClaimLoops.BuildClaimLoop(claimPay, ref segmentCount));
             }
         }
 
         // ── PLB ─ Provider Level Adjustments (across batch) ────────────
-        var allPlbs = inputs.SelectMany(i => i.Payment.ProviderAdjustments).ToList();
         if (allPlbs.Any())
         {
             foreach (var chunk in allPlbs.Chunk(6))
@@ -269,94 +278,8 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
             TotalPaymentAmount: totalAmount,
             ControlNumber: controlNumber,
             ClaimIds: claimIds,
-            IsReversal: isReversal);
-    }
-
-    private static string BuildClaimLoop(ClaimPayment cp, ref int segmentCount)
-    {
-        var sb = new StringBuilder();
-
-        sb.Append(Seg(ref segmentCount, true,
-            $"CLP*{cp.PatientControlNumber}*{cp.ClaimStatusCode}" +
-            $"*{cp.ChargeAmount:F2}*{cp.PaymentAmount:F2}*{cp.PatientResponsibilityAmount:F2}" +
-            $"*HM*{cp.PayerClaimControlNumber ?? cp.ClaimId}~"));
-
-        if (!string.IsNullOrEmpty(cp.MemberId))
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"NM1*QC*1**{cp.MemberId}****MI*{cp.MemberId}~"));
-        }
-
-        if (!string.IsNullOrEmpty(cp.RenderingProviderNPI))
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"NM1*82*1*****XX*{cp.RenderingProviderNPI}~"));
-        }
-
-        if (cp.ClaimReceivedDate.HasValue)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*050*{FormatDate(cp.ClaimReceivedDate.Value)}~"));
-        }
-
-        // Header CAS (claim-level)
-        foreach (var casGroup in cp.ClaimAdjustments.GroupBy(a => a.GroupCode))
-        {
-            foreach (var chunk in casGroup.Chunk(6))
-            {
-                var pairs = string.Concat(
-                    chunk.Select(adj => $"*{adj.ReasonCode}*{adj.Amount:F2}"));
-                sb.Append(Seg(ref segmentCount, true,
-                    $"CAS*{casGroup.Key}{pairs}~"));
-            }
-        }
-
-        // ── 2110 service line loops ────────────────────────────────────
-        foreach (var sl in cp.ServiceLines)
-        {
-            sb.Append(BuildServiceLineLoop(sl, ref segmentCount));
-        }
-
-        return sb.ToString();
-    }
-
-    private static string BuildServiceLineLoop(ServiceLinePayment sl, ref int segmentCount)
-    {
-        var sb = new StringBuilder();
-
-        string svcCode = !string.IsNullOrEmpty(sl.RevenueCode)
-            ? $"NU:{sl.RevenueCode}:{sl.ProcedureCode}"
-            : $"HC:{sl.ProcedureCode}";
-
-        sb.Append(Seg(ref segmentCount, true,
-            $"SVC*{svcCode}*{sl.ChargeAmount:F2}*{sl.PaymentAmount:F2}**{sl.Units:G}~"));
-
-        if (sl.ServiceDateFrom.HasValue)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*472*{FormatDate(sl.ServiceDateFrom.Value)}~"));
-        }
-        if (sl.ServiceDateTo.HasValue && sl.ServiceDateTo != sl.ServiceDateFrom)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*473*{FormatDate(sl.ServiceDateTo.Value)}~"));
-        }
-
-        foreach (var casGroup in sl.Adjustments.GroupBy(a => a.GroupCode))
-        {
-            foreach (var chunk in casGroup.Chunk(6))
-            {
-                var pairs = string.Concat(chunk.Select(adj =>
-                {
-                    var rarc = string.IsNullOrEmpty(adj.RemarkCode) ? string.Empty : $"*{adj.RemarkCode}";
-                    return $"*{adj.ReasonCode}*{adj.Amount:F2}{rarc}";
-                }));
-                sb.Append(Seg(ref segmentCount, true,
-                    $"CAS*{casGroup.Key}{pairs}~"));
-            }
-        }
-
-        return sb.ToString();
+            IsReversal: isReversal,
+            ForwardBalanceAmount: forwardBalance);
     }
 
     private static string Seg(ref int count, bool counted, string segment)

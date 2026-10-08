@@ -141,9 +141,16 @@ in the `ClaimPayment` — it does NOT branch on reversal mode
 beyond threading `IsReversal` to `EraEnvelope.IsReversal` for
 caller-side persistence. CLP02 = "22" comes from
 `ClaimStatusCode`; sign-flipped amounts come from
-`PaymentAmount` / `CAS.Amount`. The BPR01 segment naturally
-emits "I" (Informational) for negative `TotalPaymentAmount` per
-the existing `BatchEraGeneratorService.cs:176` branch.
+`PaymentAmount` / `CAS.Amount`. BPR02 is never negative
+(005010X221A1): an envelope whose CLP04s net below zero is emitted
+with BPR01 = `H`, BPR02 = `0.00`, BPR04 = `NON`, and a PLB
+forward-balance adjustment `FB:<trace number>` carrying the negative
+net, so sum(CLP04) - sum(PLB) = BPR02 = 0. The amount the provider
+then owes is recorded on `EraEnvelopeRecord.ForwardBalanceAmount` and
+`ReversalRun.OutstandingReceivables` / `OutstandingReceivableAmount`
+(with a run warning). payment-service has no receivable ledger yet:
+recovering it (a positive `FB` PLB on a later payment 835, or a refund
+request) is a follow-up.
 
 ## Lifecycle wiring (the load-bearing 5.12b additions)
 

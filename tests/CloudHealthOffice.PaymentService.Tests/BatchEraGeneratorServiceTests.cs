@@ -211,7 +211,7 @@ public class BatchEraGeneratorServiceTests
             new[] { new EraPaymentInput { TradingPartnerId = "TP-A", Payment = pay } },
             partners).Single();
 
-        Assert.Contains("CAS*CO*236*100.00*M86~", envelope.EdiContent);
+        Assert.Contains("CAS*CO*236*100.00~LQ*HE*M86~", envelope.EdiContent); // RARC in LQ*HE, not CAS04 (a quantity)
     }
 
     [Fact]
