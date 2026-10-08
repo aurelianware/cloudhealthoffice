@@ -165,6 +165,74 @@ public class PricingStageTests
         Assert.Equal(3m, request.Units);
     }
 
+    /// <summary>
+    /// End-to-end through the REAL fee schedule engine: a $300, 3-unit line
+    /// on an 80%-of-billed schedule must price at $240 (line total × 80%,
+    /// not × units) and that $240 must reach the benefit engine as allowed.
+    /// </summary>
+    [Fact]
+    public async Task Execute_MultiUnitPercentOfBilled_RealEngine_AllowedReachesBenefitStage()
+    {
+        var ctx = BuildContext();
+        ctx.Claim.BenefitPlanId = Guid.NewGuid().ToString();
+        ctx.Claim.ClaimLines = new List<AdapterClaimLine>
+        {
+            new()
+            {
+                LineNumber = 1, ProcedureCode = "97110", ChargeAmount = 300m, Units = 3m,
+                ServiceDateFrom = ctx.Claim.ServiceDateFrom,
+            },
+        };
+
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-pctbilled", TenantId = "tenant-1", Name = "Commercial 80% of Billed",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "97110", RateType = FeeScheduleRateType.PercentOfBilled, Rate = 0.80m }],
+        };
+        var feeRepo = Substitute.For<CloudHealthOffice.FeeScheduleEngine.Persistence.IFeeScheduleRepository>();
+        feeRepo.GetDefaultForPlanAsync("tenant-1", Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(schedule);
+        var contractRepo = Substitute.For<CloudHealthOffice.FeeScheduleEngine.Persistence.IProviderContractRepository>();
+        contractRepo.GetContractAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns((ProviderContract?)null);
+        var realEngine = new CloudHealthOffice.FeeScheduleEngine.Services.RateResolutionService(
+            feeRepo, contractRepo,
+            NullLogger<CloudHealthOffice.FeeScheduleEngine.Services.RateResolutionService>.Instance);
+
+        // In-process stand-in for the resolve-rates HTTP hop.
+        _client.ResolveBatchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => realEngine.ResolveBatchAsync(ci.ArgAt<IReadOnlyList<PricingRequest>>(1)));
+
+        var pricingResult = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, pricingResult.Outcome);
+        Assert.Equal(240m, ctx.PricingResult!.AllowedAmounts[1]);
+
+        var benefitEngine = Substitute.For<CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine>();
+        CloudHealthOffice.BenefitEngine.Models.BenefitResolutionRequest? captured = null;
+        benefitEngine.CalculateAsync(Arg.Any<CloudHealthOffice.BenefitEngine.Models.BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.Arg<CloudHealthOffice.BenefitEngine.Models.BenefitResolutionRequest>();
+                return new CloudHealthOffice.BenefitEngine.Models.BenefitResolutionResult { Success = true };
+            });
+        var benefits = new BenefitCalculationStage(
+            benefitEngine,
+            Substitute.For<IMemberResolver>(),
+            Substitute.For<IAuthorizationValidationClient>(),
+            NullLogger<BenefitCalculationStage>.Instance);
+
+        var benefitResult = await benefits.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, benefitResult.Outcome);
+        Assert.Equal(240m, captured!.AllowedAmounts[1]);
+        var line = Assert.Single(captured.Lines);
+        Assert.Equal(300m, line.BilledAmount);
+        Assert.Equal(3m, line.Units);
+    }
+
     [Fact]
     public async Task Execute_PricingServiceUnavailable_PendsWithPricingCode()
     {
