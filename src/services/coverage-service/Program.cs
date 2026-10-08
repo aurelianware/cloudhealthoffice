@@ -109,6 +109,9 @@ builder.Services.AddHttpClient<IPanelCounter, HttpPanelCounter>((sp, client) =>
 builder.Services.AddScoped<IPcpAssignmentService, PcpAssignmentService>();
 builder.Services.AddSingleton<ICareTeamProjector, CareTeamProjector>();
 builder.Services.AddScoped<PcpPanelReconciliationJob>();
+// Daily: flips coverages whose (future-dated) termination date has arrived to
+// Terminated. CoverageStatusSweep:Enabled=false turns it off.
+builder.Services.AddHostedService<CoverageStatusSweepJob>();
 
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.

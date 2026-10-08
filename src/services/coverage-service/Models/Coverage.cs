@@ -196,6 +196,60 @@ public class Coverage
     };
 
     /// <summary>
+    /// Sets the termination date (inclusive last day of coverage, 834 DTP*349)
+    /// and derives the current status from it: Terminated once the date is
+    /// today or past; a future-dated termination leaves the coverage in its
+    /// current in-force status until <see cref="Services.CoverageStatusSweepJob"/>
+    /// flips it on that date. Moving the date of an already-Terminated
+    /// coverage into the future puts it back in force. Date-of-service
+    /// eligibility does not depend on this: it is decided by the span.
+    /// </summary>
+    public void ApplyTermination(DateTime terminationDate, DateTime today)
+    {
+        TerminationDate = terminationDate.Date;
+        if (terminationDate.Date <= today.Date)
+        {
+            Status = CoverageStatus.Terminated;
+        }
+        else if (Status == CoverageStatus.Terminated)
+        {
+            Status = InForceStatus;
+        }
+    }
+
+    /// <summary>
+    /// Reinstatement (834 INS03=025): the termination is reversed, as if it
+    /// had not happened — the termination date is cleared and a Terminated or
+    /// Suspended coverage returns to its in-force status. The original
+    /// effective date is kept, so the span is continuous.
+    /// </summary>
+    public void Reinstate()
+    {
+        TerminationDate = null;
+        if (Status is CoverageStatus.Terminated or CoverageStatus.Suspended)
+        {
+            Status = InForceStatus;
+        }
+    }
+
+    /// <summary>
+    /// The status this coverage's date span has moved it to as of
+    /// <paramref name="today"/>, or null when it needs no change: a coverage
+    /// whose termination date is today or past is Terminated.
+    /// </summary>
+    public CoverageStatus? DueStatusTransition(DateTime today)
+    {
+        if (Status != CoverageStatus.Terminated
+            && TerminationDate.HasValue && TerminationDate.Value.Date <= today.Date)
+        {
+            return CoverageStatus.Terminated;
+        }
+        return null;
+    }
+
+    private CoverageStatus InForceStatus => IsCOBRA ? CoverageStatus.COBRA : CoverageStatus.Active;
+
+    /// <summary>
     /// Check if coverage is in force on a specific date of service
     /// </summary>
     public bool IsActiveOn(DateTime serviceDate)

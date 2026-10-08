@@ -102,4 +102,66 @@ public class CoverageRepositoryMongoActiveOnDateTests
             (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2025, 3, 15)))
                 .Select(c => c.Id).Should().Equal("cobra");
         });
+    [Fact]
+    public Task GetStatusTransitionsDue_ReturnsOpenCoverageWhoseTerminationDateIsReached_InAnyTenant() => RunAsync(
+        new[]
+        {
+            Build("due-today", CoverageStatus.Active, D(2025, 1, 1), D(2025, 7, 1)),
+            Build("due-past", CoverageStatus.COBRA, D(2025, 1, 1), D(2025, 6, 30)),
+            Build("future", CoverageStatus.Active, D(2025, 1, 1), D(2025, 7, 2)),
+            Build("open", CoverageStatus.Active, D(2025, 1, 1)),
+            Build("done", CoverageStatus.Terminated, D(2025, 1, 1), D(2025, 6, 30)),
+            WithTenant(Build("other-tenant", CoverageStatus.Active, D(2025, 1, 1), D(2025, 6, 1)), "t2")
+        },
+        async repo =>
+        {
+            (await repo.GetStatusTransitionsDueAsync(D(2025, 7, 1), 100))
+                .Select(c => c.Id).Should().BeEquivalentTo("due-today", "due-past", "other-tenant");
+            (await repo.GetStatusTransitionsDueAsync(D(2025, 7, 1), 1)).Should().HaveCount(1);
+        });
+
+    [Fact]
+    public Task SetStatus_OnlyWhileStatusIsStillTheExpectedOne() => RunAsync(
+        new[] { Build("c1", CoverageStatus.Active, D(2025, 1, 1), D(2025, 6, 30)) },
+        async repo =>
+        {
+            (await repo.SetStatusAsync(Tenant, "c1", CoverageStatus.COBRA, CoverageStatus.Terminated, "sweep"))
+                .Should().BeFalse();
+            (await repo.GetByIdAsync(Tenant, "c1"))!.Status.Should().Be(CoverageStatus.Active);
+
+            (await repo.SetStatusAsync(Tenant, "c1", CoverageStatus.Active, CoverageStatus.Terminated, "sweep"))
+                .Should().BeTrue();
+            var stored = (await repo.GetByIdAsync(Tenant, "c1"))!;
+            stored.Status.Should().Be(CoverageStatus.Terminated);
+            stored.LastUpdatedBy.Should().Be("sweep");
+            stored.TerminationDate.Should().Be(D(2025, 6, 30));
+
+            (await repo.SetStatusAsync("t2", "c1", CoverageStatus.Terminated, CoverageStatus.Active, "sweep"))
+                .Should().BeFalse("another tenant's id never matches");
+        });
+
+    [Fact]
+    public Task SearchActiveOnly_ExcludesActiveCoverageWhoseTerminationDateHasPassed() => RunAsync(
+        new[]
+        {
+            Build("open", CoverageStatus.Active, D(2025, 1, 1)),
+            Build("future-term", CoverageStatus.Active, D(2025, 1, 1), DateTime.UtcNow.Date.AddDays(30)),
+            Build("term-passed-not-swept", CoverageStatus.Active, D(2025, 1, 1), DateTime.UtcNow.Date.AddDays(-1)),
+            Build("term-today", CoverageStatus.Active, D(2025, 1, 1), DateTime.UtcNow.Date),
+            Build("terminated", CoverageStatus.Terminated, D(2025, 1, 1), D(2025, 6, 30))
+        },
+        async repo =>
+        {
+            var (items, _) = await repo.SearchAsync(Tenant, memberId: "M1", activeOnly: true, pageSize: 100);
+            items.Select(c => c.Id).Should().BeEquivalentTo("open", "future-term");
+
+            (await repo.GetCoverageHistoryAsync(Tenant, "M1", includeTerminated: false))
+                .Select(c => c.Id).Should().BeEquivalentTo("open", "future-term");
+        });
+
+    private static Coverage WithTenant(Coverage c, string tenant)
+    {
+        c.TenantId = tenant;
+        return c;
+    }
 }

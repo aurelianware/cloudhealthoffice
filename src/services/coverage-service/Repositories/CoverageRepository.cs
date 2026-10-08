@@ -44,26 +44,38 @@ public class CoverageRepository : ICoverageRepository
         DateTime serviceDate,
         string? insuranceLineCode = null)
     {
+        // An open-ended coverage is stored with terminationDate: null (the
+        // serializer writes nulls), so both "missing" and null mean no end.
         var queryText = @"
-            SELECT * FROM c 
-            WHERE c.tenantId = @tenantId 
+            SELECT * FROM c
+            WHERE c.tenantId = @tenantId
             AND c.memberId = @memberId
             AND ARRAY_CONTAINS(@dosStatuses, c.status)
             AND c.effectiveDate <= @serviceDate
-            AND (NOT IS_DEFINED(c.terminationDate) OR c.terminationDate >= @serviceDate)";
+            AND (NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate) OR c.terminationDate >= @serviceDate)";
 
-        var queryDef = new QueryDefinition(queryText)
-            .WithParameter("@tenantId", tenantId)
-            .WithParameter("@memberId", memberId)
+        var parameters = new List<(string Name, object Value)>
+        {
+            ("@tenantId", tenantId),
+            ("@memberId", memberId),
             // In force on DOS is decided by the date span, not current status
             // (see Coverage.DateOfServiceStatuses).
-            .WithParameter("@dosStatuses", Coverage.DateOfServiceStatuses.Select(s => (int)s).ToArray())
-            .WithParameter("@serviceDate", serviceDate.Date);
+            ("@dosStatuses", Coverage.DateOfServiceStatuses.Select(s => (int)s).ToArray()),
+            ("@serviceDate", serviceDate.Date)
+        };
 
         if (!string.IsNullOrEmpty(insuranceLineCode))
         {
             queryText += " AND c.insuranceLineCode = @insuranceLineCode";
-            queryDef.WithParameter("@insuranceLineCode", insuranceLineCode);
+            parameters.Add(("@insuranceLineCode", insuranceLineCode));
+        }
+
+        // Built only after every clause is appended: QueryDefinition copies
+        // the text, so a clause added afterwards would be silently dropped.
+        var queryDef = new QueryDefinition(queryText);
+        foreach (var (name, value) in parameters)
+        {
+            queryDef.WithParameter(name, value);
         }
 
         var iterator = _container.GetItemQueryIterator<Coverage>(
@@ -90,10 +102,12 @@ public class CoverageRepository : ICoverageRepository
         bool includeTerminated = true)
     {
         var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.memberId = @memberId";
-        
+
         if (!includeTerminated)
         {
-            queryText += " AND c.status != @terminatedStatus";
+            // Terminated = status Terminated, or a termination date already
+            // reached that the daily status sweep has not flipped yet.
+            queryText += " AND c.status != @terminatedStatus" + NotTerminatedAsOfTodayClause;
         }
 
         queryText += " ORDER BY c.effectiveDate DESC";
@@ -105,6 +119,7 @@ public class CoverageRepository : ICoverageRepository
         if (!includeTerminated)
         {
             queryDef.WithParameter("@terminatedStatus", (int)CoverageStatus.Terminated);
+            queryDef.WithParameter("@today", DateTime.UtcNow.Date);
         }
 
         var iterator = _container.GetItemQueryIterator<Coverage>(
@@ -157,8 +172,12 @@ public class CoverageRepository : ICoverageRepository
 
         if (activeOnly)
         {
-            queryText += " AND c.status = @activeStatus";
+            // Currently active: status Active and the termination date (if
+            // any) not yet reached, so the listing doesn't depend on when the
+            // daily status sweep last ran.
+            queryText += " AND c.status = @activeStatus" + NotTerminatedAsOfTodayClause;
             parameters.Add(("@activeStatus", (int)CoverageStatus.Active));
+            parameters.Add(("@today", DateTime.UtcNow.Date));
         }
 
         var queryDef = new QueryDefinition(queryText);
@@ -229,6 +248,11 @@ public class CoverageRepository : ICoverageRepository
         {
             queryText += " AND c.status = @status";
             parameters.Add(("@status", (int)status.Value));
+            if (status.Value == CoverageStatus.Active)
+            {
+                queryText += NotTerminatedAsOfTodayClause;
+                parameters.Add(("@today", DateTime.UtcNow.Date));
+            }
         }
 
         if (lineOfBusiness.HasValue)
@@ -293,6 +317,54 @@ public class CoverageRepository : ICoverageRepository
         return 0;
     }
 
+    public async Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems)
+    {
+        // Cross-partition on purpose: the daily sweep covers every tenant.
+        var queryDef = new QueryDefinition(
+                "SELECT TOP @maxItems * FROM c WHERE c.status != @terminatedStatus" +
+                " AND IS_DEFINED(c.terminationDate) AND NOT IS_NULL(c.terminationDate)" +
+                " AND c.terminationDate <= @today")
+            .WithParameter("@maxItems", maxItems)
+            .WithParameter("@terminatedStatus", (int)CoverageStatus.Terminated)
+            .WithParameter("@today", today.Date);
+
+        var iterator = _container.GetItemQueryIterator<Coverage>(queryDef);
+        var results = new List<Coverage>();
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            results.AddRange(response);
+        }
+        return results;
+    }
+
+    public async Task<bool> SetStatusAsync(
+        string tenantId, string id, CoverageStatus expectedStatus, CoverageStatus newStatus, string updatedBy)
+    {
+        // Patch only the status/audit fields, and only while the status is
+        // still the one the sweep read, so a concurrent edit (PCP change,
+        // reinstatement) is neither overwritten nor undone.
+        try
+        {
+            await _container.PatchItemAsync<Coverage>(
+                id,
+                new PartitionKey(tenantId),
+                new[]
+                {
+                    PatchOperation.Set("/status", (int)newStatus),
+                    PatchOperation.Set("/lastUpdatedDate", DateTime.UtcNow),
+                    PatchOperation.Set("/lastUpdatedBy", updatedBy)
+                },
+                new PatchItemRequestOptions { FilterPredicate = $"FROM c WHERE c.status = {(int)expectedStatus}" });
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
     public async Task<Coverage> CreateAsync(Coverage coverage)
     {
         coverage.CreatedDate = DateTime.UtcNow;
@@ -323,6 +395,10 @@ public class CoverageRepository : ICoverageRepository
             id,
             new PartitionKey(tenantId));
     }
+
+    // Termination date not yet reached (or none). The query must bind @today.
+    private const string NotTerminatedAsOfTodayClause =
+        " AND (NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate) OR c.terminationDate > @today)";
 }
 
 /// <summary>
@@ -344,6 +420,18 @@ public interface ICoverageRepository
     Task<List<Coverage>> GetByGroupNumberAsync(string tenantId, string groupNumber);
     Task<List<Coverage>> GetByPcpNpiAsync(string tenantId, string pcpNpi, CoverageStatus? status = null, LineOfBusiness? lineOfBusiness = null);
     Task<int> GetCountByGroupAsync(string tenantId, string groupNumber, CoverageStatus? status = null);
+    /// <summary>
+    /// Coverages in any tenant whose status their date span has moved on as of
+    /// <paramref name="today"/> (see <see cref="Coverage.DueStatusTransition"/>),
+    /// at most <paramref name="maxItems"/>. Read by the daily status sweep.
+    /// </summary>
+    Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems);
+    /// <summary>
+    /// Sets the status (and audit fields) only, and only while the stored
+    /// status is still <paramref name="expectedStatus"/>. False when it was
+    /// not (changed concurrently) or the coverage is gone.
+    /// </summary>
+    Task<bool> SetStatusAsync(string tenantId, string id, CoverageStatus expectedStatus, CoverageStatus newStatus, string updatedBy);
     Task<Coverage> CreateAsync(Coverage coverage);
     Task<Coverage> UpdateAsync(Coverage coverage);
     Task DeleteAsync(string tenantId, string id);
