@@ -208,6 +208,35 @@ public class PricingStageTests
     }
 
     [Fact]
+    public async Task Execute_DuplicateResultLineNumbers_PendsAmbiguousLine()
+    {
+        // Response lines [1, 1, 2]: line 1 answered twice with different
+        // amounts must not be silently resolved to either value.
+        var ctx = BuildContext();
+        _client.ResolveBatchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(new PricingResultSet
+            {
+                LineResults = new[]
+                {
+                    Priced(1, 85m, 200m),
+                    Priced(1, 150m, 200m),
+                    Priced(2, 20m, 60m),
+                },
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(PricingStage.NoContractPendCode, ctx.PendDetails!.PendCode);
+        var unpriced = Assert.Single(ctx.PricingResult!.UnpricedLines);
+        Assert.Equal(1, unpriced.LineNumber);
+        Assert.Contains("multiple results", unpriced.Reason);
+        Assert.False(ctx.PricingResult.AllowedAmounts.ContainsKey(1));
+        Assert.Equal(20m, ctx.PricingResult.AllowedAmounts[2]);
+        Assert.False(ctx.PricingResult.IsFullyPriced);
+    }
+
+    [Fact]
     public async Task Execute_ZeroChargeLineWithoutRate_PricesAtZero()
     {
         var ctx = BuildContext();

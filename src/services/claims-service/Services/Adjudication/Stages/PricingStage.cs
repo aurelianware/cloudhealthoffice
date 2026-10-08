@@ -208,10 +208,17 @@ public sealed class PricingStage : IClaimAdjudicationStage
         IReadOnlyList<PricingRequest> requests,
         PricingResultSet priced)
     {
+        // A line number answered more than once is ambiguous — there is no
+        // principled way to pick one allowed amount, so treat it as unpriced
+        // rather than letting the first (or last) value win.
         var resultsByLine = new Dictionary<int, PricingResult>();
+        var duplicateResultLines = new HashSet<int>();
         foreach (var r in priced.LineResults)
         {
-            resultsByLine.TryAdd(r.LineNumber, r);
+            if (!resultsByLine.TryAdd(r.LineNumber, r))
+            {
+                duplicateResultLines.Add(r.LineNumber);
+            }
         }
 
         var allowed = new Dictionary<int, decimal>();
@@ -219,6 +226,14 @@ public sealed class PricingStage : IClaimAdjudicationStage
 
         foreach (var request in requests)
         {
+            if (duplicateResultLines.Contains(request.LineNumber))
+            {
+                unpriced.Add(new UnpricedLine(
+                    request.LineNumber, request.ProcedureCode,
+                    "pricing returned multiple results for line; allowed amount is ambiguous"));
+                continue;
+            }
+
             if (!resultsByLine.TryGetValue(request.LineNumber, out var result))
             {
                 unpriced.Add(new UnpricedLine(
