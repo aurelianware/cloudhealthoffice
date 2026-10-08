@@ -670,6 +670,36 @@ public class BenefitCalculationStageTests
     }
 
     [Fact]
+    public async Task Execute_MultiUnitLine_SendsLineTotalAsBilled()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.ClaimLines[0].ChargeAmount = 300m;
+        claim.ClaimLines[0].Units = 3m;
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 210m),
+        };
+
+        BenefitResolutionRequest? captured = null;
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                captured = ci.Arg<BenefitResolutionRequest>();
+                return new BenefitResolutionResult { Success = true, Totals = new ClaimTotals() };
+            });
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        var line = captured!.Lines.Single();
+        Assert.Equal(300m, line.BilledAmount);
+        Assert.Equal(3m, line.Units);
+        Assert.Equal(210m, captured.AllowedAmounts[1]);
+    }
+
+    [Fact]
     public async Task Execute_PricingDidNotRun_PendsWithoutEngineCall()
     {
         var claim = BuildClaim(Guid.NewGuid().ToString());

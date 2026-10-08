@@ -85,7 +85,7 @@ public class PricingStageTests
         Assert.Equal(new DateTime(2026, 4, 15, 0, 0, 0, DateTimeKind.Utc), line1.ServiceDate);
         var line2 = captured[1];
         Assert.Equal("22", line2.PlaceOfServiceCode); // line-level POS override
-        Assert.Equal(60m, line2.BilledAmount); // 30 x 2 units
+        Assert.Equal(60m, line2.BilledAmount); // line total, not x units
         Assert.Equal(2m, line2.Units);
         Assert.Equal(new DateTime(2026, 4, 16, 0, 0, 0, DateTimeKind.Utc), line2.ServiceDate);
     }
@@ -118,6 +118,51 @@ public class PricingStageTests
         Assert.Equal(2, unpriced.LineNumber);
         // The billed-charge fallback must not leak into the allowed map.
         Assert.False(ctx.PricingResult.AllowedAmounts.ContainsKey(2));
+    }
+
+    [Fact]
+    public async Task Execute_LineRateUnresolved_PendsNoContract_WithEngineReason()
+    {
+        var ctx = BuildContext();
+        _client.ResolveBatchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(new PricingResultSet
+            {
+                LineResults = new[]
+                {
+                    Priced(1, 85m, 200m),
+                    new PricingResult
+                    {
+                        LineNumber = 2, ProcedureCode = "36415", AllowedAmount = 0m, BilledAmount = 60m,
+                        RateSource = RateSource.Unresolved, FeeScheduleType = FeeScheduleType.Commercial,
+                        FeeScheduleId = "FS-1",
+                        UnresolvedReason = "PercentOfMedicare rate with no Medicare reference schedule",
+                    },
+                },
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(PricingStage.NoContractPendCode, ctx.PendDetails!.PendCode);
+        Assert.Contains("no Medicare reference", result.Reason);
+        var unpriced = Assert.Single(ctx.PricingResult!.UnpricedLines);
+        Assert.Equal(2, unpriced.LineNumber);
+        // The engine's $0 must not be accepted as an allowed amount.
+        Assert.False(ctx.PricingResult.AllowedAmounts.ContainsKey(2));
+        Assert.False(ctx.PricingResult.IsFullyPriced);
+    }
+
+    [Fact]
+    public void BuildRequests_MultiUnitLine_SendsLineTotalAsBilled()
+    {
+        var ctx = BuildContext();
+        ctx.Claim.ClaimLines[0].ChargeAmount = 300m;
+        ctx.Claim.ClaimLines[0].Units = 3m;
+
+        var request = PricingStage.BuildRequests(ctx)[0];
+
+        Assert.Equal(300m, request.BilledAmount);
+        Assert.Equal(3m, request.Units);
     }
 
     [Fact]
@@ -287,7 +332,7 @@ public class PricingStageTests
                 },
                 new()
                 {
-                    LineNumber = 2, ProcedureCode = "36415", ChargeAmount = 30m, Units = 2m,
+                    LineNumber = 2, ProcedureCode = "36415", ChargeAmount = 60m, Units = 2m,
                     PlaceOfServiceCode = "22", ServiceDateFrom = serviceDate.AddDays(1),
                 },
             },

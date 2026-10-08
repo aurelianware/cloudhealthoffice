@@ -27,7 +27,9 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// <para>
 /// <b>Fail closed.</b> A line is unpriced when the engine fell back to
 /// billed charges (<see cref="RateSource.BilledCharges"/> — no contract,
-/// fee schedule, or rate line matched), when no result came back for the
+/// fee schedule, or rate line matched), when a matched rate could not be
+/// computed (<see cref="RateSource.Unresolved"/>, allowed $0 with an
+/// <c>UnresolvedReason</c>), when no result came back for the
 /// line, or when the pricing call itself failed. Any unpriced line pends
 /// the claim (<c>PendCode=NOCONTRACT</c>, or <c>PRICING</c> when the
 /// service was unreachable) and <see cref="BenefitCalculationStage"/>
@@ -187,10 +189,10 @@ public sealed class PricingStage : IClaimAdjudicationStage
                     ? line.ServiceDateFrom
                     : claim.ServiceDateFrom,
                 PlanId = planId,
-                // Matches BenefitCalculationStage's line billed amount so the
-                // engine's contractual adjustment (billed − allowed) lines up
-                // with what the benefit engine reports as billed.
-                BilledAmount = line.ChargeAmount * line.Units,
+                // ChargeAmount is the line total (X12 837 SV102 / SV203), not a
+                // per-unit price — same billed amount BenefitCalculationStage
+                // reports, so billed − allowed (CO-45) lines up.
+                BilledAmount = line.ChargeAmount,
                 Units = line.Units,
                 LineNumber = line.LineNumber,
                 TotalLineCount = totalLines,
@@ -230,6 +232,19 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 unpriced.Add(new UnpricedLine(
                     request.LineNumber, request.ProcedureCode,
                     $"pricing returned a negative allowed amount ({result.AllowedAmount})"));
+                continue;
+            }
+
+            if (result.RateSource == RateSource.Unresolved)
+            {
+                // A rate line matched but the engine could not compute an
+                // allowed amount (e.g. percent-of-Medicare with no Medicare
+                // reference). It reports $0 — never accept that as a price.
+                unpriced.Add(new UnpricedLine(
+                    request.LineNumber, request.ProcedureCode,
+                    string.IsNullOrWhiteSpace(result.UnresolvedReason)
+                        ? "fee schedule rate could not be resolved"
+                        : $"fee schedule rate could not be resolved: {result.UnresolvedReason}"));
                 continue;
             }
 

@@ -492,7 +492,11 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             Modifiers = line.Modifiers.ToList(),
             RevenueCode = line.RevenueCode,
             PlaceOfService = pos ?? string.Empty,
-            BilledAmount = line.ChargeAmount * line.Units,
+            // ChargeAmount is the LINE TOTAL (X12 837 SV102 / SV203, mapped
+            // verbatim by X12837ClaimMapper; scrub rule AL002 sums it
+            // without units against CLM02). Multiplying by units overstated
+            // billed for any multi-unit line.
+            BilledAmount = line.ChargeAmount,
             Units = line.Units,
             DiagnosisCodes = diagnosesForLine,
         };
