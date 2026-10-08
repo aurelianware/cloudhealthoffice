@@ -75,8 +75,19 @@ public class SyntheticFeeScheduleLine
     /// <summary>Whether bilateral adjustment (150%) applies.</summary>
     public bool BilateralAdjustmentApplies { get; set; } = true;
 
-    /// <summary>Whether multiple procedure reduction applies.</summary>
-    public bool MultipleProcedureReductionApplies { get; set; } = true;
+    /// <summary>
+    /// CMS MPFS multiple procedure indicator (PPRRVU "MULT PROC"): 0 = no reduction (E&amp;M),
+    /// 2 = standard multiple surgery, 3 = endoscopy, 4 = diagnostic imaging, 5 = therapy,
+    /// 6 = cardiovascular, 7 = ophthalmology, 9 = concept does not apply. Seeded as the
+    /// numeric value of FeeScheduleEngine's MultipleProcedureIndicator; null = unknown.
+    /// </summary>
+    public int? MultipleProcedureIndicator { get; set; }
+
+    /// <summary>
+    /// Whether the standard multiple surgery reduction applies (indicator 2) — derived,
+    /// matching FeeScheduleLine.MultipleProcedureReductionApplies.
+    /// </summary>
+    public bool MultipleProcedureReductionApplies => MultipleProcedureIndicator == 2;
 }
 
 /// <summary>
