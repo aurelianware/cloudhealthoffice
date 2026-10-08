@@ -555,6 +555,28 @@ public class PaymentRunServiceBatchedTests
     }
 
     [Fact]
+    public async Task ExecutePaymentRunAsync_InstitutionalDenial_RemarksInMia_ProfessionalInMoa()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var institutional = Denied("d-inst", rarcs: "MA130");
+        institutional.ClaimType = ClaimFormType.Institutional;
+        SetupClaimsResponse(Array.Empty<ClaimDto>(), new[] { institutional, Denied("d-prof", rarcs: "N115") });
+        var (envelopes, _) = SetupRealGenerator();
+
+        await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        var segments = Segments(Assert.Single(envelopes).EdiContent);
+        var inst = LoopOf(segments, "CLM-d-inst");
+        Assert.Contains(inst, s => s[0] == "MIA" && s[1] == "0" && s[5] == "MA130");
+        Assert.DoesNotContain(inst, s => s[0] == "MOA");
+        var prof = LoopOf(segments, "CLM-d-prof");
+        Assert.Contains(prof, s => s.SequenceEqual(new[] { "MOA", "", "", "N115" }));
+        Assert.DoesNotContain(prof, s => s[0] == "MIA");
+    }
+
+    [Fact]
     public async Task ExecutePaymentRunAsync_OnlyDenials_NonPayment835_Bpr02Zero_NoCheckOrPayment()
     {
         var run = PendingRun();

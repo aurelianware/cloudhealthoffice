@@ -497,7 +497,7 @@ public class CapitationEraServiceTests
     #region PLB — Provider Level Adjustments
 
     [Fact]
-    public void Generate835_PLB_WithholdAdjustment()
+    public void Generate835_Withhold_IsInClp04ViaCas_NotAlsoAPlb()
     {
         var stmt = CreateStatement();
         stmt.WithholdAmount.Should().BeGreaterThan(0);
@@ -505,9 +505,10 @@ public class CapitationEraServiceTests
         var edi = _service.Generate835ForStatement(stmt, CreateContract(), _defaultTp);
         var segments = edi.Split('~');
 
-        var plb = segments.FirstOrDefault(s => s.StartsWith("PLB*"));
-        plb.Should().NotBeNull();
-        plb.Should().Contain("WO:WITHHOLD");
+        segments.Should().Contain(s => s.StartsWith("CAS*CO*45*"));
+        segments.Where(s => s.StartsWith("PLB*")).Should().NotContain(s => s.Contains("WITHHOLD"));
+        // The retro add (+28.00 to the provider) increases the payment: a negative PLB.
+        segments.Should().Contain(s => s.StartsWith("PLB*") && s.Contains("*72:Retro add for MEM004*-28.00"));
     }
 
     [Fact]

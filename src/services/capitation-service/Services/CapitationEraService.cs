@@ -155,14 +155,13 @@ public class CapitationEraService : ICapitationEraService
         }
 
         // ── PLB — Provider Level Adjustments ─────────────────────────────
-        // Emit PLB for withhold, retro adjustments, incentive payments, etc.
+        // A PLB amount is positive when it reduces the payment and negative
+        // when it increases it, so that sum(CLP04) - sum(PLB) = BPR02. The
+        // withhold is not a PLB: each member's CLP04 is already net of it
+        // (CAS CO-45). Statement adjustments (retro, incentives, releases)
+        // are PLBs with the sign flipped: a credit to the provider is a
+        // negative PLB, a recoupment a positive one.
         var plbItems = new List<(string Code, string RefId, decimal Amount)>();
-
-        // Withhold amount (held back from gross)
-        if (statement.WithholdAmount > 0)
-        {
-            plbItems.Add(("WO", "WITHHOLD", -statement.WithholdAmount));
-        }
 
         // Statement-level adjustments
         foreach (var adj in statement.Adjustments)
@@ -178,7 +177,7 @@ public class CapitationEraService : ICapitationEraService
                 CapitationAdjustmentType.StopLossCredit => "FB",       // Forward balance
                 _ => "72"
             };
-            plbItems.Add((plbCode, Esc(adj.Description)?[..Math.Min(adj.Description.Length, 30)] ?? "", adj.Amount));
+            plbItems.Add((plbCode, Esc(adj.Description)?[..Math.Min(adj.Description.Length, 30)] ?? "", -adj.Amount));
         }
 
         // Negative net: the balance owed by the provider is carried forward
@@ -187,6 +186,15 @@ public class CapitationEraService : ICapitationEraService
         {
             plbItems.Add((Era835FinancialSegmentBuilder.ForwardBalanceCode, statement.StatementNumber, statement.NetPayable));
         }
+
+        // sum(CLP04) - sum(PLB) = BPR02, or the 835 is refused.
+        var clpTotal = statement.LineItems.Sum(li => li.NetAmount);
+        var plbTotal = plbItems.Sum(item => item.Amount);
+        if (clpTotal - plbTotal != bprAmount)
+            throw new InvalidOperationException(
+                $"Cannot generate an unbalanced capitation 835 for statement {statement.StatementNumber}: " +
+                $"member payments (CLP04) total {clpTotal:F2} less provider adjustments (PLB) {plbTotal:F2} " +
+                $"is {clpTotal - plbTotal:F2} but BPR02 is {bprAmount:F2} (net payable {statement.NetPayable:F2})");
 
         // PLB can carry up to 6 adjustment reason/amount pairs per segment
         if (plbItems.Count > 0)
@@ -242,6 +250,15 @@ public class CapitationEraService : ICapitationEraService
         sb.Append(Seg(ref segmentCount, true,
             $"CLP*{li.MemberId}*22*{li.GrossAmount:F2}*{li.NetAmount:F2}*0*CP*{contract.ContractNumber}~"));
 
+        // CAS — directly after CLP (2100 order: CLP, CAS, NM1, DTM, AMT, QTY).
+        // Contractual adjustment for withhold (if any)
+        // CO-45 = Charge exceeds fee schedule/maximum allowable (contractual obligation)
+        if (li.WithholdAmount > 0)
+        {
+            sb.Append(Seg(ref segmentCount, true,
+                $"CAS*CO*45*{li.WithholdAmount:F2}~"));
+        }
+
         // NM1 — Patient/Member Name
         if (!string.IsNullOrEmpty(li.MemberName))
         {
@@ -253,17 +270,10 @@ public class CapitationEraService : ICapitationEraService
                 $"NM1*QC*1*{lastName}*{firstName}****MI*{li.MemberId}~"));
         }
 
-        // DTM — Capitation period dates
+        // DTM*232 — claim statement period start (the capitation period
+        // start for this member; 150 is a 2110 service-date qualifier).
         sb.Append(Seg(ref segmentCount, true,
-            $"DTM*150*{FormatDate(li.AssignmentEffectiveDate)}~"));
-
-        // CAS — Contractual adjustment for withhold (if any)
-        // CO-45 = Charge exceeds fee schedule/maximum allowable (contractual obligation)
-        if (li.WithholdAmount > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"CAS*CO*45*{li.WithholdAmount:F2}~"));
-        }
+            $"DTM*232*{FormatDate(li.AssignmentEffectiveDate)}~"));
 
         // AMT — Supplemental amount: base PMPM before risk adjustment
         sb.Append(Seg(ref segmentCount, true,

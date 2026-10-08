@@ -148,7 +148,7 @@ public class EraGeneratorService : IEraGeneratorService
         // ── 2000 / 2100 loops — one CLP per claim ───────────────────────
         foreach (var claimPay in payment.ClaimPayments)
         {
-            sb.Append(BuildClaimLoop(claimPay, ref segmentCount));
+            sb.Append(Era835ClaimLoops.BuildClaimLoop(claimPay, ref segmentCount));
         }
 
         // ── PLB — Provider Level Adjustment (if any) ─────────────────────
@@ -181,116 +181,6 @@ public class EraGeneratorService : IEraGeneratorService
             payment.CheckNumber, payment.ClaimPayments.Count, segmentCount, payment.TotalPaymentAmount);
 
         return era;
-    }
-
-    // ── 2100 claim payment loop ────────────────────────────────────────
-
-    private static string BuildClaimLoop(ClaimPayment cp, ref int segmentCount)
-    {
-        var sb = new StringBuilder();
-
-        // CLP — Claim Level Data
-        // CLP01: patient control number (original claim #)
-        // CLP02: claim status code  1=processed, 2=suspended, 3=denied, 4=pended
-        // CLP03: total charge amount
-        // CLP04: payment amount
-        // CLP05: patient responsibility
-        // CLP06: claim filing indicator (MB=Medicare B, MC=Medicaid, HM=HMO, 11=Other)
-        // CLP07: payer claim control number (ICN)
-        sb.Append(Seg(ref segmentCount, true,
-            $"CLP*{cp.PatientControlNumber}*{cp.ClaimStatusCode}" +
-            $"*{cp.ChargeAmount:F2}*{cp.PaymentAmount:F2}*{cp.PatientResponsibilityAmount:F2}" +
-            $"*HM*{cp.PayerClaimControlNumber ?? cp.ClaimId}~"));
-
-        // NM1 — Patient Name (if member ID available)
-        if (!string.IsNullOrEmpty(cp.MemberId))
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"NM1*QC*1**{cp.MemberId}****MI*{cp.MemberId}~"));
-        }
-
-        // NM1 — Rendering Provider (if available)
-        if (!string.IsNullOrEmpty(cp.RenderingProviderNPI))
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"NM1*82*1*****XX*{cp.RenderingProviderNPI}~"));
-        }
-
-        // DTP — Date Claim Received
-        if (cp.ClaimReceivedDate.HasValue)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*050*{FormatDate(cp.ClaimReceivedDate.Value)}~"));
-        }
-
-        // CAS — Claim-level adjustments (CO, PR, OA, PI)
-        // Up to 6 CARC/amount pairs per CAS segment
-        foreach (var casGroup in cp.ClaimAdjustments.GroupBy(a => a.GroupCode))
-        {
-            foreach (var chunk in casGroup.Chunk(6))
-            {
-                var pairs = string.Concat(
-                    chunk.Select(adj => $"*{adj.ReasonCode}*{adj.Amount:F2}"));
-                sb.Append(Seg(ref segmentCount, true,
-                    $"CAS*{casGroup.Key}{pairs}~"));
-            }
-        }
-
-        // ── 2110 service line loops ────────────────────────────────────
-        foreach (var sl in cp.ServiceLines)
-        {
-            sb.Append(BuildServiceLineLoop(sl, ref segmentCount));
-        }
-
-        return sb.ToString();
-    }
-
-    // ── 2110 service line loop ─────────────────────────────────────────
-
-    private static string BuildServiceLineLoop(ServiceLinePayment sl, ref int segmentCount)
-    {
-        var sb = new StringBuilder();
-
-        // SVC — Service Payment Information
-        // SVC01: composite procedure code  HC:CPTCODE or NU:REVCODE
-        // SVC02: line charge amount
-        // SVC03: line payment amount
-        // SVC05: units
-        string svcCode = !string.IsNullOrEmpty(sl.RevenueCode)
-            ? $"NU:{sl.RevenueCode}:{sl.ProcedureCode}"
-            : $"HC:{sl.ProcedureCode}";
-
-        sb.Append(Seg(ref segmentCount, true,
-            $"SVC*{svcCode}*{sl.ChargeAmount:F2}*{sl.PaymentAmount:F2}**{sl.Units:G}~"));
-
-        // DTM — Service dates
-        if (sl.ServiceDateFrom.HasValue)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*472*{FormatDate(sl.ServiceDateFrom.Value)}~"));
-        }
-        if (sl.ServiceDateTo.HasValue && sl.ServiceDateTo != sl.ServiceDateFrom)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*473*{FormatDate(sl.ServiceDateTo.Value)}~"));
-        }
-
-        // CAS — Line-level adjustments
-        foreach (var casGroup in sl.Adjustments.GroupBy(a => a.GroupCode))
-        {
-            foreach (var chunk in casGroup.Chunk(6))
-            {
-                var pairs = string.Concat(chunk.Select(adj =>
-                {
-                    var rarc = string.IsNullOrEmpty(adj.RemarkCode) ? string.Empty : $"*{adj.RemarkCode}";
-                    return $"*{adj.ReasonCode}*{adj.Amount:F2}{rarc}";
-                }));
-                sb.Append(Seg(ref segmentCount, true,
-                    $"CAS*{casGroup.Key}{pairs}~"));
-            }
-        }
-
-        return sb.ToString();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────

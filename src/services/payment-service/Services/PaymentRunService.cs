@@ -1013,6 +1013,7 @@ public class PaymentRunService : IPaymentRunService
             PaymentAmount = paid,
             PatientResponsibilityAmount = claim.AdjudicationResult?.PatientResponsibility ?? 0m,
             PayerClaimControlNumber = claim.PayerClaimControlNumber,
+            IsInstitutional = claim.ClaimType == ClaimFormType.Institutional,
             MemberId = claim.MemberId,
             RenderingProviderNPI = claim.RenderingProviderNPI,
             ClaimAdjustments = headerCas,
@@ -1270,6 +1271,10 @@ public class ClaimDto
     public decimal? PlanPaidAmount => AdjudicationResult?.PayerPayment;
 
     public ClaimStatus Status { get; set; }
+
+    /// <summary>claims-service's <c>ClaimType</c> (numeric): 837P, 837I or 837D. Decides MIA vs MOA.</summary>
+    public ClaimFormType ClaimType { get; set; } = ClaimFormType.Professional;
+
     public DateTime ServiceDateFrom { get; set; }
     public DateTime? SubmittedDate { get; set; }
 
@@ -1288,6 +1293,14 @@ public class ClaimDto
     /// </summary>
     [JsonPropertyName("claimLines")]
     public List<ClaimServiceLineDto>? ServiceLines { get; set; }
+}
+
+/// <summary>Mirrors claims-service's <c>ClaimType</c> value for value.</summary>
+public enum ClaimFormType
+{
+    Professional = 1,
+    Institutional = 2,
+    Dental = 3,
 }
 
 /// <summary>Mirrors <c>ClaimsService.Models.AdjudicationResult</c> for the fields used by 5.10.</summary>

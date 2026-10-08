@@ -141,6 +141,88 @@ public class CapitationEra835FinancialSegmentTests
         Assert.Contains($"*FB:{statement.StatementNumber}*-40.00", string.Join("*", plb));
     }
 
+    private static void AssertBalanced(string edi)
+    {
+        var segments = edi.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
+        var bpr02 = decimal.Parse(segments.Single(s => s[0] == "BPR")[2]);
+        var clp04 = segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4]));
+        var plb = segments.Where(s => s[0] == "PLB")
+            .Sum(s => Enumerable.Range(0, (s.Length - 3) / 2).Sum(k => decimal.Parse(s[4 + 2 * k])));
+        Assert.True(bpr02 >= 0m);
+        Assert.Equal(bpr02, clp04 - plb);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0)]       // members only, withhold in CLP04
+    [InlineData(25, 0, 0)]      // incentive credit (negative PLB)
+    [InlineData(0, -30, 0)]     // retro recoupment (positive PLB)
+    [InlineData(15, -10, 20)]   // incentive, recoupment and withhold release
+    [InlineData(0, -500, 0)]    // recoupment exceeding the month: BPR02 0, FB carries the rest
+    public void Balances_Clp04LessPlb_EqualsBpr02(int incentive, int retro, int withholdRelease)
+    {
+        var statement = Statement(net: 0m);
+        statement.LineItems.Add(new CapitationLineItem
+        {
+            MemberId = "MEM001", GrossAmount = 100m, WithholdAmount = 10m, NetAmount = 90m,
+            BasePMPM = 100m, RiskScore = 1.0m, AssignmentEffectiveDate = new DateTime(2026, 3, 1),
+        });
+        statement.LineItems.Add(new CapitationLineItem
+        {
+            MemberId = "MEM002", GrossAmount = 60m, WithholdAmount = 6m, NetAmount = 54m,
+            BasePMPM = 60m, RiskScore = 1.0m, AssignmentEffectiveDate = new DateTime(2026, 3, 1),
+        });
+        if (incentive != 0)
+            statement.Adjustments.Add(new CapitationAdjustment { Type = CapitationAdjustmentType.IncentivePayment, Description = "Incentive", Amount = incentive });
+        if (retro != 0)
+            statement.Adjustments.Add(new CapitationAdjustment { Type = CapitationAdjustmentType.RetroDisenrollment, Description = "Retro term", Amount = retro });
+        if (withholdRelease != 0)
+            statement.Adjustments.Add(new CapitationAdjustment { Type = CapitationAdjustmentType.WithholdRelease, Description = "Release", Amount = withholdRelease });
+        statement.RecalculateTotals();
+
+        var edi = Service().Generate835ForStatement(statement, Contract, Ach());
+
+        AssertBalanced(edi);
+        Assert.Equal(Math.Max(statement.NetPayable, 0m).ToString("F2"), Segment(edi, "BPR")[2]);
+    }
+
+    [Fact]
+    public void ClaimLoop_CasDirectlyAfterClp_ThenNm1_ThenDtm232()
+    {
+        var statement = Statement(net: 0m);
+        statement.LineItems.Add(new CapitationLineItem
+        {
+            MemberId = "MEM001", MemberName = "Jo Doe", GrossAmount = 100m, WithholdAmount = 10m, NetAmount = 90m,
+            BasePMPM = 100m, RiskScore = 1.2m, AssignmentEffectiveDate = new DateTime(2026, 3, 1),
+        });
+        statement.RecalculateTotals();
+
+        var ids = Service().Generate835ForStatement(statement, Contract, Ach())
+            .Split('~', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Split('*'))
+            .SkipWhile(s => s[0] != "CLP")
+            .TakeWhile(s => s[0] is not ("PLB" or "SE"))
+            .Select(s => s[0] == "DTM" ? "DTM*" + s[1] : s[0])
+            .ToList();
+
+        Assert.Equal(new[] { "CLP", "CAS", "NM1", "DTM*232", "AMT", "QTY" }, ids);
+    }
+
+    [Fact]
+    public void UnbalancedStatement_Throws()
+    {
+        var statement = Statement(net: 0m);
+        statement.LineItems.Add(new CapitationLineItem
+        {
+            MemberId = "MEM001", GrossAmount = 100m, WithholdAmount = 10m, NetAmount = 95m, // should be 90
+            BasePMPM = 100m, RiskScore = 1.0m, AssignmentEffectiveDate = new DateTime(2026, 3, 1),
+        });
+        statement.RecalculateTotals();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => Service().Generate835ForStatement(statement, Contract, Ach()));
+        Assert.Contains("unbalanced", ex.Message);
+    }
+
     [Fact]
     public void Trn03_IsOriginatingCompanyId()
     {

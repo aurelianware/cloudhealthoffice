@@ -25,7 +25,7 @@ namespace PaymentService.Services;
 ///   N1   — Payee identification (1000B loop)
 ///   [CLP — Claim payment    ] 2100 loop, one per claim in the batch
 ///   [SVC — Service line     ] 2110 loop, one per service line
-///   [CAS — Adjustments      ] within 2100 and 2110
+///   [CAS — Adjustments      ] within 2100 and 2110 (loop order: Era835ClaimLoops)
 ///   PLB  — Provider-level balance adjustment (optional)
 ///   SE   — Transaction set trailer (segment count includes ST and SE)
 ///   GE   — Functional group trailer
@@ -230,7 +230,7 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         {
             foreach (var claimPay in input.Payment.ClaimPayments)
             {
-                sb.Append(BuildClaimLoop(claimPay, ref segmentCount));
+                sb.Append(Era835ClaimLoops.BuildClaimLoop(claimPay, ref segmentCount));
             }
         }
 
@@ -280,107 +280,6 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
             ClaimIds: claimIds,
             IsReversal: isReversal,
             ForwardBalanceAmount: forwardBalance);
-    }
-
-    private static string BuildClaimLoop(ClaimPayment cp, ref int segmentCount)
-    {
-        var sb = new StringBuilder();
-
-        sb.Append(Seg(ref segmentCount, true,
-            $"CLP*{cp.PatientControlNumber}*{cp.ClaimStatusCode}" +
-            $"*{cp.ChargeAmount:F2}*{cp.PaymentAmount:F2}*{cp.PatientResponsibilityAmount:F2}" +
-            $"*HM*{cp.PayerClaimControlNumber ?? cp.ClaimId}~"));
-
-        if (!string.IsNullOrEmpty(cp.MemberId))
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"NM1*QC*1**{cp.MemberId}****MI*{cp.MemberId}~"));
-        }
-
-        if (!string.IsNullOrEmpty(cp.RenderingProviderNPI))
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"NM1*82*1*****XX*{cp.RenderingProviderNPI}~"));
-        }
-
-        // MOA — claim-level remark codes (RARCs) in MOA03-MOA07. A header CAS
-        // carries no RARC (CAS04 is a quantity), so a denial's remarks go here.
-        var remarks = cp.RemarkCodes
-            .Where(r => !string.IsNullOrWhiteSpace(r))
-            .Select(Esc)
-            .Distinct(StringComparer.Ordinal)
-            .Take(5)
-            .ToList();
-        if (remarks.Count > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"MOA***{string.Join("*", remarks)}~"));
-        }
-
-        if (cp.ClaimReceivedDate.HasValue)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*050*{FormatDate(cp.ClaimReceivedDate.Value)}~"));
-        }
-
-        // Header CAS (claim-level)
-        foreach (var casGroup in cp.ClaimAdjustments.GroupBy(a => a.GroupCode))
-        {
-            foreach (var chunk in casGroup.Chunk(6))
-            {
-                var pairs = string.Concat(
-                    chunk.Select(adj => $"*{adj.ReasonCode}*{adj.Amount:F2}"));
-                sb.Append(Seg(ref segmentCount, true,
-                    $"CAS*{casGroup.Key}{pairs}~"));
-            }
-        }
-
-        // ── 2110 service line loops ────────────────────────────────────
-        foreach (var sl in cp.ServiceLines)
-        {
-            sb.Append(BuildServiceLineLoop(sl, ref segmentCount));
-        }
-
-        return sb.ToString();
-    }
-
-    private static string BuildServiceLineLoop(ServiceLinePayment sl, ref int segmentCount)
-    {
-        var sb = new StringBuilder();
-
-        string svcCode = !string.IsNullOrEmpty(sl.RevenueCode)
-            ? $"NU:{sl.RevenueCode}:{sl.ProcedureCode}"
-            : $"HC:{sl.ProcedureCode}";
-
-        sb.Append(Seg(ref segmentCount, true,
-            $"SVC*{svcCode}*{sl.ChargeAmount:F2}*{sl.PaymentAmount:F2}**{sl.Units:G}~"));
-
-        if (sl.ServiceDateFrom.HasValue)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*472*{FormatDate(sl.ServiceDateFrom.Value)}~"));
-        }
-        if (sl.ServiceDateTo.HasValue && sl.ServiceDateTo != sl.ServiceDateFrom)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"DTM*473*{FormatDate(sl.ServiceDateTo.Value)}~"));
-        }
-
-        foreach (var casGroup in sl.Adjustments.GroupBy(a => a.GroupCode))
-        {
-            foreach (var chunk in casGroup.Chunk(6))
-            {
-                var pairs = string.Concat(chunk.Select(adj =>
-                {
-                    var rarc = string.IsNullOrEmpty(adj.RemarkCode) ? string.Empty : $"*{adj.RemarkCode}";
-                    return $"*{adj.ReasonCode}*{adj.Amount:F2}{rarc}";
-                }));
-                sb.Append(Seg(ref segmentCount, true,
-                    $"CAS*{casGroup.Key}{pairs}~"));
-            }
-        }
-
-        return sb.ToString();
     }
 
     private static string Seg(ref int count, bool counted, string segment)

@@ -256,6 +256,12 @@ public class ClaimPayment
     public List<string> RemarkCodes { get; set; } = new();
 
     /// <summary>
+    /// The claim is institutional (837I). Its remark codes go in MIA
+    /// (MIA05, MIA20-MIA23); a professional or dental claim's in MOA.
+    /// </summary>
+    public bool IsInstitutional { get; set; }
+
+    /// <summary>
     /// Date claim was received by payer
     /// 835: DTP*050
     /// </summary>

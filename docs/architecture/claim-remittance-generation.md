@@ -139,16 +139,19 @@ TRN  — Reassociation trace number (first claim's check number)
 DTM  — Production date
 N1*PR — Payer identification (1000A loop)
 N1*PE — Payee identification (1000B loop)
-[2100 loop — repeated per claim]
+[2100 loop — repeated per claim; order per 005010X221A1]
    CLP  — Claim header (status code, amounts)
+   CAS  — Claim-level adjustments (header CAS from CarcRarcMapper)
    NM1*QC — Patient (when MemberId present)
    NM1*82 — Rendering provider (when NPI present)
+   MIA / MOA — Claim remark codes (RARCs): MIA05 + MIA20-23 for an
+          institutional (837I) claim, MIA01 = 0; MOA03-07 otherwise
    DTM*050 — Claim received date (when present)
-   CAS  — Claim-level adjustments (header CAS from CarcRarcMapper)
    [2110 loop — repeated per service line]
       SVC  — Service payment
       DTM*472/473 — Service dates
       CAS  — Line-level adjustments (per-line CAS from CarcRarcMapper)
+      LQ*HE — Line remark codes (a CAS carries no RARC; CAS04 is a quantity)
 PLB  — Provider-level adjustments (when batch carries PLB rows)
 SE   — Transaction set trailer (count includes ST and SE)
 GE / IEA  — Functional group / interchange trailers
@@ -285,8 +288,9 @@ same trading partner's 835:
 - Header CAS from the claim's adjudication (`adjustmentReasons`, then
   `denialReasonCode` as `CO`); the denial CARC carries the charge no other
   adjustment explains, so CLP03 - CLP04 = the CAS amounts.
-- RARCs (`adjudicationResult.remarkCodes`) in MOA03-MOA07 (at most five; a
-  header CAS cannot carry a RARC).
+- RARCs (`adjudicationResult.remarkCodes`, at most five; a header CAS
+  cannot carry a RARC) in MIA05/MIA20-MIA23 for an institutional claim
+  (claims-service `claimType` = 2), MOA03-MOA07 otherwise.
 - Lines follow the table above with CLP04 = 0: a denied claim whose lines
   carry no paid amount is remitted at claim level; one whose lines pay more
   than 0 is not remitted and is listed in `UnbalancedServiceLineClaimIds`.
@@ -332,7 +336,13 @@ sum(CLP04) - sum(PLB) = BPR02 = 0. The balance owed is recorded on the
 envelope (`ForwardBalanceAmount`) and the reversal run
 (`OutstandingReceivables`, `OutstandingReceivableAmount`); there is no
 receivable ledger to recover it from a later 835 yet (follow-up).
-Capitation 835s with a negative NetPayable follow the same rule.
+Capitation 835s with a negative NetPayable follow the same rule. In a
+capitation 835 each member's CLP04 is net of the withhold (CAS CO-45), so
+the withhold is not also a PLB; statement adjustments are PLBs with the
+sign flipped (a credit to the provider is a negative PLB, a recoupment a
+positive one), and generation refuses a statement whose
+sum(CLP04) - sum(PLB) is not BPR02. Its 2100 loop is CLP, CAS, NM1*QC,
+DTM*232 (period start; 150 is a 2110 qualifier), AMT, QTY.
 
 ## Persistence shape (Decision 4 / 15)
 
