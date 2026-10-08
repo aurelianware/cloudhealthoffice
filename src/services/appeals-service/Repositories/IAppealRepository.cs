@@ -54,7 +54,10 @@ public interface IAppealRepository
     /// Callers MUST have validated the transition via
     /// <c>AppealStateMachine</c>. Conditional on persisted status still
     /// matching <c>auditEvent.FromStatus</c> — a mismatch throws
-    /// <see cref="InvalidAppealTransitionException"/>.
+    /// <see cref="InvalidAppealTransitionException"/>. The persisted
+    /// <c>TargetResponseDate</c> and <c>DeadlineExtension</c> always win over
+    /// the caller's snapshot: a transition never changes them, and a stale
+    /// snapshot read before a concurrent extension must not erase it.
     /// </summary>
     Task<Appeal> TransitionStatusAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default);
 
@@ -71,14 +74,29 @@ public interface IAppealRepository
     /// <summary>
     /// Race-safe one-time deadline extension. Caller sets
     /// <c>appeal.TargetResponseDate</c> and <c>appeal.DeadlineExtension</c>
-    /// (after validating against <c>AppealResponseDeadlinePolicy</c>)
-    /// before calling. Conditional on the persisted
-    /// <c>DeadlineExtension == null</c> AND
-    /// <c>Status ∈ {Submitted, InReview, PendingInfo}</c>. Returns the
-    /// updated appeal on win (audit event appended); <c>null</c> on loss —
-    /// already extended, closed, or not found.
+    /// (including its <c>EventId</c>) after validating against
+    /// <c>AppealResponseDeadlinePolicy</c>.
+    /// <list type="bullet">
+    ///   <item>First write: conditional on the persisted
+    ///     <c>DeadlineExtension == null</c> AND
+    ///     <c>Status ∈ {Submitted, InReview, PendingInfo}</c>; the deadline,
+    ///     the extension record and <paramref name="justificationNote"/> (if
+    ///     any) are written in ONE document update.</item>
+    ///   <item>Replay: when the persisted extension carries the same
+    ///     <c>EventId</c>, nothing is rewritten.</item>
+    /// </list>
+    /// In both cases <paramref name="buildAuditEvents"/> is invoked with the
+    /// PERSISTED appeal — the winning extension, which on a replay or a
+    /// same-EventId race may differ from the proposed one — and its rows
+    /// are appended (idempotent on EventId). The persisted appeal is
+    /// returned, so a retry completes an attempt that failed after the
+    /// write. Returns <c>null</c> otherwise — extended by a different
+    /// request, closed, or not found.
     /// </summary>
-    Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default);
+    Task<Appeal?> TryExtendDeadlineAsync(
+        Appeal appeal, AppealNote? justificationNote,
+        Func<Appeal, IReadOnlyList<AppealEvent>> buildAuditEvents,
+        CancellationToken ct = default);
 
     /// <summary>Atomic note append + audit event.</summary>
     Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default);

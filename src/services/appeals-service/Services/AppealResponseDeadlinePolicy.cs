@@ -48,9 +48,11 @@ namespace AppealsService.Services;
 ///   Part D IRE reconsideration           7d / 72h         7d / 72h  (42 CFR 423.600)
 ///   Commercial / Marketplace (ACA)      45d / 72h        45d / 72h  (45 CFR 147.136(d)(2)-(3);
 ///     external review                                                29 CFR 2590.715-2719(d))
-///   Medicaid State Fair Hearing         90d / 72h        90d / 5d   (42 CFR 431.244(f))
-///     (expedited hearings are due in 3 WORKING days, which can span a
-///     weekend; 72h is the default, 5 calendar days the enforceable bound)
+///   Medicaid State Fair Hearing         90d / 72h        90d / 3 working days  (42 CFR 431.244(f))
+///     (expedited: 72h is the default; the enforceable instant is receipt
+///     + 3 working days, skipping Saturdays and Sundays — see
+///     <see cref="AddWorkingDays"/>; holidays are NOT modeled, so on a
+///     holiday week the enforced ceiling is earlier than the true one)
 ///
 /// Extensions (one per appeal, see <see cref="GetExtensionRule"/>):
 ///   Medicare Advantage appeals                 up to 14 days, standard AND expedited (42 CFR 422.590(f))
@@ -104,9 +106,17 @@ public static class AppealResponseDeadlinePolicy
     public static readonly TimeSpan StateFairHearingStandard = TimeSpan.FromDays(90);
 
     /// <summary>
-    /// Enforceable bound for an expedited State Fair Hearing: 3 working
-    /// days (42 CFR 431.244(f)(2)) can span a weekend, so up to 5 calendar
-    /// days. Holidays are not modeled.
+    /// Working days an expedited State Fair Hearing has (42 CFR 431.244(f)(2)).
+    /// </summary>
+    public const int StateFairHearingExpeditedWorkingDays = 3;
+
+    /// <summary>
+    /// Widest calendar span <see cref="StateFairHearingExpeditedWorkingDays"/>
+    /// can cover (a Friday receipt runs to Wednesday). Only the window-based
+    /// <see cref="EnforceableMaximumWindow(LineOfBusiness, AppealType, AppealLevel, bool)"/>
+    /// reports this upper bound; the instant-based
+    /// <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool)"/>
+    /// applies exact working-day arithmetic from the receipt.
     /// </summary>
     public static readonly TimeSpan StateFairHearingExpeditedCeiling = TimeSpan.FromDays(5);
 
@@ -170,6 +180,9 @@ public static class AppealResponseDeadlinePolicy
     /// <summary>
     /// Federal ceiling on the time from receipt to decision, or <c>null</c>
     /// when no federal ceiling applies (commercial / Marketplace grievances).
+    /// For an expedited State Fair Hearing (a working-day clock) this is the
+    /// widest possible span; use <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool)"/>
+    /// for the exact instant.
     /// </summary>
     public static TimeSpan? EnforceableMaximumWindow(
         LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent)
@@ -239,10 +252,40 @@ public static class AppealResponseDeadlinePolicy
     /// when none applies.
     /// </summary>
     public static DateTime? ComputeEnforceableMaximum(
-        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent) =>
-        EnforceableMaximumWindow(lineOfBusiness, appealType, appealLevel, isUrgent) is { } window
+        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent)
+    {
+        if (IsExpeditedStateFairHearing(lineOfBusiness, appealType, appealLevel, isUrgent))
+            return AddWorkingDays(receivedAt, StateFairHearingExpeditedWorkingDays);
+
+        return EnforceableMaximumWindow(lineOfBusiness, appealType, appealLevel, isUrgent) is { } window
             ? receivedAt + window
             : null;
+    }
+
+    private static bool IsExpeditedStateFairHearing(
+        LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent) =>
+        isUrgent
+        && lineOfBusiness == LineOfBusiness.Medicaid
+        && IsExternalReview(appealType, appealLevel);
+
+    /// <summary>
+    /// <paramref name="start"/> moved forward by <paramref name="workingDays"/>
+    /// Monday–Friday days, keeping the time of day (Friday 10:00 + 3 →
+    /// Wednesday 10:00; Saturday 10:00 + 3 → Wednesday 10:00). Weekday is
+    /// taken from the instant as given (UTC for stored deadlines). Public
+    /// holidays are not modeled.
+    /// </summary>
+    public static DateTime AddWorkingDays(DateTime start, int workingDays)
+    {
+        var result = start;
+        var remaining = workingDays;
+        while (remaining > 0)
+        {
+            result = result.AddDays(1);
+            if (result.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) remaining--;
+        }
+        return result;
+    }
 
     // ── Extension ───────────────────────────────────────────────────────
 

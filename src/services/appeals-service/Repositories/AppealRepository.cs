@@ -240,6 +240,16 @@ public sealed class AppealRepository : IAppealRepository
                 throw new InvalidAppealTransitionException(fresh.Resource.Status, appeal.Status);
             }
 
+            // Extension fields are owned by TryExtendDeadlineAsync — carry the
+            // persisted values so a snapshot read before a concurrent
+            // extension cannot erase it (the ETag pins them to this read).
+            appeal.TargetResponseDate = fresh.Resource.TargetResponseDate;
+            appeal.DeadlineExtension = fresh.Resource.DeadlineExtension;
+            // Notes are append-only through AppendNoteAsync / the extension
+            // write; a transition never edits them, so the persisted list
+            // wins (keeps an extension's justification note).
+            appeal.Notes = fresh.Resource.Notes ?? new List<AppealNote>();
+
             appeal.UpdatedAt = DateTime.UtcNow;
             var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
             var response = await _appeals.ReplaceItemAsync(
@@ -286,39 +296,55 @@ public sealed class AppealRepository : IAppealRepository
         }
     }
 
-    public async Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    public async Task<Appeal?> TryExtendDeadlineAsync(
+        Appeal appeal, AppealNote? justificationNote,
+        Func<Appeal, IReadOnlyList<AppealEvent>> buildAuditEvents,
+        CancellationToken ct = default)
     {
+        Appeal persisted;
         try
         {
             var fresh = await _appeals.ReadItemAsync<Appeal>(
                 appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
+            persisted = fresh.Resource;
 
-            if (fresh.Resource.DeadlineExtension is not null) return null;
-            if (fresh.Resource.Status != AppealStatus.Submitted &&
-                fresh.Resource.Status != AppealStatus.InReview &&
-                fresh.Resource.Status != AppealStatus.PendingInfo)
+            if (persisted.DeadlineExtension is null)
+            {
+                if (persisted.Status != AppealStatus.Submitted &&
+                    persisted.Status != AppealStatus.InReview &&
+                    persisted.Status != AppealStatus.PendingInfo)
+                {
+                    return null;
+                }
+
+                persisted.TargetResponseDate = appeal.TargetResponseDate;
+                persisted.DeadlineExtension = appeal.DeadlineExtension;
+                if (justificationNote is not null) persisted.Notes.Add(justificationNote);
+                persisted.UpdatedAt = appeal.UpdatedAt ?? DateTime.UtcNow;
+                persisted.UpdatedBy = appeal.UpdatedBy;
+
+                var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+                var response = await _appeals.ReplaceItemAsync(
+                    persisted, persisted.Id, new PartitionKey(persisted.TenantId), options, ct);
+                persisted = response.Resource;
+            }
+            else if (!IsSameExtension(persisted, appeal))
             {
                 return null;
             }
-
-            var mutated = fresh.Resource;
-            mutated.TargetResponseDate = appeal.TargetResponseDate;
-            mutated.DeadlineExtension = appeal.DeadlineExtension;
-            mutated.UpdatedAt = appeal.UpdatedAt ?? DateTime.UtcNow;
-            mutated.UpdatedBy = appeal.UpdatedBy;
-
-            var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
-            var response = await _appeals.ReplaceItemAsync(
-                mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
-
-            await _events.AppendAsync(auditEvent, ct);
-            return response.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.NotFound)
         {
             return null;
         }
+
+        foreach (var evt in buildAuditEvents(persisted)) await _events.AppendAsync(evt, ct);
+        return persisted;
     }
+
+    internal static bool IsSameExtension(Appeal persisted, Appeal requested) =>
+        persisted.DeadlineExtension?.EventId is { Length: > 0 } stored
+        && stored == requested.DeadlineExtension?.EventId;
 
     public async Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default)
     {

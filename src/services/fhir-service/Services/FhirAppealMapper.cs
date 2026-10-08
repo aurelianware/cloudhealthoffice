@@ -42,6 +42,28 @@ public sealed class FhirAppealMapper
     public const string AppealX12TransmissionCodeExtensionUrl =
         "http://fhir.cloudhealthoffice.com/StructureDefinition/cho-appeal-x12-275-transmission-code";
 
+    public const string AppealLevelCodeSystem =
+        "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-level";
+    public const string AppealLineOfBusinessCodeSystem =
+        "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-line-of-business";
+
+    /// <summary>
+    /// Canonical CHO CodeSystem code for an appeal enum value: the enum
+    /// name in kebab-case (<c>ExternalReview</c> → <c>external-review</c>,
+    /// <c>MedicarePartD</c> → <c>medicare-part-d</c>).
+    /// </summary>
+    public static string ToCanonicalCode<TEnum>(TEnum value) where TEnum : struct, Enum
+    {
+        var name = value.ToString();
+        var sb = new System.Text.StringBuilder(name.Length + 4);
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (i > 0 && char.IsUpper(name[i])) sb.Append('-');
+            sb.Append(char.ToLowerInvariant(name[i]));
+        }
+        return sb.ToString();
+    }
+
     public const string AppealClosureReasonCodeSystem =
         "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-closure-reason";
 
@@ -93,15 +115,18 @@ public sealed class FhirAppealMapper
         // Extensions: appealLevel, lineOfBusiness, targetResponseDate, urgentFlag.
         task.Extension =
         [
+            // Profiles bind both extensions to valueCoding over the CHO code
+            // systems (kebab-case codes, e.g. external-review,
+            // medicare-part-d).
             new Extension
             {
                 Url = AppealLevelExtensionUrl,
-                Value = new Code(appeal.AppealLevel.ToString())
+                Value = new Coding(AppealLevelCodeSystem, ToCanonicalCode(appeal.AppealLevel))
             },
             new Extension
             {
                 Url = AppealLineOfBusinessExtensionUrl,
-                Value = new Code(appeal.LineOfBusiness.ToString())
+                Value = new Coding(AppealLineOfBusinessCodeSystem, ToCanonicalCode(appeal.LineOfBusiness))
             }
         ];
 
