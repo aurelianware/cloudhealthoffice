@@ -383,6 +383,35 @@ public sealed class ChoBenefitPlanProviderEngineSeamTests
         OopApplied(result, NetworkTier.OutOfNetwork).Should().Be(0m);
     }
 
+    [Fact]
+    public async Task Aggregate_NoFamilyLimits_OopAppliesFalse_IndividualFallbackPoolNotConsumed()
+    {
+        // Aggregate plan with only individual limits: ApplyToAggregatePool
+        // routes OOP to the individual fallback pool. Cost share excluded
+        // from OOP must not land there (or in the family placeholder), and
+        // is not capped by the 2,000 individual OOP max.
+        var benefit = OfficeVisitBenefit();
+        benefit.OopApplies = false;
+        var stored = Plan(
+            new CostSharing { IndividualDeductible = 1_000m, IndividualOutOfPocketMax = 2_000m },
+            model: ModelFamilyAccumulatorModel.Aggregate,
+            benefits: benefit);
+
+        var result = await AdjudicateAsync(stored, NetworkTier.InNetwork, 10_000m);
+
+        // 1000 + 30 + 20% of 8,970 = 2,824, uncapped.
+        var line = result.Lines.Single();
+        line.DeductibleAmount.Should().Be(1_000m);
+        line.MemberResponsibility.Should().Be(2_824m);
+        line.OopMaxReduction.Should().Be(0m);
+        result.AccumulatorSnapshot
+            .Where(s => s.Type is AccumulatorType.IndividualOutOfPocketMax
+                or AccumulatorType.FamilyOutOfPocketMax
+                or AccumulatorType.AcaIndividualCap)
+            .Should().OnlyContain(s => s.AmountApplied == 0m);
+        DeductibleApplied(result, NetworkTier.InNetwork).Should().Be(1_000m);
+    }
+
     // ── Coinsurance scale ──────────────────────────────────────────────
 
     [Fact]
