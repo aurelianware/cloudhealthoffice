@@ -428,4 +428,41 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
             .Should().BeTrue();
         _factory.Repo.SnapshotEvents().Should().BeEmpty("a rejected create must not persist anything");
     }
+
+    [Theory]
+    [InlineData(LineOfBusiness.MedicarePartD, AppealType.Grievance, AppealLevel.FirstLevel, true, 20 * 24)]       // 24h default, 30d ceiling
+    [InlineData(LineOfBusiness.Medicaid, AppealType.Reconsideration, AppealLevel.ExternalReview, true, 4 * 24)]   // 72h default, 3 working days
+    public async Task Create_Override_Beyond_Default_But_Within_Enforceable_Maximum_Is_Honored(
+        LineOfBusiness lob, AppealType type, AppealLevel level, bool urgent, int hours)
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate(lob, urgent: urgent, type: type, level: level);
+        var requested = DateTime.UtcNow.AddHours(hours);
+        requested = new DateTime(requested.Ticks - requested.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
+        body.TargetResponseDate = requested;
+
+        var response = await client.PostAsJsonAsync("/api/appeals", body, JsonOptions);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await ReadAppealAsync(response)).TargetResponseDate!.Value.ToUniversalTime().Should().Be(requested);
+    }
+
+    [Fact]
+    public async Task Medicaid_Urgent_Grievance_Extends_From_A_Target_Beyond_The_Default()
+    {
+        // Target set past the 72h default but inside the 90-day ceiling; the
+        // extension bound is ceiling + 14d, so a 14-day extension is allowed.
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate(LineOfBusiness.Medicaid, urgent: true, type: AppealType.Grievance);
+        body.TargetResponseDate = DateTime.UtcNow.AddDays(60);
+        var appeal = await CreateSubmittedAsync(client, body);
+        var before = appeal.TargetResponseDate!.Value.ToUniversalTime();
+
+        var extended = await ReadAppealAsync(await client.PostAsJsonAsync(
+            $"/api/appeals/{appeal.Id}/extend", Extend(), JsonOptions));
+
+        extended.TargetResponseDate!.Value.ToUniversalTime().Should().BeCloseTo(before.AddDays(14), TimeSpan.FromMilliseconds(1));
+    }
 }

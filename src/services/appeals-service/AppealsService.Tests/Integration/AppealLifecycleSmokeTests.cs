@@ -300,6 +300,50 @@ public class AppealLifecycleSmokeTests : IClassFixture<AppealsWebApplicationFact
         _factory.Repo.SnapshotEvents().Should().BeEmpty("a rejected create must not persist anything");
     }
 
+    [Theory]
+    [InlineData(LineOfBusiness.Medicare, true, 10)]     // urgent MA grievance: 24h default only, 30d ceiling
+    [InlineData(LineOfBusiness.Medicaid, true, 60)]     // urgent Medicaid grievance: 72h default only, 90d ceiling
+    [InlineData(LineOfBusiness.Commercial, false, 120)] // commercial grievance: no federal ceiling
+    [InlineData(LineOfBusiness.Commercial, true, 120)]
+    public async Task Create_Grievance_Override_Beyond_Default_But_Within_Ceiling_Is_Honored(
+        LineOfBusiness lob, bool urgent, int days)
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate();
+        body.LineOfBusiness = lob;
+        body.AppealType = AppealType.Grievance;
+        body.IsUrgent = urgent;
+        var requested = DateTime.UtcNow.AddDays(days);
+        requested = new DateTime(requested.Ticks - requested.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
+        body.TargetResponseDate = requested;
+
+        var appeal = await ReadAppealAsync(await client.PostAsJsonAsync("/api/appeals", body, JsonOptions));
+
+        appeal.TargetResponseDate!.Value.ToUniversalTime().Should().Be(requested);
+    }
+
+    [Theory]
+    [InlineData(LineOfBusiness.Medicare, true, 31)]   // 42 CFR 422.564(e)
+    [InlineData(LineOfBusiness.Medicare, false, 31)]
+    [InlineData(LineOfBusiness.Medicaid, false, 91)]  // 42 CFR 438.408(b)(1)
+    public async Task Create_Grievance_Override_Beyond_Regulatory_Ceiling_Returns400(
+        LineOfBusiness lob, bool urgent, int days)
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var body = BuildCreate();
+        body.LineOfBusiness = lob;
+        body.AppealType = AppealType.Grievance;
+        body.IsUrgent = urgent;
+        body.TargetResponseDate = DateTime.UtcNow.AddDays(days);
+
+        var response = await client.PostAsJsonAsync("/api/appeals", body, JsonOptions);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        _factory.Repo.SnapshotEvents().Should().BeEmpty();
+    }
+
     [Fact]
     public async Task InvalidTransition_Returns409_WithProblemDetails()
     {

@@ -96,21 +96,27 @@ public class AppealsController : ControllerBase
         var actor = Actor;
         var now = DateTime.UtcNow;
 
-        // Regulatory maximum (see AppealResponseDeadlinePolicy for citations).
-        // The clock depends on the level as well as the type: external
-        // review / IRE / State Fair Hearing run on their own (often longer)
-        // clocks. An explicit override may tighten the deadline but never
-        // extend it past the regulatory maximum — reject rather than
-        // silently cap so the caller learns its date was not honored.
-        // Lengthening a running clock is the one-time extension operation
-        // (POST /{id}/extend), never a create-time override.
+        // Default target vs enforceable federal ceiling (see
+        // AppealResponseDeadlinePolicy for citations). Both depend on the
+        // level as well as the type: external review / IRE / State Fair
+        // Hearing run on their own (often longer) clocks. An explicit
+        // override may tighten the deadline but never extend it past a
+        // genuine regulatory maximum — reject rather than silently cap so
+        // the caller learns its date was not honored. Where no federal
+        // ceiling exists (e.g. commercial grievances) the override is
+        // accepted as-is. Lengthening a running clock is the one-time
+        // extension operation (POST /{id}/extend), never a create-time
+        // override.
         var regulatoryDeadline = AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
             now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent);
+        var enforceableMaximum = AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
+            now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent);
         if (request.TargetResponseDate.HasValue
-            && request.TargetResponseDate.Value.ToUniversalTime() > regulatoryDeadline)
+            && enforceableMaximum.HasValue
+            && request.TargetResponseDate.Value.ToUniversalTime() > enforceableMaximum.Value)
         {
             ModelState.AddModelError(nameof(CreateAppealRequest.TargetResponseDate),
-                $"TargetResponseDate exceeds the regulatory maximum of {regulatoryDeadline:o} " +
+                $"TargetResponseDate exceeds the regulatory maximum of {enforceableMaximum.Value:o} " +
                 $"for {request.LineOfBusiness} {request.AppealType} at {request.AppealLevel} (urgent: {request.IsUrgent}).");
             return ValidationProblem(
                 detail: null, instance: null, statusCode: StatusCodes.Status400BadRequest,
@@ -686,11 +692,11 @@ public class AppealsController : ControllerBase
         var receivedAt = (appeal.ReceivedDate ?? appeal.SubmittedDate).ToUniversalTime();
         var ceiling = AppealResponseDeadlinePolicy.ComputeMaxExtendedTargetResponseDate(
             receivedAt, appeal.LineOfBusiness, appeal.AppealType, appeal.AppealLevel, appeal.IsUrgent);
-        if (extended > ceiling)
+        if (ceiling.HasValue && extended > ceiling.Value)
         {
             ModelState.AddModelError(nameof(ExtendDeadlineRequest.ExtensionDays),
                 $"Extending by {request.ExtensionDays} days would move the deadline past the extended " +
-                $"regulatory maximum of {ceiling:o}.");
+                $"regulatory maximum of {ceiling.Value:o}.");
             return ValidationProblem(
                 detail: null, instance: null, statusCode: StatusCodes.Status400BadRequest,
                 title: "Extension exceeds regulatory maximum", type: ExtensionProblemType,
