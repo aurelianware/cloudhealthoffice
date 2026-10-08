@@ -456,8 +456,6 @@ public class ReversalRunServiceTests
         BillingProviderNPI = "1234567890",
         ProviderName = "Acme",
         TotalChargeAmount = 1000m,
-        ApprovedAmount = approvedAmount,
-        PatientResponsibility = 200m,
         Status = ClaimStatus.Paid,
         ServiceDateFrom = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
         AdjudicationResult = new ClaimAdjudicationDto

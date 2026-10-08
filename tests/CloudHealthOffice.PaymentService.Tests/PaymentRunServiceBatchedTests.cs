@@ -123,8 +123,8 @@ public class PaymentRunServiceBatchedTests
 
         var claims = new[]
         {
-            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved },
-            new ClaimDto { Id = "c2", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-B", TotalChargeAmount = 200m, ApprovedAmount = 160m, MemberId = "m2", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, MemberId = "m1", Status = ClaimStatus.Approved },
+            new ClaimDto { Id = "c2", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-B", TotalChargeAmount = 200m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 160m }, MemberId = "m2", Status = ClaimStatus.Approved }
         };
         SetupClaimsResponse(claims);
 
@@ -171,7 +171,7 @@ public class PaymentRunServiceBatchedTests
 
         var claims = new[]
         {
-            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, MemberId = "m1", Status = ClaimStatus.Approved }
         };
         SetupClaimsResponse(claims);
 
@@ -209,7 +209,7 @@ public class PaymentRunServiceBatchedTests
 
         var claims = new[]
         {
-            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-MISSING", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-MISSING", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, MemberId = "m1", Status = ClaimStatus.Approved }
         };
         SetupClaimsResponse(claims);
 
@@ -246,8 +246,8 @@ public class PaymentRunServiceBatchedTests
 
         var claims = new[]
         {
-            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A1", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved },
-            new ClaimDto { Id = "c2", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-A2", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m2", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A1", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, MemberId = "m1", Status = ClaimStatus.Approved },
+            new ClaimDto { Id = "c2", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-A2", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, MemberId = "m2", Status = ClaimStatus.Approved }
         };
         SetupClaimsResponse(claims);
 
@@ -318,9 +318,9 @@ public class PaymentRunServiceBatchedTests
 
         var claims = new[]
         {
-            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved },
-            new ClaimDto { Id = "c-null", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-A", TotalChargeAmount = 5000m, ApprovedAmount = null, MemberId = "m2", Status = ClaimStatus.Approved },
-            new ClaimDto { Id = "c-zero", ClaimNumber = "CLM-3", BillingProviderNPI = "NPI-A", TotalChargeAmount = 300m, ApprovedAmount = 0m, MemberId = "m3", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, MemberId = "m1", Status = ClaimStatus.Approved },
+            new ClaimDto { Id = "c-null", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-A", TotalChargeAmount = 5000m, AdjudicationResult = null, MemberId = "m2", Status = ClaimStatus.Approved },
+            new ClaimDto { Id = "c-zero", ClaimNumber = "CLM-3", BillingProviderNPI = "NPI-A", TotalChargeAmount = 300m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 0m }, MemberId = "m3", Status = ClaimStatus.Approved }
         };
         SetupClaimsResponse(claims);
         SetupSinglePartnerPassThrough();
@@ -333,8 +333,8 @@ public class PaymentRunServiceBatchedTests
         Assert.Equal(PaymentRunStatus.Completed, result.Status);
 
         // The claim without an approved amount is reported, not paid, not reserved.
-        Assert.Equal(new[] { "c-null" }, result.MissingApprovedAmountClaimIds);
-        Assert.Contains(result.Warnings, w => w.Contains("c-null") && w.Contains("no approved amount"));
+        Assert.Equal(new[] { "c-null" }, result.MissingPlanPaidAmountClaimIds);
+        Assert.Contains(result.Warnings, w => w.Contains("c-null") && w.Contains("no plan-paid amount"));
         Assert.DoesNotContain("c-null", result.ClaimIds);
         Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "c-null");
         Assert.DoesNotContain(captured.SelectMany(p => p.ClaimPayments), cp => cp.ClaimId == "c-null");
@@ -360,14 +360,14 @@ public class PaymentRunServiceBatchedTests
         _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
         SetupClaimsResponse(new[]
         {
-            new ClaimDto { Id = "c-null", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 5000m, ApprovedAmount = null, MemberId = "m1", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c-null", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 5000m, AdjudicationResult = null, MemberId = "m1", Status = ClaimStatus.Approved }
         });
         SetupSinglePartnerPassThrough();
 
         var result = await CreateService().ExecutePaymentRunAsync(run.Id);
 
         Assert.Equal(PaymentRunStatus.Completed, result.Status);
-        Assert.Equal(new[] { "c-null" }, result.MissingApprovedAmountClaimIds);
+        Assert.Equal(new[] { "c-null" }, result.MissingPlanPaidAmountClaimIds);
         Assert.Empty(result.PaymentIds);
         Assert.Equal(0m, result.TotalPaymentAmount);
         Assert.Empty(_reservations.All);
@@ -379,7 +379,7 @@ public class PaymentRunServiceBatchedTests
     private static ClaimDto ClaimWithLines(string id, decimal approved, params decimal?[] linePaid) => new()
     {
         Id = id, ClaimNumber = "CLM-" + id, BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m * linePaid.Length,
-        ApprovedAmount = approved, MemberId = "m-" + id, Status = ClaimStatus.Approved,
+        AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = approved }, MemberId = "m-" + id, Status = ClaimStatus.Approved,
         ServiceLines = linePaid.Select((p, i) => new ClaimServiceLineDto
         {
             LineNumber = i + 1, ProcedureCode = "99213", ChargeAmount = 100m, PaidAmount = p, Units = 1
@@ -429,7 +429,7 @@ public class PaymentRunServiceBatchedTests
         // claimLines[].adjudicationResult.paidAmount (no top-level paidAmount).
         const string json = """
             [{"id":"c1","claimNumber":"CLM-1","memberId":"m1","billingProviderNPI":"NPI-A","totalChargeAmount":200,
-              "approvedAmount":150,"status":4,
+              "status":5,"adjudicationResult":{"allowedAmount":190,"payerPayment":150,"patientResponsibility":40},
               "claimLines":[
                 {"lineNumber":1,"procedureCode":"99213","chargeAmount":120,"units":1,"adjudicationResult":{"paidAmount":100}},
                 {"lineNumber":2,"procedureCode":"85025","chargeAmount":80,"units":1,"adjudicationResult":{"paidAmount":50}}]}]
@@ -495,6 +495,68 @@ public class PaymentRunServiceBatchedTests
     }
 
     [Fact]
+    public async Task ExecutePaymentRunAsync_AsksForApprovedOnly_AndRefusesPendedOrDeniedWithStalePayerPayment()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var pended = ClaimWithLines("c-pended", 80m, 80m);
+        pended.Status = ClaimStatus.Pended;
+        var denied = ClaimWithLines("c-denied", 80m, 80m);
+        denied.Status = ClaimStatus.Denied;
+        SetupClaimsResponse(new[] { ClaimWithLines("c-ok", 80m, 80m), pended, denied });
+        SetupSinglePartnerPassThrough();
+
+        var result = await CreateService().ExecutePaymentRunAsync(run.Id);
+
+        var search = _claimsHandler.RecordedRequests.First(r => r.Uri.AbsolutePath.StartsWith("/api/claims/search"));
+        Assert.Contains("status=5", search.Uri.Query); // claims-service ClaimStatus.Approved
+        Assert.Equal(new[] { "c-ok" }, result.ClaimIds);
+        Assert.Contains(result.Warnings, w => w.Contains("c-pended") && w.Contains("Pended"));
+        Assert.Contains(result.Warnings, w => w.Contains("c-denied") && w.Contains("Denied"));
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId is "c-pended" or "c-denied");
+        Assert.Equal(80m, result.TotalPaymentAmount);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_Clp03IsTotalCharge_Clp04IsPayerPayment_Clp05IsMemberResponsibility()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var claim = ClaimWithLines("c1", 170m, 120m, 50m);
+        claim.TotalChargeAmount = 300m;
+        claim.AdjudicationResult!.AllowedAmount = 220m;
+        claim.AdjudicationResult.PatientResponsibility = 50m;
+        SetupClaimsResponse(new[] { claim });
+        SetupSinglePartnerPassThrough();
+        var captured = new List<Payment>();
+        _paymentRepo.CreateAsync(Arg.Do<Payment>(captured.Add)).Returns(call => call.Arg<Payment>());
+
+        await CreateService().ExecutePaymentRunAsync(run.Id);
+
+        var cp = Assert.Single(Assert.Single(captured).ClaimPayments);
+        Assert.Equal(300m, cp.ChargeAmount);                 // CLP03
+        Assert.Equal(170m, cp.PaymentAmount);                // CLP04 = payerPayment, not allowed (220)
+        Assert.Equal(50m, cp.PatientResponsibilityAmount);   // CLP05
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_LineOfBusinessFilter_SendsClaimsServiceValue()
+    {
+        var run = PendingRun();
+        run.Criteria.LineOfBusiness = LineOfBusiness.Medicare;
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(Array.Empty<ClaimDto>());
+
+        await CreateService().ExecutePaymentRunAsync(run.Id);
+
+        var search = _claimsHandler.RecordedRequests.First(r => r.Uri.AbsolutePath.StartsWith("/api/claims/search"));
+        Assert.Contains("lineOfBusiness=2", search.Uri.Query); // claims-service Medicare == 2 (was 1 = Commercial)
+    }
+
+    [Fact]
     public async Task ExecutePaymentRunAsync_AchWithoutOriginatingCompanyId_FailsBeforeAnyClaimIsReservedOrPaid()
     {
         var configuration = new ConfigurationBuilder()
@@ -512,7 +574,7 @@ public class PaymentRunServiceBatchedTests
         _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
         SetupClaimsResponse(new[]
         {
-            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, ApprovedAmount = 80m, MemberId = "m1", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, MemberId = "m1", Status = ClaimStatus.Approved }
         });
         SetupSinglePartnerPassThrough();
 

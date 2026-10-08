@@ -110,8 +110,7 @@ public class PaymentRunBatchedEndToEndTests
                 MemberId = $"m{i}",
                 Status = ClaimStatus.Approved,
                 TotalChargeAmount = 100m + i,
-                ApprovedAmount = 80m + i,
-                PatientResponsibility = 20m,
+                AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m + i, PatientResponsibility = 20m },
                 ServiceDateFrom = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
             });
         }
@@ -185,14 +184,15 @@ public class PaymentRunBatchedEndToEndTests
             MemberId = "m-paid",
             Status = ClaimStatus.Approved,
             TotalChargeAmount = 1000m,
-            ApprovedAmount = 800m,
-            PatientResponsibility = 200m,
+
             ServiceLines = new List<ClaimServiceLineDto>
             {
                 new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 1000m, PaidAmount = 800m, Units = 1 }
             },
             AdjudicationResult = new ClaimAdjudicationDto
             {
+                PayerPayment = 800m,
+                PatientResponsibility = 200m,
                 AdjustmentReasons = new List<ClaimAdjustmentReasonDto>
                 {
                     new() { GroupCode = "PR", ReasonCode = "1", Amount = 200m, Description = "Deductible" }
@@ -206,9 +206,11 @@ public class PaymentRunBatchedEndToEndTests
             ClaimNumber = "CLM-DENIED",
             BillingProviderNPI = "NPI-A",
             MemberId = "m-denied",
-            Status = ClaimStatus.Denied,
+            // Approved at zero pay: line 2 bundled (NCCI). A claims-service
+            // Denied claim is never selected (the run pays Approved only).
+            Status = ClaimStatus.Approved,
             TotalChargeAmount = 500m,
-            ApprovedAmount = 0m,
+            AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 0m },
             ServiceLines = new List<ClaimServiceLineDto>
             {
                 new() { LineNumber = 1, ProcedureCode = "27447", ChargeAmount = 250m, PaidAmount = 0m, Units = 1 },

@@ -230,13 +230,25 @@ Every generated 835 must balance: BPR02 = sum of CLP04 - sum of PLB, and
 for a claim with service lines, sum of SVC03 = CLP04; otherwise generation
 throws.
 
-A claim claims-service returns without an `ApprovedAmount` is never
-paid (never at billed charges): it is excluded before reservation,
-stays Approved, and is listed in `PaymentRun.MissingApprovedAmountClaimIds`.
+The amount paid (CLP04) is the plan's payment, claims-service's
+`adjudicationResult.payerPayment` (published as PlanPaid, finalized by
+ClaimFinalizationService); never the allowed amount and never the billed
+charge. CLP03 is `totalChargeAmount`; CLP05 is
+`adjudicationResult.patientResponsibility`. The run searches
+`status=5` (claims-service Approved; payment-service's `ClaimStatus`
+mirrors claims-service's numeric values) and refuses any other status the
+search returns. A claim without an adjudication result / payer payment is
+never paid: it is excluded before reservation, stays Approved, and is
+listed in `PaymentRun.MissingPlanPaidAmountClaimIds`.
 A line's SVC03 is its paid amount (`claimLines[].adjudicationResult.paidAmount`),
 never its charge; a line with none counts as 0 only when the other lines
-already add up to the approved amount. Otherwise the claim is excluded
+already add up to the payer payment. Otherwise the claim is excluded
 the same way and listed in `PaymentRun.UnbalancedServiceLineClaimIds`.
+The benefit engine, MPIP and the repository's financial normalization all
+set payerPayment = sum of line paid amounts, so engine-adjudicated claims
+balance; claims adjudicated only at claim level (adjudication or inbound
+remittance endpoints that set payerPayment without line results) do not,
+and land on that list.
 
 A reversal recoups the amount payment-service recorded for the
 predecessor's original claim payment (claim and line amounts, sign-flipped),

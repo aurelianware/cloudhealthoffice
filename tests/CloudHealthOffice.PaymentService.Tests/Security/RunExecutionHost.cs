@@ -49,7 +49,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
             return existing;
 
         var claim = Claims.Get(claimId).Dto;
-        var paid = claim.ApprovedAmount ?? 0m;
+        var paid = claim.PlanPaidAmount ?? 0m;
         return Payments.CreateAsync(new Payment
         {
             CheckNumber = "0000999999",
@@ -282,7 +282,7 @@ public sealed class StandInClaimsService : StandInService
                 BillingProviderNPI = npi,
                 ProviderName = "Clinic " + npi,
                 TotalChargeAmount = approved + 20m,
-                ApprovedAmount = approved,
+                AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = approved },
                 Status = ClaimStatus.Approved,
                 ServiceDateFrom = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc),
                 ServiceLines = new List<ClaimServiceLineDto>
