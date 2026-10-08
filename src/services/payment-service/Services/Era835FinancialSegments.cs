@@ -106,11 +106,13 @@ public static class Era835FinancialSegments
     }
 
     /// <summary>
-    /// The adjustment balancing problems of one claim. Once its lines carry
-    /// CAS: each line with CAS must satisfy SVC02 - sum(line CAS) = SVC03, and
-    /// the claim CLP03 - sum(CAS, claim and lines) = CLP04. Empty when it
-    /// balances, or when no line carries CAS (claim-level CAS, or a reversal
-    /// whose lines carry none, is not checked here).
+    /// The adjustment balancing problems of one claim, payment or reversal
+    /// (CLP02 = 22, every amount negated) alike. Once its lines carry CAS:
+    /// every line must satisfy SVC02 - sum(line CAS) = SVC03 (a line without
+    /// CAS must be paid in full), and the claim CLP03 - sum(CAS, claim and
+    /// lines) = CLP04. Empty when it balances, or when no line carries CAS
+    /// (claim-level CAS, and payments and reversals recorded before lines
+    /// carried CAS, are not checked here).
     /// </summary>
     public static IReadOnlyList<string> AdjustmentBalanceProblems(ClaimPayment cp)
     {
@@ -118,7 +120,7 @@ public static class Era835FinancialSegments
         if (!cp.ServiceLines.Any(l => l.Adjustments.Count > 0))
             return problems;
 
-        foreach (var line in cp.ServiceLines.Where(l => l.Adjustments.Count > 0))
+        foreach (var line in cp.ServiceLines)
         {
             var cas = line.Adjustments.Sum(a => a.Amount);
             if (line.ChargeAmount - cas != line.PaymentAmount)

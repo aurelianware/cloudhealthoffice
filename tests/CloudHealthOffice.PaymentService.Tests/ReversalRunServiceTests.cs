@@ -33,6 +33,7 @@ public class ReversalRunServiceTests
     private readonly IConfiguration _configuration;
     private readonly TestActor _actor = TestActor.Approver();
     private readonly InMemoryClaimReservationRepository _reservations = new();
+    private readonly ICarcRarcMappingService _mapper = new CarcRarcMappingService(NullLogger<CarcRarcMappingService>.Instance);
 
     public ReversalRunServiceTests()
     {
@@ -77,7 +78,8 @@ public class ReversalRunServiceTests
         _configuration,
         _actor,
         _actor.SeparationOfDuties(),
-        _reservations);
+        _reservations,
+        _mapper);
 
     private static ReversalRun PendingRun() => new()
     {
@@ -396,7 +398,16 @@ public class ReversalRunServiceTests
         Assert.Equal(-650m, reversal.TotalPaymentAmount);
         var cp = Assert.Single(reversal.ClaimPayments);
         Assert.Equal(-650m, cp.PaymentAmount);
-        Assert.Equal(-650m, Assert.Single(cp.ServiceLines).PaymentAmount);
+        var line = Assert.Single(cp.ServiceLines);
+        Assert.Equal(-650m, line.PaymentAmount);
+        // CLP03/SVC02 are negated too, and the line (recorded before line CAS)
+        // gets the single-line fallback: the claim-level PR-1 200, and CO-45
+        // for the 150 the recorded payment leaves unexplained, all negated.
+        Assert.Equal((-1000m, -1000m, -200m), (cp.ChargeAmount, line.ChargeAmount, cp.PatientResponsibilityAmount));
+        Assert.Equal(new[] { ("PR", "1", -200m), ("CO", "45", -150m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.Empty(cp.ClaimAdjustments);
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(cp));
         Assert.Equal(-650m, executed.TotalReversalAmount);
         Assert.Empty(executed.MissingPaidAmountClaimIds);
     }
@@ -423,7 +434,7 @@ public class ReversalRunServiceTests
         var service = new ReversalRunService(
             _paymentRepo, _runRepo, new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
             _envelopeRepo, _tpClient, _httpFactory, NullLogger<ReversalRunService>.Instance, _configuration,
-            _actor, _actor.SeparationOfDuties(), _reservations);
+            _actor, _actor.SeparationOfDuties(), _reservations, _mapper);
 
         var executed = await service.ExecuteReversalRunAsync(run.Id);
 
@@ -493,6 +504,114 @@ public class ReversalRunServiceTests
 
         Assert.Equal(new[] { "pred-1" }, executed.UnbalancedServiceLineClaimIds);
         Assert.Empty(executed.PaymentIds);
+        Assert.Empty(_reservations.All);
+    }
+
+    /// <summary>Records <paramref name="recorded"/> as the claim's original payment.</summary>
+    private void SeedOriginalPayment(ClaimPayment recorded)
+    {
+        var original = new Payment
+        {
+            Id = "orig-" + recorded.ClaimId,
+            CheckNumber = "0001000001",
+            PaymentMethod = "ACH",
+            TotalPaymentAmount = recorded.PaymentAmount,
+            Status = PaymentStatus.Posted,
+            ClaimPayments = new List<ClaimPayment> { recorded },
+        };
+        _paymentRepo.GetByClaimIdAsync(recorded.ClaimId).Returns(new[] { original });
+    }
+
+    /// <summary>Executes one adjustment's reversal through the real batched generator; returns the run and its envelope.</summary>
+    private async Task<(ReversalRun Run, List<EraEnvelopeRecord> Envelopes, List<Payment> Payments)> ExecuteWithRealGeneratorAsync(ClaimDto pred)
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: pred.Id) });
+        SetupClaimResponse(pred.Id, pred);
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        var envelopes = new List<EraEnvelopeRecord>();
+        _envelopeRepo.CreateAsync(Arg.Do<EraEnvelopeRecord>(envelopes.Add)).Returns(call =>
+        {
+            var rec = call.Arg<EraEnvelopeRecord>();
+            rec.Id = "env-1";
+            return rec;
+        });
+        var payments = new List<Payment>();
+        _paymentRepo.CreateAsync(Arg.Do<Payment>(payments.Add)).Returns(call => call.Arg<Payment>());
+
+        var service = new ReversalRunService(
+            _paymentRepo, _runRepo, new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
+            _envelopeRepo, _tpClient, _httpFactory, NullLogger<ReversalRunService>.Instance, _configuration,
+            _actor, _actor.SeparationOfDuties(), _reservations, _mapper);
+        return (await service.ExecuteReversalRunAsync(run.Id), envelopes, payments);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_MultiLineLineCas_ReversalSvcLoopsNegatedAndBalanced()
+    {
+        var pred = Era835ReversalTests.MultiLinePaidClaim();
+        SeedOriginalPayment(Era835ReversalTests.Recorded(pred));
+
+        var (executed, envelopes, payments) = await ExecuteWithRealGeneratorAsync(pred);
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        Assert.Empty(executed.UnbalancedServiceLineClaimIds);
+        Assert.Equal(-170m, Assert.Single(payments).TotalPaymentAmount);
+        var edi = Assert.Single(envelopes).EdiContent;
+        Assert.Contains("CLP*CLM-1*22*-300.00*-170.00*-50.00*HM*ICN-1~", edi);
+        Assert.Contains("SVC*HC:99213*-200.00*-120.00**1~CAS*CO*45*-50.00~CAS*PR*1*-20.00**2*-10.00~LQ*HE*N130~", edi);
+        Assert.Contains("SVC*HC:85025*-100.00*-50.00**1~CAS*CO*45*-30.00~CAS*PR*1*-20.00~", edi);
+        // PLB forward balance and the receivable are unchanged by line CAS.
+        Assert.Contains("*FB:", edi);
+        Assert.Equal(-170m, envelopes[0].ForwardBalanceAmount);
+        Assert.Equal(170m, executed.OutstandingReceivableAmount);
+        EdiBalance.AssertEveryLoopBalances(edi);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_LegacyMultiLinePaymentWithoutLineDetail_FallsBackToCo45_Reversed()
+    {
+        var pred = Era835ReversalTests.MultiLinePaidClaim();
+        foreach (var l in pred.ServiceLines!)
+            l.AdjudicationResult!.AdjustmentReasons = null;
+        var recorded = Era835ReversalTests.LegacyRecorded(Era835ReversalTests.Recorded(pred));
+        recorded.ClaimAdjustments = new List<ClaimAdjustment>
+        {
+            new() { GroupCode = "CO", ReasonCode = "45", Amount = 80m },
+            new() { GroupCode = "PR", ReasonCode = "1", Amount = 40m },
+            new() { GroupCode = "PR", ReasonCode = "2", Amount = 10m },
+        };
+        SeedOriginalPayment(recorded);
+
+        var (executed, envelopes, _) = await ExecuteWithRealGeneratorAsync(pred);
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        Assert.Empty(executed.UnbalancedServiceLineClaimIds);
+        var edi = Assert.Single(envelopes).EdiContent;
+        Assert.Contains("CLP*CLM-1*22*-300.00*-170.00*-50.00*HM*ICN-1~NM1", edi); // no header CAS: the lines explain the charge
+        Assert.Contains("SVC*HC:99213*-200.00*-120.00**1~CAS*CO*45*-80.00~", edi);
+        Assert.Contains("SVC*HC:85025*-100.00*-50.00**1~CAS*CO*45*-50.00~", edi);
+        EdiBalance.AssertEveryLoopBalances(edi);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_RecordedLineCasUnbalanced_NotReversed_Reported_NotReserved()
+    {
+        var pred = Era835ReversalTests.MultiLinePaidClaim();
+        var recorded = Era835ReversalTests.Recorded(pred);
+        recorded.ServiceLines[1].Adjustments[0].Amount = 10m; // 100 - 30 != 50
+        SeedOriginalPayment(recorded);
+
+        var (executed, envelopes, payments) = await ExecuteWithRealGeneratorAsync(pred);
+
+        Assert.Equal(new[] { "c1" }, executed.UnbalancedServiceLineClaimIds);
+        Assert.Contains(executed.Warnings, w => w.Contains("c1") && w.Contains("line 2"));
+        Assert.Empty(executed.PaymentIds);
+        Assert.Empty(payments);
+        Assert.Empty(envelopes);
         Assert.Empty(_reservations.All);
     }
 
