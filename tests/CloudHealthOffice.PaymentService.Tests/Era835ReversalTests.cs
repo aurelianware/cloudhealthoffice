@@ -337,6 +337,73 @@ public class Era835ReversalTests
             new Dictionary<string, TradingPartnerInfo> { ["TP-A"] = new() { OriginatingCompanyId = "1123456789" } }));
     }
 
+    private static ClaimPayment ClaimLevel(string status, decimal charge, decimal paid, params decimal[] cas) => new()
+    {
+        ClaimId = "cl1", PatientControlNumber = "CLM-CL1", ClaimStatusCode = status,
+        ChargeAmount = charge, PaymentAmount = paid,
+        ClaimAdjustments = cas.Select(a => new ClaimAdjustment { GroupCode = "CO", ReasonCode = "45", Amount = a }).ToList(),
+    };
+
+    private static readonly Dictionary<string, TradingPartnerInfo> NonPartner =
+        new() { ["TP-A"] = new() { OriginatingCompanyId = "1123456789" } };
+
+    [Fact]
+    public void ClaimLevelReversal_HeaderCasNotExplainingTheCharge_ReportedAndRefusedByGeneration()
+    {
+        // Recorded at claim level: CLP03 100, CLP04 80, CAS 10 (10 unexplained).
+        var original = ClaimLevel("1", 100m, 80m, 10m);
+
+        var reversal = Era835ClaimPaymentBuilder.BuildReversal(original, new ClaimDto { Id = "cl1" }, Mapper);
+
+        Assert.Equal((-100m, -80m, -10m), (reversal.ChargeAmount, reversal.PaymentAmount, reversal.ClaimAdjustments[0].Amount));
+        var problem = Assert.Single(Era835FinancialSegments.AdjustmentBalanceProblems(reversal));
+        Assert.Contains("CLP03", problem);
+        Assert.Contains("-90.00", problem);
+        var generator = new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance);
+        Assert.Throws<InvalidOperationException>(() => generator.GenerateBatch(
+            new[] { Input(-80m, "R-0001", reversal, isReversal: true) }, NonPartner));
+    }
+
+    [Fact]
+    public void ClaimLevelReversal_Balanced_Accepted()
+    {
+        var reversal = Era835ClaimPaymentBuilder.BuildReversal(ClaimLevel("1", 100m, 80m, 20m), new ClaimDto { Id = "cl1" }, Mapper);
+
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(reversal));
+        var generator = new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance);
+        var edi = generator.GenerateBatch(new[] { Input(-80m, "R-0001", reversal, isReversal: true) }, NonPartner).Single().EdiContent;
+        Assert.Contains("CLP*CLM-CL1*22*-100.00*-80.00*0.00*HM*cl1~CAS*CO*45*-20.00~", edi);
+        EdiBalance.AssertEveryLoopBalances(edi);
+    }
+
+    [Fact]
+    public void ClaimLevelPayment_HeaderCasNotExplainingTheCharge_Reported()
+    {
+        Assert.Single(Era835FinancialSegments.AdjustmentBalanceProblems(ClaimLevel("1", 100m, 80m, 10m)));
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(ClaimLevel("1", 100m, 80m, 20m)));
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(ClaimLevel("1", 100m, 100m)));
+    }
+
+    [Fact]
+    public void StoredLegacyReversals_PositiveClp03_NoLineCas_StillRegenerate()
+    {
+        // Stored before this change: CLP03 positive, CLP04 and CAS negated.
+        var claimLevel = ClaimLevel("22", 1000m, -800m, -200m);
+        var withLines = ClaimLevel("22", 1000m, -800m, -200m);
+        withLines.ClaimId = "cl2";
+        withLines.ServiceLines.Add(new ServiceLinePayment { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 1000m, PaymentAmount = -800m, Units = 1 });
+        Assert.True(Era835FinancialSegments.IsLegacyReversal(claimLevel));
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(claimLevel));
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(withLines));
+
+        var era = new EraGeneratorService(NullLogger<EraGeneratorService>.Instance);
+        foreach (var cp in new[] { claimLevel, withLines })
+        {
+            var payment = Input(-800m, "R-OLD", cp, isReversal: true).Payment;
+            Assert.Contains("CLP*CLM-CL1*22*1000.00*-800.00*", era.Generate835(payment, NonPartner["TP-A"]));
+        }
+    }
+
     private static EraPaymentInput Input(decimal total, string check, ClaimPayment cp, bool isReversal) => new()
     {
         TradingPartnerId = "TP-A",

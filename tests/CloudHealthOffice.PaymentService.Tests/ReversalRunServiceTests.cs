@@ -615,6 +615,28 @@ public class ReversalRunServiceTests
         Assert.Empty(_reservations.All);
     }
 
+    [Fact]
+    public async Task ExecuteReversalRunAsync_ClaimLevelHeaderCasUnbalanced_NotReversed_Reported_NotReserved()
+    {
+        var pred = BuildClaim("pred-1", approvedAmount: 80m);
+        pred.ServiceLines = null;
+        // Recorded at claim level: CLP03 100, CLP04 80, header CAS only 10.
+        SeedOriginalPayment(new ClaimPayment
+        {
+            ClaimId = "pred-1", PatientControlNumber = "CLM-pred-1", ClaimStatusCode = "1",
+            ChargeAmount = 100m, PaymentAmount = 80m,
+            ClaimAdjustments = new List<ClaimAdjustment> { new() { GroupCode = "CO", ReasonCode = "45", Amount = 10m } },
+        });
+
+        var (executed, envelopes, payments) = await ExecuteWithRealGeneratorAsync(pred);
+
+        Assert.Equal(new[] { "pred-1" }, executed.UnbalancedServiceLineClaimIds);
+        Assert.Contains(executed.Warnings, w => w.Contains("pred-1") && w.Contains("CLP03"));
+        Assert.Empty(payments);
+        Assert.Empty(envelopes);
+        Assert.Empty(_reservations.All);
+    }
+
     private static ClaimDto BuildClaim(string id, decimal approvedAmount) => new()
     {
         Id = id,

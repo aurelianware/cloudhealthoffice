@@ -211,8 +211,11 @@ the 835's adjustments:
 
 Generation checks, once lines carry CAS, that every line satisfies
 SVC02 - sum(line CAS) = SVC03 (a line without CAS must then be paid in
-full) and the claim CLP03 - sum(CAS, claim and lines) = CLP04, and throws
-otherwise. A payment run checks the same before reserving: a claim that
+full) and the claim CLP03 - sum(CAS, claim and lines) = CLP04; for a
+claim remitted at claim level (no SVC) with header CAS, that CLP03 -
+sum(CAS) = CLP04. It throws otherwise. A claim whose SVC loops carry no CAS
+(payments recorded before line CAS, which keep the claim-level CAS in the
+header) is not checked. A payment run checks the same before reserving: a claim that
 would fail is not paid and is listed in `UnbalancedServiceLineClaimIds`.
 
 ### Reversals (CLP02 = 22)
@@ -240,8 +243,10 @@ payment-service recorded for the predecessor:
 The reversal run applies the same per-line and per-claim check before
 reserving: a reversal whose adjustments would not balance is not
 recouped and is listed in `ReversalRun.UnbalancedServiceLineClaimIds`,
-and 835 generation refuses it. Stored reversal payments from before this
-change (no line CAS) are not checked, so their 835s still regenerate.
+and 835 generation refuses it; this includes a claim-level reversal whose
+header CAS does not explain the charge. Stored reversal payments from
+before this change (positive CLP03, no line CAS) are not checked, so their
+835s still regenerate.
 Denials are never recorded as payments, so a reversal run reverses only
 paid claims; a recorded denial (CLP02 = 4) would reverse with CLP04 =
 0.00 and its denial CAS negated.
