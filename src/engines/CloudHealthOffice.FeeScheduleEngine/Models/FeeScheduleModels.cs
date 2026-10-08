@@ -77,8 +77,9 @@ public class FeeSchedule
     public decimal? PercentOfMedicare { get; set; }
 
     /// <summary>
-    /// For Medicaid schedules: the MPFS fee schedule ID to use as the base rate.
-    /// If null, lines must store pre-calculated flat rates.
+    /// The Medicare MPFS fee schedule ID to use as the base rate for Medicaid
+    /// schedules and for PercentOfMedicare lines on Commercial/Custom schedules.
+    /// If null, lines must store pre-calculated flat rates (or inline RVUs).
     /// </summary>
     public string? BaseMpfsFeeScheduleId { get; set; }
 
@@ -325,6 +326,12 @@ public record PricingResult
 
     /// <summary>Ordered list of adjustments applied to arrive at AllowedAmount.</summary>
     public IReadOnlyList<RateAdjustment> Adjustments { get; init; } = Array.Empty<RateAdjustment>();
+
+    /// <summary>
+    /// Set when <see cref="RateSource"/> is <see cref="RateSource.Unresolved"/>:
+    /// why the allowed amount could not be determined.
+    /// </summary>
+    public string? UnresolvedReason { get; init; }
 }
 
 /// <summary>

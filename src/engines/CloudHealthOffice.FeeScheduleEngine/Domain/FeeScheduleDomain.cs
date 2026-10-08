@@ -156,7 +156,15 @@ public enum RateSource
     Drg,
 
     /// <summary>Capitation — no fee-for-service payment.</summary>
-    Capitation
+    Capitation,
+
+    /// <summary>
+    /// A rate line matched but its allowed amount could not be determined
+    /// (e.g. percent-of-Medicare with no resolvable Medicare reference rate).
+    /// AllowedAmount is 0 and PricingResult.UnresolvedReason explains why;
+    /// the line must be pended for review, not paid.
+    /// </summary>
+    Unresolved
 }
 
 /// <summary>

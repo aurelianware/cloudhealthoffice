@@ -522,6 +522,38 @@ public class AdjudicationController : ControllerBase
             rateSpan?.SetTag("cho.rate.line_count", pricingResults.LineResults.Count);
         }
 
+        // A line whose rate matched but could not be computed (e.g. percent-of-Medicare
+        // with no Medicare reference) prices at $0 — pend rather than adjudicate on it.
+        var unresolvedLines = pricingResults.LineResults
+            .Where(p => p.RateSource == CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.Unresolved)
+            .ToList();
+        if (unresolvedLines.Count > 0)
+        {
+            adjudicationSpan?.SetTag("cho.outcome", "pricing_unresolved");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Fee schedule rate could not be resolved");
+
+            RecordLatency(sw, claimTypeCode, "pricing_unresolved");
+
+            _logger.LogWarning(
+                "Claim {ClaimId} pended: fee schedule rate unresolved for {LineCount} line(s)",
+                SanitizeForLog(request.ClaimId), unresolvedLines.Count);
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "PRICING_UNRESOLVED",
+                message = "Allowed amount could not be determined for one or more lines; manual pricing review required",
+                lines = unresolvedLines.Select(p => new
+                {
+                    lineNumber = p.LineNumber,
+                    procedureCode = p.ProcedureCode,
+                    feeScheduleId = p.FeeScheduleId,
+                    reason = p.UnresolvedReason,
+                }),
+                timings = stageTimings,
+            });
+        }
+
         // ── Step 2: Build benefit request with allowed amounts from pricing ──
         // Uses CalculateWithModeAsync when operating in Augment mode (Gap 1).
         BenefitResolutionResult benefitResult;

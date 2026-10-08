@@ -400,6 +400,25 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.NotEmpty(result.Accumulators);
     }
 
+    [Fact]
+    public async Task Adjudicate_PricingUnresolved_Returns422PendInsteadOfPayingZero()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        SetupRateResult(allowedAmount: 0m, rateSource: RateSource.Unresolved);
+        SetupBenefitResult();
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = body.RootElement;
+        Assert.Equal("PRICING_UNRESOLVED", root.GetProperty("error").GetString());
+        Assert.Equal(1, root.GetProperty("lines").GetArrayLength());
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // Adjudicate provider integrity outcomes — a confirmed exclusion must
     // be distinguished from "could not confidently verify" (manual review
