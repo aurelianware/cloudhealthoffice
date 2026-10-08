@@ -45,6 +45,48 @@ public class AppealResponseDeadlinePolicyTests
             .Should().Be(Received.AddHours(hours));
     }
 
+    [Theory]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, true, 72)]
+    [InlineData(LineOfBusiness.Medicaid, AppealType.Reconsideration, true, 72)]
+    [InlineData(LineOfBusiness.Commercial, AppealType.PeerReview, true, 72)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Reconsideration, false, 30 * 24)]
+    [InlineData(LineOfBusiness.Medicaid, AppealType.Reconsideration, false, 30 * 24)]
+    [InlineData(LineOfBusiness.Commercial, AppealType.Reconsideration, false, 30 * 24)]
+    [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, false, 30 * 24)]  // 422.564(e)
+    [InlineData(LineOfBusiness.Medicare, AppealType.Grievance, true, 30 * 24)]   // 24h is default only
+    [InlineData(LineOfBusiness.Medicaid, AppealType.Grievance, false, 90 * 24)]  // 438.408(b)(1)
+    [InlineData(LineOfBusiness.Medicaid, AppealType.Grievance, true, 90 * 24)]   // 72h is default only
+    public void EnforceableMaximum_Is_Regulatory_Ceiling(LineOfBusiness lob, AppealType type, bool urgent, int hours)
+    {
+        AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(Received, lob, type, urgent)
+            .Should().Be(Received.AddHours(hours));
+    }
+
+    [Theory]
+    [InlineData(LineOfBusiness.Commercial, false)]
+    [InlineData(LineOfBusiness.Commercial, true)]
+    [InlineData(LineOfBusiness.Marketplace, false)]
+    [InlineData(LineOfBusiness.Marketplace, true)]
+    public void Commercial_Grievance_Has_No_Federal_Maximum(LineOfBusiness lob, bool urgent)
+    {
+        AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(Received, lob, AppealType.Grievance, urgent)
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Default_Target_Never_Exceeds_Enforceable_Maximum()
+    {
+        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var type in Enum.GetValues<AppealType>())
+        foreach (var urgent in new[] { true, false })
+        {
+            var max = AppealResponseDeadlinePolicy.EnforceableMaximumWindow(lob, type, urgent);
+            if (max is null) continue;
+            AppealResponseDeadlinePolicy.MaxResponseWindow(lob, type, urgent)
+                .Should().BeLessThanOrEqualTo(max.Value, $"{lob} {type} urgent={urgent}");
+        }
+    }
+
     [Fact]
     public void Urgent_Never_Exceeds_72_Hours_For_Any_Combination()
     {
