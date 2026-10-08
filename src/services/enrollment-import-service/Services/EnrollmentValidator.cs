@@ -52,9 +52,10 @@ public sealed class EnrollmentValidator : IEnrollmentValidator
         "18", "01", "19", "G8", "17", "10"
     };
 
+    // INS05: A=Active, C=COBRA, S=Surviving Insured, T=TEFRA.
     private static readonly HashSet<string> AllowedBenefitStatus = new(StringComparer.Ordinal)
     {
-        "A", "C", "T"
+        "A", "C", "S", "T"
     };
 
     public EnrollmentValidationResult Validate(MemberEnrollment? enrollment)
@@ -78,7 +79,7 @@ public sealed class EnrollmentValidator : IEnrollmentValidator
 
         if (string.IsNullOrWhiteSpace(enrollment.BenefitStatus))
             errors.Add(new("benefitStatus", "benefitStatus.required",
-                "benefitStatus is required (A/C/T)"));
+                "benefitStatus is required (A/C/S/T)"));
         else if (!AllowedBenefitStatus.Contains(enrollment.BenefitStatus))
             errors.Add(new("benefitStatus", "benefitStatus.unsupported",
                 $"benefitStatus '{enrollment.BenefitStatus}' is not supported"));

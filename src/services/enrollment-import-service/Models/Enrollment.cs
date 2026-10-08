@@ -34,6 +34,14 @@ public class Enrollment834
     public List<Dependent> DependentEnrollments { get; set; } = new();
 
     /// <summary>
+    /// Content the 834 parser recognized but could not import (e.g. member
+    /// data inside an LS/LE block — a pre-X220A1 "dependent loop"). The
+    /// import service copies these onto the run's error list.
+    /// </summary>
+    [JsonPropertyName("parseWarnings")]
+    public List<string> ParseWarnings { get; set; } = new();
+
+    /// <summary>
     /// Optional caller-supplied batch id. When set, replays of the same batch produce
     /// deterministic event ids and de-duplicate at the event store.
     /// </summary>
@@ -64,7 +72,7 @@ public class MemberEnrollment
     public string? MaintenanceReason { get; set; }
     
     [JsonPropertyName("benefitStatus")]
-    public string BenefitStatus { get; set; } = string.Empty; // A=Active, C=COBRA, T=Terminated
+    public string BenefitStatus { get; set; } = string.Empty; // INS05: A=Active, C=COBRA, S=Surviving insured, T=TEFRA (not "terminated")
     
     [JsonPropertyName("subscriberId")]
     public string? SubscriberId { get; set; }

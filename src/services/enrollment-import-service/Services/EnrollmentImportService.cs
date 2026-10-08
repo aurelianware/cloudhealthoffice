@@ -67,6 +67,17 @@ public class EnrollmentImportService : IEnrollmentImportService
         var batchId = !string.IsNullOrEmpty(enrollment.BatchId)
             ? enrollment.BatchId
             : $"BATCH-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}".Substring(0, 40);
+        var ctx = new BatchContext(tenantId, batchId, enrollment, result);
+
+        // Parser warnings (e.g. a pre-X220A1 LS/LE "dependent" block whose
+        // contents could not be imported) go on the run's error list so an
+        // operator sees them, rather than the data silently disappearing.
+        foreach (var warning in enrollment.ParseWarnings)
+        {
+            _logger.LogWarning("834 parse warning for {FileName}: {Warning}",
+                SanitizeForLog(enrollment.FileName), SanitizeForLog(warning));
+            result.Errors.Add(warning);
+        }
 
         for (int i = 0; i < enrollment.Enrollments.Count; i++)
         {
@@ -99,7 +110,7 @@ public class EnrollmentImportService : IEnrollmentImportService
 
             try
             {
-                await ProcessMemberEnrollmentAsync(memberEnrollment, tenantId, result);
+                await ProcessMemberEnrollmentAsync(memberEnrollment, ctx, transactionId);
                 await PublishEnrollmentEventAsync(tenantId, batchId, transactionId, enrollment, memberEnrollment);
             }
             catch (Exception ex)
@@ -118,9 +129,9 @@ public class EnrollmentImportService : IEnrollmentImportService
         // (e.g. a newborn add or a child's termination on its own). The
         // subscriber must already exist — a dependent is never used to
         // create, or write onto, a subscriber record.
-        foreach (var dependent in enrollment.DependentEnrollments)
+        for (var k = 0; k < enrollment.DependentEnrollments.Count; k++)
         {
-            await ProcessStandaloneDependentAsync(dependent, tenantId, result);
+            await ProcessStandaloneDependentAsync(enrollment.DependentEnrollments[k], ctx, k);
         }
 
         result.CompletedAt = DateTime.UtcNow;
@@ -163,6 +174,8 @@ public class EnrollmentImportService : IEnrollmentImportService
                 DependentsUpdated = result.DependentsUpdated,
                 DependentsTerminated = result.DependentsTerminated,
                 CoverageRecordsCreated = result.CoverageRecordsCreated,
+                CoverageRecordsUpdated = result.CoverageRecordsUpdated,
+                CoverageRecordsTerminated = result.CoverageRecordsTerminated,
                 CoverageMappingsUnresolved = result.CoverageMappingsUnresolved,
                 Errors = result.Errors
             });
@@ -180,9 +193,12 @@ public class EnrollmentImportService : IEnrollmentImportService
         string batchId,
         string transactionId,
         Enrollment834 batch,
-        MemberEnrollment memberEnrollment)
+        MemberEnrollment memberEnrollment,
+        string? dependentMemberId = null)
     {
-        var memberId = memberEnrollment.SubscriberId ?? string.Empty;
+        // Subscriber events are keyed by SubscriberId; a dependent's event by
+        // the dependent's own member id (with SubscriberId in the payload).
+        var memberId = dependentMemberId ?? memberEnrollment.SubscriberId ?? string.Empty;
         if (string.IsNullOrEmpty(memberId)) return;
 
         var eventType = EnrollmentEventClassifier.Classify(memberEnrollment);
@@ -205,6 +221,10 @@ public class EnrollmentImportService : IEnrollmentImportService
             ["coverageCount"] = memberEnrollment.Coverage?.Count ?? 0,
             ["dependentCount"] = memberEnrollment.Dependents?.Count ?? 0
         };
+        if (dependentMemberId is not null)
+        {
+            payload["subscriberId"] = memberEnrollment.SubscriberId;
+        }
 
         var rawSegment = SerializeRawSegment(memberEnrollment);
 
@@ -285,11 +305,12 @@ public class EnrollmentImportService : IEnrollmentImportService
         string batchId,
         Enrollment834 batch,
         MemberEnrollment memberEnrollment,
-        string status)
+        string status,
+        string? dependentMemberId = null)
     {
         try
         {
-            var memberId = memberEnrollment.SubscriberId ?? string.Empty;
+            var memberId = dependentMemberId ?? memberEnrollment.SubscriberId ?? string.Empty;
             var firstName = memberEnrollment.Demographics?.FirstName ?? string.Empty;
             var lastName = memberEnrollment.Demographics?.LastName ?? string.Empty;
 
@@ -297,7 +318,9 @@ public class EnrollmentImportService : IEnrollmentImportService
             {
                 TenantId = tenantId,
                 BatchId = batchId,
-                TransactionId = $"{batchId}-{Guid.NewGuid():N}".Substring(0, 40),
+                // Capped at 40 chars; a short caller-supplied batchId must not
+                // make Substring throw (which silently dropped the row).
+                TransactionId = Truncate($"{batchId}-{Guid.NewGuid():N}", 40),
                 MemberId = memberId,
                 SubscriberId = memberEnrollment.SubscriberId,
                 MemberName = $"{firstName} {lastName}".Trim(),
@@ -317,8 +340,14 @@ public class EnrollmentImportService : IEnrollmentImportService
         }
     }
 
-    private async Task ProcessMemberEnrollmentAsync(MemberEnrollment enrollment, string tenantId, ImportResult result)
+    /// <summary>Batch-level context threaded through member, dependent and coverage processing.</summary>
+    private sealed record BatchContext(string TenantId, string BatchId, Enrollment834 Batch, ImportResult Result);
+
+    private async Task ProcessMemberEnrollmentAsync(
+        MemberEnrollment enrollment, BatchContext ctx, string transactionId)
     {
+        var tenantId = ctx.TenantId;
+        var result = ctx.Result;
         // 1. Ensure the sponsor (employer/group) exists. Sponsor-service keys
         // sponsors by GroupNumber (REF*1L, e.g. "GRP0001") — NOT by the N1
         // segment's own id (typically the employer's FEIN), which is a
@@ -336,10 +365,8 @@ public class EnrollmentImportService : IEnrollmentImportService
         var memberExists = !string.IsNullOrEmpty(enrollment.SubscriberId) &&
             await _memberClient.ExistsAsync(tenantId, memberId);
 
-        // Whether the subscriber's own coverage lines should be written, and
-        // whether the subscriber is on file afterwards (dependents are only
-        // ever linked to a subscriber that exists in member-service).
-        var syncSubscriberCoverage = enrollment.MaintenanceType != "024";
+        // Whether the subscriber is on file afterwards: its coverage and its
+        // dependents are only ever reconciled against a member that exists.
         var subscriberOnFile = true;
 
         switch (enrollment.MaintenanceType)
@@ -348,12 +375,11 @@ public class EnrollmentImportService : IEnrollmentImportService
                 if (memberExists)
                 {
                     // Re-import of the same add: leave the subscriber alone,
-                    // but still reconcile its dependents (each keyed
-                    // deterministically, so a replay updates nothing twice).
+                    // but still reconcile coverage and dependents — both are
+                    // keyed deterministically, so a replay changes nothing.
                     _logger.LogWarning("Member {SubscriberId} already exists, skipping addition",
                         SanitizeForLog(enrollment.SubscriberId));
                     result.SkippedCount++;
-                    syncSubscriberCoverage = false;
                     break;
                 }
                 await CreateMemberFromEnrollmentAsync(memberId, enrollment, tenantId);
@@ -413,19 +439,19 @@ public class EnrollmentImportService : IEnrollmentImportService
         // same as Member/Sponsor above. PlanId is resolved via
         // benefit-plan-service's plan-code-mapping crosswalk first, since the
         // raw 834 only carries the trading partner's own plan code, not this
-        // platform's PlanId.
-        if (syncSubscriberCoverage)
+        // platform's PlanId. Each HD line's own maintenance type drives the
+        // change (see ApplyCoverageAsync); a member-level 024 terminates
+        // every line regardless of HD01.
+        if (subscriberOnFile)
         {
-            foreach (var coverageDetail in enrollment.Coverage)
-            {
-                await ProcessCoverageAndCountAsync(
-                    memberId, tenantId, coverageDetail, enrollment.EnrollmentDate, enrollment.GroupNumber, result);
-            }
+            await ApplyMemberCoverageAsync(
+                memberId, enrollment.Coverage, enrollment.MaintenanceType, enrollment.MaintenanceReason,
+                enrollment.EnrollmentDate, enrollment.TerminationDate, enrollment.GroupNumber, ctx);
         }
 
         // 4. Process Dependents — each is its own member (its own 834 Loop
-        // 2000) with its own id and maintenance type; nothing here writes to
-        // the subscriber's record.
+        // 2000) with its own id, maintenance type, transaction-log row and
+        // enrollment event; nothing here writes to the subscriber's record.
         if (enrollment.Dependents.Count == 0)
         {
             return;
@@ -435,11 +461,14 @@ public class EnrollmentImportService : IEnrollmentImportService
             _logger.LogWarning(
                 "Subscriber {SubscriberId} not on file; skipping {Count} dependent(s)",
                 SanitizeForLog(enrollment.SubscriberId), enrollment.Dependents.Count);
+            result.Errors.Add(
+                $"Subscriber {enrollment.SubscriberId}: not on file; {enrollment.Dependents.Count} dependent(s) not applied");
             return;
         }
-        foreach (var dependent in enrollment.Dependents)
+        for (var j = 0; j < enrollment.Dependents.Count; j++)
         {
-            await ProcessDependentAsync(dependent, tenantId, memberId, enrollment, result);
+            await ProcessDependentTransactionAsync(
+                enrollment.Dependents[j], memberId, enrollment, ctx, $"{transactionId}-D{j:D2}");
         }
     }
 
@@ -447,53 +476,148 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// A dependent Loop 2000 that arrived without its subscriber's INS loop.
     /// Counted as its own top-level transaction in Success/Failed/Skipped.
     /// </summary>
-    private async Task ProcessStandaloneDependentAsync(Dependent dependent, string tenantId, ImportResult result)
+    private async Task ProcessStandaloneDependentAsync(Dependent dependent, BatchContext ctx, int index)
     {
+        var result = ctx.Result;
         var subscriberId = dependent.SubscriberId;
         if (string.IsNullOrWhiteSpace(subscriberId) || string.IsNullOrWhiteSpace(dependent.MaintenanceType))
         {
             result.Errors.Add(
                 $"Dependent of subscriber {subscriberId}: subscriberId (REF*0F) and maintenanceType (INS03) are required");
             result.FailedCount++;
+            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch,
+                ToMemberEnrollment(dependent, null, dependent.MaintenanceType), "Rejected");
             return;
+        }
+
+        bool exists;
+        try
+        {
+            exists = await _memberClient.ExistsAsync(ctx.TenantId, subscriberId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error looking up subscriber {SubscriberId} for dependent",
+                SanitizeForLog(subscriberId));
+            result.Errors.Add($"Subscriber {subscriberId} dependent: {ex.Message}");
+            result.FailedCount++;
+            return;
+        }
+
+        if (!exists)
+        {
+            var projected = ToMemberEnrollment(dependent, null, dependent.MaintenanceType);
+            if (dependent.MaintenanceType == "024")
+            {
+                _logger.LogWarning(
+                    "Subscriber {SubscriberId} not found for dependent termination, skipping",
+                    SanitizeForLog(subscriberId));
+                result.SkippedCount++;
+                // Same status the subscriber loop records for a not-found 024.
+                await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted");
+            }
+            else
+            {
+                result.Errors.Add($"Subscriber {subscriberId}: not on file; cannot apply dependent maintenance");
+                result.FailedCount++;
+                await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected");
+            }
+            return;
+        }
+
+        var outcome = await ProcessDependentTransactionAsync(
+            dependent, subscriberId, null, ctx, $"{ctx.BatchId}-S{index:D4}-{subscriberId}");
+        switch (outcome)
+        {
+            case DependentOutcome.Applied: result.SuccessCount++; break;
+            case DependentOutcome.Skipped: result.SkippedCount++; break;
+            default: result.FailedCount++; break;
+        }
+    }
+
+    private enum DependentOutcome { Applied, Skipped, Failed }
+
+    /// <summary>
+    /// Applies one dependent and writes its audit trail the same way the
+    /// subscriber loop does: an EnrollmentEvent (deterministic id keyed on
+    /// the dependent's own member id) and an EnrollmentTransaction row. A
+    /// failure is contained to this dependent.
+    /// </summary>
+    private async Task<DependentOutcome> ProcessDependentTransactionAsync(
+        Dependent dependent, string subscriberMemberId, MemberEnrollment? subscriber, BatchContext ctx,
+        string transactionId)
+    {
+        var maintenanceType = dependent.MaintenanceType ?? subscriber?.MaintenanceType;
+        var projected = ToMemberEnrollment(dependent, subscriber, maintenanceType);
+        projected.SubscriberId ??= subscriberMemberId;
+        projected.TransactionId = transactionId;
+
+        var dependentMemberId = BuildDependentMemberId(subscriberMemberId, dependent);
+        if (dependentMemberId is null)
+        {
+            ctx.Result.Errors.Add(
+                $"Subscriber {subscriberMemberId}: dependent has no member identifier (REF*23) and no first name + date of birth to key it by; not applied");
+            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected");
+            return DependentOutcome.Failed;
         }
 
         try
         {
-            if (!await _memberClient.ExistsAsync(tenantId, subscriberId))
-            {
-                if (dependent.MaintenanceType == "024")
-                {
-                    _logger.LogWarning(
-                        "Subscriber {SubscriberId} not found for dependent termination, skipping",
-                        SanitizeForLog(subscriberId));
-                    result.SkippedCount++;
-                }
-                else
-                {
-                    result.Errors.Add($"Subscriber {subscriberId}: not on file; cannot apply dependent maintenance");
-                    result.FailedCount++;
-                }
-                return;
-            }
-
-            if (await ProcessDependentAsync(dependent, tenantId, subscriberId, null, result))
-            {
-                result.SuccessCount++;
-            }
-            else
-            {
-                result.SkippedCount++;
-            }
+            var applied = await ProcessDependentAsync(
+                dependent, dependentMemberId, maintenanceType, subscriberMemberId, subscriber, ctx);
+            await PublishEnrollmentEventAsync(
+                ctx.TenantId, ctx.BatchId, transactionId, ctx.Batch, projected, dependentMemberId);
+            await RecordTransactionAsync(
+                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted", dependentMemberId);
+            return applied ? DependentOutcome.Applied : DependentOutcome.Skipped;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing dependent of subscriber {SubscriberId}",
-                SanitizeForLog(subscriberId));
-            result.Errors.Add($"Subscriber {subscriberId} dependent: {ex.Message}");
-            result.FailedCount++;
+            _logger.LogError(ex, "Error processing dependent {DependentId} of subscriber {SubscriberId}",
+                SanitizeForLog(dependentMemberId), SanitizeForLog(subscriberMemberId));
+            ctx.Result.Errors.Add($"Dependent {dependentMemberId}: {ex.Message}");
+            await RecordTransactionAsync(
+                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
+            return DependentOutcome.Failed;
         }
     }
+
+    /// <summary>
+    /// Projects a dependent onto the <see cref="MemberEnrollment"/> shape the
+    /// event classifier, event payload and transaction log already consume,
+    /// inheriting from the subscriber only what the dependent didn't send.
+    /// </summary>
+    private static MemberEnrollment ToMemberEnrollment(
+        Dependent dependent, MemberEnrollment? subscriber, string? maintenanceType) => new()
+    {
+        Relationship = dependent.Relationship ?? string.Empty,
+        MaintenanceType = maintenanceType ?? string.Empty,
+        MaintenanceReason = dependent.MaintenanceReason ?? subscriber?.MaintenanceReason,
+        BenefitStatus = dependent.BenefitStatus ?? subscriber?.BenefitStatus ?? string.Empty,
+        SubscriberId = dependent.SubscriberId ?? subscriber?.SubscriberId,
+        GroupNumber = dependent.GroupNumber ?? subscriber?.GroupNumber,
+        EnrollmentDate = dependent.EnrollmentDate ?? subscriber?.EnrollmentDate,
+        TerminationDate = dependent.TerminationDate ?? subscriber?.TerminationDate,
+        EventId = subscriber?.EventId,
+        Demographics = new Demographics
+        {
+            EntityType = dependent.EntityType,
+            FirstName = dependent.FirstName,
+            LastName = dependent.LastName,
+            MiddleName = dependent.MiddleName,
+            Suffix = dependent.Suffix,
+            IdQualifier = dependent.IdQualifier,
+            Id = dependent.Id,
+            Address1 = dependent.Address1,
+            Address2 = dependent.Address2,
+            City = dependent.City,
+            State = dependent.State,
+            Zip = dependent.Zip,
+            DateOfBirth = dependent.DateOfBirth,
+            Gender = dependent.Gender
+        },
+        Coverage = dependent.Coverage ?? new()
+    };
 
     private async Task EnsureSponsorExistsAsync(Sponsor sponsor, string? groupNumber, string tenantId)
     {
@@ -566,20 +690,271 @@ public class EnrollmentImportService : IEnrollmentImportService
         });
     }
 
+    /// <summary>
+    /// INS05 benefit status: A=Active, C=COBRA, S=Surviving Insured,
+    /// T=TEFRA. None of these means "terminated" — termination is INS03=024
+    /// (member-service TerminateAsync) plus coverage end dates — so only
+    /// COBRA maps to a distinct member-service status.
+    /// </summary>
     private static string MapStatus(string? benefitStatus) =>
-        benefitStatus == "A" ? "Active" :
-        benefitStatus == "C" ? "COBRA" : "Terminated";
+        benefitStatus == "C" ? "COBRA" : "Active";
+
+    /// <summary>
+    /// Reconciles one member's 834 coverage lines (Loop 2300) against what
+    /// coverage-service already holds for that member. Each HD's own HD01
+    /// maintenance type drives the change; a member-level 024 terminates
+    /// every line (and, when no HD was sent, every open coverage).
+    /// </summary>
+    private async Task ApplyMemberCoverageAsync(
+        string memberId,
+        IReadOnlyList<CoverageDetail>? coverage,
+        string? memberMaintenanceType,
+        string? maintenanceReason,
+        string? memberEffectiveDate,
+        string? memberTerminationDate,
+        string? groupNumber,
+        BatchContext ctx)
+    {
+        List<CoverageRecordDto>? existing = null;
+        async Task<List<CoverageRecordDto>> Existing() =>
+            existing ??= (await _coverageClient.GetMemberCoverageAsync(ctx.TenantId, memberId) ?? []).ToList();
+
+        if (coverage is null || coverage.Count == 0)
+        {
+            if (memberMaintenanceType == "024")
+            {
+                var termDate = ParseDate(memberTerminationDate) ?? DateTime.UtcNow.Date;
+                foreach (var open in (await Existing()).Where(e =>
+                             !string.IsNullOrEmpty(e.Id)
+                             && e.EffectiveDate.Date <= termDate
+                             && (e.TerminationDate is null || e.TerminationDate.Value.Date > termDate)))
+                {
+                    await TerminateCoverageAsync(open, termDate, maintenanceReason, ctx);
+                }
+            }
+            return;
+        }
+
+        foreach (var line in coverage)
+        {
+            var planId = await ResolvePlanIdAsync(memberId, ctx.TenantId, line, groupNumber);
+            if (planId is null)
+            {
+                ctx.Result.CoverageMappingsUnresolved++;
+
+                // A termination must not be lost to a missing plan-code
+                // mapping (that would leave the coverage paying claims):
+                // end the open coverage(s) on the same insurance line.
+                if (memberMaintenanceType == "024" || line.MaintenanceType == "024")
+                {
+                    var termDate = ParseDate(line.BenefitEndDate)
+                        ?? ParseDate(memberTerminationDate)
+                        ?? DateTime.UtcNow.Date;
+                    foreach (var open in (await Existing()).Where(e =>
+                                 !string.IsNullOrEmpty(e.Id)
+                                 && string.Equals(e.InsuranceLineCode, line.InsuranceLineCode, StringComparison.OrdinalIgnoreCase)
+                                 && e.EffectiveDate.Date <= termDate
+                                 && (e.TerminationDate is null || e.TerminationDate.Value.Date > termDate)).ToList())
+                    {
+                        await TerminateCoverageAsync(open, termDate, maintenanceReason, ctx);
+                    }
+                }
+                continue;
+            }
+
+            await ApplyCoverageAsync(
+                memberId, line, planId, groupNumber!, memberMaintenanceType, maintenanceReason,
+                memberEffectiveDate, memberTerminationDate, await Existing(), ctx);
+        }
+    }
+
+    /// <summary>
+    /// One HD line. Matching existing coverage = same deterministic coverage
+    /// key (member + insurance line + resolved PlanId) with an overlapping
+    /// span, so re-importing the same file is a no-op:
+    /// <list type="bullet">
+    /// <item>021 creates only if no matching coverage exists.</item>
+    /// <item>001/025 update the matching coverage's plan/level (falling back
+    /// to the single open coverage on the same insurance line, for a plan
+    /// change), creating only when nothing matches; an HD end date (DTP*349)
+    /// is applied as a termination date.</item>
+    /// <item>024 (on the HD or the member) sets the matching coverage's
+    /// termination date — it never creates coverage.</item>
+    /// </list>
+    /// </summary>
+    private async Task ApplyCoverageAsync(
+        string memberId,
+        CoverageDetail line,
+        string planId,
+        string groupNumber,
+        string? memberMaintenanceType,
+        string? maintenanceReason,
+        string? memberEffectiveDate,
+        string? memberTerminationDate,
+        List<CoverageRecordDto> existing,
+        BatchContext ctx)
+    {
+        var maintenanceType = memberMaintenanceType == "024"
+            ? "024"
+            : line.MaintenanceType ?? memberMaintenanceType;
+        var begin = ParseDate(line.BenefitBeginDate) ?? ParseDate(memberEffectiveDate);
+        var end = ParseDate(line.BenefitEndDate);
+        var key = BuildCoverageKey(memberId, line.InsuranceLineCode, planId);
+
+        var match = existing
+            .Where(e => BuildCoverageKey(memberId, e.InsuranceLineCode, e.PlanId) == key && Overlaps(e, begin, end))
+            .OrderByDescending(e => e.EffectiveDate)
+            .FirstOrDefault();
+
+        switch (maintenanceType)
+        {
+            case "021":
+                if (match is not null)
+                {
+                    _logger.LogInformation(
+                        "Coverage {CoverageKey} already on file for member {MemberId}; addition is a no-op",
+                        key, SanitizeForLog(memberId));
+                    return;
+                }
+                await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, "021", existing, ctx);
+                return;
+
+            case "001":
+            case "025":
+                if (match is null || string.IsNullOrEmpty(match.Id))
+                {
+                    // A plan change sent as 001: the one open coverage on the
+                    // same insurance line is the one being changed.
+                    var sameLine = existing
+                        .Where(e => !string.IsNullOrEmpty(e.Id)
+                                    && string.Equals(e.InsuranceLineCode, line.InsuranceLineCode, StringComparison.OrdinalIgnoreCase)
+                                    && Overlaps(e, begin, end)
+                                    && (e.TerminationDate is null || e.TerminationDate.Value.Date >= DateTime.UtcNow.Date))
+                        .ToList();
+                    match = match is null && sameLine.Count == 1 ? sameLine[0] : match;
+                }
+                if (match is null)
+                {
+                    await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, maintenanceType, existing, ctx);
+                    return;
+                }
+                if (string.IsNullOrEmpty(match.Id))
+                {
+                    return; // created earlier in this same pass
+                }
+
+                var level = line.CoverageLevel ?? match.CoverageLevel;
+                if (!string.Equals(match.PlanId, planId, StringComparison.Ordinal)
+                    || !string.Equals(match.CoverageLevel, level, StringComparison.Ordinal))
+                {
+                    await _coverageClient.UpdateAsync(ctx.TenantId, match.Id, new UpdateCoverageRequestDto
+                    {
+                        PlanId = planId,
+                        CoverageLevel = level
+                    });
+                    match.PlanId = planId;
+                    match.CoverageLevel = level;
+                    ctx.Result.CoverageRecordsUpdated++;
+                }
+                if (end is not null && match.TerminationDate?.Date != end.Value.Date)
+                {
+                    await TerminateCoverageAsync(match, end.Value, maintenanceReason, ctx);
+                }
+                return;
+
+            case "024":
+                if (match is null || string.IsNullOrEmpty(match.Id))
+                {
+                    _logger.LogWarning(
+                        "No matching coverage {CoverageKey} on file for member {MemberId}; termination not applied",
+                        key, SanitizeForLog(memberId));
+                    return;
+                }
+                var terminationDate = end ?? ParseDate(memberTerminationDate) ?? DateTime.UtcNow.Date;
+                if (match.TerminationDate?.Date == terminationDate.Date)
+                {
+                    return; // already terminated as of this date — replay
+                }
+                await TerminateCoverageAsync(match, terminationDate, maintenanceReason, ctx);
+                return;
+
+            default:
+                _logger.LogWarning(
+                    "Unsupported coverage maintenance type {MaintenanceType} for member {MemberId}; skipped",
+                    SanitizeForLog(maintenanceType), SanitizeForLog(memberId));
+                return;
+        }
+    }
+
+    private async Task CreateCoverageAsync(
+        string memberId, CoverageDetail line, string planId, string groupNumber, DateTime? begin, DateTime? end,
+        string? maintenanceType, List<CoverageRecordDto> existing, BatchContext ctx)
+    {
+        var request = new CreateCoverageRequestDto
+        {
+            MemberId = memberId,
+            GroupNumber = groupNumber,
+            PlanId = planId,
+            InsuranceLineCode = line.InsuranceLineCode,
+            CoverageLevel = line.CoverageLevel ?? "EMP",
+            // Loop 2300 DTP*348 is this coverage's own benefit begin; the
+            // member-level date is only a fallback when the file omits it.
+            EffectiveDate = begin ?? DateTime.UtcNow,
+            TerminationDate = end,
+            MaintenanceTypeCode = maintenanceType
+        };
+        await _coverageClient.CreateAsync(ctx.TenantId, request);
+        ctx.Result.CoverageRecordsCreated++;
+
+        // Visible to later lines in this same pass (no id: coverage-service
+        // assigns it), so a duplicate HD in one file doesn't double-create.
+        existing.Add(new CoverageRecordDto
+        {
+            MemberId = memberId,
+            GroupNumber = groupNumber,
+            PlanId = planId,
+            InsuranceLineCode = line.InsuranceLineCode,
+            CoverageLevel = request.CoverageLevel,
+            EffectiveDate = request.EffectiveDate,
+            TerminationDate = end
+        });
+    }
+
+    private async Task TerminateCoverageAsync(
+        CoverageRecordDto coverage, DateTime terminationDate, string? reasonCode, BatchContext ctx)
+    {
+        await _coverageClient.TerminateAsync(ctx.TenantId, coverage.Id, terminationDate.Date, reasonCode);
+        coverage.TerminationDate = terminationDate.Date;
+        ctx.Result.CoverageRecordsTerminated++;
+    }
+
+    private static bool Overlaps(CoverageRecordDto e, DateTime? begin, DateTime? end) =>
+        e.EffectiveDate.Date <= (end ?? DateTime.MaxValue).Date
+        && (e.TerminationDate ?? DateTime.MaxValue).Date >= (begin ?? DateTime.MinValue).Date;
+
+    /// <summary>
+    /// Deterministic coverage key — same approach as
+    /// <see cref="BuildDependentMemberId"/>: a hash of member + insurance
+    /// line + resolved PlanId. Coverage level is deliberately excluded so a
+    /// 001 level change (EMP→FAM) updates the coverage instead of adding a
+    /// second one.
+    /// </summary>
+    public static string BuildCoverageKey(string memberId, string? insuranceLineCode, string planId)
+    {
+        var key = $"{memberId}|{(insuranceLineCode ?? string.Empty).Trim().ToUpperInvariant()}|{planId}";
+        return $"COV-{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)), 0, 6)}";
+    }
 
     /// <summary>
     /// Resolves the 834's own plan code (HD04) to benefit-plan-service's PlanId
-    /// via the plan-code-mapping crosswalk, then writes Coverage. Returns false
-    /// — without writing a Coverage record — when there's no group number/plan
-    /// code to resolve with, or no mapping exists yet; the caller surfaces this
-    /// as <see cref="ImportResult.CoverageMappingsUnresolved"/> rather than
+    /// via the plan-code-mapping crosswalk. Returns null — without touching
+    /// Coverage — when there's no group number/plan code to resolve with, or
+    /// no mapping exists yet; the caller surfaces this as
+    /// <see cref="ImportResult.CoverageMappingsUnresolved"/> rather than
     /// silently defaulting the PlanId, which just hid the same gap downstream.
     /// </summary>
-    private async Task<bool> ProcessCoverageAsync(
-        string memberId, string tenantId, CoverageDetail coverageDetail, string? effectiveDate, string? groupNumber)
+    private async Task<string?> ResolvePlanIdAsync(
+        string memberId, string tenantId, CoverageDetail coverageDetail, string? groupNumber)
     {
         var externalPlanCode = coverageDetail.PlanCoverageDescription;
         if (string.IsNullOrWhiteSpace(externalPlanCode) || string.IsNullOrWhiteSpace(groupNumber))
@@ -587,7 +962,7 @@ public class EnrollmentImportService : IEnrollmentImportService
             _logger.LogWarning(
                 "Coverage for member {MemberId} is missing group number or plan code (HD04); cannot resolve PlanId",
                 SanitizeForLog(memberId));
-            return false;
+            return null;
         }
 
         var planId = await _benefitPlanClient.ResolvePlanIdAsync(
@@ -598,72 +973,42 @@ public class EnrollmentImportService : IEnrollmentImportService
                 "No plan-code mapping for group {GroupNumber} line {InsuranceLineCode} code {ExternalCode}; skipping coverage for {MemberId}",
                 SanitizeForLog(groupNumber), SanitizeForLog(coverageDetail.InsuranceLineCode),
                 SanitizeForLog(externalPlanCode), SanitizeForLog(memberId));
-            return false;
         }
-
-        await _coverageClient.CreateAsync(tenantId, new CreateCoverageRequestDto
-        {
-            MemberId = memberId,
-            GroupNumber = groupNumber,
-            PlanId = planId,
-            InsuranceLineCode = coverageDetail.InsuranceLineCode,
-            CoverageLevel = coverageDetail.CoverageLevel ?? "EMP",
-            // Loop 2300 DTP*348 is this coverage's own benefit begin; the
-            // member-level date is only a fallback when the file omits it.
-            EffectiveDate = ParseDate(coverageDetail.BenefitBeginDate) ?? ParseDate(effectiveDate) ?? DateTime.UtcNow,
-            TerminationDate = ParseDate(coverageDetail.BenefitEndDate),
-            MaintenanceTypeCode = coverageDetail.MaintenanceType
-        });
-        return true;
-    }
-
-    private async Task ProcessCoverageAndCountAsync(
-        string memberId, string tenantId, CoverageDetail coverageDetail, string? effectiveDate,
-        string? groupNumber, ImportResult result)
-    {
-        if (await ProcessCoverageAsync(memberId, tenantId, coverageDetail, effectiveDate, groupNumber))
-        {
-            result.CoverageRecordsCreated++;
-        }
-        else
-        {
-            result.CoverageMappingsUnresolved++;
-        }
+        return planId;
     }
 
     /// <summary>
     /// Applies one dependent's own maintenance (its INS03, inheriting the
     /// subscriber's only when a JSON caller didn't send one) to the
-    /// dependent's own member record. Returns false when nothing was applied
-    /// (already added, not found for termination, unkeyable, unknown type).
+    /// dependent's own member record, then reconciles its coverage. Returns
+    /// false when the member record needed no change (already added, not
+    /// found for termination, unknown type).
     /// </summary>
     private async Task<bool> ProcessDependentAsync(
-        Dependent dependent, string tenantId, string subscriberMemberId, MemberEnrollment? subscriber,
-        ImportResult result)
+        Dependent dependent, string dependentMemberId, string? maintenanceType, string subscriberMemberId,
+        MemberEnrollment? subscriber, BatchContext ctx)
     {
-        var dependentMemberId = BuildDependentMemberId(subscriberMemberId, dependent);
-        if (dependentMemberId is null)
-        {
-            result.Errors.Add(
-                $"Subscriber {subscriberMemberId}: dependent has no member identifier (REF*23) and no first name + date of birth to key it by; skipped");
-            return false;
-        }
-
-        var maintenanceType = dependent.MaintenanceType ?? subscriber?.MaintenanceType;
+        var tenantId = ctx.TenantId;
+        var result = ctx.Result;
         var groupNumber = dependent.GroupNumber ?? subscriber?.GroupNumber;
         var exists = await _memberClient.ExistsAsync(tenantId, dependentMemberId);
+        bool applied;
 
         switch (maintenanceType)
         {
             case "021": // Addition
                 if (exists)
                 {
+                    // Replay: leave the member alone, still reconcile coverage
+                    // (idempotent by coverage key).
                     _logger.LogWarning("Dependent {DependentId} already exists, skipping addition",
                         SanitizeForLog(dependentMemberId));
-                    return false;
+                    applied = false;
+                    break;
                 }
                 await CreateDependentAsync(dependentMemberId, dependent, tenantId, subscriberMemberId, groupNumber);
                 result.DependentsCreated++;
+                applied = true;
                 break;
 
             case "001": // Change
@@ -685,6 +1030,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                     await CreateDependentAsync(dependentMemberId, dependent, tenantId, subscriberMemberId, groupNumber);
                     result.DependentsCreated++;
                 }
+                applied = true;
                 break;
 
             case "024": // Termination — terminate the matching dependent, never create one.
@@ -704,7 +1050,8 @@ public class EnrollmentImportService : IEnrollmentImportService
                     ReasonCode = "834"
                 });
                 result.DependentsTerminated++;
-                return true;
+                applied = true;
+                break;
 
             default:
                 _logger.LogWarning("Unknown maintenance type {MaintenanceType} for dependent {DependentId}",
@@ -712,16 +1059,13 @@ public class EnrollmentImportService : IEnrollmentImportService
                 return false;
         }
 
-        if (dependent.Coverage != null)
-        {
-            foreach (var coverageDetail in dependent.Coverage)
-            {
-                await ProcessCoverageAndCountAsync(
-                    dependentMemberId, tenantId, coverageDetail,
-                    dependent.EnrollmentDate ?? subscriber?.EnrollmentDate, groupNumber, result);
-            }
-        }
-        return true;
+        await ApplyMemberCoverageAsync(
+            dependentMemberId, dependent.Coverage, maintenanceType,
+            dependent.MaintenanceReason ?? subscriber?.MaintenanceReason,
+            dependent.EnrollmentDate ?? subscriber?.EnrollmentDate,
+            dependent.TerminationDate ?? subscriber?.TerminationDate,
+            groupNumber, ctx);
+        return applied;
     }
 
     private async Task CreateDependentAsync(
@@ -822,6 +1166,9 @@ public class EnrollmentImportService : IEnrollmentImportService
         return null;
     }
 
+    private static string Truncate(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value.Substring(0, maxLength);
+
     private static string SanitizeForLog(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -846,6 +1193,8 @@ public class ImportResult
     public int DependentsUpdated { get; set; }
     public int DependentsTerminated { get; set; }
     public int CoverageRecordsCreated { get; set; }
+    public int CoverageRecordsUpdated { get; set; }
+    public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
 }

@@ -66,6 +66,7 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
         public string? MemberIdentifier { get; set; }
         public CoverageDetail? CurrentCoverage { get; set; }
         public ReportingCategory? CurrentCategory { get; set; }
+        public bool LegacyBlockWarned { get; set; }
     }
 
     public Enrollment834 Parse(string ediContent, string fileName)
@@ -140,6 +141,23 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
                         }
                     };
                     loop = Loop.Member;
+                    break;
+
+                // Member data (name/demographics/coverage) inside or after an
+                // LS...LE block has no place in X220A1 — it's the old
+                // non-standard "dependent inside LS/LE" shape. Don't guess at
+                // who it belongs to, and don't drop it silently either.
+                case "NM1" or "N3" or "N4" or "DMG" or "HD"
+                    when current is not null
+                         && loop is Loop.ReportingCategories or Loop.AfterReportingCategories:
+                    if (!current.LegacyBlockWarned)
+                    {
+                        result.ParseWarnings.Add(
+                            $"Subscriber {current.Record.SubscriberId}: member data ({seg.Id}) found inside/after LS...LE. " +
+                            "In 005010X220A1 LS/LE wraps Loop 2700 reporting categories, not dependents; " +
+                            "this block was NOT imported. Resend each dependent as its own INS*N loop with REF*0F.");
+                        current.LegacyBlockWarned = true;
+                    }
                     break;
 
                 // No 2100 loop defines REF/DTP, so a REF/DTP seen while in
@@ -223,6 +241,7 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
                 case "LS" when current is not null:
                     // Loop 2700 member reporting categories — NOT a dependent.
                     loop = Loop.ReportingCategories;
+                    current.LegacyBlockWarned = false;
                     break;
 
                 case "LE" when current is not null:
