@@ -1455,6 +1455,238 @@ public class RateResolutionServiceTests
         Assert.Equal(RateSource.BilledCharges, result.RateSource);
     }
 
+    /// <summary>
+    /// A modifier-qualified revenue-code rate applies only when the claim line
+    /// carries that modifier, and wins over the unqualified rate — in either
+    /// schedule order, the same selection as procedure-code lines.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RevenueCode_ModifierQualifiedRate_MatchedBeforeBaseRate_EitherOrder(bool qualifiedFirst)
+    {
+        var qualified = new FeeScheduleLine { RevenueCode = "0450", Modifier = "TC", Rate = 300m };
+        var unqualified = new FeeScheduleLine { RevenueCode = "0450", Rate = 500m };
+        var schedule = new FeeSchedule
+        {
+            Id = $"rev-mod-{qualifiedFirst}", TenantId = Tenant, Name = "Outpatient",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = qualifiedFirst ? [qualified, unqualified] : [unqualified, qualified],
+        };
+        var engine = CreateEngine(schedule);
+
+        var withModifier = await engine.ResolveAsync(
+            CreateRequest(string.Empty, billed: 900m, revenueCode: "0450", modifiers: ["TC"]));
+        var withoutModifier = await engine.ResolveAsync(
+            CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+        var otherModifier = await engine.ResolveAsync(
+            CreateRequest(string.Empty, billed: 900m, revenueCode: "0450", modifiers: ["26"]));
+
+        Assert.Equal(300m, withModifier.AllowedAmount);
+        Assert.Equal(500m, withoutModifier.AllowedAmount);
+        Assert.Equal(500m, otherModifier.AllowedAmount);
+    }
+
+    [Fact]
+    public async Task RevenueCode_OnlyModifierQualifiedRate_ClaimWithoutModifier_NotMatched()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "rev-mod-only", TenantId = Tenant, Name = "Outpatient",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", Modifier = "TC", Rate = 300m }],
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(RateSource.BilledCharges, result.RateSource);
+    }
+
+    /// <summary>
+    /// Revenue-code-only line on a percent-of-Medicare contract: the Medicare
+    /// reference rate is looked up by revenue code on the reference schedule
+    /// too (110% × 400 = 440), not left unresolved.
+    /// </summary>
+    [Fact]
+    public async Task RevenueCode_Commercial_PercentOfMedicare_ReferenceLookedUpByRevenueCode()
+    {
+        var reference = new FeeSchedule
+        {
+            Id = "opps-ref", TenantId = Tenant, Name = "Medicare OPPS reference",
+            Type = FeeScheduleType.MedicareOpps,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", RateType = FeeScheduleRateType.FlatRate, Rate = 400m }],
+        };
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-rev-pctmed", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "opps-ref",
+            Lines = [new FeeScheduleLine { RevenueCode = "450", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }],
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        repo.AddSchedule(reference);
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(440m, result.AllowedAmount);
+        Assert.Equal(RateSource.ContractedRate, result.RateSource);
+        Assert.Null(result.UnresolvedReason);
+    }
+
+    /// <summary>
+    /// Medicaid percent-of-Medicare on a revenue-code-only line: priced off the
+    /// reference schedule's revenue-code rate (90% × 400 = 360), not the
+    /// stored Medicaid fallback rate.
+    /// </summary>
+    [Fact]
+    public async Task RevenueCode_Medicaid_PercentOfMedicare_ReferenceLookedUpByRevenueCode()
+    {
+        var reference = new FeeSchedule
+        {
+            Id = "opps-ref", TenantId = Tenant, Name = "Medicare OPPS reference",
+            Type = FeeScheduleType.MedicareOpps,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", RateType = FeeScheduleRateType.FlatRate, Rate = 400m }],
+        };
+        var medicaid = new FeeSchedule
+        {
+            Id = "mcd-rev-pctmed", TenantId = Tenant, Name = "Medicaid 90% of Medicare",
+            Type = FeeScheduleType.Medicaid,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PercentOfMedicare = 0.90m,
+            BaseMpfsFeeScheduleId = "opps-ref",
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", RateType = FeeScheduleRateType.FlatRate, Rate = 300m }],
+        };
+        var repo = new InMemoryFeeScheduleRepo(medicaid);
+        repo.AddSchedule(reference);
+        var engine = CreateEngine(medicaid, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(360m, result.AllowedAmount);
+        Assert.Equal(RateSource.Medicaid, result.RateSource);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PER-STAY ALLOCATION EDGES
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// A $0 final line has no billed capacity: the truncation remainder goes
+    /// to the previous line, never onto the $0 line.
+    /// 100 × 100/300 → 33.33 each; remainder 0.01 → line 3.
+    /// </summary>
+    [Fact]
+    public async Task Drg_Batch_ZeroChargeFinalLine_GetsNoRemainder_AllowedNeverExceedsBilled()
+    {
+        var engine = CreateEngine(DrgSchedule("drg-zero", 100m));
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 100m, drgCode: "470", lineNumber: 1, totalLines: 4, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: 100m, drgCode: "470", lineNumber: 2, totalLines: 4, revenueCode: "0250"),
+            CreateRequest(string.Empty, billed: 100m, drgCode: "470", lineNumber: 3, totalLines: 4, revenueCode: "0300"),
+            CreateRequest(string.Empty, billed: 0m, drgCode: "470", lineNumber: 4, totalLines: 4, revenueCode: "0370"),
+        ]);
+
+        Assert.Equal(new[] { 33.33m, 33.33m, 33.34m, 0m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(100m, result.TotalAllowedAmount);
+        Assert.All(result.LineResults, r => Assert.True(r.AllowedAmount <= r.BilledAmount));
+    }
+
+    /// <summary>
+    /// A one-cent final line can take at most one cent; the rest of the
+    /// remainder spreads backwards over lines with billed capacity.
+    /// $3 across [1, 1, 1, 0.01] → truncated [0.99, 0.99, 0.99, 0.00],
+    /// remainder 0.03 → [0.99, 1.00, 1.00, 0.01].
+    /// </summary>
+    [Fact]
+    public async Task Drg_Batch_SmallChargeFinalLine_RemainderCappedAtBilled()
+    {
+        var engine = CreateEngine(DrgSchedule("drg-small", 3m));
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 1m, drgCode: "470", lineNumber: 1, totalLines: 4, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: 1m, drgCode: "470", lineNumber: 2, totalLines: 4, revenueCode: "0250"),
+            CreateRequest(string.Empty, billed: 1m, drgCode: "470", lineNumber: 3, totalLines: 4, revenueCode: "0300"),
+            CreateRequest(string.Empty, billed: 0.01m, drgCode: "470", lineNumber: 4, totalLines: 4, revenueCode: "0370"),
+        ]);
+
+        Assert.Equal(new[] { 0.99m, 1.00m, 1.00m, 0.01m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(3m, result.TotalAllowedAmount);
+        Assert.All(result.LineResults, r => Assert.True(r.ContractualAdjustment >= 0m));
+    }
+
+    /// <summary>
+    /// Contract code-range routing sends lines of one stay to two different
+    /// DRG schedules. Adding both case rates would pay the stay twice, and
+    /// neither is authoritative, so every per-stay line is unresolved (the
+    /// claim pends). An ordinary per-line carve-out keeps its own price.
+    /// </summary>
+    [Fact]
+    public async Task Drg_Batch_PerStayLinesFromTwoSchedules_UnresolvedNotStacked()
+    {
+        var drgA = DrgSchedule("drg-a", 12000m);
+        var drgB = DrgSchedule("drg-b", 15000m);
+        var carveOut = new FeeSchedule
+        {
+            Id = "comm-carve", TenantId = Tenant, Name = "Drug carve-out",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "J1885", Rate = 20m }],
+        };
+        var repo = new InMemoryFeeScheduleRepo(drgA);
+        repo.AddSchedule(drgB);
+        repo.AddSchedule(carveOut);
+        var contracts = new FixedContractRepo(new ProviderContract
+        {
+            Id = "contract-routed", TenantId = Tenant, ProviderNpi = ProviderNpi, PlanId = PlanId,
+            NetworkStatus = NetworkStatus.InNetwork,
+            FeeScheduleId = "drg-a",
+            EffectiveDate = new DateTime(2026, 1, 1),
+            ContractLines =
+            [
+                new ProviderContractLine { ProcedureCodeFrom = "J0000", ProcedureCodeTo = "J9999", FeeScheduleId = "comm-carve" },
+                new ProviderContractLine { ProcedureCodeFrom = "27000", ProcedureCodeTo = "27999", FeeScheduleId = "drg-b" },
+            ],
+        });
+        var engine = new RateResolutionService(repo, contracts, NullLogger<RateResolutionService>.Instance);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 12000m, drgCode: "470", lineNumber: 1, totalLines: 3, revenueCode: "0120"),
+            CreateRequest("27447", billed: 29000m, drgCode: "470", lineNumber: 2, totalLines: 3, revenueCode: "0360"),
+            CreateRequest("J1885", billed: 50m, drgCode: "470", lineNumber: 3, totalLines: 3, revenueCode: "0636"),
+        ]);
+
+        var stay = result.LineResults.Where(r => r.LineNumber <= 2).ToList();
+        Assert.All(stay, r =>
+        {
+            Assert.Equal(RateSource.Unresolved, r.RateSource);
+            Assert.Equal(0m, r.AllowedAmount);
+            Assert.False(r.IsPerStayRate);
+            Assert.Contains("conflicting per-stay rates", r.UnresolvedReason);
+        });
+        var carve = result.LineResults.Single(r => r.LineNumber == 3);
+        Assert.Equal(RateSource.ContractedRate, carve.RateSource);
+        Assert.Equal(20m, carve.AllowedAmount);
+    }
+
+    private static FeeSchedule DrgSchedule(string id, decimal caseRate) => new()
+    {
+        Id = id, TenantId = Tenant, Name = $"DRG {id}",
+        Type = FeeScheduleType.Drg,
+        EffectiveDate = new DateTime(2026, 1, 1),
+        Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = caseRate }],
+    };
+
     // ═══════════════════════════════════════════════════════════════════
     // CAPITATION
     // ═══════════════════════════════════════════════════════════════════
@@ -1714,6 +1946,23 @@ internal class InMemoryProviderContractRepo : IProviderContractRepository
             EffectiveDate = new DateTime(2026, 1, 1),
         });
     }
+
+    public Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct)
+        => Task.FromResult(contract);
+
+    public Task<IReadOnlyList<ProviderContract>> ListByProviderAsync(string tenantId, string providerNpi, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ProviderContract>>([]);
+}
+
+internal class FixedContractRepo : IProviderContractRepository
+{
+    private readonly ProviderContract _contract;
+
+    public FixedContractRepo(ProviderContract contract) => _contract = contract;
+
+    public Task<ProviderContract?> GetContractAsync(
+        string tenantId, string providerNpi, string planId, DateTime serviceDate, CancellationToken ct)
+        => Task.FromResult<ProviderContract?>(_contract);
 
     public Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct)
         => Task.FromResult(contract);

@@ -863,6 +863,57 @@ public class BenefitCalculationStageTests
     public async Task Execute_ThreeLineDrgClaim_OneCopay_DeductibleOnce_LinesReconcile()
     {
         var planGuid = Guid.NewGuid();
+        var (sut, accumulators) = CreateRealEngineStage(planGuid);
+        var ctx = BuildDrgContext(planGuid);
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        var claimResult = ctx.AdjudicationResult;
+        Assert.Equal(12000m, claimResult.AllowedAmount);
+        Assert.Equal(500m, claimResult.DeductibleAmount);   // once
+        Assert.Equal(250m, claimResult.CopayAmount);        // one copay per stay, not 3 × $250
+        Assert.Equal(2250m, claimResult.CoinsuranceAmount); // 20% of 12000 − 750
+        Assert.Equal(3000m, claimResult.PatientResponsibility);
+        Assert.Equal(9000m, claimResult.PayerPayment);
+
+        var lines = ctx.LineAdjudicationResults;
+        Assert.Equal(3, lines.Count);
+        Assert.Equal(claimResult.PayerPayment, lines.Sum(l => l.PaidAmount));
+        Assert.Equal(claimResult.PatientResponsibility, lines.Sum(l => l.PatientResponsibility));
+        Assert.Equal(claimResult.AllowedAmount, lines.Sum(l => l.AllowedAmount));
+        Assert.All(lines, l => Assert.Equal(l.AllowedAmount - l.PatientResponsibility, l.PaidAmount));
+
+        await accumulators.ReceivedWithAnyArgs(1).ApplyUpdatesAsync(
+            default!, default!, default, default!, default!, default!, default);
+    }
+
+    /// <summary>
+    /// Per-stay allocation that allows each line more than it billed (DRG
+    /// case rate above total billed): the real engine pends it for pricing
+    /// review and the stage pends the claim — no denial, no accumulator write.
+    /// </summary>
+    [Fact]
+    public async Task Execute_DrgClaim_AllowedExceedsBilled_PendsPricingReview_NoAccumulatorWrite()
+    {
+        var planGuid = Guid.NewGuid();
+        var (sut, accumulators) = CreateRealEngineStage(planGuid);
+        // $60,000 case rate against $42,500 billed.
+        var ctx = BuildDrgContext(planGuid,
+            new Dictionary<int, decimal> { [1] = 16941.17m, [2] = 2117.64m, [3] = 40941.19m });
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(PricingStage.PricingUnavailablePendCode, ctx.PendDetails!.PendCode);
+        Assert.Contains("allocates more than billed", ctx.PendDetails.PendReason);
+        Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
+        await accumulators.DidNotReceiveWithAnyArgs().ApplyUpdatesAsync(
+            default!, default!, default, default!, default!, default!, default);
+    }
+
+    private (BenefitCalculationStage Stage, IAccumulatorService Accumulators) CreateRealEngineStage(Guid planGuid)
+    {
         var plan = new BenefitPlanConfig
         {
             Id = planGuid,
@@ -912,31 +963,10 @@ public class BenefitCalculationStageTests
             resolver, planProvider, accumulators,
             new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
             NullLogger<BenefitCalculationEngine>.Instance);
-        var sut = new BenefitCalculationStage(
+        var stage = new BenefitCalculationStage(
             engine, _memberResolver, _authorizationValidationClient,
             NullLogger<BenefitCalculationStage>.Instance);
-        var ctx = BuildDrgContext(planGuid);
-
-        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
-
-        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
-        var claimResult = ctx.AdjudicationResult;
-        Assert.Equal(12000m, claimResult.AllowedAmount);
-        Assert.Equal(500m, claimResult.DeductibleAmount);   // once
-        Assert.Equal(250m, claimResult.CopayAmount);        // one copay per stay, not 3 × $250
-        Assert.Equal(2250m, claimResult.CoinsuranceAmount); // 20% of 12000 − 750
-        Assert.Equal(3000m, claimResult.PatientResponsibility);
-        Assert.Equal(9000m, claimResult.PayerPayment);
-
-        var lines = ctx.LineAdjudicationResults;
-        Assert.Equal(3, lines.Count);
-        Assert.Equal(claimResult.PayerPayment, lines.Sum(l => l.PaidAmount));
-        Assert.Equal(claimResult.PatientResponsibility, lines.Sum(l => l.PatientResponsibility));
-        Assert.Equal(claimResult.AllowedAmount, lines.Sum(l => l.AllowedAmount));
-        Assert.All(lines, l => Assert.Equal(l.AllowedAmount - l.PatientResponsibility, l.PaidAmount));
-
-        await accumulators.ReceivedWithAnyArgs(1).ApplyUpdatesAsync(
-            default!, default!, default, default!, default!, default!, default);
+        return (stage, accumulators);
     }
 
     private static AccumulatorSnapshot Snapshot(AccumulatorType type, AccumulatorScope scope, decimal limit) => new()
@@ -952,7 +982,8 @@ public class BenefitCalculationStageTests
     /// Inpatient DRG claim as PricingStage leaves it: DRG 470 case rate
     /// $12,000 allocated across three lines by billed charges ($42,500).
     /// </summary>
-    private static ClaimAdjudicationContext BuildDrgContext(Guid planGuid)
+    private static ClaimAdjudicationContext BuildDrgContext(
+        Guid planGuid, Dictionary<int, decimal>? allowedByLine = null)
     {
         var admit = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc);
         var claim = BuildClaim(planGuid.ToString());
@@ -976,7 +1007,8 @@ public class BenefitCalculationStageTests
             new() { LineNumber = 3, RevenueCode = "0360", ProcedureCode = "27447", ChargeAmount = 29000m, Units = 1, ServiceDateFrom = admit, ServiceDateTo = admit },
         };
 
-        var allowed = new Dictionary<int, decimal> { [1] = 3388.23m, [2] = 423.52m, [3] = 8188.25m };
+        var allowed = allowedByLine
+            ?? new Dictionary<int, decimal> { [1] = 3388.23m, [2] = 423.52m, [3] = 8188.25m };
         return new ClaimAdjudicationContext
         {
             TenantId = "tenant-1",

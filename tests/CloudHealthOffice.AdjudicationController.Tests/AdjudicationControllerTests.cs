@@ -9,6 +9,7 @@ using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
+using CloudHealthOffice.FeeScheduleEngine.Persistence;
 using CloudHealthOffice.FeeScheduleEngine.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.NcciEngine.Models;
@@ -483,6 +484,188 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.Null(line.RevenueCode);
         Assert.Null(line.BillType);
     }
+
+    // ── Synchronous DRG stay through the real fee schedule and benefit engines ──
+
+    /// <summary>
+    /// Sync /adjudicate regression: a 3-line DRG stay is priced once by the
+    /// real fee schedule engine (case rate $12,000 allocated across lines by
+    /// billed charges) and the real benefit engine takes the claim-level
+    /// inpatient path — one $250 inpatient copay, not 3 × $250, deductible
+    /// once, accumulators written once — with original billed charges kept.
+    /// </summary>
+    [Fact]
+    public async Task Adjudicate_InstitutionalDrgStay_RealEngines_CostSharesOncePerStay()
+    {
+        var accumulators = WireRealEngines(caseRate: 12000m);
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeDrgStayRequest());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>(Json);
+        Assert.NotNull(result);
+        Assert.True(result!.Success);
+        Assert.Equal(42500m, result.Totals.BilledAmount);
+        Assert.Equal(12000m, result.Totals.AllowedAmount);
+        Assert.Equal(500m, result.Totals.DeductibleAmount);   // once
+        Assert.Equal(250m, result.Totals.CopayAmount);        // one copay per stay
+        Assert.Equal(2250m, result.Totals.CoinsuranceAmount); // 20% × (12000 − 750)
+        Assert.Equal(3000m, result.Totals.MemberResponsibility);
+        Assert.Equal(9000m, result.Totals.PlanPayment);
+        Assert.Equal(30500m, result.Totals.ContractualAdjustment);
+
+        Assert.Equal(3, result.Lines.Count);
+        Assert.Equal(new[] { 12000m, 1500m, 29000m }, result.Lines.Select(l => l.BilledAmount));
+        Assert.Equal(new[] { 3388.23m, 423.52m, 8188.25m }, result.Lines.Select(l => l.AllowedAmount));
+        Assert.Equal(result.Totals.PlanPayment, result.Lines.Sum(l => l.PlanPayment));
+        Assert.Equal(result.Totals.MemberResponsibility, result.Lines.Sum(l => l.MemberResponsibility));
+        Assert.All(result.Lines, l => Assert.True(l.ContractualAdjustment >= 0m));
+
+        await accumulators.ReceivedWithAnyArgs(1).ApplyUpdatesAsync(
+            default!, default!, default, default!, default!, default!, default);
+    }
+
+    /// <summary>
+    /// A case rate above total billed would allocate every line more than it
+    /// billed (negative CO-45). The sync path pends it (422 PRICING_REVIEW)
+    /// and the benefit engine writes no accumulators.
+    /// </summary>
+    [Fact]
+    public async Task Adjudicate_InstitutionalDrgStay_CaseRateAboveBilled_RealEngines_PendsWithoutAccumulatorWrite()
+    {
+        var accumulators = WireRealEngines(caseRate: 50000m);
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeDrgStayRequest());
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("PRICING_REVIEW", body.RootElement.GetProperty("error").GetString());
+        Assert.Equal("PRICING", body.RootElement.GetProperty("pendCode").GetString());
+        await accumulators.DidNotReceiveWithAnyArgs().ApplyUpdatesAsync(
+            default!, default!, default, default!, default!, default!, default);
+    }
+
+    private AdjudicationRequest MakeDrgStayRequest()
+    {
+        var baseRequest = MakeAdjudicationRequest(lineCount: 3);
+        var billed = new[] { 12000m, 1500m, 29000m };
+        var revenue = new[] { "0120", "0250", "0360" };
+        return baseRequest with
+        {
+            ClaimType = "Institutional",
+            DrgCode = "470",
+            LengthOfStay = 4,
+            BillType = "111",
+            Lines = baseRequest.Lines
+                .Select((l, i) => l with { BilledAmount = billed[i], RevenueCode = revenue[i], PlaceOfService = "21" })
+                .ToList(),
+        };
+    }
+
+    /// <summary>
+    /// Routes the factory's rate and benefit engine seams to real engines:
+    /// a plan-default DRG schedule (DRG 470 at <paramref name="caseRate"/>)
+    /// and an inpatient benefit with a $500 deductible, $250 copay and 20%
+    /// coinsurance. Returns the accumulator service so writes can be counted.
+    /// </summary>
+    private CloudHealthOffice.BenefitEngine.Services.IAccumulatorService WireRealEngines(decimal caseRate)
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+
+        var schedules = Substitute.For<IFeeScheduleRepository>();
+        schedules.GetDefaultForPlanAsync(default!, default!, default, default)
+            .ReturnsForAnyArgs(new FeeSchedule
+            {
+                Id = "DRG-SYNC", TenantId = TenantId, Name = "DRG",
+                Type = FeeScheduleType.Drg,
+                EffectiveDate = new DateTime(2026, 1, 1),
+                Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = caseRate }],
+            });
+        var contracts = Substitute.For<IProviderContractRepository>();
+        var rateEngine = new RateResolutionService(
+            schedules, contracts,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<RateResolutionService>.Instance);
+        _factory.RateEngine
+            .ResolveBatchAsync(Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => rateEngine.ResolveBatchAsync(ci.Arg<IReadOnlyList<PricingRequest>>(), CancellationToken.None));
+
+        var plan = new BenefitPlanConfig
+        {
+            Id = PlanId,
+            TenantId = TenantId,
+            PlanName = "Sync PPO",
+            PlanYear = "2026",
+            IndividualDeductible = 500,
+            FamilyDeductible = 1500,
+            IndividualOopMax = 10000,
+            FamilyOopMax = 20000,
+            Categories =
+            [
+                new BenefitCategoryConfig
+                {
+                    ServiceTypeCode = "48",
+                    ServiceTypeDescription = "Hospital - Inpatient",
+                    IsCovered = true,
+                    InNetworkCostSharing =
+                    [
+                        new CostShareRuleConfig { CostShareType = CostShareType.Deductible, DeductibleApplies = true },
+                        new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 250 },
+                        new CostShareRuleConfig { CostShareType = CostShareType.Coinsurance, CoinsurancePercent = 0.20m },
+                    ],
+                },
+            ],
+        };
+        var planProvider = Substitute.For<IBenefitPlanProvider>();
+        planProvider.GetPlanAsync(PlanId, Arg.Any<CancellationToken>()).Returns(plan);
+        var resolver = Substitute.For<IServiceCategoryResolver>();
+        resolver.ResolveAsync(default!, default, default, default!, default!, default!, default!, default, default)
+            .ReturnsForAnyArgs(new ServiceCategoryMatch
+            {
+                ServiceTypeCode = "48", ServiceTypeDescription = "Hospital - Inpatient",
+                MatchedBy = "Test", MatchedRule = "Fixed:48",
+            });
+        var accumulators = Substitute.For<CloudHealthOffice.BenefitEngine.Services.IAccumulatorService>();
+        accumulators.GetAccumulatorsAsync(default!, default!, default, default!, default)
+            .ReturnsForAnyArgs(new List<AccumulatorSnapshot>
+            {
+                Snapshot(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual, 500),
+                Snapshot(AccumulatorType.FamilyDeductible, AccumulatorScope.Family, 1500),
+                Snapshot(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual, 10000),
+                Snapshot(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family, 20000),
+            });
+        var benefitEngine = new BenefitCalculationEngine(
+            resolver, planProvider, accumulators,
+            new BenefitRuleGate(Microsoft.Extensions.Logging.Abstractions.NullLogger<BenefitRuleGate>.Instance),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<BenefitCalculationEngine>.Instance);
+        _factory.BenefitEngine
+            .CalculateWithModeAsync(
+                Arg.Any<BenefitResolutionRequest>(),
+                Arg.Any<IOperatingMode>(),
+                Arg.Any<string>(),
+                Arg.Any<BenefitResolutionResult?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(ci => benefitEngine.CalculateWithModeAsync(
+                ci.ArgAt<BenefitResolutionRequest>(0),
+                ci.ArgAt<IOperatingMode>(1),
+                ci.ArgAt<string>(2),
+                ci.ArgAt<BenefitResolutionResult?>(3),
+                CancellationToken.None));
+
+        return accumulators;
+    }
+
+    private static AccumulatorSnapshot Snapshot(AccumulatorType type, AccumulatorScope scope, decimal limit) => new()
+    {
+        Type = type,
+        Scope = scope,
+        NetworkTier = NetworkTier.InNetwork,
+        LimitAmount = limit,
+        RemainingAmount = limit,
+    };
 
     // ═══════════════════════════════════════════════════════════════
     // Adjudicate provider integrity outcomes — a confirmed exclusion must

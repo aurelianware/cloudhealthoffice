@@ -143,6 +143,22 @@ public record BenefitResolutionResult
     public bool Success { get; init; }
     public string? DenialReasonCode { get; init; }
     public string? DenialReasonDescription { get; init; }
+
+    /// <summary>
+    /// True when the engine could not adjudicate the claim as submitted and it
+    /// must be pended for manual review rather than denied — e.g. a per-stay
+    /// (DRG / all-inclusive per-diem) allocation that pays a line more than it
+    /// billed, which no balanced remittance can represent. <see cref="Success"/>
+    /// is false, no cost share is computed and no accumulators are written.
+    /// </summary>
+    public bool RequiresReview { get; init; }
+
+    /// <summary>Pend code when <see cref="RequiresReview"/> is true (e.g. "PRICING").</summary>
+    public string? PendReasonCode { get; init; }
+
+    /// <summary>Why the claim needs review, when <see cref="RequiresReview"/> is true.</summary>
+    public string? PendReason { get; init; }
+
     public List<LineBenefitResult> Lines { get; init; } = [];
     public ClaimTotals Totals { get; init; } = new();
     public List<AccumulatorState> AccumulatorSnapshot { get; init; } = [];

@@ -63,6 +63,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     private readonly IBenefitRuleGate _ruleGate;
     private readonly ILogger<BenefitCalculationEngine> _logger;
 
+    /// <summary>
+    /// <see cref="BenefitResolutionResult.PendReasonCode"/> when a per-stay
+    /// allocation allows a line more than it billed (pricing review).
+    /// </summary>
+    public const string AllowedExceedsBilledPendCode = "PRICING";
+
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
@@ -382,13 +388,44 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     {
         var drgAllowed = request.DrgAllowedAmount!.Value;
         var totalBilled = request.Lines.Sum(l => l.BilledAmount);
+        var orderedLines = request.Lines.OrderBy(l => l.LineNumber).ToList();
+        var allowedByLine = orderedLines
+            .Select(l => request.AllowedAmounts.GetValueOrDefault(l.LineNumber, l.BilledAmount))
+            .ToList();
+
+        // A line allowed more than it billed (a per-stay rate above total
+        // billed, under a contract without a lesser-of-billed provision) needs
+        // a negative contractual adjustment that the line-level remittance
+        // cannot carry: billed − adjustments would not equal paid. Pend for
+        // pricing review — before any cost share is computed or accumulator
+        // written — rather than return a result that does not balance.
+        var overBilled = orderedLines
+            .Select((l, i) => (Line: l, Allowed: allowedByLine[i]))
+            .Where(x => x.Allowed > x.Line.BilledAmount)
+            .ToList();
+        if (overBilled.Count > 0)
+        {
+            var detail = string.Join(", ", overBilled.Select(x =>
+                $"line {x.Line.LineNumber} allowed {x.Allowed:0.00} > billed {x.Line.BilledAmount:0.00}"));
+            _logger.LogWarning(
+                "Claim {ClaimId}: per-stay allowed exceeds billed on {LineCount} line(s); pending for pricing review",
+                SanitizeForLog(request.ClaimId), overBilled.Count);
+            return new BenefitResolutionResult
+            {
+                Success = false,
+                RequiresReview = true,
+                PendReasonCode = AllowedExceedsBilledPendCode,
+                PendReason =
+                    $"Per-stay allowed amount {drgAllowed:0.00} allocates more than billed on {detail}; " +
+                    "a negative contractual adjustment is not supported — manual pricing review required",
+            };
+        }
 
         // Resolve the stay's benefit category from one anchor line (all lines
         // share it): the first room-and-board line (revenue code 0100–0219,
         // the inpatient accommodation) when present, so an ancillary line
         // (pharmacy, lab) listed first cannot pick the stay's benefit;
         // otherwise the first line.
-        var orderedLines = request.Lines.OrderBy(l => l.LineNumber).ToList();
         var firstLine = orderedLines.FirstOrDefault(l => IsAccommodationRevenueCode(l.RevenueCode))
             ?? orderedLines[0];
         var categoryMatch = await _categoryResolver.ResolveAsync(
@@ -459,9 +496,6 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // reduction and PlanPaid = allowed − MemberResponsibility, so line
         // sums reconcile to the claim totals and each line balances.
         var lines = orderedLines;
-        var allowedByLine = lines
-            .Select(l => request.AllowedAmounts.GetValueOrDefault(l.LineNumber, l.BilledAmount))
-            .ToList();
         var deductibles = AllocateToLines(drgCostShare.DeductibleApplied, allowedByLine, allowedByLine);
         var afterDeductible = allowedByLine.Select((a, i) => a - deductibles[i]).ToList();
         var copays = AllocateToLines(drgCostShare.CopayApplied, allowedByLine, afterDeductible);

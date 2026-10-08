@@ -933,8 +933,65 @@ public class BenefitCalculationEngineTests
             Assert.Equal(l.CopayAmount, l.Adjustments.Where(a => a is { GroupCode: "PR", ReasonCode: "3" }).Sum(a => a.Amount));
         });
 
+        // Every component counts toward the OOP max here: the OOP-applied
+        // portion allocates with member responsibility and sums to it.
+        Assert.Equal(3000m, result.Lines.Sum(l => l.OopAppliedAmount));
+        Assert.Equal(3000m, result.Totals.TotalOopApplied);
+        Assert.All(result.Lines, l => Assert.Equal(l.MemberResponsibility, l.OopAppliedAmount));
+
         // Accumulators written once for the stay.
         Assert.Equal(1, accumulators.ApplyCalls);
+    }
+
+    /// <summary>
+    /// A per-stay rate above total billed (no lesser-of-billed provision)
+    /// allocates every line more than it billed; the line-level remittance
+    /// cannot carry the negative contractual adjustment, so the engine pends
+    /// for pricing review before computing cost share or writing accumulators.
+    /// </summary>
+    [Fact]
+    public async Task Drg_PricedPerStay_AllowedExceedsBilled_PendsBeforeCostShareAndAccumulators()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500, individualOopMax: 10000);
+        plan.Categories.Add(new BenefitCategoryConfig
+        {
+            ServiceTypeCode = "IPC",
+            ServiceTypeDescription = "Inpatient Stay",
+            IsCovered = true,
+            InNetworkCostSharing =
+            [
+                new CostShareRuleConfig { CostShareType = CostShareType.Deductible, DeductibleApplies = true },
+                new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 250 },
+            ]
+        });
+        var accumulators = new CountingAccumulatorService(new InMemoryAccumulatorService(plan, 0, 0, 0, "IPC"));
+        var engine = new BenefitCalculationEngine(
+            new FixedCategoryResolver("IPC", "Inpatient Stay"),
+            new InMemoryBenefitPlanProvider(plan),
+            accumulators,
+            new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
+            NullLogger<BenefitCalculationEngine>.Instance);
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I",
+            drgCode: "470",
+            drgAllowedAmount: 12000m,
+            lines:
+            [
+                ("", 2000m, 8000m, "21"),
+                ("", 1000m, 4000m, "21"),
+            ]) with { InpatientPricingMethod = InpatientPricingMethod.DrgCaseRate };
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.False(result.Success);
+        Assert.True(result.RequiresReview);
+        Assert.Equal(BenefitCalculationEngine.AllowedExceedsBilledPendCode, result.PendReasonCode);
+        Assert.Contains("line 1 allowed 8000.00 > billed 2000.00", result.PendReason);
+        Assert.Null(result.DenialReasonCode);
+        Assert.Empty(result.Lines);
+        Assert.Null(result.DrgCostShare);
+        Assert.Equal(0, accumulators.ApplyCalls);
     }
 
     [Fact]

@@ -57,17 +57,26 @@
 > sends `DrgCode`, `LengthOfStay` (inpatient only — admission date
 > present), `RevenueCode` and `BillType`. The engine pays a DRG case rate
 > or all-inclusive per diem **once per claim**, allocated across the
-> lines priced from that schedule in proportion to billed charges (each
-> share truncated to the cent, remainder on the last line, so the shares
-> sum to the claim-level amount), and can match revenue-code fee schedule
-> lines. While the claim-level allowed is at or below total billed, every
-> line's allowed is at or below its billed charge, so per-line CO-45 is
-> non-negative. **Edge:** a contract without a lesser-of-billed provision
-> can pay more than total billed; the allocation stays proportional, so
-> every line's allowed exceeds its billed and its contractual adjustment
-> (billed − allowed) is negative. The claim total is still correct; 835
-> generation must tolerate a negative line-level CO-45 in that case.
-> `BenefitCalculationStage` sends such per-stay-priced claims through the
+> per-stay lines in proportion to billed charges (each share truncated to
+> the cent; the remainder goes to the last line that still has room under
+> its billed charge, so the shares sum to the claim-level amount). While
+> the claim-level allowed is at or below total billed, every line's
+> allowed is at or below its billed charge, so per-line CO-45 is
+> non-negative — including a $0 or one-cent final line. Per-stay lines
+> priced from more than one DRG / per-diem schedule (contract code-range
+> routing) have no single authoritative stay rate: they are marked
+> unresolved and the claim pends rather than stacking stay rates.
+> Revenue-code fee schedule lines are matched like procedure lines
+> (modifier-qualified before unqualified), including on the Medicare
+> reference schedule for percent-of-Medicare / Medicaid pricing.
+> **Allowed above billed:** a contract without a lesser-of-billed provision
+> can pay more than total billed, which would need a negative line-level
+> CO-45. The benefit engine pends such a stay (`PRICING`, manual pricing
+> review) before computing cost share or writing accumulators; the
+> synchronous `Adjudicate` endpoint returns 422 `PRICING_REVIEW`.
+> `BenefitCalculationStage` (and the synchronous `Adjudicate` endpoint,
+> which forwards the claim type, original billed charges and the priced
+> `AllowedAmounts`) sends such per-stay-priced claims through the
 > benefit engine's claim-level inpatient path (`InpatientPricingMethod`
 > on the request overrides the plan default): deductible, one inpatient
 > copay and coinsurance are computed once on the claim's total allowed,

@@ -222,6 +222,22 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
 
         context.BenefitResolutionResult = result;
+
+        // The engine could not produce a balanced result (e.g. a per-stay
+        // allocation allowing a line more than it billed). It wrote no
+        // accumulators; pend for review instead of denying.
+        if (result.RequiresReview)
+        {
+            var reviewReason = result.PendReason ?? "Benefit calculation requires manual review.";
+            context.PendDetails ??= new PendDetails
+            {
+                PendCode = result.PendReasonCode ?? PricingRequiredPendCode,
+                PendReason = reviewReason,
+                PendedAt = DateTime.UtcNow,
+            };
+            return ClaimAdjudicationStageResult.Pend(StageName, reviewReason);
+        }
+
         ApplyToContext(context, result);
 
         if (!result.Success)
