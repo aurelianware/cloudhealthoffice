@@ -51,7 +51,10 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// of benefit calculation, so a claim-level Deny is issued only when every
 /// line resolves to Deny; a claim mixing duplicate and clean lines pends
 /// with the per-line findings (and suggested CARC 18) on
-/// <see cref="ClaimAdjudicationContext.PendDetails"/>.
+/// <see cref="PendDetails.DuplicateFindings"/> — a collection separate from
+/// the NCCI-specific <see cref="PendDetails.EditFailures"/>, mirrored on
+/// <see cref="ClaimAdjudicationContext.DuplicateFindings"/> so
+/// PersistenceStage can re-attach it if a later stage replaces PendDetails.
 /// </para>
 /// </summary>
 public sealed class DuplicateClaimStage : IClaimAdjudicationStage
@@ -67,8 +70,8 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
     public const string DuplicatePendCode = "DUPLICATE";
     public const string ExactRuleId = "DUP001";
     public const string SuspectRuleId = "DUP002";
-    public const string ExactEditType = "ExactDuplicate";
-    public const string SuspectEditType = "SuspectDuplicate";
+    public const string ExactDuplicateType = "Exact";
+    public const string SuspectDuplicateType = "Suspect";
 
     private const string ReplacementFrequencyCode = "7";
     private const string VoidFrequencyCode = "8";
@@ -215,12 +218,16 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
         }
 
         var pendReason = BuildPendReason(actionable);
+        var snapshots = actionable.Select(ToSnapshot).ToList();
+        // Also kept on the context: a later stage (e.g. NCCI) may replace
+        // PendDetails wholesale, and PersistenceStage re-attaches these.
+        context.DuplicateFindings.AddRange(snapshots);
         context.PendDetails = new PendDetails
         {
             PendCode = DuplicatePendCode,
             PendReason = TruncatePendReason(pendReason),
             PendedAt = DateTime.UtcNow,
-            EditFailures = actionable.Select(ToSnapshot).ToList(),
+            DuplicateFindings = snapshots.ToList(),
         };
         activity?.SetTag("duplicate.outcome", "pend");
         return ClaimAdjudicationStageResult.Pend(StageName, TruncatePendReason(pendReason)!);
@@ -420,15 +427,17 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
             : $"{findings.Count} possible duplicate line(s); first: {head}.";
     }
 
-    private static NcciEditFailureSnapshot ToSnapshot(DuplicateFinding finding) => new()
+    private static DuplicateFindingSnapshot ToSnapshot(DuplicateFinding finding) => new()
     {
-        EditType = finding.IsExact ? ExactEditType : SuspectEditType,
+        DuplicateType = finding.IsExact ? ExactDuplicateType : SuspectDuplicateType,
         RuleId = finding.IsExact ? ExactRuleId : SuspectRuleId,
         Message = TruncateMessage(
             $"Line {finding.LineNumber} vs claim {finding.PriorClaimNumber} ({finding.PriorClaimId}) " +
             $"line {finding.PriorLineNumber}: {finding.Detail}"),
-        AffectedLineNumbers = new List<int> { finding.LineNumber },
-        ModifierOverridePresent = false,
+        LineNumber = finding.LineNumber,
+        MatchedClaimId = finding.PriorClaimId,
+        MatchedClaimNumber = finding.PriorClaimNumber,
+        MatchedLineNumber = finding.PriorLineNumber,
         SuggestedCarc = DuplicateCarc,
     };
 

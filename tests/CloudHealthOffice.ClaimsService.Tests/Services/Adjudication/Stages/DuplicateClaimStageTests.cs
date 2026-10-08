@@ -162,13 +162,17 @@ public class DuplicateClaimStageTests
         Assert.Equal(DuplicateClaimStage.DuplicatePendCode, ctx.PendDetails!.PendCode);
         Assert.Contains("Suspect duplicate", ctx.PendDetails.PendReason);
         Assert.Contains("billing provider", ctx.PendDetails.PendReason);
-        Assert.Equal(2, ctx.PendDetails.EditFailures.Count);
-        Assert.All(ctx.PendDetails.EditFailures, f =>
+        Assert.Empty(ctx.PendDetails.EditFailures); // duplicates are not NCCI edits
+        Assert.Equal(2, ctx.PendDetails.DuplicateFindings.Count);
+        Assert.All(ctx.PendDetails.DuplicateFindings, f =>
         {
             Assert.Equal(DuplicateClaimStage.SuspectRuleId, f.RuleId);
-            Assert.Equal(DuplicateClaimStage.SuspectEditType, f.EditType);
-            Assert.False(f.IsModifierAddressable());
+            Assert.Equal(DuplicateClaimStage.SuspectDuplicateType, f.DuplicateType);
+            Assert.Equal("prior-1", f.MatchedClaimId);
+            Assert.Equal("CN-PRIOR", f.MatchedClaimNumber);
         });
+        Assert.Equal(new[] { 1, 2 }, ctx.PendDetails.DuplicateFindings.Select(f => f.LineNumber));
+        Assert.Equal(2, ctx.DuplicateFindings.Count);
         Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
     }
 
@@ -203,10 +207,12 @@ public class DuplicateClaimStageTests
         var result = await NewStage().ExecuteAsync(ctx, CancellationToken.None);
 
         Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
-        var failure = Assert.Single(ctx.PendDetails!.EditFailures);
-        Assert.Equal(DuplicateClaimStage.ExactRuleId, failure.RuleId);
-        Assert.Equal("18", failure.SuggestedCarc);
-        Assert.Equal(new[] { 1 }, failure.AffectedLineNumbers);
+        var finding = Assert.Single(ctx.PendDetails!.DuplicateFindings);
+        Assert.Equal(DuplicateClaimStage.ExactRuleId, finding.RuleId);
+        Assert.Equal(DuplicateClaimStage.ExactDuplicateType, finding.DuplicateType);
+        Assert.Equal("18", finding.SuggestedCarc);
+        Assert.Equal(1, finding.LineNumber);
+        Assert.Equal(1, finding.MatchedLineNumber);
     }
 
     [Fact]

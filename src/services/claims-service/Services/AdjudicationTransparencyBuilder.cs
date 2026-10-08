@@ -15,6 +15,7 @@ public static class AdjudicationTransparencyBuilder
         {
             Steps = BuildSteps(claim),
             NcciResults = BuildNcciResults(claim),
+            DuplicateResults = BuildDuplicateResults(claim),
             FeeScheduleResults = BuildFeeScheduleResults(claim),
             BenefitCalculation = BuildBenefitCalculation(claim)
         };
@@ -96,6 +97,30 @@ public static class AdjudicationTransparencyBuilder
             AffectedProcedureCode = edit.Column2Code ?? edit.Column1Code,
             AffectedModifier = edit.ModifierOverridePresent ? "Modifier override present" : null
         }).ToList();
+    }
+
+    private static List<DuplicateEditResult> BuildDuplicateResults(Claim claim)
+    {
+        if (claim.PendDetails?.DuplicateFindings is not { Count: > 0 } findings)
+        {
+            return new List<DuplicateEditResult>();
+        }
+
+        return findings
+            .OrderBy(finding => finding.LineNumber)
+            .Select(finding => new DuplicateEditResult
+            {
+                EditCode = finding.RuleId,
+                DuplicateType = finding.DuplicateType,
+                Description = finding.Message ?? string.Empty,
+                Passed = false,
+                FailureReason = finding.SuggestedCarc is null ? null : $"Suggested CARC {finding.SuggestedCarc}",
+                LineNumber = finding.LineNumber,
+                MatchedClaimId = finding.MatchedClaimId,
+                MatchedClaimNumber = finding.MatchedClaimNumber,
+                MatchedLineNumber = finding.MatchedLineNumber
+            })
+            .ToList();
     }
 
     private static List<FeeScheduleResult> BuildFeeScheduleResults(Claim claim)

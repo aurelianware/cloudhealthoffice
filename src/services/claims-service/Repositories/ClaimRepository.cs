@@ -1625,6 +1625,17 @@ public class ClaimRepository : IClaimRepository
     private static string CosmosStatusLiteral(ClaimStatus status) =>
         JsonNamingPolicy.CamelCase.ConvertName(status.ToString());
 
+    /// <summary>
+    /// Both spellings of each enum name — the serializer's camelCase form
+    /// (see <see cref="CosmosStatusLiteral"/>) and PascalCase — for
+    /// exclusion filters that must never let a dead row through.
+    /// </summary>
+    internal static IReadOnlyList<string> DuplicateExclusionLiterals(IEnumerable<string> enumNames) =>
+        enumNames
+            .SelectMany(n => new[] { JsonNamingPolicy.CamelCase.ConvertName(n), n })
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
     public async Task<AccumulatorTotalsResponse> GetAccumulatorTotalsAsync(
         string ownerId,
         string scope,
@@ -1844,6 +1855,27 @@ public class ClaimRepository : IClaimRepository
         // range indexes. Undefined-vs-anything comparisons evaluate to
         // undefined in Cosmos SQL (≠ true), so each optional/legacy field is
         // guarded with NOT IS_DEFINED / null to keep legacy rows visible.
+        //
+        // Dead-row exclusion must match the persisted enum spelling, or dead
+        // rows survive the filter and can fill the TOP cap ahead of a live
+        // duplicate. The Cosmos serializer writes enums camelCase
+        // (CosmosStatusLiteral); PascalCase is also excluded so rows written
+        // by older serializers (and the PascalCase literals other queries
+        // here still compare against) can never leak through.
+        var deadStatuses = DuplicateExclusionLiterals(
+            new[] { ClaimStatus.Denied, ClaimStatus.Voided }.Select(s => s.ToString()));
+        var deadVersionStates = DuplicateExclusionLiterals(
+            new[]
+            {
+                ClaimVersionState.Draft,
+                ClaimVersionState.Denied,
+                ClaimVersionState.Voided,
+                ClaimVersionState.Adjusted,
+            }.Select(s => s.ToString()));
+
+        var statusParams = deadStatuses.Select((_, i) => $"@deadStatus{i}").ToList();
+        var versionStateParams = deadVersionStates.Select((_, i) => $"@deadVersionState{i}").ToList();
+
         var query = new QueryDefinition($@"
             SELECT TOP {MaxDuplicateCandidates} *
             FROM c
@@ -1853,24 +1885,20 @@ public class ClaimRepository : IClaimRepository
               AND c.serviceDateTo >= @serviceDateFrom
               AND c.id != @excludeChain
               AND (NOT IS_DEFINED(c.claimVersionId) OR c.claimVersionId = null OR c.claimVersionId != @excludeChain)
-              AND c.status != @denied
-              AND c.status != @voided
+              AND NOT (c.status IN ({string.Join(", ", statusParams)}))
               AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null
-                   OR (c.versionState != @draft AND c.versionState != @vDenied
-                       AND c.versionState != @vVoided AND c.versionState != @adjusted))
+                   OR NOT (c.versionState IN ({string.Join(", ", versionStateParams)})))
               AND (NOT IS_DEFINED(c.supersededAt) OR c.supersededAt = null)
               AND (NOT IS_DEFINED(c.claimFrequencyCode) OR c.claimFrequencyCode = null OR c.claimFrequencyCode != '8')")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@memberId", memberId)
             .WithParameter("@serviceDateFrom", serviceDateFrom)
             .WithParameter("@serviceDateTo", serviceDateTo)
-            .WithParameter("@excludeChain", excludeClaimVersionId)
-            .WithParameter("@denied", ClaimStatus.Denied.ToString())
-            .WithParameter("@voided", ClaimStatus.Voided.ToString())
-            .WithParameter("@draft", ClaimVersionState.Draft.ToString())
-            .WithParameter("@vDenied", ClaimVersionState.Denied.ToString())
-            .WithParameter("@vVoided", ClaimVersionState.Voided.ToString())
-            .WithParameter("@adjusted", ClaimVersionState.Adjusted.ToString());
+            .WithParameter("@excludeChain", excludeClaimVersionId);
+        for (var i = 0; i < deadStatuses.Count; i++)
+            query = query.WithParameter(statusParams[i], deadStatuses[i]);
+        for (var i = 0; i < deadVersionStates.Count; i++)
+            query = query.WithParameter(versionStateParams[i], deadVersionStates[i]);
 
         var iterator = _container.GetItemQueryIterator<Claim>(
             query,
