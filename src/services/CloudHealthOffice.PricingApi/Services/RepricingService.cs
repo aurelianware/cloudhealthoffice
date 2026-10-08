@@ -49,15 +49,19 @@ public class RepricingService : IRepricingService
                 e => e,
                 StringComparer.OrdinalIgnoreCase);
 
-            // Sort lines for multiple procedure ranking
-            var sortedLines = request.Lines
-                .OrderByDescending(l => GetBaseRate(entryMap, l, request))
-                .ToList();
+            // Rank only lines eligible for the standard multiple surgery reduction
+            // (MPFS indicator 2, or OPPS status indicator T) by base rate.
+            var multiProcRanks = Enumerable.Range(0, request.Lines.Count)
+                .Where(i => entryMap.TryGetValue(request.Lines[i].ProcedureCode, out var e) && IsMultipleSurgeryEligible(e))
+                .OrderByDescending(i => GetBaseRate(entryMap, request.Lines[i], request))
+                .ThenBy(i => request.Lines[i].LineNumber)
+                .Select((index, rank) => (index, rank))
+                .ToDictionary(x => x.index, x => x.rank);
 
-            for (var rank = 0; rank < sortedLines.Count; rank++)
+            for (var i = 0; i < request.Lines.Count; i++)
             {
-                var line = sortedLines[rank];
-                var pricedLine = await PriceLineAsync(line, entryMap, request, rank, warnings);
+                int? rank = multiProcRanks.TryGetValue(i, out var r) ? r : null;
+                var pricedLine = await PriceLineAsync(request.Lines[i], entryMap, request, rank, warnings);
                 pricedLines.Add(pricedLine);
             }
 
@@ -108,6 +112,7 @@ public class RepricingService : IRepricingService
             ConversionFactor = entry.ConversionFactor,
             StatusIndicator = entry.StatusIndicator,
             ApcCode = entry.ApcCode,
+            MultipleProcedureIndicator = entry.MultipleProcedureIndicator,
             Facility = request.Facility
         };
     }
@@ -181,7 +186,7 @@ public class RepricingService : IRepricingService
         ClaimLineRequest line,
         Dictionary<string, FeeScheduleEntry> entryMap,
         RepricingRequest request,
-        int multiProcRank,
+        int? multiProcRank,
         List<string> warnings)
     {
         if (!entryMap.TryGetValue(line.ProcedureCode, out var entry))
@@ -210,11 +215,15 @@ public class RepricingService : IRepricingService
         // Apply modifier adjustments
         var modifierFactor = CalculateModifierFactor(line.Modifiers, warnings, line.LineNumber);
 
-        // Apply multiple procedure reduction (standard CMS rules)
-        var multiProcFactor = CalculateMultiProcFactor(multiProcRank, line.Modifiers);
+        // Apply multiple procedure reduction (standard CMS rules) — only to ranked lines
+        var multiProcFactor = multiProcRank is { } rank ? CalculateMultiProcFactor(rank, line.Modifiers) : 1.0m;
         if (multiProcFactor < 1.0m)
         {
             warnings.Add($"Line {line.LineNumber}: Multiple procedure reduction applied ({multiProcFactor:P0}).");
+        }
+        else if (request.Lines.Count > 1 && MultipleProcedureIndicatorWarning(entry) is { } indicatorWarning)
+        {
+            warnings.Add($"Line {line.LineNumber}: {indicatorWarning}");
         }
 
         var allowedAmount = Math.Round(baseRate * line.Units * modifierFactor * multiProcFactor, 2);
@@ -281,9 +290,39 @@ public class RepricingService : IRepricingService
     }
 
     /// <summary>
+    /// A line takes part in the standard multiple surgery ranking only when its MPFS
+    /// multiple procedure indicator is 2, or — for OPPS entries, which carry no MPFS
+    /// indicator — its status indicator is T (multiple procedure discount applies).
+    /// E&amp;M (0), not-applicable (9), unsupported (3–7) and unknown indicators are
+    /// not reduced.
+    /// </summary>
+    private static bool IsMultipleSurgeryEligible(FeeScheduleEntry entry)
+        => entry.MultipleProcedureIndicator == 2
+           || (entry.MultipleProcedureIndicator is null
+               && string.Equals(entry.StatusIndicator, "T", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Warning text for a multi-line claim when the entry's multiple procedure treatment
+    /// is not handled: no indicator loaded (priced with no reduction so E&amp;M is never
+    /// cut, but the missing data is surfaced) or an indicator for a CMS rule not yet
+    /// implemented (3–7 and other unrecognised values). Null when nothing to report.
+    /// </summary>
+    private static string? MultipleProcedureIndicatorWarning(FeeScheduleEntry entry)
+    {
+        return entry.MultipleProcedureIndicator switch
+        {
+            0 or 2 or 9 => null,
+            null when !string.IsNullOrEmpty(entry.StatusIndicator) => null, // OPPS — uses status indicator
+            null when entry.DrgWeight is not null => null,
+            null => $"No CMS multiple procedure indicator for {entry.ProcedureCode}; multiple procedure reduction not applied.",
+            var indicator => $"Multiple procedure indicator {indicator} for {entry.ProcedureCode} is not yet supported; multiple procedure reduction not applied.",
+        };
+    }
+
+    /// <summary>
     /// Standard CMS Multiple Procedure Payment Reduction (MPPR).
-    /// Highest-valued procedure at 100%, subsequent at 50% for the PE component.
-    /// Simplified: rank 0 = 100%, rank 1+ = 50%.
+    /// Applied only to lines eligible for the standard multiple surgery rule.
+    /// Simplified: rank 0 = 100%, rank 1+ = 50% (6th+ are "by report" under CMS).
     /// </summary>
     private static decimal CalculateMultiProcFactor(int rank, List<string>? modifiers)
     {
@@ -328,7 +367,7 @@ public class RepricingService : IRepricingService
             return 0;
 
         return IsFacilityPos(request.PlaceOfService)
-            ? (entry.FacilityRate ?? 0)
-            : (entry.NonFacilityRate ?? 0);
+            ? (entry.FacilityRate ?? entry.ApcPaymentRate ?? 0)
+            : (entry.NonFacilityRate ?? entry.ApcPaymentRate ?? 0);
     }
 }

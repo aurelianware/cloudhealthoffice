@@ -159,6 +159,9 @@ public record CodeLookupResponse
     public decimal? ConversionFactor { get; init; }
     public string? StatusIndicator { get; init; }
     public string? ApcCode { get; init; }
+
+    /// <summary>CMS MPFS multiple procedure indicator (PPRRVU "MULT PROC"); null when not loaded.</summary>
+    public int? MultipleProcedureIndicator { get; init; }
     public bool Facility { get; init; }
 }
 
@@ -205,6 +208,14 @@ public record FeeScheduleEntry
     public decimal? DrgWeight { get; init; }
     public decimal? DrgBaseRate { get; init; }
     public int? MultiProcRank { get; init; }
+
+    /// <summary>
+    /// CMS MPFS multiple procedure indicator from the PPRRVU "MULT PROC" column:
+    /// 0 = no reduction, 2 = standard multiple surgery (100/50), 3 = endoscopy,
+    /// 4 = diagnostic imaging, 5 = therapy, 6 = cardiovascular, 7 = ophthalmology,
+    /// 9 = concept does not apply. Null when the source file did not supply it.
+    /// </summary>
+    public int? MultipleProcedureIndicator { get; init; }
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -372,6 +372,17 @@ public class PaymentEstimateService : IPaymentEstimateService
                     ? $"Allowed amount from {DescribeFeeSchedule(priced)} ({priced.NetworkStatus})."
                     : "No contracted or fee-schedule rate matched; billed charges used as the allowed amount."
             });
+
+            // e.g. missing / unsupported CMS multiple procedure indicator — priced without reduction
+            foreach (var warning in priced.Warnings)
+            {
+                messages.Add(new EstimateMessage
+                {
+                    Code = "PRICING_WARNING",
+                    Severity = EstimateMessageSeverity.Warning,
+                    Description = warning
+                });
+            }
         }
 
         if (contractual > 0)

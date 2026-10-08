@@ -285,6 +285,29 @@ public class PaymentEstimateServiceTests
     }
 
     [Fact]
+    public async Task PricingWarnings_SurfacedAsLineMessages()
+    {
+        const string warning = "No CMS multiple procedure indicator on the fee schedule line for 29881; " +
+                               "multiple procedure reduction not applied";
+        var pricing = Pricing((1, 900m, 800m, RateSource.ContractedRate));
+        pricing = pricing with
+        {
+            LineResults = [pricing.LineResults[0] with { Warnings = [warning] }]
+        };
+
+        var h = new Harness();
+        h.SetupPricing(pricing);
+        h.SetupBenefit(Benefit(true, PayableLine(1, 800m)));
+
+        var resp = await h.Build().EstimateAsync(Tenant, Request(Line(1, "29881", 900m)));
+
+        resp.Lines.Single().Messages.Should().Contain(m => m.Code == "PRICING_WARNING"
+            && m.Severity == EstimateMessageSeverity.Warning
+            && m.Description == warning);
+        resp.Lines.Single().Messages.Should().Contain(m => m.Code == "FEE_SCHEDULE_APPLIED");
+    }
+
+    [Fact]
     public async Task UnresolvedRate_AddsWarningAndLowersConfidence()
     {
         var h = new Harness();

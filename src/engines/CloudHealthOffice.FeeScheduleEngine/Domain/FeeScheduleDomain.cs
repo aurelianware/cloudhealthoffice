@@ -168,6 +168,44 @@ public enum RateSource
 }
 
 /// <summary>
+/// CMS MPFS multiple procedure indicator ("MULT PROC" column of the PPRRVU
+/// relative value file). Tells the payer which multiple procedure payment
+/// reduction rule, if any, applies to a code. Persisted as its numeric value.
+///
+/// Only <see cref="StandardSurgery"/> is priced by the engine's 100/50/50
+/// ranking. Indicators 3–7 are distinct CMS rules (endoscopy base, imaging
+/// TC/PC, therapy PE, cardiovascular and ophthalmology diagnostic reductions)
+/// that are not yet implemented — lines carrying them are left unreduced and
+/// flagged on the pricing result.
+/// </summary>
+public enum MultipleProcedureIndicator : byte
+{
+    /// <summary>0 — No payment adjustment rules for multiple procedures (e.g. E&amp;M).</summary>
+    NoReduction = 0,
+
+    /// <summary>2 — Standard multiple surgery rules: 100% highest, 50% for 2nd–5th, 6th+ by report.</summary>
+    StandardSurgery = 2,
+
+    /// <summary>3 — Special rules for multiple endoscopic procedures (same endoscopic base family).</summary>
+    Endoscopy = 3,
+
+    /// <summary>4 — Multiple diagnostic imaging reduction (TC and PC of the same family).</summary>
+    DiagnosticImaging = 4,
+
+    /// <summary>5 — Multiple therapy services reduction (practice expense).</summary>
+    TherapyServices = 5,
+
+    /// <summary>6 — Multiple diagnostic cardiovascular services reduction (TC).</summary>
+    DiagnosticCardiovascular = 6,
+
+    /// <summary>7 — Multiple diagnostic ophthalmology services reduction (TC).</summary>
+    DiagnosticOphthalmology = 7,
+
+    /// <summary>9 — Multiple procedure concept does not apply.</summary>
+    NotApplicable = 9
+}
+
+/// <summary>
 /// Standard CMS modifier codes that affect payment rates.
 /// Not all modifiers affect payment; only these are actioned by the rate engine.
 /// </summary>
