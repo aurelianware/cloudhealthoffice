@@ -85,14 +85,17 @@ public interface IAppealRepository
     ///   <item>Replay: when the persisted extension carries the same
     ///     <c>EventId</c>, nothing is rewritten.</item>
     /// </list>
-    /// In both cases <paramref name="auditEvents"/> are then appended
-    /// (idempotent on EventId) and the persisted appeal is returned, so a
-    /// retry completes an attempt that failed after the write. Returns
-    /// <c>null</c> otherwise — extended by a different request, closed, or
-    /// not found.
+    /// In both cases <paramref name="buildAuditEvents"/> is invoked with the
+    /// PERSISTED appeal — the winning extension, which on a replay or a
+    /// same-EventId race may differ from the proposed one — and its rows
+    /// are appended (idempotent on EventId). The persisted appeal is
+    /// returned, so a retry completes an attempt that failed after the
+    /// write. Returns <c>null</c> otherwise — extended by a different
+    /// request, closed, or not found.
     /// </summary>
     Task<Appeal?> TryExtendDeadlineAsync(
-        Appeal appeal, AppealNote? justificationNote, IReadOnlyList<AppealEvent> auditEvents,
+        Appeal appeal, AppealNote? justificationNote,
+        Func<Appeal, IReadOnlyList<AppealEvent>> buildAuditEvents,
         CancellationToken ct = default);
 
     /// <summary>Atomic note append + audit event.</summary>

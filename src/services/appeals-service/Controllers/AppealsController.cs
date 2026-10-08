@@ -732,7 +732,9 @@ public class AppealsController : ControllerBase
             ExtendedBy = actor,
             RegulatoryBasis = rule.RegulatoryBasis,
             EventId = string.IsNullOrEmpty(request.EventId) ? Guid.NewGuid().ToString() : request.EventId,
-            JustificationNoteId = justificationNote?.NoteId
+            JustificationNoteId = justificationNote?.NoteId,
+            StatusAtExtension = appeal.Status,
+            CorrelationId = HttpContext.TraceIdentifier
         };
         appeal.UpdatedAt = now;
         appeal.UpdatedBy = actor;
@@ -745,14 +747,17 @@ public class AppealsController : ControllerBase
     /// guarded write of the extension + justification note, idempotent audit
     /// appends, then the Kafka publishes. Every step is safe to repeat, so a
     /// retry after a partial failure completes whatever was left undone.
+    /// Everything after the write is derived from the PERSISTED (winning)
+    /// extension, never the proposed one: a concurrent same-EventId request
+    /// may have committed a different note id, actor and timestamp.
     /// </summary>
     private async Task<IActionResult> CompleteExtensionAsync(
         Appeal appeal, AppealNote? justificationNote, CancellationToken ct)
     {
-        var extension = appeal.DeadlineExtension!;
-        var auditEvents = BuildExtensionAuditEvents(appeal, extension);
-
-        var updated = await _appeals.TryExtendDeadlineAsync(appeal, justificationNote, auditEvents, ct);
+        var updated = await _appeals.TryExtendDeadlineAsync(
+            appeal, justificationNote,
+            persisted => BuildExtensionAuditEvents(persisted, persisted.DeadlineExtension!),
+            ct);
         if (updated == null)
         {
             // Lost a race: another writer extended or closed the appeal
@@ -761,17 +766,27 @@ public class AppealsController : ControllerBase
                 "The appeal was extended or closed concurrently; only one extension is permitted.");
         }
 
-        var note = extension.JustificationNoteId is { } noteId
+        var winner = updated.DeadlineExtension!;
+        var correlationId = winner.CorrelationId ?? HttpContext.TraceIdentifier;
+        var note = winner.JustificationNoteId is { } noteId
             ? updated.Notes.FirstOrDefault(n => n.NoteId == noteId)
             : null;
         if (note != null)
         {
-            await _publisher.PublishNoteAddedAsync(updated, note, extension.ExtendedBy, HttpContext.TraceIdentifier, ct);
+            // Stable id + original time so a replayed publish is the same
+            // logical event (matches the audit row's EventId).
+            var hasStableId = !string.IsNullOrEmpty(winner.EventId);
+            await _publisher.PublishNoteAddedAsync(updated, note, winner.ExtendedBy, correlationId, ct,
+                eventId: hasStableId ? JustificationNoteEventId(winner) : null,
+                occurredAt: hasStableId ? winner.ExtendedAt : null);
         }
-        await _publisher.PublishDeadlineExtendedAsync(updated, extension.ExtendedBy, HttpContext.TraceIdentifier, ct);
+        await _publisher.PublishDeadlineExtendedAsync(updated, winner.ExtendedBy, correlationId, ct);
 
         return Ok(await DecryptForResponseAsync(updated, ct));
     }
+
+    private static string JustificationNoteEventId(AppealDeadlineExtension extension) =>
+        $"{extension.EventId}:justification-note";
 
     /// <summary>
     /// Deterministic audit rows for an extension — rebuilt identically from
@@ -785,7 +800,9 @@ public class AppealsController : ControllerBase
         extensionEvent.OccurredAt = extension.ExtendedAt;
         extensionEvent.Payload = new JsonObject
         {
-            ["currentStatus"] = appeal.Status.ToString(),
+            // Status when the extension committed, not the live status: a
+            // replay after a transition must record the same history.
+            ["currentStatus"] = (extension.StatusAtExtension ?? appeal.Status).ToString(),
             ["reason"] = extension.Reason.ToString(),
             ["extensionDays"] = extension.ExtensionDays,
             ["previousTargetResponseDate"] = extension.PreviousTargetResponseDate.ToUniversalTime().ToString("o"),
@@ -798,7 +815,7 @@ public class AppealsController : ControllerBase
         if (extension.JustificationNoteId is { } noteId)
         {
             var noteEvent = BuildEvent(appeal, AppealEventType.AppealNoteAdded,
-                fromStatus: null, toStatus: null, extension.ExtendedBy, $"{extension.EventId}:justification-note");
+                fromStatus: null, toStatus: null, extension.ExtendedBy, JustificationNoteEventId(extension));
             noteEvent.OccurredAt = extension.ExtendedAt;
             noteEvent.Payload = new JsonObject
             {

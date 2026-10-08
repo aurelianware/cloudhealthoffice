@@ -136,9 +136,10 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
     }
 
     public Task PublishNoteAddedAsync(
-        Appeal appeal, AppealNote note, string actor, string? correlationId, CancellationToken ct = default)
+        Appeal appeal, AppealNote note, string actor, string? correlationId, CancellationToken ct = default,
+        string? eventId = null, DateTime? occurredAt = null)
     {
-        var evt = BuildNoteAddedPayload(appeal, note, actor, correlationId);
+        var evt = BuildNoteAddedPayload(appeal, note, actor, correlationId, eventId, occurredAt);
         return ProduceAsync(appeal, AppealNoteAddedType, evt, ct);
     }
 
@@ -283,12 +284,13 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
     };
 
     internal static AppealNoteAddedEventPayload BuildNoteAddedPayload(
-        Appeal a, AppealNote n, string actor, string? correlationId) => new()
+        Appeal a, AppealNote n, string actor, string? correlationId,
+        string? eventId = null, DateTime? occurredAt = null) => new()
     {
-        EventId = Guid.NewGuid().ToString(),
+        EventId = eventId ?? Guid.NewGuid().ToString(),
         EventType = AppealNoteAddedType,
         EventVersion = EventVersion,
-        OccurredAt = DateTime.UtcNow,
+        OccurredAt = occurredAt ?? DateTime.UtcNow,
         TenantId = a.TenantId,
         AppealId = a.Id,
         NoteId = n.NoteId,
@@ -382,18 +384,21 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
     internal static AppealDeadlineExtendedEventPayload BuildDeadlineExtendedPayload(
         Appeal a, string actor, string? correlationId) => new()
     {
-        EventId = Guid.NewGuid().ToString(),
+        // Deterministic from the stored extension: a same-EventId replay
+        // republishes the SAME logical event (legacy records without an
+        // EventId fall back to a fresh one).
+        EventId = a.DeadlineExtension?.EventId is { Length: > 0 } stored ? stored : Guid.NewGuid().ToString(),
         EventType = AppealDeadlineExtendedType,
         EventVersion = EventVersion,
-        OccurredAt = DateTime.UtcNow,
+        OccurredAt = a.DeadlineExtension?.ExtendedAt ?? DateTime.UtcNow,
         TenantId = a.TenantId,
         AppealId = a.Id,
-        CurrentStatus = a.Status.ToString(),
+        CurrentStatus = (a.DeadlineExtension?.StatusAtExtension ?? a.Status).ToString(),
         LineOfBusiness = a.LineOfBusiness.ToString(),
         Reason = a.DeadlineExtension?.Reason.ToString(),
         ExtensionDays = a.DeadlineExtension?.ExtensionDays,
         PreviousTargetResponseDate = a.DeadlineExtension?.PreviousTargetResponseDate,
-        TargetResponseDate = a.TargetResponseDate,
+        TargetResponseDate = a.DeadlineExtension?.NewTargetResponseDate ?? a.TargetResponseDate,
         WrittenNoticeSentAt = a.DeadlineExtension?.WrittenNoticeSentAt,
         RegulatoryBasis = a.DeadlineExtension?.RegulatoryBasis,
         Actor = actor,

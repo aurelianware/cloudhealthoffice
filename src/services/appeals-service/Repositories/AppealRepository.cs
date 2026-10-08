@@ -245,6 +245,10 @@ public sealed class AppealRepository : IAppealRepository
             // extension cannot erase it (the ETag pins them to this read).
             appeal.TargetResponseDate = fresh.Resource.TargetResponseDate;
             appeal.DeadlineExtension = fresh.Resource.DeadlineExtension;
+            // Notes are append-only through AppendNoteAsync / the extension
+            // write; a transition never edits them, so the persisted list
+            // wins (keeps an extension's justification note).
+            appeal.Notes = fresh.Resource.Notes ?? new List<AppealNote>();
 
             appeal.UpdatedAt = DateTime.UtcNow;
             var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
@@ -293,7 +297,8 @@ public sealed class AppealRepository : IAppealRepository
     }
 
     public async Task<Appeal?> TryExtendDeadlineAsync(
-        Appeal appeal, AppealNote? justificationNote, IReadOnlyList<AppealEvent> auditEvents,
+        Appeal appeal, AppealNote? justificationNote,
+        Func<Appeal, IReadOnlyList<AppealEvent>> buildAuditEvents,
         CancellationToken ct = default)
     {
         Appeal persisted;
@@ -333,7 +338,7 @@ public sealed class AppealRepository : IAppealRepository
             return null;
         }
 
-        foreach (var evt in auditEvents) await _events.AppendAsync(evt, ct);
+        foreach (var evt in buildAuditEvents(persisted)) await _events.AppendAsync(evt, ct);
         return persisted;
     }
 

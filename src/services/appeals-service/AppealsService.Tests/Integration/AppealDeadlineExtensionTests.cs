@@ -541,4 +541,59 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
         (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/extend", Extend(), JsonOptions))
             .StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
+
+    [Fact]
+    public async Task Replay_Republishes_Identical_Payloads_Even_After_A_Status_Transition()
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var appeal = await CreateSubmittedAsync(client, BuildCreate(LineOfBusiness.Medicare));
+        var request = Extend(AppealExtensionReason.PlanNeedsInfo,
+            justification: "Waiting on the treating specialist's records.", eventId: Guid.NewGuid().ToString());
+
+        (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/extend", request, JsonOptions))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/begin-review", new IdempotencyEnvelope(), JsonOptions))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/extend", request, JsonOptions))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var extended = _factory.Publisher.DeadlineExtendedPayloads.ToList();
+        extended.Should().HaveCount(2);
+        extended[1].Should().Be(extended[0], "a replay must republish the same logical event");
+        extended[0].EventId.Should().Be(request.EventId);
+        extended[0].CurrentStatus.Should().Be(nameof(AppealStatus.Submitted));
+
+        var notes = _factory.Publisher.NoteAddedPayloads.ToList();
+        notes.Should().HaveCount(2);
+        notes[1].Should().Be(notes[0]);
+        notes[0].EventId.Should().Be($"{request.EventId}:justification-note");
+    }
+
+    [Fact]
+    public async Task Retry_After_A_Status_Transition_Records_The_Extension_Time_Status()
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var appeal = await CreateSubmittedAsync(client, BuildCreate(LineOfBusiness.Medicare));
+        var request = Extend(eventId: Guid.NewGuid().ToString());
+
+        // Commits while Submitted, then the audit append fails.
+        _factory.Repo.FailAuditAppendOnce();
+        (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/extend", request, JsonOptions))
+            .IsSuccessStatusCode.Should().BeFalse();
+
+        (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/begin-review", new IdempotencyEnvelope(), JsonOptions))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/extend", request, JsonOptions))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var audit = _factory.Repo.SnapshotEvents()
+            .Single(e => e.AppealId == appeal.Id && e.EventType == AppealEventType.AppealDeadlineExtended);
+        audit.Payload!["currentStatus"]!.GetValue<string>().Should().Be(nameof(AppealStatus.Submitted));
+        _factory.Publisher.DeadlineExtendedPayloads.Should().ContainSingle()
+            .Which.CurrentStatus.Should().Be(nameof(AppealStatus.Submitted));
+        _factory.Repo.PeekStored("tenant-ext", appeal.Id)!.Status.Should().Be(AppealStatus.InReview);
+    }
 }

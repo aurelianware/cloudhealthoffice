@@ -156,10 +156,18 @@ public sealed class AppealRepositoryMongo : IAppealRepository
 
             appeal.TargetResponseDate = persisted.TargetResponseDate;
             appeal.DeadlineExtension = persisted.DeadlineExtension;
+            // Notes are append-only (AppendNoteAsync / the extension write);
+            // carry the persisted list and pin its length so a note pushed
+            // between the read and the replace forces a retry, not a loss.
+            appeal.Notes = persisted.Notes ?? new List<AppealNote>();
 
-            var filter = persisted.DeadlineExtension is null
-                ? idFilter & Builders<Appeal>.Filter.Eq(a => a.DeadlineExtension, null)
-                : idFilter;
+            var notesUnchanged = appeal.Notes.Count == 0
+                // Legacy documents may hold null or lack the field ($size never matches those).
+                ? Builders<Appeal>.Filter.Size(a => a.Notes, 0) | Builders<Appeal>.Filter.Eq(a => a.Notes, null)
+                : Builders<Appeal>.Filter.Size(a => a.Notes, appeal.Notes.Count);
+            var filter = idFilter & notesUnchanged;
+            if (persisted.DeadlineExtension is null)
+                filter &= Builders<Appeal>.Filter.Eq(a => a.DeadlineExtension, null);
 
             appeal.UpdatedAt = DateTime.UtcNow;
             var replaceResult = await _appeals.ReplaceOneAsync(filter, appeal, cancellationToken: ct);
@@ -195,7 +203,8 @@ public sealed class AppealRepositoryMongo : IAppealRepository
     }
 
     public async Task<Appeal?> TryExtendDeadlineAsync(
-        Appeal appeal, AppealNote? justificationNote, IReadOnlyList<AppealEvent> auditEvents,
+        Appeal appeal, AppealNote? justificationNote,
+        Func<Appeal, IReadOnlyList<AppealEvent>> buildAuditEvents,
         CancellationToken ct = default)
     {
         var nonTerminalStatuses = new[] { AppealStatus.Submitted, AppealStatus.InReview, AppealStatus.PendingInfo };
@@ -228,7 +237,7 @@ public sealed class AppealRepositoryMongo : IAppealRepository
             updated = persisted;
         }
 
-        foreach (var evt in auditEvents) await _events.AppendAsync(evt, ct);
+        foreach (var evt in buildAuditEvents(updated)) await _events.AppendAsync(evt, ct);
         return updated;
     }
 

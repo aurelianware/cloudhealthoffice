@@ -148,6 +148,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             // stale snapshot.
             appeal.TargetResponseDate = current.TargetResponseDate;
             appeal.DeadlineExtension = current.DeadlineExtension is null ? null : CloneExtension(current.DeadlineExtension);
+            appeal.Notes = current.Notes.Select(CloneNote).ToList();
             _appeals[key] = Clone(appeal);
             AppendEventInternal(auditEvent);
         }
@@ -175,7 +176,8 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
     }
 
     public Task<Appeal?> TryExtendDeadlineAsync(
-        Appeal appeal, AppealNote? justificationNote, IReadOnlyList<AppealEvent> auditEvents,
+        Appeal appeal, AppealNote? justificationNote,
+        Func<Appeal, IReadOnlyList<AppealEvent>> buildAuditEvents,
         CancellationToken ct = default)
     {
         lock (_sync)
@@ -203,7 +205,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
                 return Task.FromResult<Appeal?>(null);
             }
 
-            foreach (var evt in auditEvents) AppendEventInternal(evt);
+            foreach (var evt in buildAuditEvents(Clone(current))) AppendEventInternal(evt);
             return Task.FromResult<Appeal?>(Clone(current));
         }
     }
@@ -435,7 +437,9 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         ExtendedBy = e.ExtendedBy,
         RegulatoryBasis = e.RegulatoryBasis,
         EventId = e.EventId,
-        JustificationNoteId = e.JustificationNoteId
+        JustificationNoteId = e.JustificationNoteId,
+        StatusAtExtension = e.StatusAtExtension,
+        CorrelationId = e.CorrelationId
     };
 
     private static AppealAttachment CloneAttachment(AppealAttachment a) => new()
