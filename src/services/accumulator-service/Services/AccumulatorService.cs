@@ -318,7 +318,7 @@ public class AccumulatorService : IAccumulatorService
         return null;
     }
 
-    private static (decimal deductible, decimal oop, List<ServiceAccumulatorDelta> services) ComputeDeltas(ClaimFinalizedEvent evt)
+    internal static (decimal deductible, decimal oop, List<ServiceAccumulatorDelta> services) ComputeDeltas(ClaimFinalizedEvent evt)
     {
         // Prefer per-line amounts when present — they let us attribute to multiple
         // benefit categories from a single claim. Fall back to claim-level when

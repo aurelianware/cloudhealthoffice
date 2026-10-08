@@ -144,10 +144,55 @@ public class NppesEndpoint
 
 public class ExclusionScreeningResult
 {
+    /// <summary>
+    /// True only when a real exclusion source (LEIE, SAM.gov, ...) was
+    /// actually queried to produce this result. Defaults to <c>false</c> so
+    /// a result is never read as "screened clear" unless the adapter that
+    /// built it affirmatively says it screened -- placeholder adapters, and
+    /// any adapter that could not reach its source, leave it unset. The
+    /// scorer treats an unscreened result as "not evaluated", never as clear.
+    /// </summary>
+    public bool WasScreened { get; set; }
+
     public bool IsExcluded { get; set; }
     public List<ExclusionMatch> Matches { get; set; } = [];
     public DateTimeOffset ScreenedAt { get; set; } = DateTimeOffset.UtcNow;
     public ExclusionScreeningSource Source { get; set; }
+
+    /// <summary>
+    /// Per-source outcome when the result combines several exclusion lists
+    /// (OIG LEIE + SAM.gov). <see cref="WasScreened"/> is <c>true</c> only
+    /// when every enabled source here screened; a source that could not be
+    /// queried (stale local dataset, HTTP failure, rejected API key) is
+    /// recorded with <see cref="ExclusionSourceScreening.WasScreened"/> =
+    /// <c>false</c> and a reason. Empty for single-source/placeholder results.
+    /// </summary>
+    public List<ExclusionSourceScreening> SourceResults { get; set; } = [];
+}
+
+/// <summary>Outcome of screening one provider against one exclusion source.</summary>
+public class ExclusionSourceScreening
+{
+    public ExclusionScreeningSource Source { get; set; }
+
+    /// <summary>True only when this source was actually queried with current data.</summary>
+    public bool WasScreened { get; set; }
+
+    /// <summary>
+    /// How the source was queried: "LocalDataset" (bulk file synced into the
+    /// local store) or "LiveApi" (per-provider API call).
+    /// </summary>
+    public string? Mode { get; set; }
+
+    /// <summary>
+    /// For local datasets, when the dataset was last synced from the
+    /// publisher. Providers screened against data older than the latest sync
+    /// are due for re-screening.
+    /// </summary>
+    public DateTimeOffset? DataAsOf { get; set; }
+
+    /// <summary>Why the source did not screen (or other context). Never contains secrets.</summary>
+    public string? Note { get; set; }
 }
 
 public enum ExclusionScreeningSource
@@ -169,6 +214,12 @@ public class ExclusionMatch
     public DateTimeOffset? ReinstatementDate { get; set; }
     public string? WaiverState { get; set; }
     public float MatchConfidence { get; set; }
+
+    /// <summary>How the match was made: "NPI", "NAME_DOB", "NAME", "BUSINESS_NAME".</summary>
+    public string? MatchBasis { get; set; }
+
+    /// <summary>Human-readable reason for the confidence assigned (for reviewers).</summary>
+    public string? MatchNote { get; set; }
 }
 
 // -----------------------------------------------------------------

@@ -49,7 +49,7 @@ jobs:
       # the site kept serving whatever numbers were committed in src/site/*.html.
       # Inject here so the published figures track CI instead of drifting.
       - name: Download latest test metrics
-        uses: dawidd6/action-download-artifact@v24
+        uses: dawidd6/action-download-artifact@v27
         with:
           workflow: test-metrics.yml
           name: test-metrics

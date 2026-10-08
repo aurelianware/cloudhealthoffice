@@ -33,6 +33,22 @@
 > (`GET /api/v1/adjudication/provider-integrity/{npi}`) rather than
 > folding the check into `calculate-benefits` itself. See "Provider
 > integrity stage (added July 2026)" below.
+>
+> **Addendum, October 2026 — PricingStage added.** The pipeline had no
+> pricing step: `BenefitCalculationStage` sent an empty `AllowedAmounts`
+> map, so the benefit engine fell back to allowed = billed, and the
+> network tier was hardcoded `InNetwork`. `PricingStage` (Order=250)
+> now prices every line through the fee schedule engine
+> (`POST /api/v1/adjudication/resolve-rates` on benefit-plan-service —
+> the same `IRateResolutionService.ResolveBatchAsync` the synchronous
+> `Adjudicate` endpoint uses). Any line the engine could only price at
+> billed charges (no contract / fee schedule / rate line), or a pricing
+> service outage, pends the claim (`NOCONTRACT` / `PRICING`) and
+> `BenefitCalculationStage` refuses to call the engine — there is no
+> fail-open mode. `BenefitCalculationStage` now sends the priced
+> allowed amounts and derives the tier from `NetworkCredentialingStage`
+> (matched tier → `InNetwork`; membership evaluated without a match →
+> `OutOfNetwork`; network stage disabled → `InNetwork`).
 
 ## Why this exists
 
@@ -68,6 +84,7 @@ POST /api/v1/claims                                     (capability 5.3)
    │       100  ScrubbingStage               ★ real (5.4)         │
    │       150  ProviderIntegrityStage       ★ real (added 7/26)  │
    │       200  NetworkCredentialingStage    ★ real (5.6)         │
+   │       250  PricingStage                 ★ real (added 10/26) │
    │       300  BenefitCalculationStage      ★ real (5.5)         │
    │       400  NcciEditsStage               ★ real (5.7)         │
    │       500  CoordinationOfBenefitsStage  ★ real (5.8)         │

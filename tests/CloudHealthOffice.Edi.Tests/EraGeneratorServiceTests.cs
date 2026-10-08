@@ -17,7 +17,7 @@ public class EraGeneratorServiceTests
             TenantId = "tenant-1",
             CheckNumber = "CHK12345",
             PaymentMethod = "ACH",
-            TotalPaymentAmount = 150.00m,
+            TotalPaymentAmount = 140.00m, // balanced: CLP04 150.00 - PLB 10.00
             PaymentDate = new DateTime(2026, 3, 1),
             PayerName = "Test Payer",
             PayerId = "PAYER01",
@@ -90,6 +90,7 @@ public class EraGeneratorServiceTests
             ApplicationReceiverId = "APPRECV",
             PayerRoutingNumber = "011000015",
             PayerAccountNumber = "111122223333",
+            OriginatingCompanyId = "1234567890",
             PayeeRoutingNumber = "021000021",
             PayeeAccountNumber = "444455556666"
         };
@@ -97,14 +98,14 @@ public class EraGeneratorServiceTests
         var edi = service.Generate835(payment, tp);
 
         Assert.Contains("ST*835*0001*005010X221A1~", edi);
-        Assert.Contains("BPR*C*150.00*C*ACH*CCP*01*011000015*DA*111122223333*20260301*01*021000021*DA*444455556666*20260301~", edi);
-        Assert.Contains("TRN*1*CHK12345*PAYER01~", edi);
+        Assert.Contains("BPR*C*140.00*C*ACH*CCP*01*011000015*DA*111122223333*1234567890**01*021000021*DA*444455556666*20260301~", edi);
+        Assert.Contains("TRN*1*CHK12345*1234567890~", edi);
         Assert.Contains("N1*PR*Test Payer*XV*PAYER01~", edi);
         Assert.Contains("N1*PE*Test Clinic*XX*1234567890~", edi);
         Assert.Contains("CLP*CLM-0001*1*200.00*150.00*50.00*HM*PCN123~", edi);
         Assert.Contains("SVC*HC:99213*200.00*150.00**1~", edi);
         Assert.Contains("CAS*CO*45*50.00~", edi);
-        Assert.Contains("CAS*PR*1*20.00*N620~", edi);
+        Assert.Contains("CAS*PR*1*20.00~LQ*HE*N620~", edi); // RARC in LQ*HE, not CAS04 (a quantity)
         Assert.Contains("PLB*1234567890*20260331*FB:WITHHOLD*10.00~", edi);
 
         var segments = edi.Split('~', StringSplitOptions.RemoveEmptyEntries);
