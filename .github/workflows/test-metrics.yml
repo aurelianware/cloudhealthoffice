@@ -55,7 +55,7 @@ jobs:
       # on first use and keeps it in ~/.local/share/ephemeral-mongo. Cache it so
       # Mongo-backed test projects don't re-download it on every run.
       - name: Cache EphemeralMongo binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/ephemeral-mongo
           key: ephemeral-mongo-${{ runner.os }}-${{ runner.arch }}-mongo7-${{ hashFiles('Directory.Packages.props') }}
