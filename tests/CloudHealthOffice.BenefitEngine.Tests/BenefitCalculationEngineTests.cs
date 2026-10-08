@@ -279,6 +279,34 @@ public class BenefitCalculationEngineTests
     }
 
     [Fact]
+    public async Task NoCategoryMapping_DeniedWithCarc204()
+    {
+        var plan = CreateTestPlan();
+        var engine = CreateUnmappedEngine(plan);
+        var request = CreateRequest(plan.Id, lines: ("ZZZZZ", 75m, 75m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+        var line = result.Lines.Single();
+        Assert.False(line.IsCovered);
+        Assert.Equal("204", line.DenialReasonCode);
+        Assert.Equal(0m, line.PlanPaidAmount);
+    }
+
+    [Fact]
+    public async Task Drg_NoCategoryMapping_DeniedWithCarc204()
+    {
+        var plan = CreateTestPlan(inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateUnmappedEngine(plan);
+        var request = CreateRequest(plan.Id,
+            claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+            lines: ("99223", 8000m, 8000m, "21"));
+
+        var result = await engine.CalculateAsync(request);
+        Assert.False(result.Success);
+        Assert.Equal("204", result.DenialReasonCode);
+    }
+
+    [Fact]
     public async Task VisitLimitExceeded_DeniedWithCarc119()
     {
         var plan = CreateTestPlan();
@@ -885,6 +913,14 @@ public class BenefitCalculationEngineTests
             categoryResolver, planProvider, accumulatorService, ruleGate,
             NullLogger<BenefitCalculationEngine>.Instance);
     }
+
+    private static BenefitCalculationEngine CreateUnmappedEngine(BenefitPlanConfig plan)
+        => new(
+            new UnmappedCategoryResolver(),
+            new InMemoryBenefitPlanProvider(plan),
+            new InMemoryAccumulatorService(plan, 0, 0, 0, "98"),
+            new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
+            NullLogger<BenefitCalculationEngine>.Instance);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1069,4 +1105,16 @@ internal class FixedCategoryResolver : IServiceCategoryResolver
             MatchedRule = $"Fixed:{_code}"
         });
     }
+}
+
+/// <summary>
+/// Resolver with no mapping for any procedure code.
+/// </summary>
+internal class UnmappedCategoryResolver : IServiceCategoryResolver
+{
+    public Task<ServiceCategoryMatch?> ResolveAsync(
+        string tenantId, Guid benefitPlanId, DateOnly serviceDate,
+        string procedureCode, string codeType, string placeOfService,
+        IReadOnlyList<string> modifiers, string? revenueCode, CancellationToken ct)
+        => Task.FromResult<ServiceCategoryMatch?>(null);
 }

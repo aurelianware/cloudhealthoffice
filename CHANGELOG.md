@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Benefit engine: deductibles now apply on non-HDHP plans.** The benefit-plan
+  projection (`ChoBenefitPlanProvider`) emitted only copay/coinsurance rules, so
+  the engine never took the deductible unless the plan was an HDHP — claims were
+  overpaid by the unmet deductible. Benefits with `DeductibleApplies=true` now
+  project an explicit deductible rule for both network tiers.
+- **Benefit engine: unset family limits no longer zero out cost share.** A plan
+  with no family deductible or family OOP max seeded zero-limit family
+  accumulators that read as "met", so members owed nothing. Unset (null) limits
+  now mean "no limit"; an explicit $0 deductible still means no deductible; a
+  zero OOP max is treated as unset and logged. Embedded remaining amounts are
+  now bounded by the closer of the individual and family limits. Aggregate plans
+  with no family limit use the member's individual deductible / OOP max as the
+  pool instead of dropping it.
+- **ACA preventive services carry no in-network cost share** (§2713 /
+  45 CFR 147.130) regardless of the `DeductibleApplies` default, and HDHP plans
+  exempt them from deductible-first (IRS Notice 2004-23).
+- **Coinsurance stored on the percent scale (e.g. `20`) is normalized** to the
+  engine's fraction, matching how the FHIR projector reads it.
+- **Benefit engine: unmapped procedure codes deny with CARC 204** ("not covered
+  under the patient's current benefit plan") instead of CARC 18 ("exact
+  duplicate claim/service"), on both the per-line and DRG paths. Payment
+  estimates still report these as `NO_BENEFIT_MAPPING` / `needs_review`.
+
 ## [5.0.0] - 2026-10-06
 
 First tagged release since v4.0.0; also covers 4.1.0–4.4.0 below, which were

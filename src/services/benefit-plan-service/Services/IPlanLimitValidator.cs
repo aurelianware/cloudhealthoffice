@@ -25,6 +25,14 @@ namespace BenefitPlanService.Services;
 /// run against the plan-year resolved by
 /// <see cref="IPlanYearResolver"/>.
 /// </para>
+///
+/// <para>
+/// <b>Advisory warnings.</b> Ambiguous-but-legal configurations (Aggregate
+/// plan with a $0 family deductible / OOP max and a positive individual
+/// one) do not reject: they emit a structured warning and increment
+/// <c>cho.benefit_plan.plan_limit_validation_warnings.total</c>, following
+/// the <see cref="INetworkTierSoftValidator"/> soft-validation pattern.
+/// </para>
 /// </summary>
 public interface IPlanLimitValidator
 {
@@ -139,6 +147,8 @@ public sealed class PlanLimitValidator : IPlanLimitValidator
                 cap: caps.FamilyCap);
         }
 
+        WarnOnAmbiguousAggregateLimits(plan, cs, caller);
+
         _logger.LogDebug(
             "PlanLimitValidator passed for plan {PlanId} version {VersionId} caller={Caller} planYear={PlanYear}",
             SanitizeForLog(plan.PlanId),
@@ -146,6 +156,57 @@ public sealed class PlanLimitValidator : IPlanLimitValidator
             caller,
             planYear);
     }
+
+    /// <summary>
+    /// Advisory (soft) check — structured warning + counter, write still
+    /// succeeds. The in-network family limits are non-nullable, so an
+    /// Aggregate plan with a $0 family deductible / OOP max and a positive
+    /// individual one is ambiguous: the engine projection reads 0 as
+    /// "not set" and applies the individual limit as each member's pool.
+    /// A true $0 family deductible cannot currently be expressed.
+    /// </summary>
+    private void WarnOnAmbiguousAggregateLimits(BenefitPlan plan, CostSharing cs, PlanLimitWriteCaller caller)
+    {
+        if (plan.FamilyAccumulatorModel != FamilyAccumulatorModel.Aggregate) return;
+
+        // Same individual-limit resolution as ChoBenefitPlanProvider.
+        var individualDeductible = cs.IndividualDeductible > 0 ? cs.IndividualDeductible : cs.InNetworkDeductible;
+        var individualOop = cs.IndividualOutOfPocketMax > 0 ? cs.IndividualOutOfPocketMax : cs.InNetworkOutOfPocketMax;
+
+        if (cs.FamilyDeductible <= 0 && individualDeductible > 0)
+            EmitWarning(plan, caller, "AggregateZeroFamilyDeductible",
+                "costSharing.familyDeductible", "deductible", individualDeductible);
+
+        if (cs.FamilyOutOfPocketMax <= 0 && individualOop > 0)
+            EmitWarning(plan, caller, "AggregateZeroFamilyOop",
+                "costSharing.familyOutOfPocketMax", "out-of-pocket maximum", individualOop);
+    }
+
+    private void EmitWarning(
+        BenefitPlan plan, PlanLimitWriteCaller caller, string reason,
+        string field, string limitName, decimal individualLimit)
+    {
+        ChoMetrics.PlanLimitValidationWarnings.Add(
+            1,
+            new KeyValuePair<string, object?>("cho.caller", caller.ToString()),
+            new KeyValuePair<string, object?>("cho.tenant_id", plan.TenantId ?? string.Empty),
+            new KeyValuePair<string, object?>("cho.reason", reason));
+
+        _logger.LogWarning(
+            "PlanLimitWarning {Reason} on plan write. caller={Caller} tenantId={TenantId} planId={PlanId} versionId={VersionId} field={Field}: {Detail}",
+            reason,
+            caller,
+            SanitizeForLog(plan.TenantId),
+            SanitizeForLog(plan.PlanId),
+            SanitizeForLog(plan.VersionId),
+            field,
+            AmbiguousAggregateLimitMessage(limitName, individualLimit));
+    }
+
+    internal static string AmbiguousAggregateLimitMessage(string limitName, decimal individualLimit)
+        => $"Aggregate plan has a $0 family {limitName}. $0 is treated as \"not set\": the individual " +
+           $"{limitName} ({individualLimit:C0}) will be applied per member. A true $0 family {limitName} " +
+           "cannot currently be expressed.";
 
     private static string SanitizeForLog(string? value)
     {

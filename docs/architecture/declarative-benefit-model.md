@@ -159,6 +159,16 @@ Type-aware engine paths arrive in subsequent capabilities:
 - **5.7** — embedded vs non-embedded OOP rules. The engine becomes
   preventive-aware (`benefit is PreventiveBenefit { IsAcaPreventive: true }`
   + grade A/B ⇒ zero member liability).
+  *Implemented in the engine-config projection* (`ChoBenefitPlanProvider`):
+  a benefit is ACA preventive when it is a `PreventiveBenefit` with
+  `IsAcaPreventive` or a USPSTF A/B grade (either suffices — HRSA and
+  ACIP recommendations carry no USPSTF grade), or when its
+  `ServiceCategory` resolves to `BenefitCategoryMap.Preventive`. Such
+  benefits project no in-network cost-share rules (no deductible, copay
+  or coinsurance); out-of-network sharing is unchanged. Their service
+  codes populate `HdhpDeductibleExemptServices` when every benefit on
+  that code is preventive. The model has no grandfathered-plan flag, so
+  all plans are treated as non-grandfathered.
 - **5.14** — formulary service. The engine resolves
   `PharmacyBenefit.FormularyTier` against the formulary doc to land
   benefits on the correct tier.

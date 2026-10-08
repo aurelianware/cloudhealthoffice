@@ -256,12 +256,14 @@ public class PaymentEstimateServiceTests
         line.Messages.Should().Contain(m => m.Code == "NON_COVERED_SERVICE" && m.Severity == EstimateMessageSeverity.Denial);
     }
 
-    [Fact]
-    public async Task InvalidProcedureCode_NoBenefitMapping_NeedsReview()
+    [Theory]
+    [InlineData("16")]
+    [InlineData("204")]
+    public async Task InvalidProcedureCode_NoBenefitMapping_NeedsReview(string carc)
     {
         var h = new Harness();
         h.SetupPricing(Pricing((1, 100m, 100m, RateSource.BilledCharges)));
-        h.SetupBenefit(Benefit(false, DeniedLine(1, 100m, "16", "No benefit category mapping for procedure code")));
+        h.SetupBenefit(Benefit(false, DeniedLine(1, 100m, carc, "No benefit category mapping for procedure code")));
 
         var resp = await h.Build().EstimateAsync(Tenant, Request(Line(1, "ZZZZZ", 100m)));
 
