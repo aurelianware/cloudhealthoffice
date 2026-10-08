@@ -89,6 +89,21 @@ public class HttpCoverageServiceClient : ICoverageServiceClient
         await EnsureSuccessAsync(response, "termination", coverageId, ct).ConfigureAwait(false);
     }
 
+    public async Task ReinstateAsync(string tenantId, string coverageId, string? reasonCode, CancellationToken ct = default)
+    {
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        var url = $"/api/v1/coverage/{Uri.EscapeDataString(coverageId)}/reinstate";
+        if (!string.IsNullOrEmpty(reasonCode))
+        {
+            url += $"?reasonCode={Uri.EscapeDataString(reasonCode)}";
+        }
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
+        httpRequest.Headers.Add("X-Tenant-ID", tenantId);
+
+        using var response = await client.SendAsync(httpRequest, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "reinstatement", coverageId, ct).ConfigureAwait(false);
+    }
+
     private async Task EnsureSuccessAsync(HttpResponseMessage response, string operation, string id, CancellationToken ct)
     {
         if (response.IsSuccessStatusCode)

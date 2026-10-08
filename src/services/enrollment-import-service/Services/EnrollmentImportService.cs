@@ -175,6 +175,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 DependentsTerminated = result.DependentsTerminated,
                 CoverageRecordsCreated = result.CoverageRecordsCreated,
                 CoverageRecordsUpdated = result.CoverageRecordsUpdated,
+                CoverageRecordsReinstated = result.CoverageRecordsReinstated,
                 CoverageRecordsTerminated = result.CoverageRecordsTerminated,
                 CoverageMappingsUnresolved = result.CoverageMappingsUnresolved,
                 Errors = result.Errors
@@ -774,10 +775,11 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// span, so re-importing the same file is a no-op:
     /// <list type="bullet">
     /// <item>021 creates only if no matching coverage exists.</item>
-    /// <item>001/025 update the matching coverage's plan/level (falling back
+    /// <item>001 updates the matching coverage's plan/level (falling back
     /// to the single open coverage on the same insurance line, for a plan
     /// change), creating only when nothing matches; an HD end date (DTP*349)
     /// is applied as a termination date.</item>
+    /// <item>025 reinstates: see <see cref="ApplyReinstatementAsync"/>.</item>
     /// <item>024 (on the HD or the member) sets the matching coverage's
     /// termination date — it never creates coverage.</item>
     /// </list>
@@ -819,8 +821,12 @@ public class EnrollmentImportService : IEnrollmentImportService
                 await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, "021", existing, ctx);
                 return;
 
-            case "001":
             case "025":
+                await ApplyReinstatementAsync(
+                    memberId, line, planId, groupNumber, maintenanceReason, begin, end, key, match, existing, ctx);
+                return;
+
+            case "001":
                 if (match is null || string.IsNullOrEmpty(match.Id))
                 {
                     // A plan change sent as 001: the one open coverage on the
@@ -883,6 +889,97 @@ public class EnrollmentImportService : IEnrollmentImportService
                     "Unsupported coverage maintenance type {MaintenanceType} for member {MemberId}; skipped",
                     SanitizeForLog(maintenanceType), SanitizeForLog(memberId));
                 return;
+        }
+    }
+
+    /// <summary>
+    /// 834 INS03/HD01 = 025 (reinstatement). A reinstatement reverses a
+    /// termination as if it had not happened, so when it continues a
+    /// terminated coverage — no DTP*348, or a begin date on or before the day
+    /// after that coverage's termination date — the same coverage record is
+    /// reinstated in coverage-service (termination date cleared, status back
+    /// to Active; its original effective date keeps the span unbroken). When
+    /// the 025's DTP*348 begins after a gap, the gap was genuinely uncovered,
+    /// and reinstating the old record would make it eligible: a new coverage
+    /// span is created from that date instead. An HD end date (DTP*349) is
+    /// then applied as the termination date, as for a change. Plan/level are
+    /// updated as for a change. Replaying the file changes nothing: the
+    /// reinstated coverage is open (or already ends on DTP*349), and a span
+    /// created after a gap is found by the overlap match.
+    /// </summary>
+    private async Task ApplyReinstatementAsync(
+        string memberId,
+        CoverageDetail line,
+        string planId,
+        string groupNumber,
+        string? maintenanceReason,
+        DateTime? begin,
+        DateTime? end,
+        string key,
+        CoverageRecordDto? match,
+        List<CoverageRecordDto> existing,
+        BatchContext ctx)
+    {
+        if (match is null)
+        {
+            // Nothing overlaps the reinstated span; the coverage it continues
+            // is the latest same-key one ending before it.
+            var previous = existing
+                .Where(e => !string.IsNullOrEmpty(e.Id)
+                            && BuildCoverageKey(memberId, e.InsuranceLineCode, e.PlanId) == key
+                            && e.TerminationDate is not null)
+                .OrderByDescending(e => e.EffectiveDate)
+                .FirstOrDefault();
+
+            if (previous is null || (begin is not null && begin.Value.Date > previous.TerminationDate!.Value.Date.AddDays(1)))
+            {
+                if (previous is not null)
+                {
+                    _logger.LogInformation(
+                        "Reinstatement {CoverageKey} for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
+                        key, SanitizeForLog(memberId), begin, previous.TerminationDate);
+                }
+                await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, "025", existing, ctx);
+                return;
+            }
+            match = previous;
+        }
+
+        if (string.IsNullOrEmpty(match.Id))
+        {
+            return; // created earlier in this same pass
+        }
+
+        var level = line.CoverageLevel ?? match.CoverageLevel;
+        if (!string.Equals(match.PlanId, planId, StringComparison.Ordinal)
+            || !string.Equals(match.CoverageLevel, level, StringComparison.Ordinal))
+        {
+            await _coverageClient.UpdateAsync(ctx.TenantId, match.Id, new UpdateCoverageRequestDto
+            {
+                PlanId = planId,
+                CoverageLevel = level
+            });
+            match.PlanId = planId;
+            match.CoverageLevel = level;
+            ctx.Result.CoverageRecordsUpdated++;
+        }
+
+        if (end is not null)
+        {
+            // Reinstated through DTP*349: moving the termination date is the
+            // whole change (coverage-service derives the status from it).
+            if (match.TerminationDate?.Date != end.Value.Date)
+            {
+                await TerminateCoverageAsync(match, end.Value, maintenanceReason, ctx);
+            }
+            return;
+        }
+
+        if (match.TerminationDate is not null)
+        {
+            await _coverageClient.ReinstateAsync(ctx.TenantId, match.Id, maintenanceReason);
+            match.TerminationDate = null;
+            ctx.Result.CoverageRecordsReinstated++;
         }
     }
 
@@ -1194,6 +1291,7 @@ public class ImportResult
     public int DependentsTerminated { get; set; }
     public int CoverageRecordsCreated { get; set; }
     public int CoverageRecordsUpdated { get; set; }
+    public int CoverageRecordsReinstated { get; set; }
     public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();

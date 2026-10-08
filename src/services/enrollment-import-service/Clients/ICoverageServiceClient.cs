@@ -18,6 +18,12 @@ public interface ICoverageServiceClient
     /// <summary>Updates plan / coverage level on an existing coverage (coverage-service PUT).</summary>
     Task UpdateAsync(string tenantId, string coverageId, UpdateCoverageRequestDto request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Reinstates a terminated coverage (coverage-service POST /{id}/reinstate):
+    /// clears its termination date and restores Active, keeping its effective date.
+    /// </summary>
+    Task ReinstateAsync(string tenantId, string coverageId, string? reasonCode, CancellationToken ct = default);
+
     /// <summary>Sets an existing coverage's termination date (coverage-service DELETE ?terminationDate=).</summary>
     Task TerminateAsync(string tenantId, string coverageId, DateTime terminationDate, string? reasonCode, CancellationToken ct = default);
 }

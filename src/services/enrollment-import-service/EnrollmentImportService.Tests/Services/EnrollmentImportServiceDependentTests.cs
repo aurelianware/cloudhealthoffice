@@ -28,6 +28,7 @@ public class EnrollmentImportServiceDependentTests
         public List<CoverageRecordDto> StoredCoverage { get; } = new();
         public List<(string Id, UpdateCoverageRequestDto Request)> CoverageUpdates { get; } = new();
         public List<(string Id, DateTime Date)> CoverageTerminations { get; } = new();
+        public List<string> CoverageReinstatements { get; } = new();
         public List<EnrollmentTransaction> Transactions { get; } = new();
         public InMemoryEnrollmentEventRepository Events { get; } = new();
         public string? ResolvedPlanId { get; set; } = "resolved-plan-id";
@@ -111,6 +112,14 @@ public class EnrollmentImportServiceDependentTests
                 {
                     CoverageTerminations.Add((id, date));
                     StoredCoverage.Single(x => x.Id == id).TerminationDate = date;
+                })
+                .Returns(Task.CompletedTask);
+
+            coverageClient.Setup(c => c.ReinstateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .Callback((string _, string id, string? _, CancellationToken _) =>
+                {
+                    CoverageReinstatements.Add(id);
+                    StoredCoverage.Single(x => x.Id == id).TerminationDate = null;
                 })
                 .Returns(Task.CompletedTask);
 
@@ -463,6 +472,136 @@ public class EnrollmentImportServiceDependentTests
         h.Coverage.Should().BeEmpty();
         h.CoverageUpdates.Should().ContainSingle(u => u.Id == health.Id && u.Request.CoverageLevel == "FAM");
         result.CoverageRecordsUpdated.Should().Be(1);
+    }
+
+    private static MemberEnrollment Reinstatement(string? begin, string? end = null)
+    {
+        var sub = Subscriber("SUB1", "025");
+        sub.EnrollmentDate = null;
+        sub.MaintenanceReason = "41";
+        sub.Coverage =
+        [
+            new CoverageDetail
+            {
+                MaintenanceType = "025", InsuranceLineCode = "HLT", PlanCoverageDescription = "PPO",
+                CoverageLevel = "EMP", BenefitBeginDate = begin, BenefitEndDate = end
+            }
+        ];
+        return sub;
+    }
+
+    [Fact]
+    public async Task Reinstatement_WithoutBenefitBegin_ReinstatesTheTerminatedCoverage()
+    {
+        // Before: the 025 matched the terminated coverage and only (maybe)
+        // updated plan/level, leaving the member terminated.
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var health = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20251231");
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "R1", Enrollments = { Reinstatement(begin: null) } });
+
+        h.CoverageReinstatements.Should().Equal(health.Id);
+        health.TerminationDate.Should().BeNull();
+        health.EffectiveDate.Should().Be(new DateTime(2025, 1, 1));
+        h.Coverage.Should().BeEmpty();
+        h.CoverageTerminations.Should().BeEmpty();
+        result.CoverageRecordsReinstated.Should().Be(1);
+
+        // Replaying the file changes nothing.
+        await h.ImportAsync(new Enrollment834 { BatchId = "R1", Enrollments = { Reinstatement(begin: null) } });
+        h.CoverageReinstatements.Should().HaveCount(1);
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("20251001")] // within the old span
+    [InlineData("20260101")] // the day after the termination date: no gap
+    public async Task Reinstatement_ContinuingTheTerminatedSpan_ReinstatesTheSameRecord(string begin)
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var health = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20251231");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R2", Enrollments = { Reinstatement(begin) } });
+
+        h.CoverageReinstatements.Should().Equal(health.Id);
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Reinstatement_AfterAGap_CreatesANewSpan_LeavingTheGapUncovered()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var old = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20251231");
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "R3", Enrollments = { Reinstatement("20260301") } });
+
+        h.CoverageReinstatements.Should().BeEmpty();
+        old.TerminationDate.Should().Be(new DateTime(2025, 12, 31));
+        var created = h.Coverage.Should().ContainSingle().Subject;
+        created.EffectiveDate.Should().Be(new DateTime(2026, 3, 1));
+        created.TerminationDate.Should().BeNull();
+        created.MaintenanceTypeCode.Should().Be("025");
+        result.CoverageRecordsCreated.Should().Be(1);
+
+        // Replay: the new span is found by the overlap match.
+        await h.ImportAsync(new Enrollment834 { BatchId = "R3", Enrollments = { Reinstatement("20260301") } });
+        h.Coverage.Should().HaveCount(1);
+        h.CoverageReinstatements.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Reinstatement_WithBenefitEnd_MovesTheTerminationDate()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var health = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20251231");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R4", Enrollments = { Reinstatement(null, "20260630") } });
+
+        h.CoverageTerminations.Should().Equal((health.Id, new DateTime(2026, 6, 30)));
+        h.CoverageReinstatements.Should().BeEmpty();
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Reinstatement_OfAFutureDatedTermination_ClearsIt()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var health = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20991231");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R5", Enrollments = { Reinstatement(null) } });
+
+        h.CoverageReinstatements.Should().Equal(health.Id);
+    }
+
+    [Fact]
+    public async Task Reinstatement_OfOpenCoverage_ChangesNothing()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        h.SeedCoverage("SUB1", "HLT", "EMP", "20250101");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R6", Enrollments = { Reinstatement(null) } });
+
+        h.CoverageReinstatements.Should().BeEmpty();
+        h.CoverageTerminations.Should().BeEmpty();
+        h.CoverageUpdates.Should().BeEmpty();
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Reinstatement_WithNothingOnFile_CreatesTheCoverage()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R7", Enrollments = { Reinstatement("20260101") } });
+
+        h.Coverage.Should().ContainSingle().Which.EffectiveDate.Should().Be(new DateTime(2026, 1, 1));
     }
 
     [Fact]
