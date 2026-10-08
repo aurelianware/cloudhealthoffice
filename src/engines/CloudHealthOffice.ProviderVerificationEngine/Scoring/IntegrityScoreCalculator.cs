@@ -15,7 +15,7 @@ using Microsoft.Extensions.Options;
 ///   - Exclusion screening is the one mandatory dimension: when no real
 ///     LEIE/SAM source was queried it is left unevaluated (excluded from the
 ///     composite, never awarded 100), flagged EXCLUSION_NOT_SCREENED, and the
-///     rating is Unknown rather than a score bucket -- a provider that was
+///     rating is always Unknown rather than a score bucket -- a provider that was
 ///     never screened must not read as screened-clear downstream.
 /// </summary>
 public class IntegrityScoreCalculator
@@ -89,11 +89,13 @@ public class IntegrityScoreCalculator
             _ => IntegrityRating.Blocked
         };
 
-        // Without exclusion screening no favorable rating is knowable: the
-        // composite only reflects the dimensions that were evaluated. A
-        // Blocked rating from the other dimensions still stands (it is
-        // already the most severe outcome).
-        if (!score.ExclusionScreening.WasEvaluated && score.Rating != IntegrityRating.Blocked)
+        // Without exclusion screening no rating is knowable: the composite
+        // only reflects the dimensions that were evaluated. This applies to
+        // Blocked too -- confirmed exclusions already returned via the hard
+        // stop above, and downstream consumers of the persisted rating
+        // (projection -> adjudication gate) must not read a Blocked from
+        // other dimensions as a federal exclusion.
+        if (!score.ExclusionScreening.WasEvaluated)
         {
             score.Rating = IntegrityRating.Unknown;
         }

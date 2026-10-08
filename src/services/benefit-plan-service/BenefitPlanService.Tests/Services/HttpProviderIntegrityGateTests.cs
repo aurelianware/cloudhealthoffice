@@ -283,7 +283,45 @@ public sealed class HttpProviderIntegrityGateTests
     }
 
     [Fact]
-    public async Task CheckAsync_ExcludedRating_OnCachedProjection_DenialCodeSurfaces()
+    public async Task CheckAsync_BlockedRatingOnCachedProjection_LiveConfirmsExcluded_DenialCodeSurfaces()
+    {
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 0, rating: "Blocked", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 0, rating: "Blocked", status: "Excluded"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeTrue();
+        result.DenialCode.Should().Be("B7");
+        verificationHandler.RequestCount.Should().Be(1,
+            "a cached Blocked rating cannot distinguish exclusion from a low composite, so it is re-checked live");
+    }
+
+    [Fact]
+    public async Task CheckAsync_BlockedRatingOnCachedProjection_LiveNotExcluded_RequiresManualReview_NotB7()
+    {
+        // Unscreened provider whose NPI failed validation: the projection
+        // only says "Blocked"; live says ManualReviewRequired, not Excluded.
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 0, rating: "Blocked", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 0, rating: "Unknown", status: "Failed",
+                flagCodes: ["NPI_NOT_FOUND", "EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeFalse("no exclusion was found -- this must not be denied as federally excluded");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().NotBe("B7");
+    }
+
+    [Fact]
+    public async Task CheckAsync_BlockedRatingOnCachedProjection_LiveUnavailable_RequiresManualReview_NotB7()
     {
         var providerHandler = FakeHttpMessageHandler.Json(
             ProviderJson(score: 5, rating: "Blocked", lastVerifiedAt: DateTimeOffset.UtcNow));
@@ -292,11 +330,27 @@ public sealed class HttpProviderIntegrityGateTests
 
         var result = await gate.CheckAsync(Npi, Tenant);
 
+        result.Passed.Should().BeFalse("never pay a provider whose cached rating is Blocked");
+        result.IsExcluded.Should().BeFalse("the cached projection alone cannot confirm a federal exclusion");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
+        verificationHandler.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CheckAsync_StaleBlockedRating_LiveUnavailable_RequiresManualReview_NotB7()
+    {
+        var stale = DateTimeOffset.UtcNow - TimeSpan.FromDays(30);
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 5, rating: "Blocked", lastVerifiedAt: stale));
+        var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
         result.Passed.Should().BeFalse();
-        result.IsExcluded.Should().BeTrue();
-        result.DenialCode.Should().Be("B7");
-        verificationHandler.RequestCount.Should().Be(0,
-            "Blocked on cached projection is sufficient — the gate should not call verification-service");
+        result.IsExcluded.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
     }
 
     [Fact]
