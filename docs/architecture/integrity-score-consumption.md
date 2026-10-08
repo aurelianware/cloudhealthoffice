@@ -49,6 +49,177 @@ Depends on: 5.4.5 (verification write-back), 5.4 (network roster), 5.7 (FHIR Pra
 > unreachable the claim is held for review -- neither denied as excluded
 > nor paid.
 
+> **Addendum, October 2026 — real LEIE / SAM.gov screening.** Real
+> adapters now exist behind configuration (see "Exclusion screening
+> sources" below). They stay **off** by default, so until an operator
+> enables them the placeholder behaviour above still applies. Once enabled,
+> `WasScreened` is `true` only when every enabled source screened with
+> current data; any source that could not (stale dataset, HTTP failure,
+> rejected API key) leaves the provider NOT screened.
+
+## Exclusion screening sources
+
+`provider-verification-service` screens against two federal lists through
+`CompositeExclusionScreeningAdapter` (engine:
+`DataSources/Exclusions/`). Each source reports its own outcome in
+`ExclusionScreeningResult.SourceResults` (source, `WasScreened`, mode,
+`DataAsOf`, note), and the Exclusion Screening dimension `Detail` names
+which sources screened and why any did not, e.g.
+`Clear — screened at 2026-10-08 (screened: OIG LEIE (data as of 2026-10-07), SAM.gov (data as of 2026-10-08))`.
+
+| Source | Mode | How |
+|---|---|---|
+| OIG LEIE | Local dataset | `LeieDatasetSync` downloads the full-database `UPDATED.csv`, parses it (RFC 4180, columns mapped by header name) and loads it into the local store. |
+| SAM.gov | `Extract` (default) | `SamExtractDatasetSync` downloads the public exclusions extract (zipped CSV) from the SAM.gov Extracts API — one request per sync, independent of network size — and loads it into the same store. |
+| SAM.gov | `Api` (optional) | `SamExclusionsApiScreener` calls the Exclusions API (`{ApiBaseUrl}{ApiVersion}/exclusions`, default v4) per provider by NPI and name. Use only for small volumes: SAM keys are rate-limited per account (personal keys can be ~10 requests/day, system accounts ~1,000/day). |
+
+**SAM Exclusions API contract — unverified.** The request defaults
+(`npi`, `exclusionName`, `page`/`size`, response `totalRecords` /
+`excludedEntity[].exclusionIdentification` / `exclusionActions.listOfActions`)
+follow our best reading of the v4 Exclusions API documentation but were not
+checked against the live API (a PR review suggested `start`/`length` and
+`firstName`/`lastName`/`entityName` instead). Every parameter name is
+configurable (`PaginationStyle` = `PageSize` | `StartLength`, `PageParameter`,
+`SizeParameter`, `NpiParameter`, `NameSearchStyle` = `ExclusionName` |
+`NameParts`, `ExclusionNameParameter`, `First/Last/EntityNameParameter`).
+Verify against https://open.gsa.gov/api/exclusions-api/ before enabling Api
+mode. A contract mismatch fails safe: an unmappable record, an empty page
+before `totalRecords` is reached, a repeated page (pagination ignored) or
+more results than `MaxPages` all report SAM NOT screened. Retry-After is
+honoured exactly; one longer than `MaxServerRetryDelay` (2 min) reports NOT
+screened rather than retrying early. Extract mode (the default) does not
+depend on this contract.
+
+**Matching policy** (`ExclusionMatcher`). False negatives are the compliance
+risk; false positives go to manual review, never denial.
+
+- Exact NPI match on an exclusion in effect → `IsExcluded = true`,
+  confidence 1.0 (hard stop, `Blocked`).
+- Exclusion ended (LEIE `REINDATE` / SAM termination date in the past, or
+  SAM record status Inactive) → not a match.
+- NPI match with a waiver (`WAIVERDATE`/`WVRSTATE`) or a future-dated
+  exclusion → possible match (0.95), manual review.
+- Individual name (normalized: diacritics, punctuation and Jr/Sr/III
+  suffixes stripped) + DOB equal → 0.95 (0.85 with first initial only);
+  DOB conflicting → not a match; DOB unavailable (NPPES has none) with exact
+  first + last name → 0.7, review. A list row that carries a *different*
+  NPI and no DOB confirmation is treated as a namesake (not reported).
+- Organization legal name (normalized: punctuation, `&`, leading THE and
+  trailing LLC/INC/CORP/CO/PC/PLLC/... removed) → 0.85 possible match;
+  an excluded individual listed with that business name → 0.7.
+- Anything ≥ 0.7 raises `POSSIBLE_EXCLUSION_MATCH` (score 40) for review.
+- The orchestrator now screens after NPPES returns so names (individual
+  first/last, or organization legal name) accompany the NPI.
+
+**Staleness rule.** A local dataset reports `WasScreened = true` only when
+its last *successful* sync is within `StalenessWindow` (default 35 days).
+Against older data the source still searches, but reports NOT screened and
+downgrades any NPI hit to a 0.9 possible match (it may since have ended).
+A never-synced dataset reports NOT screened.
+
+**Sync safety.** Files are downloaded to a temp file, header-validated
+(an HTML/JSON error page is rejected), and loaded under a new sync id. The
+load only becomes visible when the sync status is switched to its sync id:
+every lookup is scoped to `ActiveSyncId`, so rows of an in-flight, rejected
+or superseded load never affect screening. The load is rejected — previous
+dataset and its timestamp kept — when it has
+fewer than `MinimumRecordCount` rows or fewer than `MinimumRetainedFraction`
+of the previous count. A per-source lease in the store stops replicas
+downloading concurrently. Failures back off `SyncRetryDelay` (4 h) so a
+rate-limited SAM key is not exhausted.
+
+**Storage.** With `MongoDb:ConnectionString` set, records go to the
+tenant-agnostic collections `exclusion_list_records` (indexes:
+source+sync id+NPI, source+sync id+normalized last name+DOB, source+sync
+id+normalized business name; the sync worker retries index creation before
+each sync until it succeeds) and
+`exclusion_list_sync_status` in `MongoDb:DatabaseName` (or
+`ExclusionScreening:MongoDatabaseName`). Without it each replica holds an
+in-memory copy (development only: LEIE + SAM extract need several hundred
+MB per replica).
+
+**Re-screening after a sync.** `GET /api/v1/exclusions/status` returns
+each dataset's `lastSuccessfulSyncAt`, record count and `isStale`. A
+provider whose stored `ExclusionScreening.SourceResults[].DataAsOf` predates
+the latest sync is due for re-screening; the sync worker logs that
+boundary on every successful sync. Today re-screening rides the existing
+cadence: `IntegrityProjectionWorker` refreshes providers when
+`NextVerificationDue` passes (verification-service sets it from
+`ReverificationInterval`, default 30 days), i.e. roughly once per LEIE
+publication cycle — not immediately after a sync. **Follow-up:** have `IntegrityProjectionWorker`
+read `/exclusions/status` and refresh projections whose screen predates
+the latest sync immediately rather than on cadence.
+
+**Secrets.** The SAM.gov key is read from
+`ProviderVerification:ExclusionScreening:Sam:ApiKey`, falling back to the
+existing `ProviderVerification:SamGovApiKey` secret. It travels only as the
+`api_key` query parameter; the SAM/extract HTTP clients have their request
+loggers removed, the code never logs URLs, and OpenTelemetry HTTP
+instrumentation (1.15) redacts query strings. A 401/403 from SAM logs a
+warning that the key was rejected (keys expire every 90 days) without the
+key, and the source reports NOT screened until it is rotated.
+
+### Configuration
+
+```jsonc
+// appsettings.json (provider-verification-service)
+"ProviderVerification": {
+  "SamGovApiKey": "",                       // secret (Key Vault / k8s Secret); fallback SAM key
+  "ExclusionScreening": {
+    "Leie": {
+      "Enabled": false,                     // true to screen against OIG LEIE
+      "DownloadUrl": "https://oig.hhs.gov/exclusions/downloadables/UPDATED.csv",
+      "MinimumRecordCount": 10000
+    },
+    "Sam": {
+      "Enabled": false,                     // true to screen against SAM.gov
+      "Mode": "Extract",                    // Extract (default) | Api
+      "ApiKey": "",                         // secret; falls back to SamGovApiKey
+      "ExtractDownloadUrl": "https://api.sam.gov/data-services/v1/extracts?fileType=EXCLUSION",
+      "MinimumRecordCount": 10000,
+      "ApiBaseUrl": "https://api.sam.gov/entity-information/",   // Api mode
+      "ApiVersion": "v4",                                        // Api mode
+      "RequestTimeout": "00:00:20",
+      "MaxRetries": 3,                      // 429 / 5xx / timeout retries
+      "RetryBaseDelay": "00:00:02",         // exponential; Retry-After wins
+      "MaxRetryDelay": "00:01:00",          // cap on computed backoff only
+      "MaxServerRetryDelay": "00:02:00",    // longer Retry-After → NOT screened
+      "PageSize": 10,
+      "MaxPages": 5,                        // more results → NOT screened
+      "PaginationStyle": "PageSize",        // PageSize | StartLength (unverified contract)
+      "PageParameter": "page",
+      "SizeParameter": "size",
+      "NpiParameter": "npi",
+      "NameSearchStyle": "ExclusionName",   // ExclusionName | NameParts
+      "ExclusionNameParameter": "exclusionName"
+    },
+    "StalenessWindow": "35.00:00:00",
+    "SyncInterval": "1.00:00:00",
+    "SyncCheckInterval": "01:00:00",
+    "SyncRetryDelay": "04:00:00",
+    "SyncLeaseDuration": "00:30:00",
+    "DownloadTimeout": "00:10:00",
+    "MinimumRetainedFraction": 0.5,
+    "MongoDatabaseName": null,
+    "RecordsCollectionName": "exclusion_list_records",
+    "SyncStatusCollectionName": "exclusion_list_sync_status"
+  }
+},
+"MongoDb": { "ConnectionString": "", "DatabaseName": "CloudHealthOffice" }
+```
+
+**Gate caching.** `HttpProviderIntegrityGate` does not cache a live result
+that is not-screened (rating `Unknown` or `EXCLUSION_NOT_SCREENED`), just as
+it does not cache unavailability, so claims stop pending as soon as LEIE /
+SAM screening recovers instead of after the 1-hour cache TTL.
+
+Deployment checklist: set `Leie:Enabled` / `Sam:Enabled` (k8s ConfigMap
+`provider-verification-service-config`), the SAM key and
+`MongoDb__ConnectionString` (Secret `provider-verification-service-secrets`),
+allow egress to `oig.hhs.gov` and `api.sam.gov`, then confirm
+`GET /api/v1/exclusions/status` shows both datasets non-stale before
+relying on screening. Until then claims keep pending for review.
+
 ## Why a canonical decision tree
 
 Integrity-score data has three consumers patterns that look similar
