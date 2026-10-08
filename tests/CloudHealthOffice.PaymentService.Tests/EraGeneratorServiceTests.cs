@@ -125,6 +125,28 @@ public class EraGeneratorServiceTests
     }
 
     [Fact]
+    public void Generate835_ReversalPayment_Bpr02Zero_NegativeBalanceCarriedForwardInPlb()
+    {
+        var payment = CreateTestPayment();
+        payment.IsReversal = true;
+        payment.TotalPaymentAmount = -1250m;
+        payment.ClaimPayments[0].ClaimStatusCode = "22";
+        payment.ClaimPayments[0].PaymentAmount = -1250m;
+        payment.ClaimPayments[0].ServiceLines[0].PaymentAmount = -1250m;
+        var tp = CreateTestTradingPartner();
+
+        var era = _generator.Generate835(payment, tp);
+
+        var segments = era.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
+        Assert.Equal(new[] { "H", "0.00", "C", "NON" }, segments.Single(s => s[0] == "BPR").Skip(1).Take(4));
+        var plb = segments.Single(s => s[0] == "PLB");
+        Assert.Equal($"FB:{payment.CheckNumber}", plb[3]);
+        Assert.Equal("-1250.00", plb[4]);
+        var clp04 = segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4]));
+        Assert.Equal(0m, clp04 - decimal.Parse(plb[4]));
+    }
+
+    [Fact]
     public void Generate835_ContainsTRNWithCheckNumber()
     {
         var payment = CreateTestPayment();

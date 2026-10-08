@@ -402,6 +402,54 @@ public class ReversalRunServiceTests
     }
 
     [Fact]
+    public async Task ExecuteReversalRunAsync_RealGenerator_Bpr02Zero_RecoupmentCarriedForward_RecordedAsReceivable()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
+        SetupClaimResponse("pred-1", BuildClaim("pred-1", approvedAmount: 650m));
+        SeedOriginalPayment("pred-1", paid: 650m);
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        var envelopes = new List<EraEnvelopeRecord>();
+        _envelopeRepo.CreateAsync(Arg.Do<EraEnvelopeRecord>(envelopes.Add)).Returns(call =>
+        {
+            var rec = call.Arg<EraEnvelopeRecord>();
+            rec.Id = "env-1";
+            return rec;
+        });
+
+        var service = new ReversalRunService(
+            _paymentRepo, _runRepo, new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
+            _envelopeRepo, _tpClient, _httpFactory, NullLogger<ReversalRunService>.Instance, _configuration,
+            _actor, _actor.SeparationOfDuties(), _reservations);
+
+        var executed = await service.ExecuteReversalRunAsync(run.Id);
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        var envelope = Assert.Single(envelopes);
+        Assert.Equal(0m, envelope.TotalPaymentAmount);
+        Assert.Equal(-650m, envelope.ForwardBalanceAmount);
+
+        var segments = envelope.EdiContent.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
+        var bpr = segments.Single(s => s[0] == "BPR");
+        Assert.Equal(new[] { "H", "0.00", "C", "NON" }, bpr.Skip(1).Take(4));
+        var clp04 = segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4]));
+        Assert.Equal(-650m, clp04);
+        var plb = segments.Single(s => s[0] == "PLB");
+        Assert.StartsWith("FB:", plb[3]);
+        Assert.Equal(-650m, decimal.Parse(plb[4]));
+        Assert.Equal(0m, clp04 - decimal.Parse(plb[4])); // sum CLP04 - sum PLB = BPR02 = 0
+
+        var receivable = Assert.Single(executed.OutstandingReceivables);
+        Assert.Equal(("TP-A", "env-1", 650m), (receivable.TradingPartnerId, receivable.EraEnvelopeId, receivable.Amount));
+        Assert.Equal(plb[3].Split(':')[1], receivable.Reference);
+        Assert.Equal(650m, executed.OutstandingReceivableAmount);
+        Assert.Equal(-650m, executed.TotalReversalAmount);
+    }
+
+    [Fact]
     public async Task ExecuteReversalRunAsync_NoRecordedPayment_NotReversed_Reported_NotReserved()
     {
         var run = PendingRun();

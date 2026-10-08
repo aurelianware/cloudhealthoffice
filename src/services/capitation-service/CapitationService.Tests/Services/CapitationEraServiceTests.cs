@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using CapitationService.Models;
 using CapitationService.Services;
@@ -11,8 +12,7 @@ public class CapitationEraServiceTests
 
     public CapitationEraServiceTests()
     {
-        var logger = new Mock<ILogger<CapitationEraService>>();
-        _service = new CapitationEraService(logger.Object);
+        _service = CreateService();
 
         _defaultTp = new CapitationEraTradingPartnerInfo
         {
@@ -28,6 +28,20 @@ public class CapitationEraServiceTests
             PayeeAccountNumber = "9876543210"
         };
     }
+
+    private const string OriginatingCompanyId = "1123456789";
+
+    private static CapitationEraService CreateService(string? originatingCompanyId = OriginatingCompanyId)
+    {
+        var settings = new Dictionary<string, string?>();
+        if (originatingCompanyId != null)
+            settings["Era:OriginatingCompanyId"] = originatingCompanyId;
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+        return new CapitationEraService(new Mock<ILogger<CapitationEraService>>().Object, configuration);
+    }
+
+    private static string[] Elements(string edi, string segmentId)
+        => edi.Split('~').First(s => s.StartsWith(segmentId + "*")).Split('*');
 
     private static CapitationContract CreateContract() => new()
     {
@@ -191,6 +205,71 @@ public class CapitationEraServiceTests
     }
 
     [Fact]
+    public void Generate835_BPR_ACH_ElementPositions()
+    {
+        var stmt = CreateStatement();
+        var bpr = Elements(_service.Generate835ForStatement(stmt, CreateContract(), _defaultTp), "BPR");
+
+        bpr.Should().HaveCount(17);
+        bpr[1].Should().Be("C");
+        bpr[2].Should().Be(stmt.NetPayable.ToString("F2"));
+        bpr[3].Should().Be("C");
+        bpr[4].Should().Be("ACH");
+        bpr[5].Should().Be("CCP");
+        bpr[6].Should().Be("01");
+        bpr[7].Should().Be("091000019");
+        bpr[8].Should().Be("DA");
+        bpr[9].Should().Be("1234567890");
+        bpr[10].Should().Be(OriginatingCompanyId); // BPR10 originating company id
+        bpr[11].Should().BeEmpty();                // BPR11 supplemental code (not configured)
+        bpr[12].Should().Be("01");
+        bpr[13].Should().Be("021000089");
+        bpr[14].Should().Be("DA");
+        bpr[15].Should().Be("9876543210");
+        bpr[16].Should().Be("20260401");           // BPR16 effective date
+    }
+
+    [Fact]
+    public void Generate835_BPR_CHK_DateInBpr16()
+    {
+        var stmt = CreateStatement();
+        stmt.CheckNumber = "CHK-12345";
+        var tp = new CapitationEraTradingPartnerInfo { PayerName = "CHO", PayerId = "CHO1" };
+
+        var bpr = Elements(_service.Generate835ForStatement(stmt, CreateContract(), tp), "BPR");
+
+        bpr.Should().HaveCount(17);
+        bpr[4].Should().Be("CHK");
+        bpr.Skip(5).Take(11).Should().OnlyContain(e => e == string.Empty);
+        bpr[16].Should().Be("20260401");
+    }
+
+    [Fact]
+    public void Generate835_ZeroPayment_IsNonEvenWithBankDetails()
+    {
+        var stmt = CreateStatement(0);
+        stmt.Adjustments.Clear();
+        stmt.RecalculateTotals();
+
+        var bpr = Elements(_service.Generate835ForStatement(stmt, CreateContract(), _defaultTp), "BPR");
+
+        bpr[1].Should().Be("H");
+        bpr[2].Should().Be("0.00");
+        bpr[4].Should().Be("NON");
+        bpr[16].Should().Be("20260401");
+    }
+
+    [Fact]
+    public void Generate835_WithoutOriginatingCompanyId_Throws()
+    {
+        var service = CreateService(originatingCompanyId: null);
+
+        var act = () => service.Generate835ForStatement(CreateStatement(), CreateContract(), _defaultTp);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Era:OriginatingCompanyId*");
+    }
+
+    [Fact]
     public void Generate835_BPR_CHK_WhenCheckNumber()
     {
         var stmt = CreateStatement();
@@ -240,7 +319,7 @@ public class CapitationEraServiceTests
         var segments = edi.Split('~');
 
         var bpr = segments.First(s => s.StartsWith("BPR*"));
-        bpr.Should().StartWith("BPR*I*"); // Remittance info only
+        bpr.Should().StartWith("BPR*H*0.00*C*NON*"); // Notification only
     }
 
     #endregion
@@ -256,6 +335,15 @@ public class CapitationEraServiceTests
 
         var trn = segments.First(s => s.StartsWith("TRN*"));
         trn.Should().Contain(stmt.StatementNumber);
+    }
+
+    [Fact]
+    public void Generate835_TRN03_IsOriginatingCompanyId_NotPayerId()
+    {
+        var stmt = CreateStatement();
+        var trn = Elements(_service.Generate835ForStatement(stmt, CreateContract(), _defaultTp), "TRN");
+
+        trn.Should().Equal("TRN", "1", stmt.StatementNumber, OriginatingCompanyId);
     }
 
     [Fact]
@@ -312,7 +400,7 @@ public class CapitationEraServiceTests
 
         var clp = segments.First(s => s.StartsWith("CLP*"));
         var elements = clp.Split('*');
-        elements[2].Should().Be("22"); // Capitation payment status code
+        elements[2].Should().Be("1"); // Processed as primary (22 would read as a reversal)
     }
 
     [Fact]
@@ -409,7 +497,7 @@ public class CapitationEraServiceTests
     #region PLB — Provider Level Adjustments
 
     [Fact]
-    public void Generate835_PLB_WithholdAdjustment()
+    public void Generate835_Withhold_IsInClp04ViaCas_NotAlsoAPlb()
     {
         var stmt = CreateStatement();
         stmt.WithholdAmount.Should().BeGreaterThan(0);
@@ -417,9 +505,10 @@ public class CapitationEraServiceTests
         var edi = _service.Generate835ForStatement(stmt, CreateContract(), _defaultTp);
         var segments = edi.Split('~');
 
-        var plb = segments.FirstOrDefault(s => s.StartsWith("PLB*"));
-        plb.Should().NotBeNull();
-        plb.Should().Contain("WO:WITHHOLD");
+        segments.Should().Contain(s => s.StartsWith("CAS*CO*45*"));
+        segments.Where(s => s.StartsWith("PLB*")).Should().NotContain(s => s.Contains("WITHHOLD"));
+        // The retro add (+28.00 to the provider) increases the payment: a negative PLB.
+        segments.Should().Contain(s => s.StartsWith("PLB*") && s.Contains("*72:Retro add for MEM004*-28.00"));
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Text;
 using CapitationService.Models;
+using CloudHealthOffice.Infrastructure.Edi;
 
 namespace CapitationService.Services;
 
@@ -10,7 +11,8 @@ namespace CapitationService.Services;
 ///
 /// Capitation 835s differ from fee-for-service 835s:
 ///   - No individual claim references (claims are tracking-only under capitation)
-///   - CLP02 = "22" (capitation payment, not claim status)
+///   - CLP02 = "1" (processed as primary); "22" (reversal of previous
+///     payment) only for a member line that recoups (negative net amount)
 ///   - CLP06 = "CP" (capitation/HMO claim filing indicator)
 ///   - No SVC service lines (capitation is not per-service)
 ///   - CAS CO-45 for contractual withhold adjustments
@@ -22,7 +24,7 @@ namespace CapitationService.Services;
 ///   GS   — Functional group header
 ///   ST   — Transaction set header (835)
 ///   BPR  — Financial information (payment method, total amount)
-///   TRN  — Reassociation trace number (statement number)
+///   TRN  — Reassociation trace number (statement number; TRN03 = Era:OriginatingCompanyId)
 ///   DTM  — Production date
 ///   N1   — Payer identification (1000A loop — health plan)
 ///   N1   — Payee identification (1000B loop — provider)
@@ -44,6 +46,9 @@ public interface ICapitationEraService
     /// <summary>
     /// Generate an X12 005010X221A1 835 ERA for a capitation statement.
     /// Returns the raw EDI string ready for transmission or file storage.
+    /// Throws <see cref="InvalidOperationException"/> when the BPR/TRN cannot
+    /// be built (no 10-character Era:OriginatingCompanyId, or an ACH BPR
+    /// without both banks' account numbers).
     /// </summary>
     string Generate835ForStatement(
         CapitationStatement statement,
@@ -68,19 +73,21 @@ public class CapitationEraTradingPartnerInfo
     public string? PayerRoutingNumber { get; set; }
     /// <summary>Payer's bank account number (BPR09)</summary>
     public string? PayerAccountNumber { get; set; }
-    /// <summary>Provider's bank routing number (BPR12)</summary>
+    /// <summary>Provider's bank routing number (BPR13)</summary>
     public string? PayeeRoutingNumber { get; set; }
-    /// <summary>Provider's bank account number (BPR14)</summary>
+    /// <summary>Provider's bank account number (BPR15)</summary>
     public string? PayeeAccountNumber { get; set; }
 }
 
 public class CapitationEraService : ICapitationEraService
 {
     private readonly ILogger<CapitationEraService> _logger;
+    private readonly IConfiguration _configuration;
 
-    public CapitationEraService(ILogger<CapitationEraService> logger)
+    public CapitationEraService(ILogger<CapitationEraService> logger, IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
     }
 
     public string Generate835ForStatement(
@@ -108,34 +115,27 @@ public class CapitationEraService : ICapitationEraService
         // ── ST — Transaction Set Header ──────────────────────────────────
         sb.Append(Seg(ref segmentCount, true, "ST*835*0001*005010X221A1~"));
 
-        // ── BPR — Financial Information ──────────────────────────────────
-        var bprCode = statement.NetPayable > 0 ? "C" : "I";
-        string bpr;
-        if (tp.PayerRoutingNumber is not null && tp.PayeeRoutingNumber is not null)
-        {
-            // Full ACH EFT detail
-            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*ACH" +
-                  $"*CCP*01*{tp.PayerRoutingNumber}*DA*{tp.PayerAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(statement.PaymentDate ?? now)}" +
-                  $"*01*{tp.PayeeRoutingNumber}*DA*{tp.PayeeAccountNumber ?? string.Empty}" +
-                  $"*{FormatDate(statement.PaymentDate ?? now)}~";
-        }
-        else if (!string.IsNullOrEmpty(statement.CheckNumber))
-        {
-            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*CHK" +
-                  $"****{FormatDate(statement.PaymentDate ?? now)}~";
-        }
-        else
-        {
-            bpr = $"BPR*{bprCode}*{statement.NetPayable:F2}*C*NON" +
-                  $"****{FormatDate(statement.PaymentDate ?? now)}~";
-        }
-        sb.Append(Seg(ref segmentCount, true, bpr));
-
-        // ── TRN — Reassociation Trace Number ─────────────────────────────
-        // TRN02 = statement number as the check/EFT trace
+        // ── BPR / TRN — Financial Information, Reassociation Trace ───────
+        // Element positions: the shared Era835FinancialSegmentBuilder (same
+        // builder as payment-service's claim 835s). ACH when both banks'
+        // routing numbers are supplied, CHK when the statement carries a
+        // check number, otherwise NON; a zero NetPayable is always NON.
+        // TRN02 = statement number as the trace; TRN03 = the configured
+        // originating company id (Era:OriginatingCompanyId, = BPR10 on ACH).
+        // Throws rather than emit a misaligned BPR or a made-up TRN03.
+        var bankDetails = BankDetails(tp);
+        var paymentMethod = tp.PayerRoutingNumber is not null && tp.PayeeRoutingNumber is not null
+            ? "ACH"
+            : !string.IsNullOrEmpty(statement.CheckNumber) ? "CHK" : "NON";
+        // BPR02 is never negative: a net-negative statement (retro
+        // disenrollments exceeding the month) is BPR02 = 0 and its balance is
+        // carried forward in a PLB FB adjustment below.
+        var bprAmount = Math.Max(statement.NetPayable, 0m);
         sb.Append(Seg(ref segmentCount, true,
-            $"TRN*1*{statement.StatementNumber}*{tp.PayerId}~"));
+            Era835FinancialSegmentBuilder.BuildBpr(
+                bprAmount, paymentMethod, statement.PaymentDate ?? now, bankDetails)));
+        sb.Append(Seg(ref segmentCount, true,
+            Era835FinancialSegmentBuilder.BuildTrn(statement.StatementNumber, bankDetails)));
 
         // ── DTM — Production Date ────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,
@@ -156,14 +156,13 @@ public class CapitationEraService : ICapitationEraService
         }
 
         // ── PLB — Provider Level Adjustments ─────────────────────────────
-        // Emit PLB for withhold, retro adjustments, incentive payments, etc.
+        // A PLB amount is positive when it reduces the payment and negative
+        // when it increases it, so that sum(CLP04) - sum(PLB) = BPR02. The
+        // withhold is not a PLB: each member's CLP04 is already net of it
+        // (CAS CO-45). Statement adjustments (retro, incentives, releases)
+        // are PLBs with the sign flipped: a credit to the provider is a
+        // negative PLB, a recoupment a positive one.
         var plbItems = new List<(string Code, string RefId, decimal Amount)>();
-
-        // Withhold amount (held back from gross)
-        if (statement.WithholdAmount > 0)
-        {
-            plbItems.Add(("WO", "WITHHOLD", -statement.WithholdAmount));
-        }
 
         // Statement-level adjustments
         foreach (var adj in statement.Adjustments)
@@ -179,8 +178,24 @@ public class CapitationEraService : ICapitationEraService
                 CapitationAdjustmentType.StopLossCredit => "FB",       // Forward balance
                 _ => "72"
             };
-            plbItems.Add((plbCode, Esc(adj.Description)?[..Math.Min(adj.Description.Length, 30)] ?? "", adj.Amount));
+            plbItems.Add((plbCode, Esc(adj.Description)?[..Math.Min(adj.Description.Length, 30)] ?? "", -adj.Amount));
         }
+
+        // Negative net: the balance owed by the provider is carried forward
+        // (FB, negative amount, referenced by the statement number), BPR02 = 0.
+        if (statement.NetPayable < 0m)
+        {
+            plbItems.Add((Era835FinancialSegmentBuilder.ForwardBalanceCode, statement.StatementNumber, statement.NetPayable));
+        }
+
+        // sum(CLP04) - sum(PLB) = BPR02, or the 835 is refused.
+        var clpTotal = statement.LineItems.Sum(li => li.NetAmount);
+        var plbTotal = plbItems.Sum(item => item.Amount);
+        if (clpTotal - plbTotal != bprAmount)
+            throw new InvalidOperationException(
+                $"Cannot generate an unbalanced capitation 835 for statement {statement.StatementNumber}: " +
+                $"member payments (CLP04) total {clpTotal:F2} less provider adjustments (PLB) {plbTotal:F2} " +
+                $"is {clpTotal - plbTotal:F2} but BPR02 is {bprAmount:F2} (net payable {statement.NetPayable:F2})");
 
         // PLB can carry up to 6 adjustment reason/amount pairs per segment
         if (plbItems.Count > 0)
@@ -216,7 +231,8 @@ public class CapitationEraService : ICapitationEraService
 
     /// <summary>
     /// Build the 2100 CLP loop for a single member-month capitation line item.
-    /// CLP02 = "22" (capitation payment status)
+    /// CLP02 = "1" (processed as primary), or "22" (reversal of previous
+    /// payment) when the line recoups (negative net amount)
     /// CLP06 = "CP" (capitation claim filing indicator)
     /// No SVC service lines — capitation is not per-service.
     /// </summary>
@@ -227,14 +243,25 @@ public class CapitationEraService : ICapitationEraService
 
         // CLP — Claim Payment Information (member-month capitation)
         // CLP01: Member ID (patient control number)
-        // CLP02: "22" = capitation payment
+        // CLP02: "1" = processed as primary; "22" = reversal of previous
+        //        payment, only for a line that recoups (negative net). "22"
+        //        on an ordinary payment would read as a reversal.
         // CLP03: Gross amount (charge equivalent)
         // CLP04: Net amount (paid amount)
         // CLP05: 0 (no patient responsibility in capitation)
         // CLP06: "CP" = capitation claim filing indicator
         // CLP07: contract number as payer claim control number
         sb.Append(Seg(ref segmentCount, true,
-            $"CLP*{li.MemberId}*22*{li.GrossAmount:F2}*{li.NetAmount:F2}*0*CP*{contract.ContractNumber}~"));
+            $"CLP*{li.MemberId}*{ClaimStatusCode(li)}*{li.GrossAmount:F2}*{li.NetAmount:F2}*0*CP*{contract.ContractNumber}~"));
+
+        // CAS — directly after CLP (2100 order: CLP, CAS, NM1, DTM, AMT, QTY).
+        // Contractual adjustment for withhold (if any)
+        // CO-45 = Charge exceeds fee schedule/maximum allowable (contractual obligation)
+        if (li.WithholdAmount > 0)
+        {
+            sb.Append(Seg(ref segmentCount, true,
+                $"CAS*CO*45*{li.WithholdAmount:F2}~"));
+        }
 
         // NM1 — Patient/Member Name
         if (!string.IsNullOrEmpty(li.MemberName))
@@ -247,17 +274,10 @@ public class CapitationEraService : ICapitationEraService
                 $"NM1*QC*1*{lastName}*{firstName}****MI*{li.MemberId}~"));
         }
 
-        // DTM — Capitation period dates
+        // DTM*232 — claim statement period start (the capitation period
+        // start for this member; 150 is a 2110 service-date qualifier).
         sb.Append(Seg(ref segmentCount, true,
-            $"DTM*150*{FormatDate(li.AssignmentEffectiveDate)}~"));
-
-        // CAS — Contractual adjustment for withhold (if any)
-        // CO-45 = Charge exceeds fee schedule/maximum allowable (contractual obligation)
-        if (li.WithholdAmount > 0)
-        {
-            sb.Append(Seg(ref segmentCount, true,
-                $"CAS*CO*45*{li.WithholdAmount:F2}~"));
-        }
+            $"DTM*232*{FormatDate(li.AssignmentEffectiveDate)}~"));
 
         // AMT — Supplemental amount: base PMPM before risk adjustment
         sb.Append(Seg(ref segmentCount, true,
@@ -274,6 +294,24 @@ public class CapitationEraService : ICapitationEraService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    /// <summary>CLP02: 22 (reversal of previous payment) for a recouping line, else 1 (processed as primary).</summary>
+    internal static string ClaimStatusCode(CapitationLineItem li) => li.NetAmount < 0m ? "22" : "1";
+
+    /// <summary>
+    /// BPR/TRN details: the banks from the request's trading partner info, the
+    /// originating company id (BPR10/TRN03) and supplemental code (BPR11)
+    /// from configuration — the payer's identity, never caller-supplied.
+    /// </summary>
+    private Era835BankDetails BankDetails(CapitationEraTradingPartnerInfo tp) => new()
+    {
+        PayerRoutingNumber = tp.PayerRoutingNumber,
+        PayerAccountNumber = tp.PayerAccountNumber,
+        OriginatingCompanyId = _configuration["Era:OriginatingCompanyId"],
+        OriginatingCompanySupplementalCode = _configuration["Era:OriginatingCompanySupplementalCode"],
+        PayeeRoutingNumber = tp.PayeeRoutingNumber,
+        PayeeAccountNumber = tp.PayeeAccountNumber,
+    };
 
     private static string Seg(ref int count, bool counted, string segment)
     {

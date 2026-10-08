@@ -260,7 +260,7 @@ public class PaymentRunBatchedEndToEndTests
 
         var envelope = Assert.Single(await _envelopeRepo.GetByPaymentRunIdAsync(run.Id));
         Assert.Contains("CAS*PR*1*200.00~", envelope.EdiContent); // header CAS for paid
-        Assert.Contains("CAS*CO*236*0.00*M86~", envelope.EdiContent); // line CAS for denied (suggested CARC + RARC)
+        Assert.Contains("CAS*CO*236*0.00~LQ*HE*M86~", envelope.EdiContent); // line CAS (suggested CARC), RARC in LQ*HE
         Assert.Equal(2, envelope.ClaimCount);
     }
 }

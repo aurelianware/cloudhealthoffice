@@ -105,7 +105,7 @@ public class EraGeneratorServiceTests
         Assert.Contains("CLP*CLM-0001*1*200.00*150.00*50.00*HM*PCN123~", edi);
         Assert.Contains("SVC*HC:99213*200.00*150.00**1~", edi);
         Assert.Contains("CAS*CO*45*50.00~", edi);
-        Assert.Contains("CAS*PR*1*20.00*N620~", edi);
+        Assert.Contains("CAS*PR*1*20.00~LQ*HE*N620~", edi); // RARC in LQ*HE, not CAS04 (a quantity)
         Assert.Contains("PLB*1234567890*20260331*FB:WITHHOLD*10.00~", edi);
 
         var segments = edi.Split('~', StringSplitOptions.RemoveEmptyEntries);
