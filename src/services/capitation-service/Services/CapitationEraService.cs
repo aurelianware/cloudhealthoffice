@@ -11,7 +11,8 @@ namespace CapitationService.Services;
 ///
 /// Capitation 835s differ from fee-for-service 835s:
 ///   - No individual claim references (claims are tracking-only under capitation)
-///   - CLP02 = "22" (capitation payment, not claim status)
+///   - CLP02 = "1" (processed as primary); "22" (reversal of previous
+///     payment) only for a member line that recoups (negative net amount)
 ///   - CLP06 = "CP" (capitation/HMO claim filing indicator)
 ///   - No SVC service lines (capitation is not per-service)
 ///   - CAS CO-45 for contractual withhold adjustments
@@ -230,7 +231,8 @@ public class CapitationEraService : ICapitationEraService
 
     /// <summary>
     /// Build the 2100 CLP loop for a single member-month capitation line item.
-    /// CLP02 = "22" (capitation payment status)
+    /// CLP02 = "1" (processed as primary), or "22" (reversal of previous
+    /// payment) when the line recoups (negative net amount)
     /// CLP06 = "CP" (capitation claim filing indicator)
     /// No SVC service lines — capitation is not per-service.
     /// </summary>
@@ -241,14 +243,16 @@ public class CapitationEraService : ICapitationEraService
 
         // CLP — Claim Payment Information (member-month capitation)
         // CLP01: Member ID (patient control number)
-        // CLP02: "22" = capitation payment
+        // CLP02: "1" = processed as primary; "22" = reversal of previous
+        //        payment, only for a line that recoups (negative net). "22"
+        //        on an ordinary payment would read as a reversal.
         // CLP03: Gross amount (charge equivalent)
         // CLP04: Net amount (paid amount)
         // CLP05: 0 (no patient responsibility in capitation)
         // CLP06: "CP" = capitation claim filing indicator
         // CLP07: contract number as payer claim control number
         sb.Append(Seg(ref segmentCount, true,
-            $"CLP*{li.MemberId}*22*{li.GrossAmount:F2}*{li.NetAmount:F2}*0*CP*{contract.ContractNumber}~"));
+            $"CLP*{li.MemberId}*{ClaimStatusCode(li)}*{li.GrossAmount:F2}*{li.NetAmount:F2}*0*CP*{contract.ContractNumber}~"));
 
         // CAS — directly after CLP (2100 order: CLP, CAS, NM1, DTM, AMT, QTY).
         // Contractual adjustment for withhold (if any)
@@ -290,6 +294,9 @@ public class CapitationEraService : ICapitationEraService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    /// <summary>CLP02: 22 (reversal of previous payment) for a recouping line, else 1 (processed as primary).</summary>
+    internal static string ClaimStatusCode(CapitationLineItem li) => li.NetAmount < 0m ? "22" : "1";
 
     /// <summary>
     /// BPR/TRN details: the banks from the request's trading partner info, the

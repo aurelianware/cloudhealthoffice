@@ -400,7 +400,7 @@ public class CapitationEraServiceTests
 
         var clp = segments.First(s => s.StartsWith("CLP*"));
         var elements = clp.Split('*');
-        elements[2].Should().Be("22"); // Capitation payment status code
+        elements[2].Should().Be("1"); // Processed as primary (22 would read as a reversal)
     }
 
     [Fact]

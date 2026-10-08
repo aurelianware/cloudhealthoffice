@@ -208,6 +208,31 @@ public class CapitationEra835FinancialSegmentTests
     }
 
     [Fact]
+    public void Clp02_IsProcessedAsPrimary_ForPayments_AndReversalOnlyForRecoupingLines()
+    {
+        var statement = Statement(net: 0m);
+        statement.LineItems.Add(new CapitationLineItem
+        {
+            MemberId = "MEM-PAY", GrossAmount = 100m, WithholdAmount = 10m, NetAmount = 90m,
+            BasePMPM = 100m, RiskScore = 1.0m, AssignmentEffectiveDate = new DateTime(2026, 3, 1),
+        });
+        statement.LineItems.Add(new CapitationLineItem
+        {
+            MemberId = "MEM-RECOUP", GrossAmount = -40m, WithholdAmount = 0m, NetAmount = -40m, // retro recoupment line
+            BasePMPM = 40m, RiskScore = 1.0m, AssignmentEffectiveDate = new DateTime(2026, 2, 1),
+        });
+        statement.RecalculateTotals();
+
+        var edi = Service().Generate835ForStatement(statement, Contract, Ach());
+        var clps = edi.Split('~').Select(s => s.Split('*')).Where(s => s[0] == "CLP").ToDictionary(s => s[1]);
+
+        Assert.Equal("1", clps["MEM-PAY"][2]);
+        Assert.Equal("22", clps["MEM-RECOUP"][2]);
+        Assert.Equal("-40.00", clps["MEM-RECOUP"][4]);
+        AssertBalanced(edi);
+    }
+
+    [Fact]
     public void UnbalancedStatement_Throws()
     {
         var statement = Statement(net: 0m);
