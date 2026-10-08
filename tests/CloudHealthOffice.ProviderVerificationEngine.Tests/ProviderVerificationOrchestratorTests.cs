@@ -307,6 +307,74 @@ public class ProviderVerificationOrchestratorTests
         Assert.Equal(VerificationStatus.Expired, result.Status);
     }
 
+    [Fact]
+    public async Task ExclusionScreenedClear_ReturnsVerifiedStatus()
+    {
+        ArrangeStandardTier(new ExclusionScreeningResult
+        {
+            WasScreened = true,
+            IsExcluded = false,
+            Source = ExclusionScreeningSource.OigLeie
+        });
+
+        var result = await _orchestrator.VerifyProviderAsync("1234567893");
+
+        Assert.Equal(VerificationStatus.Verified, result.Status);
+        Assert.Equal(IntegrityRating.Clear, result.IntegrityScore.Rating);
+    }
+
+    [Fact]
+    public async Task ExclusionNotScreened_ReturnsManualReviewRequired_NotVerified()
+    {
+        // Placeholder-adapter shape: no real LEIE/SAM source was queried.
+        ArrangeStandardTier(new ExclusionScreeningResult { Source = ExclusionScreeningSource.OigLeie });
+
+        var result = await _orchestrator.VerifyProviderAsync("1234567893");
+
+        Assert.Equal(VerificationStatus.ManualReviewRequired, result.Status);
+        Assert.Equal(IntegrityRating.Unknown, result.IntegrityScore.Rating);
+        Assert.Contains(result.IntegrityScore.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+    }
+
+    [Fact]
+    public async Task ExclusionAdapterThrows_ReturnsManualReviewRequired()
+    {
+        ArrangeStandardTier(new ExclusionScreeningResult());
+        _exclusions.ScreenProviderAsync("1234567893", ct: Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("LEIE service unavailable"));
+
+        var result = await _orchestrator.VerifyProviderAsync("1234567893");
+
+        Assert.Equal(VerificationStatus.ManualReviewRequired, result.Status);
+        Assert.Contains(result.IntegrityScore.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+    }
+
+    [Fact]
+    public async Task BasicTier_SkipsExclusionScreening_ReturnsManualReviewRequired()
+    {
+        _nppes.LookupByNpiAsync("1234567893", Arg.Any<CancellationToken>())
+            .Returns(CreateActiveNppesData());
+
+        var result = await _orchestrator.VerifyProviderAsync("1234567893", VerificationTier.Basic);
+
+        Assert.Equal(VerificationStatus.ManualReviewRequired, result.Status);
+        Assert.Contains(result.IntegrityScore.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+    }
+
+    private void ArrangeStandardTier(ExclusionScreeningResult exclusion)
+    {
+        _nppes.LookupByNpiAsync("1234567893", Arg.Any<CancellationToken>())
+            .Returns(CreateActiveNppesData());
+        _exclusions.ScreenProviderAsync("1234567893", ct: Arg.Any<CancellationToken>())
+            .Returns(exclusion);
+        _pecos.GetEnrollmentStatusAsync("1234567893", Arg.Any<CancellationToken>())
+            .Returns((PecosEnrollmentStatus?)null);
+        _openPayments.GetPaymentSummaryAsync("1234567893", ct: Arg.Any<CancellationToken>())
+            .Returns((OpenPaymentsSummary?)null);
+        _utilization.GetUtilizationProfileAsync("1234567893", ct: Arg.Any<CancellationToken>())
+            .Returns((MedicareUtilizationProfile?)null);
+    }
+
     private static NppesProviderData CreateActiveNppesData() => new()
     {
         Npi = "1234567893",

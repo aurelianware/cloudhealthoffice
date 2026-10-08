@@ -227,6 +227,13 @@ public class ProviderVerificationOrchestrator
         if (record.NppesData.NpiStatus == NppesNpiStatus.Deactivated)
             return VerificationStatus.Expired;
 
+        // No real exclusion source was queried (tier skipped it, or the
+        // adapter is a placeholder). Exclusion status is unknown, so the
+        // provider cannot be Verified -- hold for review. Adjudication
+        // gates treat ManualReviewRequired as "pend", never as a pass.
+        if (record.ExclusionScreening is not { WasScreened: true })
+            return VerificationStatus.ManualReviewRequired;
+
         return record.IntegrityScore.Rating switch
         {
             IntegrityRating.Blocked => VerificationStatus.Excluded,

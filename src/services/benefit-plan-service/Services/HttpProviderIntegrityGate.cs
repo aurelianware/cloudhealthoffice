@@ -75,6 +75,12 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
     public const string VerificationServiceClientName = "ProviderVerificationService";
     private const string TenantHeaderName = "X-Tenant-ID";
 
+    /// <summary>
+    /// Flag code provider-verification-service emits when no real
+    /// OIG/LEIE/SAM exclusion source was queried for the provider.
+    /// </summary>
+    private const string ExclusionNotScreenedFlagCode = "EXCLUSION_NOT_SCREENED";
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<ProviderIntegrityGateOptions> _options;
@@ -154,14 +160,18 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                 result = live ?? Unavailable();
                 RecordDecision(IntegrityGatePath.NullFallback, result.Rating);
             }
-            else if (projection.Score is null || projection.LastVerifiedAt is null)
+            else if (projection.Score is null || projection.LastVerifiedAt is null
+                     || IsUnknownRating(projection.IntegrityRating))
             {
-                // Projection row exists but was never refreshed -- unlike
-                // the staleness branch below, there is no real prior rating
-                // here (BuildResultFromProjection on an unset IntegrityRating
-                // would read as "not Blocked" i.e. falsely Clear). Fall back
-                // to live; if that also fails, this NPI has no trustworthy
-                // data anywhere and must be treated as unavailable.
+                // Projection row exists but was never refreshed, or carries
+                // no real rating -- unlike the staleness branch below, there
+                // is no usable prior rating here (BuildResultFromProjection
+                // on an unset/Unknown IntegrityRating would read as "not
+                // Blocked" i.e. falsely Clear). The verification engine rates
+                // a provider Unknown when no real OIG/LEIE/SAM screen was
+                // performed. Fall back to live; if that also fails, this NPI
+                // has no trustworthy data anywhere and must be treated as
+                // unavailable.
                 var live = await CallVerificationServiceAsync(npi, tenantId, ct);
                 isUnavailable = live is null;
                 result = live ?? Unavailable();
@@ -265,7 +275,12 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             // -- they mean the verification service itself could not reach
             // a confident determination. Treat them the same as total
             // unavailability (held for review) rather than a silent pass.
-            var requiresManualReview = !isExcluded && status is "Failed" or "ManualReviewRequired";
+            // An Unknown rating (no real exclusion screen performed, or an
+            // unparseable rating) is likewise never a confident pass.
+            var exclusionNotScreened = !isExcluded && record.Flags?.Any(f =>
+                string.Equals(f.Code, ExclusionNotScreenedFlagCode, StringComparison.OrdinalIgnoreCase)) == true;
+            var requiresManualReview = !isExcluded
+                && (status is "Failed" or "ManualReviewRequired" || rating == "Unknown" || exclusionNotScreened);
             return new ProviderIntegrityResult
             {
                 Passed = !isExcluded && !requiresManualReview,
@@ -278,9 +293,11 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                     : requiresManualReview ? "PROVIDER_VERIFICATION_UNAVAILABLE" : null,
                 DenialReason = isExcluded
                     ? "Provider is excluded from federal healthcare programs"
-                    : requiresManualReview
-                        ? "Provider verification could not reach a confident determination; manual review required"
-                        : null
+                    : exclusionNotScreened
+                        ? "Provider was not screened against OIG LEIE / SAM.gov exclusion lists; manual review required"
+                        : requiresManualReview
+                            ? "Provider verification could not reach a confident determination; manual review required"
+                            : null
             };
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -312,6 +329,10 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                 : null
         };
     }
+
+    private static bool IsUnknownRating(string? rating) =>
+        string.IsNullOrWhiteSpace(rating)
+        || string.Equals(rating, "Unknown", StringComparison.OrdinalIgnoreCase);
 
     private static void RecordDecision(IntegrityGatePath path, string? rating)
     {
@@ -401,7 +422,13 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
         public int CompositeScore { get; init; }
         public JsonElement Rating { get; init; }
         public JsonElement Status { get; init; }
+        public List<IntegrityFlagResponse>? Flags { get; init; }
         public DateTimeOffset? VerifiedAt { get; init; }
+    }
+
+    private sealed record IntegrityFlagResponse
+    {
+        public string? Code { get; init; }
     }
 
     private enum IntegrityGatePath

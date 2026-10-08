@@ -32,6 +32,7 @@ public class IntegrityScoreCalculatorTests
             NppesData = CreateActiveNppesData(),
             ExclusionScreening = new ExclusionScreeningResult
             {
+                WasScreened = true,
                 IsExcluded = true,
                 Source = ExclusionScreeningSource.OigLeie,
                 Matches =
@@ -72,6 +73,7 @@ public class IntegrityScoreCalculatorTests
             },
             ExclusionScreening = new ExclusionScreeningResult
             {
+                WasScreened = true,
                 IsExcluded = false,
                 Source = ExclusionScreeningSource.OigLeie,
                 Matches =
@@ -100,6 +102,7 @@ public class IntegrityScoreCalculatorTests
             NppesData = CreateActiveNppesData(),
             ExclusionScreening = new ExclusionScreeningResult
             {
+                WasScreened = true,
                 IsExcluded = false,
                 Source = ExclusionScreeningSource.OigLeie
             },
@@ -132,6 +135,7 @@ public class IntegrityScoreCalculatorTests
             },
             ExclusionScreening = new ExclusionScreeningResult
             {
+                WasScreened = true,
                 IsExcluded = false,
                 Source = ExclusionScreeningSource.OigLeie
             }
@@ -153,6 +157,7 @@ public class IntegrityScoreCalculatorTests
             NppesData = CreateActiveNppesData(),
             ExclusionScreening = new ExclusionScreeningResult
             {
+                WasScreened = true,
                 IsExcluded = false,
                 Source = ExclusionScreeningSource.OigLeie
             },
@@ -171,6 +176,121 @@ public class IntegrityScoreCalculatorTests
         Assert.Contains(score.Flags, f => f.Code == "HIGH_PAYMENTS" && f.Severity == IntegrityFlagSeverity.Warning);
         Assert.True(score.ConflictOfInterest.WasEvaluated);
         Assert.Equal(50, score.ConflictOfInterest.Score);
+    }
+
+    [Fact]
+    public void ExclusionNotScreened_PlaceholderResult_NotEvaluated_FlaggedAndExcludedFromComposite()
+    {
+        // Placeholder adapter shape: a result object exists but no real
+        // LEIE/SAM source was queried (WasScreened defaults to false).
+        // NPI: 100 (weight 30), PECOS not enrolled: 60 (weight 15)
+        // Composite = (100*30 + 60*15) / 45 = 86.67 -> 87.
+        // Had exclusion been awarded 100 at weight 30 it would be 92.
+        var record = new ProviderVerificationRecord
+        {
+            Npi = "1234567893",
+            NppesData = CreateActiveNppesData(),
+            ExclusionScreening = new ExclusionScreeningResult
+            {
+                Source = ExclusionScreeningSource.OigLeie
+            },
+            PecosStatus = new PecosEnrollmentStatus { IsEnrolledInMedicare = false }
+        };
+
+        var score = _calculator.Calculate(record);
+
+        Assert.False(score.ExclusionScreening.WasEvaluated);
+        Assert.NotEqual(100, score.ExclusionScreening.Score);
+        Assert.DoesNotContain("Clear", score.ExclusionScreening.Detail);
+        Assert.Contains(score.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED" && f.Severity == IntegrityFlagSeverity.Warning);
+        Assert.Equal(87, score.CompositeScore);
+        Assert.Equal(IntegrityRating.Unknown, score.Rating);
+    }
+
+    [Fact]
+    public void ExclusionNotPerformed_NullResult_NotEvaluated_FlaggedRatingUnknown()
+    {
+        var record = new ProviderVerificationRecord
+        {
+            Npi = "1234567893",
+            NppesData = CreateActiveNppesData(),
+            ExclusionScreening = null
+        };
+
+        var score = _calculator.Calculate(record);
+
+        Assert.False(score.ExclusionScreening.WasEvaluated);
+        Assert.Contains(score.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+        Assert.Equal(IntegrityRating.Unknown, score.Rating);
+    }
+
+    [Fact]
+    public void ExclusionScreenedClear_Scores100_NoNotScreenedFlag()
+    {
+        var record = new ProviderVerificationRecord
+        {
+            Npi = "1234567893",
+            NppesData = CreateActiveNppesData(),
+            ExclusionScreening = new ExclusionScreeningResult
+            {
+                WasScreened = true,
+                IsExcluded = false,
+                Source = ExclusionScreeningSource.OigLeie
+            }
+        };
+
+        var score = _calculator.Calculate(record);
+
+        Assert.True(score.ExclusionScreening.WasEvaluated);
+        Assert.Equal(100, score.ExclusionScreening.Score);
+        Assert.StartsWith("Clear", score.ExclusionScreening.Detail);
+        Assert.DoesNotContain(score.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+        Assert.Equal(IntegrityRating.Clear, score.Rating);
+    }
+
+    [Fact]
+    public void ExclusionScreened_PossibleMatch_Scores40()
+    {
+        var record = new ProviderVerificationRecord
+        {
+            Npi = "1234567893",
+            NppesData = CreateActiveNppesData(),
+            ExclusionScreening = new ExclusionScreeningResult
+            {
+                WasScreened = true,
+                IsExcluded = false,
+                Source = ExclusionScreeningSource.OigLeie,
+                Matches = [new ExclusionMatch { MatchConfidence = 0.8f, Source = ExclusionScreeningSource.OigLeie }]
+            }
+        };
+
+        var score = _calculator.Calculate(record);
+
+        Assert.True(score.ExclusionScreening.WasEvaluated);
+        Assert.Equal(40, score.ExclusionScreening.Score);
+        Assert.Contains(score.Flags, f => f.Code == "POSSIBLE_EXCLUSION_MATCH");
+        Assert.DoesNotContain(score.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+    }
+
+    [Fact]
+    public void ExcludedProvider_HardStopApplies_EvenWithoutScreenedFlag()
+    {
+        // A confirmed exclusion is never downgraded to "not screened".
+        var record = new ProviderVerificationRecord
+        {
+            Npi = "1234567893",
+            NppesData = CreateActiveNppesData(),
+            ExclusionScreening = new ExclusionScreeningResult
+            {
+                IsExcluded = true,
+                Source = ExclusionScreeningSource.OigLeie
+            }
+        };
+
+        var score = _calculator.Calculate(record);
+
+        Assert.Equal(0, score.CompositeScore);
+        Assert.Equal(IntegrityRating.Blocked, score.Rating);
     }
 
     private static NppesProviderData CreateActiveNppesData() => new()

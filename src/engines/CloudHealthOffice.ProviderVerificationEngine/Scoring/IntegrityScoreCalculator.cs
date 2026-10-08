@@ -12,6 +12,11 @@ using Microsoft.Extensions.Options;
 ///   - Each dimension scored 0–100 independently
 ///   - Composite = weighted average of evaluated dimensions
 ///   - Flags are additive annotations, not score modifiers
+///   - Exclusion screening is the one mandatory dimension: when no real
+///     LEIE/SAM source was queried it is left unevaluated (excluded from the
+///     composite, never awarded 100), flagged EXCLUSION_NOT_SCREENED, and the
+///     rating is Unknown rather than a score bucket -- a provider that was
+///     never screened must not read as screened-clear downstream.
 /// </summary>
 public class IntegrityScoreCalculator
 {
@@ -83,6 +88,15 @@ public class IntegrityScoreCalculator
             >= 20 => IntegrityRating.Alert,
             _ => IntegrityRating.Blocked
         };
+
+        // Without exclusion screening no favorable rating is knowable: the
+        // composite only reflects the dimensions that were evaluated. A
+        // Blocked rating from the other dimensions still stands (it is
+        // already the most severe outcome).
+        if (!score.ExclusionScreening.WasEvaluated && score.Rating != IntegrityRating.Blocked)
+        {
+            score.Rating = IntegrityRating.Unknown;
+        }
 
         score.CalculatedAt = DateTimeOffset.UtcNow;
         return score;
@@ -170,10 +184,20 @@ public class IntegrityScoreCalculator
             Weight = _weights.ExclusionScreening
         };
 
-        if (record.ExclusionScreening is null)
+        if (record.ExclusionScreening is not { WasScreened: true })
         {
+            // Either the tier skipped screening or the adapter did not query
+            // a real source (e.g. placeholder adapter). Never score as clear.
             dim.WasEvaluated = false;
-            dim.Detail = "Exclusion screening not performed";
+            dim.Detail = "Exclusion screening not performed — no LEIE/SAM source was queried";
+            flags.Add(new IntegrityFlag
+            {
+                Severity = IntegrityFlagSeverity.Warning,
+                Source = "LEIE/SAM",
+                Code = "EXCLUSION_NOT_SCREENED",
+                Message = "Provider was not screened against OIG LEIE / SAM.gov exclusion lists — " +
+                          "exclusion status unknown, manual review required"
+            });
             return dim;
         }
 

@@ -21,6 +21,23 @@ Depends on: 5.4.5 (verification write-back), 5.4 (network roster), 5.7 (FHIR Pra
 > than the old fail-open `Passthrough()` default. See "Provider integrity
 > stage (added July 2026)" in `claim-adjudication-pipeline.md`.
 
+> **Addendum, October 2026 — exclusion screening not performed.** The
+> OIG LEIE / SAM.gov adapters are still placeholders. Previously the
+> placeholder returned an empty "not excluded" result that the scorer
+> awarded 100 ("Clear — screened at ..."), so unscreened providers read as
+> screened-clean everywhere. `ExclusionScreeningResult.WasScreened` (default
+> `false`) now records whether a real source was queried. When it is not
+> set, the scorer leaves the Exclusion Screening dimension unevaluated
+> (excluded from the composite), adds a Warning flag
+> `EXCLUSION_NOT_SCREENED`, rates the provider `Unknown` (unless otherwise
+> `Blocked`), and the orchestrator returns `ManualReviewRequired`. The gate
+> treats an `Unknown` cached rating like a never-refreshed projection (live
+> fallback) and treats a live `Unknown` rating or `EXCLUSION_NOT_SCREENED`
+> flag as `RequiresManualReview`, so claims pend `MEDREVIEW` rather than
+> pass. Until real adapters ship, every claim reaching `ProviderIntegrityStage`
+> will pend for review; disable the stage via `EnabledStages` only as an
+> explicit, audited operator decision.
+
 ## Why a canonical decision tree
 
 Integrity-score data has three consumers patterns that look similar
@@ -101,7 +118,7 @@ CheckAsync(npi, forceRefresh=false)
   ├── 3. GET /providers/npi/{npi} from provider-service
   │     ├── 404 / transport error
   │     │   → live verification-service (null_fallback)
-  │     ├── projection row exists, score is null
+  │     ├── projection row exists, score is null or rating is Unknown
   │     │   → live verification-service (null_fallback)
   │     ├── projection row exists, LastVerifiedAt < now - threshold
   │     │   → live verification-service (stale_fallback)

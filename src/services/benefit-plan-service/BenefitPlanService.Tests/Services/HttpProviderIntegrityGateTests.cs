@@ -318,6 +318,74 @@ public sealed class HttpProviderIntegrityGateTests
         verificationHandler.RequestCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task CheckAsync_UnknownRatingOnCachedProjection_FallsBackToLive_NotTreatedAsClear()
+    {
+        // The verification engine rates a provider Unknown when no real
+        // OIG/LEIE/SAM screen was performed. A fresh projection carrying
+        // that rating must not short-circuit to a pass.
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 100, rating: "Unknown", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 100, rating: "Unknown", status: "ManualReviewRequired",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse("an unscreened provider is not screened-clear");
+        result.IsExcluded.Should().BeFalse("not screened is not a confirmed exclusion");
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialReason.Should().Contain("not screened");
+        verificationHandler.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CheckAsync_UnknownRatingOnCachedProjection_LiveUnavailable_ReturnsUnavailableForReview()
+    {
+        var providerHandler = FakeHttpMessageHandler.Json(
+            ProviderJson(score: 100, rating: "Unknown", lastVerifiedAt: DateTimeOffset.UtcNow));
+        var verificationHandler = FakeHttpMessageHandler.Throw(new HttpRequestException());
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveExclusionNotScreenedFlag_RequiresManualReview_EvenIfStatusLooksVerified()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 95, rating: "Clear", status: "Verified",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.IsExcluded.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
+        result.DenialCode.Should().Be("PROVIDER_VERIFICATION_UNAVAILABLE");
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveUnknownRating_RequiresManualReview()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 90, rating: "Unknown", status: "Pending"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        var result = await gate.CheckAsync(Npi, Tenant);
+
+        result.Passed.Should().BeFalse();
+        result.RequiresManualReview.Should().BeTrue();
+    }
+
     private static HttpProviderIntegrityGate BuildGate(
         FakeHttpMessageHandler providerHandler,
         FakeHttpMessageHandler verificationHandler,
@@ -359,6 +427,15 @@ public sealed class HttpProviderIntegrityGateTests
         $"\"CompositeScore\":{compositeScore}," +
         $"\"Rating\":{ratingToken}," +
         $"\"Status\":{statusToken}," +
+        $"\"VerifiedAt\":\"{DateTimeOffset.UtcNow:O}\"" +
+        "}";
+
+    private static string VerificationJsonWithFlags(int compositeScore, string rating, string status, string[] flagCodes) =>
+        "{" +
+        $"\"CompositeScore\":{compositeScore}," +
+        $"\"Rating\":\"{rating}\"," +
+        $"\"Status\":\"{status}\"," +
+        $"\"Flags\":[{string.Join(",", flagCodes.Select(c => $"{{\"code\":\"{c}\",\"severity\":1}}"))}]," +
         $"\"VerifiedAt\":\"{DateTimeOffset.UtcNow:O}\"" +
         "}";
 
