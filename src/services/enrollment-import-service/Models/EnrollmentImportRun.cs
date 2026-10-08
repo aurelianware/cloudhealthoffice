@@ -35,6 +35,8 @@ public class EnrollmentImportRun
     public int MembersUpdated { get; set; }
     public int MembersTerminated { get; set; }
     public int DependentsCreated { get; set; }
+    public int DependentsUpdated { get; set; }
+    public int DependentsTerminated { get; set; }
     public int CoverageRecordsCreated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
 

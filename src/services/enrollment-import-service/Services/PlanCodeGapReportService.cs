@@ -35,10 +35,15 @@ public sealed class PlanCodeGapReportService : IPlanCodeGapReportService
             Collect(member.Coverage, member.GroupNumber, triples, report);
             foreach (var dependent in member.Dependents)
             {
-                // Dependents share the subscriber's group number — there's no
-                // separate REF*1L inside the LS...LE dependent loop.
-                Collect(dependent.Coverage, member.GroupNumber, triples, report);
+                // A dependent's own Loop 2000 REF*1L wins when sent;
+                // otherwise it shares the subscriber's group number.
+                Collect(dependent.Coverage, dependent.GroupNumber ?? member.GroupNumber, triples, report);
             }
+        }
+
+        foreach (var dependent in enrollment.DependentEnrollments)
+        {
+            Collect(dependent.Coverage, dependent.GroupNumber, triples, report);
         }
 
         foreach (var (groupNumber, insuranceLineCode, externalPlanCode) in triples)

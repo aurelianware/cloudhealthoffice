@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using EnrollmentImportService.Clients;
@@ -112,6 +114,15 @@ public class EnrollmentImportService : IEnrollmentImportService
             await RecordTransactionAsync(tenantId, batchId, enrollment, memberEnrollment, txnStatus);
         }
 
+        // Dependent Loop 2000s whose subscriber wasn't resent in this file
+        // (e.g. a newborn add or a child's termination on its own). The
+        // subscriber must already exist — a dependent is never used to
+        // create, or write onto, a subscriber record.
+        foreach (var dependent in enrollment.DependentEnrollments)
+        {
+            await ProcessStandaloneDependentAsync(dependent, tenantId, result);
+        }
+
         result.CompletedAt = DateTime.UtcNow;
         result.BatchId = batchId;
         _logger.LogInformation(
@@ -149,6 +160,8 @@ public class EnrollmentImportService : IEnrollmentImportService
                 MembersUpdated = result.MembersUpdated,
                 MembersTerminated = result.MembersTerminated,
                 DependentsCreated = result.DependentsCreated,
+                DependentsUpdated = result.DependentsUpdated,
+                DependentsTerminated = result.DependentsTerminated,
                 CoverageRecordsCreated = result.CoverageRecordsCreated,
                 CoverageMappingsUnresolved = result.CoverageMappingsUnresolved,
                 Errors = result.Errors
@@ -323,15 +336,25 @@ public class EnrollmentImportService : IEnrollmentImportService
         var memberExists = !string.IsNullOrEmpty(enrollment.SubscriberId) &&
             await _memberClient.ExistsAsync(tenantId, memberId);
 
+        // Whether the subscriber's own coverage lines should be written, and
+        // whether the subscriber is on file afterwards (dependents are only
+        // ever linked to a subscriber that exists in member-service).
+        var syncSubscriberCoverage = enrollment.MaintenanceType != "024";
+        var subscriberOnFile = true;
+
         switch (enrollment.MaintenanceType)
         {
             case "021": // Addition
                 if (memberExists)
                 {
+                    // Re-import of the same add: leave the subscriber alone,
+                    // but still reconcile its dependents (each keyed
+                    // deterministically, so a replay updates nothing twice).
                     _logger.LogWarning("Member {SubscriberId} already exists, skipping addition",
                         SanitizeForLog(enrollment.SubscriberId));
                     result.SkippedCount++;
-                    return;
+                    syncSubscriberCoverage = false;
+                    break;
                 }
                 await CreateMemberFromEnrollmentAsync(memberId, enrollment, tenantId);
                 result.MembersCreated++;
@@ -366,7 +389,8 @@ public class EnrollmentImportService : IEnrollmentImportService
                     _logger.LogWarning("Member {SubscriberId} not found for termination, skipping",
                         SanitizeForLog(enrollment.SubscriberId));
                     result.SkippedCount++;
-                    return;
+                    subscriberOnFile = false;
+                    break;
                 }
                 await _memberClient.TerminateAsync(tenantId, memberId, new TerminateMemberRequestDto
                 {
@@ -390,28 +414,84 @@ public class EnrollmentImportService : IEnrollmentImportService
         // benefit-plan-service's plan-code-mapping crosswalk first, since the
         // raw 834 only carries the trading partner's own plan code, not this
         // platform's PlanId.
-        if (enrollment.MaintenanceType != "024")
+        if (syncSubscriberCoverage)
         {
             foreach (var coverageDetail in enrollment.Coverage)
             {
-                var resolved = await ProcessCoverageAsync(
-                    memberId, tenantId, coverageDetail, enrollment.EnrollmentDate, enrollment.GroupNumber);
-                if (resolved)
-                {
-                    result.CoverageRecordsCreated++;
-                }
-                else
-                {
-                    result.CoverageMappingsUnresolved++;
-                }
+                await ProcessCoverageAndCountAsync(
+                    memberId, tenantId, coverageDetail, enrollment.EnrollmentDate, enrollment.GroupNumber, result);
             }
         }
 
-        // 4. Process Dependents
+        // 4. Process Dependents — each is its own member (its own 834 Loop
+        // 2000) with its own id and maintenance type; nothing here writes to
+        // the subscriber's record.
+        if (enrollment.Dependents.Count == 0)
+        {
+            return;
+        }
+        if (!subscriberOnFile)
+        {
+            _logger.LogWarning(
+                "Subscriber {SubscriberId} not on file; skipping {Count} dependent(s)",
+                SanitizeForLog(enrollment.SubscriberId), enrollment.Dependents.Count);
+            return;
+        }
         foreach (var dependent in enrollment.Dependents)
         {
-            await ProcessDependentAsync(dependent, tenantId, memberId, enrollment.GroupNumber);
-            result.DependentsCreated++;
+            await ProcessDependentAsync(dependent, tenantId, memberId, enrollment, result);
+        }
+    }
+
+    /// <summary>
+    /// A dependent Loop 2000 that arrived without its subscriber's INS loop.
+    /// Counted as its own top-level transaction in Success/Failed/Skipped.
+    /// </summary>
+    private async Task ProcessStandaloneDependentAsync(Dependent dependent, string tenantId, ImportResult result)
+    {
+        var subscriberId = dependent.SubscriberId;
+        if (string.IsNullOrWhiteSpace(subscriberId) || string.IsNullOrWhiteSpace(dependent.MaintenanceType))
+        {
+            result.Errors.Add(
+                $"Dependent of subscriber {subscriberId}: subscriberId (REF*0F) and maintenanceType (INS03) are required");
+            result.FailedCount++;
+            return;
+        }
+
+        try
+        {
+            if (!await _memberClient.ExistsAsync(tenantId, subscriberId))
+            {
+                if (dependent.MaintenanceType == "024")
+                {
+                    _logger.LogWarning(
+                        "Subscriber {SubscriberId} not found for dependent termination, skipping",
+                        SanitizeForLog(subscriberId));
+                    result.SkippedCount++;
+                }
+                else
+                {
+                    result.Errors.Add($"Subscriber {subscriberId}: not on file; cannot apply dependent maintenance");
+                    result.FailedCount++;
+                }
+                return;
+            }
+
+            if (await ProcessDependentAsync(dependent, tenantId, subscriberId, null, result))
+            {
+                result.SuccessCount++;
+            }
+            else
+            {
+                result.SkippedCount++;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing dependent of subscriber {SubscriberId}",
+                SanitizeForLog(subscriberId));
+            result.Errors.Add($"Subscriber {subscriberId} dependent: {ex.Message}");
+            result.FailedCount++;
         }
     }
 
@@ -476,18 +556,19 @@ public class EnrollmentImportService : IEnrollmentImportService
         // apply through this API today; known limitation of delegating here
         // rather than writing directly, not something this change attempts to
         // paper over.
-        var status = enrollment.BenefitStatus == "A" ? "Active" :
-                     enrollment.BenefitStatus == "C" ? "COBRA" : "Terminated";
-
         await _memberClient.UpdateAsync(tenantId, memberId, new UpdateMemberRequestDto
         {
             Address = enrollment.Demographics?.Address1,
             City = enrollment.Demographics?.City,
             State = enrollment.Demographics?.State,
             ZipCode = enrollment.Demographics?.Zip,
-            Status = status
+            Status = MapStatus(enrollment.BenefitStatus)
         });
     }
+
+    private static string MapStatus(string? benefitStatus) =>
+        benefitStatus == "A" ? "Active" :
+        benefitStatus == "C" ? "COBRA" : "Terminated";
 
     /// <summary>
     /// Resolves the 834's own plan code (HD04) to benefit-plan-service's PlanId
@@ -527,17 +608,125 @@ public class EnrollmentImportService : IEnrollmentImportService
             PlanId = planId,
             InsuranceLineCode = coverageDetail.InsuranceLineCode,
             CoverageLevel = coverageDetail.CoverageLevel ?? "EMP",
-            EffectiveDate = ParseDate(effectiveDate) ?? DateTime.UtcNow,
+            // Loop 2300 DTP*348 is this coverage's own benefit begin; the
+            // member-level date is only a fallback when the file omits it.
+            EffectiveDate = ParseDate(coverageDetail.BenefitBeginDate) ?? ParseDate(effectiveDate) ?? DateTime.UtcNow,
+            TerminationDate = ParseDate(coverageDetail.BenefitEndDate),
             MaintenanceTypeCode = coverageDetail.MaintenanceType
         });
         return true;
     }
 
-    private async Task ProcessDependentAsync(
-        Dependent dependent, string tenantId, string? subscriberMemberId, string? groupNumber)
+    private async Task ProcessCoverageAndCountAsync(
+        string memberId, string tenantId, CoverageDetail coverageDetail, string? effectiveDate,
+        string? groupNumber, ImportResult result)
     {
-        var dependentMemberId = $"D-{Guid.NewGuid():N}".Substring(0, 20);
+        if (await ProcessCoverageAsync(memberId, tenantId, coverageDetail, effectiveDate, groupNumber))
+        {
+            result.CoverageRecordsCreated++;
+        }
+        else
+        {
+            result.CoverageMappingsUnresolved++;
+        }
+    }
 
+    /// <summary>
+    /// Applies one dependent's own maintenance (its INS03, inheriting the
+    /// subscriber's only when a JSON caller didn't send one) to the
+    /// dependent's own member record. Returns false when nothing was applied
+    /// (already added, not found for termination, unkeyable, unknown type).
+    /// </summary>
+    private async Task<bool> ProcessDependentAsync(
+        Dependent dependent, string tenantId, string subscriberMemberId, MemberEnrollment? subscriber,
+        ImportResult result)
+    {
+        var dependentMemberId = BuildDependentMemberId(subscriberMemberId, dependent);
+        if (dependentMemberId is null)
+        {
+            result.Errors.Add(
+                $"Subscriber {subscriberMemberId}: dependent has no member identifier (REF*23) and no first name + date of birth to key it by; skipped");
+            return false;
+        }
+
+        var maintenanceType = dependent.MaintenanceType ?? subscriber?.MaintenanceType;
+        var groupNumber = dependent.GroupNumber ?? subscriber?.GroupNumber;
+        var exists = await _memberClient.ExistsAsync(tenantId, dependentMemberId);
+
+        switch (maintenanceType)
+        {
+            case "021": // Addition
+                if (exists)
+                {
+                    _logger.LogWarning("Dependent {DependentId} already exists, skipping addition",
+                        SanitizeForLog(dependentMemberId));
+                    return false;
+                }
+                await CreateDependentAsync(dependentMemberId, dependent, tenantId, subscriberMemberId, groupNumber);
+                result.DependentsCreated++;
+                break;
+
+            case "001": // Change
+            case "025": // Reinstatement
+                if (exists)
+                {
+                    await _memberClient.UpdateAsync(tenantId, dependentMemberId, new UpdateMemberRequestDto
+                    {
+                        Address = dependent.Address1,
+                        City = dependent.City,
+                        State = dependent.State,
+                        ZipCode = dependent.Zip,
+                        Status = MapStatus(dependent.BenefitStatus ?? subscriber?.BenefitStatus)
+                    });
+                    result.DependentsUpdated++;
+                }
+                else
+                {
+                    await CreateDependentAsync(dependentMemberId, dependent, tenantId, subscriberMemberId, groupNumber);
+                    result.DependentsCreated++;
+                }
+                break;
+
+            case "024": // Termination — terminate the matching dependent, never create one.
+                if (!exists)
+                {
+                    _logger.LogWarning("Dependent {DependentId} not found for termination, skipping",
+                        SanitizeForLog(dependentMemberId));
+                    return false;
+                }
+                await _memberClient.TerminateAsync(tenantId, dependentMemberId, new TerminateMemberRequestDto
+                {
+                    MemberId = dependentMemberId,
+                    CoverageId = string.Empty,
+                    TerminationDate = ParseDate(dependent.TerminationDate)
+                        ?? ParseDate(subscriber?.TerminationDate)
+                        ?? DateTime.UtcNow,
+                    ReasonCode = "834"
+                });
+                result.DependentsTerminated++;
+                return true;
+
+            default:
+                _logger.LogWarning("Unknown maintenance type {MaintenanceType} for dependent {DependentId}",
+                    SanitizeForLog(maintenanceType), SanitizeForLog(dependentMemberId));
+                return false;
+        }
+
+        if (dependent.Coverage != null)
+        {
+            foreach (var coverageDetail in dependent.Coverage)
+            {
+                await ProcessCoverageAndCountAsync(
+                    dependentMemberId, tenantId, coverageDetail,
+                    dependent.EnrollmentDate ?? subscriber?.EnrollmentDate, groupNumber, result);
+            }
+        }
+        return true;
+    }
+
+    private async Task CreateDependentAsync(
+        string dependentMemberId, Dependent dependent, string tenantId, string subscriberMemberId, string? groupNumber)
+    {
         await _memberClient.CreateAsync(tenantId, new CreateMemberRequestDto
         {
             MemberId = dependentMemberId,
@@ -549,7 +738,8 @@ public class EnrollmentImportService : IEnrollmentImportService
             // graph) — no separate fetch-subscriber/append-id/write-back
             // needed, unlike the old direct-Mongo path.
             SubscriberMemberId = subscriberMemberId,
-            RelationshipCode = "19",
+            // INS02 individual relationship code (01 spouse, 19 child, ...).
+            RelationshipCode = dependent.Relationship,
             FirstName = dependent.FirstName,
             LastName = dependent.LastName,
             MiddleName = dependent.MiddleName,
@@ -560,14 +750,36 @@ public class EnrollmentImportService : IEnrollmentImportService
             State = dependent.State,
             ZipCode = dependent.Zip
         });
+    }
 
-        if (dependent.Coverage != null)
+    /// <summary>
+    /// Deterministic dependent member id, so re-importing the same dependent
+    /// (replay, or a later 001/024 for them) resolves to the same record
+    /// instead of minting a new one each pass. Keyed under the subscriber by
+    /// the trading partner's member-level identifier (REF*23) when
+    /// present, otherwise by normalized first name + date of birth. The key
+    /// is hashed so the id has a fixed shape and carries no PHI. Returns
+    /// null when there's nothing stable to key on.
+    /// </summary>
+    public static string? BuildDependentMemberId(string subscriberMemberId, Dependent dependent)
+    {
+        string key;
+        if (!string.IsNullOrWhiteSpace(dependent.MemberIdentifier))
         {
-            foreach (var coverageDetail in dependent.Coverage)
-            {
-                await ProcessCoverageAsync(dependentMemberId, tenantId, coverageDetail, null, groupNumber);
-            }
+            key = "ID|" + dependent.MemberIdentifier.Trim().ToUpperInvariant();
         }
+        else
+        {
+            var dob = ParseDate(dependent.DateOfBirth);
+            if (string.IsNullOrWhiteSpace(dependent.FirstName) || dob is null)
+            {
+                return null;
+            }
+            key = $"ND|{dependent.FirstName.Trim().ToUpperInvariant()}|{dob.Value:yyyyMMdd}";
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
+        return $"{subscriberMemberId}-D{Convert.ToHexString(hash, 0, 6)}";
     }
 
     private string GenerateMemberId(MemberEnrollment enrollment)
@@ -596,7 +808,7 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// with the explicit D8 format fixes all three; the general TryParse
     /// fallback stays for any caller that isn't handing this raw 834 text.
     /// </summary>
-    private DateTime? ParseDate(string? dateString)
+    private static DateTime? ParseDate(string? dateString)
     {
         if (string.IsNullOrEmpty(dateString))
             return null;
@@ -631,6 +843,8 @@ public class ImportResult
     public int MembersUpdated { get; set; }
     public int MembersTerminated { get; set; }
     public int DependentsCreated { get; set; }
+    public int DependentsUpdated { get; set; }
+    public int DependentsTerminated { get; set; }
     public int CoverageRecordsCreated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
     public List<string> Errors { get; set; } = new();
