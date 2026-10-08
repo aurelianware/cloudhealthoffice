@@ -51,7 +51,8 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
     /// <summary>
     /// Import CMS Physician Fee Schedule Relative Value File (RVU).
     /// Expected CSV columns: HCPCS, MOD, DESCRIPTION, WORK_RVU, NON_FAC_PE_RVU, FAC_PE_RVU,
-    /// MP_RVU, NON_FACILITY_NA_INDICATOR, FACILITY_NA_INDICATOR, CONV_FACTOR, LOCALITY, etc.
+    /// MP_RVU, NON_FACILITY_NA_INDICATOR, FACILITY_NA_INDICATOR, CONV_FACTOR, LOCALITY,
+    /// MULT PROC (multiple procedure indicator), etc. Columns are matched by header name.
     /// </summary>
     public async Task<int> SeedMedicareRbrvs(string csvFilePath, int year)
     {
@@ -111,7 +112,8 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             var convFactor = ParseDecimal(row.ConvFactor);
 
             var entry = Rbrvs(scheduleId, hcpcs, row.Description?.Trim() ?? "",
-                workRvu, nonFacPeRvu, facPeRvu, mpRvu, convFactor);
+                workRvu, nonFacPeRvu, facPeRvu, mpRvu, convFactor,
+                ParseMultipleProcedureIndicator(row.MultProc));
 
             // Preserve locality if present
             if (!string.IsNullOrWhiteSpace(row.Locality))
@@ -357,33 +359,35 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
         });
 
         // ── RBRVS entries (common E/M + surgical codes, national average) ──
+        // multProc = CMS PPRRVU multiple procedure indicator (0 E/M, 2 surgery, 3 endoscopy,
+        // 4 advanced imaging, 5 therapy, 9 not applicable)
         var rbrvsCodes = new List<FeeScheduleEntry>
         {
-            Rbrvs(rbrvs, "99203", "Office visit, new patient, low complexity",       0.88m, 1.27m, 0.87m, 0.10m, cf),
-            Rbrvs(rbrvs, "99204", "Office visit, new patient, moderate complexity",   1.60m, 1.91m, 1.26m, 0.16m, cf),
-            Rbrvs(rbrvs, "99205", "Office visit, new patient, high complexity",       2.31m, 2.61m, 1.64m, 0.23m, cf),
-            Rbrvs(rbrvs, "99211", "Office visit, established patient, minimal",       0.18m, 0.47m, 0.30m, 0.02m, cf),
-            Rbrvs(rbrvs, "99212", "Office visit, established patient, straightforward",0.70m, 0.81m, 0.55m, 0.06m, cf),
-            Rbrvs(rbrvs, "99213", "Office visit, established patient, low complexity", 0.97m, 1.10m, 0.73m, 0.08m, cf),
-            Rbrvs(rbrvs, "99214", "Office visit, established patient, moderate",       1.50m, 1.61m, 1.05m, 0.12m, cf),
-            Rbrvs(rbrvs, "99215", "Office visit, established patient, high complexity",2.11m, 2.17m, 1.37m, 0.18m, cf),
-            Rbrvs(rbrvs, "99281", "ED visit, self-limited problem",                   0.28m, 0.65m, 0.65m, 0.05m, cf),
-            Rbrvs(rbrvs, "99283", "ED visit, moderate severity",                      1.24m, 1.43m, 1.43m, 0.14m, cf),
-            Rbrvs(rbrvs, "99285", "ED visit, life-threatening condition",              3.80m, 3.08m, 3.08m, 0.36m, cf),
-            Rbrvs(rbrvs, "10060", "Incision and drainage of abscess, simple",          1.22m, 1.79m, 0.78m, 0.19m, cf),
-            Rbrvs(rbrvs, "27447", "Total knee arthroplasty",                          20.71m, 12.73m, 12.73m, 4.49m, cf),
-            Rbrvs(rbrvs, "27130", "Total hip arthroplasty",                           20.06m, 12.37m, 12.37m, 4.93m, cf),
-            Rbrvs(rbrvs, "43239", "Upper GI endoscopy with biopsy",                   2.39m, 3.42m, 1.01m, 0.30m, cf),
-            Rbrvs(rbrvs, "45380", "Colonoscopy with biopsy",                          3.22m, 4.44m, 1.56m, 0.33m, cf),
-            Rbrvs(rbrvs, "71046", "Chest X-ray, 2 views",                             0.18m, 0.67m, 0.12m, 0.04m, cf),
-            Rbrvs(rbrvs, "73721", "MRI knee without contrast",                        1.09m, 5.26m, 0.80m, 0.14m, cf),
-            Rbrvs(rbrvs, "80053", "Comprehensive metabolic panel",                     0.00m, 0.15m, 0.15m, 0.01m, cf),
-            Rbrvs(rbrvs, "85025", "CBC with differential",                             0.00m, 0.10m, 0.10m, 0.01m, cf),
-            Rbrvs(rbrvs, "36415", "Venipuncture for blood draw",                       0.00m, 0.15m, 0.10m, 0.01m, cf),
-            Rbrvs(rbrvs, "90837", "Psychotherapy, 60 minutes",                         1.65m, 1.67m, 0.97m, 0.09m, cf),
-            Rbrvs(rbrvs, "97110", "Therapeutic exercises",                             0.44m, 0.58m, 0.25m, 0.03m, cf),
-            Rbrvs(rbrvs, "97140", "Manual therapy techniques",                         0.43m, 0.53m, 0.23m, 0.03m, cf),
-            Rbrvs(rbrvs, "99232", "Subsequent hospital care, moderate complexity",      1.39m, 0.58m, 0.58m, 0.06m, cf),
+            Rbrvs(rbrvs, "99203", "Office visit, new patient, low complexity",       0.88m, 1.27m, 0.87m, 0.10m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99204", "Office visit, new patient, moderate complexity",   1.60m, 1.91m, 1.26m, 0.16m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99205", "Office visit, new patient, high complexity",       2.31m, 2.61m, 1.64m, 0.23m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99211", "Office visit, established patient, minimal",       0.18m, 0.47m, 0.30m, 0.02m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99212", "Office visit, established patient, straightforward",0.70m, 0.81m, 0.55m, 0.06m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99213", "Office visit, established patient, low complexity", 0.97m, 1.10m, 0.73m, 0.08m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99214", "Office visit, established patient, moderate",       1.50m, 1.61m, 1.05m, 0.12m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99215", "Office visit, established patient, high complexity",2.11m, 2.17m, 1.37m, 0.18m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99281", "ED visit, self-limited problem",                   0.28m, 0.65m, 0.65m, 0.05m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99283", "ED visit, moderate severity",                      1.24m, 1.43m, 1.43m, 0.14m, cf, multProc: 0),
+            Rbrvs(rbrvs, "99285", "ED visit, life-threatening condition",              3.80m, 3.08m, 3.08m, 0.36m, cf, multProc: 0),
+            Rbrvs(rbrvs, "10060", "Incision and drainage of abscess, simple",          1.22m, 1.79m, 0.78m, 0.19m, cf, multProc: 2),
+            Rbrvs(rbrvs, "27447", "Total knee arthroplasty",                          20.71m, 12.73m, 12.73m, 4.49m, cf, multProc: 2),
+            Rbrvs(rbrvs, "27130", "Total hip arthroplasty",                           20.06m, 12.37m, 12.37m, 4.93m, cf, multProc: 2),
+            Rbrvs(rbrvs, "43239", "Upper GI endoscopy with biopsy",                   2.39m, 3.42m, 1.01m, 0.30m, cf, multProc: 3),
+            Rbrvs(rbrvs, "45380", "Colonoscopy with biopsy",                          3.22m, 4.44m, 1.56m, 0.33m, cf, multProc: 3),
+            Rbrvs(rbrvs, "71046", "Chest X-ray, 2 views",                             0.18m, 0.67m, 0.12m, 0.04m, cf, multProc: 0),
+            Rbrvs(rbrvs, "73721", "MRI knee without contrast",                        1.09m, 5.26m, 0.80m, 0.14m, cf, multProc: 4),
+            Rbrvs(rbrvs, "80053", "Comprehensive metabolic panel",                     0.00m, 0.15m, 0.15m, 0.01m, cf, multProc: 9),
+            Rbrvs(rbrvs, "85025", "CBC with differential",                             0.00m, 0.10m, 0.10m, 0.01m, cf, multProc: 9),
+            Rbrvs(rbrvs, "36415", "Venipuncture for blood draw",                       0.00m, 0.15m, 0.10m, 0.01m, cf, multProc: 9),
+            Rbrvs(rbrvs, "90837", "Psychotherapy, 60 minutes",                         1.65m, 1.67m, 0.97m, 0.09m, cf, multProc: 0),
+            Rbrvs(rbrvs, "97110", "Therapeutic exercises",                             0.44m, 0.58m, 0.25m, 0.03m, cf, multProc: 5),
+            Rbrvs(rbrvs, "97140", "Manual therapy techniques",                         0.43m, 0.53m, 0.23m, 0.03m, cf, multProc: 5),
+            Rbrvs(rbrvs, "99232", "Subsequent hospital care, moderate complexity",      1.39m, 0.58m, 0.58m, 0.06m, cf, multProc: 0),
         };
 
         // ── OPPS entries (common outpatient APCs) ──
@@ -428,7 +432,8 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
     // ── Helper factories ──
 
     private static FeeScheduleEntry Rbrvs(string schedId, string code, string desc,
-        decimal workRvu, decimal peNonFac, decimal peFac, decimal mpRvu, decimal convFactor)
+        decimal workRvu, decimal peNonFac, decimal peFac, decimal mpRvu, decimal convFactor,
+        int? multProc)
     {
         var totalNonFac = workRvu + peNonFac + mpRvu;
         var totalFac = workRvu + peFac + mpRvu;
@@ -446,7 +451,8 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             ConversionFactor = convFactor,
             NonFacilityRate = Math.Round(totalNonFac * convFactor, 2),
             FacilityRate = Math.Round(totalFac * convFactor, 2),
-            MultiProcRank = code.StartsWith("99") ? null : 0  // E/M codes exempt from MPPR
+            MultiProcRank = code.StartsWith("99") ? null : 0, // E/M codes exempt from MPPR
+            MultipleProcedureIndicator = multProc
         };
     }
 
@@ -498,6 +504,20 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             : 0m;
     }
 
+    /// <summary>
+    /// Parse the PPRRVU "MULT PROC" multiple procedure indicator (a single digit 0–9).
+    /// Blank or unrecognised values return null — "unknown" — which repricing treats as
+    /// no reduction with a warning, rather than guessing.
+    /// </summary>
+    internal static int? ParseMultipleProcedureIndicator(string? value)
+    {
+        var cleaned = value?.Trim();
+        return int.TryParse(cleaned, NumberStyles.None, CultureInfo.InvariantCulture, out var indicator)
+               && indicator is >= 0 and <= 9
+            ? indicator
+            : null;
+    }
+
     // ── CsvHelper row models and mappings ──
 
     /// <summary>CMS PFSRVF (Physician Fee Schedule Relative Value File) row.</summary>
@@ -514,6 +534,7 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
         public string? Locality { get; set; }
         public string? NonFacilityNaIndicator { get; set; }
         public string? FacilityNaIndicator { get; set; }
+        public string? MultProc { get; set; }
     }
 
     private sealed class RbrvsCsvRowMap : ClassMap<RbrvsCsvRow>
@@ -531,6 +552,8 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
             Map(m => m.Locality).Name("LOCALITY", "MAC_LOCALITY", "Locality", "locality");
             Map(m => m.NonFacilityNaIndicator).Name("NON_FACILITY_NA_INDICATOR", "Non_Facility_NA_Indicator", "NONFAC_NA_IND");
             Map(m => m.FacilityNaIndicator).Name("FACILITY_NA_INDICATOR", "Facility_NA_Indicator", "FAC_NA_IND");
+            Map(m => m.MultProc).Name("MULT PROC", "MULT_PROC", "MULTPROC", "MULT_PROC_IND", "MULT PROC IND",
+                "MULTIPLE_PROCEDURE_INDICATOR", "Mult_Proc", "mult_proc").Optional();
         }
     }
 

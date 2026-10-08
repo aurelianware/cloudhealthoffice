@@ -41,16 +41,24 @@ public class RateResolutionService : IRateResolutionService
     }
 
     public async Task<PricingResult> ResolveAsync(PricingRequest request, CancellationToken ct = default)
-        => (await ResolveLineAsync(request, applyMultipleProcedureReduction: true, ct)).Result;
+        => (await ResolveLineAsync(
+            request,
+            applyMultipleProcedureReduction: true,
+            multipleProcedureContext: request.TotalLineCount > 1,
+            ct)).Result;
 
     /// <summary>
     /// Prices one line and also returns the matched rate line so batch pricing can
     /// honour per-line flags (e.g. <see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>).
     /// When <paramref name="applyMultipleProcedureReduction"/> is false the per-line
     /// modifier-51 / line-position reduction is suppressed (batch pricing ranks instead).
+    /// When <paramref name="multipleProcedureContext"/> is true (the claim has more than
+    /// one line) the result is flagged if the rate line's multiple procedure indicator
+    /// is missing or names a reduction rule the engine does not implement.
     /// </summary>
     private async Task<(PricingResult Result, FeeScheduleLine? RateLine)> ResolveLineAsync(
-        PricingRequest request, bool applyMultipleProcedureReduction, CancellationToken ct)
+        PricingRequest request, bool applyMultipleProcedureReduction, bool multipleProcedureContext,
+        CancellationToken ct)
     {
         // 1. Provider contract lookup
         var contract = await _contractRepo.GetContractAsync(
@@ -134,6 +142,11 @@ public class RateResolutionService : IRateResolutionService
         if (scheduleType != FeeScheduleType.Drg && !isLineTotal)
             finalAmount *= request.Units;
 
+        // 7. Flag lines whose multiple procedure treatment could not be determined
+        var warnings = multipleProcedureContext
+            ? MultipleProcedureIndicatorWarnings(request, rateLine, rateSource, scheduleType)
+            : [];
+
         return (new PricingResult
         {
             LineNumber      = request.LineNumber,
@@ -146,6 +159,7 @@ public class RateResolutionService : IRateResolutionService
             FeeScheduleId   = schedule?.Id,
             FeeScheduleName = schedule?.Name,
             Adjustments     = adjustments,
+            Warnings        = warnings,
         }, rateLine);
     }
 
@@ -157,9 +171,13 @@ public class RateResolutionService : IRateResolutionService
     /// = 50%. 6th and subsequent are "by report"; this engine prices them at
     /// 50% and flags the adjustment for review. This implementation:
     ///   1. Prices all lines at 100% (per-line multiple procedure logic suppressed)
-    ///   2. Ranks only lines whose rate line is flagged
-    ///      <see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>
-    ///      (E&amp;M and other non-surgical lines are left unreduced)
+    ///   2. Ranks only lines whose rate line carries indicator 2
+    ///      (<see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>);
+    ///      E&amp;M (0), not-applicable (9) and lines with no indicator are left
+    ///      unreduced. Indicators 3–7 (endoscopy, imaging, therapy, cardiovascular,
+    ///      ophthalmology) follow different CMS rules that are not yet implemented,
+    ///      so those lines are left unreduced and flagged in
+    ///      <see cref="PricingResult.Warnings"/>, as are lines with no indicator.
     ///   3. Applies the rank-based reduction to ranked lines 2+
     /// </summary>
     public async Task<PricingResultSet> ResolveBatchAsync(
@@ -177,7 +195,8 @@ public class RateResolutionService : IRateResolutionService
         // Phase 1: Price all lines at 100% (per-line multiple procedure reduction suppressed)
         var initialResults = new List<(PricingResult Result, FeeScheduleLine? RateLine)>(requests.Count);
         foreach (var request in requests.OrderBy(r => r.LineNumber))
-            initialResults.Add(await ResolveLineAsync(request, applyMultipleProcedureReduction: false, ct));
+            initialResults.Add(await ResolveLineAsync(
+                request, applyMultipleProcedureReduction: false, multipleProcedureContext: true, ct));
 
         // Phase 2: Rank the lines eligible for multiple procedure reduction
         var rankByIndex = Enumerable.Range(0, initialResults.Count)
@@ -241,13 +260,55 @@ public class RateResolutionService : IRateResolutionService
 
     /// <summary>
     /// A line participates in multiple procedure ranking only when it was priced from a
-    /// fee schedule line that is flagged for the reduction. Unresolved, billed-charge,
+    /// fee schedule line with MPFS indicator 2 (standard multiple surgery). Unresolved, billed-charge,
     /// DRG, per diem and capitation lines never participate.
     /// </summary>
     private static bool IsMultipleProcedureEligible(PricingResult result, FeeScheduleLine? rateLine)
         => rateLine is { MultipleProcedureReductionApplies: true }
            && result.RateSource is not (RateSource.Unresolved or RateSource.BilledCharges)
            && result.FeeScheduleType is not (FeeScheduleType.Drg or FeeScheduleType.PerDiem or FeeScheduleType.Capitation);
+
+    /// <summary>
+    /// Warnings for a line on a multi-line claim whose multiple procedure treatment is
+    /// not handled by the 100/50/50 rule: no indicator in the source data (priced with
+    /// no reduction — the safe default for E&amp;M, but missing data must be visible), or
+    /// an indicator for a CMS rule the engine does not implement yet (3–7, or any other
+    /// unrecognised value). Lines that never take part in multiple procedure pricing
+    /// (unresolved, billed charges, DRG, per diem, capitation) are not flagged.
+    /// </summary>
+    private List<string> MultipleProcedureIndicatorWarnings(
+        PricingRequest request, FeeScheduleLine? rateLine, RateSource rateSource, FeeScheduleType scheduleType)
+    {
+        if (rateLine is null
+            || rateSource is RateSource.Unresolved or RateSource.BilledCharges
+            || scheduleType is FeeScheduleType.Drg or FeeScheduleType.PerDiem or FeeScheduleType.Capitation)
+            return [];
+
+        string warning;
+        switch (rateLine.MultipleProcedureIndicator)
+        {
+            case MultipleProcedureIndicator.NoReduction:
+            case MultipleProcedureIndicator.StandardSurgery:
+            case MultipleProcedureIndicator.NotApplicable:
+                return [];
+
+            case null:
+                warning = $"No CMS multiple procedure indicator on the fee schedule line for {request.ProcedureCode}; " +
+                          "multiple procedure reduction not applied";
+                break;
+
+            case var indicator:
+                warning = $"Multiple procedure indicator {(byte)indicator} ({indicator}) for {request.ProcedureCode} " +
+                          "is not yet supported; multiple procedure reduction not applied";
+                break;
+        }
+
+        _logger.LogWarning(
+            "Line {LineNumber} ({ProcedureCode}): {Warning}",
+            request.LineNumber, LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(warning));
+
+        return [warning];
+    }
 
     // ── Schedule selection ─────────────────────────────────────────────
 
@@ -736,10 +797,12 @@ public class RateResolutionService : IRateResolutionService
         // via rank-based ordering. The per-line fallback below only applies when
         // ResolveBatchAsync is not used (single-line ResolveAsync calls); batch pricing
         // suppresses it so a modifier-51 line is not reduced twice.
+        // Only standard multiple surgery lines (MPFS indicator 2) are reduced; modifier 51
+        // on a line whose indicator is 0/9/unknown/unsupported does not trigger the 50% rule.
         if (applyMultipleProcedureReduction
+            && line is { MultipleProcedureReductionApplies: true }
             && (modifiers.Contains(PaymentModifiers.MultipleProcedures, StringComparer.OrdinalIgnoreCase)
-                || (request.LineNumber > 1 && request.TotalLineCount > 1
-                    && (line?.MultipleProcedureReductionApplies ?? true))))
+                || (request.LineNumber > 1 && request.TotalLineCount > 1)))
         {
             var reduced = amount * 0.50m;
             var adj = reduced - amount;

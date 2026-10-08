@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.ReferenceData.Domain;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Models;
 
@@ -111,7 +112,11 @@ public class FeeSchedule
 /// For MPFS schedules, WorkRvu/PeRvu/MpRvu are stored here and
 /// rate is computed at runtime using the schedule's GPCI × ConversionFactor.
 /// For all other types, Rate is the pre-calculated flat dollar amount.
+///
+/// Extra elements are ignored so documents written before
+/// MultipleProcedureReductionApplies became derived still deserialize.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class FeeScheduleLine
 {
     /// <summary>CPT/HCPCS procedure code.</summary>
@@ -169,8 +174,22 @@ public class FeeScheduleLine
     /// <summary>When true, bilateral modifier (50) applies the 150% adjustment.</summary>
     public bool BilateralAdjustmentApplies { get; set; } = true;
 
-    /// <summary>When true, multiple procedure reduction (51) applies for secondary procedures.</summary>
-    public bool MultipleProcedureReductionApplies { get; set; } = true;
+    /// <summary>
+    /// CMS MPFS multiple procedure indicator (PPRRVU "MULT PROC" column).
+    /// Null = not supplied by the source data; the engine then applies no
+    /// reduction and flags the line on the pricing result.
+    /// </summary>
+    public MultipleProcedureIndicator? MultipleProcedureIndicator { get; set; }
+
+    /// <summary>
+    /// True only for indicator 2 (standard multiple surgery), the only rule the
+    /// engine's 100/50/50 ranking implements. Derived from
+    /// <see cref="MultipleProcedureIndicator"/>; not persisted.
+    /// </summary>
+    [JsonIgnore]
+    [BsonIgnore]
+    public bool MultipleProcedureReductionApplies
+        => MultipleProcedureIndicator == Domain.MultipleProcedureIndicator.StandardSurgery;
 
     /// <summary>
     /// Assistant-at-surgery allowed (if false, assistant modifier claims price at $0).
@@ -332,6 +351,13 @@ public record PricingResult
     /// why the allowed amount could not be determined.
     /// </summary>
     public string? UnresolvedReason { get; init; }
+
+    /// <summary>
+    /// Non-fatal pricing notes that need visibility but do not change the allowed
+    /// amount — e.g. the rate line has no CMS multiple procedure indicator, or its
+    /// indicator names a reduction rule the engine does not yet implement.
+    /// </summary>
+    public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>
