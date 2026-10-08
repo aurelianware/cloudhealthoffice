@@ -29,14 +29,25 @@ Depends on: 5.4.5 (verification write-back), 5.4 (network roster), 5.7 (FHIR Pra
 > `false`) now records whether a real source was queried. When it is not
 > set, the scorer leaves the Exclusion Screening dimension unevaluated
 > (excluded from the composite), adds a Warning flag
-> `EXCLUSION_NOT_SCREENED`, rates the provider `Unknown` (unless otherwise
-> `Blocked`), and the orchestrator returns `ManualReviewRequired`. The gate
+> `EXCLUSION_NOT_SCREENED`, always rates the provider `Unknown`
+> (never `Blocked`), and the orchestrator returns `ManualReviewRequired`. The gate
 > treats an `Unknown` cached rating like a never-refreshed projection (live
 > fallback) and treats a live `Unknown` rating or `EXCLUSION_NOT_SCREENED`
 > flag as `RequiresManualReview`, so claims pend `MEDREVIEW` rather than
 > pass. Until real adapters ship, every claim reaching `ProviderIntegrityStage`
 > will pend for review; disable the stage via `EnabledStages` only as an
 > explicit, audited operator decision.
+>
+> A `Blocked` rating is no longer proof of exclusion on its own. The
+> projection persists only score and rating, and a very low composite (for
+> example an NPI that fails validation) also buckets as `Blocked`. The
+> engine therefore rates every unscreened provider `Unknown` (confirmed
+> exclusions return earlier via the hard stop), reports a non-exclusion
+> `Blocked` rating as `ManualReviewRequired` rather than `Excluded`, and
+> the gate re-checks a cached `Blocked` live (`cho.path=blocked_recheck`).
+> B7 is asserted only when the live service reports `Excluded`; if live is
+> unreachable the claim is held for review -- neither denied as excluded
+> nor paid.
 
 > **Addendum, October 2026 — real LEIE / SAM.gov screening.** Real
 > adapters now exist behind configuration (see "Exclusion screening
@@ -257,6 +268,9 @@ CheckAsync(npi, forceRefresh=false)
   │     │   → live verification-service (null_fallback)
   │     ├── projection row exists, score is null or rating is Unknown
   │     │   → live verification-service (null_fallback)
+  │     ├── projection row exists, rating is Blocked
+  │     │   → live verification-service (blocked_recheck); live unreachable
+  │     │     → RequiresManualReview (never B7 from the projection alone)
   │     ├── projection row exists, LastVerifiedAt < now - threshold
   │     │   → live verification-service (stale_fallback)
   │     └── projection row exists, score is fresh
@@ -285,7 +299,7 @@ defaults to 7 days; high-trust environments can extend to 30 days.
 Meter:      CloudHealthOffice
 Instrument: cho.provider.integrity_gate.decisions.total (Counter)
 Tags:
-  cho.path     ∈ { cached_hit, stale_fallback, null_fallback, live_only }
+  cho.path     ∈ { cached_hit, stale_fallback, null_fallback, blocked_recheck, live_only }
   cho.rating   ∈ { Clear, Advisory, Caution, Alert, Blocked, unknown }
 ```
 

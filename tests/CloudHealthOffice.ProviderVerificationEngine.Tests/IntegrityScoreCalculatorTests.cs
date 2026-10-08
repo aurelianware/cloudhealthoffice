@@ -225,6 +225,29 @@ public class IntegrityScoreCalculatorTests
     }
 
     [Fact]
+    public void ExclusionNotScreened_NpiNotFound_RatesUnknown_NotBlocked()
+    {
+        // Composite is 0 (only the NPI dimension evaluated, and it failed),
+        // which would bucket as Blocked. Blocked is read downstream as a
+        // federal exclusion, which was never found -- so the rating must be
+        // Unknown (manual review), not Blocked (B7 denial).
+        var record = new ProviderVerificationRecord
+        {
+            Npi = "1234567893",
+            NppesData = null,
+            ExclusionScreening = new ExclusionScreeningResult { Source = ExclusionScreeningSource.OigLeie }
+        };
+
+        var score = _calculator.Calculate(record);
+
+        Assert.Equal(0, score.CompositeScore);
+        Assert.Equal(IntegrityRating.Unknown, score.Rating);
+        Assert.Contains(score.Flags, f => f.Code == "NPI_NOT_FOUND");
+        Assert.Contains(score.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+        Assert.DoesNotContain(score.Flags, f => f.Code == "EXCLUDED");
+    }
+
+    [Fact]
     public void ExclusionScreenedClear_Scores100_NoNotScreenedFlag()
     {
         var record = new ProviderVerificationRecord

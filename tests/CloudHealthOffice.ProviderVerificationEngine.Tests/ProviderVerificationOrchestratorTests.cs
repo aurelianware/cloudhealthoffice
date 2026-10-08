@@ -361,6 +361,19 @@ public class ProviderVerificationOrchestratorTests
         Assert.Contains(result.IntegrityScore.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
     }
 
+    [Fact]
+    public async Task ExclusionNotScreened_NpiNotFound_IsNotReportedExcluded()
+    {
+        ArrangeStandardTier(new ExclusionScreeningResult { Source = ExclusionScreeningSource.OigLeie });
+        _nppes.LookupByNpiAsync("1234567893", Arg.Any<CancellationToken>())
+            .Returns((NppesProviderData?)null);
+
+        var result = await _orchestrator.VerifyProviderAsync("1234567893");
+
+        Assert.NotEqual(VerificationStatus.Excluded, result.Status);
+        Assert.NotEqual(IntegrityRating.Blocked, result.IntegrityScore.Rating);
+    }
+
     private void ArrangeStandardTier(ExclusionScreeningResult exclusion)
     {
         _nppes.LookupByNpiAsync("1234567893", Arg.Any<CancellationToken>())
