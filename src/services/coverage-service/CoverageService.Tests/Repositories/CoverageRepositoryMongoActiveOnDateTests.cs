@@ -9,7 +9,7 @@ namespace CoverageService.Tests.Repositories;
 /// GetActiveCoverageByMemberIdAsync against a real mongod: a coverage is
 /// returned for a service date inside its effective/termination span whatever
 /// its current status (a terminated coverage was in force for its span),
-/// except statuses that are not in force (Suspended).
+/// except statuses that are not in force (Pending, Suspended).
 /// </summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public class CoverageRepositoryMongoActiveOnDateTests
@@ -91,7 +91,7 @@ public class CoverageRepositoryMongoActiveOnDateTests
         });
 
     [Fact]
-    public Task PendingAndCobraCoverage_FoundOnceEffective() => RunAsync(
+    public Task CobraFound_PendingNotFound_EvenOnceEffective() => RunAsync(
         new[]
         {
             Build("pend", CoverageStatus.Pending, D(2025, 1, 1)),
@@ -100,6 +100,6 @@ public class CoverageRepositoryMongoActiveOnDateTests
         async repo =>
         {
             (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2025, 3, 15)))
-                .Select(c => c.Id).Should().BeEquivalentTo(new[] { "pend", "cobra" });
+                .Select(c => c.Id).Should().Equal("cobra");
         });
 }

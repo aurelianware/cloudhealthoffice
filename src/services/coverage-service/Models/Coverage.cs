@@ -182,15 +182,15 @@ public class Coverage
     /// Statuses whose coverage was in force for its effective/termination span.
     /// Date-of-service eligibility is decided by the span, not by the current
     /// status: a Terminated coverage still covers service dates on or before its
-    /// termination date (including after a retro-term), and a Pending coverage
-    /// is in force once its effective date arrives. Suspended (payment hold with
-    /// no span of its own) is deliberately excluded, as is any status not listed
-    /// here, so a future void/cancel status cannot leak into eligibility.
+    /// termination date (including after a retro-term). Pending is excluded: it
+    /// can mean "not yet effectuated" (e.g. ACA binder payment outstanding), so
+    /// treating it as in force would fail open. Suspended (payment hold with no
+    /// span of its own) is excluded too, as is any status not listed here, so a
+    /// future void/cancel status cannot leak into eligibility.
     /// </summary>
     public static readonly IReadOnlyList<CoverageStatus> DateOfServiceStatuses = new[]
     {
         CoverageStatus.Active,
-        CoverageStatus.Pending,
         CoverageStatus.Terminated,
         CoverageStatus.COBRA
     };

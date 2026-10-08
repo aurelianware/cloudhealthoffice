@@ -284,15 +284,17 @@ public class ChoEligibilityAdapterTests
         Assert.Equal(new DateTime(2025, 6, 30), result.CoverageEndDate);
     }
 
-    [Fact]
-    public async Task VerifyEligibility_SuspendedCoverage_ReturnsNotEligible()
+    [Theory]
+    [InlineData(2)] // Pending — may not be effectuated yet (binder payment)
+    [InlineData(4)] // Suspended
+    public async Task VerifyEligibility_PendingOrSuspendedCoverage_ReturnsNotEligible(int status)
     {
         var coverageArray = JsonSerializer.Serialize(new[]
         {
-            new { id = "cov-susp", memberId = "MBR-001", groupNumber = "GRP-100",
+            new { id = "cov-x", memberId = "MBR-001", groupNumber = "GRP-100",
                   planId = "PLAN-PPO-2025", coverageLevel = "FAM",
                   effectiveDate = "2025-01-01", terminationDate = (string?)null,
-                  status = 4, lineOfBusiness = 1 },
+                  status, lineOfBusiness = 1 },
         }, JsonOpts);
 
         var handler = new SequenceHandler(new[]

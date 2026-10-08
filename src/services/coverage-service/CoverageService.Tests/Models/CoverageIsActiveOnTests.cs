@@ -61,7 +61,6 @@ public class CoverageIsActiveOnTests
 
     [Theory]
     [InlineData(CoverageStatus.Active)]
-    [InlineData(CoverageStatus.Pending)]
     [InlineData(CoverageStatus.Terminated)]
     [InlineData(CoverageStatus.COBRA)]
     public void InForceStatuses_WithinSpan_AreActive(CoverageStatus status)
@@ -69,10 +68,13 @@ public class CoverageIsActiveOnTests
         Build(status, Effective, Termination).IsActiveOn(new DateTime(2025, 3, 1)).Should().BeTrue();
     }
 
-    [Fact]
-    public void Suspended_WithinSpan_IsNotActive()
+    [Theory]
+    [InlineData(CoverageStatus.Pending)]
+    [InlineData(CoverageStatus.Suspended)]
+    public void NotInForceStatuses_WithinSpan_AreNotActive(CoverageStatus status)
     {
-        Build(CoverageStatus.Suspended, Effective, Termination)
+        // Pending may not be effectuated yet (e.g. binder payment outstanding).
+        Build(status, Effective, Termination)
             .IsActiveOn(new DateTime(2025, 3, 1)).Should().BeFalse();
     }
 

@@ -222,15 +222,15 @@ internal class ChoCoverageDto
     /// <summary>
     /// Coverage is in force on a date of service when the date falls within its
     /// effective/termination span and its status is one that was in force for
-    /// that span: 1 (Active), 2 (Pending, once effective), 3 (Terminated — still
-    /// covers dates on or before the termination date) or 5 (COBRA). 4
-    /// (Suspended) and unknown statuses are excluded. Mirrors
+    /// that span: 1 (Active), 3 (Terminated — still covers dates on or before
+    /// the termination date) or 5 (COBRA). 2 (Pending — may not be effectuated
+    /// yet), 4 (Suspended) and unknown statuses are excluded. Mirrors
     /// coverage-service <c>Coverage.IsActiveOn</c>.
     /// </summary>
     public bool IsInForceOn(DateTime serviceDate)
     {
         var date = serviceDate.Date;
-        return Status is 1 or 2 or 3 or 5
+        return Status is 1 or 3 or 5
             && date >= EffectiveDate.Date
             && (!TerminationDate.HasValue || date <= TerminationDate.Value.Date);
     }
