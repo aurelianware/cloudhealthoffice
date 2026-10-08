@@ -109,9 +109,11 @@ public class CoverageRepositoryCosmosActiveOnDateTests
         var (repo, captured) = Build();
         await repo.SearchAsync("t1", groupNumber: "G1", activeOnly: true);
 
-        captured.Query!.QueryText.Should().Contain("c.status = @activeStatus")
+        captured.Query!.QueryText.Should().Contain(
+                "(c.status = @activeStatus OR (c.status = @pendingStatus AND c.effectiveDate <= @today))")
             .And.Contain("(NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate) OR c.terminationDate > @today)");
         Param(captured.Query, "@activeStatus").Should().Be((int)CoverageStatus.Active);
+        Param(captured.Query, "@pendingStatus").Should().Be((int)CoverageStatus.Pending);
         Param(captured.Query, "@today").Should().Be(DateTime.UtcNow.Date);
     }
 
@@ -146,9 +148,11 @@ public class CoverageRepositoryCosmosActiveOnDateTests
             .And.Contain("c.status != @terminatedStatus")
             .And.Contain("NOT IS_NULL(c.terminationDate)")
             .And.Contain("c.terminationDate <= @today")
+            .And.Contain("OR (c.status = @pendingStatus AND c.effectiveDate <= @today)")
             .And.NotContain("c.tenantId");
         Param(captured.Query, "@maxItems").Should().Be(250);
         Param(captured.Query, "@terminatedStatus").Should().Be((int)CoverageStatus.Terminated);
+        Param(captured.Query, "@pendingStatus").Should().Be((int)CoverageStatus.Pending);
         Param(captured.Query, "@today").Should().Be(new DateTime(2025, 7, 1));
         // Cross-partition: no partition key.
         captured.Options?.PartitionKey.Should().BeNull();

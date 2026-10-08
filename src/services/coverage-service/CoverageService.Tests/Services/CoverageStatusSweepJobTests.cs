@@ -64,6 +64,23 @@ public class CoverageStatusSweepJobTests
     }
 
     [Fact]
+    public async Task Sweep_PromotesPendingWhoseEffectiveDateArrived_ToActive()
+    {
+        var (job, repo) = Build();
+        var pending = Cov("p", CoverageStatus.Pending, null);
+        pending.EffectiveDate = new DateTime(2025, 7, 1);
+        repo.Setup(r => r.GetStatusTransitionsDueAsync(It.IsAny<DateTime>(), It.IsAny<int>()))
+            .ReturnsAsync(new List<Coverage> { pending });
+        repo.Setup(r => r.SetStatusAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CoverageStatus>(),
+                It.IsAny<CoverageStatus>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        (await job.SweepOnceAsync()).Should().Be(1);
+        repo.Verify(r => r.SetStatusAsync("t1", "p", CoverageStatus.Pending, CoverageStatus.Active,
+            CoverageStatusSweepJob.Actor), Times.Once);
+    }
+
+    [Fact]
     public async Task Sweep_SkipsRowsThatAreNotActuallyDue()
     {
         var (job, repo) = Build();

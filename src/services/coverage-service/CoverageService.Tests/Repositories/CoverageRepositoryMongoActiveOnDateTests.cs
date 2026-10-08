@@ -1,6 +1,9 @@
 using CloudHealthOffice.Testing.Mongo;
 using CoverageService.Models;
 using CoverageService.Repositories;
+using CoverageService.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Driver;
 
 namespace CoverageService.Tests.Repositories;
@@ -173,6 +176,66 @@ public class CoverageRepositoryMongoActiveOnDateTests
     private static Coverage WithTenant(Coverage c, string tenant)
     {
         c.TenantId = tenant;
+        return c;
+    }
+    private sealed class FixedClock(DateTime today) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(today.AddHours(3), TimeSpan.Zero);
+    }
+
+    private static Task<int> SweepAsync(CoverageRepositoryMongo repo, DateTime today) =>
+        new CoverageStatusSweepJob(
+                new ServiceCollection().AddSingleton<ICoverageRepository>(repo).BuildServiceProvider(),
+                new CoverageStatusSweepOptions(),
+                new FixedClock(today),
+                NullLogger<CoverageStatusSweepJob>.Instance)
+            .SweepOnceAsync();
+
+    [Fact]
+    public Task FutureDatedAdd_BecomesEligibleOnItsEffectiveDate_AfterTheSweep() => RunAsync(
+        // As CoverageController.CreateCoverage stores an add ahead of its effective date.
+        new[] { Build("future-add", CoverageStatus.Pending, D(2026, 1, 1)) },
+        async repo =>
+        {
+            // Before the effective date: not swept, not eligible.
+            (await SweepAsync(repo, D(2025, 12, 31))).Should().Be(0);
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2026, 1, 1))).Should().BeEmpty();
+
+            // On the effective date the sweep effectuates it.
+            (await SweepAsync(repo, D(2026, 1, 1))).Should().Be(1);
+            (await repo.GetByIdAsync(Tenant, "future-add"))!.Status.Should().Be(CoverageStatus.Active);
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2026, 1, 1)))
+                .Select(c => c.Id).Should().Equal("future-add");
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2026, 3, 15)))
+                .Select(c => c.Id).Should().Equal("future-add");
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2025, 12, 31))).Should().BeEmpty();
+
+            // Replay: nothing left to do.
+            (await SweepAsync(repo, D(2026, 1, 1))).Should().Be(0);
+        });
+
+    [Fact]
+    public Task CurrentlyActiveReads_ReportPendingAsActiveOnItsEffectiveDate_BeforeTheSweep() => RunAsync(
+        new[]
+        {
+            Build("effective-today", CoverageStatus.Pending, DateTime.UtcNow.Date),
+            Build("not-yet", CoverageStatus.Pending, DateTime.UtcNow.Date.AddDays(1)),
+            WithPcp(Build("pcp-effective", CoverageStatus.Pending, DateTime.UtcNow.Date.AddDays(-2)))
+        },
+        async repo =>
+        {
+            var (items, _) = await repo.SearchAsync(Tenant, memberId: "M1", activeOnly: true, pageSize: 100);
+            items.Select(c => c.Id).Should().BeEquivalentTo("effective-today", "pcp-effective");
+
+            (await repo.GetByPcpNpiAsync(Tenant, "1234567893", CoverageStatus.Active))
+                .Select(c => c.Id).Should().Equal("pcp-effective");
+            (await repo.GetByPcpNpiAsync(Tenant, "1234567893", CoverageStatus.Pending))
+                .Select(c => c.Id).Should().Equal(new[] { "pcp-effective" }, "a stored-status filter other than Active is unchanged");
+        });
+
+    private static Coverage WithPcp(Coverage c)
+    {
+        c.PcpNpi = "1234567893";
         return c;
     }
 }

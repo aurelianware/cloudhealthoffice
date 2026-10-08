@@ -663,9 +663,8 @@ public class CoverageController : ControllerBase
         });
     }
 
-    // Status as of today, whether or not the daily sweep has flipped it yet.
-    private static CoverageStatus CurrentStatus(Coverage c) =>
-        c.DueStatusTransition(DateTime.UtcNow.Date) ?? c.Status;
+    // Status as of today, whether or not the daily sweep has stored it yet.
+    private static CoverageStatus CurrentStatus(Coverage c) => c.CurrentStatus(DateTime.UtcNow.Date);
 
     private static string SanitizeForLog(string? value)
     {

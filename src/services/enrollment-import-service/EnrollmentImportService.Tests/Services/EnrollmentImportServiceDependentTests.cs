@@ -604,6 +604,91 @@ public class EnrollmentImportServiceDependentTests
         h.Coverage.Should().ContainSingle().Which.EffectiveDate.Should().Be(new DateTime(2026, 1, 1));
     }
 
+    private static MemberEnrollment MemberReinstatement(string? begin)
+    {
+        var sub = Subscriber("SUB1", "025");
+        sub.EnrollmentDate = begin;
+        sub.MaintenanceReason = "41";
+        sub.Coverage = [];
+        return sub;
+    }
+
+    [Fact]
+    public async Task MemberReinstatement_WithoutHd_ReinstatesTheCoveragesEndedByTheLastTermination()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        // A member-level 024 ended health and dental together; vision had
+        // ended earlier on its own and must stay ended.
+        var health = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20251231");
+        var dental = h.SeedCoverage("SUB1", "DEN", "EMP", "20250101", "20251231");
+        var vision = h.SeedCoverage("SUB1", "VIS", "EMP", "20240101", "20240630");
+        var olderHealth = h.SeedCoverage("SUB1", "HLT", "EMP", "20230101", "20231231");
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "M1", Enrollments = { MemberReinstatement(null) } });
+
+        h.CoverageReinstatements.Should().BeEquivalentTo(health.Id, dental.Id);
+        vision.TerminationDate.Should().Be(new DateTime(2024, 6, 30));
+        olderHealth.TerminationDate.Should().Be(new DateTime(2023, 12, 31));
+        h.Coverage.Should().BeEmpty();
+        result.CoverageRecordsReinstated.Should().Be(2);
+
+        // Replay: each line's latest coverage is open now; the older
+        // terminations are not picked up as "the last one".
+        await h.ImportAsync(new Enrollment834 { BatchId = "M1", Enrollments = { MemberReinstatement(null) } });
+        h.CoverageReinstatements.Should().HaveCount(2);
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MemberReinstatement_WithoutHd_ContinuingTheSpan_ReinstatesTheSameRecord()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var health = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", "20251231");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "M2", Enrollments = { MemberReinstatement("20260101") } });
+
+        h.CoverageReinstatements.Should().Equal(health.Id);
+        h.Coverage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MemberReinstatement_WithoutHd_AfterAGap_CreatesNewSpans()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var health = h.SeedCoverage("SUB1", "HLT", "FAM", "20250101", "20251231");
+        h.SeedCoverage("SUB1", "DEN", "EMP", "20250101", "20251231");
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "M3", Enrollments = { MemberReinstatement("20260301") } });
+
+        h.CoverageReinstatements.Should().BeEmpty();
+        health.TerminationDate.Should().Be(new DateTime(2025, 12, 31));
+        h.Coverage.Should().HaveCount(2).And.OnlyContain(c =>
+            c.EffectiveDate == new DateTime(2026, 3, 1) && c.TerminationDate == null
+            && c.MaintenanceTypeCode == "025" && c.PlanId == "resolved-plan-id" && c.GroupNumber == "GRP0001");
+        h.Coverage.Single(c => c.InsuranceLineCode == "HLT").CoverageLevel.Should().Be("FAM");
+        result.CoverageRecordsCreated.Should().Be(2);
+
+        // Replay: the new spans are each line's latest coverage, and open.
+        await h.ImportAsync(new Enrollment834 { BatchId = "M3", Enrollments = { MemberReinstatement("20260301") } });
+        h.Coverage.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task MemberReinstatement_WithoutHd_NothingTerminated_ChangesNothing()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        h.SeedCoverage("SUB1", "HLT", "EMP", "20250101");
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "M4", Enrollments = { MemberReinstatement(null) } });
+
+        h.CoverageReinstatements.Should().BeEmpty();
+        h.Coverage.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task HdAddition_CreatesOnlyWhenNoMatchingCoverageIsOnFile()
     {

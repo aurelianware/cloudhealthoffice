@@ -97,6 +97,37 @@ public class CoverageTerminationTests
         Build(status, DateTime.Parse(termination)).DueStatusTransition(Today).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("2025-07-01", false, CoverageStatus.Active)]  // effective today
+    [InlineData("2025-06-01", false, CoverageStatus.Active)]  // effective in the past
+    [InlineData("2025-07-01", true, CoverageStatus.COBRA)]
+    public void DueStatusTransition_PendingWhoseEffectiveDateArrived_IsInForce(
+        string effective, bool cobra, CoverageStatus expected)
+    {
+        var coverage = Build(CoverageStatus.Pending, cobra: cobra);
+        coverage.EffectiveDate = DateTime.Parse(effective);
+
+        coverage.DueStatusTransition(Today).Should().Be(expected);
+        coverage.CurrentStatus(Today).Should().Be(expected);
+    }
+
+    [Fact]
+    public void DueStatusTransition_PendingNotYetEffective_StaysPending()
+    {
+        var coverage = Build(CoverageStatus.Pending);
+        coverage.EffectiveDate = new DateTime(2025, 7, 2);
+
+        coverage.DueStatusTransition(Today).Should().BeNull();
+        coverage.CurrentStatus(Today).Should().Be(CoverageStatus.Pending);
+    }
+
+    [Fact]
+    public void DueStatusTransition_PendingWhoseTerminationAlsoPassed_IsTerminated()
+    {
+        var coverage = Build(CoverageStatus.Pending, new DateTime(2025, 6, 30));
+        coverage.DueStatusTransition(Today).Should().Be(CoverageStatus.Terminated);
+    }
+
     [Fact]
     public void DueStatusTransition_NothingDue_IsNull()
     {

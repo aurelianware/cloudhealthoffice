@@ -235,7 +235,11 @@ public class Coverage
     /// <summary>
     /// The status this coverage's date span has moved it to as of
     /// <paramref name="today"/>, or null when it needs no change: a coverage
-    /// whose termination date is today or past is Terminated.
+    /// whose termination date is today or past is Terminated, and a Pending
+    /// coverage whose effective date has arrived is in force (Active, or COBRA
+    /// for COBRA coverage). Pending only ever means "not yet effective" here:
+    /// CoverageController.CreateCoverage sets it solely for a future effective
+    /// date, so the arrival of that date is what effectuates it.
     /// </summary>
     public CoverageStatus? DueStatusTransition(DateTime today)
     {
@@ -244,8 +248,18 @@ public class Coverage
         {
             return CoverageStatus.Terminated;
         }
+        if (Status == CoverageStatus.Pending && EffectiveDate.Date <= today.Date)
+        {
+            return InForceStatus;
+        }
         return null;
     }
+
+    /// <summary>
+    /// The status as of <paramref name="today"/>, whether or not the daily
+    /// status sweep has stored it yet.
+    /// </summary>
+    public CoverageStatus CurrentStatus(DateTime today) => DueStatusTransition(today) ?? Status;
 
     private CoverageStatus InForceStatus => IsCOBRA ? CoverageStatus.COBRA : CoverageStatus.Active;
 

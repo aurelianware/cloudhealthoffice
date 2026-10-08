@@ -176,11 +176,13 @@ public class CoverageRepository : ICoverageRepository
 
         if (activeOnly)
         {
-            // Currently active: status Active and the termination date (if
-            // any) not yet reached, so the listing doesn't depend on when the
+            // Currently active (Coverage.CurrentStatus): Active, or Pending
+            // whose effective date has arrived, with the termination date (if
+            // any) not yet reached — so the listing doesn't depend on when the
             // daily status sweep last ran.
-            queryText += " AND c.status = @activeStatus" + NotTerminatedAsOfTodayClause;
+            queryText += CurrentlyActiveClause;
             parameters.Add(("@activeStatus", (int)CoverageStatus.Active));
+            parameters.Add(("@pendingStatus", (int)CoverageStatus.Pending));
             parameters.Add(("@today", DateTime.UtcNow.Date));
         }
 
@@ -248,15 +250,17 @@ public class CoverageRepository : ICoverageRepository
             ("@pcpNpi", pcpNpi)
         };
 
-        if (status.HasValue)
+        if (status == CoverageStatus.Active)
+        {
+            queryText += CurrentlyActiveClause;
+            parameters.Add(("@activeStatus", (int)CoverageStatus.Active));
+            parameters.Add(("@pendingStatus", (int)CoverageStatus.Pending));
+            parameters.Add(("@today", DateTime.UtcNow.Date));
+        }
+        else if (status.HasValue)
         {
             queryText += " AND c.status = @status";
             parameters.Add(("@status", (int)status.Value));
-            if (status.Value == CoverageStatus.Active)
-            {
-                queryText += NotTerminatedAsOfTodayClause;
-                parameters.Add(("@today", DateTime.UtcNow.Date));
-            }
         }
 
         if (lineOfBusiness.HasValue)
@@ -324,12 +328,16 @@ public class CoverageRepository : ICoverageRepository
     public async Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems)
     {
         // Cross-partition on purpose: the daily sweep covers every tenant.
+        // Termination date reached, or Pending whose effective date arrived.
         var queryDef = new QueryDefinition(
-                "SELECT TOP @maxItems * FROM c WHERE c.status != @terminatedStatus" +
+                "SELECT TOP @maxItems * FROM c WHERE" +
+                " (c.status != @terminatedStatus" +
                 " AND IS_DEFINED(c.terminationDate) AND NOT IS_NULL(c.terminationDate)" +
-                " AND c.terminationDate <= @today")
+                " AND c.terminationDate <= @today)" +
+                " OR (c.status = @pendingStatus AND c.effectiveDate <= @today)")
             .WithParameter("@maxItems", maxItems)
             .WithParameter("@terminatedStatus", (int)CoverageStatus.Terminated)
+            .WithParameter("@pendingStatus", (int)CoverageStatus.Pending)
             .WithParameter("@today", today.Date);
 
         var iterator = _container.GetItemQueryIterator<Coverage>(queryDef);
@@ -403,6 +411,11 @@ public class CoverageRepository : ICoverageRepository
     // Termination date not yet reached (or none). The query must bind @today.
     private const string NotTerminatedAsOfTodayClause =
         " AND (NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate) OR c.terminationDate > @today)";
+
+    // Coverage.CurrentStatus == Active. Binds @activeStatus, @pendingStatus, @today.
+    private const string CurrentlyActiveClause =
+        " AND (c.status = @activeStatus OR (c.status = @pendingStatus AND c.effectiveDate <= @today))" +
+        NotTerminatedAsOfTodayClause;
 }
 
 /// <summary>

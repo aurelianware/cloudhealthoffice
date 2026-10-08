@@ -733,6 +733,10 @@ public class EnrollmentImportService : IEnrollmentImportService
                     await TerminateCoverageAsync(open, termDate, maintenanceReason, ctx);
                 }
             }
+            else if (memberMaintenanceType == "025")
+            {
+                await ReinstateMemberCoverageAsync(memberId, maintenanceReason, memberEffectiveDate, await Existing(), ctx);
+            }
             return;
         }
 
@@ -931,7 +935,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 .OrderByDescending(e => e.EffectiveDate)
                 .FirstOrDefault();
 
-            if (previous is null || (begin is not null && begin.Value.Date > previous.TerminationDate!.Value.Date.AddDays(1)))
+            if (previous is null || BeginsAfterGap(begin, previous.TerminationDate!.Value))
             {
                 if (previous is not null)
                 {
@@ -982,6 +986,74 @@ public class EnrollmentImportService : IEnrollmentImportService
             ctx.Result.CoverageRecordsReinstated++;
         }
     }
+
+    /// <summary>
+    /// Member-level 025 with no HD loop: reverses the member's most recent
+    /// termination. It applies only while the member is terminated (every
+    /// insurance line's latest coverage has a termination date); the lines
+    /// whose latest coverage ends on the most recent of those dates — the ones
+    /// a member-level 024 ended together — are reinstated with the same rule as
+    /// an HD 025 (<see cref="ApplyReinstatementAsync"/>): the same record when
+    /// the member's begin date (or none) continues the span, a new span from
+    /// that date after a gap. Lines ended earlier, by an unrelated termination,
+    /// stay ended, and a replay changes nothing (lines are open by then).
+    /// </summary>
+    private async Task ReinstateMemberCoverageAsync(
+        string memberId,
+        string? maintenanceReason,
+        string? memberEffectiveDate,
+        List<CoverageRecordDto> existing,
+        BatchContext ctx)
+    {
+        var latestPerLine = existing
+            .Where(e => !string.IsNullOrEmpty(e.Id))
+            .GroupBy(e => (e.InsuranceLineCode ?? string.Empty).Trim().ToUpperInvariant())
+            .Select(g => g.OrderByDescending(e => e.EffectiveDate).First())
+            .ToList();
+
+        // A member-level termination ends every line, so it is only in effect
+        // while no line is open. Any open line means the member is not (or
+        // no longer — e.g. a replay of this file) terminated: nothing to undo.
+        var terminated = latestPerLine.Where(e => e.TerminationDate is not null).ToList();
+        if (terminated.Count == 0 || terminated.Count < latestPerLine.Count)
+        {
+            _logger.LogInformation(
+                "Reinstatement for member {MemberId} with no HD: member has open coverage or none terminated; nothing to reinstate",
+                SanitizeForLog(memberId));
+            return;
+        }
+
+        var lastTermination = terminated.Max(e => e.TerminationDate!.Value.Date);
+        var begin = ParseDate(memberEffectiveDate);
+        foreach (var previous in terminated.Where(e => e.TerminationDate!.Value.Date == lastTermination))
+        {
+            if (BeginsAfterGap(begin, previous.TerminationDate!.Value))
+            {
+                _logger.LogInformation(
+                    "Reinstatement for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
+                    SanitizeForLog(memberId), begin, previous.TerminationDate);
+                var line = new CoverageDetail
+                {
+                    InsuranceLineCode = previous.InsuranceLineCode ?? string.Empty,
+                    CoverageLevel = previous.CoverageLevel
+                };
+                await CreateCoverageAsync(memberId, line, previous.PlanId, previous.GroupNumber, begin, null, "025", existing, ctx);
+                continue;
+            }
+
+            await _coverageClient.ReinstateAsync(ctx.TenantId, previous.Id, maintenanceReason);
+            previous.TerminationDate = null;
+            ctx.Result.CoverageRecordsReinstated++;
+        }
+    }
+
+    /// <summary>
+    /// A reinstatement beginning on <paramref name="begin"/> leaves a gap after
+    /// a coverage ending on <paramref name="terminationDate"/> (inclusive last
+    /// day) when it begins later than the day after. No begin date = no gap.
+    /// </summary>
+    private static bool BeginsAfterGap(DateTime? begin, DateTime terminationDate) =>
+        begin is not null && begin.Value.Date > terminationDate.Date.AddDays(1);
 
     private async Task CreateCoverageAsync(
         string memberId, CoverageDetail line, string planId, string groupNumber, DateTime? begin, DateTime? end,

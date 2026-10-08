@@ -140,12 +140,11 @@ public class CoverageRepositoryMongo : ICoverageRepository
 
         if (activeOnly)
         {
-            // Currently active: status Active and the termination date (if
-            // any) not yet reached, so the listing doesn't depend on when the
+            // Currently active (Coverage.CurrentStatus): Active, or Pending
+            // whose effective date has arrived, with the termination date (if
+            // any) not yet reached — so the listing doesn't depend on when the
             // daily status sweep last ran.
-            filter = builder.And(filter,
-                builder.Eq(c => c.Status, CoverageStatus.Active),
-                NotTerminatedAsOf(DateTime.UtcNow.Date));
+            filter = builder.And(filter, CurrentlyActiveAsOf(DateTime.UtcNow.Date));
         }
 
         // Pagination in MongoDB usually works with Skip/Limit.
@@ -195,13 +194,13 @@ public class CoverageRepositoryMongo : ICoverageRepository
             builder.Eq(c => c.PcpNpi, pcpNpi)
         );
 
-        if (status.HasValue)
+        if (status == CoverageStatus.Active)
+        {
+            filter = builder.And(filter, CurrentlyActiveAsOf(DateTime.UtcNow.Date));
+        }
+        else if (status.HasValue)
         {
             filter = builder.And(filter, builder.Eq(c => c.Status, status.Value));
-            if (status.Value == CoverageStatus.Active)
-            {
-                filter = builder.And(filter, NotTerminatedAsOf(DateTime.UtcNow.Date));
-            }
         }
 
         if (lineOfBusiness.HasValue)
@@ -232,10 +231,15 @@ public class CoverageRepositoryMongo : ICoverageRepository
     public async Task<List<Coverage>> GetStatusTransitionsDueAsync(DateTime today, int maxItems)
     {
         var builder = Builders<Coverage>.Filter;
-        var filter = builder.And(
-            builder.Ne(c => c.Status, CoverageStatus.Terminated),
-            builder.Ne(c => c.TerminationDate, null),
-            builder.Lte(c => c.TerminationDate, today.Date));
+        // Termination date reached, or Pending whose effective date arrived.
+        var filter = builder.Or(
+            builder.And(
+                builder.Ne(c => c.Status, CoverageStatus.Terminated),
+                builder.Ne(c => c.TerminationDate, null),
+                builder.Lte(c => c.TerminationDate, today.Date)),
+            builder.And(
+                builder.Eq(c => c.Status, CoverageStatus.Pending),
+                builder.Lte(c => c.EffectiveDate, today.Date)));
 
         return await _collection.Find(filter).Limit(maxItems).ToListAsync();
     }
@@ -308,4 +312,15 @@ public class CoverageRepositoryMongo : ICoverageRepository
         Builders<Coverage>.Filter.Or(
             Builders<Coverage>.Filter.Eq(c => c.TerminationDate, null),
             Builders<Coverage>.Filter.Gt(c => c.TerminationDate, today));
+
+    // Coverage.CurrentStatus == Active.
+    private static FilterDefinition<Coverage> CurrentlyActiveAsOf(DateTime today)
+    {
+        var b = Builders<Coverage>.Filter;
+        return b.And(
+            b.Or(
+                b.Eq(c => c.Status, CoverageStatus.Active),
+                b.And(b.Eq(c => c.Status, CoverageStatus.Pending), b.Lte(c => c.EffectiveDate, today))),
+            NotTerminatedAsOf(today));
+    }
 }

@@ -30,16 +30,18 @@ public sealed class CoverageStatusSweepOptions
 }
 
 /// <summary>
-/// Daily sweep that moves a coverage's current status along its date span: a
-/// coverage terminated with a future date (834 DTP*349, or the terminate
-/// endpoints) stays in force until that date, and this flips it to
-/// <see cref="CoverageStatus.Terminated"/> once the date is today or past
-/// (see <see cref="Coverage.DueStatusTransition"/>).
+/// Daily sweep that moves a coverage's current status along its date span
+/// (see <see cref="Coverage.DueStatusTransition"/>): a coverage terminated with
+/// a future date (834 DTP*349, or the terminate endpoints) stays in force until
+/// that date, and this flips it to <see cref="CoverageStatus.Terminated"/> once
+/// the date is today or past; a Pending coverage (added ahead of its effective
+/// date) is promoted to Active once that date arrives.
 ///
-/// Date-of-service eligibility never waits on this job — it is decided by the
-/// effective/termination span — and the "currently active" listings check the
-/// termination date themselves, so a late or missed sweep only leaves the
-/// stored status stale, never the answers. Safe on several replicas: each
+/// The "currently active" listings derive the same status from the dates
+/// themselves, so they never wait on this job. Date-of-service eligibility is
+/// span-based but excludes Pending, so a future-dated add becomes eligible
+/// once this sweep has promoted it — up to one interval after its effective
+/// date. Safe on several replicas: each
 /// change is a conditional status update (expected status → new status), so a
 /// second replica's write is a no-op, and a coverage reinstated in the
 /// meantime is left alone.
@@ -140,8 +142,8 @@ public sealed class CoverageStatusSweepJob : BackgroundService
                 {
                     changedThisBatch++;
                     _logger.LogInformation(
-                        "Coverage {CoverageId} (tenant {TenantId}) {From} -> {To}: termination date {TerminationDate:yyyy-MM-dd} reached",
-                        coverage.Id, coverage.TenantId, coverage.Status, next.Value, coverage.TerminationDate);
+                        "Coverage {CoverageId} (tenant {TenantId}) {From} -> {To} (effective {EffectiveDate:yyyy-MM-dd}, terminates {TerminationDate:yyyy-MM-dd})",
+                        coverage.Id, coverage.TenantId, coverage.Status, next.Value, coverage.EffectiveDate, coverage.TerminationDate);
                 }
             }
             changed += changedThisBatch;
