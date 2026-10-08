@@ -40,6 +40,15 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
     // for pair edits; MUE failures use the rule id directly.
     private const string NcciEditSystem = "urn:cho:ncci-edit";
 
+    // CHO-private system for duplicate-claim findings (DuplicateClaimStage)
+    // emitted on item[].adjudication[].reason. Codes are the stage rule ids:
+    // DUP001 (exact duplicate) / DUP002 (suspect duplicate).
+    private const string DuplicateEditSystem = "urn:cho:duplicate-edit";
+
+    // CARC 18 — exact duplicate claim/service; fallback when a finding
+    // carries no suggested CARC.
+    private const string DefaultDuplicateCarc = "18";
+
     public JsonObject Project(Claim claim)
     {
         // FHIR id is the chain-stable ClaimVersionId so consumers see one
@@ -169,6 +178,7 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
             // adjudication mapping is O(lines + failures) instead of O(lines *
             // failures). Absent failures collection ⇒ empty bucket.
             var editFailuresByLine = BucketEditFailuresByLine(claim);
+            var duplicateFindingsByLine = BucketDuplicateFindingsByLine(claim);
 
             foreach (var line in claim.ClaimLines)
             {
@@ -196,9 +206,18 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                     {
                         ["value"] = (decimal)line.Units
                     },
-                    ["unitPrice"] = Money(line.ChargeAmount),
-                    ["net"] = Money(line.ChargeAmount * line.Units)
+                    // ClaimLine.ChargeAmount is the line TOTAL (837
+                    // SV102/SV203), which is exactly FHIR item.net.
+                    ["net"] = Money(line.ChargeAmount)
                 };
+
+                // unitPrice is derived (net / quantity). Omitted when the
+                // quantity is zero rather than dividing by zero.
+                if (line.Units > 0)
+                {
+                    item["unitPrice"] = Money(
+                        Math.Round(line.ChargeAmount / line.Units, 2, MidpointRounding.AwayFromZero));
+                }
 
                 // item[].adjudication[] — Decision 9. Each NCCI/MUE failure
                 // affecting this line emits one adjudication entry whose
@@ -207,6 +226,18 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
                 if (editFailuresByLine.TryGetValue(line.LineNumber, out var failures))
                 {
                     item["adjudication"] = BuildLineAdjudicationsFromEditFailures(failures);
+                }
+
+                // Duplicate-claim findings are coded under their own system
+                // (urn:cho:duplicate-edit), never as NCCI edits.
+                if (duplicateFindingsByLine.TryGetValue(line.LineNumber, out var duplicates))
+                {
+                    var adjudications = item["adjudication"] as JsonArray ?? new JsonArray();
+                    foreach (var entry in BuildLineAdjudicationsFromDuplicateFindings(duplicates))
+                    {
+                        adjudications.Add(entry);
+                    }
+                    item["adjudication"] = adjudications;
                 }
 
                 items.Add(item);
@@ -385,6 +416,64 @@ public sealed class ExplanationOfBenefitProjector : IExplanationOfBenefitProject
             }
         }
         return buckets;
+    }
+
+    private static Dictionary<int, List<DuplicateFindingSnapshot>> BucketDuplicateFindingsByLine(Claim claim)
+    {
+        var buckets = new Dictionary<int, List<DuplicateFindingSnapshot>>();
+        if (claim.PendDetails is null || claim.PendDetails.DuplicateFindings.Count == 0)
+            return buckets;
+
+        foreach (var finding in claim.PendDetails.DuplicateFindings)
+        {
+            if (!buckets.TryGetValue(finding.LineNumber, out var list))
+            {
+                list = new List<DuplicateFindingSnapshot>();
+                buckets[finding.LineNumber] = list;
+            }
+            list.Add(finding);
+        }
+        return buckets;
+    }
+
+    private static List<JsonObject> BuildLineAdjudicationsFromDuplicateFindings(
+        List<DuplicateFindingSnapshot> findings)
+    {
+        var adjudications = new List<JsonObject>();
+        foreach (var finding in findings)
+        {
+            var carc = string.IsNullOrEmpty(finding.SuggestedCarc)
+                ? DefaultDuplicateCarc
+                : finding.SuggestedCarc!;
+
+            adjudications.Add(new JsonObject
+            {
+                ["category"] = new JsonObject
+                {
+                    ["coding"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["system"] = CarcSystem,
+                            ["code"] = carc
+                        }
+                    }
+                },
+                ["reason"] = new JsonObject
+                {
+                    ["coding"] = new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["system"] = DuplicateEditSystem,
+                            ["code"] = finding.RuleId,
+                            ["display"] = finding.Message ?? $"{finding.DuplicateType} duplicate"
+                        }
+                    }
+                }
+            });
+        }
+        return adjudications;
     }
 
     private static JsonArray BuildLineAdjudicationsFromEditFailures(

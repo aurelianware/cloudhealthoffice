@@ -55,6 +55,7 @@ public sealed class AppealDto
     public DateTime SubmittedDate { get; set; } = DateTime.UtcNow;
     public DateTime? ReceivedDate { get; set; }
     public DateTime? TargetResponseDate { get; set; }
+    public AppealDeadlineExtensionDto? DeadlineExtension { get; set; }
     public DateTime? DecisionDate { get; set; }
 
     public string? SubmittedBy { get; set; }
@@ -117,6 +118,18 @@ public sealed class AppealDecisionDto
     public string? DecisionMaker { get; set; }
     public DateTime DecisionDate { get; set; } = DateTime.UtcNow;
     public string? ReviewerNotes { get; set; }
+}
+
+public sealed class AppealDeadlineExtensionDto
+{
+    public AppealExtensionReason Reason { get; set; }
+    public int ExtensionDays { get; set; }
+    public DateTime PreviousTargetResponseDate { get; set; }
+    public DateTime NewTargetResponseDate { get; set; }
+    public DateTime WrittenNoticeSentAt { get; set; }
+    public DateTime ExtendedAt { get; set; } = DateTime.UtcNow;
+    public string ExtendedBy { get; set; } = string.Empty;
+    public string RegulatoryBasis { get; set; } = string.Empty;
 }
 
 public sealed class AppealNoteDto

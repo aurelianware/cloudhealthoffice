@@ -90,6 +90,8 @@ public sealed class BenefitPlanValidationService : IBenefitPlanValidationService
                 : $"{plan.Exclusions.Count} explicit exclusion rule(s) are configured."
         });
 
+        AddOopExclusionCheck(result, plan);
+
         result.MemberView = await _benefitPlans.GetMemberViewAsync(plan.PlanId, serviceDate);
         if (result.MemberView is null)
         {
@@ -457,6 +459,34 @@ public sealed class BenefitPlanValidationService : IBenefitPlanValidationService
             Severity = passed ? "Success" : "Error",
             Message = passed ? success : failure
         });
+
+    /// <summary>
+    /// 45 CFR 156.130: on a non-grandfathered plan, in-network cost sharing
+    /// for essential health benefits must count toward the out-of-pocket
+    /// limit. A stored benefit's <c>OopApplies</c> flag covers both network
+    /// tiers, and the plan model carries neither an EHB nor a grandfathered
+    /// flag, so any covered benefit excluded from the OOP max is surfaced as
+    /// a warning for the operator to confirm (non-EHB service or
+    /// grandfathered plan) rather than rejected outright.
+    /// </summary>
+    private static void AddOopExclusionCheck(BenefitPlanValidationResult result, BenefitPlanDetails plan)
+    {
+        var excluded = plan.Benefits
+            .Where(benefit => benefit.IsCovered && !benefit.OopApplies)
+            .Select(benefit => benefit.Description.DefaultIfBlank(benefit.ServiceCategory))
+            .ToList();
+
+        result.Checks.Add(new BenefitPlanValidationCheck
+        {
+            Name = "Out-of-pocket max",
+            Severity = excluded.Count == 0 ? "Success" : "Warning",
+            Message = excluded.Count == 0
+                ? "All covered benefit cost sharing counts toward the out-of-pocket maximum."
+                : $"{excluded.Count} covered benefit(s) do not count toward the out-of-pocket maximum, including in-network " +
+                  $"({string.Join(", ", excluded)}). Under 45 CFR 156.130, in-network cost sharing for essential health benefits " +
+                  "must count on non-grandfathered plans; confirm each is a non-EHB service or the plan is grandfathered."
+        });
+    }
 
     private static string VersionLabel(BenefitPlanDetails plan)
         => plan.VersionNumber > 0 ? $"Version {plan.VersionNumber} ({plan.VersionState})" : plan.VersionState;

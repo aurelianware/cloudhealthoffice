@@ -59,6 +59,7 @@ public class PaymentRunBatchedEndToEndTests
                 ["TradingPartners:Environment"] = "Production",
                 ["Payer:Name"] = "Cloud Health Office",
                 ["Payer:Id"] = "CHO",
+                ["Era:OriginatingCompanyId"] = "1123456789",
                 ["Payment:StartingCheckNumber"] = "1000000"
             })
             .Build();
@@ -109,8 +110,11 @@ public class PaymentRunBatchedEndToEndTests
                 MemberId = $"m{i}",
                 Status = ClaimStatus.Approved,
                 TotalChargeAmount = 100m + i,
-                ApprovedAmount = 80m + i,
-                PatientResponsibility = 20m,
+                AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m + i, PatientResponsibility = 20m },
+                ServiceLines = new List<ClaimServiceLineDto>
+                {
+                    new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 100m + i, PaidAmount = 80m + i, Units = 1 }
+                },
                 ServiceDateFrom = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
             });
         }
@@ -184,14 +188,15 @@ public class PaymentRunBatchedEndToEndTests
             MemberId = "m-paid",
             Status = ClaimStatus.Approved,
             TotalChargeAmount = 1000m,
-            ApprovedAmount = 800m,
-            PatientResponsibility = 200m,
+
             ServiceLines = new List<ClaimServiceLineDto>
             {
                 new() { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 1000m, PaidAmount = 800m, Units = 1 }
             },
             AdjudicationResult = new ClaimAdjudicationDto
             {
+                PayerPayment = 800m,
+                PatientResponsibility = 200m,
                 AdjustmentReasons = new List<ClaimAdjustmentReasonDto>
                 {
                     new() { GroupCode = "PR", ReasonCode = "1", Amount = 200m, Description = "Deductible" }
@@ -205,9 +210,11 @@ public class PaymentRunBatchedEndToEndTests
             ClaimNumber = "CLM-DENIED",
             BillingProviderNPI = "NPI-A",
             MemberId = "m-denied",
-            Status = ClaimStatus.Denied,
+            // Approved at zero pay: line 2 bundled (NCCI). A claims-service
+            // Denied claim is never selected (the run pays Approved only).
+            Status = ClaimStatus.Approved,
             TotalChargeAmount = 500m,
-            ApprovedAmount = 0m,
+            AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 0m },
             ServiceLines = new List<ClaimServiceLineDto>
             {
                 new() { LineNumber = 1, ProcedureCode = "27447", ChargeAmount = 250m, PaidAmount = 0m, Units = 1 },
@@ -253,7 +260,7 @@ public class PaymentRunBatchedEndToEndTests
 
         var envelope = Assert.Single(await _envelopeRepo.GetByPaymentRunIdAsync(run.Id));
         Assert.Contains("CAS*PR*1*200.00~", envelope.EdiContent); // header CAS for paid
-        Assert.Contains("CAS*CO*236*0.00*M86~", envelope.EdiContent); // line CAS for denied (suggested CARC + RARC)
+        Assert.Contains("CAS*CO*236*0.00~LQ*HE*M86~", envelope.EdiContent); // line CAS (suggested CARC), RARC in LQ*HE
         Assert.Equal(2, envelope.ClaimCount);
     }
 }

@@ -54,6 +54,13 @@ public sealed class ClaimIndexInitializer : IHostedService
                 .Ascending(c => c.BenefitPlanId)
                 .Ascending(c => c.SubscriberId)
                 .Ascending(c => c.ServiceDateFrom)),
+            // Duplicate-claim detection — DuplicateClaimStage's candidate
+            // query (FindDuplicateCandidatesAsync) is tenant + member
+            // equality with a service-date range.
+            new CreateIndexModel<Claim>(keys
+                .Ascending(c => c.TenantId)
+                .Ascending(c => c.MemberId)
+                .Ascending(c => c.ServiceDateFrom)),
         };
 
         collection.Indexes.CreateMany(indexes, cancellationToken);

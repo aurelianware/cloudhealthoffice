@@ -22,7 +22,8 @@ public interface IRateResolutionService
 
     /// <summary>
     /// Resolve allowed rates for all lines in a claim batch.
-    /// Lines are processed in order; line rank drives multiple-procedure reduction.
+    /// Lines flagged for multiple-procedure reduction are ranked by allowed amount
+    /// (highest 100%, subsequent 50%); unflagged lines (e.g. E&amp;M) are not reduced.
     /// </summary>
     Task<PricingResultSet> ResolveBatchAsync(
         IReadOnlyList<PricingRequest> requests, CancellationToken ct = default);

@@ -10,6 +10,8 @@ using ClaimsService.Services.Adjudication;
 using ClaimsService.Services.Resolution;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.FeeScheduleEngine.Domain;
+using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.Infrastructure.Messaging;
 using CloudHealthOffice.NcciEngine.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -118,6 +120,25 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
         Assert.Equal(120m, write.Result.PayerPayment);
         Assert.Equal(30m, write.Result.PatientResponsibility);
         Assert.Single(write.LineResults);
+
+        // PricingStage priced the line through the fee schedule client and
+        // BenefitCalculationStage handed that allowed amount (not billed
+        // charges) to the engine.
+        var pricingCall = Assert.Single(_factory.PricingRequests);
+        Assert.Equal("tenant-1", pricingCall.TenantId);
+        var priced = Assert.Single(pricingCall.Requests);
+        Assert.Equal("99213", priced.ProcedureCode);
+        Assert.Equal("1234567893", priced.ProviderNpi);
+        Assert.Equal(200m, priced.BilledAmount);
+
+        var benefitRequest = Assert.Single(_factory.BenefitRequests);
+        Assert.Equal(150m, benefitRequest.AllowedAmounts[1]);
+        Assert.Equal(200m, benefitRequest.Lines.Single().BilledAmount);
+        // The stub plan configures no network tiers, so NetworkCredentialingStage
+        // (SoftValidation in Development) observes "no in-network tier" and the
+        // benefit engine is told OutOfNetwork rather than a hardcoded InNetwork.
+        Assert.Equal(CloudHealthOffice.BenefitEngine.Domain.NetworkTier.OutOfNetwork, benefitRequest.NetworkTier);
+        Assert.Equal("OutOfNetwork", write.Result.NetworkTier);
     }
 
     /// <summary>
@@ -130,6 +151,8 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
     {
         public IClaimRepository Repository { get; } = Substitute.For<IClaimRepository>();
         public List<ProjectionWrite> ProjectionWrites { get; } = new();
+        public List<(string TenantId, IReadOnlyList<PricingRequest> Requests)> PricingRequests { get; } = new();
+        public List<BenefitResolutionRequest> BenefitRequests { get; } = new();
 
         private Claim? _lastCreated;
 
@@ -208,6 +231,7 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                              || d.ImplementationType == typeof(ClaimAdjustmentIndexInitializer)
                              || d.ServiceType == typeof(IClaimVersionEventPublisher)
                              || d.ServiceType == typeof(IBenefitCalculationEngine)
+                             || d.ServiceType == typeof(IFeeSchedulePricingClient)
                              || d.ServiceType == typeof(IBenefitPlanResolver)
                              || d.ServiceType == typeof(IMemberResolver))
                     .ToList();
@@ -251,34 +275,63 @@ public class AdjudicationEndToEndTests : IAsyncLifetime
                 engine.CalculateAsync(
                         Arg.Any<BenefitResolutionRequest>(),
                         Arg.Any<CancellationToken>())
-                    .Returns(new BenefitResolutionResult
+                    .Returns(ci =>
                     {
-                        Success = true,
-                        Totals = new ClaimTotals
+                        BenefitRequests.Add(ci.Arg<BenefitResolutionRequest>());
+                        return new BenefitResolutionResult
                         {
-                            TotalBilled = 200m,
-                            TotalAllowed = 150m,
-                            TotalDeductible = 0m,
-                            TotalCoinsurance = 30m,
-                            TotalCopay = 0m,
-                            TotalMemberResponsibility = 30m,
-                            TotalPlanPaid = 120m,
-                        },
-                        Lines = new List<LineBenefitResult>
-                        {
-                            new()
+                            Success = true,
+                            Totals = new ClaimTotals
                             {
-                                LineNumber = 1,
-                                IsCovered = true,
-                                ServiceTypeCode = "1",
-                                ServiceTypeDescription = "Office",
-                                AllowedAmount = 150m,
-                                PlanPaidAmount = 120m,
-                                MemberResponsibility = 30m,
-                            }
-                        },
+                                TotalBilled = 200m,
+                                TotalAllowed = 150m,
+                                TotalDeductible = 0m,
+                                TotalCoinsurance = 30m,
+                                TotalCopay = 0m,
+                                TotalMemberResponsibility = 30m,
+                                TotalPlanPaid = 120m,
+                            },
+                            Lines = new List<LineBenefitResult>
+                            {
+                                new()
+                                {
+                                    LineNumber = 1,
+                                    IsCovered = true,
+                                    ServiceTypeCode = "1",
+                                    ServiceTypeDescription = "Office",
+                                    AllowedAmount = 150m,
+                                    PlanPaidAmount = 120m,
+                                    MemberResponsibility = 30m,
+                                }
+                            },
+                        };
                     });
                 services.AddSingleton(engine);
+
+                // PricingStage — contracted rate of $150 for the $200 line.
+                var pricingClient = Substitute.For<IFeeSchedulePricingClient>();
+                pricingClient.ResolveBatchAsync(
+                        Arg.Any<string>(),
+                        Arg.Any<IReadOnlyList<PricingRequest>>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(ci =>
+                    {
+                        var requests = ci.ArgAt<IReadOnlyList<PricingRequest>>(1);
+                        PricingRequests.Add((ci.ArgAt<string>(0), requests));
+                        return new PricingResultSet
+                        {
+                            LineResults = requests.Select(r => new PricingResult
+                            {
+                                LineNumber = r.LineNumber,
+                                ProcedureCode = r.ProcedureCode,
+                                BilledAmount = r.BilledAmount,
+                                AllowedAmount = 150m,
+                                RateSource = RateSource.ContractedRate,
+                                FeeScheduleType = FeeScheduleType.Commercial,
+                            }).ToList(),
+                        };
+                    });
+                services.AddSingleton(pricingClient);
 
                 var planResolver = Substitute.For<IBenefitPlanResolver>();
                 planResolver.GetPlanAsync(

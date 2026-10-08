@@ -522,6 +522,38 @@ public class AdjudicationController : ControllerBase
             rateSpan?.SetTag("cho.rate.line_count", pricingResults.LineResults.Count);
         }
 
+        // A line whose rate matched but could not be computed (e.g. percent-of-Medicare
+        // with no Medicare reference) prices at $0 — pend rather than adjudicate on it.
+        var unresolvedLines = pricingResults.LineResults
+            .Where(p => p.RateSource == CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.Unresolved)
+            .ToList();
+        if (unresolvedLines.Count > 0)
+        {
+            adjudicationSpan?.SetTag("cho.outcome", "pricing_unresolved");
+            adjudicationSpan?.SetStatus(ActivityStatusCode.Error, "Fee schedule rate could not be resolved");
+
+            RecordLatency(sw, claimTypeCode, "pricing_unresolved");
+
+            _logger.LogWarning(
+                "Claim {ClaimId} pended: fee schedule rate unresolved for {LineCount} line(s)",
+                SanitizeForLog(request.ClaimId), unresolvedLines.Count);
+
+            return UnprocessableEntity(new
+            {
+                claimId = request.ClaimId,
+                error = "PRICING_UNRESOLVED",
+                message = "Allowed amount could not be determined for one or more lines; manual pricing review required",
+                lines = unresolvedLines.Select(p => new
+                {
+                    lineNumber = p.LineNumber,
+                    procedureCode = p.ProcedureCode,
+                    feeScheduleId = p.FeeScheduleId,
+                    reason = p.UnresolvedReason,
+                }),
+                timings = stageTimings,
+            });
+        }
+
         // ── Step 2: Build benefit request with allowed amounts from pricing ──
         // Uses CalculateWithModeAsync when operating in Augment mode (Gap 1).
         BenefitResolutionResult benefitResult;
@@ -633,6 +665,7 @@ public class AdjudicationController : ControllerBase
                 CopayAmount = benefitResult.Totals.TotalCopay,
                 CoinsuranceAmount = benefitResult.Totals.TotalCoinsurance,
                 MemberResponsibility = benefitResult.Totals.TotalMemberResponsibility,
+                OopAppliedAmount = benefitResult.Totals.TotalOopApplied,
                 PlanPayment = benefitResult.Totals.TotalPlanPaid,
                 ContractualAdjustment = request.Lines.Sum(l => l.BilledAmount)
                     - benefitResult.Totals.TotalAllowed
@@ -653,6 +686,7 @@ public class AdjudicationController : ControllerBase
                     CopayAmount = bl.CopayAmount,
                     CoinsuranceAmount = bl.CoinsuranceAmount,
                     MemberResponsibility = bl.MemberResponsibility,
+                    OopAppliedAmount = bl.OopAppliedAmount,
                     PlanPayment = bl.PlanPaidAmount,
                     ContractualAdjustment = priced?.ContractualAdjustment ?? 0,
                     FeeScheduleType = priced?.FeeScheduleType.ToString(),
@@ -660,7 +694,8 @@ public class AdjudicationController : ControllerBase
                     NetworkStatus = priced?.NetworkStatus.ToString(),
                     ServiceTypeCode = bl.ServiceTypeCode,
                     IsCovered = bl.IsCovered,
-                    AdjustmentReasons = bl.Adjustments
+                    AdjustmentReasons = bl.Adjustments,
+                    PricingWarnings = priced?.Warnings ?? []
                 };
             }).ToList(),
             Accumulators = benefitResult.AccumulatorSnapshot,
@@ -1273,6 +1308,10 @@ public record AdjudicationTotals
     public decimal CopayAmount { get; init; }
     public decimal CoinsuranceAmount { get; init; }
     public decimal MemberResponsibility { get; init; }
+
+    /// <summary>Portion of member responsibility that counts toward the OOP max.</summary>
+    public decimal OopAppliedAmount { get; init; }
+
     public decimal PlanPayment { get; init; }
 }
 
@@ -1287,6 +1326,10 @@ public record AdjudicationLineResponse
     public decimal CopayAmount { get; init; }
     public decimal CoinsuranceAmount { get; init; }
     public decimal MemberResponsibility { get; init; }
+
+    /// <summary>Portion of member responsibility that counts toward the OOP max.</summary>
+    public decimal OopAppliedAmount { get; init; }
+
     public decimal PlanPayment { get; init; }
     public string? FeeScheduleType { get; init; }
     public string? FeeScheduleId { get; init; }
@@ -1294,6 +1337,12 @@ public record AdjudicationLineResponse
     public string? ServiceTypeCode { get; init; }
     public bool IsCovered { get; init; }
     public List<AdjustmentReason> AdjustmentReasons { get; init; } = [];
+
+    /// <summary>
+    /// Non-fatal fee schedule pricing notes (e.g. no CMS multiple procedure
+    /// indicator on the rate line, so no multiple procedure reduction was applied).
+    /// </summary>
+    public IReadOnlyList<string> PricingWarnings { get; init; } = [];
 }
 
 /// <summary>

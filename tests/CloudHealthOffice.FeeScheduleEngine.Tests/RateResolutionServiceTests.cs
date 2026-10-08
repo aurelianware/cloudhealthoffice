@@ -139,6 +139,42 @@ public class RateResolutionServiceTests
     }
 
     /// <summary>
+    /// Medicaid cross-schedule lookup where the MPFS reference has an RVU line but
+    /// no conversion factor: the stored Rate is not a usable Medicare rate, so the
+    /// line is unresolved rather than priced off it.
+    /// </summary>
+    [Fact]
+    public async Task Medicaid_RvuReferenceWithoutConversionFactor_Unresolved()
+    {
+        var mpfsSchedule = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m,
+            cf: 33.8872m);
+        mpfsSchedule.Id = "mpfs-2026";
+        mpfsSchedule.ConversionFactor = null;
+
+        var medicaidSchedule = new FeeSchedule
+        {
+            Id = "medicaid-nocf", TenantId = Tenant, Name = "AZ Medicaid 72% of Medicare",
+            Type = FeeScheduleType.Medicaid,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PercentOfMedicare = 0.72m,
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.FlatRate, Rate = 0m }]
+        };
+
+        var repo = new InMemoryFeeScheduleRepo(medicaidSchedule);
+        repo.AddSchedule(mpfsSchedule);
+        var engine = CreateEngine(medicaidSchedule, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m));
+
+        Assert.Equal(RateSource.Unresolved, result.RateSource);
+        Assert.Equal(FeeScheduleType.Medicaid, result.FeeScheduleType);
+        Assert.Equal(0m, result.AllowedAmount);
+        Assert.Contains("mpfs-2026", result.UnresolvedReason);
+    }
+
+    /// <summary>
     /// Medicaid with inline RVU values and percent-of-Medicare.
     /// The Medicaid schedule stores its own RVU values and applies percent.
     /// </summary>
@@ -273,6 +309,353 @@ public class RateResolutionServiceTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // COMMERCIAL PERCENT OF MEDICARE
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// 110% of Medicare via the referenced MPFS schedule.
+    /// Medicare 99213 = 100.98 → 100.98 × 1.10 = 111.08 (not 110% of billed).
+    /// </summary>
+    [Fact]
+    public async Task Commercial_PercentOfMedicare_AppliesToMedicareRateNotBilled()
+    {
+        var mpfsSchedule = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m,
+            cf: 33.8872m);
+        mpfsSchedule.Id = "mpfs-2026";
+
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }]
+        };
+
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        repo.AddSchedule(mpfsSchedule);
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m));
+
+        Assert.Equal(111.08m, result.AllowedAmount);
+        Assert.Equal(RateSource.ContractedRate, result.RateSource);
+        Assert.Null(result.UnresolvedReason);
+    }
+
+    /// <summary>
+    /// Percent-of-Medicare with RVUs stored inline on the commercial line
+    /// and the schedule's own GPCI/CF: 100.98 × 1.20 = 121.18.
+    /// </summary>
+    [Fact]
+    public async Task Commercial_PercentOfMedicare_InlineRvu()
+    {
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-rvu", TenantId = Tenant, Name = "Commercial 120% of Medicare (RVU)",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            ConversionFactor = 33.8872m,
+            Lines =
+            [
+                new FeeScheduleLine
+                {
+                    ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.20m,
+                    WorkRvu = 1.30m, PeRvu = 1.59m, PeRvuFacility = 0.83m, MpRvu = 0.09m
+                }
+            ]
+        };
+        var engine = CreateEngine(commercial);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m));
+
+        Assert.Equal(121.18m, result.AllowedAmount);
+        Assert.Equal(RateSource.ContractedRate, result.RateSource);
+    }
+
+    /// <summary>
+    /// Percent-of-Medicare with no Medicare reference schedule or RVUs must not
+    /// fall back to a percentage of billed charges — the line is unresolved.
+    /// </summary>
+    [Fact]
+    public async Task Commercial_PercentOfMedicare_NoMedicareReference_UnresolvedNotBilled()
+    {
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-noref", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }]
+        };
+        var engine = CreateEngine(commercial);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", billed: 500m));
+
+        Assert.Equal(RateSource.Unresolved, result.RateSource);
+        Assert.Equal(0m, result.AllowedAmount);
+        Assert.NotEqual(550m, result.AllowedAmount); // the old 110%-of-billed result
+        Assert.False(string.IsNullOrWhiteSpace(result.UnresolvedReason));
+        Assert.Equal("comm-pctmed-noref", result.FeeScheduleId);
+        Assert.Empty(result.Adjustments);
+    }
+
+    /// <summary>
+    /// Referenced Medicare schedule missing, or missing the code → unresolved.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Commercial_PercentOfMedicare_ReferenceUnusable_Unresolved(bool referenceExists)
+    {
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-badref", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }]
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        if (referenceExists)
+        {
+            // Reference schedule exists but has no line for 99213
+            var mpfs = CreateMpfsSchedule("99214",
+                workRvu: 1.92m, peRvu: 2.07m, peRvuFacility: 1.0m, mpRvu: 0.13m, cf: 33.8872m);
+            mpfs.Id = "mpfs-2026";
+            repo.AddSchedule(mpfs);
+        }
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", billed: 500m));
+
+        Assert.Equal(RateSource.Unresolved, result.RateSource);
+        Assert.Equal(0m, result.AllowedAmount);
+        Assert.Contains("mpfs-2026", result.UnresolvedReason);
+    }
+
+    /// <summary>
+    /// Reference schedule missing / lacking the code, but the line carries inline
+    /// RVUs and the schedule has a CF → falls through to the inline RVUs.
+    /// 100.98 × 1.20 = 121.18.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Commercial_PercentOfMedicare_ReferenceUnusable_FallsBackToInlineRvu(bool referenceExists)
+    {
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-fallback", TenantId = Tenant, Name = "Commercial 120% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            ConversionFactor = 33.8872m,
+            Lines =
+            [
+                new FeeScheduleLine
+                {
+                    ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.20m,
+                    WorkRvu = 1.30m, PeRvu = 1.59m, PeRvuFacility = 0.83m, MpRvu = 0.09m
+                }
+            ]
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        if (referenceExists)
+        {
+            var mpfs = CreateMpfsSchedule("99214",
+                workRvu: 1.92m, peRvu: 2.07m, peRvuFacility: 1.0m, mpRvu: 0.13m, cf: 33.8872m);
+            mpfs.Id = "mpfs-2026";
+            repo.AddSchedule(mpfs);
+        }
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m));
+
+        Assert.Equal(RateSource.ContractedRate, result.RateSource);
+        Assert.Equal(121.18m, result.AllowedAmount);
+    }
+
+    /// <summary>
+    /// An RVU reference line on a schedule with no conversion factor is not a
+    /// usable Medicare rate (its stored Rate is not maintained) → unresolved,
+    /// not priced off the stale/zero Rate.
+    /// </summary>
+    [Fact]
+    public async Task Commercial_PercentOfMedicare_RvuReferenceWithoutConversionFactor_Unresolved()
+    {
+        var mpfs = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m, cf: 33.8872m);
+        mpfs.Id = "mpfs-2026";
+        mpfs.ConversionFactor = null;
+
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-nocf", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }]
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        repo.AddSchedule(mpfs);
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", billed: 500m));
+
+        Assert.Equal(RateSource.Unresolved, result.RateSource);
+        Assert.Equal(0m, result.AllowedAmount);
+        Assert.Contains("mpfs-2026", result.UnresolvedReason);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // UNITS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// BilledAmount is the line total, so 80% of a $300 3-unit line is $240,
+    /// not $240 × 3.
+    /// </summary>
+    [Fact]
+    public async Task Units_PercentOfBilled_NotMultipliedByUnits()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-pctbilled", TenantId = Tenant, Name = "Commercial 80% of Billed",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "97110", RateType = FeeScheduleRateType.PercentOfBilled, Rate = 0.80m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("97110", billed: 300m, units: 3));
+
+        Assert.Equal(240m, result.AllowedAmount);
+    }
+
+    /// <summary>Billed-charges fallback is also the line total — not multiplied by units.</summary>
+    [Fact]
+    public async Task Units_BilledChargesFallback_NotMultipliedByUnits()
+    {
+        var engine = CreateEngine(schedule: null);
+
+        var result = await engine.ResolveAsync(CreateRequest("97110", billed: 300m, units: 3));
+
+        Assert.Equal(RateSource.BilledCharges, result.RateSource);
+        Assert.Equal(300m, result.AllowedAmount);
+    }
+
+    /// <summary>Flat per-unit rates are still multiplied by units: $50 × 3 = $150.</summary>
+    [Fact]
+    public async Task Units_FlatRate_MultipliedByUnits()
+    {
+        var engine = CreateEngine(CreateCommercialSchedule("97110", 50m));
+
+        var result = await engine.ResolveAsync(CreateRequest("97110", billed: 300m, units: 3));
+
+        Assert.Equal(150m, result.AllowedAmount);
+    }
+
+    /// <summary>
+    /// Percent-of-Medicare is a per-unit Medicare rate × %, so it is multiplied
+    /// by units: 100.98 × 1.10 = 111.08 per unit × 2 = 222.16.
+    /// </summary>
+    [Fact]
+    public async Task Units_PercentOfMedicare_MultipliedByUnits()
+    {
+        var mpfs = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m, cf: 33.8872m);
+        mpfs.Id = "mpfs-2026";
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-units", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }]
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        repo.AddSchedule(mpfs);
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m, units: 2));
+
+        Assert.Equal(222.16m, result.AllowedAmount);
+    }
+
+    /// <summary>
+    /// Multi-unit percent-of-billed line in a batch: the rank reduction applies
+    /// to the line total once (80% × $300 = $240 → 50% = $120).
+    /// </summary>
+    [Fact]
+    public async Task Units_PercentOfBilled_InBatchReduction_UsesLineTotal()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-pctbilled-batch", TenantId = Tenant, Name = "Commercial Mixed",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", RateType = FeeScheduleRateType.PercentOfBilled, Rate = 0.80m,
+                    MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("27447", lineNumber: 1, totalLines: 2),
+            CreateRequest("20610", lineNumber: 2, totalLines: 2, billed: 300m, units: 3),
+        ]);
+
+        Assert.Equal(1500m, resultSet.LineResults.Single(r => r.LineNumber == 1).AllowedAmount);
+        Assert.Equal(120m, resultSet.LineResults.Single(r => r.LineNumber == 2).AllowedAmount);
+    }
+
+    /// <summary>
+    /// An unresolved line takes no multiple procedure rank and is not reduced;
+    /// the remaining eligible lines rank among themselves.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_UnresolvedLine_ExcludedFromRanking()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-mixed", TenantId = Tenant, Name = "Commercial Mixed",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine
+                {
+                    ProcedureCode = "27447", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m,
+                    MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery,
+                },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("27447", lineNumber: 1, totalLines: 3, billed: 5000m),
+            CreateRequest("29881", lineNumber: 2, totalLines: 3),
+            CreateRequest("20610", lineNumber: 3, totalLines: 3),
+        ]);
+
+        var unresolved = resultSet.LineResults.Single(r => r.LineNumber == 1);
+        Assert.Equal(RateSource.Unresolved, unresolved.RateSource);
+        Assert.Equal(0m, unresolved.AllowedAmount);
+        Assert.Empty(unresolved.Adjustments);
+
+        Assert.Equal(800m, resultSet.LineResults.Single(r => r.LineNumber == 2).AllowedAmount);
+        Assert.Equal(100m, resultSet.LineResults.Single(r => r.LineNumber == 3).AllowedAmount);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // UCR FALLBACK
     // ═══════════════════════════════════════════════════════════════════
 
@@ -320,11 +703,12 @@ public class RateResolutionServiceTests
     // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Batch with 3 lines — highest-paid at 100%, second at 50%, third at 25%.
+    /// Batch with 3 eligible lines — CMS multiple surgery (indicator 2):
+    /// highest-paid at 100%, second and third at 50%.
     /// Lines are ranked by allowed amount, not by line number.
     /// </summary>
     [Fact]
-    public async Task MultipleProcedure_BatchRanking_HighestPaidAt100()
+    public async Task MultipleProcedure_ThreeEligibleSurgeries_100_50_50()
     {
         var schedule = new FeeSchedule
         {
@@ -333,9 +717,9 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m }, // Highest
-                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },  // Second
-                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m },  // Third
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery }, // Highest
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },  // Second
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },  // Third
             ]
         };
         var engine = CreateEngine(schedule);
@@ -357,9 +741,122 @@ public class RateResolutionServiceTests
         var line3 = resultSet.LineResults.First(r => r.ProcedureCode == "29881");
         Assert.Equal(400m, line3.AllowedAmount);
 
-        // 20610 (third=$200) should be at 25% = $50
+        // 20610 (third=$200) should also be at 50% = $100 (2nd–5th all 50%)
         var line1 = resultSet.LineResults.First(r => r.ProcedureCode == "20610");
-        Assert.Equal(50m, line1.AllowedAmount);
+        Assert.Equal(100m, line1.AllowedAmount);
+        Assert.Contains(line1.Adjustments, a => a.Modifier == "51" && a.AdjustmentFactor == 0.50m);
+    }
+
+    /// <summary>
+    /// E&amp;M lines are not subject to multiple procedure reduction
+    /// (rate line flag off) — they neither take a rank nor get reduced, even
+    /// when they are the highest-paid line on the claim.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_EmPlusTwoSurgeries_EmUnreduced()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-em", TenantId = Tenant, Name = "Commercial E&M",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { ProcedureCode = "99215", Rate = 900m, MultipleProcedureIndicator = MultipleProcedureIndicator.NoReduction },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var requests = new List<PricingRequest>
+        {
+            CreateRequest("99215", lineNumber: 1, totalLines: 3, billed: 1000m, modifiers: ["25"]),
+            CreateRequest("29881", lineNumber: 2, totalLines: 3, billed: 1000m),
+            CreateRequest("20610", lineNumber: 3, totalLines: 3, billed: 300m),
+        };
+
+        var resultSet = await engine.ResolveBatchAsync(requests);
+
+        var em = resultSet.LineResults.Single(r => r.ProcedureCode == "99215");
+        Assert.Equal(900m, em.AllowedAmount);
+        Assert.DoesNotContain(em.Adjustments, a => a.Modifier == "51");
+
+        // Highest eligible surgery at 100%, second at 50%
+        Assert.Equal(800m, resultSet.LineResults.Single(r => r.ProcedureCode == "29881").AllowedAmount);
+        Assert.Equal(100m, resultSet.LineResults.Single(r => r.ProcedureCode == "20610").AllowedAmount);
+    }
+
+    /// <summary>
+    /// CMS: 6th and subsequent procedures are "by report". The engine prices
+    /// them at 50% and flags the adjustment for review.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_SixthProcedure_PricedAt50AndFlaggedByReport()
+    {
+        var codes = new[] { "10001", "10002", "10003", "10004", "10005", "10006" };
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-six", TenantId = Tenant, Name = "Commercial Six",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = codes.Select((c, i) => new FeeScheduleLine
+            {
+                ProcedureCode = c, Rate = 600m - i * 100m,
+                MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery,
+            }).ToList()
+        };
+        var engine = CreateEngine(schedule);
+
+        var requests = codes
+            .Select((c, i) => CreateRequest(c, lineNumber: i + 1, totalLines: codes.Length))
+            .ToList();
+
+        var resultSet = await engine.ResolveBatchAsync(requests);
+
+        Assert.Equal(600m, resultSet.LineResults[0].AllowedAmount);
+        Assert.Equal([250m, 200m, 150m, 100m],
+            resultSet.LineResults.Skip(1).Take(4).Select(r => r.AllowedAmount).ToArray());
+
+        var sixth = resultSet.LineResults[5];
+        Assert.Equal(50m, sixth.AllowedAmount);
+        var adj = Assert.Single(sixth.Adjustments, a => a.Modifier == "51");
+        Assert.Contains("by report", adj.Description);
+        Assert.DoesNotContain(resultSet.LineResults.Take(5).SelectMany(r => r.Adjustments),
+            a => a.Description.Contains("by report"));
+    }
+
+    /// <summary>
+    /// A secondary line billed with modifier 51 is reduced once by batch ranking,
+    /// not again by the per-line modifier-51 rule.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_Modifier51InBatch_NotReducedTwice()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-51", TenantId = Tenant, Name = "Commercial 51",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var requests = new List<PricingRequest>
+        {
+            CreateRequest("27447", lineNumber: 1, totalLines: 2),
+            CreateRequest("29881", lineNumber: 2, totalLines: 2, modifiers: ["51"]),
+        };
+
+        var resultSet = await engine.ResolveBatchAsync(requests);
+
+        var secondary = resultSet.LineResults.Single(r => r.ProcedureCode == "29881");
+        Assert.Equal(400m, secondary.AllowedAmount);
+        Assert.Single(secondary.Adjustments, a => a.Modifier == "51");
     }
 
     /// <summary>
@@ -379,9 +876,7 @@ public class RateResolutionServiceTests
 
     /// <summary>
     /// Batch pricing must preserve each request's original LineNumber on the
-    /// corresponding result. Phase 1 prices every line as a single-line request
-    /// (LineNumber forced to 1 to suppress per-line MPPR); the engine must
-    /// restore the real line number so callers can key results by line.
+    /// corresponding result so callers can key results by line.
     /// </summary>
     [Fact]
     public async Task Batch_PreservesOriginalLineNumbers()
@@ -393,9 +888,9 @@ public class RateResolutionServiceTests
             EffectiveDate = new DateTime(2026, 1, 1),
             Lines =
             [
-                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m },
-                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m },
-                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m },
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "29881", Rate = 800m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
+                new FeeScheduleLine { ProcedureCode = "20610", Rate = 200m, MultipleProcedureIndicator = MultipleProcedureIndicator.StandardSurgery },
             ]
         };
         var engine = CreateEngine(schedule);
@@ -420,6 +915,197 @@ public class RateResolutionServiceTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // MPFS MULTIPLE PROCEDURE INDICATOR
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static FeeScheduleLine IndicatorLine(string code, decimal rate, MultipleProcedureIndicator? indicator)
+        => new() { ProcedureCode = code, Rate = rate, MultipleProcedureIndicator = indicator };
+
+    private static FeeSchedule CreateIndicatorSchedule(params FeeScheduleLine[] lines)
+        => new()
+        {
+            Id = "comm-mpi", TenantId = Tenant, Name = "Commercial MPI",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = lines.ToList(),
+        };
+
+    [Fact]
+    public void MultipleProcedureReductionApplies_DerivedFromIndicator()
+    {
+        Assert.True(IndicatorLine("27447", 1m, MultipleProcedureIndicator.StandardSurgery).MultipleProcedureReductionApplies);
+
+        foreach (var indicator in new MultipleProcedureIndicator?[]
+        {
+            null,
+            MultipleProcedureIndicator.NoReduction,
+            MultipleProcedureIndicator.Endoscopy,
+            MultipleProcedureIndicator.DiagnosticImaging,
+            MultipleProcedureIndicator.TherapyServices,
+            MultipleProcedureIndicator.DiagnosticCardiovascular,
+            MultipleProcedureIndicator.DiagnosticOphthalmology,
+            MultipleProcedureIndicator.NotApplicable,
+        })
+        {
+            Assert.False(IndicatorLine("x", 1m, indicator).MultipleProcedureReductionApplies);
+        }
+    }
+
+    /// <summary>
+    /// E&amp;M codes carry MPFS indicator 0 and are never reduced — not by batch
+    /// ranking, not by line position, and not by modifier 51 — and need no warning.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_EmIndicator0_NeverReduced()
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("99215", 300m, MultipleProcedureIndicator.NoReduction),
+            IndicatorLine("99214", 200m, MultipleProcedureIndicator.NoReduction),
+            IndicatorLine("29881", 800m, MultipleProcedureIndicator.StandardSurgery));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("29881", lineNumber: 1, totalLines: 3),
+            CreateRequest("99215", lineNumber: 2, totalLines: 3, modifiers: ["25"]),
+            CreateRequest("99214", lineNumber: 3, totalLines: 3, modifiers: ["51"]),
+        ]);
+
+        Assert.Equal([800m, 300m, 200m], resultSet.LineResults.Select(r => r.AllowedAmount).ToArray());
+        Assert.DoesNotContain(resultSet.LineResults.SelectMany(r => r.Adjustments), a => a.Modifier == "51");
+        Assert.All(resultSet.LineResults, r => Assert.Empty(r.Warnings));
+
+        // Single-line pricing path: secondary line position and modifier 51 do not reduce E&M either
+        var single = await engine.ResolveAsync(CreateRequest("99214", lineNumber: 2, totalLines: 2, modifiers: ["51"]));
+        Assert.Equal(200m, single.AllowedAmount);
+        Assert.Empty(single.Adjustments);
+        Assert.Empty(single.Warnings);
+    }
+
+    /// <summary>
+    /// Indicator 4 (diagnostic imaging) follows a different CMS rule (TC/PC family
+    /// reduction) that is not implemented: imaging lines take no surgery rank, are not
+    /// reduced by the 100/50/50 rule, and are flagged as unsupported.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_ImagingIndicator4_NotReducedBySurgeryRule_Flagged()
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("27447", 1500m, MultipleProcedureIndicator.StandardSurgery),
+            IndicatorLine("29881", 800m, MultipleProcedureIndicator.StandardSurgery),
+            IndicatorLine("73721", 300m, MultipleProcedureIndicator.DiagnosticImaging),
+            IndicatorLine("71046", 50m, MultipleProcedureIndicator.DiagnosticImaging));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("73721", lineNumber: 1, totalLines: 4),
+            CreateRequest("71046", lineNumber: 2, totalLines: 4),
+            CreateRequest("27447", lineNumber: 3, totalLines: 4),
+            CreateRequest("29881", lineNumber: 4, totalLines: 4),
+        ]);
+
+        var mri = resultSet.LineResults.Single(r => r.ProcedureCode == "73721");
+        var xray = resultSet.LineResults.Single(r => r.ProcedureCode == "71046");
+        Assert.Equal(300m, mri.AllowedAmount);
+        Assert.Equal(50m, xray.AllowedAmount);
+        Assert.Empty(mri.Adjustments);
+        Assert.Empty(xray.Adjustments);
+        Assert.Contains(mri.Warnings, w => w.Contains("indicator 4") && w.Contains("not yet supported"));
+        Assert.Contains(xray.Warnings, w => w.Contains("indicator 4") && w.Contains("not yet supported"));
+
+        // Surgeries rank only among themselves: 100% / 50%
+        Assert.Equal(1500m, resultSet.LineResults.Single(r => r.ProcedureCode == "27447").AllowedAmount);
+        Assert.Equal(400m, resultSet.LineResults.Single(r => r.ProcedureCode == "29881").AllowedAmount);
+    }
+
+    [Theory]
+    [InlineData(MultipleProcedureIndicator.Endoscopy)]
+    [InlineData(MultipleProcedureIndicator.TherapyServices)]
+    [InlineData(MultipleProcedureIndicator.DiagnosticCardiovascular)]
+    [InlineData(MultipleProcedureIndicator.DiagnosticOphthalmology)]
+    public async Task MultipleProcedure_UnsupportedIndicators_NotReduced_Flagged(MultipleProcedureIndicator indicator)
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("A0001", 500m, indicator),
+            IndicatorLine("A0002", 400m, indicator));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("A0001", lineNumber: 1, totalLines: 2),
+            CreateRequest("A0002", lineNumber: 2, totalLines: 2),
+        ]);
+
+        Assert.Equal([500m, 400m], resultSet.LineResults.Select(r => r.AllowedAmount).ToArray());
+        Assert.All(resultSet.LineResults, r =>
+            Assert.Contains(r.Warnings, w => w.Contains($"indicator {(byte)indicator}") && w.Contains("not yet supported")));
+    }
+
+    /// <summary>
+    /// No indicator in the source data: default to no reduction (indicator 0
+    /// semantics, so E&amp;M is never wrongly cut) but flag every line on a
+    /// multi-line claim so the missing data is visible.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_UnknownIndicator_NoReduction_Warns()
+    {
+        var schedule = CreateIndicatorSchedule(
+            IndicatorLine("27447", 1500m, null),
+            IndicatorLine("29881", 800m, null));
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("27447", lineNumber: 1, totalLines: 2),
+            CreateRequest("29881", lineNumber: 2, totalLines: 2, modifiers: ["51"]),
+        ]);
+
+        Assert.Equal([1500m, 800m], resultSet.LineResults.Select(r => r.AllowedAmount).ToArray());
+        Assert.DoesNotContain(resultSet.LineResults.SelectMany(r => r.Adjustments), a => a.Modifier == "51");
+        Assert.All(resultSet.LineResults, r =>
+            Assert.Contains(r.Warnings, w => w.Contains("No CMS multiple procedure indicator")));
+
+        // Single-line pricing path behaves the same
+        var single = await engine.ResolveAsync(CreateRequest("29881", lineNumber: 2, totalLines: 2));
+        Assert.Equal(800m, single.AllowedAmount);
+        Assert.Contains(single.Warnings, w => w.Contains("No CMS multiple procedure indicator"));
+    }
+
+    /// <summary>
+    /// The indicator only matters when there is more than one line; a single-line
+    /// claim with no indicator is not flagged.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_UnknownIndicator_SingleLineClaim_NoWarning()
+    {
+        var engine = CreateEngine(CreateIndicatorSchedule(IndicatorLine("27447", 1500m, null)));
+
+        var result = await engine.ResolveAsync(CreateRequest("27447"));
+        var batch = await engine.ResolveBatchAsync([CreateRequest("27447")]);
+
+        Assert.Equal(1500m, result.AllowedAmount);
+        Assert.Empty(result.Warnings);
+        Assert.Empty(batch.LineResults.Single().Warnings);
+    }
+
+    /// <summary>
+    /// Single-line pricing of a secondary indicator-2 line still applies the 50% rule.
+    /// </summary>
+    [Fact]
+    public async Task MultipleProcedure_SingleLinePath_Indicator2Secondary_Reduced()
+    {
+        var engine = CreateEngine(CreateIndicatorSchedule(
+            IndicatorLine("29881", 800m, MultipleProcedureIndicator.StandardSurgery)));
+
+        var result = await engine.ResolveAsync(CreateRequest("29881", lineNumber: 2, totalLines: 2));
+
+        Assert.Equal(400m, result.AllowedAmount);
+        Assert.Single(result.Adjustments, a => a.Modifier == "51");
+        Assert.Empty(result.Warnings);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // PER DIEM
     // ═══════════════════════════════════════════════════════════════════
 
@@ -439,6 +1125,48 @@ public class RateResolutionServiceTests
         var result = await engine.ResolveAsync(CreateRequest("99223", los: 5));
 
         Assert.Equal(12500m, result.AllowedAmount); // 2500 × 5
+        Assert.Equal(RateSource.PerDiem, result.RateSource);
+    }
+
+    /// <summary>
+    /// Institutional per-diem lines carry units = days; with LOS supplied the
+    /// amount is rate × LOS and units are not applied again (not 2500 × 5 × 5).
+    /// </summary>
+    [Fact]
+    public async Task PerDiem_WithLos_UnitsNotAppliedAgain()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-units", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+            Lines = [new FeeScheduleLine { ProcedureCode = "0120", Rate = 2500m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("0120", los: 5, units: 5));
+
+        Assert.Equal(12500m, result.AllowedAmount);
+    }
+
+    /// <summary>Without LOS, units are the day count: 2500 × 4 = 10000.</summary>
+    [Fact]
+    public async Task PerDiem_WithoutLos_UsesUnitsAsDays()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-nolos", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+            Lines = [new FeeScheduleLine { ProcedureCode = "0120", Rate = 2500m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("0120", units: 4));
+
+        Assert.Equal(10000m, result.AllowedAmount);
         Assert.Equal(RateSource.PerDiem, result.RateSource);
     }
 
@@ -603,7 +1331,8 @@ public class RateResolutionServiceTests
         int? los = null,
         int lineNumber = 1,
         int totalLines = 1,
-        List<string>? modifiers = null)
+        List<string>? modifiers = null,
+        decimal units = 1)
     {
         return new PricingRequest
         {
@@ -615,7 +1344,7 @@ public class RateResolutionServiceTests
             ServiceDate = new DateTime(2026, 3, 8),
             PlanId = PlanId,
             BilledAmount = billed,
-            Units = 1,
+            Units = units,
             LineNumber = lineNumber,
             TotalLineCount = totalLines,
             DrgCode = drgCode,

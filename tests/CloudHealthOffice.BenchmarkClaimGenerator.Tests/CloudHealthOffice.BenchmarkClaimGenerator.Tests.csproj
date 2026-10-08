@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CloudHealthOffice.BenchmarkClaimGenerator\CloudHealthOffice.BenchmarkClaimGenerator.csproj" />
+    <ProjectReference Include="..\..\src\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>
