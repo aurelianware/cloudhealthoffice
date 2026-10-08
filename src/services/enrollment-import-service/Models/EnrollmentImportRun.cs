@@ -41,6 +41,7 @@ public class EnrollmentImportRun
     public int DependentsFailed { get; set; }
     public int CoverageRecordsCreated { get; set; }
     public int CoverageRecordsUpdated { get; set; }
+    public int CoverageRecordsReinstated { get; set; }
     public int CoverageRecordsTerminated { get; set; }
     public int CoverageMappingsUnresolved { get; set; }
 

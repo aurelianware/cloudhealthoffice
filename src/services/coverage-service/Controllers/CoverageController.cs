@@ -233,7 +233,9 @@ public class CoverageController : ControllerBase
             InsuranceLineCode = request.InsuranceLineCode,
             EffectiveDate = request.EffectiveDate,
             TerminationDate = request.TerminationDate,
-            Status = request.EffectiveDate > DateTime.UtcNow.Date ? CoverageStatus.Pending : CoverageStatus.Active,
+            Status = request.TerminationDate.HasValue && request.TerminationDate.Value.Date <= DateTime.UtcNow.Date
+                ? CoverageStatus.Terminated
+                : request.EffectiveDate > DateTime.UtcNow.Date ? CoverageStatus.Pending : CoverageStatus.Active,
             IsCOBRA = request.IsCOBRA,
             COBRAEffectiveDate = request.COBRAEffectiveDate,
             MonthlyPremium = request.MonthlyPremium,
@@ -283,6 +285,20 @@ public class CoverageController : ControllerBase
             });
         }
 
+        // Pending means only "not yet effective" (it is in force for
+        // date-of-service eligibility from its effective date, see
+        // Coverage.DateOfServiceStatuses), so it can't be set on coverage that
+        // is already effective — e.g. to model an unpaid binder.
+        if (request.Status == CoverageStatus.Pending && coverage.EffectiveDate.Date <= DateTime.UtcNow.Date)
+        {
+            return BadRequest(new
+            {
+                Id = id,
+                Message = "Cannot set Status=Pending on coverage whose effective date is today or past; " +
+                          "Pending means not yet effective."
+            });
+        }
+
         if (request.PlanId != null) coverage.PlanId = request.PlanId;
         if (request.CoverageLevel != null) coverage.CoverageLevel = request.CoverageLevel;
         if (request.Status.HasValue) coverage.Status = request.Status.Value;
@@ -315,14 +331,52 @@ public class CoverageController : ControllerBase
             return NotFound(new { Id = id, Message = "Coverage not found" });
         }
 
-        coverage.Status = CoverageStatus.Terminated;
-        coverage.TerminationDate = terminationDate ?? DateTime.UtcNow.Date;
+        // Terminated now only when the date is today or past; a future-dated
+        // termination stays in force until CoverageStatusSweepJob flips it.
+        coverage.ApplyTermination(terminationDate ?? DateTime.UtcNow.Date, DateTime.UtcNow.Date);
         coverage.MaintenanceReasonCode = reasonCode;
         coverage.LastUpdatedDate = DateTime.UtcNow;
         coverage.LastUpdatedBy = _actor.UserId;
 
         await _coverageRepository.UpdateAsync(coverage);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Reinstate a terminated coverage (834 INS03=025): the termination is
+    /// reversed as if it had not happened — the termination date is cleared and
+    /// the coverage returns to Active (COBRA when it is COBRA coverage), keeping
+    /// its original effective date. Reinstating a coverage that is not
+    /// terminated is a no-op. Coverage that resumes only after a gap is a new
+    /// span, not a reinstatement: create it with POST instead.
+    /// </summary>
+    [HttpPost("{id}/reinstate")]
+    [ProducesResponseType(typeof(Coverage), 200)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> ReinstateCoverage(
+        [FromRoute] string id,
+        [FromQuery] string? reasonCode = null)
+    {
+        var coverage = await _coverageRepository.GetByIdAsync(TenantId, id);
+        if (coverage == null)
+        {
+            return NotFound(new { Id = id, Message = "Coverage not found" });
+        }
+
+        if (coverage.TerminationDate is null
+            && coverage.Status is not (CoverageStatus.Terminated or CoverageStatus.Suspended))
+        {
+            return Ok(coverage);
+        }
+
+        coverage.Reinstate();
+        if (!string.IsNullOrEmpty(reasonCode)) coverage.MaintenanceReasonCode = reasonCode;
+        coverage.MaintenanceTypeCode = "025";
+        coverage.LastUpdatedDate = DateTime.UtcNow;
+        coverage.LastUpdatedBy = _actor.UserId;
+
+        var updated = await _coverageRepository.UpdateAsync(coverage);
+        return Ok(updated);
     }
 
     /// <summary>
@@ -340,9 +394,9 @@ public class CoverageController : ControllerBase
         {
             GroupNumber = groupNumber,
             TotalCovered = coverages.Count,
-            ActiveCoverage = coverages.Count(c => c.Status == CoverageStatus.Active),
-            PendingCoverage = coverages.Count(c => c.Status == CoverageStatus.Pending),
-            TerminatedCoverage = coverages.Count(c => c.Status == CoverageStatus.Terminated),
+            ActiveCoverage = coverages.Count(c => CurrentStatus(c) == CoverageStatus.Active),
+            PendingCoverage = coverages.Count(c => CurrentStatus(c) == CoverageStatus.Pending),
+            TerminatedCoverage = coverages.Count(c => CurrentStatus(c) == CoverageStatus.Terminated),
             ByPlan = coverages.GroupBy(c => c.PlanId).ToDictionary(g => g.Key, g => g.Count()),
             ByCoverageLevel = coverages
                 .Where(c => c.CoverageLevel != null)
@@ -584,11 +638,13 @@ public class CoverageController : ControllerBase
 
         var asOf = request.TerminationDate == default ? DateTime.UtcNow.Date : request.TerminationDate;
         // The DOS query also returns coverages already Terminated on or after
-        // asOf (they were in force on that date); this endpoint only terminates
-        // coverages that are still open, so skip those.
+        // asOf (they were in force on that date), and ones whose (future-dated)
+        // termination already ends them on asOf; this endpoint only terminates
+        // coverages still open past asOf, so skip those.
         var active = (await _coverageRepository.GetActiveCoverageByMemberIdAsync(
             TenantId, memberId, asOf))
-            .Where(c => c.Status != CoverageStatus.Terminated)
+            .Where(c => c.Status != CoverageStatus.Terminated
+                        && !(c.TerminationDate.HasValue && c.TerminationDate.Value.Date <= asOf.Date))
             .ToList();
 
         if (active.Count == 0)
@@ -602,8 +658,9 @@ public class CoverageController : ControllerBase
 
         foreach (var coverage in active)
         {
-            coverage.Status = CoverageStatus.Terminated;
-            coverage.TerminationDate = asOf;
+            // Terminated now only when asOf is today or past; a future-dated
+            // termination stays in force until CoverageStatusSweepJob flips it.
+            coverage.ApplyTermination(asOf, DateTime.UtcNow.Date);
             if (!string.IsNullOrEmpty(request.ReasonCode))
                 coverage.MaintenanceReasonCode = request.ReasonCode;
             coverage.LastUpdatedDate = DateTime.UtcNow;
@@ -619,6 +676,9 @@ public class CoverageController : ControllerBase
             ReasonCode = request.ReasonCode
         });
     }
+
+    // Status as of today, whether or not the daily sweep has stored it yet.
+    private static CoverageStatus CurrentStatus(Coverage c) => c.CurrentStatus(DateTime.UtcNow.Date);
 
     private static string SanitizeForLog(string? value)
     {

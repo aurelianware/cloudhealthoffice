@@ -319,6 +319,19 @@ public class EnrollmentImportPipelineAuthTests : IClassFixture<EnrollmentImportP
     }
 
     [Fact]
+    public async Task CoverageReinstatement_PostsToCoverageServiceReinstate_WithServiceToken()
+    {
+        var coverage = _factory.Services.GetRequiredService<ICoverageServiceClient>();
+
+        await coverage.ReinstateAsync(Tenant, "cov-9", "41");
+
+        var sent = _factory.CoverageOutbound.Last!;
+        sent.Method.Should().Be(HttpMethod.Post);
+        sent.RequestUri!.PathAndQuery.Should().Be("/api/v1/coverage/cov-9/reinstate?reasonCode=41");
+        ShouldCarryServiceToken(sent, Tenant);
+    }
+
+    [Fact]
     public async Task MemberServiceCall_WithoutCaller_CarriesServiceTokenForNamedTenant()
     {
         var members = _factory.Services.GetRequiredService<IMemberServiceClient>();
