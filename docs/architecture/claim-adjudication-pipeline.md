@@ -56,10 +56,19 @@
 > occurrence/span/value/condition codes) and line NDC. `PricingStage`
 > sends `DrgCode`, `LengthOfStay` (inpatient only — admission date
 > present), `RevenueCode` and `BillType`. The engine pays a DRG case rate
-> or all-inclusive per diem **once per claim** (lowest line number; the
-> other lines are allowed $0 with an "included in" adjustment) and can
-> match revenue-code fee schedule lines. CHO has no MS-DRG grouper: a
-> DRG-contracted claim without a billed DRG (HI*DR) pends `NOCONTRACT`.
+> or all-inclusive per diem **once per claim**, allocated across the
+> lines priced from that schedule in proportion to billed charges (each
+> share truncated to the cent, remainder on the last line, so the shares
+> sum to the claim-level amount), and can match revenue-code fee schedule
+> lines. While the claim-level allowed is at or below total billed, every
+> line's allowed is at or below its billed charge, so per-line CO-45 is
+> non-negative. **Edge:** a contract without a lesser-of-billed provision
+> can pay more than total billed; the allocation stays proportional, so
+> every line's allowed exceeds its billed and its contractual adjustment
+> (billed − allowed) is negative. The claim total is still correct; 835
+> generation must tolerate a negative line-level CO-45 in that case. CHO
+> has no MS-DRG grouper: a DRG-contracted claim without a billed DRG
+> (HI*DR) pends `NOCONTRACT`.
 
 ## Why this exists
 

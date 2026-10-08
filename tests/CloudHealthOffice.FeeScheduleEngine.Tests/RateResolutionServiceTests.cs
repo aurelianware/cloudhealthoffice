@@ -139,6 +139,42 @@ public class RateResolutionServiceTests
     }
 
     /// <summary>
+    /// Medicaid cross-schedule lookup where the MPFS reference has an RVU line but
+    /// no conversion factor: the stored Rate is not a usable Medicare rate, so the
+    /// line is unresolved rather than priced off it.
+    /// </summary>
+    [Fact]
+    public async Task Medicaid_RvuReferenceWithoutConversionFactor_Unresolved()
+    {
+        var mpfsSchedule = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m,
+            cf: 33.8872m);
+        mpfsSchedule.Id = "mpfs-2026";
+        mpfsSchedule.ConversionFactor = null;
+
+        var medicaidSchedule = new FeeSchedule
+        {
+            Id = "medicaid-nocf", TenantId = Tenant, Name = "AZ Medicaid 72% of Medicare",
+            Type = FeeScheduleType.Medicaid,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PercentOfMedicare = 0.72m,
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.FlatRate, Rate = 0m }]
+        };
+
+        var repo = new InMemoryFeeScheduleRepo(medicaidSchedule);
+        repo.AddSchedule(mpfsSchedule);
+        var engine = CreateEngine(medicaidSchedule, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m));
+
+        Assert.Equal(RateSource.Unresolved, result.RateSource);
+        Assert.Equal(FeeScheduleType.Medicaid, result.FeeScheduleType);
+        Assert.Equal(0m, result.AllowedAmount);
+        Assert.Contains("mpfs-2026", result.UnresolvedReason);
+    }
+
+    /// <summary>
     /// Medicaid with inline RVU values and percent-of-Medicare.
     /// The Medicaid schedule stores its own RVU values and applies percent.
     /// </summary>
@@ -252,8 +288,9 @@ public class RateResolutionServiceTests
 
     /// <summary>
     /// A DRG claim sends the same DRG on every line; the case rate must be
-    /// paid once for the admission (on the lowest-numbered line), not once
-    /// per line. Base rate $5,000 × weight 2.4 = $12,000 for the claim.
+    /// paid once for the admission, not once per line, and is allocated
+    /// across the lines in proportion to billed charges.
+    /// Base rate $5,000 × weight 2.4 = $12,000 for the claim; billed $42,500.
     /// </summary>
     [Fact]
     public async Task Drg_Batch_PaysCaseRateOnceAtClaimLevel()
@@ -268,7 +305,7 @@ public class RateResolutionServiceTests
         };
         var engine = CreateEngine(schedule);
 
-        // Deliberately out of line order: the carrier is the lowest line number.
+        // Deliberately out of line order: the remainder goes to the highest line number.
         var result = await engine.ResolveBatchAsync(
         [
             CreateRequest("27447", billed: 29000m, drgCode: "470", los: 4, lineNumber: 3, totalLines: 3, revenueCode: "0360"),
@@ -278,17 +315,67 @@ public class RateResolutionServiceTests
 
         Assert.Equal(3, result.LineResults.Count);
         Assert.Equal(12000m, result.TotalAllowedAmount);
-        Assert.Equal(1, result.LineResults[0].LineNumber);
-        Assert.Equal(12000m, result.LineResults[0].AllowedAmount);
-        Assert.Empty(result.LineResults[0].Adjustments);
-        Assert.All(result.LineResults, r => Assert.Equal(RateSource.Drg, r.RateSource));
-        Assert.All(result.LineResults.Skip(1), r =>
+        Assert.Equal(new[] { 1, 2, 3 }, result.LineResults.Select(r => r.LineNumber));
+        // 12000 × 12000/42500 = 3388.235… → 3388.23; × 1500/42500 = 423.529… → 423.52;
+        // line 3 takes the remainder 12000 − 3811.75 = 8188.25.
+        Assert.Equal(new[] { 3388.23m, 423.52m, 8188.25m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.All(result.LineResults, r =>
         {
-            Assert.Equal(0m, r.AllowedAmount);
+            Assert.Equal(RateSource.Drg, r.RateSource);
+            Assert.True(r.ContractualAdjustment >= 0m); // allowed ≤ billed on every line
             var adj = Assert.Single(r.Adjustments);
-            Assert.Contains("Included in DRG case rate paid on line 1", adj.Description);
-            Assert.Equal(-12000m, adj.AdjustmentAmount);
+            Assert.Contains("DRG case rate 12000.00 for the claim allocated by billed charges", adj.Description);
+            Assert.Equal(r.AllowedAmount - 12000m, adj.AdjustmentAmount);
         });
+    }
+
+    [Fact]
+    public async Task Drg_Batch_CaseRateAboveTotalBilled_AllocatesProportionally_NegativeContractual()
+    {
+        // Contract without lesser-of-billed: the case rate exceeds total billed.
+        var schedule = new FeeSchedule
+        {
+            Id = "drg-over", TenantId = Tenant, Name = "DRG",
+            Type = FeeScheduleType.Drg,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = 12000m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 2000m, drgCode: "470", lineNumber: 1, totalLines: 2, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: 1000m, drgCode: "470", lineNumber: 2, totalLines: 2, revenueCode: "0250"),
+        ]);
+
+        Assert.Equal(new[] { 8000m, 4000m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(12000m, result.TotalAllowedAmount);
+        Assert.All(result.LineResults, r => Assert.True(r.ContractualAdjustment < 0m));
+    }
+
+    [Theory]
+    [InlineData(1, 1, 1)]   // equal billed: 33.33 / 33.33 / 33.34
+    [InlineData(0, 0, 0)]   // nothing billed: split evenly the same way
+    public async Task Drg_Batch_RoundsToCents_RemainderOnLastLine(int billed1, int billed2, int billed3)
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "drg-round", TenantId = Tenant, Name = "DRG",
+            Type = FeeScheduleType.Drg,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "999", Rate = 100m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: billed1, drgCode: "999", lineNumber: 1, totalLines: 3, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: billed2, drgCode: "999", lineNumber: 2, totalLines: 3, revenueCode: "0250"),
+            CreateRequest(string.Empty, billed: billed3, drgCode: "999", lineNumber: 3, totalLines: 3, revenueCode: "0300"),
+        ]);
+
+        Assert.Equal(new[] { 33.33m, 33.33m, 33.34m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(100m, result.TotalAllowedAmount);
     }
 
     [Fact]
@@ -459,6 +546,185 @@ public class RateResolutionServiceTests
         Assert.Equal(RateSource.Unresolved, result.RateSource);
         Assert.Equal(0m, result.AllowedAmount);
         Assert.Contains("mpfs-2026", result.UnresolvedReason);
+    }
+
+    /// <summary>
+    /// Reference schedule missing / lacking the code, but the line carries inline
+    /// RVUs and the schedule has a CF → falls through to the inline RVUs.
+    /// 100.98 × 1.20 = 121.18.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Commercial_PercentOfMedicare_ReferenceUnusable_FallsBackToInlineRvu(bool referenceExists)
+    {
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-fallback", TenantId = Tenant, Name = "Commercial 120% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            ConversionFactor = 33.8872m,
+            Lines =
+            [
+                new FeeScheduleLine
+                {
+                    ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.20m,
+                    WorkRvu = 1.30m, PeRvu = 1.59m, PeRvuFacility = 0.83m, MpRvu = 0.09m
+                }
+            ]
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        if (referenceExists)
+        {
+            var mpfs = CreateMpfsSchedule("99214",
+                workRvu: 1.92m, peRvu: 2.07m, peRvuFacility: 1.0m, mpRvu: 0.13m, cf: 33.8872m);
+            mpfs.Id = "mpfs-2026";
+            repo.AddSchedule(mpfs);
+        }
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m));
+
+        Assert.Equal(RateSource.ContractedRate, result.RateSource);
+        Assert.Equal(121.18m, result.AllowedAmount);
+    }
+
+    /// <summary>
+    /// An RVU reference line on a schedule with no conversion factor is not a
+    /// usable Medicare rate (its stored Rate is not maintained) → unresolved,
+    /// not priced off the stale/zero Rate.
+    /// </summary>
+    [Fact]
+    public async Task Commercial_PercentOfMedicare_RvuReferenceWithoutConversionFactor_Unresolved()
+    {
+        var mpfs = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m, cf: 33.8872m);
+        mpfs.Id = "mpfs-2026";
+        mpfs.ConversionFactor = null;
+
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-nocf", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }]
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        repo.AddSchedule(mpfs);
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", billed: 500m));
+
+        Assert.Equal(RateSource.Unresolved, result.RateSource);
+        Assert.Equal(0m, result.AllowedAmount);
+        Assert.Contains("mpfs-2026", result.UnresolvedReason);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // UNITS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// BilledAmount is the line total, so 80% of a $300 3-unit line is $240,
+    /// not $240 × 3.
+    /// </summary>
+    [Fact]
+    public async Task Units_PercentOfBilled_NotMultipliedByUnits()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-pctbilled", TenantId = Tenant, Name = "Commercial 80% of Billed",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "97110", RateType = FeeScheduleRateType.PercentOfBilled, Rate = 0.80m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("97110", billed: 300m, units: 3));
+
+        Assert.Equal(240m, result.AllowedAmount);
+    }
+
+    /// <summary>Billed-charges fallback is also the line total — not multiplied by units.</summary>
+    [Fact]
+    public async Task Units_BilledChargesFallback_NotMultipliedByUnits()
+    {
+        var engine = CreateEngine(schedule: null);
+
+        var result = await engine.ResolveAsync(CreateRequest("97110", billed: 300m, units: 3));
+
+        Assert.Equal(RateSource.BilledCharges, result.RateSource);
+        Assert.Equal(300m, result.AllowedAmount);
+    }
+
+    /// <summary>Flat per-unit rates are still multiplied by units: $50 × 3 = $150.</summary>
+    [Fact]
+    public async Task Units_FlatRate_MultipliedByUnits()
+    {
+        var engine = CreateEngine(CreateCommercialSchedule("97110", 50m));
+
+        var result = await engine.ResolveAsync(CreateRequest("97110", billed: 300m, units: 3));
+
+        Assert.Equal(150m, result.AllowedAmount);
+    }
+
+    /// <summary>
+    /// Percent-of-Medicare is a per-unit Medicare rate × %, so it is multiplied
+    /// by units: 100.98 × 1.10 = 111.08 per unit × 2 = 222.16.
+    /// </summary>
+    [Fact]
+    public async Task Units_PercentOfMedicare_MultipliedByUnits()
+    {
+        var mpfs = CreateMpfsSchedule("99213",
+            workRvu: 1.30m, peRvu: 1.59m, peRvuFacility: 0.83m, mpRvu: 0.09m, cf: 33.8872m);
+        mpfs.Id = "mpfs-2026";
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-pctmed-units", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "mpfs-2026",
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }]
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        repo.AddSchedule(mpfs);
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", pos: "11", billed: 500m, units: 2));
+
+        Assert.Equal(222.16m, result.AllowedAmount);
+    }
+
+    /// <summary>
+    /// Multi-unit percent-of-billed line in a batch: the rank reduction applies
+    /// to the line total once (80% × $300 = $240 → 50% = $120).
+    /// </summary>
+    [Fact]
+    public async Task Units_PercentOfBilled_InBatchReduction_UsesLineTotal()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "comm-pctbilled-batch", TenantId = Tenant, Name = "Commercial Mixed",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { ProcedureCode = "27447", Rate = 1500m },
+                new FeeScheduleLine { ProcedureCode = "20610", RateType = FeeScheduleRateType.PercentOfBilled, Rate = 0.80m },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var resultSet = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("27447", lineNumber: 1, totalLines: 2),
+            CreateRequest("20610", lineNumber: 2, totalLines: 2, billed: 300m, units: 3),
+        ]);
+
+        Assert.Equal(1500m, resultSet.LineResults.Single(r => r.LineNumber == 1).AllowedAmount);
+        Assert.Equal(120m, resultSet.LineResults.Single(r => r.LineNumber == 2).AllowedAmount);
     }
 
     /// <summary>
@@ -776,6 +1042,48 @@ public class RateResolutionServiceTests
         Assert.Equal(RateSource.PerDiem, result.RateSource);
     }
 
+    /// <summary>
+    /// Institutional per-diem lines carry units = days; with LOS supplied the
+    /// amount is rate × LOS and units are not applied again (not 2500 × 5 × 5).
+    /// </summary>
+    [Fact]
+    public async Task PerDiem_WithLos_UnitsNotAppliedAgain()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-units", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+            Lines = [new FeeScheduleLine { ProcedureCode = "0120", Rate = 2500m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("0120", los: 5, units: 5));
+
+        Assert.Equal(12500m, result.AllowedAmount);
+    }
+
+    /// <summary>Without LOS, units are the day count: 2500 × 4 = 10000.</summary>
+    [Fact]
+    public async Task PerDiem_WithoutLos_UsesUnitsAsDays()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-nolos", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+            Lines = [new FeeScheduleLine { ProcedureCode = "0120", Rate = 2500m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("0120", units: 4));
+
+        Assert.Equal(10000m, result.AllowedAmount);
+        Assert.Equal(RateSource.PerDiem, result.RateSource);
+    }
+
     [Fact]
     public async Task PerDiem_AllInclusive_UnitsDoNotMultiplyTheStay()
     {
@@ -798,10 +1106,10 @@ public class RateResolutionServiceTests
     /// <summary>
     /// All-inclusive per diem: every line of the stay prices under the
     /// schedule's daily rate (no per-code line needed), but the stay is paid
-    /// once — on the lowest-numbered line — not once per line.
+    /// once — allocated across the lines by billed charges — not once per line.
     /// </summary>
     [Fact]
-    public async Task PerDiem_AllInclusive_Batch_PaysStayOnceOnFirstLine()
+    public async Task PerDiem_AllInclusive_Batch_PaysStayOnceAllocatedByBilled()
     {
         var schedule = new FeeSchedule
         {
@@ -820,14 +1128,12 @@ public class RateResolutionServiceTests
         ]);
 
         Assert.Equal(10000m, result.TotalAllowedAmount); // 2500 × 4, once
-        Assert.Equal(10000m, result.LineResults[0].AllowedAmount);
-        Assert.All(result.LineResults, r => Assert.Equal(RateSource.PerDiem, r.RateSource));
-        Assert.All(result.LineResults.Skip(1), r =>
+        // 10000 × 12000/42500 → 2823.52; × 1500/42500 → 352.94; remainder 6823.54.
+        Assert.Equal(new[] { 2823.52m, 352.94m, 6823.54m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.All(result.LineResults, r =>
         {
-            Assert.Equal(0m, r.AllowedAmount);
-            var adj = Assert.Single(r.Adjustments);
-            Assert.Contains("Included in per diem paid on line 1", adj.Description);
-            Assert.Equal(-10000m, adj.AdjustmentAmount);
+            Assert.Equal(RateSource.PerDiem, r.RateSource);
+            Assert.Contains("per diem 10000.00 for the claim", Assert.Single(r.Adjustments).Description);
         });
     }
 

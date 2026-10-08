@@ -309,8 +309,8 @@ public record PricingRequest
     /// <summary>
     /// DRG code (required for FeeScheduleType.Drg). Must be the DRG billed on
     /// the claim (837I HI*DR) — the engine does not group. Send the same code
-    /// on every line of the claim: batch pricing pays the DRG case rate once
-    /// (on the lowest-numbered line) and prices the remaining lines at $0.
+    /// on every line of the claim: batch pricing pays the DRG case rate once,
+    /// allocated across the lines in proportion to their billed charges.
     /// </summary>
     public string? DrgCode { get; init; }
 

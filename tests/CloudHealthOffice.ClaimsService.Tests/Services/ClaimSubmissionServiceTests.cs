@@ -109,7 +109,9 @@ public class ClaimSubmissionServiceTests
 
         var result = await _sut.SubmitAsync(inbound, "tenant-1", "actor", null);
         Assert.True(result.Success);
-        Assert.Equal(150m * 2 + 35.50m, capturedTotal);
+        // ChargeAmount is the line TOTAL (837 SV102/SV203); Units must not
+        // multiply it, or CLM02 would not balance (scrub rule AL002).
+        Assert.Equal(150m + 35.50m, capturedTotal);
     }
 
     [Fact]

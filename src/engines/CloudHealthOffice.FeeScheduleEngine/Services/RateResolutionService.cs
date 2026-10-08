@@ -111,7 +111,7 @@ public class RateResolutionService : IRateResolutionService
         }
 
         // 4. Calculate base allowed amount
-        var (baseAmount, rateSource, scheduleType, unresolvedReason) = await CalculateBaseAmountAsync(
+        var (baseAmount, rateSource, scheduleType, unresolvedReason, isLineTotal) = await CalculateBaseAmountAsync(
             request, schedule, rateLine, networkStatus, ct);
 
         if (unresolvedReason is not null)
@@ -121,7 +121,8 @@ public class RateResolutionService : IRateResolutionService
             // pend the line, rather than silently substituting billed charges.
             _logger.LogWarning(
                 "Rate unresolved for {ProcedureCode} on schedule {ScheduleId}: {Reason}",
-                request.ProcedureCode, schedule?.Id, unresolvedReason);
+                LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(schedule?.Id),
+                LogSanitizer.SafeForLog(unresolvedReason));
 
             return new LineResolution(new PricingResult
             {
@@ -154,13 +155,16 @@ public class RateResolutionService : IRateResolutionService
                 baseAmount, request, rateLine, applyMultipleProcedureReduction);
         }
 
-        // 6. Apply units (not for DRG — case rate is per-admission regardless of line
-        //    count — nor for per diem, whose day count is already in the base amount)
-        if (scheduleType is not (FeeScheduleType.Drg or FeeScheduleType.PerDiem))
+        // 6. Apply units (not for DRG — case rate is per-admission regardless of line count —
+        //    nor for line-total amounts: billed-based amounts, since BilledAmount is the line
+        //    total (837 SV102/SV203), and per diem × length of stay, which already counts days)
+        if (scheduleType != FeeScheduleType.Drg && !isLineTotal)
             finalAmount *= request.Units;
 
+        // Per-stay amounts are paid once per claim (ResolveBatchAsync): a DRG case
+        // rate, or an all-inclusive per diem priced for the length of stay.
         var isPerStay = rateSource == RateSource.Drg
-            || (rateSource == RateSource.PerDiem && schedule?.PerDiemRate is not null);
+            || (rateSource == RateSource.PerDiem && schedule?.PerDiemRate is not null && request.LengthOfStay is not null);
 
         return new LineResolution(new PricingResult
         {
@@ -190,11 +194,11 @@ public class RateResolutionService : IRateResolutionService
     ///      <see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>
     ///      (E&amp;M and other non-surgical lines are left unreduced)
     ///   3. Applies the rank-based reduction to ranked lines 2+
-    ///   4. Pays a per-stay rate (DRG case rate, all-inclusive per diem) once:
-    ///      the lowest-numbered line priced from a given per-stay schedule
-    ///      carries the whole amount and every other line priced from that
-    ///      schedule is allowed $0 ("included in" adjustment). Without this,
-    ///      an N-line inpatient claim would be paid N case rates.
+    ///   4. Pays a per-stay rate (DRG case rate, all-inclusive per diem) once
+    ///      per claim, allocated across the lines priced from that schedule in
+    ///      proportion to their billed charges — see
+    ///      <see cref="AllocatePerStayAmounts"/>. Without this, an N-line
+    ///      inpatient claim would be paid N case rates.
     ///
     /// A batch is one claim's lines — the same assumption the multiple
     /// procedure ranking already makes.
@@ -249,7 +253,7 @@ public class RateResolutionService : IRateResolutionService
                 _logger.LogWarning(
                     "Multiple procedure rank {Rank} for line {LineNumber} ({ProcedureCode}) is by report; " +
                     "priced at {Factor:P0} pending review",
-                    rank + 1, result.LineNumber, result.ProcedureCode, reductionFactor);
+                    rank + 1, result.LineNumber, LogSanitizer.SafeForLog(result.ProcedureCode), reductionFactor);
             }
 
             var adjustments = new List<RateAdjustment>(result.Adjustments);
@@ -270,42 +274,92 @@ public class RateResolutionService : IRateResolutionService
             });
         }
 
-        // Phase 4: Per-stay rates are paid once per claim
-        var perStayCarrier = new Dictionary<(string? ScheduleId, FeeScheduleType Type), int>();
-        for (var i = 0; i < initialResults.Count; i++)
-        {
-            if (!initialResults[i].IsPerStay)
-                continue;
-
-            var result = finalResults[i];
-            var key = (result.FeeScheduleId, result.FeeScheduleType);
-            if (perStayCarrier.TryAdd(key, result.LineNumber))
-                continue; // lowest line number (lines are in line-number order) carries the rate
-
-            var carrierLine = perStayCarrier[key];
-            var rateName = result.FeeScheduleType == FeeScheduleType.Drg ? "DRG case rate" : "per diem";
-            var adjustments = new List<RateAdjustment>(result.Adjustments)
-            {
-                new()
-                {
-                    Modifier = string.Empty,
-                    Description = $"Included in {rateName} paid on line {carrierLine}",
-                    AdjustmentFactor = 0m,
-                    AdjustmentAmount = -result.AllowedAmount,
-                },
-            };
-
-            finalResults[i] = result with
-            {
-                AllowedAmount = 0m,
-                Adjustments = adjustments,
-            };
-        }
+        // Phase 4: Per-stay rates are paid once per claim, allocated across the lines
+        AllocatePerStayAmounts(initialResults, finalResults);
 
         return new PricingResultSet
         {
             LineResults = finalResults.OrderBy(r => r.LineNumber).ToList()
         };
+    }
+
+    /// <summary>
+    /// Every line of a DRG or all-inclusive per-diem claim prices to the same
+    /// claim-level amount (the case rate, or per diem × length of stay). Pay it
+    /// once: for each per-stay schedule, the claim-level allowed amount (the
+    /// amount priced on the group's first line) is allocated across the
+    /// group's lines in proportion to each line's billed charge. Each share is
+    /// truncated to the cent and the remainder goes to the last (highest
+    /// numbered) line, so the shares sum exactly to the claim-level amount
+    /// and no share is negative. When the group bills $0 in total, the amount
+    /// is split evenly the same way.
+    ///
+    /// <para>
+    /// Proportional allocation keeps each line's allowed at or below its
+    /// billed charge whenever the claim-level allowed is at or below total
+    /// billed, so the per-line contractual adjustment (CO-45 = billed −
+    /// allowed) is non-negative. When the contract pays more than was billed
+    /// (no lesser-of-billed provision) every share exceeds its billed charge
+    /// in the same proportion and each line's contractual adjustment is
+    /// negative; the claim total is still correct. Truncation can move at most
+    /// one cent per line onto the last line.
+    /// </para>
+    /// </summary>
+    private static void AllocatePerStayAmounts(
+        IReadOnlyList<LineResolution> initialResults, List<PricingResult> finalResults)
+    {
+        var groups = Enumerable.Range(0, initialResults.Count)
+            .Where(i => initialResults[i].IsPerStay)
+            .GroupBy(i => (finalResults[i].FeeScheduleId, finalResults[i].FeeScheduleType));
+
+        foreach (var group in groups)
+        {
+            var indexes = group.OrderBy(i => finalResults[i].LineNumber).ToList();
+            var claimAllowed = finalResults[indexes[0]].AllowedAmount;
+            var totalBilled = indexes.Sum(i => Math.Max(finalResults[i].BilledAmount, 0m));
+            var rateName = group.Key.FeeScheduleType == FeeScheduleType.Drg ? "DRG case rate" : "per diem";
+            var allocated = 0m;
+
+            for (var n = 0; n < indexes.Count; n++)
+            {
+                var i = indexes[n];
+                var result = finalResults[i];
+                var share = totalBilled > 0m
+                    ? Math.Max(result.BilledAmount, 0m) / totalBilled
+                    : 1m / indexes.Count;
+
+                decimal lineAllowed;
+                if (n == indexes.Count - 1)
+                {
+                    lineAllowed = claimAllowed - allocated;
+                }
+                else
+                {
+                    lineAllowed = Math.Floor(claimAllowed * share * 100m) / 100m;
+                    allocated += lineAllowed;
+                }
+
+                if (indexes.Count == 1)
+                    continue; // single line: it already carries the whole amount
+
+                var adjustments = new List<RateAdjustment>(result.Adjustments)
+                {
+                    new()
+                    {
+                        Modifier = string.Empty,
+                        Description = $"{rateName} {claimAllowed:0.00} for the claim allocated by billed charges ({share:P2} to line {result.LineNumber})",
+                        AdjustmentFactor = Math.Round(share, 6),
+                        AdjustmentAmount = lineAllowed - result.AllowedAmount,
+                    },
+                };
+
+                finalResults[i] = result with
+                {
+                    AllowedAmount = lineAllowed,
+                    Adjustments = adjustments,
+                };
+            }
+        }
     }
 
     /// <summary>
@@ -435,9 +489,12 @@ public class RateResolutionService : IRateResolutionService
     /// Async version of base amount calculation — needed for Medicaid and
     /// percent-of-Medicare cross-schedule resolution. A non-null
     /// <c>unresolvedReason</c> means a rate line matched but its base amount
-    /// could not be determined; the amount is then meaningless.
+    /// could not be determined; the amount is then meaningless. <c>isLineTotal</c>
+    /// is true when the amount already covers every unit on the line (billed-charge
+    /// based amounts, or per diem × length of stay) and must not be multiplied by
+    /// units again.
     /// </summary>
-    private async Task<(decimal amount, RateSource source, FeeScheduleType scheduleType, string? unresolvedReason)> CalculateBaseAmountAsync(
+    private async Task<(decimal amount, RateSource source, FeeScheduleType scheduleType, string? unresolvedReason, bool isLineTotal)> CalculateBaseAmountAsync(
         PricingRequest request,
         FeeSchedule? schedule,
         FeeScheduleLine? line,
@@ -446,26 +503,29 @@ public class RateResolutionService : IRateResolutionService
     {
         if (schedule is null || line is null)
         {
-            return (request.BilledAmount, RateSource.BilledCharges, FeeScheduleType.Ucr, null);
+            return (request.BilledAmount, RateSource.BilledCharges, FeeScheduleType.Ucr, null, true);
         }
 
         switch (schedule.Type)
         {
             case FeeScheduleType.Capitation:
-                return (0m, RateSource.Capitation, FeeScheduleType.Capitation, null);
+                return (0m, RateSource.Capitation, FeeScheduleType.Capitation, null, false);
 
             case FeeScheduleType.PerDiem:
             {
-                // All-inclusive per diem (schedule-level rate): rate × length of
-                // stay, paid once per claim. Line-level daily rate (no schedule
-                // rate, e.g. room-and-board by revenue code): rate × the line's
-                // billed days (units) — sending LengthOfStay on every line must
-                // not multiply each accommodation line by the whole stay.
-                var days = schedule.PerDiemRate.HasValue
-                    ? request.LengthOfStay ?? 1
-                    : request.Units;
                 var rate = schedule.PerDiemRate ?? line.Rate;
-                return (rate * days, RateSource.PerDiem, FeeScheduleType.PerDiem, null);
+
+                // All-inclusive per diem (schedule-level PerDiemRate) with a length of
+                // stay: rate × LOS covers the whole stay — paid once per claim by
+                // ResolveBatchAsync — and units (= days on accommodation lines) are not
+                // applied again. Otherwise units are the day count (step 6): a line-level
+                // daily rate (e.g. room and board keyed by revenue code) prices each
+                // accommodation line by the days it bills, so a claim-level LOS sent on
+                // every line never multiplies each line by the whole stay.
+                if (schedule.PerDiemRate.HasValue && request.LengthOfStay is { } los)
+                    return (rate * los, RateSource.PerDiem, FeeScheduleType.PerDiem, null, true);
+
+                return (rate, RateSource.PerDiem, FeeScheduleType.PerDiem, null, false);
             }
 
             case FeeScheduleType.Drg:
@@ -474,21 +534,21 @@ public class RateResolutionService : IRateResolutionService
                 // If DRG weight is specified, rate = base rate × weight
                 if (line.DrgWeight.HasValue && line.DrgWeight.Value > 0)
                     drgRate = (schedule.DrgBaseRate ?? line.Rate) * line.DrgWeight.Value;
-                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg, null);
+                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg, null, false);
             }
 
             case FeeScheduleType.MedicareMpfs:
             case FeeScheduleType.MedicareOpps:
             {
                 var amount = CalculateMedicareLineAmount(schedule, line, request.PlaceOfServiceCode);
-                return (amount, RateSource.MedicareMpfs, schedule.Type, null);
+                return (amount, RateSource.MedicareMpfs, schedule.Type, null, false);
             }
 
             case FeeScheduleType.Medicaid:
             {
-                var amount = await ResolveMedicaidRateAsync(
+                var (amount, failure) = await ResolveMedicaidRateAsync(
                     request, schedule, line, ct);
-                return (amount, RateSource.Medicaid, FeeScheduleType.Medicaid, null);
+                return (amount, RateSource.Medicaid, FeeScheduleType.Medicaid, failure, false);
             }
 
             default: // Commercial, Custom
@@ -505,18 +565,15 @@ public class RateResolutionService : IRateResolutionService
                         request, schedule, line, ct);
 
                     if (medicareRate is null)
-                        return (0m, source, schedule.Type, failure);
+                        return (0m, source, schedule.Type, failure, false);
 
-                    return (Math.Round(medicareRate.Value * line.Rate, 2), source, schedule.Type, null);
+                    return (Math.Round(medicareRate.Value * line.Rate, 2), source, schedule.Type, null, false);
                 }
 
-                var amount = line.RateType switch
-                {
-                    FeeScheduleRateType.PercentOfBilled => request.BilledAmount * line.Rate,
-                    _                                   => line.Rate,
-                };
+                if (line.RateType == FeeScheduleRateType.PercentOfBilled)
+                    return (request.BilledAmount * line.Rate, source, schedule.Type, null, true);
 
-                return (amount, source, schedule.Type, null);
+                return (line.Rate, source, schedule.Type, null, false);
             }
         }
     }
@@ -541,7 +598,7 @@ public class RateResolutionService : IRateResolutionService
     /// QNXT equivalent: FS_FEE_SCHEDULE → REFERENCE_SCHEDULE_ID lookup
     /// for percent-of-Medicare pricing.
     /// </summary>
-    private async Task<decimal> ResolveMedicaidRateAsync(
+    private async Task<(decimal amount, string? failureReason)> ResolveMedicaidRateAsync(
         PricingRequest request,
         FeeSchedule medicaidSchedule,
         FeeScheduleLine medicaidLine,
@@ -551,7 +608,7 @@ public class RateResolutionService : IRateResolutionService
         if (medicaidLine.RateType == FeeScheduleRateType.FlatRate
             && !medicaidSchedule.PercentOfMedicare.HasValue)
         {
-            return medicaidLine.Rate;
+            return (medicaidLine.Rate, null);
         }
 
         // Strategy 3: Inline RVU on the Medicaid line itself
@@ -560,7 +617,7 @@ public class RateResolutionService : IRateResolutionService
             var rvuAmount = CalculateRvuAmount(medicaidSchedule, medicaidLine, request.PlaceOfServiceCode);
             if (medicaidSchedule.PercentOfMedicare.HasValue)
                 rvuAmount *= medicaidSchedule.PercentOfMedicare.Value;
-            return Math.Round(rvuAmount, 2);
+            return (Math.Round(rvuAmount, 2), null);
         }
 
         // Strategy 2: Cross-schedule lookup — load the base Medicare MPFS schedule
@@ -573,6 +630,16 @@ public class RateResolutionService : IRateResolutionService
             if (baseSchedule is not null)
             {
                 var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
+                if (baseLine is { RateType: FeeScheduleRateType.Rvu }
+                    && !baseSchedule.ConversionFactor.HasValue)
+                {
+                    // CalculateRvuAmount would fall back to the stored Rate, which is not
+                    // maintained for RVU lines — not a usable Medicare rate.
+                    return (0m,
+                        $"Medicare reference schedule {medicaidSchedule.BaseMpfsFeeScheduleId} has no " +
+                        $"conversion factor to price RVU line {request.ProcedureCode}");
+                }
+
                 if (baseLine is not null)
                 {
                     var medicareRate = CalculateMedicareLineAmount(
@@ -583,23 +650,24 @@ public class RateResolutionService : IRateResolutionService
                     _logger.LogDebug(
                         "Medicaid cross-schedule: {ProcedureCode} Medicare={MedicareRate:C} " +
                         "× {Percent:P0} = {MedicaidRate:C}",
-                        request.ProcedureCode, medicareRate,
+                        LogSanitizer.SafeForLog(request.ProcedureCode), medicareRate,
                         medicaidSchedule.PercentOfMedicare.Value, medicaidRate);
 
-                    return Math.Round(medicaidRate, 2);
+                    return (Math.Round(medicaidRate, 2), null);
                 }
 
                 _logger.LogWarning(
                     "Medicaid cross-schedule: base MPFS schedule {ScheduleId} has no line " +
                     "for {ProcedureCode}; falling back to Medicaid line rate",
-                    medicaidSchedule.BaseMpfsFeeScheduleId, request.ProcedureCode);
+                    LogSanitizer.SafeForLog(medicaidSchedule.BaseMpfsFeeScheduleId),
+                    LogSanitizer.SafeForLog(request.ProcedureCode));
             }
             else
             {
                 _logger.LogWarning(
                     "Medicaid cross-schedule: base MPFS schedule {ScheduleId} not found; " +
                     "falling back to Medicaid line rate",
-                    medicaidSchedule.BaseMpfsFeeScheduleId);
+                    LogSanitizer.SafeForLog(medicaidSchedule.BaseMpfsFeeScheduleId));
             }
         }
 
@@ -608,7 +676,7 @@ public class RateResolutionService : IRateResolutionService
         if (medicaidSchedule.PercentOfMedicare.HasValue)
             fallbackRate *= medicaidSchedule.PercentOfMedicare.Value;
 
-        return Math.Round(fallbackRate, 2);
+        return (Math.Round(fallbackRate, 2), null);
     }
 
     // ── Percent-of-Medicare base resolution (Commercial / Custom) ──────
@@ -623,7 +691,8 @@ public class RateResolutionService : IRateResolutionService
     /// 2. RVUs stored inline on the line itself, priced with the schedule's
     ///    GPCI × ConversionFactor.
     ///
-    /// Returns a null rate with a reason when neither yields a Medicare amount.
+    /// Falls through to (2) when the reference schedule is missing or unusable;
+    /// returns a null rate with a reason only when neither yields a Medicare amount.
     /// </summary>
     private async Task<(decimal? medicareRate, string? failureReason)> ResolveMedicareBaseRateAsync(
         PricingRequest request,
@@ -631,24 +700,36 @@ public class RateResolutionService : IRateResolutionService
         FeeScheduleLine line,
         CancellationToken ct)
     {
+        string? referenceFailure = null;
+
         if (schedule.BaseMpfsFeeScheduleId is not null)
         {
             var baseSchedule = await _feeScheduleRepo.GetByIdAsync(
                 request.TenantId, schedule.BaseMpfsFeeScheduleId, ct);
 
             if (baseSchedule is null)
-                return (null, $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} not found");
-
-            var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
-            if (baseLine is null
-                || baseLine.RateType is FeeScheduleRateType.PercentOfBilled or FeeScheduleRateType.PercentOfMedicare)
             {
-                return (null,
-                    $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} has no Medicare rate " +
-                    $"for {request.ProcedureCode}");
+                referenceFailure = $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} not found";
             }
+            else
+            {
+                var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
+                var usable = baseLine?.RateType switch
+                {
+                    FeeScheduleRateType.FlatRate => true,
+                    // An RVU line needs a conversion factor; CalculateRvuAmount would otherwise
+                    // fall back to the stored Rate, which is not maintained for RVU lines.
+                    FeeScheduleRateType.Rvu      => baseSchedule.ConversionFactor.HasValue,
+                    _                            => false,
+                };
 
-            return (CalculateMedicareLineAmount(baseSchedule, baseLine, request.PlaceOfServiceCode), null);
+                if (usable)
+                    return (CalculateMedicareLineAmount(baseSchedule, baseLine!, request.PlaceOfServiceCode), null);
+
+                referenceFailure =
+                    $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} has no usable Medicare rate " +
+                    $"for {request.ProcedureCode}";
+            }
         }
 
         // Inline RVUs: only usable when a conversion factor is configured — CalculateRvuAmount
@@ -656,12 +737,19 @@ public class RateResolutionService : IRateResolutionService
         if (schedule.ConversionFactor.HasValue
             && (line.WorkRvu.HasValue || line.PeRvu.HasValue || line.PeRvuFacility.HasValue || line.MpRvu.HasValue))
         {
+            if (referenceFailure is not null)
+            {
+                _logger.LogWarning(
+                    "Percent-of-Medicare for {ProcedureCode}: {Reason}; using inline RVUs",
+                    LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(referenceFailure));
+            }
+
             return (CalculateRvuAmount(schedule, line, request.PlaceOfServiceCode), null);
         }
 
-        return (null,
-            $"Percent-of-Medicare rate for {request.ProcedureCode} has no Medicare reference schedule " +
-            "or inline RVUs to price against");
+        return (null, referenceFailure
+            ?? $"Percent-of-Medicare rate for {request.ProcedureCode} has no Medicare reference schedule " +
+               "or inline RVUs to price against");
     }
 
     // ── RVU calculation ───────────────────────────────────────────────

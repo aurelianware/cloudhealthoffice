@@ -179,8 +179,8 @@ public sealed class PricingStage : IClaimAdjudicationStage
         // grouper, so a DRG-contracted claim without one finds no DRG rate
         // and pends NOCONTRACT rather than being grouped or guessed. The
         // engine pays a DRG case rate / all-inclusive per diem once per
-        // claim (lowest-numbered line) and allows $0 on the other lines, so
-        // sending the DRG on every line never pays N case rates.
+        // claim, allocated across the lines in proportion to billed charges,
+        // so sending the DRG on every line never pays N case rates.
         var drgCode = string.IsNullOrWhiteSpace(claim.Institutional?.DrgCode)
             ? null
             : claim.Institutional!.DrgCode!.Trim();
@@ -228,10 +228,17 @@ public sealed class PricingStage : IClaimAdjudicationStage
         IReadOnlyList<PricingRequest> requests,
         PricingResultSet priced)
     {
+        // A line number answered more than once is ambiguous — there is no
+        // principled way to pick one allowed amount, so treat it as unpriced
+        // rather than letting the first (or last) value win.
         var resultsByLine = new Dictionary<int, PricingResult>();
+        var duplicateResultLines = new HashSet<int>();
         foreach (var r in priced.LineResults)
         {
-            resultsByLine.TryAdd(r.LineNumber, r);
+            if (!resultsByLine.TryAdd(r.LineNumber, r))
+            {
+                duplicateResultLines.Add(r.LineNumber);
+            }
         }
 
         var allowed = new Dictionary<int, decimal>();
@@ -239,6 +246,14 @@ public sealed class PricingStage : IClaimAdjudicationStage
 
         foreach (var request in requests)
         {
+            if (duplicateResultLines.Contains(request.LineNumber))
+            {
+                unpriced.Add(new UnpricedLine(
+                    request.LineNumber, request.ProcedureCode,
+                    "pricing returned multiple results for line; allowed amount is ambiguous"));
+                continue;
+            }
+
             if (!resultsByLine.TryGetValue(request.LineNumber, out var result))
             {
                 unpriced.Add(new UnpricedLine(

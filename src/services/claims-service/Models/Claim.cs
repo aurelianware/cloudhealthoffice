@@ -509,8 +509,12 @@ public class ClaimLine
     public decimal Units { get; set; } = 1;
 
     /// <summary>
-    /// Charge amount per unit
-    /// 837: SV102 (professional) or SV202 (institutional)
+    /// Line-item charge amount: the TOTAL billed for this line across all
+    /// <see cref="Units"/> (NOT a per-unit price). Σ ChargeAmount over all
+    /// lines must equal the claim's <see cref="Claim.TotalChargeAmount"/>
+    /// (CLM02 balancing, scrub rule AL002) and flows unchanged to the
+    /// 835 SVC02.
+    /// 837: SV102 (professional) or SV203 (institutional)
     /// </summary>
     [Required]
     [Range(0, 999999.99)]
