@@ -29,6 +29,7 @@ public class BatchEraGeneratorReversalTests
                 InterchangeReceiverId = "R",
                 ApplicationSenderId = "S",
                 ApplicationReceiverId = "R",
+                OriginatingCompanyId = "1123456789",
             },
         };
 
