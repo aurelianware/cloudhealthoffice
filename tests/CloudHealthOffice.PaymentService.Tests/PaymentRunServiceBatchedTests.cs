@@ -124,7 +124,7 @@ public class PaymentRunServiceBatchedTests
         var claims = new[]
         {
             new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, ServiceLines = OneLine(80m), MemberId = "m1", Status = ClaimStatus.Approved },
-            new ClaimDto { Id = "c2", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-B", TotalChargeAmount = 200m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 160m }, ServiceLines = OneLine(160m), MemberId = "m2", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c2", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-B", TotalChargeAmount = 200m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 160m }, ServiceLines = OneLine(160m, 200m), MemberId = "m2", Status = ClaimStatus.Approved }
         };
         SetupClaimsResponse(claims);
 
@@ -320,7 +320,7 @@ public class PaymentRunServiceBatchedTests
         {
             new ClaimDto { Id = "c1", ClaimNumber = "CLM-1", BillingProviderNPI = "NPI-A", TotalChargeAmount = 100m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 80m }, ServiceLines = OneLine(80m), MemberId = "m1", Status = ClaimStatus.Approved },
             new ClaimDto { Id = "c-null", ClaimNumber = "CLM-2", BillingProviderNPI = "NPI-A", TotalChargeAmount = 5000m, AdjudicationResult = null, MemberId = "m2", Status = ClaimStatus.Approved },
-            new ClaimDto { Id = "c-zero", ClaimNumber = "CLM-3", BillingProviderNPI = "NPI-A", TotalChargeAmount = 300m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 0m }, ServiceLines = OneLine(0m), MemberId = "m3", Status = ClaimStatus.Approved }
+            new ClaimDto { Id = "c-zero", ClaimNumber = "CLM-3", BillingProviderNPI = "NPI-A", TotalChargeAmount = 300m, AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 0m }, ServiceLines = OneLine(0m, 300m), MemberId = "m3", Status = ClaimStatus.Approved }
         };
         SetupClaimsResponse(claims);
         SetupSinglePartnerPassThrough();
@@ -377,8 +377,8 @@ public class PaymentRunServiceBatchedTests
     }
 
     /// <summary>One service line paying <paramref name="paid"/> (SVC03 balances CLP04).</summary>
-    private static List<ClaimServiceLineDto> OneLine(decimal paid) =>
-        new() { new ClaimServiceLineDto { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = paid + 20m, PaidAmount = paid, Units = 1 } };
+    private static List<ClaimServiceLineDto> OneLine(decimal paid, decimal? charge = null) =>
+        new() { new ClaimServiceLineDto { LineNumber = 1, ProcedureCode = "99213", ChargeAmount = charge ?? paid + 20m, PaidAmount = paid, Units = 1 } };
 
     private static ClaimDto ClaimWithLines(string id, decimal approved, params decimal?[] linePaid) => new()
     {
@@ -799,6 +799,7 @@ public class PaymentRunServiceBatchedTests
         _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
         var claim = ClaimWithLines("c1", 170m, 120m, 50m);
         claim.TotalChargeAmount = 300m;
+        claim.ServiceLines![0].ChargeAmount = 200m; // CLP03 = sum of SVC02
         claim.AdjudicationResult!.AllowedAmount = 220m;
         claim.AdjudicationResult.PatientResponsibility = 50m;
         SetupClaimsResponse(new[] { claim });

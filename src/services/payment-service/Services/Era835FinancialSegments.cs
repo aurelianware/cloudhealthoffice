@@ -106,15 +106,48 @@ public static class Era835FinancialSegments
     }
 
     /// <summary>
+    /// The adjustment balancing problems of one claim. Once its lines carry
+    /// CAS: each line with CAS must satisfy SVC02 - sum(line CAS) = SVC03, and
+    /// the claim CLP03 - sum(CAS, claim and lines) = CLP04. Empty when it
+    /// balances, or when no line carries CAS (claim-level CAS, or a reversal
+    /// whose lines carry none, is not checked here).
+    /// </summary>
+    public static IReadOnlyList<string> AdjustmentBalanceProblems(ClaimPayment cp)
+    {
+        var problems = new List<string>();
+        if (!cp.ServiceLines.Any(l => l.Adjustments.Count > 0))
+            return problems;
+
+        foreach (var line in cp.ServiceLines.Where(l => l.Adjustments.Count > 0))
+        {
+            var cas = line.Adjustments.Sum(a => a.Amount);
+            if (line.ChargeAmount - cas != line.PaymentAmount)
+                problems.Add(
+                    $"claim {cp.ClaimId} line {line.LineNumber}: charge (SVC02) {line.ChargeAmount:F2} less adjustments (CAS) {cas:F2} " +
+                    $"is {line.ChargeAmount - cas:F2} but the line payment (SVC03) is {line.PaymentAmount:F2}");
+        }
+
+        var allCas = cp.ClaimAdjustments.Sum(a => a.Amount) + cp.ServiceLines.Sum(l => l.Adjustments.Sum(a => a.Amount));
+        if (cp.ChargeAmount - allCas != cp.PaymentAmount)
+            problems.Add(
+                $"claim {cp.ClaimId}: charge (CLP03) {cp.ChargeAmount:F2} less adjustments (CAS, claim and lines) {allCas:F2} " +
+                $"is {cp.ChargeAmount - allCas:F2} but the claim payment (CLP04) is {cp.PaymentAmount:F2}");
+        return problems;
+    }
+
+    /// <summary>
     /// Throws <see cref="InvalidOperationException"/> unless the 835 balances:
-    /// BPR02 = sum of CLP04 - sum of PLB amounts, and for every claim with
-    /// service lines, sum of SVC03 = CLP04.
+    /// BPR02 = sum of CLP04 - sum of PLB amounts; for every claim with
+    /// service lines, sum of SVC03 = CLP04; and, once lines carry CAS,
+    /// SVC02 - sum(line CAS) = SVC03 and CLP03 - sum(CAS) = CLP04
+    /// (<see cref="AdjustmentBalanceProblems"/>).
     /// </summary>
     public static void EnsureBalanced(
         decimal bprAmount, IEnumerable<ClaimPayment> claimPayments, IEnumerable<ProviderAdjustment> providerAdjustments)
     {
         var claims = claimPayments.ToList();
-        var problems = claims.Select(ServiceLineBalanceProblem).Where(p => p != null).ToList();
+        var problems = claims.Select(ServiceLineBalanceProblem).Where(p => p != null).Select(p => p!).ToList();
+        problems.AddRange(claims.SelectMany(AdjustmentBalanceProblems));
 
         var expected = claims.Sum(cp => cp.PaymentAmount) - providerAdjustments.Sum(a => a.Amount);
         if (expected != bprAmount)

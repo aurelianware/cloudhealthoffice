@@ -646,7 +646,23 @@ public class PaymentRunService : IPaymentRunService
             var linePaid = lines.Sum(sl => sl.LinePaidAmount ?? 0m);
             if (RemitsAtClaimLevel(claim) || linePaid == expected)
             {
-                kept.Add(claim);
+                // The CAS must balance too (SVC02 - line CAS = SVC03, CLP03 -
+                // all CAS = CLP04); checked here, before anything is reserved
+                // or paid, rather than failing 835 generation afterwards.
+                var casProblems = Era835FinancialSegments.AdjustmentBalanceProblems(BuildClaimPayment(claim, denied));
+                if (casProblems.Count == 0)
+                {
+                    kept.Add(claim);
+                    continue;
+                }
+
+                paymentRun.UnbalancedServiceLineClaimIds.Add(claim.Id);
+                paymentRun.Warnings.Add(
+                    (denied ? $"Denied claim {claim.Id} not remitted" : $"Claim {claim.Id} not paid") +
+                    ": its adjustments do not balance, so its 835 would not balance: " + string.Join("; ", casProblems));
+                _logger.LogWarning(
+                    "Claim {ClaimId} adjustments do not balance; excluded from payment run {PaymentRunNumber}",
+                    SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
                 continue;
             }
 
@@ -665,13 +681,7 @@ public class PaymentRunService : IPaymentRunService
         return kept;
     }
 
-    /// <summary>
-    /// True when the claim is remitted at claim level, without SVC loops: it
-    /// has no service lines, or none of them carries a paid amount (the claim
-    /// was adjudicated at claim level only: payerPayment without line results).
-    /// </summary>
-    private static bool RemitsAtClaimLevel(ClaimDto claim) =>
-        claim.ServiceLines is not { Count: > 0 } lines || lines.All(sl => sl.LinePaidAmount is null);
+    private static bool RemitsAtClaimLevel(ClaimDto claim) => Era835ClaimPaymentBuilder.RemitsAtClaimLevel(claim);
 
     /// <summary>
     /// The denied claims to remit in this run: claims-service status Denied,
@@ -963,148 +973,11 @@ public class PaymentRunService : IPaymentRunService
         return inputs;
     }
 
-    /// <summary>
-    /// One claim's 2100 loop. A paid claim: CLP02 = 1, CLP04 = its plan-paid
-    /// amount. A denial: CLP02 = 4, CLP04 = 0, its denial CARC in the header
-    /// CAS (carrying the part of the charge no other adjustment explains, so
-    /// CLP03 - CLP04 = the adjustments) and its RARCs in MOA. A claim whose
-    /// lines carry no paid amount is remitted at claim level, without SVC.
-    /// </summary>
-    private ClaimPayment BuildClaimPayment(ClaimDto claim, bool denied)
-    {
-        var snapshot = BuildAdjudicationSnapshot(claim);
-        var headerCas = _carcRarcMapper.MapClaimAdjustments(snapshot).ToList();
-        var perLineCas = _carcRarcMapper.MapLineAdjustments(snapshot);
+    /// <summary>One claim's 2100/2110 data; see <see cref="Era835ClaimPaymentBuilder"/>.</summary>
+    private ClaimPayment BuildClaimPayment(ClaimDto claim, bool denied) =>
+        Era835ClaimPaymentBuilder.Build(claim, denied, _carcRarcMapper);
 
-        var serviceLines = RemitsAtClaimLevel(claim)
-            ? new List<ServiceLinePayment>()
-            : claim.ServiceLines!
-                .Select(sl => new ServiceLinePayment
-                {
-                    LineNumber = sl.LineNumber,
-                    ProcedureCode = sl.ProcedureCode,
-                    ChargeAmount = sl.ChargeAmount,
-                    // Never the line charge: the recorded paid amount, or 0
-                    // (ExcludeUnbalancedServiceLines kept the claim only if
-                    // the lines balance to CLP04 with 0 for unpriced lines).
-                    PaymentAmount = sl.LinePaidAmount ?? 0m,
-                    RevenueCode = sl.RevenueCode,
-                    Units = sl.Units,
-                    ServiceDateFrom = sl.ServiceDateFrom,
-                    ServiceDateTo = sl.ServiceDateTo,
-                    Adjustments = perLineCas.TryGetValue(sl.LineNumber, out var lineAdj)
-                        ? lineAdj.ToList()
-                        : new List<ServiceLineAdjustment>()
-                })
-                .ToList();
-
-        var paid = denied ? 0m : PlanPaidAmountOf(claim);
-        if (denied)
-            headerCas = WithDenialAmount(headerCas, claim, serviceLines);
-
-        return new ClaimPayment
-        {
-            ClaimId = claim.Id,
-            PatientControlNumber = claim.ClaimNumber,
-            // CLP02: 1 = processed as primary, 4 = denied.
-            ClaimStatusCode = denied ? "4" : "1",
-            // CLP03 total charge, CLP04 plan paid (0 for a denial), CLP05 member responsibility.
-            ChargeAmount = claim.TotalChargeAmount,
-            PaymentAmount = paid,
-            PatientResponsibilityAmount = claim.AdjudicationResult?.PatientResponsibility ?? 0m,
-            PayerClaimControlNumber = claim.PayerClaimControlNumber,
-            IsInstitutional = claim.ClaimType == ClaimFormType.Institutional,
-            MemberId = claim.MemberId,
-            RenderingProviderNPI = claim.RenderingProviderNPI,
-            ClaimAdjustments = headerCas,
-            RemarkCodes = denied ? snapshot.RemarkCodes.ToList() : new List<string>(),
-            ServiceLines = serviceLines
-        };
-    }
-
-    /// <summary>
-    /// The mapper emits a header denial CARC with amount 0. On a denial the
-    /// CARC explains the charge the plan did not pay, so it carries what the
-    /// other adjustments leave unexplained (charge - 0 paid - other CAS).
-    /// </summary>
-    private static List<ClaimAdjustment> WithDenialAmount(
-        List<ClaimAdjustment> headerCas, ClaimDto claim, List<ServiceLinePayment> serviceLines)
-    {
-        var code = claim.AdjudicationResult?.DenialReasonCode;
-        if (string.IsNullOrEmpty(code))
-            return headerCas;
-        var index = headerCas.FindIndex(a => a.Amount == 0m && string.Equals(a.ReasonCode, code, StringComparison.Ordinal));
-        if (index < 0)
-            return headerCas;
-
-        var unexplained = claim.TotalChargeAmount
-            - headerCas.Sum(a => a.Amount)
-            - serviceLines.Sum(l => l.Adjustments.Sum(a => a.Amount));
-        if (unexplained <= 0m)
-            return headerCas;
-
-        var denial = headerCas[index];
-        headerCas[index] = new ClaimAdjustment
-        {
-            GroupCode = denial.GroupCode,
-            ReasonCode = denial.ReasonCode,
-            Amount = unexplained,
-            ReasonDescription = denial.ReasonDescription,
-        };
-        return headerCas;
-    }
-
-    /// <summary>
-    /// The amount a claim is paid: the plan's payment. Claims without one are
-    /// excluded before reservation (<see cref="ExcludeNotPayable"/>); reaching
-    /// here without one is a bug, and the run fails rather than paying billed
-    /// charges.
-    /// </summary>
-    private static decimal PlanPaidAmountOf(ClaimDto claim) =>
-        claim.PlanPaidAmount
-        ?? throw new InvalidOperationException(
-            $"Claim {claim.Id} has no plan-paid amount; it is never paid at billed charges");
-
-    private static ClaimAdjudicationSnapshot BuildAdjudicationSnapshot(ClaimDto claim)
-    {
-        var snapshot = new ClaimAdjudicationSnapshot
-        {
-            ClaimId = claim.Id,
-            DenialReasonCode = claim.AdjudicationResult?.DenialReasonCode,
-            DenialReason = claim.AdjudicationResult?.DenialReason,
-        };
-
-        if (claim.AdjudicationResult?.AdjustmentReasons is { Count: > 0 } reasons)
-        {
-            snapshot.AdjustmentReasons = reasons.Select(r => new ClaimAdjustmentReasonView
-            {
-                GroupCode = r.GroupCode,
-                ReasonCode = r.ReasonCode,
-                Amount = r.Amount,
-                Description = r.Description
-            }).ToList();
-        }
-
-        if (claim.AdjudicationResult?.RemarkCodes is { Count: > 0 } remarks)
-        {
-            snapshot.RemarkCodes = remarks.ToList();
-        }
-
-        if (claim.PendDetails?.EditFailures is { Count: > 0 } failures)
-        {
-            snapshot.EditFailures = failures.Select(f => new EditFailureView
-            {
-                EditType = f.EditType,
-                RuleId = f.RuleId,
-                Message = f.Message,
-                AffectedLineNumbers = f.AffectedLineNumbers?.ToList() ?? new List<int>(),
-                SuggestedCarc = f.SuggestedCarc,
-                SuggestedRarc = f.SuggestedRarc
-            }).ToList();
-        }
-
-        return snapshot;
-    }
+    private static decimal PlanPaidAmountOf(ClaimDto claim) => Era835ClaimPaymentBuilder.PlanPaidAmountOf(claim);
 
     private async Task FinalizeIssuedPaymentsAsync(
         List<Payment> issuedPayments,
@@ -1372,6 +1245,27 @@ public class ClaimServiceLineDto
 public class ClaimLineAdjudicationDto
 {
     public decimal? PaidAmount { get; set; }
+
+    /// <summary>
+    /// The line's adjustments (claims-service <c>LineAdjudicationResult.AdjustmentReasons</c>):
+    /// CO-45, PR-1/2/3, OA-23, CO denial CARCs. Emitted as the line's CAS.
+    /// Empty on claims adjudicated before claims-service populated it.
+    /// </summary>
+    public List<ClaimLineAdjustmentReasonDto>? AdjustmentReasons { get; set; }
+}
+
+/// <summary>
+/// One line adjustment as claims-service sends it. <c>remarkCode</c> is read
+/// when present (claims-service adds it with line cost-share adjustments) and
+/// is null otherwise.
+/// </summary>
+public class ClaimLineAdjustmentReasonDto
+{
+    public string GroupCode { get; set; } = string.Empty;
+    public string ReasonCode { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string? Description { get; set; }
+    public string? RemarkCode { get; set; }
 }
 
 internal class RemittancePostBody

@@ -179,6 +179,42 @@ Fallback CARC `237` (mirrors 5.11 EOB projector default) only fires
 when an edit failure has `SuggestedCarc=null`. The fallback never
 overrides an explicit CARC from the precedence chain above.
 
+### Line-level CAS (2110) and balancing
+
+`Era835ClaimPaymentBuilder` turns the mapper output and the claim into
+the 835's adjustments:
+
+- A line remitted with an SVC loop carries its own CAS: the line's
+  adjudication adjustments (`claimLines[].adjudicationResult.adjustmentReasons`,
+  filled by claims-service: CO-45, PR-1/2/3, OA-23, CO denial CARCs),
+  grouped by group code, up to six reason/amount/quantity triplets per
+  CAS (the quantity is empty: `CAS*CO*45*100.00**253*50.00`). A RARC on
+  an adjustment (`remarkCode`, read when claims-service sends it) goes in
+  `LQ*HE` after the line's CAS.
+- NCCI edit CARCs for the line are added only when the line does not
+  already carry that group and CARC; they never double count the money,
+  and every distinct RARC of a matching edit still reaches `LQ*HE`.
+- **Fallback for lines without adjustment detail** (claims adjudicated
+  before claims-service populated line adjustments): on a single-line
+  claim the claim-level adjustments become that line's CAS; whatever
+  SVC02 - SVC03 is still unexplained goes to the adjustment carrying the
+  line's NCCI edit CARC (matched by group and CARC) if it has one, else to
+  one `CO-45` (on a denial, CO with the denial CARC).
+  So every line balances, at the cost of reporting member cost share on
+  such older multi-line claims as CO-45.
+- When the lines carry CAS, the claim-level adjustments (the claim's
+  totals of the same amounts) are not repeated in the header; only a
+  denial CARC no line carries stays there. A claim remitted at claim
+  level (no SVC) keeps the claim-level adjustments in its header CAS.
+- On a denial the header entry with the denial CARC, whatever amount it
+  arrived with, carries what the other adjustments leave unexplained.
+
+Generation checks, once lines carry CAS, that each line satisfies
+SVC02 - sum(line CAS) = SVC03 and the claim CLP03 - sum(CAS, claim and
+lines) = CLP04, and throws otherwise. A payment run checks the same
+before reserving: a claim that would fail is not paid and is listed in
+`UnbalancedServiceLineClaimIds`.
+
 ## Check number allocation
 
 A PaymentRun allocates **one check number per trading partner envelope**.

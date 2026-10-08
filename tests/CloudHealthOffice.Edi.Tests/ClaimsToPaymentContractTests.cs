@@ -108,6 +108,94 @@ public class ClaimsToPaymentContractTests
         }
     }
 
+    /// <summary>
+    /// claims-service fills <c>claimLines[].adjudicationResult.adjustmentReasons</c>
+    /// (CO-45, PR-1/2/3, OA-23). <c>remarkCode</c> arrives with the line
+    /// cost-share change; it is not on this model yet, so it is added to the
+    /// wire JSON here the way claims-service will send it.
+    /// </summary>
+    private static Claims.Claim ClaimWithLineAdjustments()
+    {
+        var claim = AdjudicatedClaim(Claims.ClaimStatus.Approved);
+        claim.ClaimLines[0].AdjudicationResult!.AdjustmentReasons = new List<Claims.ClaimAdjustmentReason>
+        {
+            new() { GroupCode = "CO", ReasonCode = "45", Amount = 50m },
+            new() { GroupCode = "PR", ReasonCode = "1", Amount = 20m, Description = "Deductible" },
+            new() { GroupCode = "PR", ReasonCode = "2", Amount = 10m },
+        };
+        claim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons = new List<Claims.ClaimAdjustmentReason>
+        {
+            new() { GroupCode = "CO", ReasonCode = "45", Amount = 30m },
+            new() { GroupCode = "OA", ReasonCode = "23", Amount = 0m },
+            new() { GroupCode = "PR", ReasonCode = "1", Amount = 20m },
+        };
+        return claim;
+    }
+
+    private static async Task<Pay.ClaimDto> RoundTripWithLineRemark(Claims.Claim claim, int line, int adjustment, string remarkCode)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(new[] { claim }, ClaimsServiceWire))!;
+        node[0]!["claimLines"]![line]!["adjudicationResult"]!["adjustmentReasons"]![adjustment]!["remarkCode"] = remarkCode;
+        using var content = new StringContent(node.ToJsonString(), Encoding.UTF8, "application/json");
+        return Assert.Single((await content.ReadFromJsonAsync<List<Pay.ClaimDto>>())!);
+    }
+
+    [Fact]
+    public async Task LineAdjustmentReasons_BecomeSvcCas_RemarkInLq_AndThe835Balances()
+    {
+        var dto = await RoundTripWithLineRemark(ClaimWithLineAdjustments(), line: 0, adjustment: 1, remarkCode: "N130");
+        var cp = Pay.Era835ClaimPaymentBuilder.Build(dto, denied: false,
+            new Pay.CarcRarcMappingService(Microsoft.Extensions.Logging.Abstractions.NullLogger<Pay.CarcRarcMappingService>.Instance));
+
+        var payment = new PayModels.Payment
+        {
+            CheckNumber = "0001000001", PaymentMethod = "CHK", TotalPaymentAmount = cp.PaymentAmount,
+            PaymentDate = new DateTime(2026, 4, 2), PayeeNPI = "1234567893",
+            ClaimPayments = new List<PayModels.ClaimPayment> { cp },
+        };
+        var edi = new Pay.BatchEraGeneratorService(Microsoft.Extensions.Logging.Abstractions.NullLogger<Pay.BatchEraGeneratorService>.Instance)
+            .GenerateBatch(new[] { new Pay.EraPaymentInput { TradingPartnerId = "TP", Payment = payment } },
+                new Dictionary<string, Pay.TradingPartnerInfo> { ["TP"] = new() { OriginatingCompanyId = "1123456789" } })
+            .Single().EdiContent;
+        var segments = edi.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
+
+        // Line CAS grouped by group code, reason/amount/quantity triplets; the claim-level
+        // CO-45 total is not repeated in the header.
+        // (service-date DTMs between SVC and CAS left out of the comparison)
+        var withoutLineDates = string.Join("~", edi.Split('~').Where(s => !s.StartsWith("DTM*47", StringComparison.Ordinal)));
+        Assert.Contains(
+            "SVC*HC:99213*200.00*120.00**1~CAS*CO*45*50.00~CAS*PR*1*20.00**2*10.00~LQ*HE*N130~" +
+            "SVC*HC:85025*100.00*50.00**1~CAS*CO*45*30.00~CAS*OA*23*0.00~CAS*PR*1*20.00~",
+            withoutLineDates);
+        var clp = segments.Single(s => s[0] == "CLP");
+        Assert.DoesNotContain(segments.SkipWhile(s => s[0] != "CLP").Skip(1).TakeWhile(s => s[0] != "NM1"), s => s[0] == "CAS");
+
+        // SVC02 - sum(line CAS) = SVC03 for each line; CLP03 - sum(CAS) = CLP04.
+        var lineCas = 0m;
+        for (var i = 0; i < segments.Count; i++)
+        {
+            if (segments[i][0] != "SVC") continue;
+            var cas = segments.Skip(i + 1).TakeWhile(s => s[0] is not ("SVC" or "PLB" or "SE"))
+                .Where(s => s[0] == "CAS")
+                .Sum(s => Enumerable.Range(0, (s.Length - 1) / 3).Sum(k => decimal.Parse(s[3 + 3 * k])));
+            Assert.Equal(decimal.Parse(segments[i][3]), decimal.Parse(segments[i][2]) - cas);
+            lineCas += cas;
+        }
+        Assert.Equal(decimal.Parse(clp[4]), decimal.Parse(clp[3]) - lineCas);
+        Assert.Equal("170.00", clp[4]);
+    }
+
+    [Fact]
+    public async Task LineAdjustmentReasons_WithoutRemarkCode_DeserializeWithNullRemark()
+    {
+        var dto = await RoundTrip(ClaimWithLineAdjustments());
+
+        var reasons = dto.ServiceLines![0].AdjudicationResult!.AdjustmentReasons!;
+        Assert.Equal(new[] { ("CO", "45", 50m), ("PR", "1", 20m), ("PR", "2", 10m) },
+            reasons.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
+        Assert.All(reasons, r => Assert.Null(r.RemarkCode));
+    }
+
     [Fact]
     public async Task ClaimWithoutAdjudicationResult_HasNoPlanPaidAmount()
     {

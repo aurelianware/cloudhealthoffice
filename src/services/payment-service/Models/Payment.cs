@@ -350,6 +350,14 @@ public class ServiceLinePayment
     /// 835: CAS segments at 2110 level
     /// </summary>
     public List<ServiceLineAdjustment> Adjustments { get; set; } = new();
+
+    /// <summary>
+    /// Further line remark codes (RARCs) not held by an adjustment's
+    /// <see cref="ServiceLineAdjustment.RemarkCode"/>, e.g. the RARC of an NCCI
+    /// edit whose CARC the line already carries. 835: LQ*HE, with the
+    /// adjustments' RARCs, each distinct code once.
+    /// </summary>
+    public List<string> RemarkCodes { get; set; } = new();
 }
 
 /// <summary>
