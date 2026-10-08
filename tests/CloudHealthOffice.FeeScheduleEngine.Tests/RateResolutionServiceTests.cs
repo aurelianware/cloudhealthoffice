@@ -286,6 +286,120 @@ public class RateResolutionServiceTests
         Assert.Empty(result.Adjustments);
     }
 
+    /// <summary>
+    /// A DRG claim sends the same DRG on every line; the case rate must be
+    /// paid once for the admission, not once per line, and is allocated
+    /// across the lines in proportion to billed charges.
+    /// Base rate $5,000 × weight 2.4 = $12,000 for the claim; billed $42,500.
+    /// </summary>
+    [Fact]
+    public async Task Drg_Batch_PaysCaseRateOnceAtClaimLevel()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "drg-batch", TenantId = Tenant, Name = "DRG Weight-Based",
+            Type = FeeScheduleType.Drg,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            DrgBaseRate = 5000m,
+            Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = 0m, DrgWeight = 2.4m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        // Deliberately out of line order: the remainder goes to the highest line number.
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest("27447", billed: 29000m, drgCode: "470", los: 4, lineNumber: 3, totalLines: 3, revenueCode: "0360"),
+            CreateRequest(string.Empty, billed: 12000m, drgCode: "470", los: 4, lineNumber: 1, totalLines: 3, revenueCode: "0120", units: 4m),
+            CreateRequest(string.Empty, billed: 1500m, drgCode: "470", los: 4, lineNumber: 2, totalLines: 3, revenueCode: "0250", units: 10m),
+        ]);
+
+        Assert.Equal(3, result.LineResults.Count);
+        Assert.Equal(12000m, result.TotalAllowedAmount);
+        Assert.Equal(new[] { 1, 2, 3 }, result.LineResults.Select(r => r.LineNumber));
+        // 12000 × 12000/42500 = 3388.235… → 3388.23; × 1500/42500 = 423.529… → 423.52;
+        // line 3 takes the remainder 12000 − 3811.75 = 8188.25.
+        Assert.Equal(new[] { 3388.23m, 423.52m, 8188.25m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.All(result.LineResults, r =>
+        {
+            Assert.Equal(RateSource.Drg, r.RateSource);
+            Assert.True(r.ContractualAdjustment >= 0m); // allowed ≤ billed on every line
+            var adj = Assert.Single(r.Adjustments);
+            Assert.Contains("DRG case rate 12000.00 for the claim allocated by billed charges", adj.Description);
+            Assert.Equal(r.AllowedAmount - 12000m, adj.AdjustmentAmount);
+        });
+    }
+
+    [Fact]
+    public async Task Drg_Batch_CaseRateAboveTotalBilled_AllocatesProportionally_NegativeContractual()
+    {
+        // Contract without lesser-of-billed: the case rate exceeds total billed.
+        var schedule = new FeeSchedule
+        {
+            Id = "drg-over", TenantId = Tenant, Name = "DRG",
+            Type = FeeScheduleType.Drg,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = 12000m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 2000m, drgCode: "470", lineNumber: 1, totalLines: 2, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: 1000m, drgCode: "470", lineNumber: 2, totalLines: 2, revenueCode: "0250"),
+        ]);
+
+        Assert.Equal(new[] { 8000m, 4000m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(12000m, result.TotalAllowedAmount);
+        Assert.All(result.LineResults, r => Assert.True(r.ContractualAdjustment < 0m));
+    }
+
+    [Theory]
+    [InlineData(1, 1, 1)]   // equal billed: 33.33 / 33.33 / 33.34
+    [InlineData(0, 0, 0)]   // nothing billed: split evenly the same way
+    public async Task Drg_Batch_RoundsToCents_RemainderOnLastLine(int billed1, int billed2, int billed3)
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "drg-round", TenantId = Tenant, Name = "DRG",
+            Type = FeeScheduleType.Drg,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "999", Rate = 100m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: billed1, drgCode: "999", lineNumber: 1, totalLines: 3, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: billed2, drgCode: "999", lineNumber: 2, totalLines: 3, revenueCode: "0250"),
+            CreateRequest(string.Empty, billed: billed3, drgCode: "999", lineNumber: 3, totalLines: 3, revenueCode: "0300"),
+        ]);
+
+        Assert.Equal(new[] { 33.33m, 33.33m, 33.34m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(100m, result.TotalAllowedAmount);
+    }
+
+    [Fact]
+    public async Task Drg_NoDrgOnClaim_FallsBackToBilledCharges_NoGrouping()
+    {
+        // No MS-DRG grouper: a DRG schedule with no billed DRG finds no rate.
+        var schedule = new FeeSchedule
+        {
+            Id = "drg-nogroup", TenantId = Tenant, Name = "DRG",
+            Type = FeeScheduleType.Drg,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = 12000m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 12000m, los: 4, lineNumber: 1, totalLines: 2, revenueCode: "0120"),
+            CreateRequest("27447", billed: 29000m, los: 4, lineNumber: 2, totalLines: 2, revenueCode: "0360"),
+        ]);
+
+        Assert.All(result.LineResults, r => Assert.Equal(RateSource.BilledCharges, r.RateSource));
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // COMMERCIAL FLAT RATE
     // ═══════════════════════════════════════════════════════════════════
@@ -1170,6 +1284,409 @@ public class RateResolutionServiceTests
         Assert.Equal(RateSource.PerDiem, result.RateSource);
     }
 
+    [Fact]
+    public async Task PerDiem_AllInclusive_UnitsDoNotMultiplyTheStay()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-units", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+        };
+        var engine = CreateEngine(schedule);
+
+        // Room-and-board line billing 4 days, stay of 4 days → 4 days, not 16.
+        var result = await engine.ResolveAsync(
+            CreateRequest(string.Empty, los: 4, revenueCode: "0120", units: 4m));
+
+        Assert.Equal(10000m, result.AllowedAmount);
+    }
+
+    /// <summary>
+    /// All-inclusive per diem: every line of the stay prices under the
+    /// schedule's daily rate (no per-code line needed), but the stay is paid
+    /// once — allocated across the lines by billed charges — not once per line.
+    /// </summary>
+    [Fact]
+    public async Task PerDiem_AllInclusive_Batch_PaysStayOnceAllocatedByBilled()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-batch", TenantId = Tenant, Name = "Inpatient Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 12000m, los: 4, lineNumber: 1, totalLines: 3, revenueCode: "0120", units: 4m),
+            CreateRequest(string.Empty, billed: 1500m, los: 4, lineNumber: 2, totalLines: 3, revenueCode: "0250", units: 10m),
+            CreateRequest("27447", billed: 29000m, los: 4, lineNumber: 3, totalLines: 3, revenueCode: "0360"),
+        ]);
+
+        Assert.Equal(10000m, result.TotalAllowedAmount); // 2500 × 4, once
+        // 10000 × 12000/42500 → 2823.52; × 1500/42500 → 352.94; remainder 6823.54.
+        Assert.Equal(new[] { 2823.52m, 352.94m, 6823.54m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.All(result.LineResults, r =>
+        {
+            Assert.Equal(RateSource.PerDiem, r.RateSource);
+            Assert.Contains("per diem 10000.00 for the claim", Assert.Single(r.Adjustments).Description);
+        });
+    }
+
+    [Fact]
+    public async Task PerDiem_AllInclusive_LineWithoutStay_IsNotCaptured()
+    {
+        // A per-diem schedule must not price an unrelated (no length of stay)
+        // line that has no rate line of its own.
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-nostay", TenantId = Tenant, Name = "Per Diem",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PerDiemRate = 2500m,
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest("99213", billed: 150m));
+
+        Assert.Equal(RateSource.BilledCharges, result.RateSource);
+    }
+
+    /// <summary>
+    /// Line-level per diem keyed by revenue code (no schedule-wide rate):
+    /// each accommodation line pays its own daily rate × the days it bills.
+    /// The claim's length of stay must not multiply every line.
+    /// </summary>
+    [Fact]
+    public async Task PerDiem_RevenueCodeLines_PriceEachAccommodationLineByItsDays()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "perdiem-rev", TenantId = Tenant, Name = "Room and Board by Revenue Code",
+            Type = FeeScheduleType.PerDiem,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { RevenueCode = "0120", Rate = 1800m },
+                new FeeScheduleLine { RevenueCode = "0200", Rate = 3000m },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 9000m, los: 4, lineNumber: 1, totalLines: 2, revenueCode: "0120", units: 3m),
+            CreateRequest(string.Empty, billed: 5000m, los: 4, lineNumber: 2, totalLines: 2, revenueCode: "0200", units: 1m),
+        ]);
+
+        Assert.Equal(5400m, result.LineResults[0].AllowedAmount); // 1800 × 3
+        Assert.Equal(3000m, result.LineResults[1].AllowedAmount); // 3000 × 1
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // REVENUE CODE MATCHING
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task RevenueCode_FlatRate_PricesRevenueCodeOnlyLine()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "rev-flat", TenantId = Tenant, Name = "Outpatient Revenue Code",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { RevenueCode = "450", Rate = 500m }]
+        };
+        var engine = CreateEngine(schedule);
+
+        // Leading-zero difference ("0450" billed, "450" keyed) still matches.
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(500m, result.AllowedAmount);
+        Assert.Equal(RateSource.ContractedRate, result.RateSource);
+    }
+
+    [Fact]
+    public async Task RevenueCode_ProcedureCodeLineTakesPrecedence()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "rev-precedence", TenantId = Tenant, Name = "Outpatient",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { RevenueCode = "0450", Rate = 500m },
+                new FeeScheduleLine { ProcedureCode = "99284", Rate = 700m },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var hcpcs = await engine.ResolveAsync(CreateRequest("99284", billed: 900m, revenueCode: "0450"));
+        var unlisted = await engine.ResolveAsync(CreateRequest("99285", billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(700m, hcpcs.AllowedAmount);
+        Assert.Equal(500m, unlisted.AllowedAmount); // falls back to the revenue-code rate
+    }
+
+    [Fact]
+    public async Task RevenueCode_NoMatchingLine_FallsBackToBilledCharges()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "rev-miss", TenantId = Tenant, Name = "Outpatient",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines =
+            [
+                new FeeScheduleLine { RevenueCode = "0450", Rate = 500m },
+                // A blank-code line with no revenue code must not act as a wildcard.
+                new FeeScheduleLine { Rate = 1m },
+            ]
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 250m, revenueCode: "0300"));
+
+        Assert.Equal(RateSource.BilledCharges, result.RateSource);
+    }
+
+    /// <summary>
+    /// A modifier-qualified revenue-code rate applies only when the claim line
+    /// carries that modifier, and wins over the unqualified rate — in either
+    /// schedule order, the same selection as procedure-code lines.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RevenueCode_ModifierQualifiedRate_MatchedBeforeBaseRate_EitherOrder(bool qualifiedFirst)
+    {
+        var qualified = new FeeScheduleLine { RevenueCode = "0450", Modifier = "TC", Rate = 300m };
+        var unqualified = new FeeScheduleLine { RevenueCode = "0450", Rate = 500m };
+        var schedule = new FeeSchedule
+        {
+            Id = $"rev-mod-{qualifiedFirst}", TenantId = Tenant, Name = "Outpatient",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = qualifiedFirst ? [qualified, unqualified] : [unqualified, qualified],
+        };
+        var engine = CreateEngine(schedule);
+
+        var withModifier = await engine.ResolveAsync(
+            CreateRequest(string.Empty, billed: 900m, revenueCode: "0450", modifiers: ["TC"]));
+        var withoutModifier = await engine.ResolveAsync(
+            CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+        var otherModifier = await engine.ResolveAsync(
+            CreateRequest(string.Empty, billed: 900m, revenueCode: "0450", modifiers: ["26"]));
+
+        Assert.Equal(300m, withModifier.AllowedAmount);
+        Assert.Equal(500m, withoutModifier.AllowedAmount);
+        Assert.Equal(500m, otherModifier.AllowedAmount);
+    }
+
+    [Fact]
+    public async Task RevenueCode_OnlyModifierQualifiedRate_ClaimWithoutModifier_NotMatched()
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "rev-mod-only", TenantId = Tenant, Name = "Outpatient",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", Modifier = "TC", Rate = 300m }],
+        };
+        var engine = CreateEngine(schedule);
+
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(RateSource.BilledCharges, result.RateSource);
+    }
+
+    /// <summary>
+    /// Revenue-code-only line on a percent-of-Medicare contract: the Medicare
+    /// reference rate is looked up by revenue code on the reference schedule
+    /// too (110% × 400 = 440), not left unresolved.
+    /// </summary>
+    [Fact]
+    public async Task RevenueCode_Commercial_PercentOfMedicare_ReferenceLookedUpByRevenueCode()
+    {
+        var reference = new FeeSchedule
+        {
+            Id = "opps-ref", TenantId = Tenant, Name = "Medicare OPPS reference",
+            Type = FeeScheduleType.MedicareOpps,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", RateType = FeeScheduleRateType.FlatRate, Rate = 400m }],
+        };
+        var commercial = new FeeSchedule
+        {
+            Id = "comm-rev-pctmed", TenantId = Tenant, Name = "Commercial 110% of Medicare",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            BaseMpfsFeeScheduleId = "opps-ref",
+            Lines = [new FeeScheduleLine { RevenueCode = "450", RateType = FeeScheduleRateType.PercentOfMedicare, Rate = 1.10m }],
+        };
+        var repo = new InMemoryFeeScheduleRepo(commercial);
+        repo.AddSchedule(reference);
+        var engine = CreateEngine(commercial, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(440m, result.AllowedAmount);
+        Assert.Equal(RateSource.ContractedRate, result.RateSource);
+        Assert.Null(result.UnresolvedReason);
+    }
+
+    /// <summary>
+    /// Medicaid percent-of-Medicare on a revenue-code-only line: priced off the
+    /// reference schedule's revenue-code rate (90% × 400 = 360), not the
+    /// stored Medicaid fallback rate.
+    /// </summary>
+    [Fact]
+    public async Task RevenueCode_Medicaid_PercentOfMedicare_ReferenceLookedUpByRevenueCode()
+    {
+        var reference = new FeeSchedule
+        {
+            Id = "opps-ref", TenantId = Tenant, Name = "Medicare OPPS reference",
+            Type = FeeScheduleType.MedicareOpps,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", RateType = FeeScheduleRateType.FlatRate, Rate = 400m }],
+        };
+        var medicaid = new FeeSchedule
+        {
+            Id = "mcd-rev-pctmed", TenantId = Tenant, Name = "Medicaid 90% of Medicare",
+            Type = FeeScheduleType.Medicaid,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            PercentOfMedicare = 0.90m,
+            BaseMpfsFeeScheduleId = "opps-ref",
+            Lines = [new FeeScheduleLine { RevenueCode = "0450", RateType = FeeScheduleRateType.FlatRate, Rate = 300m }],
+        };
+        var repo = new InMemoryFeeScheduleRepo(medicaid);
+        repo.AddSchedule(reference);
+        var engine = CreateEngine(medicaid, repo: repo);
+
+        var result = await engine.ResolveAsync(CreateRequest(string.Empty, billed: 900m, revenueCode: "0450"));
+
+        Assert.Equal(360m, result.AllowedAmount);
+        Assert.Equal(RateSource.Medicaid, result.RateSource);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PER-STAY ALLOCATION EDGES
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// A $0 final line has no billed capacity: the truncation remainder goes
+    /// to the previous line, never onto the $0 line.
+    /// 100 × 100/300 → 33.33 each; remainder 0.01 → line 3.
+    /// </summary>
+    [Fact]
+    public async Task Drg_Batch_ZeroChargeFinalLine_GetsNoRemainder_AllowedNeverExceedsBilled()
+    {
+        var engine = CreateEngine(DrgSchedule("drg-zero", 100m));
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 100m, drgCode: "470", lineNumber: 1, totalLines: 4, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: 100m, drgCode: "470", lineNumber: 2, totalLines: 4, revenueCode: "0250"),
+            CreateRequest(string.Empty, billed: 100m, drgCode: "470", lineNumber: 3, totalLines: 4, revenueCode: "0300"),
+            CreateRequest(string.Empty, billed: 0m, drgCode: "470", lineNumber: 4, totalLines: 4, revenueCode: "0370"),
+        ]);
+
+        Assert.Equal(new[] { 33.33m, 33.33m, 33.34m, 0m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(100m, result.TotalAllowedAmount);
+        Assert.All(result.LineResults, r => Assert.True(r.AllowedAmount <= r.BilledAmount));
+    }
+
+    /// <summary>
+    /// A one-cent final line can take at most one cent; the rest of the
+    /// remainder spreads backwards over lines with billed capacity.
+    /// $3 across [1, 1, 1, 0.01] → truncated [0.99, 0.99, 0.99, 0.00],
+    /// remainder 0.03 → [0.99, 1.00, 1.00, 0.01].
+    /// </summary>
+    [Fact]
+    public async Task Drg_Batch_SmallChargeFinalLine_RemainderCappedAtBilled()
+    {
+        var engine = CreateEngine(DrgSchedule("drg-small", 3m));
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 1m, drgCode: "470", lineNumber: 1, totalLines: 4, revenueCode: "0120"),
+            CreateRequest(string.Empty, billed: 1m, drgCode: "470", lineNumber: 2, totalLines: 4, revenueCode: "0250"),
+            CreateRequest(string.Empty, billed: 1m, drgCode: "470", lineNumber: 3, totalLines: 4, revenueCode: "0300"),
+            CreateRequest(string.Empty, billed: 0.01m, drgCode: "470", lineNumber: 4, totalLines: 4, revenueCode: "0370"),
+        ]);
+
+        Assert.Equal(new[] { 0.99m, 1.00m, 1.00m, 0.01m }, result.LineResults.Select(r => r.AllowedAmount));
+        Assert.Equal(3m, result.TotalAllowedAmount);
+        Assert.All(result.LineResults, r => Assert.True(r.ContractualAdjustment >= 0m));
+    }
+
+    /// <summary>
+    /// Contract code-range routing sends lines of one stay to two different
+    /// DRG schedules. Adding both case rates would pay the stay twice, and
+    /// neither is authoritative, so every per-stay line is unresolved (the
+    /// claim pends). An ordinary per-line carve-out keeps its own price.
+    /// </summary>
+    [Fact]
+    public async Task Drg_Batch_PerStayLinesFromTwoSchedules_UnresolvedNotStacked()
+    {
+        var drgA = DrgSchedule("drg-a", 12000m);
+        var drgB = DrgSchedule("drg-b", 15000m);
+        var carveOut = new FeeSchedule
+        {
+            Id = "comm-carve", TenantId = Tenant, Name = "Drug carve-out",
+            Type = FeeScheduleType.Commercial,
+            EffectiveDate = new DateTime(2026, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "J1885", Rate = 20m }],
+        };
+        var repo = new InMemoryFeeScheduleRepo(drgA);
+        repo.AddSchedule(drgB);
+        repo.AddSchedule(carveOut);
+        var contracts = new FixedContractRepo(new ProviderContract
+        {
+            Id = "contract-routed", TenantId = Tenant, ProviderNpi = ProviderNpi, PlanId = PlanId,
+            NetworkStatus = NetworkStatus.InNetwork,
+            FeeScheduleId = "drg-a",
+            EffectiveDate = new DateTime(2026, 1, 1),
+            ContractLines =
+            [
+                new ProviderContractLine { ProcedureCodeFrom = "J0000", ProcedureCodeTo = "J9999", FeeScheduleId = "comm-carve" },
+                new ProviderContractLine { ProcedureCodeFrom = "27000", ProcedureCodeTo = "27999", FeeScheduleId = "drg-b" },
+            ],
+        });
+        var engine = new RateResolutionService(repo, contracts, NullLogger<RateResolutionService>.Instance);
+
+        var result = await engine.ResolveBatchAsync(
+        [
+            CreateRequest(string.Empty, billed: 12000m, drgCode: "470", lineNumber: 1, totalLines: 3, revenueCode: "0120"),
+            CreateRequest("27447", billed: 29000m, drgCode: "470", lineNumber: 2, totalLines: 3, revenueCode: "0360"),
+            CreateRequest("J1885", billed: 50m, drgCode: "470", lineNumber: 3, totalLines: 3, revenueCode: "0636"),
+        ]);
+
+        var stay = result.LineResults.Where(r => r.LineNumber <= 2).ToList();
+        Assert.All(stay, r =>
+        {
+            Assert.Equal(RateSource.Unresolved, r.RateSource);
+            Assert.Equal(0m, r.AllowedAmount);
+            Assert.False(r.IsPerStayRate);
+            Assert.Contains("conflicting per-stay rates", r.UnresolvedReason);
+        });
+        var carve = result.LineResults.Single(r => r.LineNumber == 3);
+        Assert.Equal(RateSource.ContractedRate, carve.RateSource);
+        Assert.Equal(20m, carve.AllowedAmount);
+    }
+
+    private static FeeSchedule DrgSchedule(string id, decimal caseRate) => new()
+    {
+        Id = id, TenantId = Tenant, Name = $"DRG {id}",
+        Type = FeeScheduleType.Drg,
+        EffectiveDate = new DateTime(2026, 1, 1),
+        Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = caseRate }],
+    };
+
     // ═══════════════════════════════════════════════════════════════════
     // CAPITATION
     // ═══════════════════════════════════════════════════════════════════
@@ -1332,7 +1849,8 @@ public class RateResolutionServiceTests
         int lineNumber = 1,
         int totalLines = 1,
         List<string>? modifiers = null,
-        decimal units = 1)
+        string? revenueCode = null,
+        decimal units = 1m)
     {
         return new PricingRequest
         {
@@ -1349,6 +1867,7 @@ public class RateResolutionServiceTests
             TotalLineCount = totalLines,
             DrgCode = drgCode,
             LengthOfStay = los,
+            RevenueCode = revenueCode,
         };
     }
 
@@ -1427,6 +1946,23 @@ internal class InMemoryProviderContractRepo : IProviderContractRepository
             EffectiveDate = new DateTime(2026, 1, 1),
         });
     }
+
+    public Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct)
+        => Task.FromResult(contract);
+
+    public Task<IReadOnlyList<ProviderContract>> ListByProviderAsync(string tenantId, string providerNpi, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ProviderContract>>([]);
+}
+
+internal class FixedContractRepo : IProviderContractRepository
+{
+    private readonly ProviderContract _contract;
+
+    public FixedContractRepo(ProviderContract contract) => _contract = contract;
+
+    public Task<ProviderContract?> GetContractAsync(
+        string tenantId, string providerNpi, string planId, DateTime serviceDate, CancellationToken ct)
+        => Task.FromResult<ProviderContract?>(_contract);
 
     public Task<ProviderContract> UpsertAsync(ProviderContract contract, CancellationToken ct)
         => Task.FromResult(contract);

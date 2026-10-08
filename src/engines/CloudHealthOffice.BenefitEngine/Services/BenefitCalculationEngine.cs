@@ -63,6 +63,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     private readonly IBenefitRuleGate _ruleGate;
     private readonly ILogger<BenefitCalculationEngine> _logger;
 
+    /// <summary>
+    /// <see cref="BenefitResolutionResult.PendReasonCode"/> when a per-stay
+    /// allocation allows a line more than it billed (pricing review).
+    /// </summary>
+    public const string AllowedExceedsBilledPendCode = "PRICING";
+
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
@@ -382,9 +388,46 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     {
         var drgAllowed = request.DrgAllowedAmount!.Value;
         var totalBilled = request.Lines.Sum(l => l.BilledAmount);
+        var orderedLines = request.Lines.OrderBy(l => l.LineNumber).ToList();
+        var allowedByLine = orderedLines
+            .Select(l => request.AllowedAmounts.GetValueOrDefault(l.LineNumber, l.BilledAmount))
+            .ToList();
 
-        // Resolve benefit category from the first line (all lines share the category for DRG)
-        var firstLine = request.Lines.OrderBy(l => l.LineNumber).First();
+        // A line allowed more than it billed (a per-stay rate above total
+        // billed, under a contract without a lesser-of-billed provision) needs
+        // a negative contractual adjustment that the line-level remittance
+        // cannot carry: billed − adjustments would not equal paid. Pend for
+        // pricing review — before any cost share is computed or accumulator
+        // written — rather than return a result that does not balance.
+        var overBilled = orderedLines
+            .Select((l, i) => (Line: l, Allowed: allowedByLine[i]))
+            .Where(x => x.Allowed > x.Line.BilledAmount)
+            .ToList();
+        if (overBilled.Count > 0)
+        {
+            var detail = string.Join(", ", overBilled.Select(x =>
+                $"line {x.Line.LineNumber} allowed {x.Allowed:0.00} > billed {x.Line.BilledAmount:0.00}"));
+            _logger.LogWarning(
+                "Claim {ClaimId}: per-stay allowed exceeds billed on {LineCount} line(s); pending for pricing review",
+                SanitizeForLog(request.ClaimId), overBilled.Count);
+            return new BenefitResolutionResult
+            {
+                Success = false,
+                RequiresReview = true,
+                PendReasonCode = AllowedExceedsBilledPendCode,
+                PendReason =
+                    $"Per-stay allowed amount {drgAllowed:0.00} allocates more than billed on {detail}; " +
+                    "a negative contractual adjustment is not supported — manual pricing review required",
+            };
+        }
+
+        // Resolve the stay's benefit category from one anchor line (all lines
+        // share it): the first room-and-board line (revenue code 0100–0219,
+        // the inpatient accommodation) when present, so an ancillary line
+        // (pharmacy, lab) listed first cannot pick the stay's benefit;
+        // otherwise the first line.
+        var firstLine = orderedLines.FirstOrDefault(l => IsAccommodationRevenueCode(l.RevenueCode))
+            ?? orderedLines[0];
         var categoryMatch = await _categoryResolver.ResolveAsync(
             plan.TenantId, request.BenefitPlanId, request.ServiceDate,
             firstLine.ProcedureCode, firstLine.CodeType ?? "CPT",
@@ -445,12 +488,44 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             effectiveNetworkTier, request.IsEmergency, plan,
             categoryMatch.ServiceTypeCode);
 
-        // Allocate cost-sharing proportionally across lines for 835 reporting
+        // Allocate cost-sharing back to the lines for 835 reporting, in
+        // proportion to each line's allowed amount (truncated to the cent,
+        // remainder on the last line — see AllocateToLines). Each component
+        // sums exactly to its claim-level value, and per line
+        // MemberResponsibility = deductible + copay + coinsurance − OOP-max
+        // reduction and PlanPaid = allowed − MemberResponsibility, so line
+        // sums reconcile to the claim totals and each line balances.
+        var lines = orderedLines;
+        var deductibles = AllocateToLines(drgCostShare.DeductibleApplied, allowedByLine, allowedByLine);
+        var afterDeductible = allowedByLine.Select((a, i) => a - deductibles[i]).ToList();
+        var copays = AllocateToLines(drgCostShare.CopayApplied, allowedByLine, afterDeductible);
+        var afterCopay = afterDeductible.Select((a, i) => a - copays[i]).ToList();
+        var coinsurances = AllocateToLines(drgCostShare.CoinsuranceApplied, allowedByLine, afterCopay);
+        var rawByLine = lines.Select((_, i) => deductibles[i] + copays[i] + coinsurances[i]).ToList();
+        var members = AllocateToLines(drgCostShare.MemberResponsibility, rawByLine, rawByLine);
+        // The OOP-counting portion of member responsibility (OopApplies), by
+        // the same rule within each line's member share.
+        var oopApplied = AllocateToLines(drgCostShare.OopApplied, members, members);
+
         var lineResults = new List<LineBenefitResult>();
-        foreach (var line in request.Lines.OrderBy(l => l.LineNumber))
+        for (var i = 0; i < lines.Count; i++)
         {
-            var lineAllowed = request.AllowedAmounts.GetValueOrDefault(line.LineNumber, line.BilledAmount);
-            var proportion = drgAllowed > 0 ? lineAllowed / drgAllowed : 0;
+            var line = lines[i];
+            var lineAllowed = allowedByLine[i];
+            var oopReduction = rawByLine[i] - members[i];
+            var contractual = Math.Max(0, line.BilledAmount - lineAllowed);
+
+            var lineAdjustments = new List<AdjustmentReason>();
+            if (contractual > 0)
+                lineAdjustments.Add(new AdjustmentReason { GroupCode = "CO", ReasonCode = "45", Amount = contractual });
+            if (deductibles[i] > 0)
+                lineAdjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "1", Amount = deductibles[i] });
+            if (copays[i] > 0)
+                lineAdjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "3", Amount = copays[i] });
+            if (coinsurances[i] > 0)
+                lineAdjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "2", Amount = coinsurances[i] });
+            if (oopReduction > 0)
+                lineAdjustments.Add(new AdjustmentReason { GroupCode = "OA", ReasonCode = "23", Amount = -oopReduction });
 
             lineResults.Add(new LineBenefitResult
             {
@@ -466,17 +541,19 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 AuthFound = true,
                 BilledAmount = line.BilledAmount,
                 AllowedAmount = lineAllowed,
-                ContractualAdjustment = Math.Max(0, line.BilledAmount - lineAllowed),
-                DeductibleAmount = Math.Round(drgCostShare.DeductibleApplied * proportion, 2),
-                CopayAmount = Math.Round(drgCostShare.CopayApplied * proportion, 2),
-                CoinsuranceAmount = Math.Round(drgCostShare.CoinsuranceApplied * proportion, 2),
+                ContractualAdjustment = contractual,
+                DeductibleAmount = deductibles[i],
+                CopayAmount = copays[i],
+                CoinsuranceAmount = coinsurances[i],
                 CoinsurancePercent = drgCostShare.CoinsurancePercent,
-                OopMaxReduction = Math.Round(drgCostShare.OopMaxReduction * proportion, 2),
-                MemberResponsibility = Math.Round(drgCostShare.MemberResponsibility * proportion, 2),
-                OopAppliedAmount = Math.Round(drgCostShare.OopApplied * proportion, 2),
-                PlanPaidAmount = Math.Round(drgCostShare.PlanPaid * proportion, 2),
+                OopMaxReduction = oopReduction,
+                MemberResponsibility = members[i],
+                OopAppliedAmount = oopApplied[i],
+                PlanPaidAmount = lineAllowed - members[i],
                 IsDrgPriced = true,
-                Adjustments = [] // Adjustments are at the claim level for DRG
+                // Line-level CAS consistent with the allocated amounts
+                // (claim-level detail is on DrgCostShare.Adjustments).
+                Adjustments = lineAdjustments
             });
         }
 
@@ -950,11 +1027,70 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         BenefitResolutionRequest request,
         BenefitPlanConfig plan)
     {
-        // Only applies to institutional claims with DRG info
-        if (request.ClaimType is not "837I" || request.DrgCode is null)
+        if (request.ClaimType is not "837I")
+            return InpatientPricingMethod.PerLine;
+
+        // The caller priced the stay as one claim-level amount (DRG case rate
+        // or all-inclusive per diem): cost share once per stay, regardless of
+        // the plan default and of whether a DRG code is present (per diem).
+        if (request.InpatientPricingMethod is { } priced and not InpatientPricingMethod.PerLine)
+            return priced;
+
+        // Otherwise only institutional claims with DRG info, per plan default.
+        if (request.DrgCode is null)
             return InpatientPricingMethod.PerLine;
 
         return plan.DefaultInpatientPricingMethod;
+    }
+
+    /// <summary>UB-04 accommodation (room and board) revenue codes: 0100–0219.</summary>
+    private static bool IsAccommodationRevenueCode(string? revenueCode)
+    {
+        if (string.IsNullOrWhiteSpace(revenueCode)
+            || !int.TryParse(revenueCode.Trim(), out var code))
+            return false;
+        return code is >= 100 and <= 219;
+    }
+
+    /// <summary>
+    /// Splits a claim-level amount across lines in proportion to
+    /// <paramref name="weights"/>: each share is truncated to the cent and
+    /// capped at the line's <paramref name="caps"/>; the remainder goes to the
+    /// last line, spilling backwards only where the last line has no room
+    /// left under its cap. Shares are never negative and always sum exactly
+    /// to <paramref name="total"/> (if the caps cannot hold it, the last line
+    /// takes the excess). With all weights zero, the split is even.
+    /// </summary>
+    internal static decimal[] AllocateToLines(
+        decimal total, IReadOnlyList<decimal> weights, IReadOnlyList<decimal> caps)
+    {
+        var count = weights.Count;
+        var shares = new decimal[count];
+        if (count == 0 || total <= 0)
+            return shares;
+
+        var weightSum = weights.Sum(w => Math.Max(w, 0m));
+        for (var i = 0; i < count; i++)
+        {
+            var proportion = weightSum > 0 ? Math.Max(weights[i], 0m) / weightSum : 1m / count;
+            var share = Math.Floor(total * proportion * 100m) / 100m;
+            shares[i] = Math.Min(share, Math.Max(caps[i], 0m));
+        }
+
+        var remainder = total - shares.Sum();
+        for (var i = count - 1; i >= 0 && remainder > 0; i--)
+        {
+            var room = Math.Max(caps[i], 0m) - shares[i];
+            if (room <= 0) continue;
+            var add = Math.Min(room, remainder);
+            shares[i] += add;
+            remainder -= add;
+        }
+
+        if (remainder > 0)
+            shares[count - 1] += remainder;
+
+        return shares;
     }
 
     private static LimitCheckResult CheckLimits(

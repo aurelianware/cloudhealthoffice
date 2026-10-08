@@ -817,6 +817,235 @@ public class BenefitCalculationStageTests
         Assert.Equal(NetworkTier.InNetwork, BenefitCalculationStage.ResolveNetworkTier(ctx));
     }
 
+    // ── DRG / all-inclusive per diem: cost share once per stay ──────────
+
+    [Fact]
+    public void BuildRequest_PerStayPricedInpatientClaim_RoutesToClaimLevelInpatientPath()
+    {
+        var ctx = BuildDrgContext(Guid.NewGuid());
+
+        var request = BenefitCalculationStage.BuildRequest(ctx, Guid.NewGuid(), "MEM-1");
+
+        Assert.Equal("837I", request.ClaimType);
+        Assert.Equal(InpatientPricingMethod.DrgCaseRate, request.InpatientPricingMethod);
+        Assert.Equal("470", request.DrgCode);
+        Assert.Equal(12000m, request.DrgAllowedAmount); // Σ line allowed
+        Assert.Equal(4, request.LengthOfStay);
+    }
+
+    [Fact]
+    public void BuildRequest_PerLinePricedClaim_StaysOnPerLinePath()
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        var ctx = new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+        };
+
+        var request = BenefitCalculationStage.BuildRequest(ctx, Guid.NewGuid(), "MEM-1");
+
+        Assert.Null(request.InpatientPricingMethod);
+        Assert.Null(request.DrgAllowedAmount);
+        Assert.Null(request.DrgCode);
+    }
+
+    /// <summary>
+    /// End to end through the real benefit engine: a 3-line DRG claim whose
+    /// case rate the pricing stage allocated across the lines gets one
+    /// inpatient copay and the deductible once, accumulators are written
+    /// once, and the claim lines reconcile to the claim result
+    /// (Σ line paid = PayerPayment) so the 835 balances.
+    /// </summary>
+    [Fact]
+    public async Task Execute_ThreeLineDrgClaim_OneCopay_DeductibleOnce_LinesReconcile()
+    {
+        var planGuid = Guid.NewGuid();
+        var (sut, accumulators) = CreateRealEngineStage(planGuid);
+        var ctx = BuildDrgContext(planGuid);
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        var claimResult = ctx.AdjudicationResult;
+        Assert.Equal(12000m, claimResult.AllowedAmount);
+        Assert.Equal(500m, claimResult.DeductibleAmount);   // once
+        Assert.Equal(250m, claimResult.CopayAmount);        // one copay per stay, not 3 × $250
+        Assert.Equal(2250m, claimResult.CoinsuranceAmount); // 20% of 12000 − 750
+        Assert.Equal(3000m, claimResult.PatientResponsibility);
+        Assert.Equal(9000m, claimResult.PayerPayment);
+
+        var lines = ctx.LineAdjudicationResults;
+        Assert.Equal(3, lines.Count);
+        Assert.Equal(claimResult.PayerPayment, lines.Sum(l => l.PaidAmount));
+        Assert.Equal(claimResult.PatientResponsibility, lines.Sum(l => l.PatientResponsibility));
+        Assert.Equal(claimResult.AllowedAmount, lines.Sum(l => l.AllowedAmount));
+        Assert.All(lines, l => Assert.Equal(l.AllowedAmount - l.PatientResponsibility, l.PaidAmount));
+
+        // #1251 line CAS on the per-stay lines: each line balances
+        // (charge − ΣCAS = paid) and its PR-1/2/3 sum to the claim totals.
+        var charges = ctx.Claim.ClaimLines.Select(c => c.ChargeAmount).ToList();
+        for (var i = 0; i < lines.Count; i++)
+            Assert.Equal(charges[i] - lines[i].AdjustmentReasons.Sum(r => r.Amount), lines[i].PaidAmount);
+        decimal Cas(string group, string carc) => lines.SelectMany(l => l.AdjustmentReasons)
+            .Where(r => r.GroupCode == group && r.ReasonCode == carc).Sum(r => r.Amount);
+        Assert.Equal(500m, Cas("PR", "1"));
+        Assert.Equal(2250m, Cas("PR", "2"));
+        Assert.Equal(250m, Cas("PR", "3"));
+        Assert.Equal(30500m, Cas("CO", "45"));
+
+        await accumulators.ReceivedWithAnyArgs(1).ApplyUpdatesAsync(
+            default!, default!, default, default!, default!, default!, default);
+    }
+
+    /// <summary>
+    /// Per-stay allocation that allows each line more than it billed (DRG
+    /// case rate above total billed): the real engine pends it for pricing
+    /// review and the stage pends the claim — no denial, no accumulator write.
+    /// </summary>
+    [Fact]
+    public async Task Execute_DrgClaim_AllowedExceedsBilled_PendsPricingReview_NoAccumulatorWrite()
+    {
+        var planGuid = Guid.NewGuid();
+        var (sut, accumulators) = CreateRealEngineStage(planGuid);
+        // $60,000 case rate against $42,500 billed.
+        var ctx = BuildDrgContext(planGuid,
+            new Dictionary<int, decimal> { [1] = 16941.17m, [2] = 2117.64m, [3] = 40941.19m });
+
+        var result = await sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(PricingStage.PricingUnavailablePendCode, ctx.PendDetails!.PendCode);
+        Assert.Contains("allocates more than billed", ctx.PendDetails.PendReason);
+        Assert.Null(ctx.AdjudicationResult.DenialReasonCode);
+        await accumulators.DidNotReceiveWithAnyArgs().ApplyUpdatesAsync(
+            default!, default!, default, default!, default!, default!, default);
+    }
+
+    private (BenefitCalculationStage Stage, IAccumulatorService Accumulators) CreateRealEngineStage(Guid planGuid)
+    {
+        var plan = new BenefitPlanConfig
+        {
+            Id = planGuid,
+            TenantId = "tenant-1",
+            PlanName = "Test PPO",
+            PlanYear = "2026",
+            IndividualDeductible = 500,
+            FamilyDeductible = 1500,
+            IndividualOopMax = 10000,
+            FamilyOopMax = 20000,
+            Categories =
+            [
+                new BenefitCategoryConfig
+                {
+                    ServiceTypeCode = "48",
+                    ServiceTypeDescription = "Hospital - Inpatient",
+                    IsCovered = true,
+                    InNetworkCostSharing =
+                    [
+                        new CostShareRuleConfig { CostShareType = CostShareType.Deductible, DeductibleApplies = true },
+                        new CostShareRuleConfig { CostShareType = CostShareType.Copay, CopayAmount = 250 },
+                        new CostShareRuleConfig { CostShareType = CostShareType.Coinsurance, CoinsurancePercent = 0.20m },
+                    ],
+                },
+            ],
+        };
+
+        var planProvider = Substitute.For<IBenefitPlanProvider>();
+        planProvider.GetPlanAsync(planGuid, Arg.Any<CancellationToken>()).Returns(plan);
+        var resolver = Substitute.For<IServiceCategoryResolver>();
+        resolver.ResolveAsync(default!, default, default, default!, default!, default!, default!, default, default)
+            .ReturnsForAnyArgs(new ServiceCategoryMatch
+            {
+                ServiceTypeCode = "48", ServiceTypeDescription = "Hospital - Inpatient",
+                MatchedBy = "Test", MatchedRule = "Fixed:48",
+            });
+        var accumulators = Substitute.For<IAccumulatorService>();
+        accumulators.GetAccumulatorsAsync(default!, default!, default, default!, default)
+            .ReturnsForAnyArgs(new List<AccumulatorSnapshot>
+            {
+                Snapshot(AccumulatorType.IndividualDeductible, AccumulatorScope.Individual, 500),
+                Snapshot(AccumulatorType.FamilyDeductible, AccumulatorScope.Family, 1500),
+                Snapshot(AccumulatorType.IndividualOutOfPocketMax, AccumulatorScope.Individual, 10000),
+                Snapshot(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family, 20000),
+            });
+        var engine = new BenefitCalculationEngine(
+            resolver, planProvider, accumulators,
+            new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
+            NullLogger<BenefitCalculationEngine>.Instance);
+        var stage = new BenefitCalculationStage(
+            engine, _memberResolver, _authorizationValidationClient,
+            NullLogger<BenefitCalculationStage>.Instance);
+        return (stage, accumulators);
+    }
+
+    private static AccumulatorSnapshot Snapshot(AccumulatorType type, AccumulatorScope scope, decimal limit) => new()
+    {
+        Type = type,
+        Scope = scope,
+        NetworkTier = NetworkTier.InNetwork,
+        LimitAmount = limit,
+        RemainingAmount = limit,
+    };
+
+    /// <summary>
+    /// Inpatient DRG claim as PricingStage leaves it: DRG 470 case rate
+    /// $12,000 allocated across three lines by billed charges ($42,500).
+    /// </summary>
+    private static ClaimAdjudicationContext BuildDrgContext(
+        Guid planGuid, Dictionary<int, decimal>? allowedByLine = null)
+    {
+        var admit = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc);
+        var claim = BuildClaim(planGuid.ToString());
+        claim.ClaimType = ClaimType.Institutional;
+        claim.ServiceDateFrom = admit;
+        claim.ServiceDateTo = admit.AddDays(4);
+        claim.PriorAuthorizationNumber = "AUTH-1";
+        claim.Institutional = new InstitutionalClaimDetails
+        {
+            FacilityTypeCode = "11",
+            AdmissionDate = admit,
+            StatementFromDate = admit,
+            StatementToDate = admit.AddDays(4),
+            PatientStatusCode = "01",
+            DrgCode = "470",
+        };
+        claim.ClaimLines = new List<AdapterClaimLine>
+        {
+            new() { LineNumber = 1, RevenueCode = "0120", ChargeAmount = 12000m, Units = 4, ServiceDateFrom = admit, ServiceDateTo = admit.AddDays(4) },
+            new() { LineNumber = 2, RevenueCode = "0250", ChargeAmount = 1500m, Units = 10, ServiceDateFrom = admit, ServiceDateTo = admit.AddDays(4) },
+            new() { LineNumber = 3, RevenueCode = "0360", ProcedureCode = "27447", ChargeAmount = 29000m, Units = 1, ServiceDateFrom = admit, ServiceDateTo = admit },
+        };
+
+        var allowed = allowedByLine
+            ?? new Dictionary<int, decimal> { [1] = 3388.23m, [2] = 423.52m, [3] = 8188.25m };
+        return new ClaimAdjudicationContext
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = new PricingOutcome
+            {
+                AllowedAmounts = allowed,
+                RawResult = new CloudHealthOffice.FeeScheduleEngine.Models.PricingResultSet
+                {
+                    LineResults = allowed.Select(kv => new CloudHealthOffice.FeeScheduleEngine.Models.PricingResult
+                    {
+                        LineNumber = kv.Key,
+                        AllowedAmount = kv.Value,
+                        BilledAmount = claim.ClaimLines[kv.Key - 1].ChargeAmount,
+                        RateSource = CloudHealthOffice.FeeScheduleEngine.Domain.RateSource.Drg,
+                        FeeScheduleType = CloudHealthOffice.FeeScheduleEngine.Domain.FeeScheduleType.Drg,
+                        FeeScheduleId = "DRG-1",
+                        IsPerStayRate = true,
+                    }).ToList(),
+                },
+            },
+        };
+    }
+
     [Fact]
     public void ApplyToContext_MapsEngineLineAdjustmentsOntoLineCas()
     {

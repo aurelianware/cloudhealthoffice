@@ -398,6 +398,41 @@ public class EncounterTransformerTests
         Assert.Contains("DTP*096*D8*20260115", result.RawX12); // discharge
     }
 
+    // ── Institutional DRG (HI*DR, not the HI*BG condition-code qualifier) ──
+
+    [Fact]
+    public void Transform_Institutional_DrgCode_WrittenAsHiDr()
+    {
+        var input = SimpleInput(ClaimFormType.Institutional) with
+        {
+            DrgCode = "470",
+            Lines =
+            [
+                new EncounterLineInput
+                {
+                    LineNumber = 1, ProcedureCode = "0360", RevenueCode = "0360",
+                    BilledAmount = 5000m, AllowedAmount = 4000m,
+                    PlanPaidAmount = 3600m, MemberResponsibility = 400m,
+                    Units = 1
+                }
+            ]
+        };
+        var result = Make().Transform(input);
+
+        var hi = AllSegments(result.RawX12, "HI").ToList();
+        Assert.Contains("HI*DR:470", hi);
+        Assert.DoesNotContain(hi, s => s.Contains("BG:470"));
+    }
+
+    [Fact]
+    public void Transform_Professional_DrgCode_NotWritten()
+    {
+        var input = SimpleInput(ClaimFormType.Professional) with { DrgCode = "470" };
+        var result = Make().Transform(input);
+
+        Assert.DoesNotContain(AllSegments(result.RawX12, "HI"), s => s.Contains("DR:") || s.Contains("BG:"));
+    }
+
     // ── Control number uniqueness ──────────────────────────────────────────
 
     [Fact]

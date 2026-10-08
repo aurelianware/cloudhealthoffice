@@ -198,6 +198,27 @@ public class Claim
     public List<ClaimLine> ClaimLines { get; set; } = new();
 
     /// <summary>
+    /// Institutional (837I / UB-04) header detail: facility type, admission
+    /// and discharge, statement period, CL1 codes, DRG, ICD-10-PCS
+    /// procedures and occurrence/span/value/condition codes. Null for
+    /// professional and dental claims and for institutional documents
+    /// written before these fields existed.
+    /// </summary>
+    public InstitutionalClaimDetails? Institutional { get; set; }
+
+    /// <summary>
+    /// Three-character type of bill (UB-04 FL4 without the leading zero):
+    /// the two-digit facility type code (837I CLM05-1) followed by the
+    /// claim frequency code (CLM05-3, <see cref="ClaimFrequencyCode"/>).
+    /// Derived, never stored, so it cannot drift from the frequency code
+    /// when an adjustment re-versions the claim. Null when the facility
+    /// type is unknown (all non-institutional claims).
+    /// </summary>
+    [BsonIgnore]
+    public string? TypeOfBill =>
+        InstitutionalClaimDetails.ComposeTypeOfBill(Institutional?.FacilityTypeCode, ClaimFrequencyCode);
+
+    /// <summary>
     /// Claim status
     /// </summary>
     [Required]
@@ -429,6 +450,14 @@ public class DiagnosisCode
     /// </summary>
     [StringLength(500)]
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Present-on-admission indicator (Y, N, U, W, or 1 for exempt).
+    /// Institutional only.
+    /// 837I: HI0x-9
+    /// </summary>
+    [StringLength(1)]
+    public string? PresentOnAdmission { get; set; }
 }
 
 /// <summary>
@@ -519,6 +548,26 @@ public class ClaimLine
     public string? RevenueCode { get; set; }
 
     /// <summary>
+    /// National Drug Code (11-digit, 5-4-2) for a drug billed on this line.
+    /// 837P/837I: LIN03 (2410, LIN02 = N4)
+    /// </summary>
+    [StringLength(11)]
+    public string? NationalDrugCode { get; set; }
+
+    /// <summary>
+    /// Quantity of the drug identified by <see cref="NationalDrugCode"/>.
+    /// 837P/837I: CTP04 (2410)
+    /// </summary>
+    public decimal? DrugQuantity { get; set; }
+
+    /// <summary>
+    /// Unit of measure for <see cref="DrugQuantity"/> (F2, GR, ME, ML, UN).
+    /// 837P/837I: CTP05-1 (2410)
+    /// </summary>
+    [StringLength(2)]
+    public string? DrugUnitOfMeasure { get; set; }
+
+    /// <summary>
     /// MPIP rate multiplier applied to this line's allowed amount during adjudication.
     /// 1.063 if FL SMMC 3.0 enhanced rate applies, null if MPIP was not evaluated.
     /// </summary>
@@ -528,6 +577,209 @@ public class ClaimLine
     /// Adjudication result for this line
     /// </summary>
     public LineAdjudicationResult? AdjudicationResult { get; set; }
+}
+
+/// <summary>
+/// Institutional (837I / UB-04) claim header detail. Additive: a document
+/// without it deserializes to <c>null</c>.
+///
+/// <para>
+/// The DRG is the one <i>billed</i> on the claim (HI*DR). CHO does not run
+/// an MS-DRG grouper; a DRG-priced claim without a billed DRG finds no DRG
+/// rate and pends for pricing rather than being grouped.
+/// </para>
+/// </summary>
+[BsonIgnoreExtraElements]
+public class InstitutionalClaimDetails
+{
+    /// <summary>
+    /// Facility type code — the first two digits of the type of bill
+    /// (e.g. 11 = hospital inpatient, 13 = hospital outpatient).
+    /// 837I: CLM05-1 (CLM05-2 = A)
+    /// </summary>
+    [StringLength(2)]
+    public string? FacilityTypeCode { get; set; }
+
+    /// <summary>
+    /// Inpatient admission (or start of care) date.
+    /// 837I: DTP*435 (DT or D8)
+    /// </summary>
+    public DateTime? AdmissionDate { get; set; }
+
+    /// <summary>
+    /// Admission hour (HHMM) when the admission date was sent in DT format.
+    /// 837I: DTP*435 (DT, positions 9-12)
+    /// </summary>
+    [StringLength(4)]
+    public string? AdmissionHour { get; set; }
+
+    /// <summary>
+    /// Discharge date. 005010X223 carries no discharge-date segment — for a
+    /// discharged inpatient the discharge date is
+    /// <see cref="StatementToDate"/>. Populated only when a DTP*096 arrives
+    /// with a D8/DT date instead of the spec's TM hour (an internal
+    /// encounter-generator shape).
+    /// </summary>
+    public DateTime? DischargeDate { get; set; }
+
+    /// <summary>
+    /// Discharge hour (HHMM).
+    /// 837I: DTP*096 (TM)
+    /// </summary>
+    [StringLength(4)]
+    public string? DischargeHour { get; set; }
+
+    /// <summary>
+    /// Statement covers period — from.
+    /// 837I: DTP*434 (RD8)
+    /// </summary>
+    public DateTime? StatementFromDate { get; set; }
+
+    /// <summary>
+    /// Statement covers period — through.
+    /// 837I: DTP*434 (RD8)
+    /// </summary>
+    public DateTime? StatementToDate { get; set; }
+
+    /// <summary>
+    /// Priority (type) of admission or visit (1=Emergency, 2=Urgent, 3=Elective...).
+    /// 837I: CL101
+    /// </summary>
+    [StringLength(1)]
+    public string? AdmissionTypeCode { get; set; }
+
+    /// <summary>
+    /// Point of origin (source) for admission or visit.
+    /// 837I: CL102
+    /// </summary>
+    [StringLength(1)]
+    public string? AdmissionSourceCode { get; set; }
+
+    /// <summary>
+    /// Patient (discharge) status (01=Home, 03=SNF, 20=Expired, 30=Still a patient...).
+    /// 837I: CL103
+    /// </summary>
+    [StringLength(2)]
+    public string? PatientStatusCode { get; set; }
+
+    /// <summary>
+    /// Diagnosis related group billed by the facility (e.g. MS-DRG 470).
+    /// 837I: HI*DR
+    /// </summary>
+    [StringLength(4)]
+    public string? DrgCode { get; set; }
+
+    /// <summary>
+    /// Principal ICD-10-PCS procedure.
+    /// 837I: HI*BBR
+    /// </summary>
+    public InstitutionalProcedureCode? PrincipalProcedure { get; set; }
+
+    /// <summary>
+    /// Other ICD-10-PCS procedures.
+    /// 837I: HI*BBQ
+    /// </summary>
+    public List<InstitutionalProcedureCode> OtherProcedures { get; set; } = new();
+
+    /// <summary>837I: HI*BH (occurrence code + date).</summary>
+    public List<OccurrenceCode> OccurrenceCodes { get; set; } = new();
+
+    /// <summary>837I: HI*BI (occurrence span code + period).</summary>
+    public List<OccurrenceSpanCode> OccurrenceSpanCodes { get; set; } = new();
+
+    /// <summary>837I: HI*BE (value code + amount).</summary>
+    public List<ValueCode> ValueCodes { get; set; } = new();
+
+    /// <summary>837I: HI*BG (condition codes).</summary>
+    public List<string> ConditionCodes { get; set; } = new();
+
+    /// <summary>
+    /// Builds the three-character type of bill from the facility type code
+    /// and the claim frequency code. Null unless both parts are present and
+    /// well-formed (two-character facility type, one-character frequency).
+    /// </summary>
+    public static string? ComposeTypeOfBill(string? facilityTypeCode, string? claimFrequencyCode) =>
+        facilityTypeCode is { Length: 2 } && claimFrequencyCode is { Length: 1 }
+            ? facilityTypeCode + claimFrequencyCode
+            : null;
+
+    /// <summary>
+    /// Days billed on this claim for per-diem pricing: discharge (or
+    /// statement-through) date minus admission date. When the statement
+    /// period starts after the admission (an interim or continuing bill),
+    /// counting starts at the statement-from date so each bill covers only
+    /// its own days; with no admission date, the statement covers period is
+    /// used. The discharge day is not counted (midnight census), except that
+    /// a patient still in house (status 30, interim bill) is counted through
+    /// the statement-through date. A same-day stay counts as one day. Null
+    /// when the dates needed are missing or inverted.
+    /// </summary>
+    public int? CalculateLengthOfStay()
+    {
+        var through = DischargeDate ?? StatementToDate;
+        var from = AdmissionDate is { } admitted && StatementFromDate is { } statementFrom
+            ? (statementFrom.Date > admitted.Date ? statementFrom : admitted)
+            : AdmissionDate ?? StatementFromDate;
+        if (from is null || through is null || through.Value.Date < from.Value.Date)
+        {
+            return null;
+        }
+
+        var days = (through.Value.Date - from.Value.Date).Days;
+        if (PatientStatusCode == "30")
+        {
+            days += 1;
+        }
+        return Math.Max(days, 1);
+    }
+}
+
+/// <summary>ICD-10-PCS procedure on an institutional claim (837I HI*BBR / HI*BBQ).</summary>
+[BsonIgnoreExtraElements]
+public class InstitutionalProcedureCode
+{
+    /// <summary>ICD-10-PCS code (e.g. 0SR9019).</summary>
+    [StringLength(7)]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>HI qualifier: BBR (principal) or BBQ (other).</summary>
+    [StringLength(3)]
+    public string CodeQualifier { get; set; } = "BBR";
+
+    /// <summary>Procedure date (HI0x-4, D8).</summary>
+    public DateTime? Date { get; set; }
+}
+
+/// <summary>UB-04 occurrence code (837I HI*BH).</summary>
+[BsonIgnoreExtraElements]
+public class OccurrenceCode
+{
+    [StringLength(2)]
+    public string Code { get; set; } = string.Empty;
+
+    public DateTime? Date { get; set; }
+}
+
+/// <summary>UB-04 occurrence span code (837I HI*BI).</summary>
+[BsonIgnoreExtraElements]
+public class OccurrenceSpanCode
+{
+    [StringLength(2)]
+    public string Code { get; set; } = string.Empty;
+
+    public DateTime? FromDate { get; set; }
+
+    public DateTime? ToDate { get; set; }
+}
+
+/// <summary>UB-04 value code (837I HI*BE).</summary>
+[BsonIgnoreExtraElements]
+public class ValueCode
+{
+    [StringLength(2)]
+    public string Code { get; set; } = string.Empty;
+
+    public decimal? Amount { get; set; }
 }
 
 /// <summary>

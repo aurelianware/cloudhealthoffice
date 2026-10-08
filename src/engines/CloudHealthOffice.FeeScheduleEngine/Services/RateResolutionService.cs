@@ -48,6 +48,14 @@ public class RateResolutionService : IRateResolutionService
             ct)).Result;
 
     /// <summary>
+    /// Per-line resolution output for batch pricing: the result, the matched
+    /// rate line, and whether the amount is a per-stay (claim-level) rate —
+    /// a DRG case rate or an all-inclusive per diem — that must be paid once
+    /// per claim rather than on every line.
+    /// </summary>
+    private readonly record struct LineResolution(PricingResult Result, FeeScheduleLine? RateLine, bool IsPerStay);
+
+    /// <summary>
     /// Prices one line and also returns the matched rate line so batch pricing can
     /// honour per-line flags (e.g. <see cref="FeeScheduleLine.MultipleProcedureReductionApplies"/>).
     /// When <paramref name="applyMultipleProcedureReduction"/> is false the per-line
@@ -56,7 +64,7 @@ public class RateResolutionService : IRateResolutionService
     /// one line) the result is flagged if the rate line's multiple procedure indicator
     /// is missing or names a reduction rule the engine does not implement.
     /// </summary>
-    private async Task<(PricingResult Result, FeeScheduleLine? RateLine)> ResolveLineAsync(
+    private async Task<LineResolution> ResolveLineAsync(
         PricingRequest request, bool applyMultipleProcedureReduction, bool multipleProcedureContext,
         CancellationToken ct)
     {
@@ -88,7 +96,26 @@ public class RateResolutionService : IRateResolutionService
         {
             rateLine = schedule.Type == FeeScheduleType.Drg
                 ? FindDrgRateLine(schedule, request.DrgCode)
-                : FindRateLine(schedule, request.ProcedureCode, request.Modifiers);
+                : FindRateLine(schedule, request.ProcedureCode, request.Modifiers, request.RevenueCode);
+
+            // An all-inclusive per diem covers every service on an inpatient
+            // stay: a line with no specific rate line (pharmacy, lab, supplies)
+            // still prices under the schedule's daily rate — once per claim,
+            // see ResolveBatchAsync. Only for stays (LengthOfStay supplied), so
+            // a per-diem schedule never captures an unrelated outpatient line.
+            if (rateLine is null
+                && schedule is { Type: FeeScheduleType.PerDiem, PerDiemRate: not null }
+                && request.LengthOfStay is not null)
+            {
+                rateLine = new FeeScheduleLine
+                {
+                    ProcedureCode = request.ProcedureCode,
+                    RevenueCode = request.RevenueCode,
+                    RateType = FeeScheduleRateType.FlatRate,
+                    Rate = schedule.PerDiemRate.Value,
+                    MultipleProcedureIndicator = MultipleProcedureIndicator.NotApplicable,
+                };
+            }
         }
 
         // 4. Calculate base allowed amount
@@ -105,7 +132,7 @@ public class RateResolutionService : IRateResolutionService
                 LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(schedule?.Id),
                 LogSanitizer.SafeForLog(unresolvedReason));
 
-            return (new PricingResult
+            return new LineResolution(new PricingResult
             {
                 LineNumber       = request.LineNumber,
                 ProcedureCode    = request.ProcedureCode,
@@ -117,7 +144,7 @@ public class RateResolutionService : IRateResolutionService
                 FeeScheduleId    = schedule?.Id,
                 FeeScheduleName  = schedule?.Name,
                 UnresolvedReason = unresolvedReason,
-            }, rateLine);
+            }, rateLine, IsPerStay: false);
         }
 
         // 5. Apply modifier adjustments (not applicable for DRG/PerDiem/Capitation)
@@ -137,17 +164,22 @@ public class RateResolutionService : IRateResolutionService
         }
 
         // 6. Apply units (not for DRG — case rate is per-admission regardless of line count —
-        //    nor for billed-based amounts: BilledAmount is the line total (837 SV102/SV203),
-        //    so a percentage of it already covers every unit on the line)
+        //    nor for line-total amounts: billed-based amounts, since BilledAmount is the line
+        //    total (837 SV102/SV203), and per diem × length of stay, which already counts days)
         if (scheduleType != FeeScheduleType.Drg && !isLineTotal)
             finalAmount *= request.Units;
+
+        // Per-stay amounts are paid once per claim (ResolveBatchAsync): a DRG case
+        // rate, or an all-inclusive per diem priced for the length of stay.
+        var isPerStay = rateSource == RateSource.Drg
+            || (rateSource == RateSource.PerDiem && schedule?.PerDiemRate is not null && request.LengthOfStay is not null);
 
         // 7. Flag lines whose multiple procedure treatment could not be determined
         var warnings = multipleProcedureContext
             ? MultipleProcedureIndicatorWarnings(request, rateLine, rateSource, scheduleType)
             : [];
 
-        return (new PricingResult
+        return new LineResolution(new PricingResult
         {
             LineNumber      = request.LineNumber,
             ProcedureCode   = request.ProcedureCode,
@@ -159,12 +191,14 @@ public class RateResolutionService : IRateResolutionService
             FeeScheduleId   = schedule?.Id,
             FeeScheduleName = schedule?.Name,
             Adjustments     = adjustments,
+            IsPerStayRate   = isPerStay,
             Warnings        = warnings,
-        }, rateLine);
+        }, rateLine, isPerStay);
     }
 
     /// <summary>
-    /// Batch pricing with proper multiple-procedure ranking.
+    /// Batch pricing with proper multiple-procedure ranking and once-per-claim
+    /// per-stay rates.
     ///
     /// CMS multiple surgery rules (MPFS multiple procedure indicator 2) rank
     /// eligible procedures by allowed amount: highest = 100%, 2nd through 5th
@@ -179,6 +213,15 @@ public class RateResolutionService : IRateResolutionService
     ///      so those lines are left unreduced and flagged in
     ///      <see cref="PricingResult.Warnings"/>, as are lines with no indicator.
     ///   3. Applies the rank-based reduction to ranked lines 2+
+    ///   4. Pays a per-stay rate (DRG case rate, all-inclusive per diem) once
+    ///      per claim, allocated across the per-stay lines in proportion to
+    ///      their billed charges — see <see cref="AllocatePerStayAmounts"/>.
+    ///      Without this, an N-line inpatient claim would be paid N case rates.
+    ///      Per-stay lines priced from more than one schedule are marked
+    ///      unresolved (the claim pends) rather than stacking stay rates.
+    ///
+    /// A batch is one claim's lines — the same assumption the multiple
+    /// procedure ranking already makes.
     /// </summary>
     public async Task<PricingResultSet> ResolveBatchAsync(
         IReadOnlyList<PricingRequest> requests, CancellationToken ct = default)
@@ -193,7 +236,7 @@ public class RateResolutionService : IRateResolutionService
         }
 
         // Phase 1: Price all lines at 100% (per-line multiple procedure reduction suppressed)
-        var initialResults = new List<(PricingResult Result, FeeScheduleLine? RateLine)>(requests.Count);
+        var initialResults = new List<LineResolution>(requests.Count);
         foreach (var request in requests.OrderBy(r => r.LineNumber))
             initialResults.Add(await ResolveLineAsync(
                 request, applyMultipleProcedureReduction: false, multipleProcedureContext: true, ct));
@@ -252,10 +295,134 @@ public class RateResolutionService : IRateResolutionService
             });
         }
 
+        // Phase 4: Per-stay rates are paid once per claim, allocated across the lines
+        AllocatePerStayAmounts(initialResults, finalResults);
+
         return new PricingResultSet
         {
             LineResults = finalResults.OrderBy(r => r.LineNumber).ToList()
         };
+    }
+
+    /// <summary>
+    /// Every line of a DRG or all-inclusive per-diem claim prices to the same
+    /// claim-level amount (the case rate, or per diem × length of stay). Pay it
+    /// once: the claim-level allowed amount (the amount priced on the first
+    /// per-stay line) is allocated across the per-stay lines in proportion to
+    /// each line's billed charge, each share truncated to the cent. When the
+    /// group bills $0 in total, the amount is split evenly the same way.
+    ///
+    /// <para>
+    /// The cent remainder from truncation goes to the last (highest numbered)
+    /// line that still has room under its billed charge, working backwards, so
+    /// while the claim-level allowed is at or below total billed every line's
+    /// allowed stays at or below its billed charge and the per-line
+    /// contractual adjustment (CO-45 = billed − allowed) is non-negative — a
+    /// $0 or one-cent final line never absorbs the remainder. When the
+    /// contract pays more than was billed (no lesser-of-billed provision) the
+    /// remainder goes to the last line; every line's allowed then exceeds its
+    /// billed charge, which the benefit engine pends rather than paying an
+    /// unbalanced remittance. The shares always sum exactly to the claim-level
+    /// amount.
+    /// </para>
+    ///
+    /// <para>
+    /// A claim has one stay, so it has one per-stay rate. When per-stay lines
+    /// were priced from more than one schedule (contract procedure-code
+    /// routing sent lines to different DRG / per-diem schedules), or at
+    /// different claim-level amounts, there is no single authoritative rate:
+    /// every per-stay line is marked <see cref="RateSource.Unresolved"/> so the
+    /// claim pends for review instead of paying stacked stay rates. Per-line
+    /// carve-outs priced from ordinary schedules are left as they are.
+    /// </para>
+    /// </summary>
+    private static void AllocatePerStayAmounts(
+        IReadOnlyList<LineResolution> initialResults, List<PricingResult> finalResults)
+    {
+        var indexes = Enumerable.Range(0, initialResults.Count)
+            .Where(i => initialResults[i].IsPerStay)
+            .OrderBy(i => finalResults[i].LineNumber)
+            .ToList();
+        if (indexes.Count == 0)
+            return;
+
+        var schedules = indexes
+            .Select(i => (finalResults[i].FeeScheduleId, finalResults[i].FeeScheduleType))
+            .Distinct()
+            .ToList();
+        var amounts = indexes.Select(i => finalResults[i].AllowedAmount).Distinct().ToList();
+        if (schedules.Count > 1 || amounts.Count > 1)
+        {
+            var reason = schedules.Count > 1
+                ? "conflicting per-stay rates: the claim's lines priced from more than one DRG / per-diem schedule (" +
+                  string.Join(", ", schedules.Select(s => $"{s.FeeScheduleType} {s.FeeScheduleId}")) +
+                  "); a stay is paid once, so no single rate can be selected"
+                : "conflicting per-stay rates: the claim's per-stay lines priced at different claim-level amounts (" +
+                  string.Join(", ", amounts.Select(a => a.ToString("0.00"))) + ")";
+            foreach (var i in indexes)
+            {
+                finalResults[i] = finalResults[i] with
+                {
+                    AllowedAmount = 0m,
+                    RateSource = RateSource.Unresolved,
+                    UnresolvedReason = reason,
+                    IsPerStayRate = false,
+                };
+            }
+            return;
+        }
+
+        if (indexes.Count == 1)
+            return; // single line: it already carries the whole amount
+
+        var claimAllowed = amounts[0];
+        var rateName = schedules[0].FeeScheduleType == FeeScheduleType.Drg ? "DRG case rate" : "per diem";
+        var billed = indexes.Select(i => Math.Max(finalResults[i].BilledAmount, 0m)).ToList();
+        var totalBilled = billed.Sum();
+        var proportions = billed
+            .Select(b => totalBilled > 0m ? b / totalBilled : 1m / indexes.Count)
+            .ToList();
+        var shares = proportions
+            .Select(p => Math.Floor(claimAllowed * p * 100m) / 100m)
+            .ToList();
+
+        var remainder = claimAllowed - shares.Sum();
+        if (claimAllowed <= totalBilled)
+        {
+            // Truncated shares never exceed billed here, and the total room
+            // (totalBilled − Σ shares) covers the remainder.
+            for (var n = indexes.Count - 1; n >= 0 && remainder > 0m; n--)
+            {
+                var room = billed[n] - shares[n];
+                if (room <= 0m) continue;
+                var add = Math.Min(room, remainder);
+                shares[n] += add;
+                remainder -= add;
+            }
+        }
+        shares[^1] += remainder;
+
+        for (var n = 0; n < indexes.Count; n++)
+        {
+            var i = indexes[n];
+            var result = finalResults[i];
+            var adjustments = new List<RateAdjustment>(result.Adjustments)
+            {
+                new()
+                {
+                    Modifier = string.Empty,
+                    Description = $"{rateName} {claimAllowed:0.00} for the claim allocated by billed charges ({proportions[n]:P2} to line {result.LineNumber})",
+                    AdjustmentFactor = Math.Round(proportions[n], 6),
+                    AdjustmentAmount = shares[n] - result.AllowedAmount,
+                },
+            };
+
+            finalResults[i] = result with
+            {
+                AllowedAmount = shares[n],
+                Adjustments = adjustments,
+            };
+        }
     }
 
     /// <summary>
@@ -341,18 +508,60 @@ public class RateResolutionService : IRateResolutionService
 
     /// <summary>
     /// Procedure code lookup — tries modifiers in claim order, then base rate.
+    /// When no procedure-code line matches (or the claim line has no
+    /// procedure code, as on a revenue-code-only 837I line) and a revenue
+    /// code was billed, falls back to a revenue-code line: one whose
+    /// <see cref="FeeScheduleLine.RevenueCode"/> matches and whose
+    /// <see cref="FeeScheduleLine.ProcedureCode"/> is blank. Revenue-code
+    /// lines honour <see cref="FeeScheduleLine.Modifier"/> the same way
+    /// procedure lines do: a modifier-qualified line matches only when the
+    /// claim line carries that modifier and wins over the unqualified rate.
     /// </summary>
     private static FeeScheduleLine? FindRateLine(
+        FeeSchedule schedule, string procedureCode, IReadOnlyList<string> modifiers,
+        string? revenueCode)
+    {
+        var byProcedure = string.IsNullOrEmpty(procedureCode)
+            ? null
+            : FindProcedureRateLine(schedule, procedureCode, modifiers);
+
+        if (byProcedure is not null || string.IsNullOrEmpty(revenueCode))
+            return byProcedure;
+
+        var normalized = NormalizeRevenueCode(revenueCode);
+        return SelectByModifier(
+            schedule.Lines.Where(l =>
+                string.IsNullOrEmpty(l.ProcedureCode)
+                && string.Equals(NormalizeRevenueCode(l.RevenueCode), normalized, StringComparison.OrdinalIgnoreCase)),
+            modifiers);
+    }
+
+    /// <summary>
+    /// Revenue codes are four digits with a leading zero ("0120"), but are
+    /// often keyed without it ("120"); compare on the four-digit form.
+    /// </summary>
+    private static string? NormalizeRevenueCode(string? revenueCode)
+        => string.IsNullOrEmpty(revenueCode) ? null : revenueCode.Trim().PadLeft(4, '0');
+
+    private static FeeScheduleLine? FindProcedureRateLine(
         FeeSchedule schedule, string procedureCode, IReadOnlyList<string> modifiers)
+        => SelectByModifier(
+            schedule.Lines.Where(l => string.Equals(l.ProcedureCode, procedureCode, StringComparison.OrdinalIgnoreCase)),
+            modifiers);
+
+    /// <summary>
+    /// From the lines keyed to one code: the first modifier-qualified line
+    /// whose modifier the claim line carries, else the unqualified (base)
+    /// rate. A qualified line the claim does not carry never matches.
+    /// </summary>
+    private static FeeScheduleLine? SelectByModifier(
+        IEnumerable<FeeScheduleLine> candidates, IReadOnlyList<string> modifiers)
     {
         FeeScheduleLine? baseRate = null;
 
-        foreach (var line in schedule.Lines)
+        foreach (var line in candidates)
         {
-            if (!string.Equals(line.ProcedureCode, procedureCode, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (line.Modifier is null)
+            if (string.IsNullOrEmpty(line.Modifier))
             {
                 baseRate = line;
                 continue;
@@ -425,10 +634,14 @@ public class RateResolutionService : IRateResolutionService
             {
                 var rate = schedule.PerDiemRate ?? line.Rate;
 
-                // With a length of stay the amount covers the whole stay; institutional
-                // per-diem lines usually also carry units = days, so units must not be
-                // applied again. Without LOS, units are the day count (applied in step 6).
-                if (request.LengthOfStay is { } los)
+                // All-inclusive per diem (schedule-level PerDiemRate) with a length of
+                // stay: rate × LOS covers the whole stay — paid once per claim by
+                // ResolveBatchAsync — and units (= days on accommodation lines) are not
+                // applied again. Otherwise units are the day count (step 6): a line-level
+                // daily rate (e.g. room and board keyed by revenue code) prices each
+                // accommodation line by the days it bills, so a claim-level LOS sent on
+                // every line never multiplies each line by the whole stay.
+                if (schedule.PerDiemRate.HasValue && request.LengthOfStay is { } los)
                     return (rate * los, RateSource.PerDiem, FeeScheduleType.PerDiem, null, true);
 
                 return (rate, RateSource.PerDiem, FeeScheduleType.PerDiem, null, false);
@@ -535,7 +748,7 @@ public class RateResolutionService : IRateResolutionService
 
             if (baseSchedule is not null)
             {
-                var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
+                var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers, request.RevenueCode);
                 if (baseLine is { RateType: FeeScheduleRateType.Rvu }
                     && !baseSchedule.ConversionFactor.HasValue)
                 {
@@ -619,7 +832,7 @@ public class RateResolutionService : IRateResolutionService
             }
             else
             {
-                var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
+                var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers, request.RevenueCode);
                 var usable = baseLine?.RateType switch
                 {
                     FeeScheduleRateType.FlatRate => true,

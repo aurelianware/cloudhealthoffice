@@ -30,8 +30,21 @@ public static class X12837ClaimMapper
         // failure, not a silent misattribution.
         var memberId = source.Patient?.MemberId ?? source.Subscriber.MemberId;
 
-        var claimLines = source.ServiceLines.Select(MapLine).ToList();
+        var institutional = source.ClaimType == EngineModels.ClaimType.Institutional
+            ? MapInstitutional(source.ClaimHeader)
+            : null;
+
+        // 837I service-line dates (DTP*472) are situational; a line without
+        // one inherits the claim's statement covers period (DTP*434).
+        var claimLines = source.ServiceLines
+            .Select(l => MapLine(l, institutional?.StatementFromDate, institutional?.StatementToDate))
+            .ToList();
         var (serviceDateFrom, serviceDateTo) = DeriveClaimDateRange(claimLines);
+        if (institutional?.StatementFromDate is { } statementFrom && institutional.StatementToDate is { } statementTo
+            && (serviceDateFrom == default || serviceDateTo == default))
+        {
+            (serviceDateFrom, serviceDateTo) = (statementFrom, statementTo);
+        }
 
         return new AdapterClaim
         {
@@ -67,6 +80,7 @@ public static class X12837ClaimMapper
 
             DiagnosisCodes = (source.ClaimHeader.DiagnosisCodes ?? []).Select(MapDiagnosis).ToList(),
             ClaimLines = claimLines,
+            Institutional = institutional,
 
             Status = ClaimStatus.Submitted,
             SubmittedDate = DateTime.UtcNow,
@@ -92,12 +106,48 @@ public static class X12837ClaimMapper
         Code = d.Code,
         CodeQualifier = d.Qualifier,
         PointerNumber = d.Pointer ?? 0,
+        PresentOnAdmission = string.IsNullOrEmpty(d.PresentOnAdmission) ? null : d.PresentOnAdmission,
     };
 
-    private static AdapterClaimLine MapLine(EngineModels.ServiceLine line)
+    private static InstitutionalClaimDetails MapInstitutional(EngineModels.ClaimHeader header) => new()
     {
-        var from = ParseD8(line.ServiceDate) ?? default;
-        var to = ParseD8(line.ServiceDateEnd) ?? from;
+        FacilityTypeCode = header.FacilityTypeCode,
+        AdmissionDate = ParseD8(header.AdmissionDate),
+        AdmissionHour = header.AdmissionHour,
+        DischargeDate = ParseD8(header.DischargeDate),
+        DischargeHour = header.DischargeHour,
+        StatementFromDate = ParseD8(header.StatementFromDate),
+        StatementToDate = ParseD8(header.StatementToDate),
+        AdmissionTypeCode = header.AdmissionTypeCode,
+        AdmissionSourceCode = header.AdmissionSourceCode,
+        PatientStatusCode = header.PatientStatusCode,
+        DrgCode = header.DrgCode,
+        PrincipalProcedure = header.PrincipalProcedure is { } principal ? MapProcedure(principal) : null,
+        OtherProcedures = (header.OtherProcedures ?? []).Select(MapProcedure).ToList(),
+        OccurrenceCodes = (header.OccurrenceCodes ?? [])
+            .Select(c => new OccurrenceCode { Code = c.Code, Date = ParseD8(c.Date) })
+            .ToList(),
+        OccurrenceSpanCodes = (header.OccurrenceSpanCodes ?? [])
+            .Select(c => new OccurrenceSpanCode { Code = c.Code, FromDate = ParseD8(c.Date), ToDate = ParseD8(c.DateEnd) })
+            .ToList(),
+        ValueCodes = (header.ValueCodes ?? [])
+            .Select(c => new ValueCode { Code = c.Code, Amount = c.Amount })
+            .ToList(),
+        ConditionCodes = (header.ConditionCodes ?? []).Select(c => c.Code).ToList(),
+    };
+
+    private static InstitutionalProcedureCode MapProcedure(EngineModels.InstitutionalCode code) => new()
+    {
+        Code = code.Code,
+        CodeQualifier = code.Qualifier,
+        Date = ParseD8(code.Date),
+    };
+
+    private static AdapterClaimLine MapLine(EngineModels.ServiceLine line, DateTime? defaultFrom, DateTime? defaultTo)
+    {
+        var lineFrom = ParseD8(line.ServiceDate);
+        var from = lineFrom ?? defaultFrom ?? default;
+        var to = ParseD8(line.ServiceDateEnd) ?? (lineFrom.HasValue ? from : defaultTo ?? from);
 
         return new AdapterClaimLine
         {
@@ -111,7 +161,10 @@ public static class X12837ClaimMapper
             ServiceDateFrom = from,
             ServiceDateTo = to,
             PlaceOfServiceCode = line.PlaceOfService,
-            RevenueCode = line.RevenueCode,
+            RevenueCode = string.IsNullOrEmpty(line.RevenueCode) ? null : line.RevenueCode,
+            NationalDrugCode = line.NationalDrugCode,
+            DrugQuantity = line.DrugQuantity,
+            DrugUnitOfMeasure = line.DrugUnitOfMeasure,
         };
     }
 

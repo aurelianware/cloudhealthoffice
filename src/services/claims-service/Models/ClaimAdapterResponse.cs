@@ -113,6 +113,13 @@ public class AdapterClaim
     public List<AdapterDiagnosisCode> DiagnosisCodes { get; set; } = new();
     public List<AdapterClaimLine> ClaimLines { get; set; } = new();
 
+    /// <summary>Institutional (837I) header detail; null for professional/dental.</summary>
+    public InstitutionalClaimDetails? Institutional { get; set; }
+
+    /// <summary>Derived three-character type of bill; see <see cref="Claim.TypeOfBill"/>.</summary>
+    public string? TypeOfBill =>
+        InstitutionalClaimDetails.ComposeTypeOfBill(Institutional?.FacilityTypeCode, ClaimFrequencyCode);
+
     public ClaimStatus Status { get; set; } = ClaimStatus.Submitted;
     public DateTime SubmittedDate { get; set; }
     public DateTime? ReceivedDate { get; set; }
@@ -176,6 +183,7 @@ public class AdapterClaim
         ServiceDateTo = src.ServiceDateTo,
         DiagnosisCodes = src.DiagnosisCodes.Select(AdapterDiagnosisCode.From).ToList(),
         ClaimLines = src.ClaimLines.Select(AdapterClaimLine.From).ToList(),
+        Institutional = src.Institutional,
         Status = src.Status,
         SubmittedDate = src.SubmittedDate,
         ReceivedDate = src.ReceivedDate,
@@ -237,6 +245,7 @@ public class AdapterClaim
         ServiceDateTo = ServiceDateTo,
         DiagnosisCodes = DiagnosisCodes.Select(d => d.ToDiagnosisCode()).ToList(),
         ClaimLines = ClaimLines.Select(l => l.ToClaimLine()).ToList(),
+        Institutional = Institutional,
         Status = Status,
         SubmittedDate = SubmittedDate,
         ReceivedDate = ReceivedDate,
@@ -275,6 +284,7 @@ public class AdapterDiagnosisCode
     public string CodeQualifier { get; set; } = "ABK";
     public int PointerNumber { get; set; }
     public string? Description { get; set; }
+    public string? PresentOnAdmission { get; set; }
 
     public static AdapterDiagnosisCode From(DiagnosisCode src) => new()
     {
@@ -282,6 +292,7 @@ public class AdapterDiagnosisCode
         CodeQualifier = src.CodeQualifier,
         PointerNumber = src.PointerNumber,
         Description = src.Description,
+        PresentOnAdmission = src.PresentOnAdmission,
     };
 
     public DiagnosisCode ToDiagnosisCode() => new()
@@ -290,6 +301,7 @@ public class AdapterDiagnosisCode
         CodeQualifier = CodeQualifier,
         PointerNumber = PointerNumber,
         Description = Description,
+        PresentOnAdmission = PresentOnAdmission,
     };
 }
 
@@ -312,6 +324,9 @@ public class AdapterClaimLine
     public DateTime ServiceDateTo { get; set; }
     public string? PlaceOfServiceCode { get; set; }
     public string? RevenueCode { get; set; }
+    public string? NationalDrugCode { get; set; }
+    public decimal? DrugQuantity { get; set; }
+    public string? DrugUnitOfMeasure { get; set; }
     public decimal? MpipMultiplierApplied { get; set; }
     public AdapterLineAdjudicationResult? AdjudicationResult { get; set; }
 
@@ -328,6 +343,9 @@ public class AdapterClaimLine
         ServiceDateTo = src.ServiceDateTo,
         PlaceOfServiceCode = src.PlaceOfServiceCode,
         RevenueCode = src.RevenueCode,
+        NationalDrugCode = src.NationalDrugCode,
+        DrugQuantity = src.DrugQuantity,
+        DrugUnitOfMeasure = src.DrugUnitOfMeasure,
         MpipMultiplierApplied = src.MpipMultiplierApplied,
         AdjudicationResult = src.AdjudicationResult is null
             ? null
@@ -347,6 +365,9 @@ public class AdapterClaimLine
         ServiceDateTo = ServiceDateTo,
         PlaceOfServiceCode = PlaceOfServiceCode,
         RevenueCode = RevenueCode,
+        NationalDrugCode = NationalDrugCode,
+        DrugQuantity = DrugQuantity,
+        DrugUnitOfMeasure = DrugUnitOfMeasure,
         MpipMultiplierApplied = MpipMultiplierApplied,
         AdjudicationResult = AdjudicationResult?.ToLineAdjudicationResult(),
     };
