@@ -49,5 +49,14 @@ public class CoverageRepositoryCosmosActiveOnDateTests
         });
         statuses.Should().NotContain((int)CoverageStatus.Pending)
             .And.NotContain((int)CoverageStatus.Suspended);
+
+        // Open-ended (no/null termination date) only for non-Terminated status;
+        // a Terminated record must have a termination date >= DOS.
+        captured.QueryText.Should().Contain(
+            "(((NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate)) AND c.status != @terminatedStatus)");
+        captured.QueryText.Should().Contain("OR c.terminationDate >= @serviceDate)");
+        captured.GetQueryParameters()
+            .Single(p => p.Name == "@terminatedStatus").Value
+            .Should().Be((int)CoverageStatus.Terminated);
     }
 }

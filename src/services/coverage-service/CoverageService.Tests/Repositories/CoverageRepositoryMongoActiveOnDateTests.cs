@@ -69,6 +69,17 @@ public class CoverageRepositoryMongoActiveOnDateTests
         });
 
     [Fact]
+    public Task TerminatedCoverage_WithoutTerminationDate_NotFound() => RunAsync(
+        new[] { Build("term-no-date", CoverageStatus.Terminated, D(2025, 1, 1)) },
+        async repo =>
+        {
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2025, 3, 15)))
+                .Should().BeEmpty();
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2030, 1, 1)))
+                .Should().BeEmpty();
+        });
+
+    [Fact]
     public Task SuspendedCoverage_ExcludedEvenWithinSpan() => RunAsync(
         new[] { Build("susp", CoverageStatus.Suspended, D(2025, 1, 1)) },
         async repo =>

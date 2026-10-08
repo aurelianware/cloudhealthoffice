@@ -205,4 +205,35 @@ public class CoverageMemberEndpointsTests
         resp.Should().BeOfType<NotFoundObjectResult>();
         repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
     }
+
+    [Fact]
+    public async Task UpdateCoverage_SetTerminatedWithoutTerminationDate_Returns400()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        repo.Setup(r => r.GetByIdAsync(Tenant, "cov-1")).ReturnsAsync(coverage);
+
+        var resp = await ctl.UpdateCoverage("cov-1",
+            new UpdateCoverageRequest { Status = CoverageStatus.Terminated });
+
+        resp.Should().BeOfType<BadRequestObjectResult>();
+        coverage.Status.Should().Be(CoverageStatus.Active);
+        repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateCoverage_SetTerminatedWithExistingTerminationDate_Succeeds()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        coverage.TerminationDate = DateTime.UtcNow.Date.AddDays(30);
+        repo.Setup(r => r.GetByIdAsync(Tenant, "cov-1")).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        var resp = await ctl.UpdateCoverage("cov-1",
+            new UpdateCoverageRequest { Status = CoverageStatus.Terminated });
+
+        resp.Should().BeOfType<OkObjectResult>();
+        coverage.Status.Should().Be(CoverageStatus.Terminated);
+    }
 }

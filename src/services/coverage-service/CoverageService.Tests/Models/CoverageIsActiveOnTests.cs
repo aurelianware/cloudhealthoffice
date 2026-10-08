@@ -52,6 +52,22 @@ public class CoverageIsActiveOnTests
     }
 
     [Fact]
+    public void Terminated_WithoutTerminationDate_FailsClosed()
+    {
+        // Status=Terminated with no end date must not read as open-ended.
+        var coverage = Build(CoverageStatus.Terminated, Effective);
+        coverage.IsActiveOn(new DateTime(2025, 3, 1)).Should().BeFalse();
+        coverage.IsActiveOn(new DateTime(2030, 1, 1)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ServiceDateWithTimeOfDay_OnTerminationDate_IsActive()
+    {
+        Build(CoverageStatus.Terminated, Effective, Termination)
+            .IsActiveOn(new DateTime(2025, 6, 30, 14, 30, 0)).Should().BeTrue();
+    }
+
+    [Fact]
     public void ActiveOpenEnded_IsActiveFromEffectiveDateOnward()
     {
         var coverage = Build(CoverageStatus.Active, Effective);

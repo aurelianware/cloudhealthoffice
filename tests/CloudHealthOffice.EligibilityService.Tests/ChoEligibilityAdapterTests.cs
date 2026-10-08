@@ -284,6 +284,36 @@ public class ChoEligibilityAdapterTests
         Assert.Equal(new DateTime(2025, 6, 30), result.CoverageEndDate);
     }
 
+    [Fact]
+    public async Task VerifyEligibility_TerminatedCoverageWithoutTerminationDate_ReturnsNotEligible()
+    {
+        // Status=Terminated with no end date fails closed, not open-ended.
+        var coverageArray = JsonSerializer.Serialize(new[]
+        {
+            new { id = "cov-term", memberId = "MBR-001", groupNumber = "GRP-100",
+                  planId = "PLAN-PPO-2025", coverageLevel = "FAM",
+                  effectiveDate = "2025-01-01", terminationDate = (string?)null,
+                  status = 3, lineOfBusiness = 1 },
+        }, JsonOpts);
+
+        var handler = new SequenceHandler(new[]
+        {
+            new FakeResponse(HttpStatusCode.OK, coverageArray),
+        });
+
+        var adapter = CreateAdapter(handler);
+
+        var result = await adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = "test-tenant",
+            SubscriberId = "MBR-001",
+            ServiceDate = new DateTime(2025, 6, 15),
+        });
+
+        Assert.False(result.IsEligible);
+        Assert.Equal("6", result.StatusCode);
+    }
+
     [Theory]
     [InlineData(2)] // Pending — may not be effectuated yet (binder payment)
     [InlineData(4)] // Suspended
