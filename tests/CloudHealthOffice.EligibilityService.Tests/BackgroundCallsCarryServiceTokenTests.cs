@@ -52,7 +52,7 @@ public class BackgroundCallsCarryServiceTokenTests
 
     private static HttpResponseMessage Route(HttpRequestMessage request) =>
         request.RequestUri!.AbsolutePath.Contains("/coverage/member/")
-            ? Json("""{"id":"cov-1","isActive":true,"benefitPlanId":"plan-1"}""")
+            ? Json("""[{"id":"cov-1","planId":"plan-1","insuranceLineCode":"HLT","effectiveDate":"2020-01-01T00:00:00","terminationDate":null,"status":"Active","lineOfBusiness":"Commercial"}]""")
             : request.RequestUri.AbsolutePath.EndsWith("/benefits") ? Json("[]") : Json("{}");
 
     [Fact]

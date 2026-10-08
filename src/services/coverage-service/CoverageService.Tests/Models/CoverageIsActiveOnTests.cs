@@ -77,6 +77,7 @@ public class CoverageIsActiveOnTests
 
     [Theory]
     [InlineData(CoverageStatus.Active)]
+    [InlineData(CoverageStatus.Pending)]
     [InlineData(CoverageStatus.Terminated)]
     [InlineData(CoverageStatus.COBRA)]
     public void InForceStatuses_WithinSpan_AreActive(CoverageStatus status)
@@ -84,14 +85,23 @@ public class CoverageIsActiveOnTests
         Build(status, Effective, Termination).IsActiveOn(new DateTime(2025, 3, 1)).Should().BeTrue();
     }
 
-    [Theory]
-    [InlineData(CoverageStatus.Pending)]
-    [InlineData(CoverageStatus.Suspended)]
-    public void NotInForceStatuses_WithinSpan_AreNotActive(CoverageStatus status)
+    [Fact]
+    public void Suspended_WithinSpan_IsNotActive()
     {
-        // Pending may not be effectuated yet (e.g. binder payment outstanding).
-        Build(status, Effective, Termination)
+        Build(CoverageStatus.Suspended, Effective, Termination)
             .IsActiveOn(new DateTime(2025, 3, 1)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Pending_FutureDatedAdd_IsActiveFromItsEffectiveDate_NotBefore()
+    {
+        // Pending is only the auto-assigned "not yet effective" state: the span
+        // decides, so it is eligible on the effective date without waiting for
+        // the status sweep to promote it.
+        var coverage = Build(CoverageStatus.Pending, new DateTime(2026, 1, 1));
+        coverage.IsActiveOn(new DateTime(2025, 12, 31)).Should().BeFalse();
+        coverage.IsActiveOn(new DateTime(2026, 1, 1)).Should().BeTrue();
+        coverage.IsActiveOn(new DateTime(2026, 6, 1)).Should().BeTrue();
     }
 
     [Fact]

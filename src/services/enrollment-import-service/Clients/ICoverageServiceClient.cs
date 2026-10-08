@@ -19,6 +19,12 @@ public interface ICoverageServiceClient
     /// <summary>Updates plan / coverage level on an existing coverage (coverage-service PUT).</summary>
     Task UpdateAsync(string tenantId, string coverageId, UpdateCoverageRequestDto request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Reinstates a terminated coverage (coverage-service POST /{id}/reinstate):
+    /// clears its termination date and restores Active, keeping its effective date.
+    /// </summary>
+    Task ReinstateAsync(string tenantId, string coverageId, string? reasonCode, CancellationToken ct = default);
+
     /// <summary>Sets an existing coverage's termination date (coverage-service DELETE ?terminationDate=).</summary>
     Task TerminateAsync(string tenantId, string coverageId, DateTime terminationDate, string? reasonCode, CancellationToken ct = default);
 }
@@ -34,6 +40,10 @@ public class CoverageRecordDto
     public string? InsuranceLineCode { get; set; }
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
+    /// <summary>834 maintenance type of the last create/reinstatement ("025" once reinstated).</summary>
+    public string? MaintenanceTypeCode { get; set; }
+    /// <summary>The termination date the last reinstatement cleared (coverage-service Coverage.ReinstatedTerminationDate).</summary>
+    public DateTime? ReinstatedTerminationDate { get; set; }
 }
 
 /// <summary>Mirrors coverage-service's UpdateCoverageRequest (CoverageController.cs).</summary>

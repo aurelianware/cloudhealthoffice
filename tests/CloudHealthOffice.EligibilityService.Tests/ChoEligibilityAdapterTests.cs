@@ -315,9 +315,8 @@ public class ChoEligibilityAdapterTests
     }
 
     [Theory]
-    [InlineData(2)] // Pending — may not be effectuated yet (binder payment)
     [InlineData(4)] // Suspended
-    public async Task VerifyEligibility_PendingOrSuspendedCoverage_ReturnsNotEligible(int status)
+    public async Task VerifyEligibility_SuspendedCoverage_ReturnsNotEligible(int status)
     {
         var coverageArray = JsonSerializer.Serialize(new[]
         {
@@ -343,6 +342,78 @@ public class ChoEligibilityAdapterTests
 
         Assert.False(result.IsEligible);
         Assert.Equal("6", result.StatusCode);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Coverage selection — insurance line of the service type, then group
+    // (shared with EligibilityServiceImpl.SelectCoverage)
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static object Line(string id, string plan, string? line, string group = "GRP-100",
+        string effective = "2025-01-01") =>
+        new { id, memberId = "MBR-001", groupNumber = group, planId = plan, coverageLevel = "EMP",
+              insuranceLineCode = line, effectiveDate = effective, terminationDate = (string?)null,
+              status = "Active", lineOfBusiness = "Commercial" };
+
+    private Task<EligibilityAdapterResponse> VerifyAsync(object[] coverages, string serviceType, string? group = null) =>
+        CreateAdapter(new SequenceHandler(new[]
+        {
+            new FakeResponse(HttpStatusCode.OK, JsonSerializer.Serialize(coverages, JsonOpts)),
+            new FakeResponse(HttpStatusCode.OK, "[]"),
+            new FakeResponse(HttpStatusCode.NotFound, ""),
+            new FakeResponse(HttpStatusCode.NotFound, ""),
+        })).VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = "test-tenant",
+            SubscriberId = "MBR-001",
+            GroupNumber = group,
+            ServiceDate = new DateTime(2025, 6, 15),
+            ServiceTypeCode = serviceType
+        });
+
+    [Theory]
+    [InlineData("30", "PLAN-HLT")]
+    [InlineData("35", "PLAN-DEN")]
+    [InlineData("AN", "PLAN-VIS")]
+    public async Task VerifyEligibility_MixedLines_UsesTheServiceTypesInsuranceLine(string serviceType, string expectedPlan)
+    {
+        // Dental first, so "first in-force entry" would answer a medical question with the dental plan.
+        var result = await VerifyAsync(new[]
+        {
+            Line("cov-den", "PLAN-DEN", "DEN"),
+            Line("cov-hlt", "PLAN-HLT", "HLT"),
+            Line("cov-vis", "PLAN-VIS", "VIS")
+        }, serviceType);
+
+        Assert.True(result.IsEligible);
+        Assert.Equal(expectedPlan, result.PlanId);
+    }
+
+    [Fact]
+    public async Task VerifyEligibility_DentalOnlyMember_IsNotEligibleForMedical_ButIsForDental()
+    {
+        var dentalOnly = new[] { Line("cov-den", "PLAN-DEN", "DEN") };
+
+        var medical = await VerifyAsync(dentalOnly, "30");
+        Assert.False(medical.IsEligible);
+        Assert.Equal("6", medical.StatusCode);
+
+        var dental = await VerifyAsync(dentalOnly, "35");
+        Assert.True(dental.IsEligible);
+        Assert.Equal("PLAN-DEN", dental.PlanId);
+    }
+
+    [Fact]
+    public async Task VerifyEligibility_PrefersRequestedGroup_ThenLatestEffective_LineNullIsHealth()
+    {
+        var coverages = new[]
+        {
+            Line("cov-a", "PLAN-A", null, group: "GRP-A", effective: "2025-03-01"),
+            Line("cov-b", "PLAN-B", "HLT", group: "GRP-B", effective: "2025-01-01")
+        };
+
+        Assert.Equal("PLAN-B", (await VerifyAsync(coverages, "30", group: "GRP-B")).PlanId);
+        Assert.Equal("PLAN-A", (await VerifyAsync(coverages, "30")).PlanId);
     }
 
     [Fact]

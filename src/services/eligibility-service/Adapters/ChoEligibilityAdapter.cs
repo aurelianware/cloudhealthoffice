@@ -31,7 +31,8 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
         EligibilityAdapterRequest request, CancellationToken ct = default)
     {
         // 1. Check active coverage
-        var coverage = await GetActiveCoverageAsync(request.TenantId, request.SubscriberId, request.ServiceDate);
+        var coverage = await GetActiveCoverageAsync(
+            request.TenantId, request.SubscriberId, request.ServiceDate, request.ServiceTypeCode, request.GroupNumber);
 
         if (coverage == null || !coverage.IsInForceOn(request.ServiceDate))
         {
@@ -70,7 +71,8 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
         };
     }
 
-    private async Task<ChoCoverageDto?> GetActiveCoverageAsync(string tenantId, string subscriberId, DateTime serviceDate)
+    private async Task<ChoCoverageDto?> GetActiveCoverageAsync(
+        string tenantId, string subscriberId, DateTime serviceDate, string? serviceTypeCode, string? groupNumber)
     {
         var coverageUrl = _configuration["Services:CoverageService"] ?? "http://coverage-service.cloudhealthoffice/api/v1";
         var client = _httpClientFactory.CreateClient("EligibilityDefault");
@@ -85,9 +87,11 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
             return null;
         }
 
-        // The /active endpoint returns a List<Coverage> — take the first active entry
+        // The /active endpoint returns a List<Coverage> (medical, dental,
+        // vision...): pick the one for this request's insurance line and group
+        // by the same rule as the eligibility service itself.
         var coverages = await response.Content.ReadFromJsonAsync<List<ChoCoverageDto>>();
-        return coverages?.FirstOrDefault(c => c.IsInForceOn(serviceDate));
+        return EligibilityServiceImpl.SelectCoverageFor(coverages, serviceDate, serviceTypeCode, groupNumber);
     }
 
     private async Task<List<EligibilityBenefit>> GetBenefitsAsync(string tenantId, string benefitPlanId, string? serviceType)
@@ -203,10 +207,10 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
 /// <summary>
 /// DTO matching the Coverage model returned by coverage-service.
-/// Status is an int enum (1=Active, 2=Pending, 3=Terminated, 4=Suspended, 5=COBRA).
+/// Status holds coverage-service CoverageStatus as its int (1=Active, 2=Pending, 3=Terminated, 4=Suspended, 5=COBRA); the wire sends the name.
 /// PlanId maps to BenefitPlanId in the eligibility context.
 /// </summary>
-internal class ChoCoverageDto
+internal class ChoCoverageDto : ICoverageCandidate
 {
     public string Id { get; set; } = string.Empty;
     public string? MemberId { get; set; }
@@ -214,24 +218,30 @@ internal class ChoCoverageDto
     public string? PlanName { get; set; }
     public string GroupNumber { get; set; } = string.Empty;
     public string PlanId { get; set; } = string.Empty;
+    /// <summary>834 HD03 insurance line (HLT, DEN, VIS...); null on older records (treated as health).</summary>
+    public string? InsuranceLineCode { get; set; }
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
+    // coverage-service sends enums by name ("Active", "Commercial").
+    [System.Text.Json.Serialization.JsonConverter(typeof(EligibilityService.Services.CoverageStatusIntConverter))]
     public int Status { get; set; }
+    [System.Text.Json.Serialization.JsonConverter(typeof(EligibilityService.Services.CoverageLineOfBusinessIntConverter))]
     public int LineOfBusiness { get; set; } = 1;
 
     /// <summary>
     /// Coverage is in force on a date of service when the date falls within its
-    /// effective/termination span and its status is one that was in force for
-    /// that span: 1 (Active), 3 (Terminated — still covers dates on or before
-    /// the termination date) or 5 (COBRA). 2 (Pending — may not be effectuated
-    /// yet), 4 (Suspended) and unknown statuses are excluded, as is a 3 with no
+    /// effective/termination span and its status is one that is in force for
+    /// that span: 1 (Active), 2 (Pending — only ever the auto-assigned "not yet
+    /// effective" state, so in force from its effective date), 3 (Terminated —
+    /// still covers dates on or before the termination date) or 5 (COBRA).
+    /// 4 (Suspended) and unknown statuses are excluded, as is a 3 with no
     /// termination date (fails closed rather than open-ended). Mirrors
-    /// coverage-service <c>Coverage.IsActiveOn</c>.
+    /// coverage-service <c>Coverage.IsActiveOn</c> / <c>DateOfServiceStatuses</c>.
     /// </summary>
     public bool IsInForceOn(DateTime serviceDate)
     {
         var date = serviceDate.Date;
-        if (Status is not (1 or 3 or 5)) return false;
+        if (Status is not (1 or 2 or 3 or 5)) return false;
         if (Status == 3 && !TerminationDate.HasValue) return false;
         return date >= EffectiveDate.Date
             && (!TerminationDate.HasValue || date <= TerminationDate.Value.Date);

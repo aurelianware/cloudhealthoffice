@@ -407,7 +407,12 @@ const firstNamesM = ["Carlos","Michael","William","Robert","David","James","Thom
 const firstNamesF = ["Angela","Priya","Thanh","Sophia","Margaret","Jennifer","Emily","Jessica","Sarah","Amanda","Samantha","Nicole","Rachel","Megan","Laura"];
 const lastNames = ["Ramirez","O'Brien","Henderson","Kim","Martinez","Johnson","Thompson","Garcia","Washington","Sharma","Le","Rodriguez","Patel","Foster","Anderson","Chen","Mitchell","Howard","Nguyen","Park","Davis","Wilson","Taylor","Brown","Moore","Jackson","White","Harris","Clark","Lewis","Robinson","Walker","Young","Allen","King","Wright","Scott","Hill","Green","Baker"];
 
-const memberStatuses = []; // Active=1, Pending=2, Terminated=3, COBRA=5
+const memberStatuses = []; // Active=1, Pending=2 (not yet effective), Terminated=3, COBRA=5
+
+function firstOfNextMonth() {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+}
 for (let i = 0; i < 40; i++) memberStatuses.push(1);
 for (let i = 0; i < 5; i++) memberStatuses.push(5);
 for (let i = 0; i < 3; i++) memberStatuses.push(3);
@@ -485,7 +490,10 @@ for (let i = 1; i <= 50; i++) {
     ZipCode: "78" + String(700 + (i % 100)).substring(0, 3),
     Phone: "512" + String(2000000 + i * 1111),
     Email: (first.toLowerCase() + "." + last.toLowerCase().replace(/'/g, "") + "@example.com"),
-    EffectiveDate: new Date("2025-01-01"),
+    // Pending (2) means "not yet effective" (member EnrollmentStatus and
+    // coverage-service CoverageStatus alike), so those members start on the
+    // first of next month, computed when the seed runs.
+    EffectiveDate: status === 2 ? firstOfNextMonth() : new Date("2025-01-01"),
     TerminationDate: status === 3 ? daysAgo(randInt(10, 60)) : null, // Terminated=3
     Status: status,
     LineOfBusiness: planIdx === 5 ? 3 : 1, // Commercial=1, Medicaid=3
