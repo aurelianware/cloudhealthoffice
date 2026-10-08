@@ -154,6 +154,34 @@ public class AccumulatorWorkingSetLimitTests
     }
 
     [Fact]
+    public void Aggregate_IndividualFallback_EachAmountRecordedOnceInTheActivePool()
+    {
+        // Zero-limit family placeholders (as Redis/CHO sources emit) plus the
+        // individual fallback pool: one application must land in exactly one
+        // deductible accumulator and one OOP accumulator (+ the ACA cap).
+        var ws = new AccumulatorWorkingSet(
+            [
+                ZeroPlaceholder(AccumulatorType.FamilyDeductible, AccumulatorScope.Family),
+                ZeroPlaceholder(AccumulatorType.FamilyOutOfPocketMax, AccumulatorScope.Family),
+            ],
+            Plan(FamilyAccumulatorModel.Aggregate, indDed: 1_000m, indOop: 4_000m,
+                acaCap: 9_200m, acaEnforced: true));
+
+        ws.ApplyDeductible(250m, NetworkTier.InNetwork);
+        ws.ApplyOopMax(250m, NetworkTier.InNetwork);
+
+        var updates = ws.GetPendingUpdates();
+        Assert.Single(updates, u => u.Type is AccumulatorType.IndividualDeductible or AccumulatorType.FamilyDeductible);
+        Assert.Single(updates, u => u.Type is AccumulatorType.IndividualOutOfPocketMax or AccumulatorType.FamilyOutOfPocketMax);
+        Assert.Single(updates, u => u.Type == AccumulatorType.AcaIndividualCap);
+        Assert.All(updates, u => Assert.Equal(250m, u.Amount));
+
+        var snapshot = ws.GetSnapshot().Where(s => s.NetworkTier == NetworkTier.InNetwork).ToList();
+        Assert.Equal(250m, snapshot.Single(s => s.Type == AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(0m, snapshot.Single(s => s.Type == AccumulatorType.FamilyDeductible).AmountApplied);
+    }
+
+    [Fact]
     public void Aggregate_FamilyConfigured_IndividualLimitIgnored()
     {
         var ws = new AccumulatorWorkingSet([],
