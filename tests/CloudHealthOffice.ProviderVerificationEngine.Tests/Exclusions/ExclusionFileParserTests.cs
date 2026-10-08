@@ -101,6 +101,23 @@ public class ExclusionFileParserTests
     }
 
     [Fact]
+    public void SamExtract_NameOnlyIndividual_ParsesLastCommaFirstForm()
+    {
+        var csv = "Classification,Name,Exclusion Type,NPI\n" +
+                  "Individual,\"DOE, JOHN Q\",Prohibition/Restriction,\n" +
+                  "Individual,MARY ROE,Prohibition/Restriction,\n";
+
+        var records = SamExtractCsvParser.Parse(new StringReader(csv)).ToList();
+
+        Assert.Equal("DOE", records[0].NormalizedLastName);
+        Assert.Equal("JOHN", records[0].NormalizedFirstName);
+        Assert.Equal("Q", records[0].MiddleName);
+        Assert.Null(records[0].NormalizedBusinessName);
+        Assert.Equal("ROE", records[1].NormalizedLastName);
+        Assert.Equal("MARY", records[1].NormalizedFirstName);
+    }
+
+    [Fact]
     public void SamExtract_RejectsUnexpectedContent()
     {
         var json = "{\"error\":{\"code\":\"API_KEY_INVALID\"}}";

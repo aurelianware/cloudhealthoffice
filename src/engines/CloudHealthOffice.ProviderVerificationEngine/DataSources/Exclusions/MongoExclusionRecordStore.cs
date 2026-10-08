@@ -40,15 +40,17 @@ public sealed class MongoExclusionRecordStore : IExclusionRecordStore
         var keys = Builders<ExclusionRecord>.IndexKeys;
         await _records.Indexes.CreateManyAsync(new[]
         {
+            // Every lookup is scoped to the active sync snapshot, so the sync
+            // id leads each lookup index.
             new CreateIndexModel<ExclusionRecord>(
-                keys.Ascending(r => r.Source).Ascending(r => r.Npi),
-                new CreateIndexOptions { Name = "source_npi" }),
+                keys.Ascending(r => r.Source).Ascending(r => r.SyncId).Ascending(r => r.Npi),
+                new CreateIndexOptions { Name = "source_sync_npi" }),
             new CreateIndexModel<ExclusionRecord>(
-                keys.Ascending(r => r.Source).Ascending(r => r.NormalizedLastName).Ascending(r => r.DobKey),
-                new CreateIndexOptions { Name = "source_lastname_dob" }),
+                keys.Ascending(r => r.Source).Ascending(r => r.SyncId).Ascending(r => r.NormalizedLastName).Ascending(r => r.DobKey),
+                new CreateIndexOptions { Name = "source_sync_lastname_dob" }),
             new CreateIndexModel<ExclusionRecord>(
-                keys.Ascending(r => r.Source).Ascending(r => r.NormalizedBusinessName),
-                new CreateIndexOptions { Name = "source_business_name" }),
+                keys.Ascending(r => r.Source).Ascending(r => r.SyncId).Ascending(r => r.NormalizedBusinessName),
+                new CreateIndexOptions { Name = "source_sync_business_name" }),
             new CreateIndexModel<ExclusionRecord>(
                 keys.Ascending(r => r.Source).Ascending(r => r.SyncId),
                 new CreateIndexOptions { Name = "source_sync" })
@@ -126,14 +128,14 @@ public sealed class MongoExclusionRecordStore : IExclusionRecordStore
         };
     }
 
-    public Task<IReadOnlyList<ExclusionRecord>> FindByNpiAsync(ExclusionScreeningSource source, string npi, CancellationToken ct = default) =>
-        FindAsync(r => r.Source == source && r.Npi == npi, ct);
+    public Task<IReadOnlyList<ExclusionRecord>> FindByNpiAsync(ExclusionScreeningSource source, string syncId, string npi, CancellationToken ct = default) =>
+        FindAsync(r => r.Source == source && r.SyncId == syncId && r.Npi == npi, ct);
 
-    public Task<IReadOnlyList<ExclusionRecord>> FindByLastNameAsync(ExclusionScreeningSource source, string normalizedLastName, CancellationToken ct = default) =>
-        FindAsync(r => r.Source == source && r.NormalizedLastName == normalizedLastName, ct);
+    public Task<IReadOnlyList<ExclusionRecord>> FindByLastNameAsync(ExclusionScreeningSource source, string syncId, string normalizedLastName, CancellationToken ct = default) =>
+        FindAsync(r => r.Source == source && r.SyncId == syncId && r.NormalizedLastName == normalizedLastName, ct);
 
-    public Task<IReadOnlyList<ExclusionRecord>> FindByBusinessNameAsync(ExclusionScreeningSource source, string normalizedBusinessName, CancellationToken ct = default) =>
-        FindAsync(r => r.Source == source && r.NormalizedBusinessName == normalizedBusinessName, ct);
+    public Task<IReadOnlyList<ExclusionRecord>> FindByBusinessNameAsync(ExclusionScreeningSource source, string syncId, string normalizedBusinessName, CancellationToken ct = default) =>
+        FindAsync(r => r.Source == source && r.SyncId == syncId && r.NormalizedBusinessName == normalizedBusinessName, ct);
 
     public async Task<ExclusionSyncStatus?> GetSyncStatusAsync(ExclusionScreeningSource source, CancellationToken ct = default)
     {

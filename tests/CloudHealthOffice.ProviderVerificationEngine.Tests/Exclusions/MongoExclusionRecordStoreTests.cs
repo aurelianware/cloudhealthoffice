@@ -39,9 +39,9 @@ public class MongoExclusionRecordStoreTests : IAsyncLifetime
             .Select(i => i["name"].AsString)
             .ToList();
 
-        Assert.Contains("source_npi", names);
-        Assert.Contains("source_lastname_dob", names);
-        Assert.Contains("source_business_name", names);
+        Assert.Contains("source_sync_npi", names);
+        Assert.Contains("source_sync_lastname_dob", names);
+        Assert.Contains("source_sync_business_name", names);
     }
 
     [Fact]
@@ -55,10 +55,11 @@ public class MongoExclusionRecordStoreTests : IAsyncLifetime
         var status = await _store.GetSyncStatusAsync(ExclusionScreeningSource.OigLeie);
         Assert.Equal(Now.AddDays(-1), status!.LastSuccessfulSyncAt);
         Assert.Equal(2, status.RecordCount);
-        Assert.Empty(await _store.FindByNpiAsync(ExclusionScreeningSource.OigLeie, "1497758544")); // old copy gone
-        Assert.Single(await _store.FindByLastNameAsync(ExclusionScreeningSource.OigLeie, "DOE"));
-        Assert.Single(await _store.FindByBusinessNameAsync(ExclusionScreeningSource.OigLeie, "ACME CLINIC"));
-        Assert.Empty(await _store.FindByNpiAsync(ExclusionScreeningSource.SamGov, "1234567893")); // per-source
+        var active = status.ActiveSyncId!;
+        Assert.Equal(2, await RawCountAsync()); // old copy deleted
+        Assert.Single(await _store.FindByLastNameAsync(ExclusionScreeningSource.OigLeie, active, "DOE"));
+        Assert.Single(await _store.FindByBusinessNameAsync(ExclusionScreeningSource.OigLeie, active, "ACME CLINIC"));
+        Assert.Empty(await _store.FindByNpiAsync(ExclusionScreeningSource.SamGov, active, "1234567893")); // per-source
 
         var screener = new LocalExclusionListScreener(ExclusionScreeningSource.OigLeie, _store, Wrap(_options),
             NullLogger<LocalExclusionListScreener>.Instance, new FixedTimeProvider(Now));
@@ -81,10 +82,31 @@ public class MongoExclusionRecordStoreTests : IAsyncLifetime
         await Assert.ThrowsAsync<IOException>(() => _store.ReplaceDatasetAsync(ExclusionScreeningSource.OigLeie, Broken(),
             new ExclusionDatasetLoadPolicy { SourceUrl = "x", SyncedAt = Now, MinimumRecordCount = 1 }));
 
-        Assert.Empty(await _store.FindByNpiAsync(ExclusionScreeningSource.OigLeie, "1497758544"));
-        Assert.Single(await _store.FindByNpiAsync(ExclusionScreeningSource.OigLeie, "1234567893"));
+        var active = (await _store.GetSyncStatusAsync(ExclusionScreeningSource.OigLeie))!.ActiveSyncId!;
+        Assert.Equal(1, await RawCountAsync()); // partial rows removed
+        Assert.Single(await _store.FindByNpiAsync(ExclusionScreeningSource.OigLeie, active, "1234567893"));
         Assert.Equal(Now.AddDays(-1), (await _store.GetSyncStatusAsync(ExclusionScreeningSource.OigLeie))!.LastSuccessfulSyncAt);
     }
+
+    [Fact]
+    public async Task Lookups_SeeOnlyTheActiveSnapshot_NotInFlightRows()
+    {
+        await SeedLeieAsync(_store, Now.AddDays(-1), LeieRow(last: "DOE", first: "JOHN", npi: "1234567893"));
+        // Rows of an uncommitted load (in flight, or left by a failed cleanup).
+        await _database.GetCollection<ExclusionRecord>(_options.RecordsCollectionName).InsertOneAsync(
+            new ExclusionRecord { Source = ExclusionScreeningSource.OigLeie, SyncId = "in-flight", LastName = "ROE", FirstName = "MARY", Npi = "1497758544" }.Normalize());
+
+        var screener = new LocalExclusionListScreener(ExclusionScreeningSource.OigLeie, _store, Wrap(_options),
+            NullLogger<LocalExclusionListScreener>.Instance, new FixedTimeProvider(Now));
+        var outcome = await screener.ScreenAsync(
+            new ProviderScreeningRequest { Npi = "1497758544", FirstName = "Mary", LastName = "Roe" }, default);
+
+        Assert.True(outcome.Status.WasScreened);
+        Assert.Empty(outcome.Matches);
+    }
+
+    private async Task<long> RawCountAsync() =>
+        await _database.GetCollection<BsonDocument>(_options.RecordsCollectionName).CountDocumentsAsync(FilterDefinition<BsonDocument>.Empty);
 
     [Fact]
     public async Task SyncLease_IsExclusiveUntilReleasedOrExpired()

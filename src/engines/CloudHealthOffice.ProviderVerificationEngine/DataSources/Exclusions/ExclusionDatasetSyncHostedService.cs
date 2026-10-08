@@ -22,6 +22,7 @@ public sealed class ExclusionDatasetSyncHostedService : BackgroundService
     private readonly ExclusionScreeningOptions _options;
     private readonly ILogger<ExclusionDatasetSyncHostedService> _logger;
     private readonly TimeProvider _time;
+    private bool _indexesEnsured;
 
     public ExclusionDatasetSyncHostedService(
         IEnumerable<IExclusionDatasetSync> syncs,
@@ -42,15 +43,6 @@ public sealed class ExclusionDatasetSyncHostedService : BackgroundService
         if (_syncs.Count == 0)
             return;
 
-        try
-        {
-            await _store.EnsureIndexesAsync(stoppingToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-        {
-            _logger.LogError(ex, "Creating exclusion store indexes failed; continuing");
-        }
-
         await RunDueSyncsAsync(stoppingToken).ConfigureAwait(false);
 
         var interval = _options.SyncCheckInterval > TimeSpan.Zero ? _options.SyncCheckInterval : TimeSpan.FromHours(1);
@@ -64,6 +56,28 @@ public sealed class ExclusionDatasetSyncHostedService : BackgroundService
     /// <summary>Run every sync that is due now. Public for tests and admin triggers.</summary>
     public async Task RunDueSyncsAsync(CancellationToken ct)
     {
+        // Indexes are (re)ensured before every pass until that succeeds once:
+        // a store that was unreachable at startup must not leave a pod
+        // screening 100k+ rows without indexes for its whole lifetime.
+        // Syncing waits for the indexes so a recovered store gets them first.
+        if (!_indexesEnsured)
+        {
+            try
+            {
+                await _store.EnsureIndexesAsync(ct).ConfigureAwait(false);
+                _indexesEnsured = true;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Creating exclusion store indexes failed; will retry before the next sync check");
+                return;
+            }
+        }
+
         foreach (var sync in _syncs)
         {
             try

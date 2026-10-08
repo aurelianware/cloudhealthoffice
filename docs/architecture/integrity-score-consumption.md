@@ -71,7 +71,24 @@ which sources screened and why any did not, e.g.
 |---|---|---|
 | OIG LEIE | Local dataset | `LeieDatasetSync` downloads the full-database `UPDATED.csv`, parses it (RFC 4180, columns mapped by header name) and loads it into the local store. |
 | SAM.gov | `Extract` (default) | `SamExtractDatasetSync` downloads the public exclusions extract (zipped CSV) from the SAM.gov Extracts API — one request per sync, independent of network size — and loads it into the same store. |
-| SAM.gov | `Api` (optional) | `SamExclusionsApiScreener` calls the Exclusions API (`{ApiBaseUrl}{ApiVersion}/exclusions`, default v4) per provider by `npi` and `exclusionName`. Use only for small volumes: SAM keys are rate-limited per account (personal keys can be ~10 requests/day, system accounts ~1,000/day). |
+| SAM.gov | `Api` (optional) | `SamExclusionsApiScreener` calls the Exclusions API (`{ApiBaseUrl}{ApiVersion}/exclusions`, default v4) per provider by NPI and name. Use only for small volumes: SAM keys are rate-limited per account (personal keys can be ~10 requests/day, system accounts ~1,000/day). |
+
+**SAM Exclusions API contract — unverified.** The request defaults
+(`npi`, `exclusionName`, `page`/`size`, response `totalRecords` /
+`excludedEntity[].exclusionIdentification` / `exclusionActions.listOfActions`)
+follow our best reading of the v4 Exclusions API documentation but were not
+checked against the live API (a PR review suggested `start`/`length` and
+`firstName`/`lastName`/`entityName` instead). Every parameter name is
+configurable (`PaginationStyle` = `PageSize` | `StartLength`, `PageParameter`,
+`SizeParameter`, `NpiParameter`, `NameSearchStyle` = `ExclusionName` |
+`NameParts`, `ExclusionNameParameter`, `First/Last/EntityNameParameter`).
+Verify against https://open.gsa.gov/api/exclusions-api/ before enabling Api
+mode. A contract mismatch fails safe: an unmappable record, an empty page
+before `totalRecords` is reached, a repeated page (pagination ignored) or
+more results than `MaxPages` all report SAM NOT screened. Retry-After is
+honoured exactly; one longer than `MaxServerRetryDelay` (2 min) reports NOT
+screened rather than retrying early. Extract mode (the default) does not
+depend on this contract.
 
 **Matching policy** (`ExclusionMatcher`). False negatives are the compliance
 risk; false positives go to manual review, never denial.
@@ -102,15 +119,20 @@ A never-synced dataset reports NOT screened.
 
 **Sync safety.** Files are downloaded to a temp file, header-validated
 (an HTML/JSON error page is rejected), and loaded under a new sync id. The
-load is rejected — previous dataset and its timestamp kept — when it has
+load only becomes visible when the sync status is switched to its sync id:
+every lookup is scoped to `ActiveSyncId`, so rows of an in-flight, rejected
+or superseded load never affect screening. The load is rejected — previous
+dataset and its timestamp kept — when it has
 fewer than `MinimumRecordCount` rows or fewer than `MinimumRetainedFraction`
 of the previous count. A per-source lease in the store stops replicas
 downloading concurrently. Failures back off `SyncRetryDelay` (4 h) so a
 rate-limited SAM key is not exhausted.
 
 **Storage.** With `MongoDb:ConnectionString` set, records go to the
-tenant-agnostic collections `exclusion_list_records` (indexes: source+NPI,
-source+normalized last name+DOB, source+normalized business name) and
+tenant-agnostic collections `exclusion_list_records` (indexes:
+source+sync id+NPI, source+sync id+normalized last name+DOB, source+sync
+id+normalized business name; the sync worker retries index creation before
+each sync until it succeeds) and
 `exclusion_list_sync_status` in `MongoDb:DatabaseName` (or
 `ExclusionScreening:MongoDatabaseName`). Without it each replica holds an
 in-memory copy (development only: LEIE + SAM extract need several hundred
@@ -160,9 +182,16 @@ key, and the source reports NOT screened until it is rotated.
       "RequestTimeout": "00:00:20",
       "MaxRetries": 3,                      // 429 / 5xx / timeout retries
       "RetryBaseDelay": "00:00:02",         // exponential; Retry-After wins
-      "MaxRetryDelay": "00:01:00",
+      "MaxRetryDelay": "00:01:00",          // cap on computed backoff only
+      "MaxServerRetryDelay": "00:02:00",    // longer Retry-After → NOT screened
       "PageSize": 10,
-      "MaxPages": 5                         // more results → NOT screened
+      "MaxPages": 5,                        // more results → NOT screened
+      "PaginationStyle": "PageSize",        // PageSize | StartLength (unverified contract)
+      "PageParameter": "page",
+      "SizeParameter": "size",
+      "NpiParameter": "npi",
+      "NameSearchStyle": "ExclusionName",   // ExclusionName | NameParts
+      "ExclusionNameParameter": "exclusionName"
     },
     "StalenessWindow": "35.00:00:00",
     "SyncInterval": "1.00:00:00",
@@ -178,6 +207,11 @@ key, and the source reports NOT screened until it is rotated.
 },
 "MongoDb": { "ConnectionString": "", "DatabaseName": "CloudHealthOffice" }
 ```
+
+**Gate caching.** `HttpProviderIntegrityGate` does not cache a live result
+that is not-screened (rating `Unknown` or `EXCLUSION_NOT_SCREENED`), just as
+it does not cache unavailability, so claims stop pending as soon as LEIE /
+SAM screening recovers instead of after the 1-hour cache TTL.
 
 Deployment checklist: set `Leie:Enabled` / `Sam:Enabled` (k8s ConfigMap
 `provider-verification-service-config`), the SAM key and

@@ -216,4 +216,115 @@ public class SamExclusionsApiScreenerTests
 
         Assert.False(outcome.Status.WasScreened);
     }
+
+    [Fact]
+    public async Task DefaultContract_UsesNpiExclusionNameAndPageSize()
+    {
+        var handler = new StubHandler((_, _) => StubHandler.Json(EmptyJson));
+
+        await Screener(handler).ScreenAsync(
+            new ProviderScreeningRequest { Npi = "1234567893", OrganizationName = "Acme & Sons" }, default);
+
+        Assert.Contains(handler.Requests, u => u.Query.EndsWith("&npi=1234567893&page=0&size=10"));
+        Assert.Contains(handler.Requests, u => u.Query.Contains("&exclusionName=Acme%20%26%20Sons&page=0&size=10"));
+    }
+
+    [Fact]
+    public async Task ConfigurableContract_StartLengthAndNameParts()
+    {
+        var page2 = NpiHitJson.Replace("\"totalRecords\": 1", "\"totalRecords\": 2").Replace("\"JOHN\"", "\"JAKE\"");
+        var handler = new StubHandler((req, _) =>
+            StubHandler.Json(req.RequestUri!.Query.Contains("start=1")
+                ? page2
+                : NpiHitJson.Replace("\"totalRecords\": 1", "\"totalRecords\": 2")));
+
+        var outcome = await Screener(handler, s =>
+        {
+            s.PaginationStyle = SamPaginationStyle.StartLength;
+            s.PageParameter = "start";
+            s.SizeParameter = "length";
+            s.NameSearchStyle = SamNameSearchStyle.NameParts;
+            s.PageSize = 1;
+        }).ScreenAsync(new ProviderScreeningRequest { FirstName = "John", LastName = "Doe", OrganizationName = "Acme" }, default);
+
+        Assert.True(outcome.Status.WasScreened, outcome.Status.Note);
+        Assert.Contains(handler.Requests, u => u.Query.Contains("firstName=John&lastName=Doe&start=0&length=1"));
+        Assert.Contains(handler.Requests, u => u.Query.Contains("firstName=John&lastName=Doe&start=1&length=1"));
+        Assert.Contains(handler.Requests, u => u.Query.Contains("entityName=Acme&start=0&length=1"));
+        Assert.DoesNotContain(handler.Requests, u => u.Query.Contains("exclusionName"));
+    }
+
+    [Fact]
+    public async Task EmptyPageBeforeReportedTotal_IsNotScreened()
+    {
+        var handler = new StubHandler((_, _) => StubHandler.Json("""{ "totalRecords": 3, "excludedEntity": [] }"""));
+
+        var outcome = await Screener(handler).ScreenAsync(new ProviderScreeningRequest { Npi = "1234567893" }, default);
+
+        Assert.False(outcome.Status.WasScreened);
+        Assert.Contains("empty page", outcome.Status.Note);
+    }
+
+    [Fact]
+    public async Task UnmappableEntity_IsNotScreened()
+    {
+        var handler = new StubHandler((_, _) => StubHandler.Json(
+            """{ "totalRecords": 1, "excludedEntity": [ { "someNewShape": { "npi": "1234567893" } } ] }"""));
+
+        var outcome = await Screener(handler).ScreenAsync(new ProviderScreeningRequest { Npi = "1234567893" }, default);
+
+        Assert.False(outcome.Status.WasScreened);
+        Assert.Contains("unrecognized", outcome.Status.Note);
+    }
+
+    [Fact]
+    public async Task PaginationIgnoredByServer_RepeatedPage_IsNotScreened()
+    {
+        var handler = new StubHandler((_, _) => StubHandler.Json(NpiHitJson.Replace("\"totalRecords\": 1", "\"totalRecords\": 3")));
+
+        var outcome = await Screener(handler, s => s.PageSize = 1).ScreenAsync(
+            new ProviderScreeningRequest { Npi = "1234567893" }, default);
+
+        Assert.False(outcome.Status.WasScreened);
+        Assert.Contains("repeated", outcome.Status.Note);
+    }
+
+    [Fact]
+    public async Task RetryAfter_LongerThanComputedCap_IsHonouredExactly()
+    {
+        var handler = new StubHandler((_, n) =>
+        {
+            if (n == 1)
+            {
+                var r = StubHandler.Json("{}", HttpStatusCode.TooManyRequests);
+                r.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(90));
+                return r;
+            }
+            return StubHandler.Json(EmptyJson);
+        });
+
+        var outcome = await Screener(handler, s => s.MaxRetryDelay = TimeSpan.FromSeconds(60))
+            .ScreenAsync(new ProviderScreeningRequest { Npi = "1234567893" }, default);
+
+        Assert.True(outcome.Status.WasScreened);
+        Assert.Equal([TimeSpan.FromSeconds(90)], _delays);
+    }
+
+    [Fact]
+    public async Task RetryAfter_BeyondMaxServerRetryDelay_IsNotScreened_WithoutEarlyRetry()
+    {
+        var handler = new StubHandler((_, _) =>
+        {
+            var r = StubHandler.Json("{}", HttpStatusCode.TooManyRequests);
+            r.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(5));
+            return r;
+        });
+
+        var outcome = await Screener(handler).ScreenAsync(new ProviderScreeningRequest { Npi = "1234567893" }, default);
+
+        Assert.False(outcome.Status.WasScreened);
+        Assert.Contains("rate limited", outcome.Status.Note);
+        Assert.Single(handler.Requests);
+        Assert.Empty(_delays);
+    }
 }

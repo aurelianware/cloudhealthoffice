@@ -122,15 +122,65 @@ public class SamOptions
     /// <summary>Base delay for exponential backoff; a Retry-After header wins when present.</summary>
     public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromSeconds(2);
 
-    /// <summary>Upper bound on any single backoff wait.</summary>
+    /// <summary>Upper bound on a locally computed (exponential) backoff wait.</summary>
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromSeconds(60);
 
-    /// <summary>Page size requested from the Exclusions API (Api mode).</summary>
+    /// <summary>
+    /// Longest server-requested Retry-After the screener will wait. The
+    /// header is always honoured exactly; a longer request fails the source
+    /// (reported NOT screened) rather than retrying early. Default 2 minutes.
+    /// </summary>
+    public TimeSpan MaxServerRetryDelay { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Page size requested from the Exclusions API (Api mode). SAM caps this at 10.</summary>
     public int PageSize { get; set; } = 10;
+
+    // -- Exclusions API request contract (Api mode) --------------------
+    // Defaults follow the published v4 Exclusions API as best known
+    // (npi, exclusionName, page/size). They are configurable because the
+    // contract could not be verified against the live API from this
+    // codebase; see docs/architecture/integrity-score-consumption.md.
+
+    /// <summary>Pagination: zero-based page index (default) or record offset.</summary>
+    public SamPaginationStyle PaginationStyle { get; set; } = SamPaginationStyle.PageSize;
+
+    /// <summary>Page index (PageSize style) or offset (StartLength style) parameter, e.g. "page" or "start".</summary>
+    public string PageParameter { get; set; } = "page";
+
+    /// <summary>Page-size parameter, e.g. "size" or "length".</summary>
+    public string SizeParameter { get; set; } = "size";
+
+    public string NpiParameter { get; set; } = "npi";
+
+    /// <summary>Single name filter (default) or separate first/last/entity name filters.</summary>
+    public SamNameSearchStyle NameSearchStyle { get; set; } = SamNameSearchStyle.ExclusionName;
+
+    public string ExclusionNameParameter { get; set; } = "exclusionName";
+    public string FirstNameParameter { get; set; } = "firstName";
+    public string LastNameParameter { get; set; } = "lastName";
+    public string EntityNameParameter { get; set; } = "entityName";
 
     /// <summary>
     /// Maximum pages fetched per query (Api mode). If more results exist than
     /// this allows, the source reports NOT screened rather than a partial clear.
     /// </summary>
     public int MaxPages { get; set; } = 5;
+}
+
+public enum SamPaginationStyle
+{
+    /// <summary>Zero-based page index + page size (page=0&amp;size=10).</summary>
+    PageSize,
+
+    /// <summary>Record offset + page length (start=0&amp;length=10).</summary>
+    StartLength
+}
+
+public enum SamNameSearchStyle
+{
+    /// <summary>One combined name filter ("exclusionName=John Doe").</summary>
+    ExclusionName,
+
+    /// <summary>Separate filters ("firstName=John&amp;lastName=Doe", "entityName=Acme").</summary>
+    NameParts
 }

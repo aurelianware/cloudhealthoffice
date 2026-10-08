@@ -59,14 +59,14 @@ public sealed class InMemoryExclusionRecordStore : IExclusionRecordStore
         }
     }
 
-    public Task<IReadOnlyList<ExclusionRecord>> FindByNpiAsync(ExclusionScreeningSource source, string npi, CancellationToken ct = default) =>
-        Find(source, r => r.Npi == npi);
+    public Task<IReadOnlyList<ExclusionRecord>> FindByNpiAsync(ExclusionScreeningSource source, string syncId, string npi, CancellationToken ct = default) =>
+        Find(source, r => r.SyncId == syncId && r.Npi == npi);
 
-    public Task<IReadOnlyList<ExclusionRecord>> FindByLastNameAsync(ExclusionScreeningSource source, string normalizedLastName, CancellationToken ct = default) =>
-        Find(source, r => r.NormalizedLastName == normalizedLastName);
+    public Task<IReadOnlyList<ExclusionRecord>> FindByLastNameAsync(ExclusionScreeningSource source, string syncId, string normalizedLastName, CancellationToken ct = default) =>
+        Find(source, r => r.SyncId == syncId && r.NormalizedLastName == normalizedLastName);
 
-    public Task<IReadOnlyList<ExclusionRecord>> FindByBusinessNameAsync(ExclusionScreeningSource source, string normalizedBusinessName, CancellationToken ct = default) =>
-        Find(source, r => r.NormalizedBusinessName == normalizedBusinessName);
+    public Task<IReadOnlyList<ExclusionRecord>> FindByBusinessNameAsync(ExclusionScreeningSource source, string syncId, string normalizedBusinessName, CancellationToken ct = default) =>
+        Find(source, r => r.SyncId == syncId && r.NormalizedBusinessName == normalizedBusinessName);
 
     public Task<ExclusionSyncStatus?> GetSyncStatusAsync(ExclusionScreeningSource source, CancellationToken ct = default)
     {

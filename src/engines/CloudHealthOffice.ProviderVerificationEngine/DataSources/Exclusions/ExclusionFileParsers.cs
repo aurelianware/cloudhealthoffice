@@ -155,11 +155,12 @@ public static class SamExtractCsvParser
             if (isIndividual && record.NormalizedLastName is null && name is not null)
             {
                 // Some extract versions only populate "Name" for individuals.
-                var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2)
+                if (SplitPersonName(name) is var (first2, middle2, last2))
                 {
-                    record.FirstName = parts[0];
-                    record.LastName = parts[^1];
+                    record.FirstName = first2;
+                    record.MiddleName ??= middle2;
+                    record.LastName = last2;
+                    record.BusinessName = null;
                     record.Normalize();
                 }
             }
@@ -175,6 +176,30 @@ public static class SamExtractCsvParser
 
         if (map is null)
             throw new ExclusionFileFormatException("SAM exclusions extract is empty");
+    }
+
+    /// <summary>
+    /// Split a single-field person name. SAM publishes "LAST, FIRST MIDDLE";
+    /// that comma form is parsed first. Without a comma the name is read as
+    /// "FIRST [MIDDLE...] LAST". Null when no first + last can be found.
+    /// </summary>
+    internal static (string First, string? Middle, string Last)? SplitPersonName(string name)
+    {
+        var comma = name.IndexOf(',');
+        if (comma >= 0)
+        {
+            var last = name[..comma].Trim();
+            var rest = name[(comma + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (last.Length == 0 || rest.Length == 0)
+                return null;
+            var middle = rest.Length > 1 ? string.Join(' ', rest[1..]) : null;
+            return (rest[0], middle, last);
+        }
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+            return null;
+        return (parts[0], parts.Length > 2 ? string.Join(' ', parts[1..^1]) : null, parts[^1]);
     }
 
     internal static bool IsInactiveStatus(string? status) =>

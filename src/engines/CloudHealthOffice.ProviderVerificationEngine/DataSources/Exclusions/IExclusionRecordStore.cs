@@ -23,11 +23,15 @@ public interface IExclusionRecordStore
         ExclusionDatasetLoadPolicy policy,
         CancellationToken ct = default);
 
-    Task<IReadOnlyList<ExclusionRecord>> FindByNpiAsync(ExclusionScreeningSource source, string npi, CancellationToken ct = default);
+    // Lookups are scoped to one committed snapshot: pass
+    // ExclusionSyncStatus.ActiveSyncId. Rows of an in-flight, rejected or
+    // superseded load are never visible to screening.
 
-    Task<IReadOnlyList<ExclusionRecord>> FindByLastNameAsync(ExclusionScreeningSource source, string normalizedLastName, CancellationToken ct = default);
+    Task<IReadOnlyList<ExclusionRecord>> FindByNpiAsync(ExclusionScreeningSource source, string syncId, string npi, CancellationToken ct = default);
 
-    Task<IReadOnlyList<ExclusionRecord>> FindByBusinessNameAsync(ExclusionScreeningSource source, string normalizedBusinessName, CancellationToken ct = default);
+    Task<IReadOnlyList<ExclusionRecord>> FindByLastNameAsync(ExclusionScreeningSource source, string syncId, string normalizedLastName, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ExclusionRecord>> FindByBusinessNameAsync(ExclusionScreeningSource source, string syncId, string normalizedBusinessName, CancellationToken ct = default);
 
     Task<ExclusionSyncStatus?> GetSyncStatusAsync(ExclusionScreeningSource source, CancellationToken ct = default);
 

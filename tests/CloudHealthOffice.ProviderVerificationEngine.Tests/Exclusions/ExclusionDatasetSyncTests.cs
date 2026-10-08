@@ -6,6 +6,7 @@ using CloudHealthOffice.ProviderVerificationEngine.DataSources.Exclusions;
 using CloudHealthOffice.ProviderVerificationEngine.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Xunit;
 using static CloudHealthOffice.ProviderVerificationEngine.Tests.Exclusions.ExclusionTestData;
 
@@ -67,7 +68,7 @@ public class ExclusionDatasetSyncTests
         Assert.Equal(Now.AddDays(-2), status!.LastSuccessfulSyncAt); // timestamp not refreshed
         Assert.Equal(2, status.RecordCount);
         Assert.NotNull(status.LastError);
-        Assert.Single(await _store.FindByNpiAsync(ExclusionScreeningSource.OigLeie, "1234567893"));
+        Assert.Single(await _store.FindByNpiAsync(ExclusionScreeningSource.OigLeie, status.ActiveSyncId!, "1234567893"));
     }
 
     [Fact]
@@ -197,6 +198,29 @@ public class ExclusionDatasetSyncTests
         _time.Now = Now.AddHours(5);                    // past SyncRetryDelay (4h)
         await worker.RunDueSyncsAsync(default);
         Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task HostedService_RetriesIndexCreationBeforeSyncing_UntilItSucceeds()
+    {
+        var store = NSubstitute.Substitute.For<IExclusionRecordStore>();
+        var calls = 0;
+        store.EnsureIndexesAsync(NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(_ => ++calls == 1 ? Task.FromException(new TimeoutException("mongo down")) : Task.CompletedTask);
+        var sync = NSubstitute.Substitute.For<IExclusionDatasetSync>();
+        sync.Source.Returns(ExclusionScreeningSource.OigLeie);
+        sync.SyncAsync(NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(new ExclusionDatasetSyncResult { Source = ExclusionScreeningSource.OigLeie, Succeeded = true });
+        var worker = new ExclusionDatasetSyncHostedService([sync], store, Wrap(Options()),
+            NullLogger<ExclusionDatasetSyncHostedService>.Instance, _time);
+
+        await worker.RunDueSyncsAsync(default);   // index creation fails: no sync yet
+        await sync.DidNotReceive().SyncAsync(NSubstitute.Arg.Any<CancellationToken>());
+
+        await worker.RunDueSyncsAsync(default);   // retried, succeeds, then syncs
+        await worker.RunDueSyncsAsync(default);   // not retried again once ensured
+        Assert.Equal(2, calls);
+        await sync.Received(2).SyncAsync(NSubstitute.Arg.Any<CancellationToken>());
     }
 
     private static byte[] Zip(string entryName, string content)

@@ -66,7 +66,7 @@ public sealed class LocalExclusionListScreener : IExclusionSource
         try
         {
             var sync = await _store.GetSyncStatusAsync(Source, ct).ConfigureAwait(false);
-            if (sync?.LastSuccessfulSyncAt is not { } syncedAt)
+            if (sync?.LastSuccessfulSyncAt is not { } syncedAt || string.IsNullOrEmpty(sync.ActiveSyncId))
             {
                 status.Note = $"{Label(Source)} dataset has never been synced";
                 return new ExclusionSourceOutcome { Status = status };
@@ -78,15 +78,15 @@ public sealed class LocalExclusionListScreener : IExclusionSource
             var candidates = new List<ExclusionRecord>();
             var npi = ExclusionNameNormalizer.NormalizeNpi(request.Npi);
             if (npi is not null)
-                candidates.AddRange(await _store.FindByNpiAsync(Source, npi, ct).ConfigureAwait(false));
+                candidates.AddRange(await _store.FindByNpiAsync(Source, sync.ActiveSyncId, npi, ct).ConfigureAwait(false));
 
             var last = ExclusionNameNormalizer.NormalizePersonName(request.LastName, stripSuffixes: true);
             if (last.Length > 0)
-                candidates.AddRange(await _store.FindByLastNameAsync(Source, last, ct).ConfigureAwait(false));
+                candidates.AddRange(await _store.FindByLastNameAsync(Source, sync.ActiveSyncId, last, ct).ConfigureAwait(false));
 
             var org = ExclusionNameNormalizer.NormalizeBusinessName(request.OrganizationName);
             if (org.Length > 0)
-                candidates.AddRange(await _store.FindByBusinessNameAsync(Source, org, ct).ConfigureAwait(false));
+                candidates.AddRange(await _store.FindByBusinessNameAsync(Source, sync.ActiveSyncId, org, ct).ConfigureAwait(false));
 
             var outcome = ExclusionMatcher.Match(request, candidates, now.UtcDateTime);
 

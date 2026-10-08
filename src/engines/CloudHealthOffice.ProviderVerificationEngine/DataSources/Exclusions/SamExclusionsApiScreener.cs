@@ -58,7 +58,7 @@ public sealed class SamExclusionsApiScreener : IExclusionSource
             return new ExclusionSourceOutcome { Status = status };
         }
 
-        var queries = BuildQueries(request);
+        var queries = BuildQueries(request, sam);
         if (queries.Count == 0)
         {
             status.Note = "No NPI or name to search SAM.gov with";
@@ -83,25 +83,53 @@ public sealed class SamExclusionsApiScreener : IExclusionSource
         return new ExclusionSourceOutcome { Status = status, IsExcluded = outcome.IsExcluded, Matches = outcome.Matches };
     }
 
-    private static List<string> BuildQueries(ProviderScreeningRequest request)
+    /// <summary>
+    /// One query string per identifier: NPI, then the individual's name, then
+    /// the organization's name. Parameter names come from
+    /// <see cref="SamOptions"/> so the contract can be adjusted to the
+    /// published API without a code change.
+    /// </summary>
+    internal static List<string> BuildQueries(ProviderScreeningRequest request, SamOptions sam)
     {
+        static string P(string name, string value) => $"{Uri.EscapeDataString(name)}={Uri.EscapeDataString(value)}";
+
         var queries = new List<string>();
         var npi = ExclusionNameNormalizer.NormalizeNpi(request.Npi);
         if (npi is not null)
-            queries.Add($"npi={npi}");
+            queries.Add(P(sam.NpiParameter, npi));
 
         if (!string.IsNullOrWhiteSpace(request.LastName))
         {
-            var name = string.IsNullOrWhiteSpace(request.FirstName)
-                ? request.LastName.Trim()
-                : $"{request.FirstName.Trim()} {request.LastName.Trim()}";
-            queries.Add($"exclusionName={Uri.EscapeDataString(name)}");
+            var first = request.FirstName?.Trim();
+            var last = request.LastName.Trim();
+            if (sam.NameSearchStyle == SamNameSearchStyle.NameParts)
+            {
+                queries.Add(string.IsNullOrEmpty(first)
+                    ? P(sam.LastNameParameter, last)
+                    : $"{P(sam.FirstNameParameter, first)}&{P(sam.LastNameParameter, last)}");
+            }
+            else
+            {
+                queries.Add(P(sam.ExclusionNameParameter, string.IsNullOrEmpty(first) ? last : $"{first} {last}"));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.OrganizationName))
-            queries.Add($"exclusionName={Uri.EscapeDataString(request.OrganizationName.Trim())}");
+        {
+            var org = request.OrganizationName.Trim();
+            queries.Add(sam.NameSearchStyle == SamNameSearchStyle.NameParts
+                ? P(sam.EntityNameParameter, org)
+                : P(sam.ExclusionNameParameter, org));
+        }
 
         return queries;
+    }
+
+    /// <summary>Pagination parameters for page <paramref name="pageIndex"/> (0-based).</summary>
+    internal static string PageQuery(SamOptions sam, int pageIndex, int pageSize)
+    {
+        var position = sam.PaginationStyle == SamPaginationStyle.StartLength ? pageIndex * pageSize : pageIndex;
+        return $"{Uri.EscapeDataString(sam.PageParameter)}={position}&{Uri.EscapeDataString(sam.SizeParameter)}={pageSize}";
     }
 
     private async Task<(List<ExclusionRecord> Records, string? Error)> FetchAllAsync(string query, CancellationToken ct)
@@ -110,6 +138,8 @@ public sealed class SamExclusionsApiScreener : IExclusionSource
         var records = new List<ExclusionRecord>();
         var pageSize = Math.Clamp(sam.PageSize, 1, 100);
         var maxPages = Math.Max(1, sam.MaxPages);
+        string? previousPageSignature = null;
+        var fetched = 0;
 
         for (var page = 0; page < maxPages; page++)
         {
@@ -118,10 +148,33 @@ public sealed class SamExclusionsApiScreener : IExclusionSource
                 return (records, error);
 
             var entities = response!.ExcludedEntity ?? [];
-            records.AddRange(entities.Select(MapEntity).OfType<ExclusionRecord>());
-
             var total = response.TotalRecords ?? entities.Count;
-            if ((page + 1) * pageSize >= total || entities.Count == 0)
+
+            // Every entity must map: silently dropping one we cannot read
+            // (schema drift) could hide the very exclusion we were asked about.
+            var mapped = entities.Select(MapEntity).ToList();
+            if (mapped.Any(r => r is null))
+                return (records, "SAM.gov returned an exclusion record in an unrecognized shape; not screened");
+
+            if (entities.Count == 0)
+            {
+                // An empty page before the reported total was read is an
+                // inconsistent (partial) response, not "no more results".
+                return fetched >= total
+                    ? (records, null)
+                    : (records, $"SAM.gov returned an empty page after {fetched} of {total} results; not screened");
+            }
+
+            // A server that ignores the pagination parameters returns page 0
+            // again; reading it twice would never reach the remaining results.
+            var signature = string.Join("|", mapped.Select(r => $"{r!.Npi}/{r.LastName}/{r.FirstName}/{r.BusinessName}/{r.ExclusionDate:yyyyMMdd}"));
+            if (signature == previousPageSignature)
+                return (records, "SAM.gov repeated the same page (pagination not honoured); not screened");
+            previousPageSignature = signature;
+
+            records.AddRange(mapped.OfType<ExclusionRecord>());
+            fetched += entities.Count;
+            if (fetched >= total)
                 return (records, null);
         }
 
@@ -135,7 +188,7 @@ public sealed class SamExclusionsApiScreener : IExclusionSource
     {
         var sam = _options.Sam;
         var url = $"{sam.ApiBaseUrl.TrimEnd('/')}/{sam.ApiVersion.Trim('/')}/exclusions" +
-                  $"?api_key={Uri.EscapeDataString(sam.ApiKey!)}&{query}&page={page}&size={pageSize}";
+                  $"?api_key={Uri.EscapeDataString(sam.ApiKey!)}&{query}&{PageQuery(sam, page, pageSize)}";
         var http = _httpFactory.CreateClient(HttpClientName);
         var attempts = Math.Max(0, sam.MaxRetries) + 1;
         string lastError = "SAM.gov request failed";
@@ -179,6 +232,17 @@ public sealed class SamExclusionsApiScreener : IExclusionSource
                     lastError = $"SAM.gov unavailable (HTTP {code})";
                     retryAfter = ReadRetryAfter(response);
                     _logger.LogWarning("SAM.gov exclusions API returned HTTP {StatusCode} (attempt {Attempt}/{Attempts})", code, attempt, attempts);
+
+                    // Honour Retry-After exactly; never retry earlier than the
+                    // server asked. A wait beyond what a screening call can
+                    // afford fails the source (not screened) instead.
+                    if (retryAfter is { } wait && wait > sam.MaxServerRetryDelay)
+                    {
+                        _logger.LogWarning(
+                            "SAM.gov asked to retry after {RetryAfter}, beyond MaxServerRetryDelay {Max}; reporting not screened",
+                            wait, sam.MaxServerRetryDelay);
+                        return (null, $"SAM.gov rate limited (retry after {wait.TotalSeconds:0}s); not screened");
+                    }
                 }
                 else
                 {
@@ -204,10 +268,18 @@ public sealed class SamExclusionsApiScreener : IExclusionSource
         return (null, $"{lastError}; not screened");
     }
 
+    /// <summary>
+    /// A server Retry-After is used as-is (already checked against
+    /// <see cref="SamOptions.MaxServerRetryDelay"/>); only the locally
+    /// computed exponential backoff is capped by <see cref="SamOptions.MaxRetryDelay"/>.
+    /// </summary>
     private TimeSpan Backoff(int attempt, TimeSpan? retryAfter)
     {
+        if (retryAfter is { } serverDelay)
+            return serverDelay;
+
         var sam = _options.Sam;
-        var delay = retryAfter ?? TimeSpan.FromMilliseconds(sam.RetryBaseDelay.TotalMilliseconds * Math.Pow(2, attempt - 1));
+        var delay = TimeSpan.FromMilliseconds(sam.RetryBaseDelay.TotalMilliseconds * Math.Pow(2, attempt - 1));
         return delay > sam.MaxRetryDelay ? sam.MaxRetryDelay : delay;
     }
 
