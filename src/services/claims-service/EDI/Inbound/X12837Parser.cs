@@ -1,3 +1,4 @@
+using System.Globalization;
 using CloudHealthOffice.ClaimsScrubEngine.Models;
 
 namespace ClaimsService.EDI.Inbound;
@@ -54,7 +55,25 @@ public static class X12837Parser
         decimal totalCharge = 0m;
         string? placeOfService = null;
         string? frequencyCode = null;
+        string? facilityTypeCode = null;
         List<DiagnosisCode> diagnosisCodes = [];
+        // Institutional (837I) 2300 detail, reset on CLM/flush.
+        string? admissionDate = null;
+        string? admissionHour = null;
+        string? dischargeDate = null;
+        string? dischargeHour = null;
+        string? statementFrom = null;
+        string? statementTo = null;
+        string? admissionType = null;
+        string? admissionSource = null;
+        string? patientStatus = null;
+        string? drgCode = null;
+        InstitutionalCode? principalProcedure = null;
+        List<InstitutionalCode> otherProcedures = [];
+        List<InstitutionalCode> occurrenceCodes = [];
+        List<InstitutionalCode> occurrenceSpanCodes = [];
+        List<InstitutionalCode> valueCodes = [];
+        List<InstitutionalCode> conditionCodes = [];
         List<ServiceLine> serviceLines = [];
         ServiceLine? currentLine = null;
         var claimOpen = false;
@@ -70,6 +89,29 @@ public static class X12837Parser
             seg.Elements.Count >= 2
                 ? (seg.Elements[^2].Length > 0 ? seg.Elements[^2] : null, seg.Elements[^1].Length > 0 ? seg.Elements[^1] : null)
                 : (null, null);
+
+        static string? At(string[] parts, int index) =>
+            parts.Length > index && parts[index].Length > 0 ? parts[index] : null;
+
+        // DT (CCYYMMDDHHMM) → date + hour; D8 → date only.
+        static (string? date, string? hour) SplitDateTime(string? format, string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return (null, null);
+            if (format == "DT" && value.Length >= 12) return (value[..8], value[8..12]);
+            return (value.Length >= 8 ? value[..8] : value, null);
+        }
+
+        // RD8 (CCYYMMDD-CCYYMMDD) → from/to; a single D8 date is a one-day period.
+        static (string? from, string? to) SplitPeriod(string? format, string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return (null, null);
+            if (format == "RD8" && value.Contains('-'))
+            {
+                var range = value.Split('-', 2);
+                return (range[0], range[1]);
+            }
+            return (value, value);
+        }
 
         void FlushLine()
         {
@@ -106,9 +148,31 @@ public static class X12837Parser
                     TotalChargeAmount = totalCharge,
                     PlaceOfServiceCode = placeOfService,
                     FrequencyCode = frequencyCode,
+                    FacilityTypeCode = facilityTypeCode,
                     DiagnosisCodes = diagnosisCodes.Count > 0 ? [.. diagnosisCodes] : null,
-                    PrincipalDiagnosisCode = diagnosisCodes.Count > 0 ? diagnosisCodes[0].Code : null,
-                    RenderingProvider = pendingRenderingProvider
+                    // The principal diagnosis is the ABK/BK composite when
+                    // present — not blindly the first HI element, which on
+                    // an 837I may be an admitting or reason-for-visit code.
+                    PrincipalDiagnosisCode = (diagnosisCodes.FirstOrDefault(d => d.Qualifier is "ABK" or "BK")
+                        ?? diagnosisCodes.FirstOrDefault())?.Code,
+                    AdmittingDiagnosisCode = diagnosisCodes.FirstOrDefault(d => d.Qualifier is "ABJ" or "BJ")?.Code,
+                    RenderingProvider = pendingRenderingProvider,
+                    AdmissionDate = admissionDate,
+                    AdmissionHour = admissionHour,
+                    DischargeDate = dischargeDate,
+                    DischargeHour = dischargeHour,
+                    StatementFromDate = statementFrom,
+                    StatementToDate = statementTo,
+                    AdmissionTypeCode = admissionType,
+                    AdmissionSourceCode = admissionSource,
+                    PatientStatusCode = patientStatus,
+                    DrgCode = drgCode,
+                    PrincipalProcedure = principalProcedure,
+                    OtherProcedures = otherProcedures.Count > 0 ? [.. otherProcedures] : null,
+                    OccurrenceCodes = occurrenceCodes.Count > 0 ? [.. occurrenceCodes] : null,
+                    OccurrenceSpanCodes = occurrenceSpanCodes.Count > 0 ? [.. occurrenceSpanCodes] : null,
+                    ValueCodes = valueCodes.Count > 0 ? [.. valueCodes] : null,
+                    ConditionCodes = conditionCodes.Count > 0 ? [.. conditionCodes] : null,
                 },
                 ServiceLines = [.. serviceLines],
                 TotalClaimedAmount = totalCharge,
@@ -119,7 +183,24 @@ public static class X12837Parser
             totalCharge = 0m;
             placeOfService = null;
             frequencyCode = null;
+            facilityTypeCode = null;
             diagnosisCodes = [];
+            admissionDate = null;
+            admissionHour = null;
+            dischargeDate = null;
+            dischargeHour = null;
+            statementFrom = null;
+            statementTo = null;
+            admissionType = null;
+            admissionSource = null;
+            patientStatus = null;
+            drgCode = null;
+            principalProcedure = null;
+            otherProcedures = [];
+            occurrenceCodes = [];
+            occurrenceSpanCodes = [];
+            valueCodes = [];
+            conditionCodes = [];
             serviceLines = [];
             pendingRenderingProvider = null;
             claimOpen = false;
@@ -294,20 +375,95 @@ public static class X12837Parser
                     var clmComposite = seg.Element(4) is { } c4 ? X12Tokenizer.SplitComponents(c4, componentSep) : [];
                     placeOfService = clmComposite.Length > 0 && clmComposite[0].Length > 0 ? clmComposite[0] : null;
                     frequencyCode = clmComposite.Length > 2 && clmComposite[2].Length > 0 ? clmComposite[2] : null;
+                    // On an 837I, CLM05-1 is the facility type code (first
+                    // two digits of the type of bill), not a place of
+                    // service. PlaceOfServiceCode keeps carrying it for
+                    // backward compatibility; FacilityTypeCode names it.
+                    facilityTypeCode = claimType == ClaimType.Institutional ? placeOfService : null;
+                    break;
+
+                case "CL1" when claimOpen:
+                    admissionType = seg.Element(0) is { Length: > 0 } cl101 ? cl101 : null;
+                    admissionSource = seg.Element(1) is { Length: > 0 } cl102 ? cl102 : null;
+                    patientStatus = seg.Element(2) is { Length: > 0 } cl103 ? cl103 : null;
                     break;
 
                 case "HI" when claimOpen:
+                    // HI0x composite: -1 qualifier, -2 code, -3 date format
+                    // (D8/RD8), -4 date or period, -5 amount, -9 present-on-
+                    // admission indicator. On an 837I the qualifier decides
+                    // what the code is; only diagnosis qualifiers become
+                    // DiagnosisCodes (unrecognized qualifiers stay
+                    // diagnoses, as before, so nothing is silently dropped).
                     foreach (var element in seg.Elements)
                     {
                         if (element.Length == 0) continue;
                         var parts = X12Tokenizer.SplitComponents(element, componentSep);
                         if (parts.Length < 2) continue;
-                        diagnosisCodes.Add(new DiagnosisCode
+                        var qualifier = parts[0];
+                        switch (qualifier)
                         {
-                            Qualifier = parts[0],
-                            Code = parts[1],
-                            Pointer = diagnosisCodes.Count + 1
-                        });
+                            case "DR":
+                                drgCode = parts[1].Length > 0 ? parts[1] : null;
+                                break;
+
+                            case "BBR" or "BR" or "CAH":
+                            {
+                                var (date, _) = SplitDateTime(At(parts, 2), At(parts, 3));
+                                principalProcedure = new InstitutionalCode { Qualifier = qualifier, Code = parts[1], Date = date };
+                                break;
+                            }
+
+                            case "BBQ" or "BQ":
+                            {
+                                var (date, _) = SplitDateTime(At(parts, 2), At(parts, 3));
+                                otherProcedures.Add(new InstitutionalCode { Qualifier = qualifier, Code = parts[1], Date = date });
+                                break;
+                            }
+
+                            case "BH":
+                            {
+                                var (date, _) = SplitDateTime(At(parts, 2), At(parts, 3));
+                                occurrenceCodes.Add(new InstitutionalCode { Qualifier = qualifier, Code = parts[1], Date = date });
+                                break;
+                            }
+
+                            case "BI":
+                            {
+                                var (from, to) = SplitPeriod(At(parts, 2), At(parts, 3));
+                                occurrenceSpanCodes.Add(new InstitutionalCode { Qualifier = qualifier, Code = parts[1], Date = from, DateEnd = to });
+                                break;
+                            }
+
+                            case "BE":
+                                valueCodes.Add(new InstitutionalCode
+                                {
+                                    Qualifier = qualifier,
+                                    Code = parts[1],
+                                    Amount = decimal.TryParse(At(parts, 4), NumberStyles.Number, CultureInfo.InvariantCulture, out var valueAmount)
+                                        ? valueAmount
+                                        : null
+                                });
+                                break;
+
+                            case "BG":
+                                conditionCodes.Add(new InstitutionalCode { Qualifier = qualifier, Code = parts[1] });
+                                break;
+
+                            case "TC":
+                                // Treatment codes (therapy plan) — not modeled.
+                                break;
+
+                            default:
+                                diagnosisCodes.Add(new DiagnosisCode
+                                {
+                                    Qualifier = qualifier,
+                                    Code = parts[1],
+                                    Pointer = diagnosisCodes.Count + 1,
+                                    PresentOnAdmission = At(parts, 8)
+                                });
+                                break;
+                        }
                     }
                     break;
 
@@ -375,13 +531,66 @@ public static class X12837Parser
                     currentLine = currentLine with
                     {
                         RevenueCode = seg.Element(0),
-                        ProcedureCodeQualifier = sv2Proc.Length > 0 ? sv2Proc[0] : null,
+                        // SV202 is situational on an 837I: room and board,
+                        // pharmacy etc. are billed by revenue code alone.
+                        ProcedureCodeQualifier = sv2Proc.Length > 0 && sv2Proc[0].Length > 0 ? sv2Proc[0] : null,
                         ProcedureCode = sv2Proc.Length > 1 ? sv2Proc[1] : string.Empty,
                         Modifiers = sv2Proc.Length > 2 ? [.. sv2Proc[2..].Where(m => m.Length > 0)] : null,
                         ChargeAmount = sv2Charge,
                         UnitType = seg.Element(3),
                         Units = sv2Units,
                         DiagnosisPointers = sv2Pointers is { Count: > 0 } ? sv2Pointers : null
+                    };
+                    break;
+                }
+
+                case "DTP" when claimOpen && currentLine is null:
+                {
+                    // 2300 claim-level dates (before the first LX).
+                    var format = seg.Element(1);
+                    var value = seg.Element(2);
+                    switch (seg.Element(0))
+                    {
+                        case "435": // Admission date/hour (DT or D8)
+                            (admissionDate, admissionHour) = SplitDateTime(format, value);
+                            break;
+
+                        case "096": // Discharge hour (TM). Tolerates a D8/DT
+                                    // date, which EncounterTransformer emits.
+                            if (format == "TM")
+                            {
+                                dischargeHour = string.IsNullOrEmpty(value) ? null : value;
+                            }
+                            else
+                            {
+                                var (date, hour) = SplitDateTime(format, value);
+                                dischargeDate = date;
+                                dischargeHour = hour ?? dischargeHour;
+                            }
+                            break;
+
+                        case "434": // Statement covers period (RD8)
+                            (statementFrom, statementTo) = SplitPeriod(format, value);
+                            break;
+                    }
+                    break;
+                }
+
+                case "LIN" when claimOpen && currentLine is not null && seg.Element(1) == "N4":
+                    // 2410 drug identification: LIN**N4*{11-digit NDC}
+                    currentLine = currentLine with { NationalDrugCode = seg.Element(2) is { Length: > 0 } ndc ? ndc : null };
+                    break;
+
+                case "CTP" when claimOpen && currentLine is { NationalDrugCode: not null }:
+                {
+                    // 2410 drug quantity: CTP****{quantity}*{unit composite}
+                    var unitComposite = seg.Element(4) is { } ctp05 ? X12Tokenizer.SplitComponents(ctp05, componentSep) : [];
+                    currentLine = currentLine with
+                    {
+                        DrugQuantity = decimal.TryParse(seg.Element(3), NumberStyles.Number, CultureInfo.InvariantCulture, out var drugQuantity)
+                            ? drugQuantity
+                            : null,
+                        DrugUnitOfMeasure = At(unitComposite, 0)
                     };
                     break;
                 }

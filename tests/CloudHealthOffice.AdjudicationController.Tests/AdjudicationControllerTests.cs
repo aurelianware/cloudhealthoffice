@@ -419,6 +419,71 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.Equal(1, root.GetProperty("lines").GetArrayLength());
     }
 
+    [Fact]
+    public async Task Adjudicate_InstitutionalClaim_PassesDrgLengthOfStayRevenueCodeAndBillTypeToPricing()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        SetupRateResult(allowedAmount: 150m);
+        SetupBenefitResult(allowedAmount: 150m);
+
+        IReadOnlyList<PricingRequest>? captured = null;
+        _factory.RateEngine
+            .ResolveBatchAsync(Arg.Do<IReadOnlyList<PricingRequest>>(r => captured = r), Arg.Any<CancellationToken>());
+
+        var baseRequest = MakeAdjudicationRequest(lineCount: 2);
+        var request = baseRequest with
+        {
+            ClaimType = "Institutional",
+            DrgCode = " 470 ",
+            LengthOfStay = 4,
+            BillType = "111",
+            Lines = baseRequest.Lines
+                .Select((l, i) => l with { RevenueCode = i == 0 ? "0120" : "  " })
+                .ToList(),
+        };
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(captured);
+        Assert.Equal(2, captured!.Count);
+        Assert.All(captured, p =>
+        {
+            Assert.Equal("470", p.DrgCode);
+            Assert.Equal(4, p.LengthOfStay);
+            Assert.Equal("111", p.BillType);
+        });
+        Assert.Equal("0120", captured[0].RevenueCode);
+        Assert.Null(captured[1].RevenueCode);
+    }
+
+    [Fact]
+    public async Task Adjudicate_ProfessionalClaim_SendsNoInstitutionalPricingInputs()
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        SetupRateResult(allowedAmount: 150m);
+        SetupBenefitResult(allowedAmount: 150m);
+
+        IReadOnlyList<PricingRequest>? captured = null;
+        _factory.RateEngine
+            .ResolveBatchAsync(Arg.Do<IReadOnlyList<PricingRequest>>(r => captured = r), Arg.Any<CancellationToken>());
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeAdjudicationRequest());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var line = Assert.Single(captured!);
+        Assert.Null(line.DrgCode);
+        Assert.Null(line.LengthOfStay);
+        Assert.Null(line.RevenueCode);
+        Assert.Null(line.BillType);
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // Adjudicate provider integrity outcomes — a confirmed exclusion must
     // be distinguished from "could not confidently verify" (manual review

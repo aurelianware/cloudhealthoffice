@@ -512,7 +512,14 @@ public class AdjudicationController : ControllerBase
                 PlanId = request.BenefitPlanId.ToString(),
                 BilledAmount = line.BilledAmount,
                 Units = line.Units,
-                LineNumber = line.LineNumber
+                LineNumber = line.LineNumber,
+                // Institutional: the engine pays a DRG case rate / all-inclusive
+                // per diem once per claim, so the claim-level DRG and length of
+                // stay are sent on every line.
+                DrgCode = string.IsNullOrWhiteSpace(request.DrgCode) ? null : request.DrgCode.Trim(),
+                LengthOfStay = request.LengthOfStay,
+                RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode,
+                BillType = request.BillType,
             }).ToList();
 
             pricingResults = await MeasureStageAsync(
@@ -1204,6 +1211,25 @@ public record AdjudicationRequest
     /// Cross-referenced during PA rule evaluation.
     /// </summary>
     public string? PriorAuthorizationNumber { get; init; }
+
+    /// <summary>
+    /// Institutional: DRG billed on the claim (837I HI*DR). Required for
+    /// DRG-contracted pricing — there is no grouper; without it a DRG
+    /// schedule finds no rate.
+    /// </summary>
+    public string? DrgCode { get; init; }
+
+    /// <summary>
+    /// Institutional: length of stay in days (discharge − admission, or the
+    /// statement covers period). Drives per-diem pricing.
+    /// </summary>
+    public int? LengthOfStay { get; init; }
+
+    /// <summary>
+    /// Institutional: three-character type of bill (CLM05-1 facility type +
+    /// CLM05-3 frequency). Informational; passed through to pricing.
+    /// </summary>
+    public string? BillType { get; init; }
 
     public List<AdjudicationLineRequest> Lines { get; init; } = [];
 

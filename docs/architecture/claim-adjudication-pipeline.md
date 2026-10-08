@@ -49,6 +49,17 @@
 > allowed amounts and derives the tier from `NetworkCredentialingStage`
 > (matched tier → `InNetwork`; membership evaluated without a match →
 > `OutOfNetwork`; network stage disabled → `InNetwork`).
+>
+> **Institutional pricing inputs.** The claim now carries 837I header
+> detail (`Claim.Institutional`: facility type → derived `TypeOfBill`,
+> admission/discharge, statement period, CL1, billed DRG, POA, ICD-10-PCS,
+> occurrence/span/value/condition codes) and line NDC. `PricingStage`
+> sends `DrgCode`, `LengthOfStay` (inpatient only — admission date
+> present), `RevenueCode` and `BillType`. The engine pays a DRG case rate
+> or all-inclusive per diem **once per claim** (lowest line number; the
+> other lines are allowed $0 with an "included in" adjustment) and can
+> match revenue-code fee schedule lines. CHO has no MS-DRG grouper: a
+> DRG-contracted claim without a billed DRG (HI*DR) pends `NOCONTRACT`.
 
 ## Why this exists
 

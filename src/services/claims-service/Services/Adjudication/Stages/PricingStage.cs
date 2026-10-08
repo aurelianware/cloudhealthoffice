@@ -174,6 +174,25 @@ public sealed class PricingStage : IClaimAdjudicationStage
 
         var totalLines = claim.ClaimLines.Count;
 
+        // Institutional (837I) claim-level inputs, repeated on every line.
+        // The DRG is the one billed on the claim (HI*DR) — CHO has no MS-DRG
+        // grouper, so a DRG-contracted claim without one finds no DRG rate
+        // and pends NOCONTRACT rather than being grouped or guessed. The
+        // engine pays a DRG case rate / all-inclusive per diem once per
+        // claim (lowest-numbered line) and allows $0 on the other lines, so
+        // sending the DRG on every line never pays N case rates.
+        var drgCode = string.IsNullOrWhiteSpace(claim.Institutional?.DrgCode)
+            ? null
+            : claim.Institutional!.DrgCode!.Trim();
+        // Length of stay only for a stay: 837I DTP*435 (admission date) is
+        // required on inpatient claims and absent on outpatient ones, so an
+        // outpatient claim never presents a day count that a per-diem
+        // contract could price.
+        var lengthOfStay = claim.Institutional is { AdmissionDate: not null } inpatient
+            ? inpatient.CalculateLengthOfStay()
+            : null;
+        var billType = claim.TypeOfBill;
+
         return claim.ClaimLines
             .OrderBy(l => l.LineNumber)
             .Select(line => new PricingRequest
@@ -196,9 +215,10 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 Units = line.Units,
                 LineNumber = line.LineNumber,
                 TotalLineCount = totalLines,
-                // DrgCode / LengthOfStay: the claim model carries neither yet;
-                // DRG-schedule lines therefore find no rate and pend rather
-                // than being guessed.
+                DrgCode = drgCode,
+                LengthOfStay = lengthOfStay,
+                RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode,
+                BillType = billType,
             })
             .ToList();
     }
@@ -222,7 +242,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
             if (!resultsByLine.TryGetValue(request.LineNumber, out var result))
             {
                 unpriced.Add(new UnpricedLine(
-                    request.LineNumber, request.ProcedureCode,
+                    request.LineNumber, LineLabel(request),
                     "no pricing result returned for line"));
                 continue;
             }
@@ -230,7 +250,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
             if (result.AllowedAmount < 0)
             {
                 unpriced.Add(new UnpricedLine(
-                    request.LineNumber, request.ProcedureCode,
+                    request.LineNumber, LineLabel(request),
                     $"pricing returned a negative allowed amount ({result.AllowedAmount})"));
                 continue;
             }
@@ -241,7 +261,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 // allowed amount (e.g. percent-of-Medicare with no Medicare
                 // reference). It reports $0 — never accept that as a price.
                 unpriced.Add(new UnpricedLine(
-                    request.LineNumber, request.ProcedureCode,
+                    request.LineNumber, LineLabel(request),
                     string.IsNullOrWhiteSpace(result.UnresolvedReason)
                         ? "fee schedule rate could not be resolved"
                         : $"fee schedule rate could not be resolved: {result.UnresolvedReason}"));
@@ -258,7 +278,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 }
 
                 unpriced.Add(new UnpricedLine(
-                    request.LineNumber, request.ProcedureCode,
+                    request.LineNumber, LineLabel(request),
                     "no contracted or plan-default fee schedule rate (engine fell back to billed charges)"));
                 continue;
             }
@@ -273,6 +293,15 @@ public sealed class PricingStage : IClaimAdjudicationStage
             RawResult = priced,
         };
     }
+
+    /// <summary>
+    /// Identifies a line in pend reasons: its procedure code, or its revenue
+    /// code for a revenue-code-only institutional line.
+    /// </summary>
+    private static string LineLabel(PricingRequest request) =>
+        string.IsNullOrWhiteSpace(request.ProcedureCode) && !string.IsNullOrWhiteSpace(request.RevenueCode)
+            ? $"rev {request.RevenueCode}"
+            : request.ProcedureCode;
 
     private static ClaimAdjudicationStageResult Pend(
         ClaimAdjudicationContext context,

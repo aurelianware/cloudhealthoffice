@@ -84,7 +84,10 @@ public class FeeSchedule
     public string? BaseMpfsFeeScheduleId { get; set; }
 
     /// <summary>
-    /// For FeeScheduleType.PerDiem: daily rate (AllowedAmount = PerDiemRate × LengthOfStay).
+    /// For FeeScheduleType.PerDiem: all-inclusive daily rate for the stay
+    /// (AllowedAmount = PerDiemRate × LengthOfStay, paid once per claim — see
+    /// <c>RateResolutionService.ResolveBatchAsync</c>). When null, each
+    /// matched schedule line is a line-level daily rate (Line.Rate × Units).
     /// </summary>
     public decimal? PerDiemRate { get; set; }
 
@@ -116,6 +119,15 @@ public class FeeScheduleLine
 {
     /// <summary>CPT/HCPCS procedure code.</summary>
     public string ProcedureCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional UB-04 revenue code (e.g. "0120" semi-private room and board).
+    /// A line with a revenue code and no <see cref="ProcedureCode"/> prices
+    /// institutional claim lines billed with that revenue code when no
+    /// procedure-code line matched — the usual shape for room-and-board
+    /// per diem and flat-rate revenue-code contracts.
+    /// </summary>
+    public string? RevenueCode { get; set; }
 
     /// <summary>
     /// Optional modifier qualifier. If set, this line applies only when
@@ -294,8 +306,26 @@ public record PricingRequest
     /// <summary>Length of stay in days (required for PerDiem and DRG schedules).</summary>
     public int? LengthOfStay { get; init; }
 
-    /// <summary>DRG code (required for FeeScheduleType.Drg).</summary>
+    /// <summary>
+    /// DRG code (required for FeeScheduleType.Drg). Must be the DRG billed on
+    /// the claim (837I HI*DR) — the engine does not group. Send the same code
+    /// on every line of the claim: batch pricing pays the DRG case rate once
+    /// (on the lowest-numbered line) and prices the remaining lines at $0.
+    /// </summary>
     public string? DrgCode { get; init; }
+
+    /// <summary>
+    /// UB-04 revenue code (837I SV201). Used to match revenue-code fee
+    /// schedule lines when no procedure-code line matches.
+    /// </summary>
+    public string? RevenueCode { get; init; }
+
+    /// <summary>
+    /// Three-character type of bill (837I CLM05-1 facility type + CLM05-3
+    /// frequency). Informational — carried for audit; not used in rate
+    /// selection today.
+    /// </summary>
+    public string? BillType { get; init; }
 }
 
 /// <summary>

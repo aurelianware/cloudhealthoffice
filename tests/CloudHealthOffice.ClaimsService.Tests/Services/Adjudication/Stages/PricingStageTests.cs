@@ -295,6 +295,150 @@ public class PricingStageTests
         Assert.All(requests, r => Assert.Equal("1234567893", r.ProviderNpi));
     }
 
+    [Fact]
+    public void BuildRequests_ProfessionalClaim_SendsNoInstitutionalInputs()
+    {
+        var requests = PricingStage.BuildRequests(BuildContext());
+
+        Assert.All(requests, r =>
+        {
+            Assert.Null(r.DrgCode);
+            Assert.Null(r.LengthOfStay);
+            Assert.Null(r.RevenueCode);
+            Assert.Null(r.BillType);
+        });
+    }
+
+    [Fact]
+    public void BuildRequests_InpatientDrgClaim_SendsDrgLengthOfStayRevenueCodeAndBillTypeOnEveryLine()
+    {
+        var ctx = BuildInpatientContext();
+
+        var requests = PricingStage.BuildRequests(ctx);
+
+        Assert.Equal(3, requests.Count);
+        Assert.All(requests, r =>
+        {
+            Assert.Equal("470", r.DrgCode);
+            Assert.Equal(4, r.LengthOfStay); // Feb 10 → Feb 14, discharge day not counted
+            Assert.Equal("111", r.BillType);
+        });
+        Assert.Equal(new[] { "0120", "0250", "0360" }, requests.Select(r => r.RevenueCode));
+        Assert.Equal(new[] { string.Empty, string.Empty, "27447" }, requests.Select(r => r.ProcedureCode));
+    }
+
+    [Fact]
+    public void BuildRequests_OutpatientInstitutionalClaim_SendsRevenueCodeAndBillType_NoLengthOfStay()
+    {
+        // No admission date (outpatient, TOB 131): a per-diem contract must
+        // not be handed a day count for it.
+        var ctx = BuildInpatientContext();
+        ctx.Claim.Institutional!.FacilityTypeCode = "13";
+        ctx.Claim.Institutional.AdmissionDate = null;
+        ctx.Claim.Institutional.DrgCode = null;
+
+        var requests = PricingStage.BuildRequests(ctx);
+
+        Assert.All(requests, r =>
+        {
+            Assert.Null(r.LengthOfStay);
+            Assert.Null(r.DrgCode);
+            Assert.Equal("131", r.BillType);
+        });
+        Assert.Equal("0120", requests[0].RevenueCode);
+    }
+
+    [Fact]
+    public async Task Execute_InpatientDrgClaim_EnginePaysCaseRateOnce_AllLinesPriced()
+    {
+        // The engine carries the DRG case rate on the first line and allows
+        // $0 on the rest; those $0 DRG lines are priced, not unpriced.
+        var ctx = BuildInpatientContext();
+        _client.ResolveBatchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(new PricingResultSet
+            {
+                LineResults = new[]
+                {
+                    Drg(1, 12000m, 12000m),
+                    Drg(2, 0m, 1500m),
+                    Drg(3, 0m, 29000m),
+                },
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.True(ctx.PricingResult!.IsFullyPriced);
+        Assert.Equal(12000m, ctx.PricingResult.AllowedAmounts.Values.Sum());
+        Assert.Equal(0m, ctx.PricingResult.AllowedAmounts[3]);
+    }
+
+    [Fact]
+    public async Task Execute_RevenueCodeOnlyLineUnpriced_PendReasonNamesRevenueCode()
+    {
+        var ctx = BuildInpatientContext();
+        ctx.Claim.Institutional!.DrgCode = null;
+        _client.ResolveBatchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<PricingRequest>>(), Arg.Any<CancellationToken>())
+            .Returns(new PricingResultSet
+            {
+                LineResults = new[]
+                {
+                    new PricingResult
+                    {
+                        LineNumber = 1, AllowedAmount = 12000m, BilledAmount = 12000m,
+                        RateSource = RateSource.BilledCharges, FeeScheduleType = FeeScheduleType.Ucr,
+                    },
+                    Priced(2, 1000m, 1500m),
+                    Priced(3, 20000m, 29000m),
+                },
+            });
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(PricingStage.NoContractPendCode, ctx.PendDetails!.PendCode);
+        Assert.Contains("line 1 (rev 0120)", result.Reason);
+    }
+
+    private static PricingResult Drg(int line, decimal allowed, decimal billed) => new()
+    {
+        LineNumber = line,
+        AllowedAmount = allowed,
+        BilledAmount = billed,
+        RateSource = RateSource.Drg,
+        FeeScheduleType = FeeScheduleType.Drg,
+        NetworkStatus = NetworkStatus.InNetwork,
+        FeeScheduleId = "DRG-1",
+    };
+
+    private static ClaimAdjudicationContext BuildInpatientContext()
+    {
+        var ctx = BuildContext();
+        var admit = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc);
+        var claim = ctx.Claim;
+        claim.ClaimType = ClaimType.Institutional;
+        claim.PlaceOfServiceCode = "11";
+        claim.ClaimFrequencyCode = "1";
+        claim.ServiceDateFrom = admit;
+        claim.ServiceDateTo = admit.AddDays(4);
+        claim.Institutional = new InstitutionalClaimDetails
+        {
+            FacilityTypeCode = "11",
+            AdmissionDate = admit,
+            StatementFromDate = admit,
+            StatementToDate = admit.AddDays(4),
+            PatientStatusCode = "01",
+            DrgCode = "470",
+        };
+        claim.ClaimLines = new List<AdapterClaimLine>
+        {
+            new() { LineNumber = 1, RevenueCode = "0120", ChargeAmount = 12000m, Units = 4m, ServiceDateFrom = admit },
+            new() { LineNumber = 2, RevenueCode = "0250", ChargeAmount = 1500m, Units = 10m, ServiceDateFrom = admit },
+            new() { LineNumber = 3, RevenueCode = "0360", ProcedureCode = "27447", ChargeAmount = 29000m, Units = 1m, ServiceDateFrom = admit },
+        };
+        return ctx;
+    }
+
     private static PricingResult Priced(int line, decimal allowed, decimal billed) => new()
     {
         LineNumber = line,
