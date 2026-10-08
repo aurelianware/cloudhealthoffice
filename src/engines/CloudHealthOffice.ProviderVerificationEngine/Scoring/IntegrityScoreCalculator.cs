@@ -191,15 +191,32 @@ public class IntegrityScoreCalculator
             // Either the tier skipped screening or the adapter did not query
             // a real source (e.g. placeholder adapter). Never score as clear.
             dim.WasEvaluated = false;
-            dim.Detail = "Exclusion screening not performed — no LEIE/SAM source was queried";
+            var sources = DescribeSources(record.ExclusionScreening);
+            dim.Detail = sources is null
+                ? "Exclusion screening not performed — no LEIE/SAM source was queried"
+                : $"Exclusion screening incomplete — {sources}";
             flags.Add(new IntegrityFlag
             {
                 Severity = IntegrityFlagSeverity.Warning,
                 Source = "LEIE/SAM",
                 Code = "EXCLUSION_NOT_SCREENED",
                 Message = "Provider was not screened against OIG LEIE / SAM.gov exclusion lists — " +
-                          "exclusion status unknown, manual review required"
+                          "exclusion status unknown, manual review required" +
+                          (sources is null ? string.Empty : $" ({sources})")
             });
+
+            // A source that could not fully screen (e.g. stale dataset) may
+            // still have surfaced a possible hit; never drop it.
+            if (record.ExclusionScreening?.Matches.Any(m => m.MatchConfidence >= 0.7f) == true)
+            {
+                flags.Add(new IntegrityFlag
+                {
+                    Severity = IntegrityFlagSeverity.Warning,
+                    Source = "LEIE/SAM",
+                    Code = "POSSIBLE_EXCLUSION_MATCH",
+                    Message = "Possible match found on exclusion list — manual review recommended"
+                });
+            }
             return dim;
         }
 
@@ -212,7 +229,8 @@ public class IntegrityScoreCalculator
         else if (record.ExclusionScreening.Matches.Any(m => m.MatchConfidence >= 0.7f))
         {
             dim.Score = 40;
-            dim.Detail = "Possible exclusion match found — manual review recommended";
+            dim.Detail = "Possible exclusion match found — manual review recommended" +
+                         SourcesSuffix(record.ExclusionScreening);
             flags.Add(new IntegrityFlag
             {
                 Severity = IntegrityFlagSeverity.Warning,
@@ -224,10 +242,48 @@ public class IntegrityScoreCalculator
         else
         {
             dim.Score = 100;
-            dim.Detail = $"Clear — screened at {record.ExclusionScreening.ScreenedAt:yyyy-MM-dd}";
+            dim.Detail = $"Clear — screened at {record.ExclusionScreening.ScreenedAt:yyyy-MM-dd}" +
+                         SourcesSuffix(record.ExclusionScreening);
         }
 
         return dim;
+    }
+
+    private static string SourcesSuffix(ExclusionScreeningResult result) =>
+        DescribeSources(result) is { } sources ? $" ({sources})" : string.Empty;
+
+    /// <summary>
+    /// "screened: OIG LEIE (data as of 2026-10-01), SAM.gov; not screened:
+    /// SAM.gov — SAM.gov unavailable (HTTP 503)". Null when the result has
+    /// no per-source breakdown (placeholder / single-source adapters).
+    /// </summary>
+    private static string? DescribeSources(ExclusionScreeningResult? result)
+    {
+        if (result is null || result.SourceResults.Count == 0)
+            return null;
+
+        static string Label(ExclusionScreeningSource s) => s switch
+        {
+            ExclusionScreeningSource.OigLeie => "OIG LEIE",
+            ExclusionScreeningSource.SamGov => "SAM.gov",
+            _ => s.ToString()
+        };
+
+        var screened = result.SourceResults.Where(r => r.WasScreened)
+            .Select(r => r.DataAsOf is { } asOf && r.Mode == "LocalDataset"
+                ? $"{Label(r.Source)} (data as of {asOf:yyyy-MM-dd})"
+                : Label(r.Source))
+            .ToList();
+        var notScreened = result.SourceResults.Where(r => !r.WasScreened)
+            .Select(r => string.IsNullOrWhiteSpace(r.Note) ? Label(r.Source) : $"{Label(r.Source)} — {r.Note}")
+            .ToList();
+
+        var parts = new List<string>();
+        if (screened.Count > 0)
+            parts.Add("screened: " + string.Join(", ", screened));
+        if (notScreened.Count > 0)
+            parts.Add("not screened: " + string.Join("; ", notScreened));
+        return string.Join("; ", parts);
     }
 
     private ScoreDimension ScoreMedicareEnrollment(ProviderVerificationRecord record, List<IntegrityFlag> flags)

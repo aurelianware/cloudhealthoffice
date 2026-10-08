@@ -2,6 +2,7 @@ namespace CloudHealthOffice.ProviderVerificationService;
 
 using CloudHealthOffice.ProviderVerificationEngine;
 using CloudHealthOffice.ProviderVerificationEngine.DataSources;
+using CloudHealthOffice.ProviderVerificationEngine.DataSources.Exclusions;
 using CloudHealthOffice.ProviderVerificationEngine.DataSources.Nppes;
 using CloudHealthOffice.ProviderVerificationEngine.Models;
 using CloudHealthOffice.ProviderVerificationEngine.Scoring;
@@ -61,8 +62,11 @@ public class Program
         // Tier 1: NLM Taxonomy Crosswalk (free, no auth)
         // TODO: Register NlmTaxonomyCrosswalkAdapter
 
-        // Tier 2: Exclusion screening (LEIE bulk + SAM.gov API)
-        // TODO: Register ExclusionScreeningAdapter
+        // Tier 2: Exclusion screening (OIG LEIE bulk file + SAM.gov extract/API).
+        // Real adapters when ProviderVerification:ExclusionScreening:{Leie,Sam}:Enabled;
+        // otherwise the placeholder that reports every provider NOT screened.
+        // See docs/architecture/integrity-score-consumption.md.
+        builder.Services.AddExclusionScreening(builder.Configuration);
 
         // Tier 2: PECOS (bulk CSV sync)
         // TODO: Register PecosAdapter
@@ -78,7 +82,6 @@ public class Program
 
         // ── Placeholder registrations for unimplemented adapters ─
         builder.Services.AddSingleton<INlmTaxonomyCrosswalkAdapter, NullNlmAdapter>();
-        builder.Services.AddSingleton<IExclusionScreeningAdapter, NullExclusionAdapter>();
         builder.Services.AddSingleton<IPecosAdapter, NullPecosAdapter>();
         builder.Services.AddSingleton<IOpenPaymentsAdapter, NullOpenPaymentsAdapter>();
         builder.Services.AddSingleton<IMedicareUtilizationAdapter, NullUtilizationAdapter>();
@@ -90,7 +93,7 @@ public class Program
 
         // ── Background Services ──────────────────────────────────
         // TODO: builder.Services.AddHostedService<NppesBulkSyncWorker>();
-        // TODO: builder.Services.AddHostedService<LeieSyncWorker>();
+        // LEIE / SAM extract sync worker: registered by AddExclusionScreening.
         // TODO: builder.Services.AddHostedService<PecosSyncWorker>();
 
         // ── Health checks ────────────────────────────────────────
@@ -243,6 +246,50 @@ public class Program
         .WithName("IntegrityScore")
         .WithSummary("Lightweight integrity score for claims adjudication pre-check");
 
+        // ── Exclusion list dataset status ────────────────────────
+        // When each local exclusion dataset (LEIE file, SAM extract) was last
+        // synced. A provider whose exclusion screen predates the latest sync
+        // (ExclusionScreening.SourceResults[].DataAsOf) is due for re-screening.
+        app.MapGet("/api/v1/exclusions/status", async (
+            IServiceProvider services,
+            IOptions<ExclusionScreeningOptions> exclusionOptions,
+            CancellationToken ct) =>
+        {
+            var store = services.GetService<IExclusionRecordStore>();
+            var opts = exclusionOptions.Value;
+            var now = DateTimeOffset.UtcNow;
+            var datasets = new List<object>();
+            if (store is not null)
+            {
+                foreach (var source in services.GetServices<IExclusionDatasetSync>().Select(s => s.Source))
+                {
+                    var status = await store.GetSyncStatusAsync(source, ct);
+                    datasets.Add(new
+                    {
+                        source = source.ToString(),
+                        lastSuccessfulSyncAt = status?.LastSuccessfulSyncAt,
+                        recordCount = status?.RecordCount ?? 0,
+                        isStale = status?.LastSuccessfulSyncAt is not { } at || now - at > opts.StalenessWindow,
+                        lastAttemptAt = status?.LastAttemptAt,
+                        lastError = status?.LastError
+                    });
+                }
+            }
+
+            return Results.Ok(new
+            {
+                leieEnabled = opts.Leie.Enabled,
+                samEnabled = opts.Sam.Enabled,
+                samMode = opts.Sam.Mode.ToString(),
+                stalenessWindowDays = opts.StalenessWindow.TotalDays,
+                datasets
+            });
+        })
+        .RequireAuthorization(new RequirePermissionAttribute(ProviderVerificationPermissions.Read))
+        .WithTags("Exclusion Screening")
+        .WithName("ExclusionDatasetStatus")
+        .WithSummary("Sync status of the local OIG LEIE / SAM.gov exclusion datasets");
+
         // ── Batch verification (POST) ────────────────────────────
         api.MapPost("/verify/batch", async (
             [FromBody] BatchVerificationRequest? request,
@@ -317,7 +364,7 @@ internal class NullNlmAdapter : INlmTaxonomyCrosswalkAdapter
 }
 
 /// <summary>
-/// Placeholder until the LEIE/SAM adapters exist. Returns
+/// Placeholder used when neither LEIE nor SAM.gov screening is enabled. Returns
 /// <see cref="ExclusionScreeningResult.WasScreened"/> = <c>false</c> so the
 /// scorer reports the provider as NOT screened (EXCLUSION_NOT_SCREENED,
 /// ManualReviewRequired) instead of screened-clear.
@@ -325,6 +372,9 @@ internal class NullNlmAdapter : INlmTaxonomyCrosswalkAdapter
 internal class NullExclusionAdapter : IExclusionScreeningAdapter
 {
     public Task<ExclusionScreeningResult> ScreenProviderAsync(string npi, string? firstName, string? lastName, DateTimeOffset? dateOfBirth, CancellationToken ct) =>
+        Task.FromResult(new ExclusionScreeningResult { Source = ExclusionScreeningSource.OigLeie, WasScreened = false });
+
+    public Task<ExclusionScreeningResult> ScreenAsync(ProviderScreeningRequest request, CancellationToken ct) =>
         Task.FromResult(new ExclusionScreeningResult { Source = ExclusionScreeningSource.OigLeie, WasScreened = false });
 
     public Task<List<ExclusionScreeningResult>> BatchScreenAsync(IEnumerable<ProviderScreeningRequest> providers, CancellationToken ct) =>

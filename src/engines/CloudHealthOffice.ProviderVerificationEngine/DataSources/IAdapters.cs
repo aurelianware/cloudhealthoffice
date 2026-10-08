@@ -63,6 +63,13 @@ public interface IExclusionScreeningAdapter
         CancellationToken ct = default);
 
     /// <summary>
+    /// Screen a single provider using every identifier available (NPI,
+    /// individual name + DOB, organization name). The orchestrator calls this
+    /// after NPPES so name-based screening has names to work with.
+    /// </summary>
+    Task<ExclusionScreeningResult> ScreenAsync(ProviderScreeningRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Batch screen — designed for monthly full-network re-screening.
     /// Runs against local LEIE/SAM database synced from bulk files.
     /// </summary>
@@ -80,7 +87,12 @@ public class ProviderScreeningRequest
 {
     public string Npi { get; set; } = string.Empty;
     public string? FirstName { get; set; }
+    public string? MiddleName { get; set; }
     public string? LastName { get; set; }
+
+    /// <summary>Legal business name for organization (NPI-2) providers.</summary>
+    public string? OrganizationName { get; set; }
+
     public string? Ein { get; set; }
     public DateTimeOffset? DateOfBirth { get; set; }
 }

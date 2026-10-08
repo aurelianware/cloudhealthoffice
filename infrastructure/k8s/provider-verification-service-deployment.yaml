@@ -19,6 +19,11 @@ data:
   ASPNETCORE_ENVIRONMENT: "Production"
   ProviderVerification__NppesApiBaseUrl: "https://npiregistry.cms.hhs.gov/api/"
   ProviderVerification__DefaultTier: "Standard"
+  # Exclusion screening (docs/architecture/integrity-score-consumption.md).
+  # Until enabled, every provider is reported NOT screened and claims pend.
+  ProviderVerification__ExclusionScreening__Leie__Enabled: "false"
+  ProviderVerification__ExclusionScreening__Sam__Enabled: "false"
+  ProviderVerification__ExclusionScreening__Sam__Mode: "Extract"
 ---
 apiVersion: v1
 kind: Secret
@@ -27,7 +32,12 @@ metadata:
   namespace: cloudhealthoffice
 type: Opaque
 stringData:
+  # SAM.gov API key (expires every 90 days). Used by the SAM exclusions
+  # extract download and the optional live API mode.
   ProviderVerification__SamGovApiKey: ""
+  # Shared store for the synced LEIE / SAM exclusion lists. Without it each
+  # replica holds its own in-memory copy.
+  MongoDb__ConnectionString: ""
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -85,6 +95,26 @@ spec:
             secretKeyRef:
               name: provider-verification-service-secrets
               key: ProviderVerification__SamGovApiKey
+        - name: MongoDb__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: provider-verification-service-secrets
+              key: MongoDb__ConnectionString
+        - name: ProviderVerification__ExclusionScreening__Leie__Enabled
+          valueFrom:
+            configMapKeyRef:
+              name: provider-verification-service-config
+              key: ProviderVerification__ExclusionScreening__Leie__Enabled
+        - name: ProviderVerification__ExclusionScreening__Sam__Enabled
+          valueFrom:
+            configMapKeyRef:
+              name: provider-verification-service-config
+              key: ProviderVerification__ExclusionScreening__Sam__Enabled
+        - name: ProviderVerification__ExclusionScreening__Sam__Mode
+          valueFrom:
+            configMapKeyRef:
+              name: provider-verification-service-config
+              key: ProviderVerification__ExclusionScreening__Sam__Mode
         resources:
           requests:
             memory: "256Mi"

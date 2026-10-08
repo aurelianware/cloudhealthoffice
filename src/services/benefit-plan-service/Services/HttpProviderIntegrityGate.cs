@@ -81,6 +81,9 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
     /// </summary>
     private const string ExclusionNotScreenedFlagCode = "EXCLUSION_NOT_SCREENED";
 
+    private const string ExclusionNotScreenedReason =
+        "Provider was not screened against OIG LEIE / SAM.gov exclusion lists; manual review required";
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<ProviderIntegrityGateOptions> _options;
@@ -214,9 +217,19 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
             }
         }
 
-        if (!isUnavailable) _cache.Set(cacheKey, result, CacheTtl);
+        // Not-screened / Unknown results are transient by nature: they clear
+        // as soon as the LEIE/SAM sources recover or are enabled. Caching them
+        // for the full TTL would keep every claim for the NPI pending for an
+        // hour after recovery, so they are treated like unavailability.
+        if (!isUnavailable && !IsNotScreenedResult(result)) _cache.Set(cacheKey, result, CacheTtl);
         return result;
     }
+
+    private static bool IsNotScreenedResult(ProviderIntegrityResult result) =>
+        !result.IsExcluded
+        && result.RequiresManualReview
+        && (IsUnknownRating(result.Rating)
+            || string.Equals(result.DenialReason, ExclusionNotScreenedReason, StringComparison.Ordinal));
 
     private bool IsStale(DateTimeOffset lastVerifiedAt)
     {
@@ -311,7 +324,7 @@ public class HttpProviderIntegrityGate : IProviderIntegrityGate
                 DenialReason = isExcluded
                     ? "Provider is excluded from federal healthcare programs"
                     : exclusionNotScreened
-                        ? "Provider was not screened against OIG LEIE / SAM.gov exclusion lists; manual review required"
+                        ? ExclusionNotScreenedReason
                         : requiresManualReview
                             ? "Provider verification could not reach a confident determination; manual review required"
                             : null

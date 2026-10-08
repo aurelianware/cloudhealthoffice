@@ -440,6 +440,54 @@ public sealed class HttpProviderIntegrityGateTests
         result.RequiresManualReview.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task CheckAsync_LiveNotScreenedResult_IsNotCached()
+    {
+        // LEIE/SAM not screened (Unknown + EXCLUSION_NOT_SCREENED): once the
+        // sources recover, the next claim must see the real result instead of
+        // pending for the rest of the cache TTL.
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 90, rating: "Unknown", status: "ManualReviewRequired",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        (await gate.CheckAsync(Npi, Tenant)).RequiresManualReview.Should().BeTrue();
+        await gate.CheckAsync(Npi, Tenant);
+
+        verificationHandler.RequestCount.Should().Be(2,
+            "a not-screened result is not cached, so the second call re-checks live");
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveNotScreenedFlagWithKnownRating_IsNotCached()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJsonWithFlags(compositeScore: 95, rating: "Clear", status: "Verified",
+                flagCodes: ["EXCLUSION_NOT_SCREENED"]));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        await gate.CheckAsync(Npi, Tenant);
+        await gate.CheckAsync(Npi, Tenant);
+
+        verificationHandler.RequestCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task CheckAsync_LiveScreenedClearResult_IsCached()
+    {
+        var providerHandler = FakeHttpMessageHandler.Status(HttpStatusCode.NotFound);
+        var verificationHandler = FakeHttpMessageHandler.Json(
+            VerificationJson(compositeScore: 95, rating: "Clear", status: "Verified"));
+        var gate = BuildGate(providerHandler, verificationHandler);
+
+        (await gate.CheckAsync(Npi, Tenant)).Passed.Should().BeTrue();
+        await gate.CheckAsync(Npi, Tenant);
+
+        verificationHandler.RequestCount.Should().Be(1, "a real screened result is still cached");
+    }
+
     private static HttpProviderIntegrityGate BuildGate(
         FakeHttpMessageHandler providerHandler,
         FakeHttpMessageHandler verificationHandler,

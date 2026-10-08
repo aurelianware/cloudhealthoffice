@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using CloudHealthOffice.ProviderVerificationEngine.DataSources;
+using CloudHealthOffice.ProviderVerificationEngine.DataSources.Exclusions;
 using CloudHealthOffice.ProviderVerificationEngine.Models;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -154,6 +155,58 @@ public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<CloudHeal
 
         Assert.False(result.WasScreened);
         Assert.False(result.IsExcluded);
+    }
+
+    [Fact]
+    public void ExclusionScreening_WhenLeieAndSamConfigured_RegistersCompositeAdapter()
+    {
+        var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("ProviderVerification:ExclusionScreening:Leie:Enabled", "true");
+            // Unroutable: the sync worker must never reach the real OIG site from tests.
+            builder.UseSetting("ProviderVerification:ExclusionScreening:Leie:DownloadUrl", "http://127.0.0.1:9/UPDATED.csv");
+            builder.UseSetting("ProviderVerification:ExclusionScreening:Sam:Enabled", "true");
+            builder.UseSetting("ProviderVerification:ExclusionScreening:Sam:Mode", "Api");
+            builder.UseSetting("ProviderVerification:SamGovApiKey", "legacy-key");
+            builder.ConfigureTestServices(services => services.RemoveAll<Microsoft.Extensions.Hosting.IHostedService>());
+        });
+
+        using var scope = factory.Services.CreateScope();
+        var adapter = scope.ServiceProvider.GetRequiredService<IExclusionScreeningAdapter>();
+        Assert.IsType<CompositeExclusionScreeningAdapter>(adapter);
+
+        var sources = scope.ServiceProvider.GetServices<IExclusionSource>().ToList();
+        Assert.Contains(sources, s => s is LocalExclusionListScreener && s.Source == ExclusionScreeningSource.OigLeie);
+        Assert.Contains(sources, s => s is SamExclusionsApiScreener);
+
+        // Legacy secret name is honoured as the SAM key fallback.
+        var options = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ExclusionScreeningOptions>>().Value;
+        Assert.Equal("legacy-key", options.Sam.ApiKey);
+    }
+
+    [Fact]
+    public async Task ExclusionScreening_WithLeieNeverSynced_ReportsNotScreened()
+    {
+        var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("ProviderVerification:ExclusionScreening:Leie:Enabled", "true");
+            builder.UseSetting("ProviderVerification:ExclusionScreening:Leie:DownloadUrl", "http://127.0.0.1:9/UPDATED.csv");
+            builder.ConfigureTestServices(services => services.RemoveAll<Microsoft.Extensions.Hosting.IHostedService>());
+        });
+
+        using var scope = factory.Services.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IExclusionScreeningAdapter>()
+            .ScreenProviderAsync("1234567893");
+
+        Assert.False(result.WasScreened);
+        Assert.Contains(result.SourceResults, r => r.Source == ExclusionScreeningSource.OigLeie && !r.WasScreened);
+
+        var client = factory.CreateDefaultClient(new ChoDevelopmentTokenHandler());
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", "tenant-a");
+        var status = JsonDocument.Parse(await client.GetStringAsync("/api/v1/exclusions/status")).RootElement;
+        Assert.True(status.GetProperty("leieEnabled").GetBoolean());
+        var dataset = Assert.Single(status.GetProperty("datasets").EnumerateArray());
+        Assert.True(dataset.GetProperty("isStale").GetBoolean());
     }
 
     [Fact]
