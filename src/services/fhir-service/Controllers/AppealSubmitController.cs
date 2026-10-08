@@ -331,8 +331,7 @@ public sealed class AppealSubmitController : FhirControllerBase
         var typeCode = task.Code?.Coding.FirstOrDefault()?.Code;
         var appealType = ParseCode(typeCode, AppealType.Reconsideration, AppealTypeAliases, "Task.code");
 
-        var levelExt = task.Extension.FirstOrDefault(e => e.Url == FhirAppealMapper.AppealLevelExtensionUrl);
-        var levelCode = (levelExt?.Value as Code)?.Value;
+        var levelCode = ReadCodedExtension(task, FhirAppealMapper.AppealLevelExtensionUrl);
         var appealLevel = ParseCode(levelCode, AppealLevel.FirstLevel, AppealLevelAliases,
             $"Task.extension('{FhirAppealMapper.AppealLevelExtensionUrl}')");
 
@@ -348,8 +347,27 @@ public sealed class AppealSubmitController : FhirControllerBase
         Hl7.Fhir.Model.Task task, string extensionUrl, TEnum fallback,
         IReadOnlyDictionary<string, TEnum> aliases) where TEnum : struct, Enum
     {
+        return ParseCode(ReadCodedExtension(task, extensionUrl), fallback, aliases, $"Task.extension('{extensionUrl}')");
+    }
+
+    /// <summary>
+    /// The published profiles (cho-appeal-level, cho-appeal-line-of-business)
+    /// type the extension as <c>valueCoding</c>; earlier clients send
+    /// <c>valueCode</c>. Accept both — reading only one would silently
+    /// default a profile-conforming value onto the wrong regulatory clock.
+    /// </summary>
+    private static string? ReadCodedExtension(Hl7.Fhir.Model.Task task, string extensionUrl)
+    {
         var ext = task.Extension.FirstOrDefault(e => e.Url == extensionUrl);
-        return ParseCode((ext?.Value as Code)?.Value, fallback, aliases, $"Task.extension('{extensionUrl}')");
+        return ext?.Value switch
+        {
+            Coding coding => coding.Code,
+            Code code => code.Value,
+            null => null,
+            var other => throw new AppealSubmitValueException(
+                $"Extension '{extensionUrl}' must be valueCoding (or legacy valueCode); got value{other.TypeName}.",
+                $"Task.extension('{extensionUrl}')")
+        };
     }
 
     internal static TEnum ParseCode<TEnum>(
@@ -359,13 +377,17 @@ public sealed class AppealSubmitController : FhirControllerBase
         if (string.IsNullOrWhiteSpace(value)) return fallback;
 
         var normalized = new string(value.Where(c => c is not ('-' or '_' or ' ')).ToArray());
-        if (!int.TryParse(normalized, out _)
-            && Enum.TryParse<TEnum>(normalized, ignoreCase: true, out var parsed)
-            && Enum.IsDefined(parsed))
+
+        // Exactly one enum NAME or alias. Enum.TryParse would also accept
+        // numbers and comma-separated lists ("Commercial,Marketplace" ORs
+        // to 5 = MedicarePartD), silently picking a different clock.
+        if (normalized.Length > 0 && normalized.All(char.IsAsciiLetter))
         {
-            return parsed;
+            var byName = Enum.GetNames<TEnum>()
+                .FirstOrDefault(n => string.Equals(n, normalized, StringComparison.OrdinalIgnoreCase));
+            if (byName is not null) return Enum.Parse<TEnum>(byName);
+            if (aliases.TryGetValue(normalized, out var aliased)) return aliased;
         }
-        if (aliases.TryGetValue(normalized, out var aliased)) return aliased;
 
         throw new AppealSubmitValueException(
             $"Unrecognized {typeof(TEnum).Name} code '{value}'. Allowed: " +

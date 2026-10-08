@@ -2,12 +2,12 @@
   "resourceType": "CodeSystem",
   "id": "cho-appeal-line-of-business",
   "url": "http://fhir.cloudhealthoffice.com/CodeSystem/cho-appeal-line-of-business",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "ChoAppealLineOfBusiness",
   "title": "CHO Appeal Line of Business",
   "status": "active",
   "experimental": false,
-  "date": "2026-04-22",
+  "date": "2026-10-08",
   "publisher": "Cloud Health Office",
   "caseSensitive": true,
   "content": "complete",
@@ -16,6 +16,7 @@
     { "code": "commercial", "display": "Commercial" },
     { "code": "medicare", "display": "Medicare" },
     { "code": "medicaid", "display": "Medicaid" },
-    { "code": "marketplace", "display": "Marketplace" }
+    { "code": "marketplace", "display": "Marketplace" },
+    { "code": "medicare-part-d", "display": "Medicare Part D", "definition": "Medicare Part D prescription drug coverage (stand-alone PDP or the drug benefit of an MA-PD); appeals run on the 42 CFR 423 Subpart M clocks. 'medicare' denotes Medicare Advantage (Part C)." }
   ]
 }

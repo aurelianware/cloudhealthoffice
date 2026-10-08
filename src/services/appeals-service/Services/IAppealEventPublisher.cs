@@ -37,12 +37,18 @@ public interface IAppealEventPublisher
         string? correlationId,
         CancellationToken ct = default);
 
+    /// <param name="eventId">Stable event id for a note whose publish may be
+    /// replayed (an extension's justification note); <c>null</c> mints one.</param>
+    /// <param name="occurredAt">Original occurrence time paired with
+    /// <paramref name="eventId"/>; <c>null</c> uses the current time.</param>
     Task PublishNoteAddedAsync(
         Appeal appeal,
         AppealNote note,
         string actor,
         string? correlationId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? eventId = null,
+        DateTime? occurredAt = null);
 
     Task PublishAttachmentAddedAsync(
         Appeal appeal,
@@ -76,7 +82,9 @@ public interface IAppealEventPublisher
     /// One-time regulatory extension of <see cref="Appeal.TargetResponseDate"/>.
     /// Reads the extension record from <see cref="Appeal.DeadlineExtension"/>;
     /// the plan's free-text justification (an encrypted note) is NOT in
-    /// the payload.
+    /// the payload. EventId, OccurredAt, CurrentStatus and the target come
+    /// from the stored extension, so a same-EventId replay republishes an
+    /// identical message consumers can deduplicate.
     /// </summary>
     Task PublishDeadlineExtendedAsync(
         Appeal appeal,

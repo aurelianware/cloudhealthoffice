@@ -345,6 +345,80 @@ public class AppealSubmitControllerTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*AppealType*Arbitration*");
     }
 
+    // ── Profile-shaped (valueCoding) extensions ─────────────────────────
+
+    [Fact]
+    public void Profile_conforming_valueCoding_extensions_are_read()
+    {
+        var task = BuildValidTask();
+        task.Extension.Add(new Extension(FhirAppealMapper.AppealLevelExtensionUrl,
+            new Coding(FhirAppealMapper.AppealLevelCodeSystem, "external-review")));
+        task.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl,
+            new Coding(FhirAppealMapper.AppealLineOfBusinessCodeSystem, "medicare-part-d")));
+
+        var dto = AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        dto.AppealLevel.Should().Be(AppealLevel.ExternalReview);
+        dto.LineOfBusiness.Should().Be(LineOfBusiness.MedicarePartD);
+    }
+
+    [Theory]
+    [InlineData(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, "tricare")]
+    [InlineData(FhirAppealMapper.AppealLevelExtensionUrl, "third-level")]
+    public void Unknown_valueCoding_is_rejected_not_defaulted(string url, string code)
+    {
+        var task = BuildValidTask();
+        task.Extension.Add(new Extension(url, new Coding(null, code)));
+
+        Action act = () => AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage($"*'{code}'*");
+    }
+
+    [Fact]
+    public void Extension_with_unsupported_value_type_is_rejected()
+    {
+        var task = BuildValidTask();
+        task.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, new FhirString("medicare")));
+
+        Action act = () => AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*valueCoding*");
+    }
+
+    [Theory]
+    [InlineData("Commercial,Marketplace")]   // would OR to 5 = MedicarePartD via Enum.TryParse
+    [InlineData("commercial, marketplace")]
+    [InlineData("Medicare|Medicaid")]
+    public void Composite_codes_are_rejected(string code)
+    {
+        var task = BuildValidTask();
+        task.Extension.Add(new Extension(FhirAppealMapper.AppealLineOfBusinessExtensionUrl, new Coding(null, code)));
+
+        Action act = () => AppealSubmitController.TaskToAppealDto(task, BuildValidPatient(), claim: null);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*LineOfBusiness*");
+    }
+
+    [Fact]
+    public void Mapper_output_round_trips_through_the_submit_parser()
+    {
+        foreach (var lob in Enum.GetValues<LineOfBusiness>())
+        foreach (var level in Enum.GetValues<AppealLevel>())
+        {
+            var mapped = new FhirAppealMapper().ToAppealTask(new AppealDto
+            {
+                Id = "apl-1", MemberId = "p1", ClaimId = "c1", ProviderNPI = "prov-1",
+                AppealType = AppealType.Reconsideration, AppealLevel = level, LineOfBusiness = lob,
+                Status = AppealStatus.InReview
+            });
+
+            var dto = AppealSubmitController.TaskToAppealDto(mapped, BuildValidPatient(), claim: null);
+            dto.LineOfBusiness.Should().Be(lob);
+            dto.AppealLevel.Should().Be(level);
+        }
+    }
+
     private static Hl7.Fhir.Model.Task BuildValidTask() => new()
     {
         Id = "apl-new",

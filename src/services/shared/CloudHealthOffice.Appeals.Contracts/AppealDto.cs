@@ -130,6 +130,10 @@ public sealed class AppealDeadlineExtensionDto
     public DateTime ExtendedAt { get; set; } = DateTime.UtcNow;
     public string ExtendedBy { get; set; } = string.Empty;
     public string RegulatoryBasis { get; set; } = string.Empty;
+    public string? EventId { get; set; }
+    public string? JustificationNoteId { get; set; }
+    public AppealStatus? StatusAtExtension { get; set; }
+    public string? CorrelationId { get; set; }
 }
 
 public sealed class AppealNoteDto

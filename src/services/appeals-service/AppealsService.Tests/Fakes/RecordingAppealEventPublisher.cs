@@ -22,6 +22,11 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
     public readonly ConcurrentQueue<MigratedCall> Migrated = new();
     public readonly ConcurrentQueue<DeadlineExtendedCall> DeadlineExtended = new();
 
+    // Full wire payloads (built with the production builders) for tests
+    // that assert replay determinism.
+    public readonly ConcurrentQueue<AppealNoteAddedEventPayload> NoteAddedPayloads = new();
+    public readonly ConcurrentQueue<AppealDeadlineExtendedEventPayload> DeadlineExtendedPayloads = new();
+
     /// <summary>
     /// Drain every queue. Used by the
     /// <see cref="Integration.AppealsWebApplicationFactory"/>'s test-scoped
@@ -40,6 +45,8 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
         while (Assigned.TryDequeue(out _)) { }
         while (Migrated.TryDequeue(out _)) { }
         while (DeadlineExtended.TryDequeue(out _)) { }
+        while (NoteAddedPayloads.TryDequeue(out _)) { }
+        while (DeadlineExtendedPayloads.TryDequeue(out _)) { }
     }
 
     public Task PublishCreatedAsync(Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
@@ -65,9 +72,11 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
     }
 
     public Task PublishNoteAddedAsync(
-        Appeal appeal, AppealNote note, string actor, string? correlationId, CancellationToken ct = default)
+        Appeal appeal, AppealNote note, string actor, string? correlationId, CancellationToken ct = default,
+        string? eventId = null, DateTime? occurredAt = null)
     {
         NotesAdded.Enqueue(new NoteAddedCall(appeal.Id, appeal.TenantId, note.NoteId, note.IsInternal, actor, correlationId));
+        NoteAddedPayloads.Enqueue(AppealEventPublisher.BuildNoteAddedPayload(appeal, note, actor, correlationId, eventId, occurredAt));
         return Task.CompletedTask;
     }
 
@@ -117,6 +126,7 @@ public sealed class RecordingAppealEventPublisher : IAppealEventPublisher
         DeadlineExtended.Enqueue(new DeadlineExtendedCall(
             appeal.Id, appeal.TenantId, appeal.DeadlineExtension?.Reason,
             appeal.DeadlineExtension?.ExtensionDays, appeal.TargetResponseDate, actor, correlationId));
+        DeadlineExtendedPayloads.Enqueue(AppealEventPublisher.BuildDeadlineExtendedPayload(appeal, actor, correlationId));
         return Task.CompletedTask;
     }
 

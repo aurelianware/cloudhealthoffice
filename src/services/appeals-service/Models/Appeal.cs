@@ -382,6 +382,35 @@ public class AppealDeadlineExtension
     /// <summary>Regulatory citation the extension was taken under.</summary>
     [StringLength(200)]
     public string RegulatoryBasis { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Idempotency key of the extend request (client-supplied or server-
+    /// generated). A replay with the same key re-drives the audit appends
+    /// and publishes instead of being refused as a second extension.
+    /// </summary>
+    public string? EventId { get; set; }
+
+    /// <summary>
+    /// Id of the encrypted internal note holding the plan's justification,
+    /// committed in the same write as the extension. <c>null</c> when no
+    /// justification was given.
+    /// </summary>
+    public string? JustificationNoteId { get; set; }
+
+    /// <summary>
+    /// Appeal status when the extension committed. Replays rebuild the
+    /// audit row and the Kafka payload from this, not the live status, so
+    /// a retry after a later transition records the same history.
+    /// <c>null</c> on extensions recorded before this field existed.
+    /// </summary>
+    public AppealStatus? StatusAtExtension { get; set; }
+
+    /// <summary>
+    /// Correlation id of the request that committed the extension, reused
+    /// on replay so republished events are byte-identical.
+    /// </summary>
+    [StringLength(200)]
+    public string? CorrelationId { get; set; }
 }
 
 /// <summary>Appeal note / comment.</summary>
