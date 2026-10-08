@@ -337,6 +337,25 @@ public class CoverageMemberEndpointsTests
     }
 
     [Fact]
+    public async Task GroupSummary_CountsAReachedTerminationDateAsTerminated_BeforeTheSweepRuns()
+    {
+        var (ctl, repo, _) = Build();
+        var open = ActiveCoverage("M1");
+        var futureTerm = ActiveCoverage("M2");
+        futureTerm.TerminationDate = DateTime.UtcNow.Date.AddDays(5);
+        var notSwept = ActiveCoverage("M3");
+        notSwept.TerminationDate = DateTime.UtcNow.Date.AddDays(-1);
+        repo.Setup(r => r.GetByGroupNumberAsync(Tenant, "G"))
+            .ReturnsAsync(new List<Coverage> { open, futureTerm, notSwept });
+
+        var body = (await ctl.GetGroupCoverageSummary("G")).Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<GroupCoverageSummary>().Subject;
+
+        body.ActiveCoverage.Should().Be(2);
+        body.TerminatedCoverage.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ReinstateCoverage_Unknown_Returns404()
     {
         var (ctl, repo, _) = Build();

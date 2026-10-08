@@ -380,9 +380,9 @@ public class CoverageController : ControllerBase
         {
             GroupNumber = groupNumber,
             TotalCovered = coverages.Count,
-            ActiveCoverage = coverages.Count(c => c.Status == CoverageStatus.Active),
-            PendingCoverage = coverages.Count(c => c.Status == CoverageStatus.Pending),
-            TerminatedCoverage = coverages.Count(c => c.Status == CoverageStatus.Terminated),
+            ActiveCoverage = coverages.Count(c => CurrentStatus(c) == CoverageStatus.Active),
+            PendingCoverage = coverages.Count(c => CurrentStatus(c) == CoverageStatus.Pending),
+            TerminatedCoverage = coverages.Count(c => CurrentStatus(c) == CoverageStatus.Terminated),
             ByPlan = coverages.GroupBy(c => c.PlanId).ToDictionary(g => g.Key, g => g.Count()),
             ByCoverageLevel = coverages
                 .Where(c => c.CoverageLevel != null)
@@ -662,6 +662,10 @@ public class CoverageController : ControllerBase
             ReasonCode = request.ReasonCode
         });
     }
+
+    // Status as of today, whether or not the daily sweep has flipped it yet.
+    private static CoverageStatus CurrentStatus(Coverage c) =>
+        c.DueStatusTransition(DateTime.UtcNow.Date) ?? c.Status;
 
     private static string SanitizeForLog(string? value)
     {
