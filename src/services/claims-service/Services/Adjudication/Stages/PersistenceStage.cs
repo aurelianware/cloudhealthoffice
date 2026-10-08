@@ -63,6 +63,14 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
         var isPend = resolvedOutcome == ClaimAdjudicationOutcome.Pend;
         var resolvedStatus = MapOutcomeToStatus(resolvedOutcome);
 
+        // Later stages (e.g. NCCI) replace PendDetails wholesale; re-attach
+        // DuplicateClaimStage's findings so the duplicate evidence survives.
+        if (context.DuplicateFindings.Count > 0
+            && context.PendDetails is { DuplicateFindings.Count: 0 } pendDetails)
+        {
+            pendDetails.DuplicateFindings = context.DuplicateFindings.ToList();
+        }
+
         try
         {
             var written = await _repository

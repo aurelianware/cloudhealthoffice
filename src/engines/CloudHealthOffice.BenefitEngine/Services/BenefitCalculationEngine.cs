@@ -159,7 +159,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         var workingAccumulators = MeasureStage(
             "workingSet",
-            () => new AccumulatorWorkingSet(accumulators, plan));
+            () => new AccumulatorWorkingSet(accumulators, plan, _logger));
 
         // ── Step 3: Check for DRG/per-diem inpatient pricing ──
         var inpatientMethod = DetermineInpatientPricingMethod(request, plan);
@@ -396,7 +396,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             return new BenefitResolutionResult
             {
                 Success = false,
-                DenialReasonCode = "18",
+                // CARC 204 — same no-mapping condition as the per-line path.
+                DenialReasonCode = "204",
                 DenialReasonDescription = "No benefit category mapping for DRG claim"
             };
         }
@@ -533,10 +534,13 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             line.PlaceOfService, line.Modifiers,
             line.RevenueCode, ct);
 
+        // CARC 204 (not covered under the patient's current benefit plan):
+        // the procedure maps to no benefit category on this plan. 96 is
+        // reserved for categories the plan configures but excludes.
         if (categoryMatch is null)
         {
             return CreateDeniedLine(line, billedAmount, allowedAmount,
-                "18", "Exact duplicate claim/service",
+                "204", "This service/equipment/drug is not covered under the patient's current benefit plan",
                 "No benefit category mapping for procedure code");
         }
 

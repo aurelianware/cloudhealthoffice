@@ -480,8 +480,12 @@ public class ClaimLine
     public decimal Units { get; set; } = 1;
 
     /// <summary>
-    /// Charge amount per unit
-    /// 837: SV102 (professional) or SV202 (institutional)
+    /// Line-item charge amount: the TOTAL billed for this line across all
+    /// <see cref="Units"/> (NOT a per-unit price). Σ ChargeAmount over all
+    /// lines must equal the claim's <see cref="Claim.TotalChargeAmount"/>
+    /// (CLM02 balancing, scrub rule AL002) and flows unchanged to the
+    /// 835 SVC02.
+    /// 837: SV102 (professional) or SV203 (institutional)
     /// </summary>
     [Required]
     [Range(0, 999999.99)]
@@ -782,7 +786,7 @@ public class PendDetails
 {
     /// <summary>
     /// Short pend reason code consumed by the work queue categorizer.
-    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN.
+    /// Recognized values: NCCI, MUE, AUTH, NOAUTH, OON, NOCONTRACT, COB, MEDREVIEW, CLINICAL, RETROELIG, SUBRO, SPENDDOWN, PRICING, DUPLICATE.
     /// </summary>
     [Required]
     [StringLength(20)]
@@ -803,6 +807,53 @@ public class PendDetails
     /// NCCI/MUE edit failures that caused the pend. Empty for non-edit pends.
     /// </summary>
     public List<NcciEditFailureSnapshot> EditFailures { get; set; } = new();
+
+    /// <summary>
+    /// Duplicate-claim findings that caused (or contributed to) the pend.
+    /// Kept apart from the NCCI-specific <see cref="EditFailures"/> so
+    /// duplicates are reported as duplicates downstream (transparency,
+    /// FHIR EOB) and survive a later stage replacing the pend reason.
+    /// Empty when no duplicate was found.
+    /// </summary>
+    public List<DuplicateFindingSnapshot> DuplicateFindings { get; set; } = new();
+}
+
+/// <summary>
+/// One service line flagged by the duplicate-claim stage, with the prior
+/// claim line it matched.
+/// </summary>
+[BsonIgnoreExtraElements]
+public class DuplicateFindingSnapshot
+{
+    /// <summary>"Exact" or "Suspect".</summary>
+    [StringLength(20)]
+    public string DuplicateType { get; set; } = string.Empty;
+
+    /// <summary>DUP001 (exact) or DUP002 (suspect).</summary>
+    [StringLength(10)]
+    public string RuleId { get; set; } = string.Empty;
+
+    /// <summary>Human-readable description of the match.</summary>
+    [StringLength(1000)]
+    public string? Message { get; set; }
+
+    /// <summary>Line number on this claim that was flagged.</summary>
+    public int LineNumber { get; set; }
+
+    /// <summary>Per-version id of the prior claim the line matched.</summary>
+    [StringLength(64)]
+    public string? MatchedClaimId { get; set; }
+
+    /// <summary>Claim number of the prior claim the line matched.</summary>
+    [StringLength(50)]
+    public string? MatchedClaimNumber { get; set; }
+
+    /// <summary>Line number on the prior claim that was matched.</summary>
+    public int? MatchedLineNumber { get; set; }
+
+    /// <summary>Suggested CARC for the EOB/835 (18 — exact duplicate claim/service).</summary>
+    [StringLength(10)]
+    public string? SuggestedCarc { get; set; }
 }
 
 /// <summary>

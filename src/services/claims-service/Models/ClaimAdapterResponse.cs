@@ -302,6 +302,11 @@ public class AdapterClaimLine
     public List<string> Modifiers { get; set; } = new();
     public List<int> DiagnosisPointers { get; set; } = new();
     public decimal Units { get; set; } = 1;
+
+    /// <summary>
+    /// Line-item charge: the total billed for this line across all
+    /// <see cref="Units"/> (837 SV102/SV203), not a per-unit price.
+    /// </summary>
     public decimal ChargeAmount { get; set; }
     public DateTime ServiceDateFrom { get; set; }
     public DateTime ServiceDateTo { get; set; }

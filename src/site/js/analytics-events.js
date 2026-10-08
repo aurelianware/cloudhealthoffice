@@ -310,6 +310,7 @@
   var PAGE_VIEW_EVENTS = {
     '/services': 'services_page_view',
     '/services/qnxt-cms-0057-f-adapter': 'qnxt_adapter_page_view',
+    '/services/dental-payers': 'dental_payer_page_view',
     '/deploy': 'deployment_page_view'
   };
 
