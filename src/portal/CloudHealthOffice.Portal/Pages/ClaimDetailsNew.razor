@@ -131,6 +131,8 @@
             </MudPaper>
         }
 
+        <PossibleDuplicatesPanel Matches="_duplicateMatches" />
+
         @if (HasExaminerDispositionRecord)
         {
             <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-success);">
@@ -970,14 +972,49 @@
         ? "Back to Claims"
         : "Back to Adjudication Run";
 
-    protected override async Task OnInitializedAsync()
+    private List<ClaimDuplicateMatch> _duplicateMatches = new();
+    private string? _loadedClaimId;
+
+    // Loads on parameter set (not just init) so following a "Possible
+    // duplicates" link from /claims/{a} to /claims/{b} reloads the page
+    // instead of keeping claim a's data under claim b's URL.
+    protected override async Task OnParametersSetAsync()
     {
+        if (string.Equals(_loadedClaimId, ClaimId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _loadedClaimId = ClaimId;
+        _adjudicationData = null;
+        _duplicateMatches = new();
         BuildBreadcrumbs();
 
         await LoadClaimDetails();
         BuildBreadcrumbs();
         // Load adjudication data in background (fire-and-forget, non-blocking)
         _ = LoadAdjudicationDataAsync();
+        _ = LoadDuplicateMatchesAsync(ClaimId);
+    }
+
+    private async Task LoadDuplicateMatchesAsync(string claimId)
+    {
+        // Only DUPLICATE-pended claims carry findings; skip the call otherwise.
+        if (_claim?.PendDetails?.DuplicateFindings is not { Count: > 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var matches = await ClaimsService.GetDuplicateMatchesAsync(_claim.ClaimId is { Length: > 0 } id ? id : claimId);
+            if (string.Equals(_loadedClaimId, claimId, StringComparison.Ordinal))
+            {
+                _duplicateMatches = matches;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { /* duplicate matches are supplementary to the claim detail */ }
     }
 
     private void BuildBreadcrumbs()

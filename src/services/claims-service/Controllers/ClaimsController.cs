@@ -332,6 +332,39 @@ public class ClaimsController : ControllerBase
     }
 
     /// <summary>
+    /// Prior claims the duplicate-claim stage matched this claim against
+    /// (pend code DUPLICATE), one entry per matched claim with its claim
+    /// number, service dates, billed amount, status, match type and the
+    /// fields that matched. Empty when the claim has no duplicate findings.
+    /// Matched claims are read through the tenant-scoped repository, so a
+    /// claim outside the caller's tenant is reported as not found rather
+    /// than summarized.
+    /// </summary>
+    [HttpGet("{id}/duplicate-matches")]
+    [ProducesResponseType(typeof(IReadOnlyList<ClaimDuplicateMatch>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ClaimDuplicateMatch>>> GetDuplicateMatches(string id)
+    {
+        var claim = await _claimRepository.GetByIdAsync(id);
+        if (claim == null)
+        {
+            return NotFound($"Claim {id} not found");
+        }
+
+        var matchedClaims = new Dictionary<string, Claim>(StringComparer.Ordinal);
+        foreach (var matchedId in DuplicateMatchBuilder.MatchedClaimIds(claim))
+        {
+            var matched = await _claimRepository.GetByIdAsync(matchedId);
+            if (matched is not null)
+            {
+                matchedClaims[matchedId] = matched;
+            }
+        }
+
+        return Ok(DuplicateMatchBuilder.Build(claim, matchedClaims));
+    }
+
+    /// <summary>
     /// Get claim by claim number
     /// </summary>
     [HttpGet("number/{claimNumber}")]
@@ -1390,7 +1423,13 @@ public class ClaimsController : ControllerBase
                 AiConfidenceScore = c.AiExamination?.ConfidenceScore,
                 AiRationale = c.AiExamination?.Rationale,
                 AiPolicyCitations = c.AiExamination?.PolicyCitations ?? new List<string>(),
-                AiExaminerAgreement = c.AiExamination?.ExaminerAgreement
+                AiExaminerAgreement = c.AiExamination?.ExaminerAgreement,
+                DuplicateMatchedClaimNumbers = (c.PendDetails?.DuplicateFindings ?? new List<DuplicateFindingSnapshot>())
+                    .Select(f => string.IsNullOrWhiteSpace(f.MatchedClaimNumber) ? f.MatchedClaimId : f.MatchedClaimNumber)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Select(n => n!)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList()
             };
         }).ToList();
 
@@ -1544,6 +1583,7 @@ public class ClaimsController : ControllerBase
         "OON" or "NOCONTRACT" => "Provider Not Contracted",
         "COB" => "COB Required",
         "MEDREVIEW" or "CLINICAL" => "Medical Review",
+        "DUPLICATE" => "Possible Duplicate",
         _ => "Pending Review"
     };
 
@@ -1605,6 +1645,12 @@ public class WorkQueueItem
 
     /// <summary>If a human has acted on this claim: Accepted, Modified, or Overridden.</summary>
     public string? AiExaminerAgreement { get; set; }
+
+    /// <summary>
+    /// Claim numbers (or ids, when no number was recorded) of the prior
+    /// claims a DUPLICATE-pended claim matched. Empty otherwise.
+    /// </summary>
+    public List<string> DuplicateMatchedClaimNumbers { get; set; } = new();
 }
 
 public class AssignClaimRequest
