@@ -411,6 +411,13 @@ public class ClaimRepository : IClaimRepository
             claim.AdjudicationResult.AllowedAmount = lineAllowed;
             claim.AdjudicationResult.PayerPayment = linePaid;
             claim.AdjudicationResult.PatientResponsibility = linePatientResponsibility;
+            // Roll up the OOP-eligible amount only when every line carries
+            // it; otherwise leave null so readers fall back to patient
+            // responsibility.
+            claim.AdjudicationResult.OopAppliedAmount =
+                claim.ClaimLines.All(l => l.AdjudicationResult?.OopAppliedAmount is not null)
+                    ? claim.ClaimLines.Sum(l => l.AdjudicationResult!.OopAppliedAmount!.Value)
+                    : null;
         }
 
         claim.AdjudicationResult.DenialReasonCode = null;
@@ -1668,6 +1675,9 @@ public class ClaimRepository : IClaimRepository
                    c.adjudicationResult.coinsuranceAmount,
                    c.adjudicationResult.copayAmount,
                    c.adjudicationResult.patientResponsibility,
+                   (IS_NUMBER(c.adjudicationResult.oopAppliedAmount)
+                        ? c.adjudicationResult.oopAppliedAmount
+                        : c.adjudicationResult.patientResponsibility) AS oopAmount,
                    c.adjudicationResult.networkTier
             FROM c
             WHERE c.tenantId       = @tenantId
@@ -1708,7 +1718,10 @@ public class ClaimRepository : IClaimRepository
                 var tier = (string?)row.networkTier ?? "InNetwork";
 
                 deductible[tier]  = (deductible.GetValueOrDefault(tier))  + (decimal)(row.deductibleAmount  ?? 0.0);
-                oop[tier]         = (oop.GetValueOrDefault(tier))         + (decimal)(row.patientResponsibility ?? 0.0);
+                // OOP-eligible amount when the engine recorded it (cost share
+                // excluded from the OOP max doesn't count); legacy rows fall
+                // back to full patient responsibility.
+                oop[tier]         = (oop.GetValueOrDefault(tier))         + (decimal)(row.oopAmount ?? 0.0);
                 coinsurance[tier] = (coinsurance.GetValueOrDefault(tier)) + (decimal)(row.coinsuranceAmount ?? 0.0);
                 copay[tier]       = (copay.GetValueOrDefault(tier))       + (decimal)(row.copayAmount       ?? 0.0);
             }

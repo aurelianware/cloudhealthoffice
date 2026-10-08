@@ -329,6 +329,89 @@ public sealed class ChoBenefitPlanProviderEngineSeamTests
         visit.DeductibleAmount.Should().Be(200m);
     }
 
+    // ── OOP applies ────────────────────────────────────────────────────
+
+    private static decimal OopApplied(BenefitResolutionResult result, NetworkTier tier)
+        => result.AccumulatorSnapshot.Single(s =>
+            s.Type == AccumulatorType.IndividualOutOfPocketMax
+            && s.Scope == AccumulatorScope.Individual
+            && s.NetworkTier == tier).AmountApplied;
+
+    private static decimal DeductibleApplied(BenefitResolutionResult result, NetworkTier tier)
+        => result.AccumulatorSnapshot.Single(s =>
+            s.Type == AccumulatorType.IndividualDeductible
+            && s.Scope == AccumulatorScope.Individual
+            && s.NetworkTier == tier).AmountApplied;
+
+    [Fact]
+    public async Task OopAppliesTrue_InNetwork_CostShareCappedAtOopMax()
+    {
+        // 500 + 30 + 20% of 49,470 = 10,424 raw; individual OOP max is 3,000.
+        var benefit = OfficeVisitBenefit();
+        var result = await AdjudicateAsync(Plan(StandardCostSharing(), benefits: benefit), NetworkTier.InNetwork, 50_000m);
+
+        var line = result.Lines.Single();
+        line.MemberResponsibility.Should().Be(3_000m);
+        OopApplied(result, NetworkTier.InNetwork).Should().Be(3_000m);
+    }
+
+    [Fact]
+    public async Task OopAppliesFalse_InNetwork_CostShareUncapped_DeductibleStillAccumulates()
+    {
+        var benefit = OfficeVisitBenefit();
+        benefit.OopApplies = false;
+        var result = await AdjudicateAsync(Plan(StandardCostSharing(), benefits: benefit), NetworkTier.InNetwork, 50_000m);
+
+        var line = result.Lines.Single();
+        line.DeductibleAmount.Should().Be(500m);
+        line.MemberResponsibility.Should().Be(10_424m);
+        line.OopMaxReduction.Should().Be(0m);
+        OopApplied(result, NetworkTier.InNetwork).Should().Be(0m);
+        DeductibleApplied(result, NetworkTier.InNetwork).Should().Be(500m);
+    }
+
+    [Fact]
+    public async Task OopAppliesFalse_OutOfNetwork_CostShareUncapped()
+    {
+        // 1,000 OON deductible + 40% of 49,000 = 20,600 raw; OON OOP max is 6,000.
+        var benefit = OfficeVisitBenefit();
+        benefit.OopApplies = false;
+        var result = await AdjudicateAsync(Plan(StandardCostSharing(), benefits: benefit), NetworkTier.OutOfNetwork, 50_000m);
+
+        var line = result.Lines.Single();
+        line.MemberResponsibility.Should().Be(20_600m);
+        OopApplied(result, NetworkTier.OutOfNetwork).Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task Aggregate_NoFamilyLimits_OopAppliesFalse_IndividualFallbackPoolNotConsumed()
+    {
+        // Aggregate plan with only individual limits: ApplyToAggregatePool
+        // routes OOP to the individual fallback pool. Cost share excluded
+        // from OOP must not land there (or in the family placeholder), and
+        // is not capped by the 2,000 individual OOP max.
+        var benefit = OfficeVisitBenefit();
+        benefit.OopApplies = false;
+        var stored = Plan(
+            new CostSharing { IndividualDeductible = 1_000m, IndividualOutOfPocketMax = 2_000m },
+            model: ModelFamilyAccumulatorModel.Aggregate,
+            benefits: benefit);
+
+        var result = await AdjudicateAsync(stored, NetworkTier.InNetwork, 10_000m);
+
+        // 1000 + 30 + 20% of 8,970 = 2,824, uncapped.
+        var line = result.Lines.Single();
+        line.DeductibleAmount.Should().Be(1_000m);
+        line.MemberResponsibility.Should().Be(2_824m);
+        line.OopMaxReduction.Should().Be(0m);
+        result.AccumulatorSnapshot
+            .Where(s => s.Type is AccumulatorType.IndividualOutOfPocketMax
+                or AccumulatorType.FamilyOutOfPocketMax
+                or AccumulatorType.AcaIndividualCap)
+            .Should().OnlyContain(s => s.AmountApplied == 0m);
+        DeductibleApplied(result, NetworkTier.InNetwork).Should().Be(1_000m);
+    }
+
     // ── Coinsurance scale ──────────────────────────────────────────────
 
     [Fact]
