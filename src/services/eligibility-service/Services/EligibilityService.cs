@@ -119,8 +119,8 @@ public class EligibilityServiceImpl : IEligibilityService
     public async Task<(bool IsActive, string StatusCode, string CoverageLevel, string Message)> QuickEligibilityCheckAsync(
         string tenantId, string subscriberId, string? groupNumber, DateTime serviceDate)
     {
-        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, serviceDate);
-        
+        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, serviceDate, groupNumber: groupNumber);
+
         if (coverage == null)
         {
             return (false, "6", "", "No coverage found");
@@ -137,8 +137,8 @@ public class EligibilityServiceImpl : IEligibilityService
     public async Task<List<EligibilityBenefit>> GetBenefitDetailsAsync(
         string tenantId, string subscriberId, string? serviceType, DateTime serviceDate)
     {
-        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, serviceDate);
-        
+        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, serviceDate, serviceType);
+
         if (coverage == null)
         {
             return new List<EligibilityBenefit>();
@@ -169,8 +169,8 @@ public class EligibilityServiceImpl : IEligibilityService
     public async Task<(bool Required, string Reason)> CheckAuthRequirementAsync(
         string tenantId, string subscriberId, string serviceTypeCode, string? procedureCode)
     {
-        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, DateTime.Today);
-        
+        var coverage = await GetActiveCoverageAsync(tenantId, subscriberId, DateTime.Today, serviceTypeCode);
+
         if (coverage == null)
         {
             return (false, "No active coverage");
@@ -189,7 +189,15 @@ public class EligibilityServiceImpl : IEligibilityService
 
     // Private helper methods
 
-    private async Task<CoverageDto?> GetActiveCoverageAsync(string tenantId, string subscriberId, DateTime serviceDate)
+    /// <summary>
+    /// The member's coverage in force on <paramref name="serviceDate"/> for this
+    /// request. coverage-service's <c>/active</c> answers a list (every
+    /// coverage in force that day: medical, dental, vision…, 404 when none);
+    /// see <see cref="SelectCoverage"/> for which one answers the request.
+    /// </summary>
+    private async Task<CoverageDto?> GetActiveCoverageAsync(
+        string tenantId, string subscriberId, DateTime serviceDate,
+        string? serviceTypeCode = null, string? groupNumber = null)
     {
         try
         {
@@ -205,13 +213,63 @@ public class EligibilityServiceImpl : IEligibilityService
                 return null;
             }
 
-            return await response.Content.ReadFromJsonAsync<CoverageDto>();
+            var coverages = await response.Content.ReadFromJsonAsync<List<CoverageDto>>();
+            return SelectCoverage(coverages, serviceDate, serviceTypeCode, groupNumber);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error calling Coverage Service");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Picks the coverage that answers an eligibility request from
+    /// coverage-service's <c>/active</c> list: in force on the date of service
+    /// (span-based, <see cref="CoverageDto.IsInForceOn"/>), on the insurance
+    /// line the service type belongs to (<see cref="InsuranceLineFor"/>; a
+    /// coverage with no line is treated as health), preferring the requested
+    /// group, then the most recent effective date. A dental-only member is not
+    /// eligible for a medical service, so lines never substitute for each other.
+    /// </summary>
+    public static CoverageDto? SelectCoverage(
+        IEnumerable<CoverageDto>? coverages, DateTime serviceDate, string? serviceTypeCode, string? groupNumber)
+    {
+        if (coverages is null) return null;
+
+        var line = InsuranceLineFor(serviceTypeCode);
+        var selected = coverages
+            .Where(c => c.IsInForceOn(serviceDate))
+            .Where(c => string.Equals(
+                string.IsNullOrWhiteSpace(c.InsuranceLineCode) ? HealthLine : c.InsuranceLineCode.Trim(),
+                line, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => !string.IsNullOrEmpty(groupNumber)
+                                    && string.Equals(c.GroupNumber, groupNumber, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(c => c.EffectiveDate)
+            .FirstOrDefault();
+
+        if (selected != null) selected.IsActive = true;
+        return selected;
+    }
+
+    private const string HealthLine = "HLT";
+
+    // X12 EB/EQ service type codes that belong to the dental and vision lines;
+    // everything else (including no service type, "30" health benefit plan
+    // coverage) is a health (medical) question.
+    private static readonly HashSet<string> DentalServiceTypes = new(StringComparer.OrdinalIgnoreCase)
+        { "23", "24", "25", "26", "27", "28", "35", "36", "37", "38", "39", "40", "41" };
+    private static readonly HashSet<string> VisionServiceTypes = new(StringComparer.OrdinalIgnoreCase)
+        { "AL", "AM", "AO" };
+
+    /// <summary>834 INS/HD insurance line code (HD03) a 270 service type is asked against.</summary>
+    public static string InsuranceLineFor(string? serviceTypeCode)
+    {
+        if (string.IsNullOrWhiteSpace(serviceTypeCode)) return HealthLine;
+        var code = serviceTypeCode.Trim();
+        if (DentalServiceTypes.Contains(code)) return "DEN";
+        if (VisionServiceTypes.Contains(code)) return "VIS";
+        return HealthLine;
     }
 
     private async Task<MemberDto?> GetMemberAsync(string tenantId, string subscriberId)
@@ -380,16 +438,53 @@ public class EligibilityServiceImpl : IEligibilityService
 }
 
 // DTOs for service calls
+
+/// <summary>
+/// One entry of coverage-service's <c>GET /coverage/member/{id}/active</c>
+/// list — its <c>Coverage</c> document as serialized there: camelCase
+/// properties, enums by name.
+/// </summary>
 public class CoverageDto
 {
     public string Id { get; set; } = string.Empty;
-    public bool IsActive { get; set; }
     public string CoverageLevel { get; set; } = string.Empty;
     public string PlanName { get; set; } = string.Empty;
     public string GroupNumber { get; set; } = string.Empty;
+
+    /// <summary>coverage-service's <c>planId</c> (the benefit plan id).</summary>
+    [JsonPropertyName("planId")]
     public string BenefitPlanId { get; set; } = string.Empty;
+
+    /// <summary>834 HD03 insurance line (HLT, DEN, VIS…); null on older records.</summary>
+    public string? InsuranceLineCode { get; set; }
+
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
+
+    /// <summary>coverage-service CoverageStatus (1=Active … 5=COBRA), sent by name.</summary>
+    [JsonConverter(typeof(CoverageStatusIntConverter))]
+    public int Status { get; set; }
+
+    /// <summary>
+    /// Set when this coverage was selected as in force for the request
+    /// (<see cref="EligibilityServiceImpl.SelectCoverage"/>); not on the wire.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// In force on the date of service: within the effective/termination span,
+    /// with a status that was in force for that span (Active, Terminated with a
+    /// termination date, COBRA). Mirrors coverage-service <c>Coverage.IsActiveOn</c>.
+    /// </summary>
+    public bool IsInForceOn(DateTime serviceDate)
+    {
+        var date = serviceDate.Date;
+        if (Status is not (1 or 3 or 5)) return false;
+        if (Status == 3 && !TerminationDate.HasValue) return false;
+        return date >= EffectiveDate.Date
+            && (!TerminationDate.HasValue || date <= TerminationDate.Value.Date);
+    }
 }
 
 public class MemberDto

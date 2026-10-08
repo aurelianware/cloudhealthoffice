@@ -203,7 +203,7 @@ public class ChoEligibilityAdapter : IEligibilityAdapter
 
 /// <summary>
 /// DTO matching the Coverage model returned by coverage-service.
-/// Status is an int enum (1=Active, 2=Pending, 3=Terminated, 4=Suspended, 5=COBRA).
+/// Status holds coverage-service CoverageStatus as its int (1=Active, 2=Pending, 3=Terminated, 4=Suspended, 5=COBRA); the wire sends the name.
 /// PlanId maps to BenefitPlanId in the eligibility context.
 /// </summary>
 internal class ChoCoverageDto
@@ -216,7 +216,10 @@ internal class ChoCoverageDto
     public string PlanId { get; set; } = string.Empty;
     public DateTime EffectiveDate { get; set; }
     public DateTime? TerminationDate { get; set; }
+    // coverage-service sends enums by name ("Active", "Commercial").
+    [System.Text.Json.Serialization.JsonConverter(typeof(EligibilityService.Services.CoverageStatusIntConverter))]
     public int Status { get; set; }
+    [System.Text.Json.Serialization.JsonConverter(typeof(EligibilityService.Services.CoverageLineOfBusinessIntConverter))]
     public int LineOfBusiness { get; set; } = 1;
 
     /// <summary>

@@ -206,7 +206,10 @@ public class TemporalEligibilityService : ITemporalEligibilityService
         public string? InsuranceLineCode { get; set; }
         public DateTime EffectiveDate { get; set; }
         public DateTime? TerminationDate { get; set; }
+        // coverage-service sends enums by name ("Active", "Commercial").
+        [System.Text.Json.Serialization.JsonConverter(typeof(CoverageStatusIntConverter))]
         public int Status { get; set; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(CoverageLineOfBusinessIntConverter))]
         public int LineOfBusiness { get; set; } = 1;
         public bool IsCOBRA { get; set; }
         public CoverageMedicareDto? MedicareCoverage { get; set; }
