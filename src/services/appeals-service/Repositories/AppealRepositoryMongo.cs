@@ -177,6 +177,32 @@ public sealed class AppealRepositoryMongo : IAppealRepository
         return updated;
     }
 
+    public async Task<Appeal?> TryExtendDeadlineAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
+    {
+        var nonTerminalStatuses = new[] { AppealStatus.Submitted, AppealStatus.InReview, AppealStatus.PendingInfo };
+
+        // Filter on DeadlineExtension == null makes the extension one-shot
+        // under concurrency: a second writer's filter no longer matches.
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
+                   & Builders<Appeal>.Filter.Eq(a => a.DeadlineExtension, null)
+                   & Builders<Appeal>.Filter.In(a => a.Status, nonTerminalStatuses);
+
+        var update = Builders<Appeal>.Update
+            .Set(a => a.TargetResponseDate, appeal.TargetResponseDate)
+            .Set(a => a.DeadlineExtension, appeal.DeadlineExtension)
+            .Set(a => a.UpdatedAt, appeal.UpdatedAt ?? DateTime.UtcNow)
+            .Set(a => a.UpdatedBy, appeal.UpdatedBy);
+
+        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
+
+        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct);
+        if (updated is null) return null;
+
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
+    }
+
     public async Task<Appeal> AppendNoteAsync(Appeal appeal, AppealNote note, AppealEvent auditEvent, CancellationToken ct = default)
     {
         var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)

@@ -25,6 +25,12 @@ namespace AppealsService.Services;
 ///   Any         -> Draft        (genesis cannot be re-entered)
 ///   Backwards   transitions     (InReview -> Submitted, etc.)
 ///
+/// Deadline extension is NOT a transition either: the one-time regulatory
+/// extension (<c>POST /{id}/extend</c>) moves
+/// <see cref="Appeal.TargetResponseDate"/> without changing status and is
+/// recorded as an <c>AppealDeadlineExtended</c> audit event. It is only
+/// legal while the clock is running — see <see cref="IsExtensionAllowed"/>.
+///
 /// Overdue is NOT a state. It is a read-time projection on
 /// <see cref="Appeal.IsOverdue"/> and drives the one-shot
 /// <c>AppealOverdueObserved</c> audit event via
@@ -111,4 +117,15 @@ public static class AppealStateMachine
 
             _ => false
         };
+
+    /// <summary>
+    /// Statuses in which the regulatory response clock is running and the
+    /// one-time deadline extension may be taken: Submitted, InReview,
+    /// PendingInfo. Draft has not been received yet; Closed is terminal.
+    /// Whether the line of business permits an extension at all is
+    /// <see cref="AppealResponseDeadlinePolicy.GetExtensionRule"/>'s call,
+    /// not the state machine's.
+    /// </summary>
+    public static bool IsExtensionAllowed(AppealStatus from) =>
+        from is AppealStatus.Submitted or AppealStatus.InReview or AppealStatus.PendingInfo;
 }
