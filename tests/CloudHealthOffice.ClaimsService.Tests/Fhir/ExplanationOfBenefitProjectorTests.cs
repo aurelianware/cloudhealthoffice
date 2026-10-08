@@ -295,6 +295,49 @@ public class ExplanationOfBenefitProjectorTests
             "header adjudication[] should be absent on a clean approval");
     }
 
+    // ── item[].net / unitPrice (ChargeAmount = line total) ─────────────────
+
+    [Fact]
+    public void Project_item_net_is_line_total_and_unitPrice_is_derived()
+    {
+        var claim = MinimalClaim();
+        claim.ClaimLines.Add(new ClaimLine
+        {
+            LineNumber = 1, ProcedureCode = "97110", ChargeAmount = 200m, Units = 4,
+            ServiceDateFrom = claim.ServiceDateFrom, ServiceDateTo = claim.ServiceDateTo,
+        });
+
+        var item = _projector.Project(claim)["item"]!.AsArray()[0]!;
+
+        item["quantity"]!["value"]!.GetValue<decimal>().Should().Be(4m);
+        item["net"]!["value"]!.GetValue<decimal>().Should().Be(200m,
+            "ClaimLine.ChargeAmount is already the line total (SV102/SV203)");
+        item["unitPrice"]!["value"]!.GetValue<decimal>().Should().Be(50m);
+    }
+
+    [Fact]
+    public void Project_item_unitPrice_rounds_to_cents_and_is_omitted_for_zero_units()
+    {
+        var claim = MinimalClaim();
+        claim.ClaimLines.Add(new ClaimLine
+        {
+            LineNumber = 1, ProcedureCode = "97110", ChargeAmount = 100m, Units = 3,
+            ServiceDateFrom = claim.ServiceDateFrom, ServiceDateTo = claim.ServiceDateTo,
+        });
+        claim.ClaimLines.Add(new ClaimLine
+        {
+            LineNumber = 2, ProcedureCode = "99213", ChargeAmount = 75m, Units = 0,
+            ServiceDateFrom = claim.ServiceDateFrom, ServiceDateTo = claim.ServiceDateTo,
+        });
+
+        var items = _projector.Project(claim)["item"]!.AsArray();
+
+        items[0]!["net"]!["value"]!.GetValue<decimal>().Should().Be(100m);
+        items[0]!["unitPrice"]!["value"]!.GetValue<decimal>().Should().Be(33.33m);
+        items[1]!["net"]!["value"]!.GetValue<decimal>().Should().Be(75m);
+        items[1]!.AsObject().ContainsKey("unitPrice").Should().BeFalse();
+    }
+
     // ── item[].adjudication[] from NCCI/MUE edit failures (Decision 9) ──────
 
     [Fact]
