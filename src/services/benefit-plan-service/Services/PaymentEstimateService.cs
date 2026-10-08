@@ -360,6 +360,38 @@ public class PaymentEstimateService : IPaymentEstimateService
                 Description = $"Allowed amount could not be determined from {DescribeFeeSchedule(priced)}" +
                     (priced.UnresolvedReason is null ? "." : $": {priced.UnresolvedReason}.")
             });
+
+            // The engine's $0 allowed is a sentinel, not a rate: derive no contractual
+            // adjustment or cost-share from it. Zeroed amounts keep the line out of the
+            // claim totals (totals == Σ lines) and needs_review marks it unknown.
+            if (benefitLine is not null
+                && (!benefitLine.IsCovered || benefitLine.DenialReasonCode is not null))
+            {
+                messages.Add(new EstimateMessage
+                {
+                    Code = MapDenial(benefitLine.DenialReasonCode).code,
+                    Severity = EstimateMessageSeverity.Denial,
+                    Description = benefitLine.DenialReasonDescription
+                        ?? "Service is not expected to pay as submitted."
+                });
+            }
+
+            return new EstimateLine
+            {
+                LineNumber = reqLine.LineNumber,
+                ProcedureCode = reqLine.ProcedureCode,
+                ToothNumber = reqLine.ToothNumber,
+                BilledAmount = billed,
+                AllowedAmount = 0m,
+                ContractualAdjustment = 0m,
+                PayerResponsibility = 0m,
+                PatientResponsibility = 0m,
+                DeductibleAmount = 0m,
+                CopayAmount = 0m,
+                CoinsuranceAmount = 0m,
+                Status = "needs_review",
+                Messages = messages
+            };
         }
         else if (priced is not null)
         {

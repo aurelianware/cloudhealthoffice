@@ -84,7 +84,7 @@ public class RateResolutionService : IRateResolutionService
         }
 
         // 4. Calculate base allowed amount
-        var (baseAmount, rateSource, scheduleType, unresolvedReason) = await CalculateBaseAmountAsync(
+        var (baseAmount, rateSource, scheduleType, unresolvedReason, isLineTotal) = await CalculateBaseAmountAsync(
             request, schedule, rateLine, networkStatus, ct);
 
         if (unresolvedReason is not null)
@@ -94,7 +94,8 @@ public class RateResolutionService : IRateResolutionService
             // pend the line, rather than silently substituting billed charges.
             _logger.LogWarning(
                 "Rate unresolved for {ProcedureCode} on schedule {ScheduleId}: {Reason}",
-                request.ProcedureCode, schedule?.Id, unresolvedReason);
+                LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(schedule?.Id),
+                LogSanitizer.SafeForLog(unresolvedReason));
 
             return (new PricingResult
             {
@@ -127,8 +128,10 @@ public class RateResolutionService : IRateResolutionService
                 baseAmount, request, rateLine, applyMultipleProcedureReduction);
         }
 
-        // 6. Apply units (not for DRG — case rate is per-admission regardless of line count)
-        if (scheduleType != FeeScheduleType.Drg)
+        // 6. Apply units (not for DRG — case rate is per-admission regardless of line count —
+        //    nor for billed-based amounts: BilledAmount is the line total (837 SV102/SV203),
+        //    so a percentage of it already covers every unit on the line)
+        if (scheduleType != FeeScheduleType.Drg && !isLineTotal)
             finalAmount *= request.Units;
 
         return (new PricingResult
@@ -209,7 +212,7 @@ public class RateResolutionService : IRateResolutionService
                 _logger.LogWarning(
                     "Multiple procedure rank {Rank} for line {LineNumber} ({ProcedureCode}) is by report; " +
                     "priced at {Factor:P0} pending review",
-                    rank + 1, result.LineNumber, result.ProcedureCode, reductionFactor);
+                    rank + 1, result.LineNumber, LogSanitizer.SafeForLog(result.ProcedureCode), reductionFactor);
             }
 
             var adjustments = new List<RateAdjustment>(result.Adjustments);
@@ -335,9 +338,11 @@ public class RateResolutionService : IRateResolutionService
     /// Async version of base amount calculation — needed for Medicaid and
     /// percent-of-Medicare cross-schedule resolution. A non-null
     /// <c>unresolvedReason</c> means a rate line matched but its base amount
-    /// could not be determined; the amount is then meaningless.
+    /// could not be determined; the amount is then meaningless. <c>isLineTotal</c>
+    /// is true when the amount is derived from billed charges (the line total)
+    /// and therefore must not be multiplied by units again.
     /// </summary>
-    private async Task<(decimal amount, RateSource source, FeeScheduleType scheduleType, string? unresolvedReason)> CalculateBaseAmountAsync(
+    private async Task<(decimal amount, RateSource source, FeeScheduleType scheduleType, string? unresolvedReason, bool isLineTotal)> CalculateBaseAmountAsync(
         PricingRequest request,
         FeeSchedule? schedule,
         FeeScheduleLine? line,
@@ -346,19 +351,19 @@ public class RateResolutionService : IRateResolutionService
     {
         if (schedule is null || line is null)
         {
-            return (request.BilledAmount, RateSource.BilledCharges, FeeScheduleType.Ucr, null);
+            return (request.BilledAmount, RateSource.BilledCharges, FeeScheduleType.Ucr, null, true);
         }
 
         switch (schedule.Type)
         {
             case FeeScheduleType.Capitation:
-                return (0m, RateSource.Capitation, FeeScheduleType.Capitation, null);
+                return (0m, RateSource.Capitation, FeeScheduleType.Capitation, null, false);
 
             case FeeScheduleType.PerDiem:
             {
                 var los = request.LengthOfStay ?? 1;
                 var rate = schedule.PerDiemRate ?? line.Rate;
-                return (rate * los, RateSource.PerDiem, FeeScheduleType.PerDiem, null);
+                return (rate * los, RateSource.PerDiem, FeeScheduleType.PerDiem, null, false);
             }
 
             case FeeScheduleType.Drg:
@@ -367,21 +372,21 @@ public class RateResolutionService : IRateResolutionService
                 // If DRG weight is specified, rate = base rate × weight
                 if (line.DrgWeight.HasValue && line.DrgWeight.Value > 0)
                     drgRate = (schedule.DrgBaseRate ?? line.Rate) * line.DrgWeight.Value;
-                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg, null);
+                return (Math.Round(drgRate, 2), RateSource.Drg, FeeScheduleType.Drg, null, false);
             }
 
             case FeeScheduleType.MedicareMpfs:
             case FeeScheduleType.MedicareOpps:
             {
                 var amount = CalculateMedicareLineAmount(schedule, line, request.PlaceOfServiceCode);
-                return (amount, RateSource.MedicareMpfs, schedule.Type, null);
+                return (amount, RateSource.MedicareMpfs, schedule.Type, null, false);
             }
 
             case FeeScheduleType.Medicaid:
             {
                 var amount = await ResolveMedicaidRateAsync(
                     request, schedule, line, ct);
-                return (amount, RateSource.Medicaid, FeeScheduleType.Medicaid, null);
+                return (amount, RateSource.Medicaid, FeeScheduleType.Medicaid, null, false);
             }
 
             default: // Commercial, Custom
@@ -398,18 +403,15 @@ public class RateResolutionService : IRateResolutionService
                         request, schedule, line, ct);
 
                     if (medicareRate is null)
-                        return (0m, source, schedule.Type, failure);
+                        return (0m, source, schedule.Type, failure, false);
 
-                    return (Math.Round(medicareRate.Value * line.Rate, 2), source, schedule.Type, null);
+                    return (Math.Round(medicareRate.Value * line.Rate, 2), source, schedule.Type, null, false);
                 }
 
-                var amount = line.RateType switch
-                {
-                    FeeScheduleRateType.PercentOfBilled => request.BilledAmount * line.Rate,
-                    _                                   => line.Rate,
-                };
+                if (line.RateType == FeeScheduleRateType.PercentOfBilled)
+                    return (request.BilledAmount * line.Rate, source, schedule.Type, null, true);
 
-                return (amount, source, schedule.Type, null);
+                return (line.Rate, source, schedule.Type, null, false);
             }
         }
     }
@@ -476,7 +478,7 @@ public class RateResolutionService : IRateResolutionService
                     _logger.LogDebug(
                         "Medicaid cross-schedule: {ProcedureCode} Medicare={MedicareRate:C} " +
                         "× {Percent:P0} = {MedicaidRate:C}",
-                        request.ProcedureCode, medicareRate,
+                        LogSanitizer.SafeForLog(request.ProcedureCode), medicareRate,
                         medicaidSchedule.PercentOfMedicare.Value, medicaidRate);
 
                     return Math.Round(medicaidRate, 2);
@@ -485,14 +487,15 @@ public class RateResolutionService : IRateResolutionService
                 _logger.LogWarning(
                     "Medicaid cross-schedule: base MPFS schedule {ScheduleId} has no line " +
                     "for {ProcedureCode}; falling back to Medicaid line rate",
-                    medicaidSchedule.BaseMpfsFeeScheduleId, request.ProcedureCode);
+                    LogSanitizer.SafeForLog(medicaidSchedule.BaseMpfsFeeScheduleId),
+                    LogSanitizer.SafeForLog(request.ProcedureCode));
             }
             else
             {
                 _logger.LogWarning(
                     "Medicaid cross-schedule: base MPFS schedule {ScheduleId} not found; " +
                     "falling back to Medicaid line rate",
-                    medicaidSchedule.BaseMpfsFeeScheduleId);
+                    LogSanitizer.SafeForLog(medicaidSchedule.BaseMpfsFeeScheduleId));
             }
         }
 
@@ -516,7 +519,8 @@ public class RateResolutionService : IRateResolutionService
     /// 2. RVUs stored inline on the line itself, priced with the schedule's
     ///    GPCI × ConversionFactor.
     ///
-    /// Returns a null rate with a reason when neither yields a Medicare amount.
+    /// Falls through to (2) when the reference schedule is missing or unusable;
+    /// returns a null rate with a reason only when neither yields a Medicare amount.
     /// </summary>
     private async Task<(decimal? medicareRate, string? failureReason)> ResolveMedicareBaseRateAsync(
         PricingRequest request,
@@ -524,24 +528,36 @@ public class RateResolutionService : IRateResolutionService
         FeeScheduleLine line,
         CancellationToken ct)
     {
+        string? referenceFailure = null;
+
         if (schedule.BaseMpfsFeeScheduleId is not null)
         {
             var baseSchedule = await _feeScheduleRepo.GetByIdAsync(
                 request.TenantId, schedule.BaseMpfsFeeScheduleId, ct);
 
             if (baseSchedule is null)
-                return (null, $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} not found");
-
-            var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
-            if (baseLine is null
-                || baseLine.RateType is FeeScheduleRateType.PercentOfBilled or FeeScheduleRateType.PercentOfMedicare)
             {
-                return (null,
-                    $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} has no Medicare rate " +
-                    $"for {request.ProcedureCode}");
+                referenceFailure = $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} not found";
             }
+            else
+            {
+                var baseLine = FindRateLine(baseSchedule, request.ProcedureCode, request.Modifiers);
+                var usable = baseLine?.RateType switch
+                {
+                    FeeScheduleRateType.FlatRate => true,
+                    // An RVU line needs a conversion factor; CalculateRvuAmount would otherwise
+                    // fall back to the stored Rate, which is not maintained for RVU lines.
+                    FeeScheduleRateType.Rvu      => baseSchedule.ConversionFactor.HasValue,
+                    _                            => false,
+                };
 
-            return (CalculateMedicareLineAmount(baseSchedule, baseLine, request.PlaceOfServiceCode), null);
+                if (usable)
+                    return (CalculateMedicareLineAmount(baseSchedule, baseLine!, request.PlaceOfServiceCode), null);
+
+                referenceFailure =
+                    $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} has no usable Medicare rate " +
+                    $"for {request.ProcedureCode}";
+            }
         }
 
         // Inline RVUs: only usable when a conversion factor is configured — CalculateRvuAmount
@@ -549,12 +565,19 @@ public class RateResolutionService : IRateResolutionService
         if (schedule.ConversionFactor.HasValue
             && (line.WorkRvu.HasValue || line.PeRvu.HasValue || line.PeRvuFacility.HasValue || line.MpRvu.HasValue))
         {
+            if (referenceFailure is not null)
+            {
+                _logger.LogWarning(
+                    "Percent-of-Medicare for {ProcedureCode}: {Reason}; using inline RVUs",
+                    LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(referenceFailure));
+            }
+
             return (CalculateRvuAmount(schedule, line, request.PlaceOfServiceCode), null);
         }
 
-        return (null,
-            $"Percent-of-Medicare rate for {request.ProcedureCode} has no Medicare reference schedule " +
-            "or inline RVUs to price against");
+        return (null, referenceFailure
+            ?? $"Percent-of-Medicare rate for {request.ProcedureCode} has no Medicare reference schedule " +
+               "or inline RVUs to price against");
     }
 
     // ── RVU calculation ───────────────────────────────────────────────
