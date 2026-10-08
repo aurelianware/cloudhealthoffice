@@ -167,6 +167,14 @@ public class PaymentRun
     public List<string> MissingApprovedAmountClaimIds { get; set; } = new();
 
     /// <summary>
+    /// Claims not paid because their service-line paid amounts (SVC03) do not
+    /// add up to their approved amount (CLP04), so their 835 would not balance.
+    /// A line with no paid amount counts as 0. They stay Approved in
+    /// claims-service and are picked up once their line amounts are corrected.
+    /// </summary>
+    public List<string> UnbalancedServiceLineClaimIds { get; set; } = new();
+
+    /// <summary>
     /// Claims whose payment reservation this run held, and which were released
     /// after it failed or was cancelled without paying them: automatically (no
     /// payment and no 835 in payment-service) or by a second approver. A later

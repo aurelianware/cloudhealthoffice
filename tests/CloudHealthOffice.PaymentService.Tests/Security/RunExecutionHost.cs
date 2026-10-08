@@ -38,6 +38,45 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
     public InMemoryReservationAuditLog Audit { get; } = new();
     public ManualClock Clock { get; } = new();
 
+    /// <summary>
+    /// Records the payment a payment run made for a claim the stand-in holds
+    /// (once): a reversal recoups that recorded amount, so a reversal needs it.
+    /// </summary>
+    public Payment SeedOriginalPayment(string claimId)
+    {
+        var existing = Payments.All.FirstOrDefault(p => !p.IsReversal && p.ClaimPayments.Any(cp => cp.ClaimId == claimId));
+        if (existing != null)
+            return existing;
+
+        var claim = Claims.Get(claimId).Dto;
+        var paid = claim.ApprovedAmount ?? 0m;
+        return Payments.CreateAsync(new Payment
+        {
+            CheckNumber = "0000999999",
+            PaymentMethod = "ACH",
+            TotalPaymentAmount = paid,
+            Status = PaymentStatus.Posted,
+            ClaimPayments =
+            {
+                new ClaimPayment
+                {
+                    ClaimId = claimId,
+                    PatientControlNumber = claim.ClaimNumber,
+                    ClaimStatusCode = "1",
+                    ChargeAmount = claim.TotalChargeAmount,
+                    PaymentAmount = paid,
+                    ServiceLines = (claim.ServiceLines ?? new List<ClaimServiceLineDto>())
+                        .Select(sl => new ServiceLinePayment
+                        {
+                            LineNumber = sl.LineNumber, ProcedureCode = sl.ProcedureCode,
+                            ChargeAmount = sl.ChargeAmount, PaymentAmount = sl.LinePaidAmount ?? 0m, Units = sl.Units,
+                        })
+                        .ToList(),
+                },
+            },
+        }).GetAwaiter().GetResult();
+    }
+
     /// <summary>The reconciliation job (its timer is off here; tests call RunOnceAsync).</summary>
     public ReservationReconciliationJob ReconciliationJob => Services.GetRequiredService<ReservationReconciliationJob>();
 
@@ -45,6 +84,8 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Development");
         builder.UseSetting("PaymentRuns:ReservationReconciliationEnabled", "false");
+        // TRN03 (and BPR10 on ACH): required for every 835.
+        builder.UseSetting("Era:OriginatingCompanyId", "1123456789");
         builder.ConfigureServices(services =>
         {
             var remove = services

@@ -17,7 +17,7 @@ public class EraGeneratorServiceTests
             TenantId = "tenant-1",
             CheckNumber = "CHK12345",
             PaymentMethod = "ACH",
-            TotalPaymentAmount = 150.00m,
+            TotalPaymentAmount = 140.00m, // balanced: CLP04 150.00 - PLB 10.00
             PaymentDate = new DateTime(2026, 3, 1),
             PayerName = "Test Payer",
             PayerId = "PAYER01",
@@ -98,7 +98,7 @@ public class EraGeneratorServiceTests
         var edi = service.Generate835(payment, tp);
 
         Assert.Contains("ST*835*0001*005010X221A1~", edi);
-        Assert.Contains("BPR*C*150.00*C*ACH*CCP*01*011000015*DA*111122223333*1234567890**01*021000021*DA*444455556666*20260301~", edi);
+        Assert.Contains("BPR*C*140.00*C*ACH*CCP*01*011000015*DA*111122223333*1234567890**01*021000021*DA*444455556666*20260301~", edi);
         Assert.Contains("TRN*1*CHK12345*1234567890~", edi);
         Assert.Contains("N1*PR*Test Payer*XV*PAYER01~", edi);
         Assert.Contains("N1*PE*Test Clinic*XX*1234567890~", edi);

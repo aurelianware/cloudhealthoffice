@@ -83,6 +83,7 @@ public sealed class RunConcurrencyTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         var runId = await CreateAsync("/api/reversalruns");
         _host.ReversalRuns.AfterGet = Rendezvous(2);
 
@@ -152,6 +153,7 @@ public sealed class RunConcurrencyTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         var runA = await CreateAsync("/api/reversalruns");
         var runB = await CreateAsync("/api/reversalruns");
         _host.Payments.AfterPaidLookup = Rendezvous(2);
@@ -208,6 +210,7 @@ public sealed class RunConcurrencyTests : IDisposable
     {
         _host.Claims.Add("clm-r1", status: "Paid", npi: "9999999992");
         _host.Claims.AddPendingReversal("adj-1", "clm-r1");
+        _host.SeedOriginalPayment("clm-r1");
         _host.TradingPartners.MissingNpis.Add("9999999992");
 
         var response = await Approver(ApproverA).PostAsync($"/api/reversalruns/{await CreateAsync("/api/reversalruns")}/execute", null);

@@ -134,6 +134,7 @@ public class PaymentRunService : IPaymentRunService
             var fetched = await FetchApprovedClaimsAsync(paymentRun.TenantId, paymentRun.Criteria);
             var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
             claims = ExcludeWithoutApprovedAmount(claims, paymentRun);
+            claims = ExcludeUnbalancedServiceLines(claims, paymentRun);
 
             // Step 2: Resolve trading partners for each unique pay-to / billing
             //         provider NPI. A claim whose provider has none is not paid:
@@ -164,7 +165,7 @@ public class PaymentRunService : IPaymentRunService
             {
                 paymentRun.Warnings.Add(fetched.Count == 0
                     ? "No approved claims found matching criteria"
-                    : "No approved claims left to pay after excluding paid, reserved, trading-partner-less and missing-approved-amount claims");
+                    : "No approved claims left to pay after excluding paid, reserved, trading-partner-less, missing-approved-amount and unbalanced-service-line claims");
                 paymentRun.Status = PaymentRunStatus.Completed;
                 paymentRun.ExecutionCompletedAt = DateTime.UtcNow;
                 paymentRun.ExecutionDurationSeconds = (paymentRun.ExecutionCompletedAt.Value - paymentRun.ExecutionStartedAt.Value).TotalSeconds;
@@ -560,6 +561,39 @@ public class PaymentRunService : IPaymentRunService
         return payable;
     }
 
+    /// <summary>
+    /// Drops every claim whose service-line paid amounts (SVC03) do not add up
+    /// to its approved amount (CLP04): its 835 would not balance. A line with no
+    /// paid amount counts as 0, which is only accepted when the other lines
+    /// already make up the approved amount. Such a claim is not reserved or
+    /// paid, stays Approved in claims-service, and is listed on the run.
+    /// </summary>
+    private List<ClaimDto> ExcludeUnbalancedServiceLines(List<ClaimDto> claims, PaymentRun paymentRun)
+    {
+        var payable = new List<ClaimDto>(claims.Count);
+        foreach (var claim in claims)
+        {
+            var lines = claim.ServiceLines ?? new List<ClaimServiceLineDto>();
+            var linePaid = lines.Sum(sl => sl.LinePaidAmount ?? 0m);
+            if (lines.Count == 0 || linePaid == claim.ApprovedAmount)
+            {
+                payable.Add(claim);
+                continue;
+            }
+
+            var unpriced = lines.Count(sl => sl.LinePaidAmount is null);
+            paymentRun.UnbalancedServiceLineClaimIds.Add(claim.Id);
+            paymentRun.Warnings.Add(
+                $"Claim {claim.Id} not paid: its service-line paid amounts total {linePaid:F2} " +
+                (unpriced > 0 ? $"({unpriced} line(s) with no paid amount) " : string.Empty) +
+                $"but its approved amount is {claim.ApprovedAmount:F2}, so its 835 would not balance");
+            _logger.LogWarning(
+                "Claim {ClaimId} service lines do not balance to its approved amount; excluded from payment run {PaymentRunNumber}",
+                SanitizeForLog(claim.Id), paymentRun.PaymentRunNumber);
+        }
+        return payable;
+    }
+
     private List<ClaimDto> ExcludeWithoutTradingPartner(
         List<ClaimDto> claims, IReadOnlyDictionary<string, TradingPartnerSummary> resolved, PaymentRun paymentRun)
     {
@@ -743,7 +777,10 @@ public class PaymentRunService : IPaymentRunService
                         LineNumber = sl.LineNumber,
                         ProcedureCode = sl.ProcedureCode,
                         ChargeAmount = sl.ChargeAmount,
-                        PaymentAmount = sl.PaidAmount ?? sl.ChargeAmount,
+                        // Never the line charge: the recorded paid amount, or 0
+                        // (ExcludeUnbalancedServiceLines kept the claim only if
+                        // the lines balance to CLP04 with 0 for unpriced lines).
+                        PaymentAmount = sl.LinePaidAmount ?? 0m,
                         RevenueCode = sl.RevenueCode,
                         Units = sl.Units,
                         ServiceDateFrom = sl.ServiceDateFrom,
@@ -1046,6 +1083,17 @@ public class EditFailureDto
 
 public class ClaimServiceLineDto
 {
+    /// <summary>
+    /// The line's paid amount (SVC03): <see cref="PaidAmount"/> when sent,
+    /// otherwise claims-service's <c>ClaimLine.AdjudicationResult.PaidAmount</c>.
+    /// Null when neither is present; never the charge.
+    /// </summary>
+    [JsonIgnore]
+    public decimal? LinePaidAmount => PaidAmount ?? AdjudicationResult?.PaidAmount;
+
+    /// <summary>Mirrors <c>ClaimsService.Models.LineAdjudicationResult</c> for the paid amount.</summary>
+    public ClaimLineAdjudicationDto? AdjudicationResult { get; set; }
+
     public int LineNumber { get; set; }
     public string ProcedureCode { get; set; } = string.Empty;
     public decimal ChargeAmount { get; set; }
@@ -1054,6 +1102,11 @@ public class ClaimServiceLineDto
     public decimal Units { get; set; } = 1;
     public DateTime? ServiceDateFrom { get; set; }
     public DateTime? ServiceDateTo { get; set; }
+}
+
+public class ClaimLineAdjudicationDto
+{
+    public decimal? PaidAmount { get; set; }
 }
 
 internal class RemittancePostBody

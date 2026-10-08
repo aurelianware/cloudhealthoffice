@@ -65,8 +65,8 @@ public class TradingPartnerInfo
     public string? PayerAccountNumber { get; set; }
     /// <summary>
     /// Originating company identifier (BPR10, and TRN03): exactly 10
-    /// characters, typically "1" followed by the payer's TIN. Required for an
-    /// ACH BPR; generation fails without it. Sourced from Era:OriginatingCompanyId.
+    /// characters, typically "1" followed by the payer's TIN. Required for
+    /// every 835 (TRN03); generation fails without it. Sourced from Era:OriginatingCompanyId.
     /// </summary>
     public string? OriginatingCompanyId { get; set; }
     /// <summary>Originating company supplemental code (BPR11, situational, 9 characters).</summary>
@@ -92,6 +92,10 @@ public class EraGeneratorService : IEraGeneratorService
         var controlNumber = GenerateControlNumber(now);
         var sb = new StringBuilder();
         int segmentCount = 0;
+
+        // BPR02 = sum(CLP04) - sum(PLB); sum(SVC03) = CLP04 per claim.
+        Era835FinancialSegments.EnsureBalanced(
+            payment.TotalPaymentAmount, payment.ClaimPayments, payment.ProviderAdjustments);
 
         // ── ISA ────────────────────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, false,   // ISA is not counted in SE01
@@ -119,9 +123,9 @@ public class EraGeneratorService : IEraGeneratorService
 
         // ── TRN — Reassociation Trace Number ────────────────────────────
         // TRN01=1 (check/eft), TRN02=check/EFT number, TRN03=originating
-        // company id (same as BPR10; payer id when none is configured)
+        // company id (same as BPR10; required configuration)
         sb.Append(Seg(ref segmentCount, true,
-            Era835FinancialSegments.BuildTrn(payment.CheckNumber, payment.PayerId, tp)));
+            Era835FinancialSegments.BuildTrn(payment.CheckNumber, tp)));
 
         // ── DTM — Production Date ────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,

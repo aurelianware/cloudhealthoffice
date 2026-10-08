@@ -170,6 +170,12 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         var paymentDate = first.PaymentDate;
         var traceCheckNumber = first.CheckNumber;
 
+        // BPR02 = sum(CLP04) - sum(PLB); sum(SVC03) = CLP04 per claim.
+        Era835FinancialSegments.EnsureBalanced(
+            totalAmount,
+            inputs.SelectMany(i => i.Payment.ClaimPayments),
+            inputs.SelectMany(i => i.Payment.ProviderAdjustments));
+
         // ── ISA ────────────────────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, false,
             $"ISA*00*          *00*          " +
@@ -192,9 +198,9 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
             Era835FinancialSegments.BuildBpr(totalAmount, paymentMethod, paymentDate, tp)));
 
         // ── TRN ─ Reassociation Trace Number (envelope) ────────────────
-        // TRN03 = originating company id (same as BPR10; payer id when none is configured)
+        // TRN03 = originating company id (same as BPR10; required configuration)
         sb.Append(Seg(ref segmentCount, true,
-            Era835FinancialSegments.BuildTrn(traceCheckNumber, first.PayerId, tp)));
+            Era835FinancialSegments.BuildTrn(traceCheckNumber, tp)));
 
         // ── DTM ─ Production Date ──────────────────────────────────────
         sb.Append(Seg(ref segmentCount, true,

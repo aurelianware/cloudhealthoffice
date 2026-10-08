@@ -59,6 +59,7 @@ public class PaymentRunBatchedEndToEndTests
                 ["TradingPartners:Environment"] = "Production",
                 ["Payer:Name"] = "Cloud Health Office",
                 ["Payer:Id"] = "CHO",
+                ["Era:OriginatingCompanyId"] = "1123456789",
                 ["Payment:StartingCheckNumber"] = "1000000"
             })
             .Build();

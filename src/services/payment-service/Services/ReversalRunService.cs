@@ -272,6 +272,29 @@ public class ReversalRunService : IReversalRunService
                     continue;
                 }
 
+                // A reversal recoups what was actually paid: the claim payment
+                // payment-service recorded for the predecessor, never its
+                // approved or billed amount. No recorded payment (or an
+                // unbalanced one): not reversed, listed for an operator.
+                var (original, notReversible) = await FindOriginalClaimPaymentAsync(pred.Id);
+                if (original is null)
+                {
+                    run.MissingPaidAmountClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) not reversed: {notReversible}; a reversal is never computed from approved or billed amounts");
+                    _logger.LogWarning(
+                        "Predecessor {ClaimId} has no single recorded payment; adjustment {AdjustmentId} not reversed by {ReversalRunNumber}",
+                        SanitizeForLog(pred.Id), SanitizeForLog(adj.Id), run.ReversalRunNumber);
+                    continue;
+                }
+                if (Era835FinancialSegments.ServiceLineBalanceProblem(original) is { } unbalanced)
+                {
+                    run.UnbalancedServiceLineClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) not reversed: its recorded payment does not balance ({unbalanced}), so its reversal 835 would not balance");
+                    continue;
+                }
+
                 // One reversal per claim, even across concurrent runs.
                 var reservedNow = await _reservations.TryReserveAsync(new ClaimReservation
                 {
@@ -292,7 +315,7 @@ public class ReversalRunService : IReversalRunService
                 }
 
                 var checkNumber = $"R-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
-                var payment = await BuildReversalPaymentAsync(pred, run, tradingPartnerId, checkNumber, approver);
+                var payment = await BuildReversalPaymentAsync(pred, original, run, tradingPartnerId, checkNumber, approver);
 
                 issuedPayments.Add(payment);
                 run.PaymentIds.Add(payment.Id);
@@ -600,15 +623,37 @@ public class ReversalRunService : IReversalRunService
         return seen;
     }
 
+    /// <summary>
+    /// The claim payment payment-service recorded for <paramref name="claimId"/>
+    /// in its (non-reversal) payment, or null with the reason when there is
+    /// none, or more than one so the amount paid is ambiguous.
+    /// </summary>
+    private async Task<(ClaimPayment? Original, string? Reason)> FindOriginalClaimPaymentAsync(string claimId)
+    {
+        var payments = await _paymentRepository.GetByClaimIdAsync(claimId) ?? Enumerable.Empty<Payment>();
+        var recorded = payments
+            .Where(p => !p.IsReversal)
+            .SelectMany(p => p.ClaimPayments.Where(cp => cp.ClaimId == claimId))
+            .ToList();
+        return recorded.Count switch
+        {
+            1 => (recorded[0], null),
+            0 => (null, "payment-service holds no recorded payment for it, so the amount paid is unknown"),
+            _ => (null, $"payment-service holds {recorded.Count} recorded payments for it, so the amount paid is ambiguous"),
+        };
+    }
+
     private async Task<Payment> BuildReversalPaymentAsync(
         ClaimDto pred,
+        ClaimPayment original,
         ReversalRun run,
         string? tradingPartnerId,
         string checkNumber,
         string approver)
     {
         var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
-        var originalApproved = pred.ApprovedAmount ?? pred.TotalChargeAmount;
+        // What the original payment actually paid, from payment-service's record.
+        var originalPaid = original.PaymentAmount;
 
         // Mirror the original CAS data (sign-flipped). We don't have the
         // payment-service's Payment row from the original PaymentRun in
@@ -628,7 +673,7 @@ public class ReversalRunService : IReversalRunService
         {
             CheckNumber = checkNumber,
             PaymentMethod = ReversalPaymentMethod,
-            TotalPaymentAmount = -originalApproved,
+            TotalPaymentAmount = -originalPaid,
             PaymentDate = run.ExecutionStartedAt ?? DateTime.UtcNow,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
             PayerId = _configuration["Payer:Id"] ?? "CHO",
@@ -653,20 +698,21 @@ public class ReversalRunService : IReversalRunService
                     // per Premise C; the generator emits whatever's in the
                     // ClaimPayment.
                     ClaimStatusCode = "22",
-                    ChargeAmount = pred.TotalChargeAmount,
-                    PaymentAmount = -originalApproved,
-                    PatientResponsibilityAmount = -(pred.PatientResponsibility ?? 0),
+                    ChargeAmount = original.ChargeAmount,
+                    PaymentAmount = -originalPaid,
+                    PatientResponsibilityAmount = -original.PatientResponsibilityAmount,
                     PayerClaimControlNumber = pred.PayerClaimControlNumber,
                     MemberId = pred.MemberId,
                     RenderingProviderNPI = pred.RenderingProviderNPI,
                     ClaimAdjustments = headerCas,
-                    ServiceLines = (pred.ServiceLines ?? new List<ClaimServiceLineDto>())
+                    // The original's recorded lines, payment sign-flipped.
+                    ServiceLines = original.ServiceLines
                         .Select(sl => new ServiceLinePayment
                         {
                             LineNumber = sl.LineNumber,
                             ProcedureCode = sl.ProcedureCode,
                             ChargeAmount = sl.ChargeAmount,
-                            PaymentAmount = -(sl.PaidAmount ?? sl.ChargeAmount),
+                            PaymentAmount = -sl.PaymentAmount,
                             RevenueCode = sl.RevenueCode,
                             Units = sl.Units,
                             ServiceDateFrom = sl.ServiceDateFrom,

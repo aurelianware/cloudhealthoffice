@@ -114,6 +114,8 @@ public class EraGeneratorServiceTests
     {
         var payment = CreateTestPayment();
         payment.TotalPaymentAmount = 0m;
+        payment.ClaimPayments[0].PaymentAmount = 0m;              // balanced: CLP04 = BPR02
+        payment.ClaimPayments[0].ServiceLines[0].PaymentAmount = 0m;
         var tp = CreateTestTradingPartner();
 
         var era = _generator.Generate835(payment, tp);
@@ -341,7 +343,9 @@ public class EraGeneratorServiceTests
     [Theory]
     [InlineData("CHK", "CHK")]
     [InlineData("NON", "NON")]
-    [InlineData("Check", "NON")]
+    [InlineData("Check", "CHK")]
+    [InlineData("check", "CHK")]
+    [InlineData("Wire", "NON")]
     public void Generate835_NonAchBpr_EmptyBpr05To15_DateInBpr16(string method, string expectedBpr04)
     {
         var payment = CreateTestPayment();
@@ -368,17 +372,104 @@ public class EraGeneratorServiceTests
     }
 
     [Fact]
-    public void Generate835_CheckWithoutOriginatingCompanyId_Trn03FallsBackToPayerId()
+    public void Generate835_CheckWithoutOriginatingCompanyId_Throws_NoSynthesisedTrn03()
     {
+        // TRN03 is required for every payment method; it is never made up
+        // from the payer id (previously "BCBS001"/"1999999999").
         var payment = CreateTestPayment();
         payment.PaymentMethod = "CHK";
         var tp = CreateTestTradingPartner();
         tp.OriginatingCompanyId = null;
 
-        var era = _generator.Generate835(payment, tp);
+        var ex = Assert.Throws<InvalidOperationException>(() => _generator.Generate835(payment, tp));
+        Assert.Contains("TRN03", ex.Message);
+    }
 
-        Assert.Equal("BCBS001", SegmentElements(era, "TRN")[3]);
-        Assert.Equal(17, SegmentElements(era, "BPR").Length);
+    [Fact]
+    public void Generate835_CheckWithOriginatingCompanyId_Trn03IsTheConfiguredId()
+    {
+        var payment = CreateTestPayment();
+        payment.PaymentMethod = "Check";
+
+        var era = _generator.Generate835(payment, CreateTestTradingPartner());
+
+        Assert.Equal("1123456789", SegmentElements(era, "TRN")[3]);
+        Assert.Equal("CHK", SegmentElements(era, "BPR")[4]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // BALANCING: BPR02 = sum(CLP04) - sum(PLB); sum(SVC03) = CLP04
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static void AssertBalanced(string era)
+    {
+        var segments = era.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
+        var bpr02 = decimal.Parse(segments.Single(s => s[0] == "BPR")[2]);
+        var clp04 = segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4]));
+        // PLB amounts are the odd elements from PLB04 on (reason:ref, amount pairs).
+        var plb = segments.Where(s => s[0] == "PLB")
+            .Sum(s => s.Skip(3).Where((_, i) => i % 2 == 1).Sum(decimal.Parse));
+        Assert.Equal(bpr02, clp04 - plb);
+
+        // Each CLP's SVC03 total equals its CLP04.
+        decimal? currentClp = null;
+        decimal svcTotal = 0;
+        var svcCount = 0;
+        foreach (var s in segments.Append(new[] { "END" }))
+        {
+            if (s[0] is "CLP" or "PLB" or "SE" or "END")
+            {
+                if (currentClp.HasValue && svcCount > 0)
+                    Assert.Equal(currentClp.Value, svcTotal);
+                currentClp = s[0] == "CLP" ? decimal.Parse(s[4]) : null;
+                svcTotal = 0;
+                svcCount = 0;
+            }
+            else if (s[0] == "SVC" && currentClp.HasValue)
+            {
+                svcTotal += decimal.Parse(s[3]);
+                svcCount++;
+            }
+        }
+    }
+
+    [Fact]
+    public void Generate835_WithProviderAdjustment_Balances_BprEqualsClpLessPlb()
+    {
+        var payment = CreateTestPayment();
+        payment.ProviderAdjustments.Add(new ProviderAdjustment
+        {
+            AdjustmentIdentifier = "FB", ReferenceIdentification = "WITHHOLD", Amount = 50.00m,
+            FiscalPeriodEnd = new DateTime(2026, 3, 31)
+        });
+        payment.TotalPaymentAmount = 1200.00m;   // 1250 CLP04 - 50 PLB
+
+        var era = _generator.Generate835(payment, CreateTestTradingPartner());
+
+        AssertBalanced(era);
+    }
+
+    [Fact]
+    public void Generate835_BprNotEqualToClpLessPlb_Throws()
+    {
+        var payment = CreateTestPayment();
+        payment.ProviderAdjustments.Add(new ProviderAdjustment { AdjustmentIdentifier = "FB", Amount = 50.00m });
+        // TotalPaymentAmount left at 1250: does not account for the PLB.
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            _generator.Generate835(payment, CreateTestTradingPartner()));
+        Assert.Contains("BPR02", ex.Message);
+    }
+
+    [Fact]
+    public void Generate835_ServiceLinesNotSummingToClp04_Throws()
+    {
+        var payment = CreateTestPayment();
+        payment.ClaimPayments[0].ServiceLines[0].PaymentAmount = 1500.00m; // the billed charge
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            _generator.Generate835(payment, CreateTestTradingPartner()));
+        Assert.Contains("SVC03", ex.Message);
     }
 
     [Theory]
