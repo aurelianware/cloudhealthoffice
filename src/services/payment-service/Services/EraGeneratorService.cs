@@ -93,9 +93,13 @@ public class EraGeneratorService : IEraGeneratorService
         var sb = new StringBuilder();
         int segmentCount = 0;
 
+        // BPR02 is never negative: a reversal payment's 835 is BPR02 = 0 with
+        // the recoupment carried forward in a PLB FB adjustment.
+        var (bprAmount, plbs, _) = Era835FinancialSegments.WithForwardBalance(
+            payment.TotalPaymentAmount, payment.ProviderAdjustments, payment.CheckNumber, now);
+
         // BPR02 = sum(CLP04) - sum(PLB); sum(SVC03) = CLP04 per claim.
-        Era835FinancialSegments.EnsureBalanced(
-            payment.TotalPaymentAmount, payment.ClaimPayments, payment.ProviderAdjustments);
+        Era835FinancialSegments.EnsureBalanced(bprAmount, payment.ClaimPayments, plbs);
 
         // ── ISA ────────────────────────────────────────────────────────
         sb.Append(Seg(ref segmentCount, false,   // ISA is not counted in SE01
@@ -119,7 +123,7 @@ public class EraGeneratorService : IEraGeneratorService
         // Throws when an ACH BPR cannot be filled (e.g. no BPR10 originating
         // company id) rather than emitting a misaligned segment.
         sb.Append(Seg(ref segmentCount, true,
-            Era835FinancialSegments.BuildBpr(payment.TotalPaymentAmount, payment.PaymentMethod, payment.PaymentDate, tp)));
+            Era835FinancialSegments.BuildBpr(bprAmount, payment.PaymentMethod, payment.PaymentDate, tp)));
 
         // ── TRN — Reassociation Trace Number ────────────────────────────
         // TRN01=1 (check/eft), TRN02=check/EFT number, TRN03=originating
@@ -148,10 +152,10 @@ public class EraGeneratorService : IEraGeneratorService
         }
 
         // ── PLB — Provider Level Adjustment (if any) ─────────────────────
-        if (payment.ProviderAdjustments.Any())
+        if (plbs.Any())
         {
             // PLB can carry up to 6 adjustment reason/amount pairs per segment
-            foreach (var chunk in payment.ProviderAdjustments.Chunk(6))
+            foreach (var chunk in plbs.Chunk(6))
             {
                 var plbAdjustments = string.Concat(
                     chunk.Select(adj =>

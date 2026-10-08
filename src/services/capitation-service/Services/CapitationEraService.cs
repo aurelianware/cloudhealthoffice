@@ -126,9 +126,13 @@ public class CapitationEraService : ICapitationEraService
         var paymentMethod = tp.PayerRoutingNumber is not null && tp.PayeeRoutingNumber is not null
             ? "ACH"
             : !string.IsNullOrEmpty(statement.CheckNumber) ? "CHK" : "NON";
+        // BPR02 is never negative: a net-negative statement (retro
+        // disenrollments exceeding the month) is BPR02 = 0 and its balance is
+        // carried forward in a PLB FB adjustment below.
+        var bprAmount = Math.Max(statement.NetPayable, 0m);
         sb.Append(Seg(ref segmentCount, true,
             Era835FinancialSegmentBuilder.BuildBpr(
-                statement.NetPayable, paymentMethod, statement.PaymentDate ?? now, bankDetails)));
+                bprAmount, paymentMethod, statement.PaymentDate ?? now, bankDetails)));
         sb.Append(Seg(ref segmentCount, true,
             Era835FinancialSegmentBuilder.BuildTrn(statement.StatementNumber, bankDetails)));
 
@@ -175,6 +179,13 @@ public class CapitationEraService : ICapitationEraService
                 _ => "72"
             };
             plbItems.Add((plbCode, Esc(adj.Description)?[..Math.Min(adj.Description.Length, 30)] ?? "", adj.Amount));
+        }
+
+        // Negative net: the balance owed by the provider is carried forward
+        // (FB, negative amount, referenced by the statement number), BPR02 = 0.
+        if (statement.NetPayable < 0m)
+        {
+            plbItems.Add((Era835FinancialSegmentBuilder.ForwardBalanceCode, statement.StatementNumber, statement.NetPayable));
         }
 
         // PLB can carry up to 6 adjustment reason/amount pairs per segment

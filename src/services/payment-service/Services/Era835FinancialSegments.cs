@@ -64,6 +64,33 @@ public static class Era835FinancialSegments
         => Era835FinancialSegmentBuilder.BuildTrn(checkOrEftNumber, BankDetails(tp));
 
     /// <summary>
+    /// BPR02 and the PLB adjustments of an 835 whose claims and PLBs net to
+    /// <paramref name="netAmount"/> (sum CLP04 - sum PLB). BPR02 is never
+    /// negative: a net-negative remittance (e.g. a reversal run's
+    /// recoupment) is BPR02 = 0, with a forward-balance PLB (FB, amount =
+    /// the negative net, reference = the 835's trace number) carrying what
+    /// the provider owes, so sum(CLP04) - sum(PLB) = BPR02 = 0.
+    /// <paramref name="forwardBalance"/> is that negative amount (0 when none).
+    /// </summary>
+    public static (decimal BprAmount, List<ProviderAdjustment> ProviderAdjustments, decimal ForwardBalance) WithForwardBalance(
+        decimal netAmount, IEnumerable<ProviderAdjustment> providerAdjustments, string traceNumber, DateTime fiscalPeriodEnd)
+    {
+        var plbs = providerAdjustments.ToList();
+        if (netAmount >= 0m)
+            return (netAmount, plbs, 0m);
+
+        plbs.Add(new ProviderAdjustment
+        {
+            AdjustmentIdentifier = Era835FinancialSegmentBuilder.ForwardBalanceCode,
+            ReferenceIdentification = traceNumber,
+            Amount = netAmount,
+            FiscalPeriodEnd = fiscalPeriodEnd,
+            Description = "Negative balance carried forward (provider receivable)",
+        });
+        return (0m, plbs, netAmount);
+    }
+
+    /// <summary>
     /// The balancing problem of one claim's service lines, or null: when a
     /// claim carries service lines, the sum of their payments (SVC03) must
     /// equal the claim payment (CLP04).

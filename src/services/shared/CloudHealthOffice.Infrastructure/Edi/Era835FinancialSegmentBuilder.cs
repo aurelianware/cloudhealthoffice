@@ -42,7 +42,10 @@ public sealed class Era835BankDetails
 /// For CHK and NON, BPR05-BPR15 are empty and BPR16 carries the date. A
 /// zero-amount 835 moves no money: it is always NON with BPR01 = H
 /// (notification only), whatever payment method was asked for, and needs no
-/// bank details.
+/// bank details. BPR02 is never negative: a net-negative remittance carries
+/// BPR02 = 0 and puts the balance in a PLB forward-balance adjustment
+/// (<see cref="ForwardBalanceCode"/>, negative amount), so that
+/// sum(CLP04) - sum(PLB) = BPR02 = 0.
 ///
 /// TRN03 (required for every payment method) is the originating company
 /// identifier, identical to BPR10 on an ACH BPR. It is never synthesised,
@@ -50,6 +53,14 @@ public sealed class Era835BankDetails
 /// </summary>
 public static class Era835FinancialSegmentBuilder
 {
+    /// <summary>
+    /// PLB03-1 adjustment reason code "FB" (forward balance): a negative
+    /// remittance balance carried to a later 835 (005010X221A1, balance
+    /// forward processing). The PLB amount is the negative balance, making
+    /// BPR02 = 0; the later 835 that recovers it carries a positive FB.
+    /// </summary>
+    public const string ForwardBalanceCode = "FB";
+
     /// <summary>
     /// The BPR04 payment method code for a payment method. ACH is emitted as
     /// ACH only when the payer's bank routing number is configured; otherwise
@@ -124,6 +135,13 @@ public static class Era835FinancialSegmentBuilder
     /// <summary>The BPR segment, terminator included.</summary>
     public static string BuildBpr(decimal totalAmount, string? paymentMethod, DateTime paymentDate, Era835BankDetails details)
     {
+        // BPR02 is never negative (005010X221A1). A net-negative remittance
+        // is BPR02 = 0 with the balance carried forward in a PLB (FB).
+        if (totalAmount < 0m)
+            throw new InvalidOperationException(
+                $"Cannot build the 835 BPR segment: BPR02 must not be negative ({totalAmount:F2}); " +
+                "carry a negative balance forward in a PLB (FB) and emit BPR02 = 0");
+
         var method = ResolvePaymentMethod(totalAmount, paymentMethod, details);
         EnsureCanBeBuilt(method, details);
 

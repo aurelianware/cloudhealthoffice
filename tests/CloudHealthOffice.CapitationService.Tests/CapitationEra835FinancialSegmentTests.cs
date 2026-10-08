@@ -121,6 +121,27 @@ public class CapitationEra835FinancialSegmentTests
     }
 
     [Fact]
+    public void NegativeNetPayable_Bpr02Zero_BalanceCarriedForwardInPlb()
+    {
+        var statement = Statement(net: 0m);
+        statement.Adjustments.Add(new CapitationAdjustment
+        {
+            Type = CapitationAdjustmentType.RetroDisenrollment,
+            Description = "Retro term",
+            Amount = -40m,
+        });
+        statement.RecalculateTotals();
+        Assert.Equal(-40m, statement.NetPayable);
+
+        var edi = Service().Generate835ForStatement(statement, Contract, Ach());
+
+        var bpr = Segment(edi, "BPR");
+        Assert.Equal(new[] { "H", "0.00", "C", "NON" }, bpr.Skip(1).Take(4));
+        var plb = Segment(edi, "PLB");
+        Assert.Contains($"*FB:{statement.StatementNumber}*-40.00", string.Join("*", plb));
+    }
+
+    [Fact]
     public void Trn03_IsOriginatingCompanyId()
     {
         var statement = Statement();

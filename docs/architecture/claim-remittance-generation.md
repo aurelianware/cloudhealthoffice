@@ -323,6 +323,17 @@ never its approved or billed amount. With no single recorded payment the
 claim is not reversed (`ReversalRun.MissingPaidAmountClaimIds`); with an
 unbalanced recorded payment, `ReversalRun.UnbalancedServiceLineClaimIds`.
 
+BPR02 is never negative (the shared builder refuses it). An 835 whose
+claims and PLBs net below zero (a reversal recoupment, or payments and
+reversals netting negative for one partner) is BPR01 = `H`, BPR02 = `0.00`,
+BPR04 = `NON`, with a PLB forward-balance adjustment (`FB`, reference = the
+835's trace number, amount = the negative net) so that
+sum(CLP04) - sum(PLB) = BPR02 = 0. The balance owed is recorded on the
+envelope (`ForwardBalanceAmount`) and the reversal run
+(`OutstandingReceivables`, `OutstandingReceivableAmount`); there is no
+receivable ledger to recover it from a later 835 yet (follow-up).
+Capitation 835s with a negative NetPayable follow the same rule.
+
 ## Persistence shape (Decision 4 / 15)
 
 `EraEnvelopeRecord` lives in a separate `EraEnvelopes` MongoDB

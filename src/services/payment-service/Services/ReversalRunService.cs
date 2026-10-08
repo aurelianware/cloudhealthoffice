@@ -365,11 +365,30 @@ public class ReversalRunService : IReversalRunService
                     EdiContent = env.EdiContent,
                     ClaimCount = env.ClaimCount,
                     TotalPaymentAmount = env.TotalPaymentAmount,
+                    ForwardBalanceAmount = env.ForwardBalanceAmount,
                     ControlNumber = env.ControlNumber,
                     ClaimIds = env.ClaimIds.ToList(),
                     CreatedBy = approver,
                 });
                 run.EraEnvelopeIds.Add(record.Id);
+
+                // A recoupment nets the 835 below zero: BPR02 = 0 and the
+                // balance is carried forward (PLB FB). No receivable ledger
+                // exists yet, so the amount owed is recorded on the run.
+                if (env.ForwardBalanceAmount < 0m)
+                {
+                    var owed = -env.ForwardBalanceAmount;
+                    run.OutstandingReceivables.Add(new ProviderReceivable
+                    {
+                        TradingPartnerId = env.TradingPartnerId,
+                        EraEnvelopeId = record.Id,
+                        Reference = eraInputs.First(i => i.TradingPartnerId == env.TradingPartnerId).Payment.CheckNumber,
+                        Amount = owed,
+                    });
+                    run.OutstandingReceivableAmount += owed;
+                    run.Warnings.Add(
+                        $"Trading partner {env.TradingPartnerId}: reversal 835 nets to -{owed:F2}; BPR02 = 0.00 and {owed:F2} is carried forward (PLB FB) as owed by the provider; no receivable ledger recovers it yet");
+                }
                 foreach (var claimId in env.ClaimIds)
                 {
                     claimToEnvelopeId[claimId] = record.Id;
