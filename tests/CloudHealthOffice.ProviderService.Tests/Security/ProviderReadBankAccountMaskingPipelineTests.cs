@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using CloudHealthOffice.Infrastructure.Security;
 using CloudHealthOffice.ProviderService.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
@@ -228,7 +229,12 @@ public class ProviderReadBankAccountMaskingPipelineTests : IClassFixture<Provide
 
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.Should().Be(HttpStatusCode.OK, body);
-        body.Should().NotContain("3333", "an account set before dual control is not active and is not shown as the provider's account");
+        // Assert on the bankAccount field, not a body substring: "3333" can appear in
+        // a timestamp's fractional seconds (e.g. createdDate ...47.7073333Z).
+        using var json = JsonDocument.Parse(body);
+        json.RootElement.TryGetProperty("bankAccount", out var bankAccount).Should().BeTrue(body);
+        bankAccount.ValueKind.Should().Be(JsonValueKind.Null,
+            "an account set before dual control is not active and is not shown as the provider's account");
         ShouldHaveNoFullNumbers(body);
     }
 
