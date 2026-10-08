@@ -31,6 +31,8 @@ public class EnrollmentImportServiceDependentTests
         public List<EnrollmentTransaction> Transactions { get; } = new();
         public InMemoryEnrollmentEventRepository Events { get; } = new();
         public string? ResolvedPlanId { get; set; } = "resolved-plan-id";
+        public bool ReturnCreatedCoverageId { get; set; } = true;
+        public string? ThrowOnExistsFor { get; set; }
         public ImportSvc Service { get; }
 
         public CoverageRecordDto SeedCoverage(string memberId, string line, string level, string effective, string? termination = null)
@@ -54,7 +56,10 @@ public class EnrollmentImportServiceDependentTests
         {
             var memberClient = new Mock<IMemberServiceClient>();
             memberClient.Setup(m => m.ExistsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((string _, string id, CancellationToken _) => Existing.Contains(id));
+                .ReturnsAsync((string _, string id, CancellationToken _) =>
+                    id == ThrowOnExistsFor
+                        ? throw new HttpRequestException("member-service unavailable")
+                        : Existing.Contains(id));
             memberClient.Setup(m => m.CreateAsync(It.IsAny<string>(), It.IsAny<CreateMemberRequestDto>(), It.IsAny<CancellationToken>()))
                 .Callback((string _, CreateMemberRequestDto r, CancellationToken _) =>
                 {
@@ -86,7 +91,7 @@ public class EnrollmentImportServiceDependentTests
                         TerminationDate = r.TerminationDate
                     });
                 })
-                .Returns(Task.CompletedTask);
+                .ReturnsAsync(() => ReturnCreatedCoverageId ? StoredCoverage[^1].Id : null);
             coverageClient.Setup(c => c.GetMemberCoverageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string _, string memberId, CancellationToken _) =>
                     StoredCoverage.Where(s => s.MemberId == memberId)
@@ -583,6 +588,240 @@ public class EnrollmentImportServiceDependentTests
         var result = await new Harness().ImportAsync(batch);
 
         result.Errors.Should().Contain(e => e.Contains("NOT imported"));
+    }
+
+    // ── PR #1239 review follow-ups ──────────────────────────────────────
+
+    private static CoverageDetail Hd(string maint, string line, string? begin = null, string? end = null, string? level = null) => new()
+    {
+        MaintenanceType = maint,
+        InsuranceLineCode = line,
+        PlanCoverageDescription = "PLAN",
+        CoverageLevel = level,
+        BenefitBeginDate = begin,
+        BenefitEndDate = end
+    };
+
+    [Fact]
+    public async Task DependentWithoutRef0F_IsNotAttachedToThePrecedingSubscriber_AndIsRejected()
+    {
+        const string edi = """
+            ISA*00*          *00*          *ZZ*SPONSOR123     *ZZ*PAYER456       *260206*1200*^*00501*000000001*0*P*:~
+            ST*834*0001*005010X220A1~
+            INS*Y*18*001*AI*A~
+            REF*0F*SUB1~
+            NM1*IL*1*SMITH*JOHN~
+            INS*N*19*021*28*A~
+            NM1*IL*1*STRANGER*KID~
+            DMG*D8*20150610*M~
+            SE*8*0001~
+            """;
+        var batch = new Enrollment834EdiParser().Parse(edi, "x.edi");
+        batch.BatchId = "R1";
+
+        batch.Enrollments.Single().Dependents.Should().BeEmpty();
+        batch.DependentEnrollments.Should().ContainSingle(d => d.SubscriberId == null);
+
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var result = await h.ImportAsync(batch);
+
+        result.FailedCount.Should().Be(1);
+        h.Created.Should().BeEmpty();
+        h.Transactions.Should().Contain(t => t.Status == "Rejected" && t.MemberName.Contains("STRANGER"));
+    }
+
+    [Fact]
+    public async Task UnmappedHd024_OnAMemberThatStays_IsAmbiguousWhenTwoPoliciesAreOpen()
+    {
+        var h = new Harness { ResolvedPlanId = null };
+        h.Existing.Add("SUB1");
+        var a = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101");
+        var b = h.SeedCoverage("SUB1", "HLT", "EMP", "20250601");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("024", "HLT", end: "20260131")];
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "R2", Enrollments = { sub } });
+
+        a.TerminationDate.Should().BeNull();
+        b.TerminationDate.Should().BeNull();
+        result.Errors.Should().Contain(e => e.Contains("ambiguous"));
+    }
+
+    [Fact]
+    public async Task UnmappedHd024_OnAMemberThatStays_EndsTheSingleOpenPolicy()
+    {
+        var h = new Harness { ResolvedPlanId = null };
+        h.Existing.Add("SUB1");
+        var a = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("024", "HLT", end: "20260131")];
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R3", Enrollments = { sub } });
+
+        a.TerminationDate.Should().Be(new DateTime(2026, 1, 31));
+    }
+
+    [Fact]
+    public async Task Termination_WithoutDtp349_IsBoundedByTheTerminationDate_NotTheMaintenanceDate()
+    {
+        // January span already ends Jan 31; a later February span of the same
+        // plan must not be picked (the member's DTP*303 is Feb 1).
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var jan = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", termination: "20260131");
+        var feb = h.SeedCoverage("SUB1", "HLT", "EMP", "20260201");
+        var sub = Subscriber("SUB1", "024");          // TerminationDate 20260131, EnrollmentDate 20260201
+        sub.Coverage = [Hd("024", "HLT")];
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R4", Enrollments = { sub } });
+
+        feb.TerminationDate.Should().BeNull();
+        jan.TerminationDate.Should().Be(new DateTime(2026, 1, 31));
+        h.CoverageTerminations.Should().BeEmpty(); // Jan span already ends then — replay-safe no-op
+    }
+
+    [Fact]
+    public async Task Hd024_WithNoTerminationDateAnywhere_IsReportedNotDatedToday()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var a = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("024", "HLT")];
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "R5", Enrollments = { sub } });
+
+        a.TerminationDate.Should().BeNull();
+        result.Errors.Should().Contain(e => e.Contains("DTP*349"));
+    }
+
+    [Fact]
+    public async Task PlanChange_EffectiveLater_KeepsTheEarlierSpanOnTheOldPlan()
+    {
+        var h = new Harness { ResolvedPlanId = "plan-B" };
+        h.Existing.Add("SUB1");
+        var planA = h.SeedCoverage("SUB1", "HLT", "EMP", "20260101");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("001", "HLT", begin: "20260301")];
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R6", Enrollments = { sub } });
+
+        h.CoverageUpdates.Should().BeEmpty();
+        planA.PlanId.Should().Be("resolved-plan-id");
+        planA.TerminationDate.Should().Be(new DateTime(2026, 2, 28));
+        h.Coverage.Should().ContainSingle(c => c.PlanId == "plan-B" && c.EffectiveDate == new DateTime(2026, 3, 1));
+    }
+
+    [Fact]
+    public async Task RetroPlanChange_MatchesTheCoverageOpenOnTheChangeDate_NotOnTheImportDate()
+    {
+        var h = new Harness { ResolvedPlanId = "plan-B" };
+        h.Existing.Add("SUB1");
+        var planA = h.SeedCoverage("SUB1", "HLT", "EMP", "20250101", termination: "20250331");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("001", "HLT", begin: "20250301")];
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R7", Enrollments = { sub } });
+
+        planA.TerminationDate.Should().Be(new DateTime(2025, 2, 28));
+        h.Coverage.Should().ContainSingle();
+        h.Coverage[0].EffectiveDate.Should().Be(new DateTime(2025, 3, 1));
+        h.Coverage[0].TerminationDate.Should().Be(new DateTime(2025, 3, 31));
+    }
+
+    [Fact]
+    public async Task AddThenTerminate_InOneMemberLoop_ActsOnTheJustCreatedCoverage()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("021", "HLT", begin: "20260101"), Hd("024", "HLT", end: "20260331")];
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R8", Enrollments = { sub } });
+
+        h.Coverage.Should().ContainSingle();
+        h.StoredCoverage.Single().TerminationDate.Should().Be(new DateTime(2026, 3, 31));
+    }
+
+    [Fact]
+    public async Task AddThenChange_InOneMemberLoop_ActsOnTheJustCreatedCoverage()
+    {
+        var h = new Harness();
+        h.Existing.Add("SUB1");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("021", "HLT", begin: "20260101", level: "EMP"), Hd("001", "HLT", begin: "20260101", level: "FAM")];
+
+        await h.ImportAsync(new Enrollment834 { BatchId = "R9", Enrollments = { sub } });
+
+        h.Coverage.Should().ContainSingle();
+        h.StoredCoverage.Single().CoverageLevel.Should().Be("FAM");
+    }
+
+    [Fact]
+    public async Task AddThenTerminate_WhenCoverageServiceReturnsNoId_IsReportedNotDropped()
+    {
+        var h = new Harness { ReturnCreatedCoverageId = false };
+        h.Existing.Add("SUB1");
+        var sub = Subscriber("SUB1", "001");
+        sub.Coverage = [Hd("021", "HLT", begin: "20260101"), Hd("024", "HLT", end: "20260331")];
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "R10", Enrollments = { sub } });
+
+        result.Errors.Should().Contain(e => e.Contains("no id from coverage-service"));
+    }
+
+    [Fact]
+    public async Task DependentTermination_WithoutAnyTerminationDate_IsRejectedBeforeWriting()
+    {
+        var h = new Harness();
+        var child = Child("EMMA", "20120304", "024");
+        h.Existing.Add("SUB1");
+        h.Existing.Add(DependentId(child)!);
+        var cov = h.SeedCoverage(DependentId(child)!, "HLT", "ECH", "20250101");
+
+        var result = await h.ImportAsync(new Enrollment834
+        {
+            BatchId = "R11",
+            Enrollments = { Subscriber("SUB1", "001", child) }
+        });
+
+        h.Terminated.Should().BeEmpty();
+        cov.TerminationDate.Should().BeNull();
+        result.DependentsFailed.Should().Be(1);
+        h.Transactions.Should().Contain(t => t.MemberId == DependentId(child) && t.Status == "Rejected");
+        h.Events.AllEvents.Should().NotContain(e => e.MemberId == DependentId(child));
+    }
+
+    [Fact]
+    public async Task DependentWithUnsupportedMaintenanceType_IsRejected_NoEvent()
+    {
+        var h = new Harness();
+        var child = Child("EMMA", "20120304", "999");
+        h.Existing.Add("SUB1");
+
+        var result = await h.ImportAsync(new Enrollment834
+        {
+            BatchId = "R12",
+            Enrollments = { Subscriber("SUB1", "001", child) }
+        });
+
+        result.DependentsFailed.Should().Be(1);
+        h.Transactions.Should().Contain(t => t.MemberId == DependentId(child) && t.Status == "Rejected");
+        h.Events.AllEvents.Should().NotContain(e => e.MemberId == DependentId(child));
+        result.Errors.Should().Contain(e => e.Contains("999"));
+    }
+
+    [Fact]
+    public async Task StandaloneDependent_SubscriberLookupFailure_RecordsARejectedRowForTheDependent()
+    {
+        var h = new Harness { ThrowOnExistsFor = "SUB1" };
+        var baby = Child("BABY", "20260115", "021");
+
+        var result = await h.ImportAsync(new Enrollment834 { BatchId = "R13", DependentEnrollments = { baby } });
+
+        result.FailedCount.Should().Be(1);
+        h.Transactions.Should().ContainSingle(t => t.MemberId == DependentId(baby) && t.Status == "Rejected");
     }
 
     private static string FindRepoFile(string relative)

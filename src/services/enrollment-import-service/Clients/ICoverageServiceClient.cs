@@ -10,7 +10,8 @@ namespace EnrollmentImportService.Clients;
 /// </summary>
 public interface ICoverageServiceClient
 {
-    Task CreateAsync(string tenantId, CreateCoverageRequestDto request, CancellationToken ct = default);
+    /// <summary>Creates a coverage; returns coverage-service's id for it (null if the response carried none).</summary>
+    Task<string?> CreateAsync(string tenantId, CreateCoverageRequestDto request, CancellationToken ct = default);
 
     /// <summary>Every coverage on file for the member, including terminated ones (coverage-service's history endpoint).</summary>
     Task<IReadOnlyList<CoverageRecordDto>> GetMemberCoverageAsync(string tenantId, string memberId, CancellationToken ct = default);

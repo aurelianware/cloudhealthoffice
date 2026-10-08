@@ -86,7 +86,6 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
         // Subscribers seen so far in the current ST/SE, keyed by REF*0F, so
         // dependents can be attached by identifier rather than by position.
         var subscribersById = new Dictionary<string, MemberEnrollment>(StringComparer.Ordinal);
-        MemberEnrollment? lastSubscriber = null;
 
         foreach (var seg in doc.Segments)
         {
@@ -95,15 +94,14 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
                 case "ST":
                     // Each transaction set is self-contained: header sponsor
                     // and subscriber lookup do not carry across ST/SE.
-                    FlushMember(ref current, result, subscribersById, ref lastSubscriber);
+                    FlushMember(ref current, result, subscribersById);
                     subscribersById.Clear();
-                    lastSubscriber = null;
                     headerSponsor = null;
                     loop = Loop.Header;
                     break;
 
                 case "SE":
-                    FlushMember(ref current, result, subscribersById, ref lastSubscriber);
+                    FlushMember(ref current, result, subscribersById);
                     loop = Loop.Header;
                     break;
 
@@ -125,7 +123,7 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
 
                 case "INS":
                     // New Loop 2000 — subscriber (INS01=Y) or dependent (N).
-                    FlushMember(ref current, result, subscribersById, ref lastSubscriber);
+                    FlushMember(ref current, result, subscribersById);
 
                     current = new MemberLoop
                     {
@@ -251,7 +249,7 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
             }
         }
 
-        FlushMember(ref current, result, subscribersById, ref lastSubscriber);
+        FlushMember(ref current, result, subscribersById);
 
         result.TransactionCount = result.Enrollments.Count + result.DependentEnrollments.Count;
         return result;
@@ -263,8 +261,7 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
     private static void FlushMember(
         ref MemberLoop? member,
         Enrollment834 result,
-        Dictionary<string, MemberEnrollment> subscribersById,
-        ref MemberEnrollment? lastSubscriber)
+        Dictionary<string, MemberEnrollment> subscribersById)
     {
         if (member is null)
         {
@@ -291,20 +288,17 @@ public sealed class Enrollment834EdiParser : IEnrollment834EdiParser
             {
                 subscribersById[record.SubscriberId] = record;
             }
-            lastSubscriber = record;
         }
         else
         {
-            // REF*0F is required on every X220A1 member loop. Fall back to the
-            // most recent subscriber only when a non-compliant file omits it.
+            // REF*0F is required on every X220A1 member loop and is the only
+            // thing that ties a dependent to a family. Without it, don't guess
+            // by position (that writes to the wrong family when it's wrong):
+            // leave the dependent unassociated so the importer rejects it.
             MemberEnrollment? owner = null;
             if (!string.IsNullOrEmpty(record.SubscriberId))
             {
                 subscribersById.TryGetValue(record.SubscriberId, out owner);
-            }
-            else
-            {
-                owner = lastSubscriber;
             }
 
             var dependent = ToDependent(member, owner);

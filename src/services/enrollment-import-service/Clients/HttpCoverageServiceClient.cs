@@ -21,7 +21,7 @@ public class HttpCoverageServiceClient : ICoverageServiceClient
         _logger = logger;
     }
 
-    public async Task CreateAsync(string tenantId, CreateCoverageRequestDto request, CancellationToken ct = default)
+    public async Task<string?> CreateAsync(string tenantId, CreateCoverageRequestDto request, CancellationToken ct = default)
     {
         var client = _httpClientFactory.CreateClient(HttpClientName);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/coverage")
@@ -38,6 +38,18 @@ public class HttpCoverageServiceClient : ICoverageServiceClient
                 SanitizeForLog(request.MemberId), response.StatusCode, SanitizeForLog(body));
             throw new CoverageServiceException(
                 $"coverage-service create failed for {request.MemberId}: {response.StatusCode}", response.StatusCode);
+        }
+
+        // 201 body is the created Coverage; its Id lets later HD lines in the
+        // same member loop (e.g. 021 then 024) act on the record just made.
+        try
+        {
+            var created = await response.Content.ReadFromJsonAsync<CoverageRecordDto>(cancellationToken: ct).ConfigureAwait(false);
+            return string.IsNullOrEmpty(created?.Id) ? null : created.Id;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
         }
     }
 
