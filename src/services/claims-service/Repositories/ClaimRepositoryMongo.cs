@@ -829,7 +829,11 @@ public class ClaimRepositoryMongo : IClaimRepository
                     DeductibleAmount = g.Sum(c => c.AdjudicationResult!.DeductibleAmount),
                     CoinsuranceAmount = g.Sum(c => c.AdjudicationResult!.CoinsuranceAmount),
                     CopayAmount = g.Sum(c => c.AdjudicationResult!.CopayAmount),
-                    PatientResponsibility = g.Sum(c => c.AdjudicationResult!.PatientResponsibility)
+                    PatientResponsibility = g.Sum(c => c.AdjudicationResult!.PatientResponsibility),
+                    // OOP-eligible amount; legacy rows without it count full
+                    // patient responsibility.
+                    OopAppliedAmount = g.Sum(c => c.AdjudicationResult!.OopAppliedAmount
+                        ?? c.AdjudicationResult!.PatientResponsibility)
                 })
             .ToListAsync(ct);
 
@@ -845,7 +849,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         {
             var tier = row.NetworkTier ?? "InNetwork";
             deductible[tier]  = deductible.GetValueOrDefault(tier)  + row.DeductibleAmount;
-            oop[tier]         = oop.GetValueOrDefault(tier)         + row.PatientResponsibility;
+            oop[tier]         = oop.GetValueOrDefault(tier)         + row.OopAppliedAmount;
             coinsurance[tier] = coinsurance.GetValueOrDefault(tier) + row.CoinsuranceAmount;
             copay[tier]       = copay.GetValueOrDefault(tier)       + row.CopayAmount;
         }
@@ -870,6 +874,7 @@ public class ClaimRepositoryMongo : IClaimRepository
         public decimal CoinsuranceAmount { get; set; }
         public decimal CopayAmount { get; set; }
         public decimal PatientResponsibility { get; set; }
+        public decimal OopAppliedAmount { get; set; }
     }
 
     public async Task<bool> MarkSupersededProjectionAsync(

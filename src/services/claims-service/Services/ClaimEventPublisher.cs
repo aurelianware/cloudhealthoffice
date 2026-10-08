@@ -203,7 +203,7 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
         }
     }
 
-    private static ClaimFinalizedEvent BuildFinalizedEvent(Claim claim, string tenantId)
+    internal static ClaimFinalizedEvent BuildFinalizedEvent(Claim claim, string tenantId)
     {
         var adj = claim.AdjudicationResult;
         var lines = claim.ClaimLines.Select(l => new ClaimFinalizedLineItem
@@ -217,7 +217,14 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
                 .Where(r => r.ReasonCode == "2").Sum(r => r.Amount) ?? 0m,
             CopayApplied = l.AdjudicationResult?.AdjustmentReasons
                 .Where(r => r.ReasonCode == "3").Sum(r => r.Amount) ?? 0m,
-            OopApplied = (l.AdjudicationResult?.PatientResponsibility) ?? 0m,
+            // Engine-computed OOP-eligible amount; excludes cost share the
+            // plan keeps outside the OOP max. Claims persisted before the
+            // field existed carry null and keep the prior behavior
+            // (all patient responsibility counts), which was correct for
+            // them since no OOP exclusion could have applied.
+            OopApplied = l.AdjudicationResult?.OopAppliedAmount
+                ?? l.AdjudicationResult?.PatientResponsibility
+                ?? 0m,
             PlanPaid = l.AdjudicationResult?.PaidAmount ?? 0m,
             MemberResponsibility = l.AdjudicationResult?.PatientResponsibility ?? 0m
         }).ToList();
@@ -260,7 +267,7 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             DeductibleApplied = adj?.DeductibleAmount ?? 0m,
             CoinsuranceApplied = adj?.CoinsuranceAmount ?? 0m,
             CopayApplied = adj?.CopayAmount ?? 0m,
-            OopApplied = adj?.PatientResponsibility ?? 0m,
+            OopApplied = adj?.OopAppliedAmount ?? adj?.PatientResponsibility ?? 0m,
             PlanPaid = adj?.PayerPayment ?? 0m,
             MemberResponsibility = adj?.PatientResponsibility ?? 0m,
             LineItems = lines

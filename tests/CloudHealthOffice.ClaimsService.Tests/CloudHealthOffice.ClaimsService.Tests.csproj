@@ -23,6 +23,10 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\claims-service\claims-service.csproj" />
+    <!-- Cross-service seam test (claim finalization → accumulator OOP delta).
+         Aliased so accumulator-service's top-level Program and namespaces
+         don't collide with claims-service's in this assembly. -->
+    <ProjectReference Include="..\..\src\services\accumulator-service\accumulator-service.csproj" Aliases="accumulator" />
     <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
   <ItemGroup>

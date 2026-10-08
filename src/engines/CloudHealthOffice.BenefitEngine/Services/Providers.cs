@@ -210,4 +210,16 @@ public record CostShareRuleConfig
     /// Set to InsteadOfDeductible for "copay only, no deductible" services.
     /// </summary>
     public CopayApplicationMode CopayApplicationMode { get; init; } = CopayApplicationMode.AfterDeductible;
+
+    /// <summary>
+    /// Whether the member cost share this rule produces counts toward the
+    /// out-of-pocket maximum. Defaults to true. When false, the amount is
+    /// neither added to the OOP accumulators (individual, family, ACA
+    /// per-member cap) nor reduced by the OOP max cap — the member owes it
+    /// even after the OOP max is met. Deductible accumulation is unaffected.
+    /// Typical uses: out-of-network balances, non-EHB services,
+    /// grandfathered plan designs. For non-grandfathered plans, in-network
+    /// EHB cost sharing must count (45 CFR 156.130); plan validation warns.
+    /// </summary>
+    public bool OopApplies { get; init; } = true;
 }

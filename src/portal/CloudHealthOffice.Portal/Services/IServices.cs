@@ -1624,7 +1624,7 @@ public class PlanBenefit
     public int? AnnualLimit { get; set; }
     public string? VisitLimitPeriod { get; set; }
     public bool DeductibleApplies { get; set; }
-    public bool OopApplies { get; set; }
+    public bool OopApplies { get; set; } = true;
     public bool PriorAuthRequired { get; set; }
     public List<string> CptCodes { get; set; } = new();
 }

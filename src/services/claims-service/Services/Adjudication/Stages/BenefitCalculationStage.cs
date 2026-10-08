@@ -557,6 +557,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             CoinsuranceAmount = totals.TotalCoinsurance,
             CopayAmount = totals.TotalCopay,
             PatientResponsibility = totals.TotalMemberResponsibility,
+            OopAppliedAmount = totals.TotalOopApplied,
             PayerPayment = totals.TotalPlanPaid,
             DenialReasonCode = result.Success ? null : result.DenialReasonCode,
             DenialReason = result.Success ? null : result.DenialReasonDescription,
@@ -572,6 +573,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 AllowedAmount = l.AllowedAmount,
                 PaidAmount = l.PlanPaidAmount,
                 PatientResponsibility = l.MemberResponsibility,
+                OopAppliedAmount = l.OopAppliedAmount,
                 AdjustmentReasons = new List<ClaimAdjustmentReason>(),
             })
             .ToList();

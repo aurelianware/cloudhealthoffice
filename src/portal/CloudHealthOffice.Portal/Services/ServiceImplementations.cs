@@ -1679,7 +1679,7 @@ public class BenefitPlanService : IBenefitPlanService
         public decimal? CopayAmount { get; set; }
         public decimal? CoinsurancePercentage { get; set; }
         public bool DeductibleApplies { get; set; }
-        public bool OopApplies { get; set; }
+        public bool OopApplies { get; set; } = true;
         public bool PriorAuthRequired { get; set; }
         public bool RequiresPriorAuth { get; set; }
         public int? VisitLimit { get; set; }

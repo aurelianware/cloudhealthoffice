@@ -279,6 +279,32 @@ public sealed class ChoBenefitPlanProviderModelMappingTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MapToConfig_ProjectsOopApplies_ToEveryRuleInBothTiers(bool oopApplies)
+    {
+        var provider = Build();
+        var plan = SamplePlan();
+        plan.Benefits.Add(new MedicalBenefit
+        {
+            ServiceCategory = "OOPX",
+            InNetworkCopay = 30m,
+            InNetworkCoinsurance = 0.20m,
+            OutNetworkCopay = 60m,
+            OutNetworkCoinsurance = 0.40m,
+            DeductibleApplies = true,
+            OopApplies = oopApplies,
+        });
+
+        var category = provider.MapToConfig(plan).GetCategories("OOPX").Single();
+
+        category.InNetworkCostSharing.Should().HaveCount(3)
+            .And.OnlyContain(r => r.OopApplies == oopApplies);
+        category.OutOfNetworkCostSharing.Should().HaveCount(3)
+            .And.OnlyContain(r => r.OopApplies == oopApplies);
+    }
+
+    [Theory]
     [InlineData(0.20, 0.20)]
     [InlineData(20, 0.20)]
     [InlineData(1, 1)]
