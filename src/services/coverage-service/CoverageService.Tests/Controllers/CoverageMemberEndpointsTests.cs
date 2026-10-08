@@ -207,6 +207,197 @@ public class CoverageMemberEndpointsTests
     }
 
     [Fact]
+    public async Task TerminateMemberCoverage_FutureDate_SetsDateButStaysActiveUntilThen()
+    {
+        var (ctl, repo, _) = Build();
+        var c1 = ActiveCoverage("M1");
+        repo.Setup(r => r.GetActiveCoverageByMemberIdAsync(Tenant, "M1", It.IsAny<DateTime>(), null))
+            .ReturnsAsync(new List<Coverage> { c1 });
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+        var future = DateTime.UtcNow.Date.AddDays(30);
+
+        var resp = await ctl.TerminateMemberCoverage("M1", new TerminateMemberCoverageBody { TerminationDate = future });
+
+        resp.Should().BeOfType<OkObjectResult>();
+        c1.TerminationDate.Should().Be(future);
+        c1.Status.Should().Be(CoverageStatus.Active);
+        repo.Verify(r => r.UpdateAsync(c1), Times.Once);
+    }
+
+    [Fact]
+    public async Task TerminateMemberCoverage_SkipsCoverageAlreadyEndingOnOrBeforeDate()
+    {
+        var (ctl, repo, _) = Build();
+        var future = DateTime.UtcNow.Date.AddDays(30);
+        var endsSameDay = ActiveCoverage("M1");
+        endsSameDay.TerminationDate = future;
+        repo.Setup(r => r.GetActiveCoverageByMemberIdAsync(Tenant, "M1", It.IsAny<DateTime>(), null))
+            .ReturnsAsync(new List<Coverage> { endsSameDay });
+
+        var resp = await ctl.TerminateMemberCoverage("M1", new TerminateMemberCoverageBody { TerminationDate = future });
+
+        resp.Should().BeOfType<NotFoundObjectResult>();
+        repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task TerminateCoverage_FutureDate_SetsDateButStaysActive()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        repo.Setup(r => r.GetByIdAsync(Tenant, coverage.Id)).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+        var future = DateTime.UtcNow.Date.AddDays(10);
+
+        (await ctl.TerminateCoverage(coverage.Id, future, "07")).Should().BeOfType<NoContentResult>();
+
+        coverage.Status.Should().Be(CoverageStatus.Active);
+        coverage.TerminationDate.Should().Be(future);
+        coverage.MaintenanceReasonCode.Should().Be("07");
+        repo.Verify(r => r.UpdateAsync(coverage), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    public async Task TerminateCoverage_TodayOrPast_TerminatesNow(int days)
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        repo.Setup(r => r.GetByIdAsync(Tenant, coverage.Id)).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+        var date = DateTime.UtcNow.Date.AddDays(days);
+
+        await ctl.TerminateCoverage(coverage.Id, date);
+
+        coverage.Status.Should().Be(CoverageStatus.Terminated);
+        coverage.TerminationDate.Should().Be(date);
+    }
+
+    [Fact]
+    public async Task TerminateCoverage_NoDate_TerminatesToday()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        repo.Setup(r => r.GetByIdAsync(Tenant, coverage.Id)).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        await ctl.TerminateCoverage(coverage.Id);
+
+        coverage.Status.Should().Be(CoverageStatus.Terminated);
+        coverage.TerminationDate.Should().Be(DateTime.UtcNow.Date);
+    }
+
+    [Fact]
+    public async Task ReinstateCoverage_Terminated_ClearsTerminationAndRestoresActive()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        var effective = coverage.EffectiveDate;
+        coverage.Status = CoverageStatus.Terminated;
+        coverage.TerminationDate = DateTime.UtcNow.Date.AddMonths(-1);
+        repo.Setup(r => r.GetByIdAsync(Tenant, coverage.Id)).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        var resp = await ctl.ReinstateCoverage(coverage.Id, "41");
+
+        var body = resp.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeOfType<Coverage>().Subject;
+        body.Status.Should().Be(CoverageStatus.Active);
+        body.TerminationDate.Should().BeNull();
+        body.EffectiveDate.Should().Be(effective);
+        body.MaintenanceTypeCode.Should().Be("025");
+        body.MaintenanceReasonCode.Should().Be("41");
+        repo.Verify(r => r.UpdateAsync(coverage), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReinstateCoverage_FutureDatedTermination_ClearsIt()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        coverage.TerminationDate = DateTime.UtcNow.Date.AddDays(20);
+        repo.Setup(r => r.GetByIdAsync(Tenant, coverage.Id)).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        await ctl.ReinstateCoverage(coverage.Id);
+
+        coverage.TerminationDate.Should().BeNull();
+        coverage.Status.Should().Be(CoverageStatus.Active);
+    }
+
+    [Fact]
+    public async Task ReinstateCoverage_AlreadyOpen_IsNoOp()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        repo.Setup(r => r.GetByIdAsync(Tenant, coverage.Id)).ReturnsAsync(coverage);
+
+        (await ctl.ReinstateCoverage(coverage.Id)).Should().BeOfType<OkObjectResult>();
+        repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GroupSummary_CountsAReachedTerminationDateAsTerminated_BeforeTheSweepRuns()
+    {
+        var (ctl, repo, _) = Build();
+        var open = ActiveCoverage("M1");
+        var futureTerm = ActiveCoverage("M2");
+        futureTerm.TerminationDate = DateTime.UtcNow.Date.AddDays(5);
+        var notSwept = ActiveCoverage("M3");
+        notSwept.TerminationDate = DateTime.UtcNow.Date.AddDays(-1);
+        repo.Setup(r => r.GetByGroupNumberAsync(Tenant, "G"))
+            .ReturnsAsync(new List<Coverage> { open, futureTerm, notSwept });
+
+        var body = (await ctl.GetGroupCoverageSummary("G")).Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<GroupCoverageSummary>().Subject;
+
+        body.ActiveCoverage.Should().Be(2);
+        body.TerminatedCoverage.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-30)]
+    public async Task UpdateCoverage_SetPendingOnEffectiveCoverage_Returns400(int effectiveInDays)
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        coverage.EffectiveDate = DateTime.UtcNow.Date.AddDays(effectiveInDays);
+        repo.Setup(r => r.GetByIdAsync(Tenant, "cov-1")).ReturnsAsync(coverage);
+
+        var resp = await ctl.UpdateCoverage("cov-1", new UpdateCoverageRequest { Status = CoverageStatus.Pending });
+
+        var bad = resp.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value!.ToString().Should().Contain("Pending means not yet effective");
+        coverage.Status.Should().Be(CoverageStatus.Active);
+        repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateCoverage_SetPendingOnFutureDatedCoverage_Succeeds()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        coverage.EffectiveDate = DateTime.UtcNow.Date.AddDays(1);
+        repo.Setup(r => r.GetByIdAsync(Tenant, "cov-1")).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        var resp = await ctl.UpdateCoverage("cov-1", new UpdateCoverageRequest { Status = CoverageStatus.Pending });
+
+        resp.Should().BeOfType<OkObjectResult>();
+        coverage.Status.Should().Be(CoverageStatus.Pending);
+    }
+
+    [Fact]
+    public async Task ReinstateCoverage_Unknown_Returns404()
+    {
+        var (ctl, repo, _) = Build();
+        repo.Setup(r => r.GetByIdAsync(Tenant, "nope")).ReturnsAsync((Coverage?)null);
+
+        (await ctl.ReinstateCoverage("nope")).Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
     public async Task UpdateCoverage_SetTerminatedWithoutTerminationDate_Returns400()
     {
         var (ctl, repo, _) = Build();
