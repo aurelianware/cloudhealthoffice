@@ -53,7 +53,7 @@ public class CoverageRepositoryMongo : ICoverageRepository
         // Cosmos Query:
         // WHERE c.tenantId = @tenantId 
         // AND c.memberId = @memberId
-        // AND c.status = @activeStatus
+        // AND ARRAY_CONTAINS(@dosStatuses, c.status)
         // AND c.effectiveDate <= @serviceDate
         // AND (NOT IS_DEFINED(c.terminationDate) OR c.terminationDate >= @serviceDate)
 
@@ -63,7 +63,9 @@ public class CoverageRepositoryMongo : ICoverageRepository
         var filter = builder.And(
             builder.Eq(c => c.TenantId, tenantId),
             builder.Eq(c => c.MemberId, memberId),
-            builder.Eq(c => c.Status, CoverageStatus.Active),
+            // In force on DOS is decided by the date span, not current status
+            // (see Coverage.DateOfServiceStatuses).
+            builder.In(c => c.Status, Coverage.DateOfServiceStatuses),
             builder.Lte(c => c.EffectiveDate, date),
             builder.Or(
                 builder.Eq(c => c.TerminationDate, null),

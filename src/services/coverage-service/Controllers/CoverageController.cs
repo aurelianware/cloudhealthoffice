@@ -570,8 +570,13 @@ public class CoverageController : ControllerBase
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
         var asOf = request.TerminationDate == default ? DateTime.UtcNow.Date : request.TerminationDate;
+        // The DOS query also returns coverages already Terminated on or after
+        // asOf (they were in force on that date); this endpoint only terminates
+        // coverages that are still open, so skip those.
         var active = (await _coverageRepository.GetActiveCoverageByMemberIdAsync(
-            TenantId, memberId, asOf)).ToList();
+            TenantId, memberId, asOf))
+            .Where(c => c.Status != CoverageStatus.Terminated)
+            .ToList();
 
         if (active.Count == 0)
         {
