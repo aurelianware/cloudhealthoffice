@@ -315,9 +315,8 @@ public class ChoEligibilityAdapterTests
     }
 
     [Theory]
-    [InlineData(2)] // Pending — may not be effectuated yet (binder payment)
     [InlineData(4)] // Suspended
-    public async Task VerifyEligibility_PendingOrSuspendedCoverage_ReturnsNotEligible(int status)
+    public async Task VerifyEligibility_SuspendedCoverage_ReturnsNotEligible(int status)
     {
         var coverageArray = JsonSerializer.Serialize(new[]
         {

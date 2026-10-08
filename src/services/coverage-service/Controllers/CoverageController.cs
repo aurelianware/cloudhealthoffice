@@ -285,6 +285,20 @@ public class CoverageController : ControllerBase
             });
         }
 
+        // Pending means only "not yet effective" (it is in force for
+        // date-of-service eligibility from its effective date, see
+        // Coverage.DateOfServiceStatuses), so it can't be set on coverage that
+        // is already effective — e.g. to model an unpaid binder.
+        if (request.Status == CoverageStatus.Pending && coverage.EffectiveDate.Date <= DateTime.UtcNow.Date)
+        {
+            return BadRequest(new
+            {
+                Id = id,
+                Message = "Cannot set Status=Pending on coverage whose effective date is today or past; " +
+                          "Pending means not yet effective."
+            });
+        }
+
         if (request.PlanId != null) coverage.PlanId = request.PlanId;
         if (request.CoverageLevel != null) coverage.CoverageLevel = request.CoverageLevel;
         if (request.Status.HasValue) coverage.Status = request.Status.Value;

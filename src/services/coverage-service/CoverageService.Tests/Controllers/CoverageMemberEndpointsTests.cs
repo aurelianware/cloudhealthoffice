@@ -355,6 +355,39 @@ public class CoverageMemberEndpointsTests
         body.TerminatedCoverage.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-30)]
+    public async Task UpdateCoverage_SetPendingOnEffectiveCoverage_Returns400(int effectiveInDays)
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        coverage.EffectiveDate = DateTime.UtcNow.Date.AddDays(effectiveInDays);
+        repo.Setup(r => r.GetByIdAsync(Tenant, "cov-1")).ReturnsAsync(coverage);
+
+        var resp = await ctl.UpdateCoverage("cov-1", new UpdateCoverageRequest { Status = CoverageStatus.Pending });
+
+        var bad = resp.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value!.ToString().Should().Contain("Pending means not yet effective");
+        coverage.Status.Should().Be(CoverageStatus.Active);
+        repo.Verify(r => r.UpdateAsync(It.IsAny<Coverage>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateCoverage_SetPendingOnFutureDatedCoverage_Succeeds()
+    {
+        var (ctl, repo, _) = Build();
+        var coverage = ActiveCoverage("M1");
+        coverage.EffectiveDate = DateTime.UtcNow.Date.AddDays(1);
+        repo.Setup(r => r.GetByIdAsync(Tenant, "cov-1")).ReturnsAsync(coverage);
+        repo.Setup(r => r.UpdateAsync(It.IsAny<Coverage>())).ReturnsAsync((Coverage c) => c);
+
+        var resp = await ctl.UpdateCoverage("cov-1", new UpdateCoverageRequest { Status = CoverageStatus.Pending });
+
+        resp.Should().BeOfType<OkObjectResult>();
+        coverage.Status.Should().Be(CoverageStatus.Pending);
+    }
+
     [Fact]
     public async Task ReinstateCoverage_Unknown_Returns404()
     {

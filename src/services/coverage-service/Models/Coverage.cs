@@ -179,18 +179,30 @@ public class Coverage
     public string? LastUpdatedBy { get; set; }
 
     /// <summary>
-    /// Statuses whose coverage was in force for its effective/termination span.
+    /// Statuses whose coverage is in force for its effective/termination span.
     /// Date-of-service eligibility is decided by the span, not by the current
     /// status: a Terminated coverage still covers service dates on or before its
-    /// termination date (including after a retro-term). Pending is excluded: it
-    /// can mean "not yet effectuated" (e.g. ACA binder payment outstanding), so
-    /// treating it as in force would fail open. Suspended (payment hold with no
-    /// span of its own) is excluded too, as is any status not listed here, so a
-    /// future void/cancel status cannot leak into eligibility.
+    /// termination date (including after a retro-term), and a Pending coverage
+    /// covers service dates from its effective date — so a future-dated add is
+    /// eligible on its effective date without waiting for
+    /// <see cref="Services.CoverageStatusSweepJob"/> to promote it, and the span
+    /// check still rejects every date before it.
+    /// <para>
+    /// Pending here is ONLY the auto-assigned "not yet effective" state:
+    /// CoverageController.CreateCoverage sets it solely for a future effective
+    /// date, and UpdateCoverage refuses it otherwise. Any future "awaiting
+    /// effectuation" state (e.g. ACA binder payment outstanding) must be a
+    /// distinct status that stays out of this list — reusing Pending for it
+    /// would fail open.
+    /// </para>
+    /// Suspended (payment hold with no span of its own) is excluded, as is any
+    /// status not listed here, so a future void/cancel status cannot leak into
+    /// eligibility.
     /// </summary>
     public static readonly IReadOnlyList<CoverageStatus> DateOfServiceStatuses = new[]
     {
         CoverageStatus.Active,
+        CoverageStatus.Pending,
         CoverageStatus.Terminated,
         CoverageStatus.COBRA
     };

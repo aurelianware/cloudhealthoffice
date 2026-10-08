@@ -163,8 +163,8 @@ public class EligibilityServiceCoverageSelectionTests
     }
 
     [Theory]
-    [InlineData(2)] // Pending
     [InlineData(4)] // Suspended
+    [InlineData(0)] // unknown
     public void Select_NotInForceStatus_IsSkipped(int status)
     {
         var coverages = new List<CoverageDto>
@@ -173,6 +173,48 @@ public class EligibilityServiceCoverageSelectionTests
         };
 
         Assert.Null(EligibilityServiceImpl.SelectCoverage(coverages, new DateTime(2025, 3, 1), null, null));
+    }
+
+    [Fact]
+    public async Task QuickCheck_FutureDatedAddStillPending_IsEligibleOnItsEffectiveDate_NotTheDayBefore()
+    {
+        // coverage-service's /active returns it as stored: Pending (the sweep
+        // hasn't run). Pending is only "not yet effective", so the span decides.
+        var (svc, _) = Build(Array(Wire("cov-1", "PLAN-PPO", "HLT", "Pending", "2026-01-01")));
+
+        var dayBefore = await svc.QuickEligibilityCheckAsync(Tenant, "M1", null, new DateTime(2025, 12, 31));
+        var effectiveDay = await svc.QuickEligibilityCheckAsync(Tenant, "M1", null, new DateTime(2026, 1, 1));
+
+        Assert.False(dayBefore.IsActive);
+        Assert.True(effectiveDay.IsActive);
+    }
+
+    [Fact]
+    public async Task ChoAdapter_FutureDatedAddStillPending_IsEligibleOnItsEffectiveDate_NotTheDayBefore()
+    {
+        var body = Array(Wire("cov-1", "PLAN-PPO", "HLT", "Pending", "2026-01-01"));
+        var handler = new RoutingHandler(r =>
+            r.RequestUri!.AbsolutePath.EndsWith("/active") ? Json(HttpStatusCode.OK, body)
+            : r.RequestUri.AbsolutePath.EndsWith("/benefits") ? Json(HttpStatusCode.OK, "[]")
+            : Json(HttpStatusCode.NotFound, ""));
+        var factory = Substitute.For<IHttpClientFactory>();
+        factory.CreateClient("EligibilityDefault").Returns(new HttpClient(handler));
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Services:CoverageService"] = "http://c/api/v1" })
+            .Build();
+        var adapter = new ChoEligibilityAdapter(factory, configuration, Substitute.For<ILogger<ChoEligibilityAdapter>>());
+
+        var dayBefore = await adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = Tenant, SubscriberId = "M1", ServiceDate = new DateTime(2025, 12, 31), ServiceTypeCode = "30"
+        });
+        var effectiveDay = await adapter.VerifyEligibilityAsync(new EligibilityAdapterRequest
+        {
+            TenantId = Tenant, SubscriberId = "M1", ServiceDate = new DateTime(2026, 1, 1), ServiceTypeCode = "30"
+        });
+
+        Assert.False(dayBefore.IsEligible);
+        Assert.True(effectiveDay.IsEligible);
     }
 
     [Fact]

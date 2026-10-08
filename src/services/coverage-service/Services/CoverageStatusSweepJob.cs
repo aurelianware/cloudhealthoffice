@@ -37,11 +37,10 @@ public sealed class CoverageStatusSweepOptions
 /// the date is today or past; a Pending coverage (added ahead of its effective
 /// date) is promoted to Active once that date arrives.
 ///
-/// The "currently active" listings derive the same status from the dates
-/// themselves, so they never wait on this job. Date-of-service eligibility is
-/// span-based but excludes Pending, so a future-dated add becomes eligible
-/// once this sweep has promoted it — up to one interval after its effective
-/// date. Safe on several replicas: each
+/// Status hygiene only: date-of-service eligibility is span-based (Pending
+/// included from its effective date) and the "currently active" listings
+/// derive the same status from the dates themselves, so neither waits on this
+/// job. Safe on several replicas: each
 /// change is a conditional status update (expected status → new status), so a
 /// second replica's write is a no-op, and a coverage reinstated in the
 /// meantime is left alone.

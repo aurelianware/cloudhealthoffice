@@ -46,7 +46,7 @@ public class CoverageTerminationTests
         coverage.Status.Should().Be(status);
         coverage.TerminationDate.Should().Be(new DateTime(2025, 7, 31));
         // Still in force through the termination date, not after.
-        coverage.IsActiveOn(new DateTime(2025, 7, 31)).Should().Be(status != CoverageStatus.Pending);
+        coverage.IsActiveOn(new DateTime(2025, 7, 31)).Should().BeTrue();
         coverage.IsActiveOn(new DateTime(2025, 8, 1)).Should().BeFalse();
     }
 

@@ -474,13 +474,15 @@ public class CoverageDto
 
     /// <summary>
     /// In force on the date of service: within the effective/termination span,
-    /// with a status that was in force for that span (Active, Terminated with a
-    /// termination date, COBRA). Mirrors coverage-service <c>Coverage.IsActiveOn</c>.
+    /// with a status that is in force for that span (Active; Pending, which is
+    /// only the auto-assigned "not yet effective" state; Terminated with a
+    /// termination date; COBRA). Mirrors coverage-service <c>Coverage.IsActiveOn</c>
+    /// / <c>DateOfServiceStatuses</c>.
     /// </summary>
     public bool IsInForceOn(DateTime serviceDate)
     {
         var date = serviceDate.Date;
-        if (Status is not (1 or 3 or 5)) return false;
+        if (Status is not (1 or 2 or 3 or 5)) return false;
         if (Status == 3 && !TerminationDate.HasValue) return false;
         return date >= EffectiveDate.Date
             && (!TerminationDate.HasValue || date <= TerminationDate.Value.Date);

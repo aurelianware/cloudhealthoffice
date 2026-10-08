@@ -12,7 +12,8 @@ namespace CoverageService.Tests.Repositories;
 /// GetActiveCoverageByMemberIdAsync against a real mongod: a coverage is
 /// returned for a service date inside its effective/termination span whatever
 /// its current status (a terminated coverage was in force for its span),
-/// except statuses that are not in force (Pending, Suspended).
+/// except statuses that are not in force (Suspended). Pending — only the
+/// auto-assigned "not yet effective" state — is in force from its effective date.
 /// </summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public class CoverageRepositoryMongoActiveOnDateTests
@@ -105,10 +106,10 @@ public class CoverageRepositoryMongoActiveOnDateTests
         });
 
     [Fact]
-    public Task CobraFound_PendingNotFound_EvenOnceEffective() => RunAsync(
+    public Task CobraFound_SuspendedNotFound() => RunAsync(
         new[]
         {
-            Build("pend", CoverageStatus.Pending, D(2025, 1, 1)),
+            Build("susp", CoverageStatus.Suspended, D(2025, 1, 1)),
             Build("cobra", CoverageStatus.COBRA, D(2025, 1, 1), D(2025, 12, 31))
         },
         async repo =>
@@ -192,16 +193,26 @@ public class CoverageRepositoryMongoActiveOnDateTests
             .SweepOnceAsync();
 
     [Fact]
-    public Task FutureDatedAdd_BecomesEligibleOnItsEffectiveDate_AfterTheSweep() => RunAsync(
+    public Task FutureDatedAdd_IsEligibleOnItsEffectiveDate_WithoutTheSweep_NotTheDayBefore() => RunAsync(
         // As CoverageController.CreateCoverage stores an add ahead of its effective date.
         new[] { Build("future-add", CoverageStatus.Pending, D(2026, 1, 1)) },
         async repo =>
         {
-            // Before the effective date: not swept, not eligible.
-            (await SweepAsync(repo, D(2025, 12, 31))).Should().Be(0);
-            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2026, 1, 1))).Should().BeEmpty();
+            // The sweep has never run: still stored Pending.
+            (await repo.GetByIdAsync(Tenant, "future-add"))!.Status.Should().Be(CoverageStatus.Pending);
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2025, 12, 31))).Should().BeEmpty();
+            (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2026, 1, 1)))
+                .Select(c => c.Id).Should().Equal("future-add");
+        });
 
-            // On the effective date the sweep effectuates it.
+    [Fact]
+    public Task FutureDatedAdd_SweepPromotesToActive_EligibilityUnchanged() => RunAsync(
+        new[] { Build("future-add", CoverageStatus.Pending, D(2026, 1, 1)) },
+        async repo =>
+        {
+            (await SweepAsync(repo, D(2025, 12, 31))).Should().Be(0);
+
+            // On the effective date the sweep effectuates it (status hygiene).
             (await SweepAsync(repo, D(2026, 1, 1))).Should().Be(1);
             (await repo.GetByIdAsync(Tenant, "future-add"))!.Status.Should().Be(CoverageStatus.Active);
             (await repo.GetActiveCoverageByMemberIdAsync(Tenant, "M1", D(2026, 1, 1)))

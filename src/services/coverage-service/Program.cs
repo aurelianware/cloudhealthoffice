@@ -110,7 +110,8 @@ builder.Services.AddScoped<IPcpAssignmentService, PcpAssignmentService>();
 builder.Services.AddSingleton<ICareTeamProjector, CareTeamProjector>();
 builder.Services.AddScoped<PcpPanelReconciliationJob>();
 // Daily: flips coverages whose (future-dated) termination date has arrived to
-// Terminated, and promotes Pending ones whose effective date has arrived to Active.
+// Terminated, and promotes Pending ones whose effective date has arrived to Active
+// (status hygiene: eligibility and active listings already derive it from the dates).
 // CoverageStatusSweep:Enabled=false turns it off.
 builder.Services.AddHostedService<CoverageStatusSweepJob>();
 

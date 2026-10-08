@@ -61,11 +61,11 @@ public class CoverageRepositoryCosmosActiveOnDateTests
         statuses.Should().BeEquivalentTo(new[]
         {
             (int)CoverageStatus.Active,
+            (int)CoverageStatus.Pending,
             (int)CoverageStatus.Terminated,
             (int)CoverageStatus.COBRA
         });
-        statuses.Should().NotContain((int)CoverageStatus.Pending)
-            .And.NotContain((int)CoverageStatus.Suspended);
+        statuses.Should().NotContain((int)CoverageStatus.Suspended);
 
         // Open-ended (no/null termination date) only for non-Terminated status;
         // a Terminated record must have a termination date >= DOS.
