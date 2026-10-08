@@ -48,14 +48,20 @@ public class CoverageRepository : ICoverageRepository
             SELECT * FROM c 
             WHERE c.tenantId = @tenantId 
             AND c.memberId = @memberId
-            AND c.status = @activeStatus
+            AND ARRAY_CONTAINS(@dosStatuses, c.status)
             AND c.effectiveDate <= @serviceDate
-            AND (NOT IS_DEFINED(c.terminationDate) OR c.terminationDate >= @serviceDate)";
+            AND (((NOT IS_DEFINED(c.terminationDate) OR IS_NULL(c.terminationDate)) AND c.status != @terminatedStatus)
+                 OR c.terminationDate >= @serviceDate)";
 
         var queryDef = new QueryDefinition(queryText)
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@memberId", memberId)
-            .WithParameter("@activeStatus", (int)CoverageStatus.Active)
+            // Open-ended (no termination date) only for non-Terminated coverage:
+            // a Terminated record with no termination date fails closed.
+            .WithParameter("@terminatedStatus", (int)CoverageStatus.Terminated)
+            // In force on DOS is decided by the date span, not current status
+            // (see Coverage.DateOfServiceStatuses).
+            .WithParameter("@dosStatuses", Coverage.DateOfServiceStatuses.Select(s => (int)s).ToArray())
             .WithParameter("@serviceDate", serviceDate.Date);
 
         if (!string.IsNullOrEmpty(insuranceLineCode))
