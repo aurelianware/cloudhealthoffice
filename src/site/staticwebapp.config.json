@@ -59,6 +59,15 @@
       "rewrite": "/services/qnxt-cms-0057-f-adapter.html"
     },
     {
+      "route": "/services/dental-payers.html",
+      "redirect": "/services/dental-payers",
+      "statusCode": 301
+    },
+    {
+      "route": "/services/dental-payers",
+      "rewrite": "/services/dental-payers.html"
+    },
+    {
       "route": "/deploy.html",
       "redirect": "/deploy",
       "statusCode": 301

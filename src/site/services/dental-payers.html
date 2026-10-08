@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dental Payer Administration Software — CMS-0057-F for Dental Plans | Cloud Health Office</title>
+  <meta name="description" content="CMS-0057-F FHIR APIs and core administration for Medicaid, CHIP, and Medicare Advantage dental plans, deployed beside the claims system you already run." />
+  <meta name="author" content="Aurelianware, Inc." />
+  <link rel="canonical" href="https://cloudhealthoffice.com/services/dental-payers" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cloud Health Office" />
+  <meta property="og:url" content="https://cloudhealthoffice.com/services/dental-payers" />
+  <meta property="og:title" content="Dental plans have the same 2027 FHIR deadline" />
+  <meta property="og:description" content="Medicaid, CHIP, and Medicare Advantage dental plans owe the CMS-0057-F APIs by January 1, 2027. A dental scoping questionnaire, a discovery workshop, and a fixed-scope SOW." />
+  <meta property="og:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://cloudhealthoffice.com/services/dental-payers" />
+  <meta name="twitter:title" content="Dental plans have the same 2027 FHIR deadline" />
+  <meta name="twitter:description" content="CMS-0057-F APIs for Medicaid, CHIP, and Medicare Advantage dental plans, deployed beside the claims system you already run." />
+  <meta name="twitter:image" content="https://cloudhealthoffice.com/graphics/insights/cms0057-og-modern-payer-architecture.png" />
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Service",
+      "name": "CMS-0057-F and core administration services for dental plans",
+      "url": "https://cloudhealthoffice.com/services/dental-payers",
+      "serviceType": "Dental payer administration software and CMS-0057-F API implementation",
+      "description": "Per-plan scoping and implementation of the CMS-0057-F Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization APIs for dental managed care plans and dental benefit administrators, deployed beside the plan's existing claims system.",
+      "provider": {
+        "@type": "Organization",
+        "name": "Aurelianware, Inc.",
+        "url": "https://cloudhealthoffice.com"
+      },
+      "areaServed": {
+        "@type": "Country",
+        "name": "United States"
+      },
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "Medicaid, CHIP, and Medicare Advantage dental plans, dental benefit administrators, and their technology teams"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://cloudhealthoffice.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Services",
+          "item": "https://cloudhealthoffice.com/services"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Dental plans",
+          "item": "https://cloudhealthoffice.com/services/dental-payers"
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/sentinel.css" />
+  <link rel="stylesheet" href="/css/evidence-hub.css" />
+  <link rel="stylesheet" href="/css/services.css" />
+  <link rel="stylesheet" href="/css/conversion.css" />
+  <script src="/js/auth.js"></script>
+  <script src="/js/mobile-nav.js"></script>
+</head>
+<body class="ev">
+  <a href="#main-content" class="skip-to-main">Skip to main content</a>
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Cloud Health Office Home">
+        <img src="/graphics/logo-cloudhealthoffice-sentinel-primary.svg" alt="" class="nav-logo-img" aria-hidden="true" />
+        <span class="nav-logo-lockup">
+          <span class="nav-logo-text">Cloud Health Office</span>
+          <span class="nav-logo-tagline">Payer claims platform. Compliance first. Core replacement optional.</span>
+        </span>
+      </a>
+      <div class="nav-right">
+        <button class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" id="mobileMenuToggle">&#9776;</button>
+        <ul id="mainNav">
+          <li><a href="/platform">Product</a></li>
+          <li><a href="/cms-0057f-compliance">CMS-0057-F</a></li>
+          <li><a href="/evidence">Evidence</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/services" aria-current="true">Services</a></li>
+          <li><a href="/contact" style="color:#00ffff; font-weight:bold;">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof updateNavigation === 'function') { updateNavigation('#mainNav'); }
+    });
+  </script>
+
+  <main id="main-content">
+
+    <!-- ===== 1. HERO ===== -->
+    <header class="ev-hero">
+      <div class="ev-hero-inner">
+        <nav class="ev-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/services">Services</a><span>/</span><a href="/services/dental-payers" aria-current="page">Dental plans</a></nav>
+        <span class="ev-eyebrow">Professional Services &middot; Dental payer administration</span>
+        <h1>Dental plans have the same 2027 FHIR deadline.</h1>
+        <p class="ev-lede">
+          Medicaid, CHIP, and Medicare Advantage dental plans owe the same four APIs as the large medical plans
+          &mdash; Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization &mdash; by January 1, 2027.
+          Cloud Health Office deploys beside the dental claims system you already run, so you can meet the
+          deadline without replacing it.
+        </p>
+        <div class="ev-badges">
+          <span class="ev-badge ev-badge--cyan">Scoped per plan</span>
+          <span class="ev-badge">Beside your current core</span>
+          <span class="ev-badge ev-badge--green">Fixed-scope SOW</span>
+        </div>
+        <div class="ev-actions">
+          <a class="ev-btn" href="#get-started" data-ga-event="dental_payer_cta_click">Request a dental scoping call &rarr;</a>
+          <a class="ev-btn ev-btn--ghost" href="#in-scope">Is my plan in scope?</a>
+        </div>
+        <p class="ev-rule-definition">
+          <strong>CMS-0057-F</strong> is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some
+          exchange plans to offer FHIR APIs for patient access, provider access, payer-to-payer exchange, and prior
+          authorization by January 1, 2027.
+        </p>
+      </div>
+    </header>
+
+    <!-- ===== 2. WHO IS IN SCOPE ===== -->
+    <section class="ev-section" id="in-scope">
+      <div class="ev-container">
+        <span class="ev-eyebrow">Does CMS-0057-F apply to dental plans?</span>
+        <h2>Yes, if you administer dental benefits for a government program.</h2>
+        <p class="ev-sub">
+          The rule applies to Medicare Advantage organizations, Medicaid and CHIP fee-for-service programs,
+          Medicaid managed care plans, CHIP managed care entities, and QHP issuers on the federally facilitated
+          exchanges (<a href="https://www.cms.gov/priorities/burden-reduction/overview/interoperability/policies-and-regulations/cms-interoperability-and-prior-authorization-final-rule-cms-0057-f/cms-interoperability-and-prior-authorization-final-rule-cms-0057-f" rel="noopener">CMS</a>).
+          States are passing it straight to their dental contractors: California's Medi-Cal Dental division told
+          every Dental Managed Care Plan to stand up the Provider Access, Payer-to-Payer, and Prior Authorization
+          APIs by January 1, 2027 (<a href="https://www.dhcs.ca.gov/zh-cn/file/apl-26-006-interoperability-pdf/" rel="noopener">DHCS APL 26-006</a>).
+        </p>
+
+        <div class="ev-scroll">
+          <table class="ev-table">
+            <thead>
+              <tr><th scope="col">Dental line</th><th scope="col">Where it stands</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Medicaid / CHIP</td><td><span class="ev-what">In scope</span>Dental managed care plans and prepaid ambulatory health plans contracted by a state Medicaid or CHIP agency.</td></tr>
+              <tr><td>Medicare Advantage</td><td><span class="ev-what">In scope</span>Dental supplemental benefits were already covered by the earlier CMS-9115-F Patient Access API (<a href="https://www.nadp.org/cms-finalizes-interoperability-rules/" rel="noopener">NADP</a>).</td></tr>
+              <tr><td>Delegated DBM</td><td><span class="ev-what">Depends on the contract</span>The medical plan owns the obligation, but it usually needs dental data and authorizations from you to meet it.</td></tr>
+              <tr><td>Exchange SADP</td><td><span class="ev-what">Confirm with counsel</span>Stand-alone dental plans on the federal exchanges were exempted from CMS-9115-F.</td></tr>
+              <tr><td>Commercial dental</td><td><span class="ev-what">Not in scope</span>Employer and individual dental coverage outside these programs is not covered by the rule.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="ev-sub">
+          Decision timeframes, specific denial reasons, and public prior authorization metrics already apply from
+          2026. The four APIs are the 2027 work.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== 3. WHY DENTAL IS DIFFERENT ===== -->
+    <section class="ev-section ev-section--alt" id="dental-specific">
+      <div class="ev-container">
+        <span class="ev-eyebrow">What dental adds to the work</span>
+        <h2>The APIs are the same. The data behind them is not.</h2>
+        <p class="ev-sub">
+          Most CMS-0057-F guidance is written for medical plans. Dental claims, authorizations, and benefits carry
+          detail that medical-first tooling tends to drop. We scope these questions with your team before anyone
+          prices the build.
+        </p>
+
+        <ol class="svc-qsections">
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">A</span> Plan &amp; delegation</h3>
+            <ul>
+              <li>Which state contracts and lines of business does this dental system serve?</li>
+              <li>Are you a delegated dental benefit administrator for a medical plan, and who owns each API under that contract?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">B</span> Claims &amp; encounters (837D)</h3>
+            <ul>
+              <li>Where are tooth number, surface, quadrant, and arch stored on adjudicated claims?</li>
+              <li>How are CDT procedure codes held in claims history, and what does your CDT license allow you to display to members?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">C</span> Prior authorization &amp; predeterminations</h3>
+            <ul>
+              <li>Do pre-treatment estimates run through the same workflow as prior authorizations, or a separate one?</li>
+              <li>Which CDT codes require authorization today, and is that list already published?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">D</span> Benefits &amp; limits</h3>
+            <ul>
+              <li>How are frequency limits, age limits, and annual maximums applied, and is their history kept per member?</li>
+              <li>Do your 271 responses return remaining maximums and frequency history to dental offices today?</li>
+            </ul>
+          </li>
+          <li class="svc-qsection">
+            <h3><span class="svc-qsection__letter" aria-hidden="true">E</span> Providers &amp; attribution</h3>
+            <ul>
+              <li>How is a member attributed to a dental home or primary dentist for Provider Access?</li>
+              <li>How is in-network status determined for a dental provider on a given date of service?</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===== 4. BOTH SIDES ===== -->
+    <section class="ev-section" id="both-sides">
+      <div class="ev-container ev-narrow">
+        <span class="ev-eyebrow">Both ends of the dental transaction</span>
+        <h2>We also build the dental office side.</h2>
+        <p class="ev-sub">
+          Aurelianware builds <a href="https://clouddentaloffice.com" rel="noopener">Cloud Dental Office</a>, a dental
+          practice management platform built around 837D claims, 270/271 eligibility, and 835 remittance. We test
+          what a payer sends against what a real front desk and billing team need to receive.
+        </p>
+        <p class="ev-sub">
+          That matters for your network. An eligibility response that leaves out remaining maximums, or a
+          remittance that will not auto-post, turns into phone calls to your provider services team.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== 5. HOW WE WORK ===== -->
+    <section class="ev-section ev-section--alt" id="how-we-work">
+      <div class="ev-container">
+        <span class="ev-eyebrow">How we work with dental plans</span>
+        <h2>Compliance surface first. Core work when you choose.</h2>
+        <ol class="ev-flow">
+          <li>
+            <strong>Dental scoping call and questionnaire</strong>
+            <p>Your claims, data, and compliance teams answer the dental questions together. It tells us where each API's data lives in your current system.</p>
+          </li>
+          <li>
+            <strong>Fixed-scope SOW</strong>
+            <p>A statement of work with defined deliverables, assumptions, responsibilities, and exclusions, written from what scoping established.</p>
+          </li>
+          <li>
+            <strong>CMS-0057-F APIs beside your core</strong>
+            <p>Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization, deployed in your cloud and reading from the claims system you already run.</p>
+          </li>
+          <li>
+            <strong>Core administration, when you are ready</strong>
+            <p>Move claims, eligibility, or authorization workloads onto Cloud Health Office on your timeline. Optional, and never a condition of the API work.</p>
+          </li>
+        </ol>
+        <p class="ev-sub">
+          Source-available under BSL 1.1. Evaluate and run locally for free. Production use requires a license.
+          Deploy in your cloud or as a managed tenant. <a href="/pricing">See pricing &rarr;</a>
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== 6. LEAD FORM ===== -->
+    <section class="ev-section" id="get-started">
+      <div class="ev-container ev-narrow">
+        <span class="ev-eyebrow">Get started</span>
+        <h2>Request a dental scoping call.</h2>
+        <p class="ev-sub">
+          Tell us who you are and which dental plan this is for. We will send the dental scoping questions and
+          propose a time to walk through them.
+        </p>
+
+        <form data-lead-form data-lead-interest="dental-payer-scoping" action="__FORMSPREE_LEADS_ENDPOINT__" method="POST"
+              id="dentalPayerForm" class="cho-leadform svc-gate" aria-label="Request a dental plan scoping call">
+          <input type="hidden" name="_subject" value="Dental plan CMS-0057-F scoping request" />
+          <input type="hidden" name="interest" value="dental-payer-scoping" />
+          <input type="hidden" name="linesOfBusiness" id="dp-lob-summary" value="" />
+
+          <p class="svc-gate__required">Fields marked * are required.</p>
+
+          <div class="cho-leadform__row">
+            <div><label for="dp-first">First name *</label><input id="dp-first" name="firstName" required autocomplete="given-name" /></div>
+            <div><label for="dp-last">Last name *</label><input id="dp-last" name="lastName" required autocomplete="family-name" /></div>
+          </div>
+          <div>
+            <label for="dp-email">Work email *</label>
+            <input id="dp-email" type="email" name="email" required autocomplete="email" placeholder="you@dentalplan.com" />
+          </div>
+          <div class="cho-leadform__row">
+            <div><label for="dp-plan">Dental plan or company *</label><input id="dp-plan" name="company" required autocomplete="organization" /></div>
+            <div>
+              <label for="dp-role">Role *</label>
+              <select id="dp-role" name="role" required>
+                <option value="">Select…</option>
+                <option>CIO / CTO / IT leadership</option>
+                <option>Enterprise or solution architect</option>
+                <option>Interoperability or program lead</option>
+                <option>Claims or benefits configuration</option>
+                <option>Compliance</option>
+                <option>Operations</option>
+                <option>Consultant or advisor</option>
+                <option>Other</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset class="svc-gate__fieldset" aria-describedby="dp-lob-hint">
+            <legend>Dental line(s) of business *</legend>
+            <p class="svc-gate__hint" id="dp-lob-hint">Select every line of business this dental system serves.</p>
+            <div class="svc-gate__checks">
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Medicaid dental" /> Medicaid dental</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="CHIP dental" /> CHIP dental</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Medicare Advantage dental" /> Medicare Advantage dental</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Delegated DBM for a medical plan" /> Delegated DBM for a medical plan</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Exchange stand-alone dental" /> Exchange stand-alone dental</label>
+              <label class="svc-gate__check"><input type="checkbox" name="lineOfBusiness" value="Commercial dental" /> Commercial dental</label>
+            </div>
+          </fieldset>
+
+          <div>
+            <label for="dp-core">Current dental claims system (optional)</label>
+            <input id="dp-core" name="coreSystem" autocomplete="off" />
+          </div>
+
+          <p class="svc-gate__warning">
+            Please do not send PHI, member data, claim data, production credentials, security secrets, or other
+            sensitive production information through this form.
+          </p>
+
+          <div data-lead-error role="alert" aria-live="polite" class="cho-leadform__error" hidden></div>
+          <div class="svc-gate__actions">
+            <button type="submit" class="ev-btn">Request a dental scoping call</button>
+          </div>
+          <p class="cho-leadform__note">We reply within one business day.</p>
+        </form>
+
+        <div data-lead-thankyou data-for="dentalPayerForm" class="cho-leadform__thanks" tabindex="-1" hidden>
+          <h3>Thank you.</h3>
+          <p>
+            We will email the dental scoping questions to the address you gave and propose a time to walk through
+            them. We reply within one business day.
+          </p>
+          <p style="margin-bottom:0;"><a href="/services#offer-assessment">Read about the CMS-0057-F readiness assessment &rarr;</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 7. CREDIBILITY + LIMITS ===== -->
+    <section class="ev-section ev-section--alt" id="who">
+      <div class="ev-container ev-narrow">
+        <span class="ev-eyebrow">Who scopes it</span>
+        <p class="svc-cred">
+          Scoped by an architect with 25+ years in payer core systems, nearly two decades of them on QNXT.
+          <a href="/founder">Read the founder page &rarr;</a>
+        </p>
+
+        <div class="ev-limits">
+          <h3>What we do not claim</h3>
+          <ul>
+            <li>Cloud Health Office accepts 837D dental claims. Dental-specific adjudication rules, such as tooth and surface edits and frequency and age limits, are scoped and configured per plan, not shipped as a finished dental benefits engine.</li>
+            <li>No named dental plan customers or production dental deployments are claimed on this site.</li>
+            <li>No guarantee of regulatory compliance, and no legal advice. Your state contract may add requirements.</li>
+            <li>No certification, partnership, endorsement, or authorized-implementer status with any named vendor or association.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  <script>
+    // Lines of business: at least one is required, and the selection is also
+    // sent as one comma-separated field so it reads cleanly in the lead inbox.
+    // Without JavaScript the checkboxes still submit on their own.
+    (function () {
+      var form = document.getElementById('dentalPayerForm');
+      if (!form) return;
+      var boxes = form.querySelectorAll('input[name="lineOfBusiness"]');
+      var summary = document.getElementById('dp-lob-summary');
+      function sync() {
+        var picked = [];
+        for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) picked.push(boxes[i].value);
+        summary.value = picked.join(', ');
+        boxes[0].setCustomValidity(picked.length ? '' : 'Select at least one line of business.');
+      }
+      for (var i = 0; i < boxes.length; i++) boxes[i].addEventListener('change', sync);
+      sync();
+    })();
+  </script>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <h4>Cloud Health Office</h4>
+          <p>Payer claims platform. Compliance first. Core replacement optional. Meet CMS-0057-F without replacing QNXT, Facets, or HealthEdge.</p>
+          <p style="font-size:0.82rem; color:rgba(128,128,128,0.45);">BSL 1.1 &nbsp;&middot;&nbsp; Source-Available Platform</p>
+        </div>
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="/what-is">What is Cloud Health Office?</a></li>
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/solutions-payers">Solutions</a></li>
+            <li><a href="/cms-0057f-compliance">CMS-0057-F Compliance</a></li>
+            <li><a href="/evidence">Evidence</a></li>
+            <li><a href="/deploy">Deployment &amp; operating models</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Services</h5>
+          <ul>
+            <li><a href="/services">Professional Services</a></li>
+            <li><a href="/services#offer-assessment">CMS-0057-F assessment</a></li>
+            <li><a href="/services#offer-implementation">Implementation services</a></li>
+            <li><a href="/services/qnxt-cms-0057-f-adapter">QNXT CMS-0057-F adapter</a></li>
+            <li><a href="/services/dental-payers">Dental plans</a></li>
+            <li><a href="/services#offer-core-admin">Core administration advisory</a></li>
+            <li><a href="/services#offer-sow-review">Vendor &amp; SOW review</a></li>
+            <li><a href="/services#offer-fractional">Fractional architect</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h5>Company &amp; Contact</h5>
+          <ul>
+            <li><a href="/founder">Founder</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/start">Get the evaluator pack</a></li>
+            <li><a href="mailto:sales@cloudhealthoffice.com">sales@cloudhealthoffice.com</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cloud Health Office &mdash; Aurelianware, Inc. &nbsp;&middot;&nbsp; Source-available platform (BSL 1.1) &nbsp;&middot;&nbsp; Free for non-production use &nbsp;&middot;&nbsp; <a href="mailto:licensing@cloudhealthoffice.com" style="color:rgba(0,255,255,0.6);">Commercial licensing</a></p>
+        <p><a href="/pricing" style="color:rgba(128,128,128,0.45);">Pricing</a> &nbsp;&middot;&nbsp; <a href="/trust" style="color:rgba(128,128,128,0.45);">Trust</a> &nbsp;&middot;&nbsp; <a href="/contact" style="color:rgba(128,128,128,0.45);">Contact</a> &nbsp;&middot;&nbsp; <a href="/legal/privacy-policy" style="color:rgba(128,128,128,0.45);">Privacy Policy</a></p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

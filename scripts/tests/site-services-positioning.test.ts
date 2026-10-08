@@ -1347,3 +1347,59 @@ describe('QNXT CMS-0057-F adapter scoping page', () => {
     });
   });
 });
+
+/**
+ * /services/dental-payers — CMS-0057-F and core administration for dental
+ * plans. Locked copy lives in MESSAGE_SHEET.md ("Dental plans"). The page must
+ * not claim a finished dental benefits engine, named dental customers, or a
+ * settled CMS-0057-F status for exchange stand-alone dental plans.
+ */
+describe('Dental plans page', () => {
+  const PAGE = 'services/dental-payers.html';
+  const URL = 'https://cloudhealthoffice.com/services/dental-payers';
+  const dental = read(PAGE);
+  const visibleText = decodeEntities(
+    dental.replace(/<script\b[\s\S]*?<\/script[^>]*>/gi, ' ').replace(/<[^>]+>/g, ' ')
+  ).replace(/\s+/g, ' ');
+
+  it('ships at its clean URL and is routed, mapped, and linked', () => {
+    expect(fs.existsSync(path.join(SITE, PAGE))).toBe(true);
+    expect(redirects).not.toContain('dental-payers');
+    const routes = swaConfig.routes as Array<Record<string, unknown>>;
+    expect(routes).toContainEqual({ route: '/services/dental-payers', rewrite: '/services/dental-payers.html' });
+    expect(sitemap).toContain(`<loc>${URL}</loc>`);
+    expect(services).toContain('href="/services/dental-payers"');
+    expect(analytics).toContain("'/services/dental-payers': 'dental_payer_page_view'");
+  });
+
+  it('leads its title with descriptive terms and carries canonical and social metadata', () => {
+    const title = dental.match(/<title>([^<]+)<\/title>/)?.[1] ?? '';
+    expect(title).toMatch(/^Dental Payer Administration Software/);
+    expect(dental).toContain(`<link rel="canonical" href="${URL}" />`);
+    expect(dental).toMatch(/<meta name="description" content="[^"]{80,160}"/);
+    expect(dental).toContain(`property="og:url" content="${URL}"`);
+    const raw = JSON.stringify(jsonLdBlocks(dental));
+    expect(raw).toContain('"BreadcrumbList"');
+    for (const banned of ['"Offer"', '"Review"', '"AggregateRating"']) expect(raw).not.toContain(banned);
+  });
+
+  it('carries the locked hero and the CMS-0057-F definition', () => {
+    expect(dental).toContain('<h1>Dental plans have the same 2027 FHIR deadline.</h1>');
+    expect(visibleText).toContain(
+      'CMS-0057-F is the federal rule that requires Medicare Advantage, Medicaid, CHIP, and some exchange plans'
+    );
+  });
+
+  it('states its limits and avoids overclaims', () => {
+    expect(visibleText).toContain('not shipped as a finished dental benefits engine');
+    expect(visibleText).toContain('No named dental plan customers');
+    expect(visibleText).toMatch(/Exchange SADP\s+Confirm with counsel/);
+    expect(visibleText).not.toMatch(/free CMS-0057-F/i);
+  });
+
+  it('keeps the PHI warning on its lead form', () => {
+    const form = dental.match(/<form[^>]*id="dentalPayerForm"[\s\S]*?<\/form>/)?.[0] ?? '';
+    expect(form).toContain('action="__FORMSPREE_LEADS_ENDPOINT__"');
+    expect(form).toMatch(/do not send PHI/);
+  });
+});

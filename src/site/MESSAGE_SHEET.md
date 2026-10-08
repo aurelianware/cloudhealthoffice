@@ -194,6 +194,30 @@ Never state or imply a finished, packaged, or production QNXT adapter, or a cust
 adapter is per-implementation scoping and build work. No compliance guarantee, certification, or vendor
 partnership. "Cognizant-hosted" appears only as a neutral hosting option in the questionnaire.
 
+## Dental plans (locked) — `/services/dental-payers`
+
+**H1:** Dental plans have the same 2027 FHIR deadline.
+
+**Subhead:** Medicaid, CHIP, and Medicare Advantage dental plans owe the same four APIs as the large medical
+plans — Patient Access, Provider Access, Payer-to-Payer, and Prior Authorization — by January 1, 2027.
+Cloud Health Office deploys beside the dental claims system you already run, so you can meet the deadline
+without replacing it.
+
+**Scope line:** In scope = Medicaid / CHIP dental managed care and Medicare Advantage dental. Delegated DBMs
+depend on the contract. Exchange stand-alone dental plans: "confirm with counsel" (exempted from CMS-9115-F;
+never state their 0057-F status as settled). Commercial dental is not in scope.
+
+**Process:** dental scoping call and questionnaire → fixed-scope SOW → CMS-0057-F APIs beside the current
+core → core administration only when the plan chooses.
+
+**Both sides:** Cloud Dental Office (Aurelianware's dental practice platform) may be cited as how we test
+what payers send against what dental offices need. Never imply Cloud Dental Office customers are payer
+customers.
+
+Never claim a finished dental benefits engine. The platform accepts 837D claims; tooth/surface edits and
+frequency/age limits are scoped and configured per plan. No named dental plan customers, no compliance
+guarantee, no ADA/NADP or vendor endorsement.
+
 ## cms-0057-f.com (companion property)
 
 | Property | Primary purpose | Search intent |
