@@ -37,6 +37,8 @@ public class EnrollmentImportRun
     public int DependentsCreated { get; set; }
     public int DependentsUpdated { get; set; }
     public int DependentsTerminated { get; set; }
+    /// <summary>Attached dependents rejected (not counted in FailedCount; see ImportResult.DependentsFailed).</summary>
+    public int DependentsFailed { get; set; }
     public int CoverageRecordsCreated { get; set; }
     public int CoverageRecordsUpdated { get; set; }
     public int CoverageRecordsReinstated { get; set; }

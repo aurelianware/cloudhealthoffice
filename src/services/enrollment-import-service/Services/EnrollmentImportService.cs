@@ -137,8 +137,8 @@ public class EnrollmentImportService : IEnrollmentImportService
         result.CompletedAt = DateTime.UtcNow;
         result.BatchId = batchId;
         _logger.LogInformation(
-            "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped",
-            result.SuccessCount, result.FailedCount, result.SkippedCount);
+            "Import completed: {SuccessCount} success, {FailedCount} failed, {SkippedCount} skipped, {DependentsFailed} attached dependent(s) failed",
+            result.SuccessCount, result.FailedCount, result.SkippedCount, result.DependentsFailed);
 
         await RecordRunAsync(tenantId, enrollment.ActorId, result);
 
@@ -173,6 +173,7 @@ public class EnrollmentImportService : IEnrollmentImportService
                 DependentsCreated = result.DependentsCreated,
                 DependentsUpdated = result.DependentsUpdated,
                 DependentsTerminated = result.DependentsTerminated,
+                DependentsFailed = result.DependentsFailed,
                 CoverageRecordsCreated = result.CoverageRecordsCreated,
                 CoverageRecordsUpdated = result.CoverageRecordsUpdated,
                 CoverageRecordsReinstated = result.CoverageRecordsReinstated,
@@ -419,11 +420,16 @@ public class EnrollmentImportService : IEnrollmentImportService
                     subscriberOnFile = false;
                     break;
                 }
+                // The validator requires a termination date for 024; an
+                // unparseable one is rejected rather than replaced with today.
+                var subscriberTermDate = ParseDate(enrollment.TerminationDate)
+                    ?? throw new InvalidOperationException(
+                        $"termination date '{enrollment.TerminationDate}' is not a valid date; termination not applied");
                 await _memberClient.TerminateAsync(tenantId, memberId, new TerminateMemberRequestDto
                 {
                     MemberId = memberId,
                     CoverageId = string.Empty,
-                    TerminationDate = ParseDate(enrollment.TerminationDate) ?? DateTime.UtcNow,
+                    TerminationDate = subscriberTermDate,
                     ReasonCode = "834"
                 });
                 result.MembersTerminated++;
@@ -468,8 +474,16 @@ public class EnrollmentImportService : IEnrollmentImportService
         }
         for (var j = 0; j < enrollment.Dependents.Count; j++)
         {
-            await ProcessDependentTransactionAsync(
+            // Attached dependents aren't top-level transactions (they don't
+            // count toward TransactionCount/Success/Failed), so their failures
+            // are reported in DependentsFailed — one failing dependent never
+            // stops its siblings.
+            var outcome = await ProcessDependentTransactionAsync(
                 enrollment.Dependents[j], memberId, enrollment, ctx, $"{transactionId}-D{j:D2}");
+            if (outcome == DependentOutcome.Failed)
+            {
+                result.DependentsFailed++;
+            }
         }
     }
 
@@ -481,15 +495,19 @@ public class EnrollmentImportService : IEnrollmentImportService
     {
         var result = ctx.Result;
         var subscriberId = dependent.SubscriberId;
+        var projected = ToMemberEnrollment(dependent, null, dependent.MaintenanceType);
         if (string.IsNullOrWhiteSpace(subscriberId) || string.IsNullOrWhiteSpace(dependent.MaintenanceType))
         {
             result.Errors.Add(
                 $"Dependent of subscriber {subscriberId}: subscriberId (REF*0F) and maintenanceType (INS03) are required");
             result.FailedCount++;
-            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch,
-                ToMemberEnrollment(dependent, null, dependent.MaintenanceType), "Rejected");
+            await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected");
             return;
         }
+
+        // Every rejection row below is keyed on the dependent's own id when
+        // it can be derived, so the per-dependent history has no gaps.
+        var dependentMemberId = BuildDependentMemberId(subscriberId, dependent);
 
         bool exists;
         try
@@ -502,12 +520,13 @@ public class EnrollmentImportService : IEnrollmentImportService
                 SanitizeForLog(subscriberId));
             result.Errors.Add($"Subscriber {subscriberId} dependent: {ex.Message}");
             result.FailedCount++;
+            await RecordTransactionAsync(
+                ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
             return;
         }
 
         if (!exists)
         {
-            var projected = ToMemberEnrollment(dependent, null, dependent.MaintenanceType);
             if (dependent.MaintenanceType == "024")
             {
                 _logger.LogWarning(
@@ -515,13 +534,15 @@ public class EnrollmentImportService : IEnrollmentImportService
                     SanitizeForLog(subscriberId));
                 result.SkippedCount++;
                 // Same status the subscriber loop records for a not-found 024.
-                await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted");
+                await RecordTransactionAsync(
+                    ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Accepted", dependentMemberId);
             }
             else
             {
                 result.Errors.Add($"Subscriber {subscriberId}: not on file; cannot apply dependent maintenance");
                 result.FailedCount++;
-                await RecordTransactionAsync(ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected");
+                await RecordTransactionAsync(
+                    ctx.TenantId, ctx.BatchId, ctx.Batch, projected, "Rejected", dependentMemberId);
             }
             return;
         }
@@ -724,11 +745,15 @@ public class EnrollmentImportService : IEnrollmentImportService
         {
             if (memberMaintenanceType == "024")
             {
-                var termDate = ParseDate(memberTerminationDate) ?? DateTime.UtcNow.Date;
+                // Member-level 024 with no HD: end every coverage open on the
+                // termination date. Callers have already rejected a 024
+                // without a parseable termination date.
+                var termDate = ParseDate(memberTerminationDate)
+                    ?? throw new InvalidOperationException("termination date is required for maintenanceType=024");
                 foreach (var open in (await Existing()).Where(e =>
                              !string.IsNullOrEmpty(e.Id)
                              && e.EffectiveDate.Date <= termDate
-                             && (e.TerminationDate is null || e.TerminationDate.Value.Date > termDate)))
+                             && (e.TerminationDate is null || e.TerminationDate.Value.Date > termDate)).ToList())
                 {
                     await TerminateCoverageAsync(open, termDate, maintenanceReason, ctx);
                 }
@@ -746,24 +771,9 @@ public class EnrollmentImportService : IEnrollmentImportService
             if (planId is null)
             {
                 ctx.Result.CoverageMappingsUnresolved++;
-
-                // A termination must not be lost to a missing plan-code
-                // mapping (that would leave the coverage paying claims):
-                // end the open coverage(s) on the same insurance line.
-                if (memberMaintenanceType == "024" || line.MaintenanceType == "024")
-                {
-                    var termDate = ParseDate(line.BenefitEndDate)
-                        ?? ParseDate(memberTerminationDate)
-                        ?? DateTime.UtcNow.Date;
-                    foreach (var open in (await Existing()).Where(e =>
-                                 !string.IsNullOrEmpty(e.Id)
-                                 && string.Equals(e.InsuranceLineCode, line.InsuranceLineCode, StringComparison.OrdinalIgnoreCase)
-                                 && e.EffectiveDate.Date <= termDate
-                                 && (e.TerminationDate is null || e.TerminationDate.Value.Date > termDate)).ToList())
-                    {
-                        await TerminateCoverageAsync(open, termDate, maintenanceReason, ctx);
-                    }
-                }
+                await TerminateUnmappedLineAsync(
+                    memberId, line, memberMaintenanceType, maintenanceReason, memberTerminationDate,
+                    await Existing(), ctx);
                 continue;
             }
 
@@ -774,18 +784,76 @@ public class EnrollmentImportService : IEnrollmentImportService
     }
 
     /// <summary>
+    /// A termination must not be lost to a missing plan-code mapping (that
+    /// would leave the coverage paying claims), but without a PlanId the line
+    /// can only be matched by insurance line. A member-level 024 ends every
+    /// open coverage on that line (the member is leaving entirely); an HD*024
+    /// on a member that stays only acts when exactly one coverage on the line
+    /// is open on the termination date — otherwise the ambiguity is reported
+    /// and neither policy is touched.
+    /// </summary>
+    private async Task TerminateUnmappedLineAsync(
+        string memberId,
+        CoverageDetail line,
+        string? memberMaintenanceType,
+        string? maintenanceReason,
+        string? memberTerminationDate,
+        List<CoverageRecordDto> existing,
+        BatchContext ctx)
+    {
+        var memberLevel = memberMaintenanceType == "024";
+        if (!memberLevel && line.MaintenanceType != "024")
+        {
+            return;
+        }
+
+        var termDate = ParseDate(line.BenefitEndDate) ?? ParseDate(memberTerminationDate);
+        if (termDate is null)
+        {
+            ctx.Result.Errors.Add(
+                $"Member {memberId}: HD*024 ({line.InsuranceLineCode}) has no benefit end date (DTP*349); termination not applied");
+            return;
+        }
+
+        var candidates = existing
+            .Where(e => !string.IsNullOrEmpty(e.Id)
+                        && string.Equals(e.InsuranceLineCode, line.InsuranceLineCode, StringComparison.OrdinalIgnoreCase)
+                        && e.EffectiveDate.Date <= termDate.Value.Date
+                        && (e.TerminationDate is null || e.TerminationDate.Value.Date > termDate.Value.Date))
+            .ToList();
+
+        if (!memberLevel && candidates.Count > 1)
+        {
+            ctx.Result.Errors.Add(
+                $"Member {memberId}: HD*024 ({line.InsuranceLineCode}) plan code has no mapping and {candidates.Count} coverages " +
+                "on that line are open; ambiguous, termination not applied");
+            return;
+        }
+
+        foreach (var open in candidates)
+        {
+            await TerminateCoverageAsync(open, termDate.Value, maintenanceReason, ctx);
+        }
+    }
+
+    /// <summary>
     /// One HD line. Matching existing coverage = same deterministic coverage
     /// key (member + insurance line + resolved PlanId) with an overlapping
     /// span, so re-importing the same file is a no-op:
     /// <list type="bullet">
     /// <item>021 creates only if no matching coverage exists.</item>
-    /// <item>001 updates the matching coverage's plan/level (falling back
-    /// to the single open coverage on the same insurance line, for a plan
-    /// change), creating only when nothing matches; an HD end date (DTP*349)
-    /// is applied as a termination date.</item>
+    /// <item>001 changes the matching coverage (falling back to the single
+    /// coverage on the same insurance line open on the change's effective
+    /// date, for a plan change). A plan/level change effective after the
+    /// matched span began closes that span the day before and opens a new
+    /// one, so earlier dates of service stay on the earlier plan; only a
+    /// correction to the same span is updated in place. An HD end date
+    /// (DTP*349) is applied as a termination date. Creates only when nothing
+    /// matches.</item>
     /// <item>025 reinstates: see <see cref="ApplyReinstatementAsync"/>.</item>
-    /// <item>024 (on the HD or the member) sets the matching coverage's
-    /// termination date — it never creates coverage.</item>
+    /// <item>024 (on the HD or the member) sets the termination date of the
+    /// matching coverage that is in force on that date — it never creates
+    /// coverage, and is rejected when no termination date was sent.</item>
     /// </list>
     /// </summary>
     private async Task ApplyCoverageAsync(
@@ -803,18 +871,20 @@ public class EnrollmentImportService : IEnrollmentImportService
         var maintenanceType = memberMaintenanceType == "024"
             ? "024"
             : line.MaintenanceType ?? memberMaintenanceType;
-        var begin = ParseDate(line.BenefitBeginDate) ?? ParseDate(memberEffectiveDate);
+        // HD's own DTP*348; the member-level maintenance date (DTP*303) is a
+        // fallback effective date for adds/changes only, never for a term.
+        var effective = ParseDate(line.BenefitBeginDate) ?? ParseDate(memberEffectiveDate);
         var end = ParseDate(line.BenefitEndDate);
         var key = BuildCoverageKey(memberId, line.InsuranceLineCode, planId);
-
-        var match = existing
-            .Where(e => BuildCoverageKey(memberId, e.InsuranceLineCode, e.PlanId) == key && Overlaps(e, begin, end))
-            .OrderByDescending(e => e.EffectiveDate)
-            .FirstOrDefault();
+        bool SameKey(CoverageRecordDto e) => BuildCoverageKey(memberId, e.InsuranceLineCode, e.PlanId) == key;
 
         switch (maintenanceType)
         {
             case "021":
+            {
+                var match = existing.Where(e => SameKey(e) && Overlaps(e, effective, end))
+                    .OrderByDescending(e => e.EffectiveDate)
+                    .FirstOrDefault();
                 if (match is not null)
                 {
                     _logger.LogInformation(
@@ -822,41 +892,65 @@ public class EnrollmentImportService : IEnrollmentImportService
                         key, SanitizeForLog(memberId));
                     return;
                 }
-                await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, "021", existing, ctx);
+                await CreateCoverageAsync(memberId, line, planId, groupNumber, effective, end, "021",
+                    line.CoverageLevel, existing, ctx);
                 return;
+            }
 
             case "025":
+            {
+                var match = existing.Where(e => SameKey(e) && Overlaps(e, effective, end))
+                    .OrderByDescending(e => e.EffectiveDate)
+                    .FirstOrDefault();
                 await ApplyReinstatementAsync(
-                    memberId, line, planId, groupNumber, maintenanceReason, begin, end, key, match, existing, ctx);
+                    memberId, line, planId, groupNumber, maintenanceReason, effective, end, key, match, existing, ctx);
                 return;
+            }
 
             case "001":
-                if (match is null || string.IsNullOrEmpty(match.Id))
+            {
+                var match = existing.Where(e => SameKey(e) && Overlaps(e, effective, end))
+                    .OrderByDescending(e => e.EffectiveDate)
+                    .FirstOrDefault();
+                if (match is null)
                 {
-                    // A plan change sent as 001: the one open coverage on the
-                    // same insurance line is the one being changed.
+                    // A plan change sent as 001: the one coverage on the same
+                    // insurance line that is open on the change's effective
+                    // date (not on the day the file happens to be processed).
+                    var asOf = (effective ?? DateTime.UtcNow).Date;
                     var sameLine = existing
-                        .Where(e => !string.IsNullOrEmpty(e.Id)
-                                    && string.Equals(e.InsuranceLineCode, line.InsuranceLineCode, StringComparison.OrdinalIgnoreCase)
-                                    && Overlaps(e, begin, end)
-                                    && (e.TerminationDate is null || e.TerminationDate.Value.Date >= DateTime.UtcNow.Date))
+                        .Where(e => string.Equals(e.InsuranceLineCode, line.InsuranceLineCode, StringComparison.OrdinalIgnoreCase)
+                                    && OpenOn(e, asOf))
                         .ToList();
-                    match = match is null && sameLine.Count == 1 ? sameLine[0] : match;
+                    match = sameLine.Count == 1 ? sameLine[0] : null;
                 }
                 if (match is null)
                 {
-                    await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, maintenanceType, existing, ctx);
+                    await CreateCoverageAsync(memberId, line, planId, groupNumber, effective, end, maintenanceType,
+                        line.CoverageLevel, existing, ctx);
                     return;
                 }
-                if (string.IsNullOrEmpty(match.Id))
+                if (!HasId(match, memberId, ctx))
                 {
-                    return; // created earlier in this same pass
+                    return;
                 }
 
                 var level = line.CoverageLevel ?? match.CoverageLevel;
-                if (!string.Equals(match.PlanId, planId, StringComparison.Ordinal)
-                    || !string.Equals(match.CoverageLevel, level, StringComparison.Ordinal))
+                var changed = !string.Equals(match.PlanId, planId, StringComparison.Ordinal)
+                              || !string.Equals(match.CoverageLevel, level, StringComparison.Ordinal);
+                if (changed && effective is not null && effective.Value.Date > match.EffectiveDate.Date)
                 {
+                    // Effective-dated change: keep the earlier span on its
+                    // original plan/level, open a new span from the change.
+                    var priorEnd = match.TerminationDate;
+                    await TerminateCoverageAsync(match, effective.Value.AddDays(-1), maintenanceReason, ctx);
+                    await CreateCoverageAsync(memberId, line, planId, groupNumber, effective, end ?? priorEnd,
+                        maintenanceType, level, existing, ctx);
+                    return;
+                }
+                if (changed)
+                {
+                    // Correction to the same span (no later effective date).
                     await _coverageClient.UpdateAsync(ctx.TenantId, match.Id, new UpdateCoverageRequestDto
                     {
                         PlanId = planId,
@@ -871,22 +965,37 @@ public class EnrollmentImportService : IEnrollmentImportService
                     await TerminateCoverageAsync(match, end.Value, maintenanceReason, ctx);
                 }
                 return;
+            }
 
             case "024":
-                if (match is null || string.IsNullOrEmpty(match.Id))
+            {
+                var terminationDate = end ?? ParseDate(memberTerminationDate);
+                if (terminationDate is null)
+                {
+                    ctx.Result.Errors.Add(
+                        $"Member {memberId}: HD*024 ({line.InsuranceLineCode}) has no benefit end date (DTP*349); termination not applied");
+                    return;
+                }
+
+                // Bounded by the date being written: only the span in force on
+                // the termination date — never a later span of the same plan.
+                var match = existing.Where(e => SameKey(e) && OpenOn(e, terminationDate.Value.Date))
+                    .OrderByDescending(e => e.EffectiveDate)
+                    .FirstOrDefault();
+                if (match is null)
                 {
                     _logger.LogWarning(
-                        "No matching coverage {CoverageKey} on file for member {MemberId}; termination not applied",
+                        "No coverage {CoverageKey} in force on the termination date for member {MemberId}; termination not applied",
                         key, SanitizeForLog(memberId));
                     return;
                 }
-                var terminationDate = end ?? ParseDate(memberTerminationDate) ?? DateTime.UtcNow.Date;
-                if (match.TerminationDate?.Date == terminationDate.Date)
+                if (!HasId(match, memberId, ctx) || match.TerminationDate?.Date == terminationDate.Value.Date)
                 {
-                    return; // already terminated as of this date — replay
+                    return; // no id to act on (reported), or already terminated as of this date — replay
                 }
-                await TerminateCoverageAsync(match, terminationDate, maintenanceReason, ctx);
+                await TerminateCoverageAsync(match, terminationDate.Value, maintenanceReason, ctx);
                 return;
+            }
 
             default:
                 _logger.LogWarning(
@@ -899,17 +1008,20 @@ public class EnrollmentImportService : IEnrollmentImportService
     /// <summary>
     /// 834 INS03/HD01 = 025 (reinstatement). A reinstatement reverses a
     /// termination as if it had not happened, so when it continues a
-    /// terminated coverage — no DTP*348, or a begin date on or before the day
-    /// after that coverage's termination date — the same coverage record is
+    /// terminated coverage — no begin date, or one on or before the day after
+    /// that coverage's termination date — the same coverage record is
     /// reinstated in coverage-service (termination date cleared, status back
     /// to Active; its original effective date keeps the span unbroken). When
-    /// the 025's DTP*348 begins after a gap, the gap was genuinely uncovered,
-    /// and reinstating the old record would make it eligible: a new coverage
-    /// span is created from that date instead. An HD end date (DTP*349) is
-    /// then applied as the termination date, as for a change. Plan/level are
-    /// updated as for a change. Replaying the file changes nothing: the
-    /// reinstated coverage is open (or already ends on DTP*349), and a span
-    /// created after a gap is found by the overlap match.
+    /// the 025 begins after a gap, the gap was genuinely uncovered, and
+    /// reinstating the old record would make it eligible: a new coverage span
+    /// is created from that date instead. A coverage-level change effective
+    /// after the matched span began follows the change rule (the earlier span
+    /// keeps its level and ends the day before; a new span opens from the
+    /// change); a same-span correction is updated in place. An HD end date
+    /// (DTP*349) is then applied as the termination date, as for a change.
+    /// Replaying the file changes nothing: the reinstated coverage is open (or
+    /// already ends on DTP*349), and a span created after a gap or by a change
+    /// is found by the overlap match.
     /// </summary>
     private async Task ApplyReinstatementAsync(
         string memberId,
@@ -943,20 +1055,35 @@ public class EnrollmentImportService : IEnrollmentImportService
                         "Reinstatement {CoverageKey} for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
                         key, SanitizeForLog(memberId), begin, previous.TerminationDate);
                 }
-                await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, "025", existing, ctx);
+                await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, "025",
+                    line.CoverageLevel, existing, ctx);
                 return;
             }
             match = previous;
         }
 
-        if (string.IsNullOrEmpty(match.Id))
+        if (!HasId(match, memberId, ctx))
         {
-            return; // created earlier in this same pass
+            return;
         }
 
         var level = line.CoverageLevel ?? match.CoverageLevel;
-        if (!string.Equals(match.PlanId, planId, StringComparison.Ordinal)
-            || !string.Equals(match.CoverageLevel, level, StringComparison.Ordinal))
+        var changed = !string.Equals(match.PlanId, planId, StringComparison.Ordinal)
+                      || !string.Equals(match.CoverageLevel, level, StringComparison.Ordinal);
+        if (changed && begin is not null && begin.Value.Date > match.EffectiveDate.Date)
+        {
+            // Effective-dated change: the earlier span keeps its level and
+            // ends the day before (unless it already ended earlier — the
+            // reinstatement continues it without a gap); the reinstated
+            // coverage is a new span from the change.
+            if (match.TerminationDate is null || match.TerminationDate.Value.Date >= begin.Value.Date)
+            {
+                await TerminateCoverageAsync(match, begin.Value.AddDays(-1), maintenanceReason, ctx);
+            }
+            await CreateCoverageAsync(memberId, line, planId, groupNumber, begin, end, "025", level, existing, ctx);
+            return;
+        }
+        if (changed)
         {
             await _coverageClient.UpdateAsync(ctx.TenantId, match.Id, new UpdateCoverageRequestDto
             {
@@ -1032,12 +1159,9 @@ public class EnrollmentImportService : IEnrollmentImportService
                 _logger.LogInformation(
                     "Reinstatement for member {MemberId} begins {Begin:yyyy-MM-dd}, after a gap since {Termination:yyyy-MM-dd}; creating a new span",
                     SanitizeForLog(memberId), begin, previous.TerminationDate);
-                var line = new CoverageDetail
-                {
-                    InsuranceLineCode = previous.InsuranceLineCode ?? string.Empty,
-                    CoverageLevel = previous.CoverageLevel
-                };
-                await CreateCoverageAsync(memberId, line, previous.PlanId, previous.GroupNumber, begin, null, "025", existing, ctx);
+                var line = new CoverageDetail { InsuranceLineCode = previous.InsuranceLineCode ?? string.Empty };
+                await CreateCoverageAsync(memberId, line, previous.PlanId, previous.GroupNumber, begin, null, "025",
+                    previous.CoverageLevel, existing, ctx);
                 continue;
             }
 
@@ -1055,9 +1179,25 @@ public class EnrollmentImportService : IEnrollmentImportService
     private static bool BeginsAfterGap(DateTime? begin, DateTime terminationDate) =>
         begin is not null && begin.Value.Date > terminationDate.Date.AddDays(1);
 
+    /// <summary>
+    /// A coverage created earlier in this pass whose id coverage-service did
+    /// not return can't be changed or terminated; report it rather than
+    /// silently dropping the later HD line.
+    /// </summary>
+    private static bool HasId(CoverageRecordDto match, string memberId, BatchContext ctx)
+    {
+        if (!string.IsNullOrEmpty(match.Id))
+        {
+            return true;
+        }
+        ctx.Result.Errors.Add(
+            $"Member {memberId}: coverage ({match.InsuranceLineCode}) created in this file has no id from coverage-service; later change not applied");
+        return false;
+    }
+
     private async Task CreateCoverageAsync(
         string memberId, CoverageDetail line, string planId, string groupNumber, DateTime? begin, DateTime? end,
-        string? maintenanceType, List<CoverageRecordDto> existing, BatchContext ctx)
+        string? maintenanceType, string? coverageLevel, List<CoverageRecordDto> existing, BatchContext ctx)
     {
         var request = new CreateCoverageRequestDto
         {
@@ -1065,20 +1205,22 @@ public class EnrollmentImportService : IEnrollmentImportService
             GroupNumber = groupNumber,
             PlanId = planId,
             InsuranceLineCode = line.InsuranceLineCode,
-            CoverageLevel = line.CoverageLevel ?? "EMP",
+            CoverageLevel = coverageLevel ?? "EMP",
             // Loop 2300 DTP*348 is this coverage's own benefit begin; the
             // member-level date is only a fallback when the file omits it.
             EffectiveDate = begin ?? DateTime.UtcNow,
             TerminationDate = end,
             MaintenanceTypeCode = maintenanceType
         };
-        await _coverageClient.CreateAsync(ctx.TenantId, request);
+        var createdId = await _coverageClient.CreateAsync(ctx.TenantId, request);
         ctx.Result.CoverageRecordsCreated++;
 
-        // Visible to later lines in this same pass (no id: coverage-service
-        // assigns it), so a duplicate HD in one file doesn't double-create.
+        // Visible to later HD lines in this same pass — with coverage-service's
+        // id, so e.g. an HD*021 followed by HD*024 for the same plan acts on
+        // the record just created instead of being dropped.
         existing.Add(new CoverageRecordDto
         {
+            Id = createdId ?? string.Empty,
             MemberId = memberId,
             GroupNumber = groupNumber,
             PlanId = planId,
@@ -1096,6 +1238,10 @@ public class EnrollmentImportService : IEnrollmentImportService
         coverage.TerminationDate = terminationDate.Date;
         ctx.Result.CoverageRecordsTerminated++;
     }
+
+    private static bool OpenOn(CoverageRecordDto e, DateTime date) =>
+        e.EffectiveDate.Date <= date.Date
+        && (e.TerminationDate ?? DateTime.MaxValue).Date >= date.Date;
 
     private static bool Overlaps(CoverageRecordDto e, DateTime? begin, DateTime? end) =>
         e.EffectiveDate.Date <= (end ?? DateTime.MaxValue).Date
@@ -1203,6 +1349,14 @@ public class EnrollmentImportService : IEnrollmentImportService
                 break;
 
             case "024": // Termination — terminate the matching dependent, never create one.
+            {
+                // Dependents bypass the subscriber validator, so enforce its
+                // rule here: no parseable termination date (the dependent's
+                // own, else — for an attached dependent — its subscriber's)
+                // means reject before any write, never "terminate today".
+                var termDate = ParseDate(dependent.TerminationDate) ?? ParseDate(subscriber?.TerminationDate)
+                    ?? throw new InvalidOperationException(
+                        "termination (024) has no valid termination date (DTP*357 / DTP*349); not applied");
                 if (!exists)
                 {
                     _logger.LogWarning("Dependent {DependentId} not found for termination, skipping",
@@ -1213,19 +1367,24 @@ public class EnrollmentImportService : IEnrollmentImportService
                 {
                     MemberId = dependentMemberId,
                     CoverageId = string.Empty,
-                    TerminationDate = ParseDate(dependent.TerminationDate)
-                        ?? ParseDate(subscriber?.TerminationDate)
-                        ?? DateTime.UtcNow,
+                    TerminationDate = termDate,
                     ReasonCode = "834"
                 });
                 result.DependentsTerminated++;
-                applied = true;
-                break;
+                await ApplyMemberCoverageAsync(
+                    dependentMemberId, dependent.Coverage, maintenanceType,
+                    dependent.MaintenanceReason ?? subscriber?.MaintenanceReason,
+                    dependent.EnrollmentDate ?? subscriber?.EnrollmentDate,
+                    termDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+                    groupNumber, ctx);
+                return true;
+            }
 
             default:
-                _logger.LogWarning("Unknown maintenance type {MaintenanceType} for dependent {DependentId}",
-                    SanitizeForLog(maintenanceType), SanitizeForLog(dependentMemberId));
-                return false;
+                // Reject (Rejected row, no event) rather than record a no-op
+                // as an accepted change. Inherited types are resolved above.
+                throw new InvalidOperationException(
+                    $"maintenance type '{maintenanceType}' is not supported for a dependent");
         }
 
         await ApplyMemberCoverageAsync(
@@ -1361,6 +1520,15 @@ public class ImportResult
     public int DependentsCreated { get; set; }
     public int DependentsUpdated { get; set; }
     public int DependentsTerminated { get; set; }
+
+    /// <summary>
+    /// Dependents attached to a subscriber in the file that were rejected.
+    /// They are not top-level transactions (not in TransactionCount or
+    /// FailedCount, which count subscribers and standalone dependents), so
+    /// they are reported here — alongside an entry in Errors and a Rejected
+    /// transaction row each.
+    /// </summary>
+    public int DependentsFailed { get; set; }
     public int CoverageRecordsCreated { get; set; }
     public int CoverageRecordsUpdated { get; set; }
     public int CoverageRecordsReinstated { get; set; }
