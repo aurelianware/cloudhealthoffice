@@ -205,9 +205,33 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
         return value.Replace("\r", string.Empty).Replace("\n", string.Empty);
     }
 
-    private static IReadOnlyList<CostShareRuleConfig> BuildInNetworkCostSharing(Benefit b)
+    /// <summary>
+    /// Seeds a tier's rule list with an explicit <see cref="CostShareType.Deductible"/>
+    /// rule when the benefit is subject to the deductible. The engine only
+    /// takes the deductible when such a rule is present — it does not read
+    /// <c>DeductibleApplies</c> off copay/coinsurance rules — so omitting it
+    /// silently waived the deductible on every non-HDHP plan. Emitted even
+    /// when the benefit has no copay or coinsurance (deductible, then the
+    /// plan pays in full).
+    /// </summary>
+    private static List<CostShareRuleConfig> StartCostSharing(Benefit b)
     {
         var rules = new List<CostShareRuleConfig>();
+        if (b.DeductibleApplies)
+        {
+            rules.Add(new CostShareRuleConfig
+            {
+                CostShareType = CostShareType.Deductible,
+                DeductibleApplies = true
+            });
+        }
+
+        return rules;
+    }
+
+    private static IReadOnlyList<CostShareRuleConfig> BuildInNetworkCostSharing(Benefit b)
+    {
+        var rules = StartCostSharing(b);
 
         var copay = b.InNetworkCopay ?? b.CopayAmount;
         if (copay.HasValue)
@@ -239,7 +263,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
 
     private static IReadOnlyList<CostShareRuleConfig> BuildOutOfNetworkCostSharing(Benefit b)
     {
-        var rules = new List<CostShareRuleConfig>();
+        var rules = StartCostSharing(b);
 
         if (b.OutNetworkCopay.HasValue)
         {

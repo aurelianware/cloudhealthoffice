@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Benefit engine: deductibles now apply on non-HDHP plans.** The benefit-plan
+  projection (`ChoBenefitPlanProvider`) emitted only copay/coinsurance rules, so
+  the engine never took the deductible unless the plan was an HDHP — claims were
+  overpaid by the unmet deductible. Benefits with `DeductibleApplies=true` now
+  project an explicit deductible rule for both network tiers.
+- **Benefit engine: unmapped procedure codes deny with CARC 204** ("not covered
+  under the patient's current benefit plan") instead of CARC 18 ("exact
+  duplicate claim/service"), on both the per-line and DRG paths. Payment
+  estimates still report these as `NO_BENEFIT_MAPPING` / `needs_review`.
+
 ## [5.0.0] - 2026-10-06
 
 First tagged release since v4.0.0; also covers 4.1.0–4.4.0 below, which were
