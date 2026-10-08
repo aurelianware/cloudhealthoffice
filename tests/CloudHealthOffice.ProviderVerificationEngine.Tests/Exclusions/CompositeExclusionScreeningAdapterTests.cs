@@ -121,5 +121,55 @@ public class CompositeExclusionScreeningAdapterTests
         Assert.Contains("SAM.gov — SAM.gov API key rejected", score.ExclusionScreening.Detail);
         Assert.Contains(score.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
         Assert.Contains(score.Flags, f => f.Code == "POSSIBLE_EXCLUSION_MATCH");
+        Assert.Equal(IntegrityRating.Unknown, score.Rating);
+    }
+
+    private static NppesProviderData ActiveNppes() => new()
+    {
+        Npi = "1234567893",
+        NpiStatus = NppesNpiStatus.Active,
+        Taxonomies = [new NppesTaxonomy { Code = "207Q00000X", IsPrimary = true }],
+        Addresses = [new NppesAddress { AddressPurpose = "LOCATION" }]
+    };
+
+    private static IntegrityScoreCalculator Calculator() => new(
+        Microsoft.Extensions.Options.Options.Create(new ScoringWeights()),
+        Microsoft.Extensions.Options.Options.Create(new VerificationOptions()));
+
+    [Fact]
+    public async Task PartiallyScreenedComposite_RatesUnknown_EvenWhenOtherDimensionsAreClean()
+    {
+        // LEIE clear, SAM failed: the composite is not screened, so no rating
+        // (favourable or Blocked) is knowable.
+        var screening = await Adapter(Clear(ExclusionScreeningSource.OigLeie),
+                NotScreened(ExclusionScreeningSource.SamGov, "SAM.gov unavailable (HTTP 503)"))
+            .ScreenProviderAsync("1234567893");
+
+        var score = Calculator().Calculate(new ProviderVerificationRecord
+        {
+            Npi = "1234567893", NppesData = ActiveNppes(), ExclusionScreening = screening
+        });
+
+        Assert.False(screening.WasScreened);
+        Assert.Equal(IntegrityRating.Unknown, score.Rating);
+        Assert.Contains(score.Flags, f => f.Code == "EXCLUSION_NOT_SCREENED");
+    }
+
+    [Fact]
+    public async Task PartiallyScreenedComposite_WithConfirmedExclusion_IsBlocked()
+    {
+        var screening = await Adapter(Excluded(ExclusionScreeningSource.OigLeie),
+                NotScreened(ExclusionScreeningSource.SamGov, "SAM.gov API key rejected (HTTP 401)"))
+            .ScreenProviderAsync("1234567893");
+
+        var score = Calculator().Calculate(new ProviderVerificationRecord
+        {
+            Npi = "1234567893", NppesData = ActiveNppes(), ExclusionScreening = screening
+        });
+
+        Assert.False(screening.WasScreened);
+        Assert.True(screening.IsExcluded);
+        Assert.Equal(IntegrityRating.Blocked, score.Rating);
+        Assert.Contains(score.Flags, f => f.Code == "EXCLUDED");
     }
 }
