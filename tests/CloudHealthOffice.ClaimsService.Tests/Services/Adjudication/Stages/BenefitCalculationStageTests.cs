@@ -884,6 +884,18 @@ public class BenefitCalculationStageTests
         Assert.Equal(claimResult.AllowedAmount, lines.Sum(l => l.AllowedAmount));
         Assert.All(lines, l => Assert.Equal(l.AllowedAmount - l.PatientResponsibility, l.PaidAmount));
 
+        // #1251 line CAS on the per-stay lines: each line balances
+        // (charge − ΣCAS = paid) and its PR-1/2/3 sum to the claim totals.
+        var charges = ctx.Claim.ClaimLines.Select(c => c.ChargeAmount).ToList();
+        for (var i = 0; i < lines.Count; i++)
+            Assert.Equal(charges[i] - lines[i].AdjustmentReasons.Sum(r => r.Amount), lines[i].PaidAmount);
+        decimal Cas(string group, string carc) => lines.SelectMany(l => l.AdjustmentReasons)
+            .Where(r => r.GroupCode == group && r.ReasonCode == carc).Sum(r => r.Amount);
+        Assert.Equal(500m, Cas("PR", "1"));
+        Assert.Equal(2250m, Cas("PR", "2"));
+        Assert.Equal(250m, Cas("PR", "3"));
+        Assert.Equal(30500m, Cas("CO", "45"));
+
         await accumulators.ReceivedWithAnyArgs(1).ApplyUpdatesAsync(
             default!, default!, default, default!, default!, default!, default);
     }
