@@ -1346,6 +1346,15 @@ public class PaymentRunService : IPaymentRunService
 
 public class ClaimDto
 {
+    /// <summary>
+    /// claims-service <c>Claim.PayerResponsibilityCode</c>: the 837 2000B
+    /// SBR01 sequence the claim was submitted to this plan with (P, S, T,
+    /// A–H). Informational: CLP02 follows
+    /// <see cref="ClaimAdjudicationDto.CobPayerSequence"/>, what adjudication
+    /// actually applied.
+    /// </summary>
+    public string? PayerResponsibilityCode { get; set; }
+
     public string Id { get; set; } = string.Empty;
     public string ClaimNumber { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
@@ -1487,6 +1496,13 @@ public enum ClaimFormType
 public class ClaimAdjudicationDto
 {
     public decimal AllowedAmount { get; set; }
+
+    /// <summary>
+    /// claims-service <c>adjudicationResult.cobPayerSequence</c>: the payer
+    /// sequence COB was applied in (2 secondary, 3+ tertiary); null when the
+    /// claim was adjudicated as the first payer. Drives CLP02.
+    /// </summary>
+    public int? CobPayerSequence { get; set; }
     /// <summary>What the plan pays the provider; null when claims-service did not send it.</summary>
     public decimal? PayerPayment { get; set; }
     public decimal DeductibleAmount { get; set; }

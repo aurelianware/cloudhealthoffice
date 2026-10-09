@@ -1126,6 +1126,105 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         claim.Clm, 2, elemCode: "I12", dataRef: "782", claimId: claim.ClaimId);
                 }
             }
+
+            foreach (var claim in _hls.SelectMany(h => h.Claims))
+                CheckCobBalancing(claim);
+        }
+
+        /// <summary>
+        /// TR3 coordination-of-benefits balancing (warnings only — never a
+        /// reject, since a payer's own remittance may not balance and the
+        /// claim is still processable; COB pends what it cannot place):
+        /// <list type="bullet">
+        ///   <item><description>per 2320 other payer: CLM02 = AMT*D + Σ its
+        ///     2320 CAS + Σ its 2430 CAS (lines it reported; with no 2430 the
+        ///     2320 CAS alone);</description></item>
+        ///   <item><description>per 2430: the line charge (SV102 / SV203) =
+        ///     SVD02 + Σ its 2430 CAS.</description></item>
+        /// </list>
+        /// </summary>
+        private void CheckCobBalancing(ClaimNode claim)
+        {
+            var chargeElement = _institutional ? 3 : 2;
+            var lineField = _institutional ? "SV203" : "SV102";
+
+            // 2430 groups: each SVD with the CAS segments that follow it.
+            var svds = new List<(Seg Svd, decimal Paid, decimal Cas, decimal? Charge)>();
+            foreach (var line in claim.Lines)
+            {
+                decimal? charge = line.Service is not null && TryAmount(line.Service.E(chargeElement), out var c) ? c : null;
+                // A 2430 loop runs from its SVD to the next SVD or the end of
+                // loop 2430; its CAS segments are the 2430 CAS.
+                foreach (var seg in line.Segs.Where(s => s.Loop == "2430"))
+                {
+                    if (seg.Id == "SVD")
+                        svds.Add((seg, TryAmount(seg.E(2), out var paid) ? paid : 0m, 0m, charge));
+                    else if (seg.Id == "CAS" && svds.Count > 0)
+                        svds[^1] = (svds[^1].Svd, svds[^1].Paid, svds[^1].Cas + CasTotal(seg), svds[^1].Charge);
+                }
+            }
+
+            foreach (var (svd, paid, cas, charge) in svds)
+            {
+                if (charge is { } lineCharge && paid + cas != lineCharge)
+                {
+                    Report(SnipLevel.Balancing, "L3-COB-SVD-BALANCE",
+                        $"2430 SVD for payer '{svd.E(1)}': SVD02 {paid.ToString("0.00", CultureInfo.InvariantCulture)} + 2430 CAS " +
+                        $"{cas.ToString("0.00", CultureInfo.InvariantCulture)} does not equal the line charge {lineField} " +
+                        $"{lineCharge.ToString("0.00", CultureInfo.InvariantCulture)}.",
+                        svd, 2, elemCode: "I12", dataRef: "782", claimId: claim.ClaimId, warnOnly: true);
+                }
+            }
+
+            if (!TryAmount(claim.Clm.E(2), out var total)) return;
+
+            // 2320 groups: SBR … up to the next 2320 SBR.
+            var payers = new List<(Seg Sbr, decimal? AmtD, decimal Cas, HashSet<string> Ids)>();
+            foreach (var seg in claim.Segs.Where(s => s.Loop is "2320" or "2330"))
+            {
+                if (seg.Id == "SBR")
+                {
+                    payers.Add((seg, null, 0m, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
+                    continue;
+                }
+                if (payers.Count == 0) continue;
+                var p = payers[^1];
+                if (seg.Id == "AMT" && seg.E(1) == "D" && TryAmount(seg.E(2), out var amtD))
+                    payers[^1] = (p.Sbr, amtD, p.Cas, p.Ids);
+                else if (seg.Id == "CAS" && seg.Loop == "2320")
+                    payers[^1] = (p.Sbr, p.AmtD, p.Cas + CasTotal(seg), p.Ids);
+                else if (seg.Id == "NM1" && seg.E(1) == "PR" && seg.E(9) is { Length: > 0 } nm109)
+                    p.Ids.Add(nm109.Trim());
+                else if (seg.Id == "REF" && seg.E(1) is "2U" or "FY" && seg.E(2) is { Length: > 0 } refId)
+                    p.Ids.Add(refId.Trim());
+            }
+
+            foreach (var payer in payers)
+            {
+                if (payer.AmtD is not { } amtD) continue;
+                var payerSvds = payers.Count == 1
+                    ? svds
+                    : svds.Where(s => s.Svd.E(1) is { } id && payer.Ids.Contains(id.Trim())).ToList();
+                var lineCas = payerSvds.Sum(s => s.Cas);
+                if (amtD + payer.Cas + lineCas != total)
+                {
+                    Report(SnipLevel.Balancing, "L3-COB-2320-BALANCE",
+                        $"2320 payer (SBR01 '{payer.Sbr.E(1)}'): AMT*D {amtD.ToString("0.00", CultureInfo.InvariantCulture)} + " +
+                        $"2320 CAS {payer.Cas.ToString("0.00", CultureInfo.InvariantCulture)} + its 2430 CAS " +
+                        $"{lineCas.ToString("0.00", CultureInfo.InvariantCulture)} does not equal CLM02 " +
+                        $"{total.ToString("0.00", CultureInfo.InvariantCulture)}.",
+                        payer.Sbr, 1, elemCode: "I12", dataRef: "782", claimId: claim.ClaimId, warnOnly: true);
+                }
+            }
+        }
+
+        /// <summary>Sum of a CAS segment's adjustment amounts (CAS03, 06, 09, 12, 15, 18).</summary>
+        private static decimal CasTotal(Seg cas)
+        {
+            var sum = 0m;
+            foreach (var element in new[] { 3, 6, 9, 12, 15, 18 })
+                if (TryAmount(cas.E(element), out var amount)) sum += amount;
+            return sum;
         }
 
         // ── Missing-segment positions ────────────────────────────────────

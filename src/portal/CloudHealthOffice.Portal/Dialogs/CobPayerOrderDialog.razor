@@ -1,0 +1,60 @@
+@using CloudHealthOffice.Portal.Services
+
+@* PR #1278 round 3 (M5): approving a claim pended for coordination of
+   benefits needs the payer order the examiner confirmed. *@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" GutterBottom="true">Confirm the payer order</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            This claim is pended for coordination of benefits. Approving it needs the position of this plan in
+            the member's payer order. A position that disagrees with the 837 or with coverage records needs a
+            supervisor (override permission) and a reason; pricing this plan as primary when another payer
+            already paid needs a second approver.
+        </MudText>
+        <MudSelect T="int" @bind-Value="_payerSequence" Label="This plan pays as" Variant="Variant.Outlined" Class="mb-4">
+            @for (var i = 1; i <= MaxSequence; i++)
+            {
+                var sequence = i;
+                <MudSelectItem T="int" Value="@sequence">@Label(sequence)</MudSelectItem>
+            }
+        </MudSelect>
+        <MudTextField @bind-Value="_reason"
+                      Label="Reason"
+                      Variant="Variant.Outlined"
+                      Multiline="true"
+                      Lines="3"
+                      Placeholder="How the payer order was confirmed (EOBs, member, other carrier)..." />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit"
+                   Disabled="string.IsNullOrWhiteSpace(_reason)">
+            Approve
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>Payers on the claim (its other payers + this plan).</summary>
+    [Parameter] public int MaxSequence { get; set; } = 3;
+
+    private int _payerSequence = 1;
+    private string _reason = string.Empty;
+
+    private static string Label(int sequence) => sequence switch
+    {
+        1 => "Primary (1)",
+        2 => "Secondary (2)",
+        3 => "Tertiary (3)",
+        _ => $"Payer {sequence}",
+    };
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new CobPayerOrderChoice(_payerSequence, _reason)));
+
+    public sealed record CobPayerOrderChoice(int PayerSequence, string Reason);
+}

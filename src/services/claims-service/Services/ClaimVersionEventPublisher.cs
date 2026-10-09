@@ -271,7 +271,13 @@ public sealed class MongoClaimVersionEventPublisher : IClaimVersionEventPublishe
             ["versionNumber"] = version.VersionNumber,
             ["disposition"] = disposition,
             ["reason"] = reason,
-            ["resolvedAt"] = version.AdjudicatedDate
+            ["resolvedAt"] = version.AdjudicatedDate,
+            // The persisted audit record (approvers, reason, payer order,
+            // overridden pends, timestamps) — PR #1278 round 3.
+            ["examinerResolution"] = version.ExaminerResolutions.LastOrDefault() is { } resolution
+                ? System.Text.Json.JsonSerializer.SerializeToNode(resolution,
+                    new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+                : null
         };
 
         var evt = new ClaimVersionEvent

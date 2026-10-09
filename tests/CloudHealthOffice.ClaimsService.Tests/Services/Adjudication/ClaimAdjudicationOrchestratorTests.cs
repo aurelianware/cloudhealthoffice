@@ -196,6 +196,205 @@ public class ClaimAdjudicationOrchestratorTests
         Assert.Equal("ClaimVersionAdjudicated", capturedOptions?.Properties?["MessageType"]);
     }
 
+    // ── PR #1278 round 3 ──────────────────────────────────────────────
+
+    /// <summary>
+    /// M6: the approval re-run's Adjudicated message has its own MessageId,
+    /// or Service Bus duplicate detection drops it as a repeat of the first
+    /// run's "adjudicated:{ClaimVersionId}".
+    /// </summary>
+    [Fact]
+    public async Task ApprovalRerun_AdjudicatedMessage_HasADistinctMessageId()
+    {
+        var ids = new List<string?>();
+        _messageBus
+            .When(b => b.SendAsync(
+                Arg.Any<string>(), Arg.Any<ClaimVersionAdjudicatedMessage>(), Arg.Any<SendOptions?>(), Arg.Any<CancellationToken>()))
+            .Do(ci => ids.Add(ci.Arg<SendOptions?>()?.MessageId));
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator([new RecordingStage("Persistence", 999, isRequired: true, [])]);
+
+        var approval = new ExaminerApproval { ExaminerId = "examiner-1" };
+        await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1", approval, CancellationToken.None);
+        await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1", new ExaminerApproval { ExaminerId = "examiner-1" }, CancellationToken.None);
+
+        Assert.Equal($"adjudicated:ver-1:approval:{approval.ApprovalId}", ids[0]);
+        Assert.NotEqual(ids[0], ids[1]);
+        Assert.All(ids, id => Assert.NotEqual("adjudicated:ver-1", id));
+    }
+
+    /// <summary>L8: the advisory AI examination does not run on the examiner's own approval re-run.</summary>
+    [Fact]
+    public async Task ApprovalRerun_SkipsTheAiExamination()
+    {
+        var executed = new List<string>();
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(AiExaminationStage.StageName, 600, isRequired: false, executed),
+            new RecordingStage("Persistence", 999, isRequired: true, executed),
+        ]);
+
+        await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1", new ExaminerApproval(), CancellationToken.None);
+
+        Assert.Equal(new[] { "Persistence" }, executed);
+    }
+
+    /// <summary>
+    /// A stage that pends without recording a code (network credentialing)
+    /// gets one recorded, so the examiner sees it and an approval can name
+    /// it; the re-run overrides it only when that pend was reviewed.
+    /// </summary>
+    [Fact]
+    public async Task NetworkPend_IsRecorded_AndOverriddenOnlyWhenReviewed()
+    {
+        ClaimAdjudicationContext? seen = null;
+        SetupAdapterReturningClaim();
+        var stages = new IClaimAdjudicationStage[]
+        {
+            new RecordingStage(NetworkCredentialingStage.StageName, 200, isRequired: false, [],
+                _ => ClaimAdjudicationStageResult.Pend(NetworkCredentialingStage.StageName, "Credentialing: lapsed (mode=PendForReview)")),
+            new RecordingStage("Persistence", 999, isRequired: true, [], ctx => { seen = ctx; return ClaimAdjudicationStageResult.Pass("Persistence"); }),
+        };
+        var orch = BuildOrchestrator(stages);
+
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+        Assert.Equal("NETWORK", seen!.PendDetails!.PendCode);
+
+        var unreviewed = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ReviewedPend = new PendDetails { PendCode = "DUPLICATE", PendReason = "x" } }, CancellationToken.None);
+        var reviewed = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ReviewedPend = seen.PendDetails }, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, unreviewed.Outcome);
+        Assert.Empty(unreviewed.OverriddenPends);
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, reviewed.Outcome);
+        Assert.Equal(new[] { "NetworkCredentialing: NETWORK: Credentialing: lapsed (mode=PendForReview)" }, reviewed.OverriddenPends);
+    }
+
+    /// <summary>
+    /// Round-3 verification, blocker 1 (scenario B): COB pends at 275, then
+    /// benefit calculation replaces PendDetails with a retro plan change.
+    /// Both are stored — COB stays the routing pend, RETROELIG is added — so
+    /// an approval can cover both (and payerSequence is accepted).
+    /// </summary>
+    [Fact]
+    public async Task SecondPendReplacingTheFirst_BothAreStored_FirstStaysTheRoutingPend()
+    {
+        ClaimAdjudicationContext? seen = null;
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(CoordinationOfBenefitsStage.StageName, 275, isRequired: true, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "COB", PendReason = "cob-payer-order-mismatch" };
+                return ClaimAdjudicationStageResult.Pend(CoordinationOfBenefitsStage.StageName, "mismatch");
+            }),
+            new RecordingStage(BenefitCalculationStage.StageName, 300, isRequired: false, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "RETROELIG", PendReason = "retro plan change 2026-03-01" };
+                return ClaimAdjudicationStageResult.Pend(BenefitCalculationStage.StageName, "retro plan change 2026-03-01");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, [], ctx => { seen = ctx; return ClaimAdjudicationStageResult.Pass("Persistence"); }),
+        ]);
+
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+
+        Assert.Equal("COB", seen!.PendDetails!.PendCode);
+        Assert.Equal("cob-payer-order-mismatch", seen.PendDetails.PendReason);
+        Assert.Equal(new[] { "RETROELIG: retro plan change 2026-03-01" }, seen.PendDetails.AdditionalPendReasons);
+        Assert.Equal(new[] { ("COB", (string?)"cob-payer-order-mismatch"), ("RETROELIG", "retro plan change 2026-03-01") },
+            ExaminerApproval.ReviewedFrom(seen.PendDetails));
+    }
+
+    /// <summary>
+    /// Scenario A at unit level: DUPLICATE then MEDREVIEW. Reviewing the full
+    /// stored set passes; reviewing only the last pend (what used to be
+    /// stored) does not — the loop the verifier found.
+    /// </summary>
+    [Fact]
+    public async Task TwoPends_ApprovalOfTheStoredSetPasses_OfTheLastOnlyDoesNot()
+    {
+        ClaimAdjudicationContext? seen = null;
+        SetupAdapterReturningClaim();
+        IClaimAdjudicationStage[] Stages() =>
+        [
+            new RecordingStage(DuplicateClaimStage.StageName, 120, isRequired: false, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "DUPLICATE", PendReason = "Line 1 duplicates CLM-1." };
+                return ClaimAdjudicationStageResult.Pend(DuplicateClaimStage.StageName, "Line 1 duplicates CLM-1.");
+            }),
+            new RecordingStage(ProviderIntegrityStage.StageName, 150, isRequired: false, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "MEDREVIEW", PendReason = "Billing: manual review required." };
+                return ClaimAdjudicationStageResult.Pend(ProviderIntegrityStage.StageName, "Billing: manual review required.");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, [], ctx => { seen = ctx; return ClaimAdjudicationStageResult.Pass("Persistence"); }),
+        ];
+        var orch = BuildOrchestrator(Stages());
+        await orch.AdjudicateAsync(BuildSubmittedMessage(), BuildContext(), CancellationToken.None);
+        var stored = seen!.PendDetails!;
+
+        var lastOnly = await BuildOrchestrator(Stages()).ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ReviewedPend = new PendDetails { PendCode = "MEDREVIEW", PendReason = "Billing: manual review required." } },
+            CancellationToken.None);
+        var full = await BuildOrchestrator(Stages()).ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ReviewedPend = stored }, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, lastOnly.Outcome);
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, full.Outcome);
+        Assert.Equal(2, full.OverriddenPends.Count);
+    }
+
+    /// <summary>M4: NCCI needs the exact reason reviewed, not just the code.</summary>
+    [Fact]
+    public async Task Ncci_DifferentEditOnTheRerun_IsNotOverridden()
+    {
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(NcciEditsStage.StageName, 400, isRequired: false, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "NCCI", PendReason = "NE002 99214/99215" };
+                return ClaimAdjudicationStageResult.Pend(NcciEditsStage.StageName, "NE002 99214/99215");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, []),
+        ]);
+
+        var result = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ReviewedPend = new PendDetails { PendCode = "NCCI", PendReason = "NE001 99213/99214" } },
+            CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+    }
+
+    /// <summary>
+    /// Provider integrity (an exact-reason pend): reviewed "manual review",
+    /// re-run says "could not be reached" — not the reviewed finding.
+    /// </summary>
+    [Fact]
+    public async Task ProviderIntegrity_DifferentReasonOnTheRerun_IsNotOverridden()
+    {
+        SetupAdapterReturningClaim();
+        var orch = BuildOrchestrator(
+        [
+            new RecordingStage(ProviderIntegrityStage.StageName, 150, isRequired: false, [], ctx =>
+            {
+                ctx.PendDetails = new PendDetails { PendCode = "MEDREVIEW", PendReason = "Billing: Provider integrity check could not be reached." };
+                return ClaimAdjudicationStageResult.Pend(ProviderIntegrityStage.StageName, "Billing: Provider integrity check could not be reached.");
+            }),
+            new RecordingStage("Persistence", 999, isRequired: true, []),
+        ]);
+
+        var result = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval
+            {
+                ReviewedPend = new PendDetails { PendCode = "MEDREVIEW", PendReason = "Billing: manual review required." },
+            }, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+    }
+
     [Fact]
     public async Task Adjudicate_FinalOutcomeReflectsHighestPrecedenceFailure()
     {

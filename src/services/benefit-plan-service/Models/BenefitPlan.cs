@@ -119,6 +119,28 @@ public class BenefitPlan
     [JsonPropertyName("familyAccumulatorModel")]
     public FamilyAccumulatorModel FamilyAccumulatorModel { get; set; } = FamilyAccumulatorModel.Embedded;
 
+    /// <summary>
+    /// How this plan credits its deductible when it pays secondary, tertiary
+    /// or later (coordination of benefits). Defaults to
+    /// <see cref="CobDeductibleCredit.NaicFullCredit"/>; plan documents
+    /// written before the field existed hydrate with the default.
+    /// <para>For plan administrators: with NaicFullCredit (the default) a
+    /// later-payer plan prices a claim as if it were the only plan and
+    /// applies COB to the whole claim, so on a multi-line claim the
+    /// deductible met on one line is met for the next — the 835 shows less
+    /// member deductible (PR-1) on later lines than line-by-line COB would,
+    /// and the deductible accumulator gets what the plan applied.
+    /// MemberPaidOnly prices COB line by line instead: each line counts only
+    /// the deductible the member actually paid on the lines before it, the
+    /// accumulator gets what the member owes, and splitting services across
+    /// claims does not change what is paid. The two give the same 835 for a
+    /// single-line claim and can differ on a multi-line one. NoDeductible
+    /// skips the deductible as a later payer (not allowed on an HDHP). See
+    /// docs/architecture/claim-cob-pipeline.md.</para>
+    /// </summary>
+    [JsonPropertyName("cobDeductibleCredit")]
+    public CobDeductibleCredit CobDeductibleCredit { get; set; } = CobDeductibleCredit.NaicFullCredit;
+
     // ---------------------------------------------------------------------
     // Version identity (5.1 — Plan Identity & Versioning)
     //
@@ -663,4 +685,38 @@ public enum FamilyAccumulatorModel
     /// the engine config). Common in HDHP / HSA plans.
     /// </summary>
     Aggregate = 2
+}
+
+/// <summary>
+/// Deductible crediting when the plan pays secondary or later. Mirrors
+/// <see cref="CloudHealthOffice.BenefitEngine.Domain.CobDeductibleCredit"/>
+/// (same boundary stance as <see cref="FamilyAccumulatorModel"/>);
+/// <see cref="ChoBenefitPlanProvider"/> projects it onto the engine config.
+/// Serialized by name ("NaicFullCredit", "MemberPaidOnly", "NoDeductible").
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum CobDeductibleCredit
+{
+    /// <summary>
+    /// Default. NAIC Coordination of Benefits Model Regulation (MDL-120) §7:
+    /// credit the deductible the plan would have credited with no other
+    /// coverage — the pre-COB deductible from the plan's own adjudication,
+    /// capped by the remaining deductible — including deductible a prior
+    /// payer paid.
+    /// </summary>
+    NaicFullCredit = 1,
+
+    /// <summary>
+    /// Credit only the deductible the member still owes after COB. For
+    /// self-funded ERISA plans with non-duplication or carve-out provisions.
+    /// COB is priced line by line, so a multi-line claim's 835 can differ
+    /// from NaicFullCredit's.
+    /// </summary>
+    MemberPaidOnly = 2,
+
+    /// <summary>
+    /// Neither apply nor credit the deductible when the plan is not the first
+    /// payer (e.g. Medicaid secondary plans that carry no deductible).
+    /// </summary>
+    NoDeductible = 3
 }

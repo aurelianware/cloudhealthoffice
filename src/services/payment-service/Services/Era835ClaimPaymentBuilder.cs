@@ -39,9 +39,28 @@ public static class Era835ClaimPaymentBuilder
         claim.ServiceLines is not { Count: > 0 } lines || lines.All(sl => sl.LinePaidAmount is null);
 
     /// <summary>
-    /// One claim's 2100 loop. A paid claim: CLP02 = 1, CLP04 = its plan-paid
-    /// amount. A denial: CLP02 = 4, CLP04 = 0, its denial CARC carrying the
-    /// part of the charge no other adjustment explains, RARCs in MIA/MOA.
+    /// CLP02 for a processed (not denied) claim, from the payer sequence the
+    /// claim was actually adjudicated in — claims-service
+    /// <c>adjudicationResult.cobPayerSequence</c>, set only when coordination
+    /// of benefits was applied: 2 → 2 (processed as secondary), 3 or later →
+    /// 3 (processed as tertiary; the 835 has no code past tertiary, so payers
+    /// four to eleven also report 3). Not applied (null) → 1, processed as
+    /// primary — even when the 837 SBR01 said otherwise (a claim pended on a
+    /// payer-order mismatch is never remitted as secondary by mistake).
+    /// </summary>
+    public static string ProcessedAsCode(int? cobPayerSequence) => cobPayerSequence switch
+    {
+        2 => "2",
+        >= 3 => "3",
+        _ => "1",
+    };
+
+    /// <summary>
+    /// One claim's 2100 loop. A paid claim: CLP02 = 1, 2 or 3 (processed as
+    /// primary / secondary / tertiary — <see cref="ProcessedAsCode"/>), CLP04
+    /// = its plan-paid amount. A denial: CLP02 = 4, CLP04 = 0, its denial
+    /// CARC carrying the part of the charge no other adjustment explains,
+    /// RARCs in MIA/MOA.
     /// </summary>
     public static ClaimPayment Build(ClaimDto claim, bool denied, ICarcRarcMappingService mapper)
     {
@@ -125,8 +144,8 @@ public static class Era835ClaimPaymentBuilder
         {
             ClaimId = claim.Id,
             PatientControlNumber = claim.ClaimNumber,
-            // CLP02: 1 = processed as primary, 4 = denied.
-            ClaimStatusCode = denied ? "4" : "1",
+            // CLP02: 1/2/3 = processed as primary/secondary/tertiary, 4 = denied.
+            ClaimStatusCode = denied ? "4" : ProcessedAsCode(claim.AdjudicationResult?.CobPayerSequence),
             // CLP03 total charge, CLP04 plan paid (0 for a denial), CLP05 member responsibility.
             ChargeAmount = claim.TotalChargeAmount,
             PaymentAmount = claimPaid,

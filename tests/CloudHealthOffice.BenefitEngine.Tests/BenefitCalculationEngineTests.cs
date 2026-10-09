@@ -1,12 +1,14 @@
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.CobEngine.Domain;
 using Microsoft.Extensions.Logging.Abstractions;
+using CobInfo = CloudHealthOffice.BenefitEngine.Models.CobInfo;
 using Xunit;
 
 namespace CloudHealthOffice.BenefitEngine.Tests;
 
-public class BenefitCalculationEngineTests
+public partial class BenefitCalculationEngineTests
 {
     // ═══════════════════════════════════════════════════════════════════
     // FIXTURES
@@ -1345,15 +1347,16 @@ public class BenefitCalculationEngineTests
 
     /// <summary>
     /// Deductible met: pre-COB the plan pays $96 on $150 allowed ($30 copay,
-    /// $24 coinsurance). Complementary pays min($96, $200 charge − primary).
-    /// The member owes what is left of the $150 allowed after both payers
+    /// $24 coinsurance). Complementary pays min($96, $150 allowed − primary):
+    /// all plans together never exceed the allowable expense (NAIC MDL-120
+    /// §7). The member owes what is left of the $150 allowed after both payers
     /// (never more than $54), the PR entries shrink to it (coinsurance
     /// first), and OA-23 = allowed − member − paid.
     /// </summary>
     [Theory]
     [InlineData(0, 96, 30, 24, 0)]     // no primary payment: COB is a no-op
     [InlineData(40, 96, 14, 0, 40)]    // member owes 150 − 40 − 96 = 14 (copay)
-    [InlineData(120, 80, 0, 0, 70)]    // payment capped at 200 − 120; member owes 0
+    [InlineData(120, 30, 0, 0, 120)]   // payment capped at allowed 150 − 120; member owes 0
     public async Task Cob_Complementary_Line_PrIsMemberLiability_Oa23Balances(
         decimal primaryPaid, decimal expectedPaid, decimal expectedCopay,
         decimal expectedCoinsurance, decimal expectedOa23)
@@ -1415,15 +1418,21 @@ public class BenefitCalculationEngineTests
     /// <summary>
     /// Deductible not met: the $150 allowed all goes to the deductible and
     /// the plan pays nothing pre-COB. The primary paid $100, so the member
-    /// owes $50 — PR-1 $50, OA-23 $100 — and the deductible accumulator
-    /// records $50, not $150.
+    /// owes $50 — PR-1 $50, OA-23 $100, the same 835 under either deductible
+    /// setting. The deductible accumulator records the full $150 the plan
+    /// would have applied with no other coverage under NAIC full credit (the
+    /// default; MDL-120 §7), or only the member's $50 under MemberPaidOnly.
+    /// The OOP accumulator records the member's $50 either way.
     /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Cob_DeductibleReducedToMemberLiability_AccumulatorRecordsReducedDeductible(bool complementary)
+    [InlineData(true, CobDeductibleCredit.NaicFullCredit, 150)]
+    [InlineData(false, CobDeductibleCredit.NaicFullCredit, 150)]
+    [InlineData(true, CobDeductibleCredit.MemberPaidOnly, 50)]
+    [InlineData(false, CobDeductibleCredit.MemberPaidOnly, 50)]
+    public async Task Cob_DeductibleReducedToMemberLiability_AccumulatorFollowsCreditSetting(
+        bool complementary, CobDeductibleCredit credit, decimal expectedDeductibleCredit)
     {
-        var plan = CreateTestPlan(individualDeductible: 500);
+        var plan = CreateTestPlan(individualDeductible: 500) with { CobDeductibleCredit = credit };
         var engine = CreateEngine(plan, categoryCode: "98");
         var request = AsSecondary(
             CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
@@ -1438,7 +1447,9 @@ public class BenefitCalculationEngineTests
             line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
         Assert.Equal(50m, line.MemberResponsibility);
         AssertCasInvariants(line);
-        Assert.Equal(50m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(expectedDeductibleCredit, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(expectedDeductibleCredit, line.DeductibleCreditedAmount);
+        Assert.Equal(expectedDeductibleCredit, result.Totals.TotalDeductibleCredited);
         Assert.Equal(50m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
         Assert.Equal(50m, result.Totals.TotalDeductible);
         Assert.Equal(50m, result.Totals.TotalMemberResponsibility);
@@ -1447,14 +1458,15 @@ public class BenefitCalculationEngineTests
     /// <summary>
     /// OOP max and COB on the same line. Pre-COB the $600 coinsurance is
     /// reduced to the $20 left under the OOP max and the plan would pay
-    /// $2,980. Complementary pays the $2,500 balance of the $5,000 charge;
-    /// nothing of the $3,000 allowed is left for the member, so PR-2 is
-    /// dropped, OA-23 = $500 and the OOP accumulator records $0.
+    /// $2,980. Complementary pays the $500 of the $3,000 allowed the
+    /// primary's $2,500 left (never more than allowed − prior paid, NAIC
+    /// MDL-120 §7); nothing is left for the member, so PR-2 is dropped,
+    /// OA-23 = $2,500 and the OOP accumulator records $0.
     /// Non-duplication pays $2,980 − $2,500 = $480; the member still owes
     /// the $20, OA-23 = $2,500.
     /// </summary>
     [Theory]
-    [InlineData(true, 2500, 0, 500)]
+    [InlineData(true, 500, 0, 2500)]
     [InlineData(false, 480, 20, 2500)]
     public async Task Cob_WithOopMaxReduction_Line_ReducedPrAndPositiveCobOa23(
         bool complementary, decimal expectedPaid, decimal expectedCoinsurance, decimal expectedOa23)
@@ -1569,14 +1581,17 @@ public class BenefitCalculationEngineTests
     /// DRG stay with the OOP cap AND COB. $500 OOP left: pre-COB the
     /// coinsurance is forgiven entirely, the member owes the $500 deductible
     /// and the plan would pay $11,500. The primary paid $7,000 in total.
-    /// Complementary pays $11,500 (≤ $20,000 − $7,000): nothing is left for
-    /// the member, OA-23 = $500, and no accumulator moves. Non-duplication
-    /// pays $11,500 − $7,000 = $4,500; the member still owes $500, OA-23 =
-    /// $7,000. Line 2 has $0 allowed, so its OA-23 share is capped at $0 and
-    /// the whole OA-23 lands on line 1 (no line pays below zero).
+    /// Complementary pays $5,000 (= $12,000 allowed − $7,000, NAIC MDL-120
+    /// §7): nothing is left for the member, OA-23 = $7,000, and the OOP
+    /// accumulator does not move. Non-duplication pays $11,500 − $7,000 =
+    /// $4,500; the member still owes $500, OA-23 = $7,000. Either way the
+    /// deductible accumulator gets the $500 the plan would have applied
+    /// alone (NAIC full credit, the default). Line 2 has $0 allowed, so its
+    /// OA-23 share is capped at $0 and the whole OA-23 lands on line 1 (no
+    /// line pays below zero).
     /// </summary>
     [Theory]
-    [InlineData(true, 11500, 0, 500)]
+    [InlineData(true, 5000, 0, 7000)]
     [InlineData(false, 4500, 500, 7000)]
     public async Task Cob_Drg_WithOopMax_ClaimLevelAndLinesBalance(
         bool complementary, decimal expectedPaid, decimal expectedMember, decimal expectedOa23)
@@ -1616,7 +1631,9 @@ public class BenefitCalculationEngineTests
         Assert.Equal(0m, Oa23(result.Lines[1].Adjustments));
         Assert.Equal(0m, result.Lines[1].PlanPaidAmount);
 
-        Assert.Equal(expectedMember, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(500m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(500m, drg.DeductibleCreditedAmount);
+        Assert.Equal(500m, result.Lines.Sum(l => l.DeductibleCreditedAmount));
         Assert.Equal(expectedMember, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
     }
 
@@ -1852,6 +1869,569 @@ public class BenefitCalculationEngineTests
         var line = result.Lines.Single();
         Assert.True(line.IsCovered);
         Assert.Equal(10m, line.CopayAmount);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // COB — TERTIARY AND LATER: N PRIOR PAYERS
+    //
+    // priorPaid = Σ every earlier payer's payment; the balance is
+    // min(allowed − priorPaid, the last prior payer's PR when reported);
+    // standard pays min(normal, balance), non-duplication
+    // min(normal − priorPaid, balance); member = min(cost share, balance −
+    // paid); one positive OA-23 = allowed − member − paid (NAIC MDL-120
+    // §6.A(4), §7).
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static PriorPayerAdjudication PriorPayer(
+        int sequence, decimal? claimPaid = null,
+        (string group, string carc, decimal amount)[]? claimCas = null,
+        params (int line, decimal paid, (string group, string carc, decimal amount)[] cas)[] lines)
+        => new()
+        {
+            Sequence = sequence,
+            PayerId = $"PAYER-{sequence}",
+            ClaimPaidAmount = claimPaid,
+            ClaimAdjustments = (claimCas ?? [])
+                .Select(c => new PriorPayerAdjustment { GroupCode = c.group, ReasonCode = c.carc, Amount = c.amount })
+                .ToList(),
+            Lines = lines
+                .Select(l => new PriorPayerLineAdjudication
+                {
+                    LineNumber = l.line,
+                    PaidAmount = l.paid,
+                    Adjustments = l.cas
+                        .Select(c => new PriorPayerAdjustment { GroupCode = c.group, ReasonCode = c.carc, Amount = c.amount })
+                        .ToList(),
+                })
+                .ToList(),
+        };
+
+    private static BenefitResolutionRequest WithPriorPayers(
+        BenefitResolutionRequest request, int ourSequence, bool complementary, params PriorPayerAdjudication[] priorPayers)
+        => request with
+        {
+            Cob = new CobInfo
+            {
+                PayerSequence = ourSequence,
+                UseComplementaryModel = complementary,
+                PriorPayers = priorPayers.ToList(),
+            }
+        };
+
+    private static (string, string, decimal)[] Cas(LineBenefitResult l) =>
+        l.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)).ToArray();
+
+    /// <summary>
+    /// Tertiary, both prior payers paying, line level (2430). Deductible met;
+    /// we allow $150 of the $200 charge: copay $30 + coinsurance $24, normal
+    /// benefit $96.
+    /// Primary: paid $80, PR-1 $40 (CO-45 $80). Secondary: paid $25, PR-3 $15
+    /// (OA-23 $160). Prior paid $105; the member owes $15 after the
+    /// secondary, so balance = min(150 − 105, 15) = $15.
+    /// Standard: we pay $15, member $0, OA-23 = 150 − 0 − 15 = $135.
+    /// Non-duplication: 96 − 105 &lt; 0 → we pay $0; member min(54, 15) = $15
+    /// (coinsurance forgiven first, PR-3 $15), OA-23 = 150 − 15 − 0 = $135.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 15, 0, 0)]
+    [InlineData(false, 0, 15, 0)]
+    public async Task Cob_Tertiary_BothPriorPayersPaid_Line(
+        bool complementary, decimal expectedPaid, decimal expectedCopay, decimal expectedCoinsurance)
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = WithPriorPayers(
+            CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
+            ourSequence: 3, complementary,
+            PriorPayer(1, claimPaid: 80m, lines: (1, 80m, [("CO", "45", 80m), ("PR", "1", 40m)])),
+            PriorPayer(2, claimPaid: 25m, lines: (1, 25m, [("OA", "23", 160m), ("PR", "3", 15m)])));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(expectedPaid, line.PlanPaidAmount);
+        Assert.Equal(expectedCopay, line.CopayAmount);
+        Assert.Equal(expectedCoinsurance, line.CoinsuranceAmount);
+        Assert.Equal(expectedCopay + expectedCoinsurance, line.MemberResponsibility);
+        Assert.Equal(135m, Oa23(line.Adjustments));
+        Assert.Single(line.Adjustments, a => a is { GroupCode: "OA", ReasonCode: "23" });
+        AssertCasInvariants(line);
+        // Never more than allowed − total prior paid.
+        Assert.True(line.PlanPaidAmount <= 150m - 105m);
+        Assert.Equal(line.MemberResponsibility, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// Tertiary where the secondary paid $0 (it applied everything to its
+    /// own deductible). Primary paid $80, PR $40; secondary paid $0, PR-1
+    /// $40. Prior paid $80; balance = min(150 − 80, 40) = $40.
+    /// Standard: we pay $40, member $0, OA-23 $110.
+    /// Non-duplication: we pay 96 − 80 = $16; member min(54, 40 − 16) = $24
+    /// (coinsurance $24 forgiven to 0, copay $30 → $24), OA-23 $110.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 40, 0)]
+    [InlineData(false, 16, 24)]
+    public async Task Cob_Tertiary_SecondaryPaidZero_Line(
+        bool complementary, decimal expectedPaid, decimal expectedMember)
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = WithPriorPayers(
+            CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
+            ourSequence: 3, complementary,
+            PriorPayer(1, claimPaid: 80m, lines: (1, 80m, [("CO", "45", 80m), ("PR", "1", 40m)])),
+            PriorPayer(2, claimPaid: 0m, lines: (1, 0m, [("CO", "45", 80m), ("OA", "23", 80m), ("PR", "1", 40m)])));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(expectedPaid, line.PlanPaidAmount);
+        Assert.Equal(expectedMember, line.MemberResponsibility);
+        Assert.Equal(expectedMember, line.CopayAmount);
+        Assert.Equal(0m, line.CoinsuranceAmount);
+        Assert.Equal(110m, Oa23(line.Adjustments));
+        AssertCasInvariants(line);
+    }
+
+    /// <summary>
+    /// Prior payers reported without any CAS (patient responsibility
+    /// unknown): the balance is allowed − total prior paid. Primary $60 +
+    /// secondary $40 = $100 on $150 allowed → standard pays $50 (not its
+    /// normal $96), member $0, OA-23 $100.
+    /// </summary>
+    [Fact]
+    public async Task Cob_Tertiary_NoPriorPatientResponsibility_CapsAtAllowedLessPriorPaid()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = WithPriorPayers(
+            CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
+            ourSequence: 3, complementary: true,
+            PriorPayer(1, claimPaid: 60m),
+            PriorPayer(2, claimPaid: 40m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(50m, line.PlanPaidAmount);
+        Assert.Equal(0m, line.MemberResponsibility);
+        Assert.Equal(new[] { ("CO", "45", 50m), ("OA", "23", 100m) }, Cas(line));
+        AssertCasInvariants(line);
+    }
+
+    /// <summary>
+    /// Payers sequenced at or after us (an 837 to the secondary may list the
+    /// tertiary in 2320 too) are ignored: as secondary, only the primary's
+    /// $40 counts.
+    /// </summary>
+    [Fact]
+    public async Task Cob_LaterPayersOnClaim_AreIgnored()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = WithPriorPayers(
+            CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
+            ourSequence: 2, complementary: true,
+            PriorPayer(1, claimPaid: 40m),
+            PriorPayer(3, claimPaid: 100m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(96m, line.PlanPaidAmount);   // min(96, 150 − 40)
+        Assert.Equal(14m, line.MemberResponsibility); // 150 − 40 − 96
+        Assert.Equal(40m, Oa23(line.Adjustments));
+        AssertCasInvariants(line);
+    }
+
+    /// <summary>
+    /// Line-level and claim-level prior payments mixed. Two lines:
+    /// L1 billed $200 / allowed $150 (normal $96), L2 billed $100 / allowed
+    /// $75 (copay $30, coinsurance 20% × 45 = $9, normal $36).
+    /// Primary reported L1 in 2430 (paid $80, PR-1 $40) and AMT*D $120 with a
+    /// claim-level PR-2 $10: the $40 not on a 2430 line and the $10 PR go to
+    /// L2, the only unreported line.
+    /// Secondary reported at claim level only: AMT*D $30, PR-1 $30, prorated
+    /// by charge 200 : 100 → L1 $20 / PR $20, L2 $10 / PR $10.
+    /// L1: prior paid 100, balance min(150 − 100, 20) = $20 → pay $20, OA-23 $130.
+    /// L2: prior paid 50, balance min(75 − 50, 10) = $10 → pay $10, OA-23 $65.
+    /// </summary>
+    [Fact]
+    public async Task Cob_Tertiary_LineAndClaimLevelPriorPaymentsMixed()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = WithPriorPayers(
+            CreateRequest(plan.Id, lines: [("99213", 200m, 150m, "11"), ("99212", 100m, 75m, "11")]),
+            ourSequence: 3, complementary: true,
+            PriorPayer(1, claimPaid: 120m, claimCas: [("PR", "2", 10m)],
+                lines: (1, 80m, [("CO", "45", 80m), ("PR", "1", 40m)])),
+            PriorPayer(2, claimPaid: 30m, claimCas: [("PR", "1", 30m), ("OA", "23", 240m)]));
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.Equal(new[] { 20m, 10m }, result.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(new[] { 130m, 65m }, result.Lines.Select(l => Oa23(l.Adjustments)));
+        Assert.All(result.Lines, l => Assert.Equal(0m, l.MemberResponsibility));
+        Assert.All(result.Lines, AssertCasInvariants);
+        Assert.Equal(30m, result.Totals.TotalPlanPaid);
+    }
+
+    /// <summary>
+    /// DRG stay, tertiary. Pre-COB: deductible $500 + coinsurance 20% ×
+    /// 11,500 = $2,300; member $2,800, normal $9,200 on $12,000 allowed.
+    /// Primary: claim level only, AMT*D $6,000. Secondary: 2430 on every
+    /// line, paid 1,000 / 0 / 2,000 = $3,000, PR 300 / 50 / 650 = $1,000.
+    /// Prior paid $9,000; balance = min(12,000 − 9,000, 1,000) = $1,000.
+    /// Standard: pay $1,000, member $0, OA-23 $11,000.
+    /// Non-duplication: pay min(9,200 − 9,000, 1,000) = $200; member
+    /// min(2,800, 800) = $800 (coinsurance 2,300 → 300, deductible $500),
+    /// OA-23 $11,000.
+    /// The deductible accumulator gets the $500 our plan applied alone (NAIC
+    /// full credit); the OOP accumulator the member's share.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 1000, 0, 0)]
+    [InlineData(false, 200, 500, 300)]
+    public async Task Cob_Tertiary_Drg_ClaimLevelCob_Balances(
+        bool complementary, decimal expectedPaid, decimal expectedDeductible, decimal expectedCoinsurance)
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500, individualOopMax: 6000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48");
+        var request = WithPriorPayers(
+            CreateRequest(plan.Id,
+                claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+                lines:
+                [
+                    ("99223", 12000m, 3388.23m, "21"),
+                    ("", 1500m, 423.52m, "21"),
+                    ("", 29000m, 8188.25m, "21"),
+                ]),
+            ourSequence: 3, complementary,
+            PriorPayer(1, claimPaid: 6000m),
+            PriorPayer(2, claimPaid: 3000m, lines:
+            [
+                (1, 1000m, [("PR", "2", 300m)]),
+                (2, 0m, [("PR", "2", 50m)]),
+                (3, 2000m, [("PR", "2", 650m)]),
+            ]));
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.True(result.Success);
+        var drg = result.DrgCostShare!;
+        var member = expectedDeductible + expectedCoinsurance;
+        Assert.Equal(expectedPaid, drg.PlanPaidAmount);
+        Assert.Equal(member, drg.MemberResponsibility);
+        Assert.Equal(11000m, Oa23(drg.Adjustments));
+        Assert.Equal(drg.PlanPaidAmount, result.Lines.Sum(l => l.BilledAmount) - drg.Adjustments.Sum(a => a.Amount));
+        Assert.All(drg.Adjustments, a => Assert.True(a.Amount >= 0));
+
+        Assert.All(result.Lines, AssertCasInvariants);
+        Assert.All(result.Lines, l => Assert.True(l.PlanPaidAmount >= 0));
+        Assert.Equal(expectedPaid, result.Lines.Sum(l => l.PlanPaidAmount));
+        Assert.Equal(11000m, result.Lines.Sum(l => Oa23(l.Adjustments)));
+        Assert.Equal(expectedDeductible, result.Lines.Sum(l => l.DeductibleAmount));
+        Assert.Equal(expectedCoinsurance, result.Lines.Sum(l => l.CoinsuranceAmount));
+
+        Assert.Equal(500m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(500m, result.Lines.Sum(l => l.DeductibleCreditedAmount));
+        Assert.Equal(member, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // COB DEDUCTIBLE CREDIT (per plan): NaicFullCredit / MemberPaidOnly /
+    // NoDeductible — secondary and tertiary, line and DRG, deductible
+    // partly met. NAIC MDL-120 §7: "the secondary plan shall credit to its
+    // plan deductible any amounts it would have credited to its deductible
+    // in the absence of other health care coverage." OOP: always the
+    // member's share after COB.
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static BenefitResolutionRequest AsLaterPayer(BenefitResolutionRequest request, int ourSequence, decimal totalPriorPaid)
+        => ourSequence == 2
+            ? WithPriorPayers(request, 2, complementary: true, PriorPayer(1, claimPaid: totalPriorPaid))
+            : WithPriorPayers(request, ourSequence, complementary: true,
+                PriorPayer(1, claimPaid: totalPriorPaid * 0.6m),
+                PriorPayer(2, claimPaid: totalPriorPaid * 0.4m));
+
+    /// <summary>
+    /// $400 of the $500 deductible met ($100 left). Line billed $200,
+    /// allowed $150: pre-COB deductible $100, copay $30, coinsurance 20% × 20
+    /// = $4 → member $134, normal $16. Prior payers paid $100 in total.
+    /// NaicFullCredit / MemberPaidOnly — same 835: we pay min(16, 50) = $16;
+    /// member min(134, 34) = $34, all deductible (PR-1 $34), OA-23 $100. The
+    /// deductible accumulator gets $100 (NAIC: what we applied alone, capped
+    /// by the $100 remaining) or $34 (member-paid only). OOP $34 either way.
+    /// NoDeductible: no deductible — copay $30 + coinsurance $24, normal $96;
+    /// we pay min(96, 50) = $50, member $0, OA-23 $100, nothing credited.
+    /// </summary>
+    [Theory]
+    [InlineData(2, CobDeductibleCredit.NaicFullCredit, 16, 34, 100, 34)]
+    [InlineData(3, CobDeductibleCredit.NaicFullCredit, 16, 34, 100, 34)]
+    [InlineData(2, CobDeductibleCredit.MemberPaidOnly, 16, 34, 34, 34)]
+    [InlineData(3, CobDeductibleCredit.MemberPaidOnly, 16, 34, 34, 34)]
+    [InlineData(2, CobDeductibleCredit.NoDeductible, 50, 0, 0, 0)]
+    [InlineData(3, CobDeductibleCredit.NoDeductible, 50, 0, 0, 0)]
+    public async Task CobDeductibleCredit_Line_PartlyMetDeductible(
+        int ourSequence, CobDeductibleCredit credit,
+        decimal expectedPaid, decimal expectedPr1, decimal expectedDeductibleCredit, decimal expectedOop)
+    {
+        var plan = CreateTestPlan(individualDeductible: 500) with { CobDeductibleCredit = credit };
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 400m);
+        var request = AsLaterPayer(CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")), ourSequence, 100m);
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(expectedPaid, line.PlanPaidAmount);
+        Assert.Equal(expectedPr1, line.DeductibleAmount);
+        Assert.Equal(expectedPr1, line.MemberResponsibility);
+        Assert.Equal(100m, Oa23(line.Adjustments));
+        AssertCasInvariants(line);
+        Assert.Equal(expectedDeductibleCredit, line.DeductibleCreditedAmount);
+        Assert.Equal(expectedDeductibleCredit, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(expectedDeductibleCredit, Snapshot(result, AccumulatorType.FamilyDeductible, AccumulatorScope.Family).AmountApplied);
+        Assert.Equal(expectedOop, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(expectedOop, line.OopAppliedAmount);
+    }
+
+    /// <summary>
+    /// For a single COB unit (one line, or a DRG stay) NaicFullCredit and
+    /// MemberPaidOnly produce the same 835 and differ only in the deductible
+    /// accumulators. On a multi-line claim they differ: NaicFullCredit prices
+    /// the claim as the only plan and applies COB to the whole claim;
+    /// MemberPaidOnly prices line by line — see the MultiLine tests. $300 of deductible left. Line: allowed $300 all
+    /// deductible, prior payers $150 → we pay $0, member $150 (PR-1);
+    /// credited $300 vs $150. DRG: deductible $300 + coinsurance $2,340,
+    /// prior payers $4,000 → we pay $8,000, member $0; credited $300 vs $0.
+    /// </summary>
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(2, true)]
+    [InlineData(3, true)]
+    public async Task CobDeductibleCredit_SingleUnit_NaicAndMemberPaidOnly_ProduceTheSame835(int ourSequence, bool drg)
+    {
+        async Task<BenefitResolutionResult> Run(CobDeductibleCredit credit)
+        {
+            var plan = CreateTestPlan(
+                individualDeductible: 500, individualOopMax: 6000,
+                inpatientMethod: drg ? InpatientPricingMethod.DrgCaseRate : InpatientPricingMethod.PerLine)
+                with { CobDeductibleCredit = credit };
+            var engine = CreateEngine(plan, categoryCode: drg ? "48" : "98", existingDeductible: 200m);
+            var request = drg
+                ? CreateRequest(plan.Id, claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+                    lines: [("99223", 12000m, 6000m, "21"), ("", 8000m, 6000m, "21")])
+                : CreateRequest(plan.Id, lines: ("99213", 400m, 300m, "11"));
+            return await engine.CalculateAsync(AsLaterPayer(request, ourSequence, drg ? 4000m : 150m));
+        }
+
+        var naic = await Run(CobDeductibleCredit.NaicFullCredit);
+        var memberPaid = await Run(CobDeductibleCredit.MemberPaidOnly);
+
+        Assert.Equal(naic.Lines.Select(Cas), memberPaid.Lines.Select(Cas));
+        Assert.Equal(naic.Lines.Select(l => l.PlanPaidAmount), memberPaid.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(naic.Totals.TotalMemberResponsibility, memberPaid.Totals.TotalMemberResponsibility);
+        Assert.Equal(naic.Totals.TotalDeductible, memberPaid.Totals.TotalDeductible);
+        Assert.All(naic.Lines, AssertCasInvariants);
+        // NAIC credits the full $300 left; member-paid only what PR-1 shows.
+        Assert.Equal(300m, Snapshot(naic, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(memberPaid.Totals.TotalDeductible, Snapshot(memberPaid, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.True(memberPaid.Totals.TotalDeductible < 300m);
+        Assert.Equal(
+            Snapshot(naic, AccumulatorType.IndividualOutOfPocketMax).AmountApplied,
+            Snapshot(memberPaid, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// DRG stay, $200 of the $500 deductible met ($300 left). Pre-COB:
+    /// deductible $300, coinsurance 20% × 11,700 = $2,340; normal $9,360.
+    /// Prior payers paid $10,000: we pay min(9,360, 2,000) = $2,000; the
+    /// member owes $0. The deductible accumulator gets $300 under NAIC full
+    /// credit, $0 under member-paid only. NoDeductible: coinsurance 20% ×
+    /// 12,000 = $2,400, normal $9,600 → we pay $2,000, nothing credited.
+    /// </summary>
+    [Theory]
+    [InlineData(2, CobDeductibleCredit.NaicFullCredit, 300)]
+    [InlineData(3, CobDeductibleCredit.NaicFullCredit, 300)]
+    [InlineData(2, CobDeductibleCredit.MemberPaidOnly, 0)]
+    [InlineData(3, CobDeductibleCredit.MemberPaidOnly, 0)]
+    [InlineData(2, CobDeductibleCredit.NoDeductible, 0)]
+    [InlineData(3, CobDeductibleCredit.NoDeductible, 0)]
+    public async Task CobDeductibleCredit_Drg_PartlyMetDeductible(
+        int ourSequence, CobDeductibleCredit credit, decimal expectedDeductibleCredit)
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500, individualOopMax: 6000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate) with { CobDeductibleCredit = credit };
+        var engine = CreateEngine(plan, categoryCode: "48", existingDeductible: 200m);
+        var request = AsLaterPayer(
+            CreateRequest(plan.Id, claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+                lines: [("99223", 12000m, 3388.23m, "21"), ("", 1500m, 423.52m, "21"), ("", 29000m, 8188.25m, "21")]),
+            ourSequence, 10000m);
+
+        var result = await engine.CalculateAsync(request);
+
+        var drg = result.DrgCostShare!;
+        Assert.Equal(2000m, drg.PlanPaidAmount);
+        Assert.Equal(0m, drg.MemberResponsibility);
+        Assert.Equal(10000m, Oa23(drg.Adjustments));
+        Assert.All(result.Lines, AssertCasInvariants);
+        Assert.Equal(expectedDeductibleCredit, drg.DeductibleCreditedAmount);
+        Assert.Equal(expectedDeductibleCredit, result.Lines.Sum(l => l.DeductibleCreditedAmount));
+        Assert.Equal(expectedDeductibleCredit, result.Totals.TotalDeductibleCredited);
+        Assert.Equal(expectedDeductibleCredit, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// Multi-line SECONDARY claim, $300 of the deductible left. The claim is
+    /// priced first as if this plan were the only plan (NAIC MDL-120 §7), so
+    /// the deductible met on line 1 is met for line 2 too; COB is then applied
+    /// to the claim as a whole.
+    /// L1 (billed 400, allowed 300): deductible $300 → cost share 300, normal $0.
+    /// L2 (billed 200, allowed 100): copay $30 + coinsurance 20% × 70 = $14 →
+    /// cost share 44, normal $56.
+    /// Prior payer $150 at claim level, no CAS (PR unknown) → by charge $100
+    /// on L1, $50 on L2. Room 200 + 50 = $250; no bound → balance $250.
+    /// Claim: pay min(56, 250) = $56; member min(344, 250 − 56) = $194.
+    /// (Line-level capping would pay only $50: L2's normal $56 does not fit
+    /// in its $50 room — the reviewer's M1.)
+    /// Lines: payment by normal benefit up to min(normal, room) — L2 $50 —
+    /// then the $6 left to L1's room; the member's $194 on L1 (PR-1).
+    /// L1: paid 6, PR-1 194, OA-23 = 300 − 194 − 6 = 100. L2: paid 50,
+    /// OA-23 50. NAIC credits the 300 the plan applied alone; OOP 194.
+    /// </summary>
+    [Fact]
+    public async Task CobDeductibleCredit_MultiLineSecondary_NaicClaimLevel_MemberPaidOnlyLineByLine()
+    {
+        async Task<BenefitResolutionResult> Run(CobDeductibleCredit credit)
+        {
+            var plan = CreateTestPlan(individualDeductible: 500) with { CobDeductibleCredit = credit };
+            var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 200m);
+            return await engine.CalculateAsync(AsLaterPayer(
+                CreateRequest(plan.Id, lines: [("99213", 400m, 300m, "11"), ("99212", 200m, 100m, "11")]), 2, 150m));
+        }
+
+        var naic = await Run(CobDeductibleCredit.NaicFullCredit);
+        Assert.Equal(new[] { 6m, 50m }, naic.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(new[] { 194m, 0m }, naic.Lines.Select(l => l.DeductibleAmount));
+        Assert.Equal(new[] { 194m, 0m }, naic.Lines.Select(l => l.MemberResponsibility));
+        Assert.Equal(new[] { ("CO", "45", 100m), ("PR", "1", 194m), ("OA", "23", 100m) }, Cas(naic.Lines[0]));
+        Assert.Equal(new[] { ("CO", "45", 100m), ("OA", "23", 50m) }, Cas(naic.Lines[1]));
+        Assert.Equal(new[] { 300m, 0m }, naic.Lines.Select(l => l.DeductibleCreditedAmount));
+        Assert.Equal(300m, Snapshot(naic, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(194m, Snapshot(naic, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(56m, naic.Totals.TotalPlanPaid);
+        Assert.Equal(194m, naic.Totals.TotalMemberResponsibility);
+        Assert.Equal(2, naic.CobPayerSequence);
+
+        // MemberPaidOnly prices line by line (COB per line, each line
+        // crediting only the PR-1 the member pays): L1 deductible 300, prior
+        // $100 → balance 200: pay 0, PR-1 200, OA-23 100. L2: $100 of
+        // deductible still left → normal 0; prior $50 → pay 0, PR-1 50,
+        // OA-23 50. Credited 200 + 50.
+        var memberPaid = await Run(CobDeductibleCredit.MemberPaidOnly);
+        Assert.Equal(new[] { 0m, 0m }, memberPaid.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(new[] { ("CO", "45", 100m), ("PR", "1", 200m), ("OA", "23", 100m) }, Cas(memberPaid.Lines[0]));
+        Assert.Equal(new[] { ("CO", "45", 100m), ("PR", "1", 50m), ("OA", "23", 50m) }, Cas(memberPaid.Lines[1]));
+        Assert.Equal(new[] { 200m, 50m }, memberPaid.Lines.Select(l => l.DeductibleCreditedAmount));
+        Assert.Equal(250m, Snapshot(memberPaid, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(250m, Snapshot(memberPaid, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+
+        Assert.All(naic.Lines, AssertCasInvariants);
+        Assert.All(memberPaid.Lines, AssertCasInvariants);
+        Assert.Equal(naic.Totals.TotalPlanPaid,
+            naic.Lines.Sum(l => l.BilledAmount - l.Adjustments.Sum(a => a.Amount)));
+        // All payers together never exceed the claim's allowable expense.
+        Assert.True(150m + naic.Totals.TotalPlanPaid + naic.Totals.TotalMemberResponsibility <= 400m);
+    }
+
+    /// <summary>
+    /// Multi-line TERTIARY claim, $150 of the $500 deductible left. Two lines
+    /// billed $200 / allowed $150. Pre-COB (as the only plan): L1 deductible
+    /// $150, normal $0; L2 (deductible now met) copay $30 + coinsurance 20% ×
+    /// 120 = $24, normal $96.
+    /// Primary (2430): paid $60, PR-1 $40 on each line. Secondary (2320 only):
+    /// AMT*D $40, PR-1 $40 → $20 paid per line (by charge 1 : 1); its $40 PR
+    /// is the member's liability after both payers for the whole claim.
+    /// Prior paid $80 per line; room 70 + 70 = $140; the secondary adjudicated
+    /// both lines, so balance = min(140, 40) = $40 (split 20 / 20 by room).
+    /// Claim: pay min(96, 40) = $40, member $0. (Line-level capping with the
+    /// PR prorated $20 per line paid only $20: L1's normal is $0.)
+    /// L1: paid 20, OA-23 130. L2: paid 20, OA-23 130.
+    /// NAIC credits the $150 the plan applied alone (L1).
+    /// </summary>
+    [Fact]
+    public async Task CobDeductibleCredit_MultiLineTertiary_NaicClaimLevel_MemberPaidOnlyLineByLine()
+    {
+        async Task<BenefitResolutionResult> Run(CobDeductibleCredit credit)
+        {
+            var plan = CreateTestPlan(individualDeductible: 500) with { CobDeductibleCredit = credit };
+            var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 350m);
+            return await engine.CalculateAsync(WithPriorPayers(
+                CreateRequest(plan.Id, lines: [("99213", 200m, 150m, "11"), ("99214", 200m, 150m, "11")]),
+                ourSequence: 3, complementary: true,
+                PriorPayer(1, claimPaid: 120m, lines:
+                [
+                    (1, 60m, [("CO", "45", 100m), ("PR", "1", 40m)]),
+                    (2, 60m, [("CO", "45", 100m), ("PR", "1", 40m)]),
+                ]),
+                PriorPayer(2, claimPaid: 40m, claimCas: [("PR", "1", 40m), ("OA", "23", 320m)])));
+        }
+
+        var naic = await Run(CobDeductibleCredit.NaicFullCredit);
+        Assert.Equal(new[] { 20m, 20m }, naic.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(new[] { 0m, 0m }, naic.Lines.Select(l => l.MemberResponsibility));
+        Assert.Equal(new[] { ("CO", "45", 50m), ("OA", "23", 130m) }, Cas(naic.Lines[0]));
+        Assert.Equal(new[] { ("CO", "45", 50m), ("OA", "23", 130m) }, Cas(naic.Lines[1]));
+        Assert.Equal(new[] { 150m, 0m }, naic.Lines.Select(l => l.DeductibleCreditedAmount));
+        Assert.Equal(150m, Snapshot(naic, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(0m, Snapshot(naic, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(40m, naic.Totals.TotalPlanPaid);
+        Assert.Equal(3, naic.CobPayerSequence);
+
+        // MemberPaidOnly, line by line: L1 deductible 150; prior paid 80 and
+        // the secondary left $20 (its PR prorated by charge) → pay 0, PR-1 20.
+        // L2: $130 of deductible still left + copay $20 → normal 0; balance
+        // 20 → pay 0, PR-1 20. Credited 20 + 20.
+        var memberPaid = await Run(CobDeductibleCredit.MemberPaidOnly);
+        Assert.Equal(new[] { 0m, 0m }, memberPaid.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(new[] { 20m, 20m }, memberPaid.Lines.Select(l => l.DeductibleAmount));
+        Assert.Equal(new[] { 130m, 130m }, memberPaid.Lines.Select(l => Oa23(l.Adjustments)));
+        Assert.Equal(40m, Snapshot(memberPaid, AccumulatorType.IndividualDeductible).AmountApplied);
+
+        Assert.All(naic.Lines, AssertCasInvariants);
+        Assert.All(memberPaid.Lines, AssertCasInvariants);
+        Assert.All(naic.Lines, l => Assert.True(l.PlanPaidAmount <= 150m - 80m));
+    }
+
+    /// <summary>
+    /// As the first payer the setting changes nothing: NoDeductible still
+    /// applies the deductible on a primary claim.
+    /// </summary>
+    [Fact]
+    public async Task CobDeductibleCredit_NoDeductible_AppliesDeductibleAsPrimary()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500) with { CobDeductibleCredit = CobDeductibleCredit.NoDeductible };
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 400m);
+
+        var result = await engine.CalculateAsync(CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")));
+
+        var line = result.Lines.Single();
+        Assert.Equal(100m, line.DeductibleAmount);
+        Assert.Equal(100m, line.DeductibleCreditedAmount);
+        Assert.Equal(100m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+    }
+
+    [Fact]
+    public void BenefitPlanConfig_CobDeductibleCredit_DefaultsToNaicFullCredit()
+    {
+        Assert.Equal(CobDeductibleCredit.NaicFullCredit, new BenefitPlanConfig().CobDeductibleCredit);
     }
 
     // ═══════════════════════════════════════════════════════════════════

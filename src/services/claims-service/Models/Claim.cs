@@ -223,6 +223,29 @@ public class Claim
     public InstitutionalClaimDetails? Institutional { get; set; }
 
     /// <summary>
+    /// 837 2000B SBR01: this plan's payer responsibility sequence for the
+    /// claim (P primary, S secondary, T tertiary, A–H payers four to eleven,
+    /// U unknown). Null when the claim did not come from an 837 carrying it.
+    /// </summary>
+    [StringLength(1)]
+    public string? PayerResponsibilityCode { get; set; }
+
+    /// <summary>
+    /// 837 loops 2320 / 2330B / 2430: the other payers on the claim and what
+    /// each one that already adjudicated paid and adjusted, at claim and line
+    /// level. Feeds the benefit engine's coordination-of-benefits input.
+    /// </summary>
+    public List<ClaimOtherPayer> OtherPayers { get; set; } = new();
+
+    /// <summary>
+    /// 837 2430 loops whose SVD01 matches none of the claim's other payers
+    /// (2330B NM109, REF*2U, REF*FY) while there are several: they cannot be
+    /// placed in the payer order, so the COB stage pends the claim instead of
+    /// undercounting what the earlier payers paid.
+    /// </summary>
+    public List<ClaimOtherPayerLine> UnmatchedOtherPayerLines { get; set; } = new();
+
+    /// <summary>
     /// Three-character type of bill (UB-04 FL4 without the leading zero):
     /// the two-digit facility type code (837I CLM05-1) followed by the
     /// claim frequency code (CLM05-3, <see cref="ClaimFrequencyCode"/>).
@@ -280,6 +303,27 @@ public class Claim
     /// from AdjudicationResult to keep the AI/audit boundary explicit.
     /// </summary>
     public AiExamination? AiExamination { get; set; }
+
+    /// <summary>
+    /// Audit trail of examiner resolutions of this claim's pends (PR #1278
+    /// round 3): who approved or denied it, why, the payer order they
+    /// confirmed, and exactly which pends their decision overrode. Persisted
+    /// on the claim and carried on the ClaimVersionResolved event.
+    /// </summary>
+    public List<ExaminerResolutionRecord> ExaminerResolutions { get; set; } = new();
+
+    /// <summary>
+    /// A first approval waiting for a second, different approver (sequence
+    /// 1 over a prior payer that paid). Null when none is waiting.
+    /// </summary>
+    public PendingExaminerApproval? PendingExaminerApproval { get; set; }
+
+    /// <summary>
+    /// Held while an examiner resolution re-adjudicates the claim, so two
+    /// concurrent approvals cannot both re-run and publish (taken with a
+    /// conditional write on Pended + no live lock).
+    /// </summary>
+    public ExaminerResolutionLock? ResolutionLock { get; set; }
 
     /// <summary>
     /// Prior authorization number (if required)
@@ -910,6 +954,23 @@ public class AdjudicationResult
     public decimal? OopAppliedAmount { get; set; }
 
     /// <summary>
+    /// Deductible the benefit engine credited to the deductible accumulators.
+    /// Differs from the PR-1 deductible only when this plan paid secondary or
+    /// later under NAIC full deductible credit (the plan credits the deductible
+    /// it would have applied with no other coverage). Null on claims adjudicated
+    /// before the field existed; readers fall back to the PR-1 deductible.
+    /// </summary>
+    public decimal? DeductibleCreditedAmount { get; set; }
+
+    /// <summary>
+    /// The payer sequence this plan adjudicated the claim in when COB was
+    /// applied (2 secondary, 3 tertiary, 4–11); null when it paid as the first
+    /// payer. The 835 CLP02 (processed as primary / secondary / tertiary)
+    /// follows this — what was actually applied — not the 837 SBR01 alone.
+    /// </summary>
+    public int? CobPayerSequence { get; set; }
+
+    /// <summary>
     /// Payer payment amount (what payer will pay provider)
     /// 835: CLP04 - patient responsibility
     /// </summary>
@@ -988,10 +1049,73 @@ public class LineAdjudicationResult
     public decimal? OopAppliedAmount { get; set; }
 
     /// <summary>
+    /// Deductible the benefit engine credited to the deductible accumulators.
+    /// Differs from the PR-1 deductible only when this plan paid secondary or
+    /// later under NAIC full deductible credit (the plan credits the deductible
+    /// it would have applied with no other coverage). Null on claims adjudicated
+    /// before the field existed; readers fall back to the PR-1 deductible.
+    /// </summary>
+    public decimal? DeductibleCreditedAmount { get; set; }
+
+    /// <summary>
     /// Adjustment reasons for this line
     /// 835: CAS segment (line-level)
     /// </summary>
     public List<ClaimAdjustmentReason> AdjustmentReasons { get; set; } = new();
+}
+
+/// <summary>
+/// Another payer on the claim (837 loop 2320 other subscriber information,
+/// 2330B other payer name, 2430 line adjudication information).
+/// </summary>
+public class ClaimOtherPayer
+{
+    /// <summary>2320 SBR01 — this payer's responsibility sequence (P/S/T/A–H/U).</summary>
+    [StringLength(1)]
+    public string PayerResponsibilityCode { get; set; } = string.Empty;
+
+    /// <summary>2330B NM103.</summary>
+    [StringLength(60)]
+    public string? PayerName { get; set; }
+
+    /// <summary>2330B NM109 (matched by 2430 SVD01).</summary>
+    [StringLength(80)]
+    public string? PayerId { get; set; }
+
+    /// <summary>2330B REF*2U / REF*FY — other identifiers 2430 SVD01 may name this payer by.</summary>
+    public List<string> AdditionalPayerIds { get; set; } = new();
+
+    /// <summary>True when <paramref name="id"/> (a 2430 SVD01) names this payer.</summary>
+    public bool IsIdentifiedBy(string? id) =>
+        !string.IsNullOrWhiteSpace(id)
+        && ((PayerId is not null && string.Equals(PayerId.Trim(), id.Trim(), StringComparison.OrdinalIgnoreCase))
+            || AdditionalPayerIds.Any(a => string.Equals(a?.Trim(), id.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>2320 AMT*D — what the payer paid on the claim. Null when not reported.</summary>
+    public decimal? PaidAmount { get; set; }
+
+    /// <summary>2320 CAS — the payer's claim-level adjustments.</summary>
+    public List<ClaimAdjustmentReason> ClaimAdjustments { get; set; } = new();
+
+    /// <summary>2430 — the payer's line-level adjudication.</summary>
+    public List<ClaimOtherPayerLine> LineAdjudications { get; set; } = new();
+}
+
+/// <summary>One 837 loop 2430: another payer's adjudication of a claim line.</summary>
+public class ClaimOtherPayerLine
+{
+    /// <summary>The claim line (LX) the 2430 loop belongs to.</summary>
+    public int LineNumber { get; set; }
+
+    /// <summary>SVD01 — the identifier the 2430 names its payer by.</summary>
+    [StringLength(80)]
+    public string? PayerId { get; set; }
+
+    /// <summary>SVD02 — what the payer paid for the line.</summary>
+    public decimal PaidAmount { get; set; }
+
+    /// <summary>2430 CAS — the payer's adjustments to the line.</summary>
+    public List<ClaimAdjustmentReason> Adjustments { get; set; } = new();
 }
 
 /// <summary>
@@ -1167,6 +1291,106 @@ public class PendDetails
     /// Empty when no duplicate was found.
     /// </summary>
     public List<DuplicateFindingSnapshot> DuplicateFindings { get; set; } = new();
+
+    /// <summary>
+    /// Further pend reasons ("{code}: {reason}") a later stage found while
+    /// the claim was already pended for <see cref="PendCode"/> — e.g. NCCI
+    /// edit failures on a claim pended for COB. <see cref="PendCode"/> (which
+    /// routes the work queue) stays the first reason; every reason is shown
+    /// to the examiner.
+    /// </summary>
+    public List<string> AdditionalPendReasons { get; set; } = new();
+
+    /// <summary>
+    /// Identifies exactly this set of pends: when the claim was pended plus a
+    /// hash of every "{code}: {reason}". The examiner's client sends back the
+    /// fingerprint of the pends they viewed; an approval whose fingerprint no
+    /// longer matches the stored pends (a re-adjudication changed them) is
+    /// refused with 409 (PR #1278 round-3 verification, M4). Derived; not
+    /// stored in Mongo.
+    /// </summary>
+    [BsonIgnore]
+    [JsonPropertyName("fingerprint")]
+    public string Fingerprint => ComputeFingerprint(this);
+
+    /// <summary>See <see cref="Fingerprint"/>; empty for no pend.</summary>
+    public static string ComputeFingerprint(PendDetails? pend)
+    {
+        if (pend is null) return string.Empty;
+        var entries = new List<string> { $"{pend.PendCode}: {pend.PendReason}" };
+        entries.AddRange(pend.AdditionalPendReasons ?? []);
+        var pendedAt = pend.PendedAt.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(pend.PendedAt, DateTimeKind.Utc)
+            : pend.PendedAt.ToUniversalTime();
+        // Millisecond precision: what every store keeps.
+        pendedAt = new DateTime(pendedAt.Ticks - pendedAt.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
+        var hash = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(string.Join('\n', entries)));
+        return $"{pendedAt:yyyyMMdd'T'HHmmssfff'Z'}-{Convert.ToHexString(hash, 0, 12).ToLowerInvariant()}";
+    }
+}
+
+/// <summary>One examiner resolution of a pended claim (see <see cref="Claim.ExaminerResolutions"/>).</summary>
+[BsonIgnoreExtraElements]
+public class ExaminerResolutionRecord
+{
+    /// <summary>Approved | Denied.</summary>
+    public string Disposition { get; set; } = string.Empty;
+
+    /// <summary>Every approver, in order (two for a second-approver sign-off).</summary>
+    public List<string> ApproverIds { get; set; } = new();
+
+    /// <summary>The last approver's reason.</summary>
+    public string? Reason { get; set; }
+
+    /// <summary>Each approver's reason, aligned with <see cref="ApproverIds"/>.</summary>
+    public List<string?> ApproverReasons { get; set; } = new();
+
+    /// <summary>The fingerprint of the pends the approver(s) reviewed (<see cref="PendDetails.Fingerprint"/>).</summary>
+    public string? PendFingerprint { get; set; }
+
+    /// <summary>The payer order the examiner confirmed for a COB pend.</summary>
+    public int? PayerSequence { get; set; }
+
+    /// <summary>The persisted pends the examiner reviewed ("{code}: {reason}").</summary>
+    public List<string> ReviewedPends { get; set; } = new();
+
+    /// <summary>The pends the approval re-run overrode ("{stage}: {code}: {reason}").</summary>
+    public List<string> OverriddenPends { get; set; } = new();
+
+    /// <summary>When the (first) approver acted.</summary>
+    public DateTime RequestedAt { get; set; }
+
+    /// <summary>When the resolution completed.</summary>
+    public DateTime ResolvedAt { get; set; }
+}
+
+/// <summary>A first approval waiting for a second approver (see <see cref="Claim.PendingExaminerApproval"/>).</summary>
+[BsonIgnoreExtraElements]
+public class PendingExaminerApproval
+{
+    public string RequestedBy { get; set; } = string.Empty;
+    public int? PayerSequence { get; set; }
+    public string? Reason { get; set; }
+    public DateTime RequestedAt { get; set; }
+
+    /// <summary>
+    /// The pends the first approver reviewed (<see cref="PendDetails.Fingerprint"/>).
+    /// A second approval counts only while the claim's pends still match.
+    /// </summary>
+    public string? PendFingerprint { get; set; }
+
+    /// <summary>After this the first approval no longer counts (configurable TTL, default 72 h).</summary>
+    public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>See <see cref="Claim.ResolutionLock"/>.</summary>
+[BsonIgnoreExtraElements]
+public class ExaminerResolutionLock
+{
+    public string Token { get; set; } = string.Empty;
+    public string? LockedBy { get; set; }
+    public DateTime ExpiresAt { get; set; }
 }
 
 /// <summary>

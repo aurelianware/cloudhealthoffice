@@ -8,7 +8,10 @@ namespace AccumulatorService.Services;
 /// BackgroundService subscriber for claims.finalized.v1. For each message:
 ///   - deserialize → ClaimFinalizedEvent
 ///   - delegate to IAccumulatorService.ApplyClaimFinalizedAsync (idempotent)
-///   - commit offset only on a terminal outcome (Applied | Duplicate | Orphan)
+///   - commit offset only on a terminal outcome (Applied | Duplicate | Orphan).
+///     InProgress (another worker holds the claim's lease) and failures seek
+///     back to the message and retry it after a short pause, so a claim is
+///     never skipped and never applied twice.
 ///
 /// Commit strategy is EnableAutoCommit=false with explicit StoreOffset so
 /// transient failures (DB hiccup) get a re-delivery rather than a silent skip.
@@ -24,6 +27,9 @@ public class ClaimFinalizedConsumer : BackgroundService
     private readonly IServiceProvider _services;
     private readonly IConfiguration _config;
     private readonly ILogger<ClaimFinalizedConsumer> _logger;
+
+    /// <summary>Pause before retrying a message that failed or found its claim in progress.</summary>
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -101,11 +107,16 @@ public class ClaimFinalizedConsumer : BackgroundService
                     consumer.StoreOffset(result);
                     consumer.Commit(result);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _logger.LogError(ex, "Failed to process ClaimFinalizedEvent at {Topic}:{Partition}:{Offset} — message will be redelivered",
                         result.Topic, result.Partition.Value, result.Offset.Value);
-                    // No offset commit → Kafka redelivers on next poll/assignment.
+                    // No offset commit, and rewind: without the seek the
+                    // consumer's position has already moved past the message
+                    // and it would only come back after a rebalance.
+                    try { consumer.Seek(result.TopicPartitionOffset); }
+                    catch (KafkaException seekEx) { _logger.LogWarning(seekEx, "Seek back failed; redelivery waits for a rebalance"); }
+                    stoppingToken.WaitHandle.WaitOne(RetryDelay);
                 }
             }
         }
@@ -131,6 +142,13 @@ public class ClaimFinalizedConsumer : BackgroundService
         using var scope = _services.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<IAccumulatorService>();
         var outcome = await svc.ApplyClaimFinalizedAsync(evt, ct);
+        if (outcome.Outcome == ApplyOutcome.InProgress)
+        {
+            // Another worker holds this claim's (or its reversal's) lease:
+            // not terminal — retry the message rather than commit past it.
+            throw new InvalidOperationException(
+                $"Claim {evt.ClaimId} is being processed by another worker ({outcome.Reason}); retrying.");
+        }
         _logger.LogInformation(
             "ClaimFinalized processed: claim={ClaimId} tenant={TenantId} outcome={Outcome}",
             evt.ClaimId, evt.TenantId, outcome.Outcome);

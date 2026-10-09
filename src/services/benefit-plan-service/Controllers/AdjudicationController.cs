@@ -142,6 +142,15 @@ public class AdjudicationController : ControllerBase
         [FromBody] AdjudicationRequest request,
         CancellationToken ct)
     {
+        if (request.Cob is { } cobRequest
+            && CobRequestValidation.Validate(
+                cobRequest.PayerSequence, cobRequest.PriorPayers,
+                cobRequest.PrimaryPayerPaymentByLine.Count) is { } cobError)
+        {
+            ModelState.AddModelError("cob", cobError);
+            return ValidationProblem(ModelState);
+        }
+
         var claimTypeCode = NormalizeClaimType(request.ClaimType);
 
         using var adjudicationSpan = ChoActivitySource.StartActivity(
@@ -626,7 +635,8 @@ public class AdjudicationController : ControllerBase
                     PrimaryPayerId             = request.Cob.PrimaryPayerId,
                     PrimaryPayerName           = request.Cob.PrimaryPayerName,
                     PrimaryPayerPaymentByLine  = request.Cob.PrimaryPayerPaymentByLine,
-                    PrimaryAllowedByLine       = request.Cob.PrimaryAllowedByLine
+                    PrimaryAllowedByLine       = request.Cob.PrimaryAllowedByLine,
+                    PriorPayers                = request.Cob.PriorPayers
                 }
             };
 
@@ -798,6 +808,14 @@ public class AdjudicationController : ControllerBase
         [FromBody] BenefitResolutionRequest request,
         CancellationToken ct)
     {
+        if (request.Cob is { } cob
+            && CobRequestValidation.Validate(
+                cob.PayerSequence, cob.PriorPayers, cob.PrimaryPayerPaymentByLine.Count) is { } cobError)
+        {
+            ModelState.AddModelError("cob", cobError);
+            return ValidationProblem(ModelState);
+        }
+
         _logger.LogInformation(
             "Calculating benefits for member {MemberId}, plan {PlanId}, {LineCount} lines",
             SanitizeForLog(request.MemberId), request.BenefitPlanId, request.Lines.Count);
@@ -1321,6 +1339,48 @@ public record AdjudicationRequest
     public AdjudicationCobInfo? Cob { get; init; }
 }
 
+/// <summary>
+/// Shape checks for a COB request on the adjudication APIs: a later payer
+/// (sequence ≥ 2) needs what the earlier payers did, or the engine would
+/// price the claim as if they paid nothing.
+/// </summary>
+public static class CobRequestValidation
+{
+    /// <summary>Null when valid; otherwise the validation message.</summary>
+    public static string? Validate(
+        int payerSequence,
+        IReadOnlyCollection<CloudHealthOffice.CobEngine.Domain.PriorPayerAdjudication>? priorPayers,
+        int legacyPrimaryLineCount)
+    {
+        if (payerSequence < 1)
+            return $"cob.payerSequence must be 1 (primary) or more; got {payerSequence}.";
+        if (payerSequence < 2)
+            return null;
+
+        var earlier = (priorPayers ?? []).Where(p => p.Sequence >= 1 && p.Sequence < payerSequence).ToList();
+        if (earlier.Count == 0)
+        {
+            // The secondary-only legacy input (primary payment by line) is
+            // still accepted for payer sequence 2.
+            if (payerSequence == 2 && legacyPrimaryLineCount > 0)
+                return null;
+            return $"cob.payerSequence {payerSequence} requires cob.priorPayers: the adjudication (2320/2430) of " +
+                   $"each payer sequenced before it (1..{payerSequence - 1}).";
+        }
+        var duplicate = earlier.GroupBy(p => p.Sequence).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate is not null)
+            return $"cob.priorPayers lists payer sequence {duplicate.Key} more than once.";
+        // Every earlier payer, not just some: a tertiary claim with only the
+        // primary's adjudication would be priced as if the secondary paid
+        // nothing (PR #1278 re-review).
+        var missing = Enumerable.Range(1, payerSequence - 1).Where(s => earlier.All(p => p.Sequence != s)).ToList();
+        if (missing.Count > 0)
+            return $"cob.payerSequence {payerSequence} requires the adjudication of every earlier payer " +
+                   $"(1..{payerSequence - 1}); cob.priorPayers is missing sequence {string.Join(", ", missing)}.";
+        return null;
+    }
+}
+
 public record AdjudicationCobInfo
 {
     /// <summary>1 = Primary, 2 = Secondary, 3 = Tertiary.</summary>
@@ -1337,6 +1397,14 @@ public record AdjudicationCobInfo
 
     /// <summary>Primary payer allowed per line (non-duplication model).</summary>
     public Dictionary<int, decimal> PrimaryAllowedByLine { get; init; } = [];
+
+    /// <summary>
+    /// Every payer that adjudicated before this plan (837 2320/2330B claim
+    /// level: AMT*D, CAS; 2430 line level: SVD02, CAS), with its sequence
+    /// (1 primary, 2 secondary, ...). Required for tertiary and later; when
+    /// empty, <see cref="PrimaryPayerPaymentByLine"/> is the only prior payer.
+    /// </summary>
+    public List<CloudHealthOffice.CobEngine.Domain.PriorPayerAdjudication> PriorPayers { get; init; } = [];
 }
 
 public record AdjudicationLineRequest

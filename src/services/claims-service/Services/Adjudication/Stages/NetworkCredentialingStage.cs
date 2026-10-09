@@ -53,6 +53,12 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
 {
     public const string StageName = "NetworkCredentialing";
 
+    /// <summary>Transient failures (a service could not be reached): never overridden by an approval.</summary>
+    public const string MembershipUnavailableReason = "membership-verification-unavailable";
+
+    /// <inheritdoc cref="MembershipUnavailableReason"/>
+    public const string CredentialingUnavailableReason = "credentialing-status-unavailable";
+
     private readonly IProviderMembershipClient _membershipClient;
     private readonly ICredentialingStatusClient _credentialingClient;
     private readonly TenantEnforcementPolicyOptions _options;
@@ -242,7 +248,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
             return ApplyNetworkMode(
                 context,
                 EnforcementDecision.Deny,
-                reason: $"{providerRole}: membership-verification-unavailable",
+                reason: $"{providerRole}: {MembershipUnavailableReason}",
                 serviceDate,
                 networkId: null,
                 tier: null);
@@ -283,7 +289,7 @@ public sealed class NetworkCredentialingStage : IClaimAdjudicationStage
         {
             return ApplyCredentialingMode(
                 EnforcementDecision.Deny,
-                reason: $"{providerRole}: credentialing-status-unavailable",
+                reason: $"{providerRole}: {CredentialingUnavailableReason}",
                 serviceDate);
         }
 

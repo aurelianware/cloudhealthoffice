@@ -901,6 +901,49 @@ public class ClaimRepositoryMongo : IClaimRepository
         return result.MatchedCount > 0;
     }
 
+    public async Task<bool> TryAcquireResolutionLockAsync(
+        string tenantId, string claimId, string token, string? actorId, DateTime now, TimeSpan duration,
+        CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.Id, claimId),
+            b.Eq(c => c.Status, ClaimStatus.Pended),
+            b.Or(
+                b.Eq(c => c.ResolutionLock, null),
+                b.Lt(c => c.ResolutionLock!.ExpiresAt, now)));
+        var update = Builders<Claim>.Update.Set(c => c.ResolutionLock, new ExaminerResolutionLock
+        {
+            Token = token, LockedBy = actorId, ExpiresAt = now + duration,
+        });
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.ModifiedCount == 1;
+    }
+
+    public async Task<Claim?> UpdateHoldingResolutionLockAsync(Claim claim, string lockToken, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        if (claim.TenantId != tenantId)
+            throw new InvalidOperationException("Cross-tenant updates are not allowed.");
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.Id, claim.Id),
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.ResolutionLock!.Token, lockToken));
+        var result = await _collection.ReplaceOneAsync(filter, claim, cancellationToken: ct);
+        return result.MatchedCount == 1 ? claim : null;
+    }
+
+    public async Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        await _collection.UpdateOneAsync(
+            b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId), b.Eq(c => c.ResolutionLock!.Token, token)),
+            Builders<Claim>.Update.Set(c => c.ResolutionLock, null),
+            cancellationToken: ct);
+    }
+
     public async Task<bool> MarkVoidedProjectionAsync(
         string tenantId,
         string claimId,

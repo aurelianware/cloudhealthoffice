@@ -49,6 +49,20 @@ public interface IAccumulatorService
     Task ResetForPlanYearAsync(
         Guid benefitPlanId, string planYear,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// The still-active (not reversed) accumulator updates
+    /// <paramref name="claimId"/> already applied, if any. The engine takes
+    /// them out of the starting balances when the same claim is adjudicated
+    /// again, and reverses them before writing the new ones. Stores that do
+    /// not journal per claim return none (the default).
+    /// </summary>
+    Task<IReadOnlyList<AccumulatorUpdate>> GetClaimUpdatesAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<AccumulatorUpdate>>([]);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -100,6 +114,15 @@ public record BenefitPlanConfig
     /// docs/architecture/family-accumulator-models.md.
     /// </summary>
     public bool IsAcaCapEnforced { get; init; }
+
+    // ── Coordination of benefits ──
+
+    /// <summary>
+    /// How this plan credits its deductible when it pays secondary or later.
+    /// Defaults to <see cref="CobDeductibleCredit.NaicFullCredit"/> (NAIC
+    /// MDL-120 §7). See <see cref="CobDeductibleCredit"/>.
+    /// </summary>
+    public CobDeductibleCredit CobDeductibleCredit { get; init; } = CobDeductibleCredit.NaicFullCredit;
 
     // ── HDHP / HSA ──
 

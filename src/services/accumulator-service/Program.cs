@@ -43,6 +43,8 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
     builder.Services.AddScoped<IAccumulatorRepository, AccumulatorRepositoryMongo>();
     builder.Services.AddScoped<IProcessedClaimStore, ProcessedClaimStoreMongo>();
+    // Indexes once at startup (not per scoped repository).
+    builder.Services.AddHostedService<AccumulatorMongoIndexInitializer>();
     Console.WriteLine("Using MongoDB database provider");
 }
 else
