@@ -88,18 +88,11 @@ public sealed record ServiceCategoryClaimContext(
     /// <summary>
     /// "111" → "111", "0111" → "111"; null for anything else ("11",
     /// "111garbage", or a four-digit value without the leading zero such as "1111").
+    /// Delegates to <see cref="CloudHealthOffice.ReferenceData.Domain.NubcTypeOfBill.Normalize"/>,
+    /// the same rule the fee schedule engine uses to decide the facility setting.
     /// </summary>
     public static string? NormalizeTypeOfBill(string? typeOfBill)
-    {
-        if (string.IsNullOrWhiteSpace(typeOfBill)) return null;
-        var tob = typeOfBill.Trim();
-        if (tob.Length == 4)
-        {
-            if (tob[0] != '0') return null;
-            tob = tob[1..];
-        }
-        return tob.Length == 3 && tob.All(char.IsAsciiDigit) ? tob : null;
-    }
+        => CloudHealthOffice.ReferenceData.Domain.NubcTypeOfBill.Normalize(typeOfBill);
 }
 
 public record ServiceCategoryMatch

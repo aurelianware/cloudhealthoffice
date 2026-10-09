@@ -20,5 +20,8 @@
     <!-- Secondary-payer COB math (complementary / non-duplication) for both
          the per-line and the DRG / per-diem claim-level paths. -->
     <ProjectReference Include="..\CloudHealthOffice.CobEngine\CloudHealthOffice.CobEngine.csproj" />
+    <!-- NUBC type-of-bill validity rule (NubcTypeOfBill), shared with the fee
+         schedule engine's facility / non-facility setting. Dependency-free. -->
+    <ProjectReference Include="..\CloudHealthOffice.ReferenceData\CloudHealthOffice.ReferenceData.csproj" />
   </ItemGroup>
 </Project>
