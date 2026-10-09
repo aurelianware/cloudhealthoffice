@@ -28,7 +28,7 @@ public class CobCalculationServiceTests
 
         // effectiveBalance = 500 - 300 = 200
         // secondaryPay = min(350, 200) = 200
-        // memberResp = max(0, 500 - 300 - 200) = 0
+        // memberResp = min(150, max(0, allowed 500 - 300 - 200)) = 0
         Assert.Equal(200m, result.SecondaryPlanPayment);
         Assert.Equal(0m, result.MemberResponsibility);
         Assert.Equal(150m, result.CobReduction); // 350 - 200
@@ -114,6 +114,74 @@ public class CobCalculationServiceTests
         Assert.Equal(0m, result.CobReduction);
     }
 
+    [Fact]
+    public void Complementary_OnlyMemberResponsibilityChanges_CobApplied()
+    {
+        // Allowed 200, pre-COB member 50 / plan 150, primary paid 50: the
+        // plan still pays its full 150 (no reduction), but the primary's
+        // payment covered the member's 50 — member owes 0. COB changed an
+        // amount, so CobApplied is true.
+        var result = Make().Calculate(new CobLineInput
+        {
+            LineNumber = 1,
+            BilledAmount = 200m,
+            SecondaryAllowedAmount = 200m,
+            SecondaryMemberResponsibilityBeforeCob = 50m,
+            SecondaryPlanPaymentBeforeCob = 150m,
+            PrimaryPayerPayment = 50m,
+            Model = CobModel.Complementary
+        });
+
+        Assert.Equal(150m, result.SecondaryPlanPayment);
+        Assert.Equal(0m, result.CobReduction);
+        Assert.Equal(0m, result.MemberResponsibility);
+        Assert.True(result.CobApplied);
+    }
+
+    [Fact]
+    public void NonDuplication_OnlyMemberResponsibilityChanges_CobApplied()
+    {
+        // Non-duplication moves only the member amount when this plan pays
+        // nothing pre-COB (e.g. all deductible): pre-COB member 200 / plan 0,
+        // primary 120 → plan still 0 (no reduction), member owes 80.
+        var result = Make().Calculate(new CobLineInput
+        {
+            LineNumber = 1,
+            BilledAmount = 250m,
+            SecondaryAllowedAmount = 200m,
+            SecondaryMemberResponsibilityBeforeCob = 200m,
+            SecondaryPlanPaymentBeforeCob = 0m,
+            PrimaryPayerPayment = 120m,
+            Model = CobModel.NonDuplication
+        });
+
+        Assert.Equal(0m, result.SecondaryPlanPayment);
+        Assert.Equal(0m, result.CobReduction);
+        Assert.Equal(80m, result.MemberResponsibility);
+        Assert.True(result.CobApplied);
+    }
+
+    [Theory]
+    [InlineData(CobModel.Complementary)]
+    [InlineData(CobModel.NonDuplication)]
+    public void NoPrimaryPayment_CobNotApplied(CobModel model)
+    {
+        var result = Make().Calculate(new CobLineInput
+        {
+            LineNumber = 1,
+            BilledAmount = 200m,
+            SecondaryAllowedAmount = 200m,
+            SecondaryMemberResponsibilityBeforeCob = 50m,
+            SecondaryPlanPaymentBeforeCob = 150m,
+            PrimaryPayerPayment = 0m,
+            Model = model
+        });
+
+        Assert.Equal(150m, result.SecondaryPlanPayment);
+        Assert.Equal(50m, result.MemberResponsibility);
+        Assert.False(result.CobApplied);
+    }
+
     // ── Non-duplication model ─────────────────────────────────────────────
 
     [Fact]
@@ -134,7 +202,10 @@ public class CobCalculationServiceTests
 
         // maxBenefit = 500 - 100 = 400; secondary pays 400 - 250 = 150
         Assert.Equal(150m, result.SecondaryPlanPayment);
-        Assert.Equal(200m, result.MemberResponsibility); // 600 - 250 - 150
+        // min(pre-COB 100, allowed 500 - 250 - 150) = 100. The $100 of billed
+        // over allowed is the provider's contractual write-off, not member
+        // liability (the old billed-based formula said 600 - 250 - 150 = 200).
+        Assert.Equal(100m, result.MemberResponsibility);
         Assert.Equal(250m, result.CobReduction); // 400 - 150
         Assert.True(result.CobApplied);
     }
@@ -154,7 +225,7 @@ public class CobCalculationServiceTests
         });
 
         Assert.Equal(0m, result.SecondaryPlanPayment);
-        Assert.Equal(100m, result.MemberResponsibility); // 500 - 400 - 0
+        Assert.Equal(100m, result.MemberResponsibility); // min(100, 500 - 400 - 0)
     }
 
     [Fact]
@@ -171,13 +242,15 @@ public class CobCalculationServiceTests
             Model = CobModel.NonDuplication
         });
 
-        // memberResp = max(0, 500 - 450 - 0) = 50
+        // memberResp = min(80, max(0, allowed 400 - 450 - 0)) = 0: the
+        // primary paid more than this plan allows, so nothing is left to owe.
         Assert.Equal(0m, result.SecondaryPlanPayment);
-        Assert.Equal(50m, result.MemberResponsibility);
+        Assert.Equal(0m, result.MemberResponsibility);
+        Assert.Equal(320m, result.CobReduction);
     }
 
     [Fact]
-    public void NonDuplication_PrimaryExceedsSecondaryBenefit_MemberRespIsRemainingBalance()
+    public void NonDuplication_PrimaryExceedsSecondaryBenefit_MemberRespIsRemainingAllowedBalance()
     {
         var result = Make().Calculate(new CobLineInput
         {
@@ -186,13 +259,39 @@ public class CobCalculationServiceTests
             SecondaryAllowedAmount = 400m,
             SecondaryMemberResponsibilityBeforeCob = 80m,
             SecondaryPlanPaymentBeforeCob = 320m,
-            PrimaryPayerPayment = 480m,
+            PrimaryPayerPayment = 350m,
             Model = CobModel.NonDuplication
         });
 
-        // memberResp = max(0, 500 - 480 - 0) = 20
+        // memberResp = min(80, allowed 400 - 350 - 0) = 50
         Assert.Equal(0m, result.SecondaryPlanPayment);
-        Assert.Equal(20m, result.MemberResponsibility);
+        Assert.Equal(50m, result.MemberResponsibility);
+    }
+
+    [Theory]
+    [InlineData(CobModel.Complementary)]
+    [InlineData(CobModel.NonDuplication)]
+    public void MemberResponsibility_NeverAbovePreCobCostShare_NorBilledBalance(CobModel model)
+    {
+        // Billed 1000, allowed 400: a billed-based balance would be 1000 -
+        // 100 - secondary; the member owes at most the pre-COB $80.
+        var result = Make().Calculate(new CobLineInput
+        {
+            LineNumber = 1,
+            BilledAmount = 1000m,
+            SecondaryAllowedAmount = 400m,
+            SecondaryMemberResponsibilityBeforeCob = 80m,
+            SecondaryPlanPaymentBeforeCob = 320m,
+            PrimaryPayerPayment = 100m,
+            Model = model
+        });
+
+        Assert.InRange(result.MemberResponsibility, 0m, 80m);
+        Assert.True(result.CobReduction >= 0m);
+        // OA-23 the caller reports = allowed - member - secondary payment;
+        // it covers at least the plan's COB savings.
+        var oa23 = 400m - result.MemberResponsibility - result.SecondaryPlanPayment;
+        Assert.True(oa23 >= result.CobReduction);
     }
 
     // ── CalculateAll ──────────────────────────────────────────────────────

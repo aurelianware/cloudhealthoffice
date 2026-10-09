@@ -12,6 +12,8 @@ COPY src/services/benefit-plan-service/benefit-plan-service.csproj src/services/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/engines/CloudHealthOffice.BenefitEngine/CloudHealthOffice.BenefitEngine.csproj src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/CloudHealthOffice.OperatingMode.csproj src/engines/CloudHealthOffice.OperatingMode/
+# BenefitEngine references CobEngine (secondary-payer COB math).
+COPY src/engines/CloudHealthOffice.CobEngine/CloudHealthOffice.CobEngine.csproj src/engines/CloudHealthOffice.CobEngine/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/CloudHealthOffice.ClaimsScrubEngine.csproj src/engines/CloudHealthOffice.ClaimsScrubEngine/
@@ -25,6 +27,7 @@ COPY src/services/benefit-plan-service/ src/services/benefit-plan-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
 COPY src/engines/CloudHealthOffice.BenefitEngine/ src/engines/CloudHealthOffice.BenefitEngine/
 COPY src/engines/CloudHealthOffice.OperatingMode/ src/engines/CloudHealthOffice.OperatingMode/
+COPY src/engines/CloudHealthOffice.CobEngine/ src/engines/CloudHealthOffice.CobEngine/
 COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
 COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
 COPY src/engines/CloudHealthOffice.ClaimsScrubEngine/ src/engines/CloudHealthOffice.ClaimsScrubEngine/
