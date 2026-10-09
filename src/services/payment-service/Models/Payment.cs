@@ -175,6 +175,32 @@ public class Payment
     /// <summary>The 835 envelope this payment was emitted in (null when no trading partner resolved).</summary>
     [StringLength(100)]
     public string? EraEnvelopeId { get; set; }
+
+    /// <summary>
+    /// Provider receivables this payment recovered (a payment run offsets what
+    /// the payee owes from an earlier reversal). Each one is also a PLB in
+    /// <see cref="ProviderAdjustments"/> (FB or WO, positive amount, reference =
+    /// the receivable's origin trace) and is already netted out of
+    /// <see cref="TotalPaymentAmount"/>, so BPR02 and the EFT amount are the
+    /// claim payments less these offsets. The ledger
+    /// (<c>ProviderReceivableRecord</c>) holds the matching Recovered entry.
+    /// </summary>
+    public List<ReceivableOffset> ReceivableOffsets { get; set; } = new();
+}
+
+/// <summary>One receivable recovered from a payment (see <see cref="Payment.ReceivableOffsets"/>).</summary>
+public class ReceivableOffset
+{
+    public string ReceivableId { get; set; } = string.Empty;
+
+    /// <summary>Amount withheld from the payment; always positive.</summary>
+    public decimal Amount { get; set; }
+
+    /// <summary>The PLB03-1 code used (FB or WO).</summary>
+    public string AdjustmentCode { get; set; } = string.Empty;
+
+    /// <summary>The PLB03-2 reference: the origin 835's trace number (TRN02).</summary>
+    public string? Reference { get; set; }
 }
 
 /// <summary>
@@ -503,6 +529,15 @@ public class ProviderAdjustment
     /// Description of adjustment
     /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// PLB01: the provider (NPI) this adjustment belongs to. Null means the
+    /// 835's payee. A batched 835 that spans several payee NPIs emits one PLB
+    /// segment per provider, so a forward balance or a receivable recovery is
+    /// attributed to the provider it belongs to.
+    /// </summary>
+    [StringLength(80)]
+    public string? ProviderIdentifier { get; set; }
 }
 
 public enum PaymentStatus

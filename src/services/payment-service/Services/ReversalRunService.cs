@@ -55,6 +55,7 @@ public class ReversalRunService : IReversalRunService
     private readonly IRunSeparationOfDuties _separationOfDuties;
     private readonly IClaimReservationRepository _reservations;
     private readonly ICarcRarcMappingService _carcRarcMapper;
+    private readonly IProviderReceivableLedger? _receivables;
 
     public ReversalRunService(
         IPaymentRepository paymentRepository,
@@ -68,10 +69,12 @@ public class ReversalRunService : IReversalRunService
         ICurrentActor actor,
         IRunSeparationOfDuties separationOfDuties,
         IClaimReservationRepository reservations,
-        ICarcRarcMappingService carcRarcMapper)
+        ICarcRarcMappingService carcRarcMapper,
+        IProviderReceivableLedger? receivables = null)
     {
         _reservations = reservations;
         _carcRarcMapper = carcRarcMapper;
+        _receivables = receivables;
         _paymentRepository = paymentRepository;
         _reversalRunRepository = reversalRunRepository;
         _batchEraGenerator = batchEraGenerator;
@@ -390,22 +393,11 @@ public class ReversalRunService : IReversalRunService
                 run.EraEnvelopeIds.Add(record.Id);
 
                 // A recoupment nets the 835 below zero: BPR02 = 0 and the
-                // balance is carried forward (PLB FB). No receivable ledger
-                // exists yet, so the amount owed is recorded on the run.
+                // balance is carried forward (PLB FB). The amount owed opens a
+                // provider receivable in the ledger, keyed by this 835, which
+                // later payment runs recover from the provider's payments.
                 if (env.ForwardBalanceAmount < 0m)
-                {
-                    var owed = -env.ForwardBalanceAmount;
-                    run.OutstandingReceivables.Add(new ProviderReceivable
-                    {
-                        TradingPartnerId = env.TradingPartnerId,
-                        EraEnvelopeId = record.Id,
-                        Reference = eraInputs.First(i => i.TradingPartnerId == env.TradingPartnerId).Payment.CheckNumber,
-                        Amount = owed,
-                    });
-                    run.OutstandingReceivableAmount += owed;
-                    run.Warnings.Add(
-                        $"Trading partner {env.TradingPartnerId}: reversal 835 nets to -{owed:F2}; BPR02 = 0.00 and {owed:F2} is carried forward (PLB FB) as owed by the provider; no receivable ledger recovers it yet");
-                }
+                    await RecordForwardBalancesAsync(env, record.Id, eraInputs, run, approver);
                 foreach (var claimId in env.ClaimIds)
                 {
                     claimToEnvelopeId[claimId] = record.Id;
@@ -448,6 +440,82 @@ public class ReversalRunService : IReversalRunService
                 : 0;
             await _reversalRunRepository.UpdateAsync(run);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// A reversal 835 that nets below zero carries its balance forward (BPR02 =
+    /// 0, PLB FB). Each provider's own negative net (one PLB FB per payee NPI,
+    /// <see cref="EraEnvelope.ForwardBalanceByProvider"/>) opens that provider's
+    /// receivable; one provider is never charged another's debt. A balance that
+    /// cannot be attributed is recorded on the run only, with a warning. The 835
+    /// is already persisted, so a ledger failure never fails the run: it is
+    /// reported as an unrecorded receivable.
+    /// </summary>
+    private async Task RecordForwardBalancesAsync(
+        EraEnvelope env, string envelopeId, List<EraPaymentInput> eraInputs, ReversalRun run, string approver)
+    {
+        var owedTotal = -env.ForwardBalanceAmount;
+        var trace = eraInputs.First(i => i.TradingPartnerId == env.TradingPartnerId).Payment.CheckNumber;
+        var byProvider = env.ForwardBalanceByProvider ?? new Dictionary<string, decimal>();
+
+        if (byProvider.Count == 0)
+        {
+            run.OutstandingReceivables.Add(new ProviderReceivable
+            {
+                TradingPartnerId = env.TradingPartnerId,
+                EraEnvelopeId = envelopeId,
+                Reference = trace,
+                Amount = owedTotal,
+            });
+            run.OutstandingReceivableAmount += owedTotal;
+            run.Warnings.Add(
+                $"Trading partner {env.TradingPartnerId}: reversal 835 nets to -{owedTotal:F2}; BPR02 = 0.00 and {owedTotal:F2} is carried forward (PLB FB), " +
+                "but it cannot be attributed to one provider (the 835 spans several payee NPIs with mixed balances, or a payment has no NPI), " +
+                "so no provider receivable was opened; it needs a person");
+            return;
+        }
+
+        foreach (var (npi, net) in byProvider.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            var owed = -net;
+            var receivable = new ProviderReceivable
+            {
+                TradingPartnerId = env.TradingPartnerId,
+                EraEnvelopeId = envelopeId,
+                Reference = trace,
+                Amount = owed,
+                ProviderNpi = npi,
+            };
+            run.OutstandingReceivables.Add(receivable);
+            run.OutstandingReceivableAmount += owed;
+
+            if (_receivables == null)
+            {
+                run.Warnings.Add(
+                    $"Trading partner {env.TradingPartnerId}: NPI {npi} owes {owed:F2}, carried forward (PLB FB) in reversal 835 {envelopeId}; " +
+                    "no receivable ledger is configured, so nothing recovers it automatically");
+                continue;
+            }
+
+            try
+            {
+                var ledger = await _receivables.RecordForwardBalanceAsync(
+                    run.TenantId, npi, env.TradingPartnerId, run, envelopeId, trace, owed, approver);
+                receivable.ReceivableId = ledger.Id;
+                run.Warnings.Add(
+                    $"Trading partner {env.TradingPartnerId}: NPI {npi} owes {owed:F2}, carried forward (PLB FB) in reversal 835 {envelopeId} " +
+                    $"as provider receivable {ledger.Id}; later payment runs recover it");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Provider receivable for NPI {Npi} ({Amount:F2}, reversal 835 {EnvelopeId}) could not be recorded in run {ReversalRunNumber}",
+                    SanitizeForLog(npi), owed, envelopeId, run.ReversalRunNumber);
+                run.Warnings.Add(
+                    $"Trading partner {env.TradingPartnerId}: NPI {npi} owes {owed:F2}, carried forward (PLB FB) in reversal 835 {envelopeId}, " +
+                    $"but the receivable could not be recorded ({ex.GetType().Name}); it is UNRECORDED in the ledger and needs a person");
+            }
         }
     }
 
