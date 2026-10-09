@@ -262,6 +262,26 @@ public class ClaimPayment
     public bool IsInstitutional { get; set; }
 
     /// <summary>
+    /// Institutional only: the facility type code, the first two digits of the
+    /// type of bill (837I CLM05-1). 835: CLP08. Null on payments recorded
+    /// before it was carried; the CLP is then emitted without it.
+    /// </summary>
+    [StringLength(2)]
+    public string? FacilityTypeCode { get; set; }
+
+    /// <summary>
+    /// Institutional only: the claim frequency code (837 CLM05-3). 835: CLP09.
+    /// </summary>
+    [StringLength(1)]
+    public string? ClaimFrequencyCode { get; set; }
+
+    /// <summary>
+    /// Institutional only: the DRG billed on the claim (837I HI*DR). 835: CLP11.
+    /// </summary>
+    [StringLength(4)]
+    public string? DrgCode { get; set; }
+
+    /// <summary>
     /// Date claim was received by payer
     /// 835: DTP*050
     /// </summary>
