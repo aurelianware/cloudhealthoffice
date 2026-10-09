@@ -223,7 +223,7 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         // ── 1000B ─ Payee Identification ───────────────────────────────
         var payeeNpiQual = string.IsNullOrEmpty(first.PayeeNPI) ? "" : $"*XX*{first.PayeeNPI}";
         sb.Append(Seg(ref segmentCount, true,
-            $"N1*PE*{Esc(first.PayeeName)}{payeeNpiQual}~"));
+            $"N1*PE*{Era835Names.N102(first.PayeeName)}{payeeNpiQual}~"));
 
         // ── 2000 / 2100 loops — CLP per claim across all payments ──────
         foreach (var input in inputs)

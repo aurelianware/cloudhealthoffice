@@ -197,6 +197,86 @@ public class ClaimsToPaymentContractTests
     }
 
     [Fact]
+    public async Task BillingProviderName_IsThePayeeName()
+    {
+        var claim = AdjudicatedClaim(Claims.ClaimStatus.Approved);
+        claim.BillingProviderName = "SYNTHETIC FAMILY CLINIC";
+
+        var dto = await RoundTrip(claim);
+
+        Assert.Equal("SYNTHETIC FAMILY CLINIC", dto.ProviderName);
+        Assert.Equal("SYNTHETIC FAMILY CLINIC", dto.PayeeNameOr(dto.BillingProviderNPI));
+    }
+
+    [Fact]
+    public async Task WithoutBillingProviderName_PayeeNameFallsBackToTheNpi()
+    {
+        var dto = await RoundTrip(AdjudicatedClaim(Claims.ClaimStatus.Approved));
+
+        Assert.Null(dto.ProviderName);
+        Assert.Equal("1234567893", dto.PayeeNameOr(dto.BillingProviderNPI));
+    }
+
+    /// <summary>
+    /// claims-service carries no pay-to provider (837 2010AB): payToProviderNPI
+    /// never arrives, so the payee is the billing provider, named by
+    /// billingProviderName. A long name is cut to N102's 60 characters only
+    /// when the 835 is written.
+    /// </summary>
+    [Fact]
+    public async Task NoPayToProviderOnTheWire_PayeeIsTheBillingProvider()
+    {
+        var claim = AdjudicatedClaim(Claims.ClaimStatus.Approved);
+        claim.BillingProviderName = new string('N', 300);
+
+        var dto = await RoundTrip(claim);
+
+        Assert.Null(dto.PayToProviderNPI);
+        Assert.False(dto.HasDistinctPayToProvider);
+        Assert.Equal(300, dto.PayeeNameOr(dto.BillingProviderNPI).Length);
+        Assert.Equal(new string('N', 60), Pay.Era835Names.N102(dto.PayeeNameOr(dto.BillingProviderNPI)));
+    }
+
+    /// <summary>
+    /// claims-service's 837I header detail (<c>Claim.Institutional</c>) and
+    /// <c>Claim.ClaimFrequencyCode</c> reach the 835 CLP as CLP08 facility type
+    /// code, CLP09 frequency code and CLP11 DRG.
+    /// </summary>
+    [Fact]
+    public async Task InstitutionalClaim_FacilityFrequencyAndDrg_ReachClp08Clp09Clp11()
+    {
+        var claim = AdjudicatedClaim(Claims.ClaimStatus.Approved);
+        claim.ClaimType = Claims.ClaimType.Institutional;
+        claim.ClaimFrequencyCode = "7";
+        claim.Institutional = new Claims.InstitutionalClaimDetails { FacilityTypeCode = "11", DrgCode = "470", PatientStatusCode = "01" };
+
+        var dto = await RoundTrip(claim);
+        Assert.Equal(Pay.ClaimFormType.Institutional, dto.ClaimType);
+        Assert.Equal("7", dto.ClaimFrequencyCode);
+        Assert.Equal(("11", "470"), (dto.Institutional!.FacilityTypeCode, dto.Institutional.DrgCode));
+
+        var cp = Pay.Era835ClaimPaymentBuilder.Build(dto, denied: false,
+            new Pay.CarcRarcMappingService(Microsoft.Extensions.Logging.Abstractions.NullLogger<Pay.CarcRarcMappingService>.Instance));
+        var segments = 0;
+        var clp = Pay.Era835ClaimLoops.BuildClaimLoop(cp, ref segments).Split('~')[0];
+        Assert.Equal("CLP*CLM-0001*1*300.00*170.00*50.00*HM*clm-1*11*7**470", clp);
+    }
+
+    [Fact]
+    public async Task ProfessionalClaim_HasNoInstitutionalDetail_ClpEndsAtClp07()
+    {
+        var dto = await RoundTrip(AdjudicatedClaim(Claims.ClaimStatus.Approved));
+        Assert.Null(dto.Institutional);
+        Assert.Equal("1", dto.ClaimFrequencyCode); // claims-service default; not reported for 837P
+
+        var cp = Pay.Era835ClaimPaymentBuilder.Build(dto, denied: false,
+            new Pay.CarcRarcMappingService(Microsoft.Extensions.Logging.Abstractions.NullLogger<Pay.CarcRarcMappingService>.Instance));
+        var segments = 0;
+        Assert.Equal("CLP*CLM-0001*1*300.00*170.00*50.00*HM*clm-1",
+            Pay.Era835ClaimLoops.BuildClaimLoop(cp, ref segments).Split('~')[0]);
+    }
+
+    [Fact]
     public async Task ClaimWithoutAdjudicationResult_HasNoPlanPaidAmount()
     {
         var claim = AdjudicatedClaim(Claims.ClaimStatus.Approved);

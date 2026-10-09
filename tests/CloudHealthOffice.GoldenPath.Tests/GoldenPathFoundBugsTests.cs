@@ -4,9 +4,8 @@ using CloudHealthOffice.Testing.Mongo;
 namespace CloudHealthOffice.GoldenPath.Tests;
 
 /// <summary>
-/// Defects the golden path exposed that are too large to fix here, or sit
-/// in code other work owns. Each test states the correct behaviour and
-/// fails today; remove the Skip when the fix lands.
+/// Defects the golden path exposed. Each test states the correct behaviour;
+/// a skipped one still fails today (remove the Skip when its fix lands).
 /// </summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public class GoldenPathFoundBugsTests
@@ -15,13 +14,11 @@ public class GoldenPathFoundBugsTests
 
     public GoldenPathFoundBugsTests(MongoRunnerFixture mongo) => _harness = new GoldenPathHarness(mongo);
 
-    // 005010X221A1 2100 CLP for an institutional claim: CLP08 facility type
-    // code and CLP09 claim frequency code are required, and CLP11 carries the
-    // DRG when the claim was paid by DRG. payment-service's ClaimDto /
-    // ClaimPayment carry none of them (claims-service has them on
-    // Claim.Institutional / ClaimFrequencyCode), so the DRG remittance in
-    // Golden/05-inpatient-drg.835 ends at CLP07.
-    [Fact(Skip = "bug: 837I 835 omits CLP08 facility code, CLP09 frequency code and CLP11 DRG (payment-service ClaimDto/ClaimPayment lack the fields)")]
+    // Fixed: 005010X221A1 2100 CLP for an institutional claim: CLP08 facility
+    // type code and CLP09 claim frequency code are required, and CLP11 carries
+    // the DRG. They travel from claims-service's Claim.Institutional /
+    // ClaimFrequencyCode through ClaimDto and ClaimPayment.
+    [Fact]
     public async Task InstitutionalClp_CarriesFacilityFrequencyAndDrg()
     {
         var r = await _harness.RunAsync(GoldenInputs.Scenario(), GoldenInputs.Edi837("05-inpatient-drg"));
@@ -33,10 +30,9 @@ public class GoldenPathFoundBugsTests
         Assert.Equal("470", clp[11]);
     }
 
-    // N1*PE (1000B payee) name is the NPI: payment-service fills PayeeName from
-    // ClaimDto.ProviderName, which claims-service never sends (it sends
-    // billingProviderName).
-    [Fact(Skip = "bug: 835 N1*PE payee name is the NPI; ClaimDto.ProviderName is never populated from claims-service's billingProviderName")]
+    // Fixed: N1*PE (1000B payee) name was the NPI: ClaimDto.ProviderName is
+    // now read from claims-service's billingProviderName.
+    [Fact]
     public async Task PayeeName_IsTheBillingProviderName()
     {
         var r = await _harness.RunAsync(
