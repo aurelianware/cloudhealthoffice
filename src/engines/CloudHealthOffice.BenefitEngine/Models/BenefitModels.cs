@@ -205,6 +205,14 @@ public record LineBenefitResult
     public decimal CopayAmount { get; init; }
     public decimal CoinsuranceAmount { get; init; }
     public decimal CoinsurancePercent { get; init; }
+
+    /// <summary>
+    /// Informational: cost share the out-of-pocket maximum forgave on this
+    /// line. Already netted out of <see cref="DeductibleAmount"/>,
+    /// <see cref="CopayAmount"/> and <see cref="CoinsuranceAmount"/> (and
+    /// their PR-1/PR-3/PR-2 adjustments), which carry only what the member
+    /// owes; it is not an adjustment and must not be subtracted again.
+    /// </summary>
     public decimal OopMaxReduction { get; init; }
     public decimal MemberResponsibility { get; init; }
 
