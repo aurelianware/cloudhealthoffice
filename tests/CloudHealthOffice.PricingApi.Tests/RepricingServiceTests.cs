@@ -392,19 +392,40 @@ public class RepricingServiceTests
         result.Warnings.Should().Contain(w => w.Contains("DRG 999 not found"));
     }
 
+    /// <summary>
+    /// The DRG case rate is paid once per claim and allocated across the lines in
+    /// proportion to billed charges: the engine's rule, shared with adjudication
+    /// (ADR 014). Before the Pricing API delegated to the engine it put the whole
+    /// case rate on line 1; the claim total is unchanged.
+    /// </summary>
     [Fact]
-    public async Task RepriceClaimAsync_InpatientMultipleLines_DrgPaymentOnFirstLineOnly()
+    public async Task RepriceClaimAsync_InpatientMultipleLines_DrgCaseRateAllocatedByBilledCharges()
     {
         var scheduleId = "MEDICARE_DRG_2025";
         SetupScheduleInfo(scheduleId);
-        _feeScheduleRepo.Setup(r => r.LookupDrgAsync(scheduleId, "470"))
-            .ReturnsAsync(new FeeScheduleEntry
-            {
-                FeeScheduleId = scheduleId,
-                ProcedureCode = "470",
-                DrgWeight = 2.0m,
-                DrgBaseRate = 5000.00m
-            });
+        SetupDrg(scheduleId, "470", weight: 2.0m, baseRate: 5000.00m);
+
+        var request = BuildRequest(scheduleId, ClaimType.Inpatient, drgCode: "470", lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "27447", Units = 1, BilledAmount = 30000m },
+            new ClaimLineRequest { LineNumber = 2, ProcedureCode = "99213", Units = 1, BilledAmount = 10000m }
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines[0].AllowedAmount.Should().Be(7500.00m); // 75% of 2.0 × 5000
+        result.Lines[1].AllowedAmount.Should().Be(2500.00m); // 25%
+        result.Lines.Should().OnlyContain(l => l.Status == PricingStatus.Priced);
+        result.Lines[1].StatusReason.Should().Contain("DRG case rate");
+        result.TotalAllowed.Should().Be(10000.00m);
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_InpatientMultipleLines_NoBilledCharges_SplitEvenly()
+    {
+        var scheduleId = "MEDICARE_DRG_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupDrg(scheduleId, "470", weight: 2.0m, baseRate: 5000.00m);
 
         var request = BuildRequest(scheduleId, ClaimType.Inpatient, drgCode: "470", lines: new[]
         {
@@ -414,10 +435,71 @@ public class RepricingServiceTests
 
         var result = await _sut.RepriceClaimAsync(request);
 
-        result.Lines[0].AllowedAmount.Should().Be(10000.00m); // 2.0 * 5000
-        result.Lines[1].AllowedAmount.Should().Be(0); // Bundled
-        result.Lines[1].StatusReason.Should().Contain("Bundled under DRG");
+        result.Lines.Select(l => l.AllowedAmount).Should().Equal(5000.00m, 5000.00m);
         result.TotalAllowed.Should().Be(10000.00m);
+    }
+
+    /// <summary>Modifiers 81 / 82 are assistant surgeon modifiers: 16% under CMS (the engine's rule).</summary>
+    [Theory]
+    [InlineData("81")]
+    [InlineData("82")]
+    public async Task RepriceClaimAsync_AssistantSurgeon81And82_PricedAt16Percent(string modifier)
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupFeeEntry(scheduleId, "27447", nonFacilityRate: 1000.00m);
+
+        var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "27447", Units = 1, Modifiers = new List<string> { modifier } }
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines[0].AllowedAmount.Should().Be(160.00m);
+        result.Lines[0].Breakdown.ModifierAdjustment.Should().Be("Factor: 0.16");
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_TeamSurgery66_NotAdjusted_Warns()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupFeeEntry(scheduleId, "27447", nonFacilityRate: 1000.00m);
+
+        var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "27447", Units = 1, Modifiers = new List<string> { "66" } }
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines[0].AllowedAmount.Should().Be(1000.00m);
+        result.Warnings.Should().Contain(w => w.Contains("Modifier 66") && w.Contains("by report"));
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_RepeatedLineNumbers_PricedByPosition()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupFeeEntries(scheduleId, new (string, decimal, int?)[]
+        {
+            ("27447", 1500.00m, 2),
+            ("29881", 800.00m, 2),
+        });
+
+        // Line numbers default to 1 when a caller omits them.
+        var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { ProcedureCode = "29881", Units = 1 },
+            new ClaimLineRequest { ProcedureCode = "27447", Units = 1 },
+        });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines.Select(l => l.ProcedureCode).Should().Equal("29881", "27447");
+        result.Lines.Select(l => l.AllowedAmount).Should().Equal(400.00m, 1500.00m);
     }
 
     // ─────────────────────────────────────────────────────────
@@ -606,6 +688,18 @@ public class RepricingServiceTests
         _feeScheduleRepo.Setup(r => r.LookupCodesAsync(
                 scheduleId, It.IsAny<IEnumerable<string>>(), It.IsAny<string?>()))
             .ReturnsAsync(feeEntries);
+    }
+
+    private void SetupDrg(string scheduleId, string drgCode, decimal weight, decimal baseRate)
+    {
+        _feeScheduleRepo.Setup(r => r.LookupDrgAsync(scheduleId, drgCode))
+            .ReturnsAsync(new FeeScheduleEntry
+            {
+                FeeScheduleId = scheduleId,
+                ProcedureCode = drgCode,
+                DrgWeight = weight,
+                DrgBaseRate = baseRate
+            });
     }
 
     private static RepricingRequest BuildRequest(string scheduleId, ClaimType claimType,
