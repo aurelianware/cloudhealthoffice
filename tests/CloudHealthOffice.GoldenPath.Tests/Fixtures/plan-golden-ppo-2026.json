@@ -1,0 +1,66 @@
+{
+  "id": "6f1c2b0e-3d4a-4b5c-8e9f-0a1b2c3d4e5f",
+  "tenantId": "golden-tenant",
+  "planId": "GOLDEN-PPO-2026",
+  "planName": "Golden Path Synthetic PPO 2026",
+  "payer": "CLOUD HEALTH OFFICE GOLDEN HEALTH PLAN",
+  "effectiveDate": "2026-01-01T00:00:00Z",
+  "planType": "PPO",
+  "lineOfBusiness": "Commercial",
+  "familyAccumulatorModel": "Embedded",
+  "versionId": "GOLDEN-PPO-2026-v1",
+  "versionNumber": 1,
+  "versionState": "Published",
+  "publishedAt": "2025-12-01T00:00:00Z",
+  "costSharing": {
+    "individualDeductible": 500.00,
+    "familyDeductible": 1500.00,
+    "individualOutOfPocketMax": 3000.00,
+    "familyOutOfPocketMax": 6000.00,
+    "outNetworkIndividualDeductible": 1000.00,
+    "outNetworkFamilyDeductible": 3000.00,
+    "outNetworkIndividualOutOfPocketMax": 6000.00,
+    "outNetworkFamilyOutOfPocketMax": 12000.00
+  },
+  "benefits": [
+    {
+      "benefitType": "medical",
+      "serviceCategory": "Office Visit",
+      "description": "Office visit: deductible, then 20% coinsurance",
+      "isCovered": true,
+      "inNetworkCoinsurance": 0.20,
+      "outNetworkCoinsurance": 0.40,
+      "deductibleApplies": true,
+      "oopApplies": true
+    },
+    {
+      "benefitType": "medical",
+      "serviceCategory": "Surgery",
+      "description": "Professional surgery: deductible, then 20% coinsurance",
+      "isCovered": true,
+      "inNetworkCoinsurance": 0.20,
+      "outNetworkCoinsurance": 0.40,
+      "deductibleApplies": true,
+      "oopApplies": true
+    },
+    {
+      "benefitType": "medical",
+      "serviceCategory": "Acupuncture",
+      "description": "Acupuncture: excluded",
+      "isCovered": false,
+      "deductibleApplies": true,
+      "oopApplies": true
+    },
+    {
+      "benefitType": "medical",
+      "serviceCategory": "Inpatient Hospital",
+      "description": "Inpatient stay: deductible, $250 copay per stay, then 10% coinsurance",
+      "isCovered": true,
+      "inNetworkCopay": 250.00,
+      "inNetworkCoinsurance": 0.10,
+      "outNetworkCoinsurance": 0.40,
+      "deductibleApplies": true,
+      "oopApplies": true
+    }
+  ]
+}

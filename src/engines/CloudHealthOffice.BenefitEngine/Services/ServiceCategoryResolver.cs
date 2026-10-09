@@ -179,6 +179,13 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
         return true;
     }
 
+    /// <summary><see cref="ProcedureCodeRule.CodeType"/> of a rule matched on the line's revenue code.</summary>
+    public const string RevenueCodeType = "REV";
+
+    /// <summary>Revenue codes are four digits; "120" and "0120" are the same code.</summary>
+    private static string? NormalizeRevenueCode(string? revenueCode)
+        => string.IsNullOrWhiteSpace(revenueCode) ? null : revenueCode.Trim().PadLeft(4, '0');
+
     private static bool RuleMatches(
         ProcedureCodeRule rule,
         string procedureCode,
@@ -187,9 +194,27 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
         IReadOnlyList<string> modifiers,
         string? revenueCode)
     {
-        // Code type must match
-        if (!string.Equals(rule.CodeType, codeType, StringComparison.OrdinalIgnoreCase))
+        // A REV rule (UB-04 revenue code, e.g. 0100–0219 accommodation) is
+        // matched against the line's revenue code, whatever the line's code
+        // type: claim lines always arrive as "CPT", and an 837I line may
+        // carry a revenue code with no HCPCS at all. Comparing a REV rule
+        // to the code type and the (empty) procedure code meant no REV rule
+        // ever matched, so an inpatient stay fell through to POS inference
+        // on CLM05-1 (the facility type code, "11" for a hospital
+        // inpatient bill) and resolved as an office visit.
+        var isRevenueRule = string.Equals(rule.CodeType, RevenueCodeType, StringComparison.OrdinalIgnoreCase);
+        if (isRevenueRule)
+        {
+            var revenue = NormalizeRevenueCode(revenueCode);
+            if (revenue is null)
+                return false;
+            procedureCode = revenue;
+        }
+        else if (!string.Equals(rule.CodeType, codeType, StringComparison.OrdinalIgnoreCase))
+        {
+            // Code type must match
             return false;
+        }
 
         // POS filter (if specified on rule)
         if (rule.PlaceOfServiceCode is not null &&

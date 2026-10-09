@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Golden-file end-to-end test of the money path: a stored benefit plan, a
+    provider contract / fee schedule and a synthetic X12 837 go through the
+    real claims-service submission + adjudication pipeline (PricingStage,
+    BenefitCalculationStage, PersistenceStage), the real benefit-plan-service
+    engines behind their HTTP contracts, the real payment-service payment run
+    and 835 generator; the 835 that comes out is compared with Golden/*.835.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The service projects use Sdk.Web. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <!-- Real mongod for the claims-service repository the pipeline persists through. -->
+    <PackageReference Include="EphemeralMongo" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\services\claims-service\claims-service.csproj" />
+    <ProjectReference Include="..\..\src\services\payment-service\payment-service.csproj" />
+    <ProjectReference Include="..\..\src\services\benefit-plan-service\benefit-plan-service.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Golden\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

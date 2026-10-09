@@ -321,8 +321,14 @@ public class ServiceLinePayment
     public decimal PaymentAmount { get; set; }
 
     /// <summary>
+    /// Procedure modifiers as billed (837 SV101-3..6 / SV202-3..6).
+    /// 835: SVC01-3..SVC01-6
+    /// </summary>
+    public List<string> Modifiers { get; set; } = new();
+
+    /// <summary>
     /// Revenue code (for facility claims)
-    /// 835: SVC01-4
+    /// 835: SVC04 when SVC01 carries a HCPCS code; otherwise SVC01 is NU:{revenue code}
     /// </summary>
     [StringLength(4)]
     public string? RevenueCode { get; set; }
