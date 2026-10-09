@@ -144,6 +144,9 @@ public class EraGeneratorService : IEraGeneratorService
         var payeeNpiQual = string.IsNullOrEmpty(payment.PayeeNPI) ? "" : $"*XX*{payment.PayeeNPI}";
         sb.Append(Seg(ref segmentCount, true,
             $"N1*PE*{Era835Names.N102(payment.PayeeName)}{payeeNpiQual}~"));
+        // Payee N3/N4: the 837 pay-to address (2010AB) when the claims carry one.
+        foreach (var addressSegment in Era835Names.PayeeAddressSegments(payment.PayeeAddress))
+            sb.Append(Seg(ref segmentCount, true, addressSegment));
 
         // ── 2000 / 2100 loops — one CLP per claim ───────────────────────
         foreach (var claimPay in payment.ClaimPayments)

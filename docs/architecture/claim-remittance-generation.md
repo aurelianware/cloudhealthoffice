@@ -138,7 +138,17 @@ BPR  — Financial information (envelope-wide sum)
 TRN  — Reassociation trace number (first claim's check number)
 DTM  — Production date
 N1*PR — Payer identification (1000A loop)
-N1*PE — Payee identification (1000B loop)
+N1*PE — Payee identification (1000B loop): the billing provider
+        (837 2010AA name, N103 = XX, N104 = billing NPI). 5010 has no
+        pay-to provider name or NPI: 837 2010AB is an address only
+        (X12 RFI 1522/1606), and the NPI on the claim flows to the 835
+        (X12 RFI 1559). N102 is cut to 60 characters.
+N3 / N4 — Payee address: the 837 2010AB pay-to address, only when
+        every payment in the envelope is to that payee at that address
+        (omitted otherwise). Claims naming a 2010AC pay-to plan
+        (subrogation demand) are left out of payment runs
+        (PaymentRun.PayToPlanClaimIds): the plan, not the provider NPI,
+        is the entity to be paid (X12 RFI 1107).
 [2100 loop — repeated per claim; order per 005010X221A1]
    CLP  — Claim header (status code, amounts)
    CAS  — Claim-level adjustments (header CAS from CarcRarcMapper)

@@ -231,6 +231,17 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         var payeeNpiQual = string.IsNullOrEmpty(first.PayeeNPI) ? "" : $"*XX*{first.PayeeNPI}";
         sb.Append(Seg(ref segmentCount, true,
             $"N1*PE*{Era835Names.N102(first.PayeeName)}{payeeNpiQual}~"));
+        // Payee N3/N4: the 837 pay-to address (2010AB) when the payee's claims
+        // carry one. Only when every payment in the envelope is to the same
+        // payee at the same address: N3/N4 must not put one provider's
+        // address under an envelope that also pays another.
+        var payeeAddress = inputs.All(i =>
+                string.Equals(i.Payment.PayeeNPI, first.PayeeNPI, StringComparison.Ordinal)
+                && first.PayeeAddress is not null && first.PayeeAddress.SameAs(i.Payment.PayeeAddress))
+            ? first.PayeeAddress
+            : null;
+        foreach (var addressSegment in Era835Names.PayeeAddressSegments(payeeAddress))
+            sb.Append(Seg(ref segmentCount, true, addressSegment));
 
         // ── 2000 / 2100 loops — CLP per claim across all payments ──────
         foreach (var input in inputs)

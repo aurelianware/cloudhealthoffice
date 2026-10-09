@@ -196,7 +196,7 @@ public class ReversalRunService : IReversalRunService
                 var npi = run.Criteria.ProviderNPI;
                 adjustments = adjustments
                     .Where(a => predecessors.TryGetValue(a.PredecessorClaimId, out var p)
-                        && string.Equals(p.PayToProviderNPI ?? p.BillingProviderNPI, npi, StringComparison.Ordinal))
+                        && string.Equals(p.PayeeNpi, npi, StringComparison.Ordinal))
                     .ToList();
                 if (adjustments.Count == 0)
                 {
@@ -213,7 +213,7 @@ public class ReversalRunService : IReversalRunService
             var environment = _configuration["TradingPartners:Environment"] ?? "Production";
             var resolvedTradingPartners = await ResolveTradingPartnersAsync(
                 predecessors.Values
-                    .Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI)
+                    .Select(c => c.PayeeNpi)
                     .Where(n => !string.IsNullOrEmpty(n))
                     .Distinct(StringComparer.Ordinal),
                 run.TenantId,
@@ -260,7 +260,7 @@ public class ReversalRunService : IReversalRunService
                     continue;
                 }
 
-                var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
+                var providerNpi = pred.PayeeNpi;
                 string? tradingPartnerId = null;
                 if (!string.IsNullOrEmpty(providerNpi)
                     && resolvedTradingPartners.TryGetValue(providerNpi, out var partner))
@@ -761,7 +761,7 @@ public class ReversalRunService : IReversalRunService
         string checkNumber,
         string approver)
     {
-        var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
+        var providerNpi = pred.PayeeNpi;
         var payment = new Payment
         {
             CheckNumber = checkNumber,
@@ -773,6 +773,8 @@ public class ReversalRunService : IReversalRunService
             PayerId = _configuration["Payer:Id"] ?? "CHO",
             PayeeName = pred.PayeeNameOr(string.IsNullOrWhiteSpace(providerNpi) ? "Provider" : providerNpi),
             PayeeNPI = providerNpi,
+            // The predecessor's 837 pay-to address (2010AB), as on its payment.
+            PayeeAddress = pred.PayToAddress,
             TradingPartnerId = tradingPartnerId,
             // Recouped, not yet voided in claims-service; Posted once voided.
             Status = PaymentStatus.PaidPendingFinalize,

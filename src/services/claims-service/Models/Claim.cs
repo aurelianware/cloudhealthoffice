@@ -116,6 +116,22 @@ public class Claim
     public string? BillingProviderName { get; set; }
 
     /// <summary>
+    /// Pay-to address: 837 Loop 2010AB (NM1*87 N3/N4). In 5010 this loop is
+    /// an address only (NM103 onward are not used): the billing provider is
+    /// the pay-to provider, and this is the address to direct payment to when
+    /// it differs from the billing provider's. Null when the 837 had none.
+    /// 835: payee N3/N4 (1000B).
+    /// </summary>
+    public ClaimAddress? PayToAddress { get; set; }
+
+    /// <summary>
+    /// Pay-to plan: 837 Loop 2010AC (NM1*PE), sent on a subrogation demand
+    /// (BHT06 = 31) or by a factoring agent. The plan, not the billing
+    /// provider, is the entity to be paid. Null when the 837 had none.
+    /// </summary>
+    public ClaimPayToPlan? PayToPlan { get; set; }
+
+    /// <summary>
     /// Rendering provider NPI (if different from billing)
     /// 837: NM109 (2310B)
     /// </summary>
@@ -589,6 +605,62 @@ public class ClaimLine
 /// rate and pends for pricing rather than being grouped.
 /// </para>
 /// </summary>
+/// <summary>A postal address carried on a claim (837 N3/N4).</summary>
+[BsonIgnoreExtraElements]
+public class ClaimAddress
+{
+    /// <summary>N301.</summary>
+    [StringLength(55)]
+    public string Line1 { get; set; } = string.Empty;
+
+    /// <summary>N302.</summary>
+    [StringLength(55)]
+    public string? Line2 { get; set; }
+
+    /// <summary>N401.</summary>
+    [StringLength(30)]
+    public string City { get; set; } = string.Empty;
+
+    /// <summary>N402.</summary>
+    [StringLength(2)]
+    public string? State { get; set; }
+
+    /// <summary>N403.</summary>
+    [StringLength(15)]
+    public string? PostalCode { get; set; }
+
+    /// <summary>N404; null for a US address.</summary>
+    [StringLength(3)]
+    public string? CountryCode { get; set; }
+}
+
+/// <summary>
+/// 837 Loop 2010AC pay-to plan. Its tax id is the TIN of the entity to be
+/// paid for the subrogation (X12 RFI 1107).
+/// </summary>
+[BsonIgnoreExtraElements]
+public class ClaimPayToPlan
+{
+    /// <summary>NM103 pay-to plan organizational name.</summary>
+    [StringLength(60)]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>NM108: PI (payor identification) or XV (CMS plan id).</summary>
+    [StringLength(2)]
+    public string? IdentifierQualifier { get; set; }
+
+    /// <summary>NM109 pay-to plan primary identifier.</summary>
+    [StringLength(80)]
+    public string? Identifier { get; set; }
+
+    /// <summary>REF*EI REF02 pay-to plan tax identification number.</summary>
+    [StringLength(50)]
+    public string? TaxId { get; set; }
+
+    /// <summary>N3/N4 pay-to plan address.</summary>
+    public ClaimAddress? Address { get; set; }
+}
+
 [BsonIgnoreExtraElements]
 public class InstitutionalClaimDetails
 {

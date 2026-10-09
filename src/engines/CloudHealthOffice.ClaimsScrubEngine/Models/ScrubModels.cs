@@ -40,6 +40,24 @@ public record X12837Claim
     public ClaimSubmitter Submitter { get; init; } = default!;
     public ClaimReceiver Receiver { get; init; } = default!;
     public BillingProvider BillingProvider { get; init; } = default!;
+
+    /// <summary>
+    /// Loop 2010AB pay-to address (NM1*87 + N3/N4). In 5010 this loop is an
+    /// address only: NM103 and later are not used, so it carries no name or
+    /// identifier; the billing provider (2010AA) is the pay-to provider. Sent
+    /// only when the payment address differs from the 2010AA address. Null
+    /// when the 837 has no 2010AB.
+    /// </summary>
+    public ProviderAddress? PayToAddress { get; init; }
+
+    /// <summary>
+    /// Loop 2010AC pay-to plan (NM1*PE): the plan paid on a subrogation
+    /// demand (BHT06 = 31) or a factoring agent. Null when absent.
+    /// </summary>
+    public PayToPlan? PayToPlan { get; init; }
+
+    /// <summary>BHT06 transaction type code: CH chargeable, RP reporting, 31 subrogation demand.</summary>
+    public string? TransactionTypeCode { get; init; }
     public ClaimSubscriber Subscriber { get; init; } = default!;
     public ClaimPatient? Patient { get; init; }
     public ClaimHeader ClaimHeader { get; init; } = default!;
@@ -71,6 +89,25 @@ public record ProviderAddress
     public string State { get; init; } = default!;
     public string PostalCode { get; init; } = default!;
     public string? CountryCode { get; init; }
+}
+
+/// <summary>
+/// 837 Loop 2010AC pay-to plan (005010X222A1 / 005010X223A2). The plan is
+/// the entity to be paid for the subrogation; <see cref="TaxId"/> is the
+/// TIN associated with the plan named in NM103 (X12 RFI 1107).
+/// </summary>
+public record PayToPlan
+{
+    /// <summary>NM103 pay-to plan organizational name.</summary>
+    public string Name { get; init; } = default!;
+    /// <summary>NM108: PI (payor identification) or XV (CMS plan id).</summary>
+    public string? IdentificationQualifier { get; init; }
+    /// <summary>NM109 pay-to plan primary identifier.</summary>
+    public string? IdentificationCode { get; init; }
+    /// <summary>REF*EI REF02: the pay-to plan's tax identification number.</summary>
+    public string? TaxId { get; init; }
+    /// <summary>N3/N4 pay-to plan address.</summary>
+    public ProviderAddress? Address { get; init; }
 }
 
 public record BillingProvider

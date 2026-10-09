@@ -48,6 +48,11 @@ public static class X12837Parser
         ClaimSubmitter? submitter = null;
         ClaimReceiver? receiver = null;
         BillingProvider? billingProvider = null;
+        // 2010AB / 2010AC belong to the 2000A billing provider loop and apply
+        // to every claim under it; reset when a new HL*20 starts.
+        ProviderAddress? payToAddress = null;
+        PayToPlan? payToPlan = null;
+        string? transactionTypeCode = null;
         ClaimSubscriber? subscriber = null;
         ClaimPatient? patient = null;
         RenderingProviderInfo? pendingRenderingProvider = null;
@@ -118,6 +123,17 @@ public static class X12837Parser
             return (value, value);
         }
 
+        static ProviderAddress EmptyAddress() =>
+            new() { Line1 = string.Empty, City = string.Empty, State = string.Empty, PostalCode = string.Empty };
+
+        static ProviderAddress WithCityStateZip(ProviderAddress address, X12Segment seg) => address with
+        {
+            City = seg.Element(0) ?? string.Empty,
+            State = seg.Element(1) ?? string.Empty,
+            PostalCode = seg.Element(2) ?? string.Empty,
+            CountryCode = seg.Element(3),
+        };
+
         void FlushLine()
         {
             if (currentLine is not null)
@@ -145,6 +161,9 @@ public static class X12837Parser
                 Submitter = submitter ?? new ClaimSubmitter { Name = string.Empty, IdentificationCode = string.Empty, IdentificationQualifier = string.Empty },
                 Receiver = receiver ?? new ClaimReceiver { Name = string.Empty, IdentificationCode = string.Empty, IdentificationQualifier = string.Empty },
                 BillingProvider = billingProvider ?? new BillingProvider { Npi = string.Empty, Name = string.Empty, EntityType = string.Empty, Address = new ProviderAddress { Line1 = string.Empty, City = string.Empty, State = string.Empty, PostalCode = string.Empty } },
+                PayToAddress = payToAddress,
+                PayToPlan = payToPlan,
+                TransactionTypeCode = transactionTypeCode,
                 Subscriber = subscriber ?? new ClaimSubscriber { MemberId = string.Empty, FirstName = string.Empty, LastName = string.Empty, DateOfBirth = string.Empty },
                 Patient = patient,
                 ClaimHeader = new ClaimHeader
@@ -232,10 +251,16 @@ public static class X12837Parser
 
                 case "BHT":
                     transactionDate = seg.Element(3) ?? transactionDate;
+                    transactionTypeCode = seg.Element(5);
                     break;
 
                 case "HL":
                     var levelCode = seg.Element(2);
+                    if (levelCode == "20")
+                    {
+                        payToAddress = null;
+                        payToPlan = null;
+                    }
                     if (levelCode == "23")
                     {
                         insideDependentLoop = true;
@@ -303,6 +328,29 @@ public static class X12837Parser
                             break;
                         }
 
+                        // 2010AB pay-to address: NM101 = 87, NM102 = 1/2; NM103
+                        // onward are not used in 5010, so only N3/N4 carry data.
+                        case "87":
+                            payToAddress = EmptyAddress();
+                            break;
+
+                        // 2010AC pay-to plan (subrogation): NM103 name,
+                        // NM108/NM109 PI or XV plan id; N3/N4 and REF*EI follow.
+                        case "PE":
+                        {
+                            // Only a PI/XV trailing pair is the plan id; without
+                            // NM108/NM109 the trailing pair would be NM102/NM103.
+                            var (qual, id) = TrailingIdPair(seg);
+                            var hasId = qual is "PI" or "XV";
+                            payToPlan = new PayToPlan
+                            {
+                                Name = seg.Element(2) ?? string.Empty,
+                                IdentificationQualifier = hasId ? qual : null,
+                                IdentificationCode = hasId ? id : null,
+                            };
+                            break;
+                        }
+
                         case "IL":
                         {
                             var (_, memberId) = TrailingIdPair(seg);
@@ -355,6 +403,26 @@ public static class X12837Parser
                     {
                         Address = billingProvider.Address with { City = seg.Element(0) ?? string.Empty, State = seg.Element(1) ?? string.Empty, PostalCode = seg.Element(2) ?? string.Empty }
                     };
+                    break;
+
+                case "N3" when lastNm1Context == "87" && payToAddress is not null:
+                    payToAddress = payToAddress with { Line1 = seg.Element(0) ?? string.Empty, Line2 = seg.Element(1) };
+                    break;
+
+                case "N4" when lastNm1Context == "87" && payToAddress is not null:
+                    payToAddress = WithCityStateZip(payToAddress, seg);
+                    break;
+
+                case "N3" when lastNm1Context == "PE" && payToPlan is not null:
+                    payToPlan = payToPlan with { Address = (payToPlan.Address ?? EmptyAddress()) with { Line1 = seg.Element(0) ?? string.Empty, Line2 = seg.Element(1) } };
+                    break;
+
+                case "N4" when lastNm1Context == "PE" && payToPlan is not null:
+                    payToPlan = payToPlan with { Address = WithCityStateZip(payToPlan.Address ?? EmptyAddress(), seg) };
+                    break;
+
+                case "REF" when lastNm1Context == "PE" && payToPlan is not null && seg.Element(0) == "EI":
+                    payToPlan = payToPlan with { TaxId = seg.Element(1) };
                     break;
 
                 case "REF" when lastNm1Context == "85" && billingProvider is not null && seg.Element(0) == "EI":

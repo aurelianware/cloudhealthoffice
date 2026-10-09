@@ -21,14 +21,16 @@ public interface ISnip837Validator
 ///   numbers and counts, duplicate ST02, unrecognized segment ids, X12
 ///   mandatory elements, numeric and date/time element formats.</item>
 ///   <item><b>Implementation guide.</b> BHT values, 1000A/1000B, the HL
-///   hierarchy (sequence, parents, child codes), 2010AA/2000B/2010BA/2010BB/2000C
-///   required segments, CLM05 composite and CLM06–09, principal diagnosis,
+///   hierarchy (sequence, parents, child codes), 2010AA/2010AB/2010AC/2000B/
+///   2010BA/2010BB/2000C required segments (2010AB is an address only: NM103
+///   onward not used), CLM05 composite and CLM06–09, principal diagnosis,
 ///   diagnosis count, LX numbering and SV1/SV2 presence and qualifiers.</item>
 ///   <item><b>Balancing.</b> CLM02 = ΣSV102 (837P) / ΣSV203 (837I).</item>
 ///   <item><b>Situational.</b> DTP*472 on every 837P line and on 837I
 ///   outpatient lines when the statement covers more than one day; 837I
 ///   inpatient admission date and CL1; line dates inside the statement
 ///   period and not after BHT04; NPI check digit; PO Box billing address;
+///   2010AC only on a subrogation demand (BHT06 = 31);
 ///   subscriber-is-patient rules; REF*F8 for frequency 7/8; SV107 pointers.</item>
 ///   <item><b>External code sets.</b> ICD-10-CM / ICD-10-PCS formats (and no
 ///   ICD-9 qualifiers after 2015-10-01), CPT/HCPCS and modifier formats,
@@ -880,6 +882,59 @@ public sealed class X12837SnipValidator : ISnip837Validator
                 Report(L2, "L2-2010AA-N4", "2010AA billing provider city/state/ZIP (N4) is required.", nm1, segmentId: "N4", loop: "2010AA", position: nm1.Pos + 1, segCode: "3");
             if (!loopSegs.Any(s => s.Id == "REF" && s.E(1) is "EI" or "SY"))
                 Report(L2, "L2-2010AA-TAXID", "2010AA billing provider tax id (REF*EI or REF*SY) is required.", nm1, segmentId: "REF", loop: "2010AA", position: nm1.Pos + 1, segCode: "3");
+
+            CheckPayToAddress(hl);
+            CheckPayToPlan(hl);
+        }
+
+        /// <summary>
+        /// 2010AB pay-to address. In 5010 only NM101 (87) and NM102 (1 or 2)
+        /// are used; the loop carries the address (N3 and N4, both required)
+        /// and no name or identifier (X12 RFI 1522).
+        /// </summary>
+        private void CheckPayToAddress(HlNode hl)
+        {
+            const SnipLevel L2 = SnipLevel.ImplementationGuide;
+            var nm1 = hl.Segs.FirstOrDefault(s => s.Id == "NM1" && s.Loop == "2010AB");
+            if (nm1 is null) return;
+
+            if (nm1.E(2) is not ("1" or "2"))
+                Report(L2, "L2-NM102", "2010AB NM102 entity type must be 1 or 2.", nm1, 2, elemCode: "7", dataRef: "1065", badValue: nm1.E(2));
+            for (var n = 3; n <= 12; n++)
+            {
+                if (nm1.E(n) is null) continue;
+                Report(L2, "L2-2010AB-NOT-USED", $"2010AB NM1{n:00} is not used: the pay-to address loop carries no name or identifier in 5010.", nm1, n, elemCode: "I10");
+            }
+
+            var loopSegs = hl.Segs.Where(s => s.Loop == "2010AB").ToList();
+            if (!loopSegs.Any(s => s.Id == "N3"))
+                Report(L2, "L2-2010AB-N3", "2010AB pay-to address (N3) is required.", nm1, segmentId: "N3", loop: "2010AB", position: nm1.Pos + 1, segCode: "3");
+            if (!loopSegs.Any(s => s.Id == "N4"))
+                Report(L2, "L2-2010AB-N4", "2010AB pay-to address city/state/ZIP (N4) is required.", nm1, segmentId: "N4", loop: "2010AB", position: nm1.Pos + 1, segCode: "3");
+        }
+
+        /// <summary>
+        /// 2010AC pay-to plan: NM102 = 2, NM103 plan name, NM108 PI or XV and
+        /// NM109 plan id, N3, N4 and the plan's tax id (REF*EI) are required.
+        /// </summary>
+        private void CheckPayToPlan(HlNode hl)
+        {
+            const SnipLevel L2 = SnipLevel.ImplementationGuide;
+            var nm1 = hl.Segs.FirstOrDefault(s => s.Id == "NM1" && s.Loop == "2010AC");
+            if (nm1 is null) return;
+
+            if (nm1.E(2) != "2") Report(L2, "L2-NM102", "2010AC NM102 entity type must be 2 (non-person).", nm1, 2, elemCode: "7", dataRef: "1065", badValue: nm1.E(2));
+            if (nm1.E(3) is null) Report(L2, "L2-NM103", "2010AC NM103 pay-to plan name is required.", nm1, 3, elemCode: "1", dataRef: "1035");
+            if (nm1.E(8) is not ("PI" or "XV")) Report(L2, "L2-NM108", "2010AC NM108 must be PI or XV.", nm1, 8, elemCode: "7", dataRef: "66", badValue: nm1.E(8));
+            if (nm1.E(9) is null) Report(L2, "L2-NM109", "2010AC NM109 pay-to plan identifier is required.", nm1, 9, elemCode: "1", dataRef: "67");
+
+            var loopSegs = hl.Segs.Where(s => s.Loop == "2010AC").ToList();
+            if (!loopSegs.Any(s => s.Id == "N3"))
+                Report(L2, "L2-2010AC-N3", "2010AC pay-to plan address (N3) is required.", nm1, segmentId: "N3", loop: "2010AC", position: nm1.Pos + 1, segCode: "3");
+            if (!loopSegs.Any(s => s.Id == "N4"))
+                Report(L2, "L2-2010AC-N4", "2010AC pay-to plan city/state/ZIP (N4) is required.", nm1, segmentId: "N4", loop: "2010AC", position: nm1.Pos + 1, segCode: "3");
+            if (!loopSegs.Any(s => s.Id == "REF" && s.E(1) == "EI"))
+                Report(L2, "L2-2010AC-TAXID", "2010AC pay-to plan tax id (REF*EI) is required.", nm1, segmentId: "REF", loop: "2010AC", position: nm1.Pos + 1, segCode: "3");
         }
 
         private void CheckSubscriber(HlNode hl)
@@ -1101,6 +1156,12 @@ public sealed class X12837SnipValidator : ISnip837Validator
                     var n3 = hl.Segs.FirstOrDefault(s => s.Id == "N3" && s.Loop == "2010AA");
                     if (n3?.E(1) is { } street && IsPoBox(street))
                         Report(L4, "L4-2010AA-POBOX", "The billing provider address (2010AA N3) must be a street address, not a PO Box.", n3, 1, elemCode: "I12", dataRef: "166");
+
+                    // The pay-to plan loop is used only on a subrogation
+                    // demand, BHT06 = 31 (X12 RFI 1036).
+                    if (hl.Segs.FirstOrDefault(s => s.Id == "NM1" && s.Loop == "2010AC") is { } payToPlan
+                        && _header.FirstOrDefault(s => s.Id == "BHT")?.E(6) != "31")
+                        Report(L4, "L4-2010AC-BHT06", "The pay-to plan loop (2010AC) is used only when BHT06 is 31 (subrogation demand).", payToPlan, segCode: "I9");
                 }
 
                 if (hl.LevelCode == "22" && hl.Segs.FirstOrDefault(s => s.Id == "SBR") is { } sbr && sbr.E(2) == "18")

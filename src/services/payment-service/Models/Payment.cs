@@ -9,6 +9,34 @@ namespace PaymentService.Models;
 /// Represents an 835 Electronic Remittance Advice (ERA) payment transaction
 /// Tracks claim payments, adjustments, and remittance details from payers
 /// </summary>
+/// <summary>835 1000B payee N3/N4 address (from the 837 Loop 2010AB pay-to address).</summary>
+public class PayeeAddress
+{
+    /// <summary>N301.</summary>
+    public string Line1 { get; set; } = string.Empty;
+    /// <summary>N302.</summary>
+    public string? Line2 { get; set; }
+    /// <summary>N401.</summary>
+    public string City { get; set; } = string.Empty;
+    /// <summary>N402.</summary>
+    public string? State { get; set; }
+    /// <summary>N403.</summary>
+    public string? PostalCode { get; set; }
+    /// <summary>N404; null for a US address.</summary>
+    public string? CountryCode { get; set; }
+
+    /// <summary>Same address, compared element by element (ordinal, trimmed, blank = absent).</summary>
+    public bool SameAs(PayeeAddress? other) =>
+        other is not null
+        && Eq(Line1, other.Line1) && Eq(Line2, other.Line2) && Eq(City, other.City)
+        && Eq(State, other.State) && Eq(PostalCode, other.PostalCode) && Eq(CountryCode, other.CountryCode);
+
+    private static bool Eq(string? a, string? b) =>
+        string.Equals(Norm(a), Norm(b), StringComparison.Ordinal);
+
+    private static string? Norm(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+}
+
 public class Payment
 {
     /// <summary>
@@ -80,6 +108,13 @@ public class Payment
     /// </summary>
     [StringLength(10)]
     public string? PayeeNPI { get; set; }
+
+    /// <summary>
+    /// Payee address: the 837 pay-to address (Loop 2010AB) of the claims paid,
+    /// when they carry one. 835: N3/N4 (1000B). Null when the claims have no
+    /// pay-to address (or disagree on it); the 835 then carries no payee N3/N4.
+    /// </summary>
+    public PayeeAddress? PayeeAddress { get; set; }
 
     /// <summary>
     /// Identifier of the trading partner this payment routes to. Used by
