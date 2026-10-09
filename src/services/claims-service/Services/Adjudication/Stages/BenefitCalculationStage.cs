@@ -693,12 +693,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// still balances (charge − ΣCAS = paid) and carries its cost share:
     /// <list type="bullet">
     ///   <item><description>DRG / per-diem lines, whose adjustments live
-    ///     on the claim-level <see cref="DrgCostShareResult"/>: synthesized
-    ///     from the line's allocated amounts. When the line's member share
-    ///     is below its cost share (an OOP-max cap the amounts don't yet
-    ///     reflect) the PR amounts are reduced — coinsurance, then copay,
-    ///     then deductible — so no CAS amount is negative; a member share
-    ///     above the cost share goes to a positive OA-23.</description></item>
+    ///     on the claim-level <see cref="DrgCostShareResult"/>: PR-1/3/2
+    ///     built straight from the line's allocated deductible / copay /
+    ///     coinsurance, which the engine has already reduced for any OOP-max
+    ///     cap (and which therefore already respect each rule's
+    ///     <c>OopApplies</c>). Only a pre-reduction (legacy) shape, whose
+    ///     components exceed the member share, gets an ordered reduction —
+    ///     see the comment there. A member share above the cost share goes to
+    ///     a positive OA-23.</description></item>
     ///   <item><description>Denied lines, which carry only the CO-denial
     ///     against the allowed amount: the billed-over-allowed contractual
     ///     reduction is added as CO-45.</description></item>
@@ -719,6 +721,10 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         if (line.IsDrgPriced && line.Adjustments.Count == 0)
         {
+            // Current engine shape: the components are the reduced amounts
+            // the member owes (Σ = allowed − paid). Use them verbatim — no
+            // reduction is synthesized, so an OOP-excluded component the
+            // engine left whole stays whole.
             var deductible = line.DeductibleAmount;
             var copay = line.CopayAmount;
             var coinsurance = line.CoinsuranceAmount;
@@ -726,6 +732,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             var excess = deductible + copay + coinsurance - memberPortion;
             if (excess > 0)
             {
+                // Legacy shape only (results built before the engine reduced
+                // PR amounts for the OOP max: components carry the pre-cap
+                // cost share). It is recognisable solely by Σ components
+                // exceeding the member share. Forgive in the engine's order —
+                // coinsurance, then copay, then deductible — so no CAS is
+                // negative. LIMITATION: the line does not say which
+                // components had OopApplies=false, so this may reduce an
+                // OOP-excluded component the engine would have left whole.
                 coinsurance -= Take(coinsurance, ref excess);
                 copay -= Take(copay, ref excess);
                 deductible -= Take(deductible, ref excess);

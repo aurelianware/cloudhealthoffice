@@ -1260,6 +1260,41 @@ public class BenefitCalculationEngineTests
         Assert.Equal(1500m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
     }
 
+    /// <summary>
+    /// DRG stay with OOP-excluded coinsurance: only the OOP-eligible
+    /// deductible is reduced ($500 → the $200 left); the $2,300 coinsurance
+    /// is owed in full and its per-line split is untouched by the cap.
+    /// </summary>
+    [Fact]
+    public async Task Drg_OopExcludedCoinsurance_OnlyEligibleComponentReduced()
+    {
+        var plan = WithOopApplies(CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 3000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate), "48", false, CostShareType.Coinsurance);
+        var engine = CreateEngine(plan, categoryCode: "48", existingOop: 2800m);
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+            lines:
+            [
+                ("99223", 9000m, 4000m, "21"),
+                ("", 20000m, 8000m, "21"),
+            ]);
+
+        var result = await engine.CalculateAsync(request);
+
+        var drg = result.DrgCostShare!;
+        Assert.Equal(200m, drg.DeductibleAmount);
+        Assert.Equal(2300m, drg.CoinsuranceAmount);
+        Assert.Equal(300m, drg.OopMaxReduction);
+        Assert.Equal(2500m, drg.MemberResponsibility);
+        Assert.Equal(2300m, result.Lines.Sum(l => l.CoinsuranceAmount));
+        Assert.Equal(200m, result.Totals.TotalOopApplied);
+        Assert.All(result.Lines, AssertCasInvariants);
+        Assert.Equal(200m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // COB — OA-23 SIGN AND 835 BALANCING (charge − ΣCAS = paid)
     // ═══════════════════════════════════════════════════════════════════

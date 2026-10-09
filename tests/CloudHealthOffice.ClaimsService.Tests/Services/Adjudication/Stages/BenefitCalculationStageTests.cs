@@ -1096,13 +1096,38 @@ public class BenefitCalculationStageTests
     }
 
     [Fact]
+    public void ApplyToContext_DrgLineWithoutAdjustments_OopExcludedCoinsurance_UsesReducedComponentsVerbatim()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+
+        // $30 OOP-eligible copay + $24 OOP-excluded coinsurance with $10 OOP
+        // left: the engine reduces the copay to $10 and leaves the excluded
+        // coinsurance whole — member $34. The stage must not re-reduce.
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = true, IsDrgPriced = true,
+            BilledAmount = 200m, AllowedAmount = 150m, ContractualAdjustment = 50m,
+            CopayAmount = 10m, CoinsuranceAmount = 24m, OopMaxReduction = 20m,
+            MemberResponsibility = 34m, OopAppliedAmount = 10m, PlanPaidAmount = 116m,
+        }));
+
+        var lineAdj = Assert.Single(ctx.LineAdjudicationResults);
+        Assert.Equal(
+            new[] { ("CO", "45", 50m), ("PR", "3", 10m), ("PR", "2", 24m) },
+            lineAdj.AdjustmentReasons.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
+        Assert.Equal(116m, 200m - lineAdj.AdjustmentReasons.Sum(r => r.Amount));
+        Assert.Equal(10m, lineAdj.OopAppliedAmount);
+    }
+
+    [Fact]
     public void ApplyToContext_DrgLineWithoutAdjustments_UncappedAmounts_ReducesPrNoNegativeOa23()
     {
         var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
 
-        // Legacy shape: raw cost share 60 (deductible 40, copay 5,
-        // coinsurance 15) but member owes 30 after the OOP max. The 30
-        // excess comes off coinsurance, then copay, then deductible.
+        // Legacy (pre-reduction) shape: raw cost share 60 (deductible 40,
+        // copay 5, coinsurance 15) but member owes 30 after the OOP max. The
+        // 30 excess comes off coinsurance, then copay, then deductible (the
+        // line cannot say which components were OOP-excluded).
         BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
         {
             LineNumber = 1, IsCovered = true, IsDrgPriced = true,
