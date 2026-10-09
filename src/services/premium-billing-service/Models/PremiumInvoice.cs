@@ -306,6 +306,26 @@ public class InvoiceAdjustment
     /// Date the adjustment applies to
     /// </summary>
     public DateTime AdjustmentDate { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Coverage the adjustment corrects (retro adds/terms). With
+    /// <see cref="ServicePeriodStart"/> it is how later invoices know what was
+    /// already billed for that coverage and month.
+    /// </summary>
+    [StringLength(50)]
+    public string? CoverageId { get; set; }
+
+    /// <summary>First day of the coverage month the adjustment corrects.</summary>
+    public DateTime? ServicePeriodStart { get; set; }
+
+    /// <summary>Last day of the coverage month the adjustment corrects.</summary>
+    public DateTime? ServicePeriodEnd { get; set; }
+
+    /// <summary>
+    /// True for retro adjustments produced by the rating invoice calculator.
+    /// Only these are folded into what later invoices treat as already billed.
+    /// </summary>
+    public bool IsRatingRetro { get; set; }
 }
 
 /// <summary>

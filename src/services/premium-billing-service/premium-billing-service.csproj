@@ -17,6 +17,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Rating data (age curves) ships inside the assembly; tables may override it. -->
+    <EmbeddedResource Include="Rating/AgeCurves/*.json" LogicalName="PremiumBillingService.Rating.AgeCurves.%(Filename)%(Extension)" />
+    <Content Remove="Rating/AgeCurves/*.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.FieldProtection\CloudHealthOffice.FieldProtection.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.NachaTransmission\CloudHealthOffice.NachaTransmission.csproj" />
