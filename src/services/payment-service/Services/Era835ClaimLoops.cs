@@ -91,12 +91,7 @@ public static class Era835ClaimLoops
     {
         var sb = new StringBuilder();
 
-        // SVC01 composite procedure (HC:code or NU:rev:code), SVC02 charge,
-        // SVC03 payment, SVC05 units.
-        var svcCode = !string.IsNullOrEmpty(sl.RevenueCode)
-            ? $"NU:{sl.RevenueCode}:{sl.ProcedureCode}"
-            : $"HC:{sl.ProcedureCode}";
-        Append(sb, ref segmentCount, $"SVC*{svcCode}*{sl.ChargeAmount:F2}*{sl.PaymentAmount:F2}**{sl.Units:G}");
+        Append(sb, ref segmentCount, Svc(sl));
 
         if (sl.ServiceDateFrom.HasValue)
             Append(sb, ref segmentCount, $"DTM*472*{sl.ServiceDateFrom.Value:yyyyMMdd}");
@@ -124,6 +119,28 @@ public static class Era835ClaimLoops
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The SVC segment (005010X221A1 2110): SVC01 the adjudicated procedure —
+    /// <c>HC:{HCPCS}:{modifiers}</c>, or <c>NU:{revenue code}</c> for an
+    /// institutional line billed with a revenue code only; SVC02 charge;
+    /// SVC03 payment; SVC04 the NUBC revenue code when SVC01 carries a
+    /// HCPCS code; SVC05 units. (Previously a revenue-coded line was sent as
+    /// <c>NU:{rev}:{HCPCS}</c>, which puts the HCPCS code in the modifier
+    /// position, or <c>NU:{rev}:</c> with a trailing separator, and modifiers
+    /// were dropped.)
+    /// </summary>
+    public static string Svc(ServiceLinePayment sl)
+    {
+        var hasProcedure = !string.IsNullOrWhiteSpace(sl.ProcedureCode);
+        var hasRevenue = !string.IsNullOrWhiteSpace(sl.RevenueCode);
+        var svc01 = hasProcedure || !hasRevenue
+            ? string.Join(":", new[] { "HC", sl.ProcedureCode }
+                .Concat(sl.Modifiers.Where(m => !string.IsNullOrWhiteSpace(m)).Take(4).Select(Esc)))
+            : $"NU:{Esc(sl.RevenueCode)}";
+        var svc04 = hasProcedure && hasRevenue ? Esc(sl.RevenueCode) : string.Empty;
+        return $"SVC*{svc01}*{sl.ChargeAmount:F2}*{sl.PaymentAmount:F2}*{svc04}*{sl.Units:G}";
     }
 
     /// <summary>

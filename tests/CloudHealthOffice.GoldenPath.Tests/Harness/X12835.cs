@@ -19,7 +19,7 @@ internal static class X12835
     /// <summary>
     /// One segment per line, with the run-time values replaced: ISA09/ISA10
     /// (interchange date/time), ISA13 and IEA02 (control number, from the
-    /// clock), GS04/GS05 (group date/time) and DTM*405 (production date).
+    /// clock), CLP07 (claim id assigned at submission), GS04/GS05 (group date/time) and DTM*405 (production date).
     /// Everything else — amounts, CARCs, check/trace number, BPR16 payment
     /// date, service dates — is compared as generated.
     /// </summary>
@@ -44,6 +44,11 @@ internal static class X12835
                     break;
                 case "IEA":
                     seg[2] = "#########";
+                    break;
+                case "CLP" when seg.Length > 7:
+                    // CLP07 payer claim control number: the claim id claims-service
+                    // assigns at submission (a GUID). Asserted in the test instead.
+                    seg[7] = "{claim-id}";
                     break;
             }
             lines.Add(string.Join("*", seg) + "~");

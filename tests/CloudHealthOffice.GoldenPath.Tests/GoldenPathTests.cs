@@ -40,6 +40,8 @@ public class GoldenPathTests
         Assert.Equal(paid, r.FinalizedEvent.PlanPaid);
         Assert.Equal(member, r.FinalizedEvent.MemberResponsibility);
         Assert.Equal(paid, r.FinalizedEvent.LineItems.Sum(l => l.PlanPaid));
+        var clp = X12835.Segments(r.Edi835).Single(s => s[0] == "CLP");
+        Assert.Equal(r.FinalizedClaim.Id, clp[7]);
     }
 
     // 01 — Professional office visit, deductible + coinsurance.
@@ -118,13 +120,29 @@ public class GoldenPathTests
     // Cost share on the stay (fresh plan year, Inpatient Hospital benefit):
     //   deductible $500; copay $250; coinsurance 10% × (18,000 − 500 − 250) = $1,725.
     //   Member 500 + 250 + 1,725 = $2,475 (under the $3,000 OOP max); plan $15,525.
-    // See the test body for the line allocation.
+    // Line allocation (each share truncated to the cent, remainder to the last line):
+    //   Allowed by billed share of 42,500: 0120 12,000 → 5,082.35; 0250 1,500 → 635.29;
+    //   0360 29,000 → 12,282.35 + 0.01 remainder = 12,282.36 (Σ 18,000.00).
+    //   CO-45 = billed − allowed: 6,917.65 / 864.71 / 16,717.64 (Σ 24,500.00).
+    //   Deductible 500 by allowed: 141.17 / 17.64 / 341.17 + 0.02 = 341.19.
+    //   Copay 250: 70.58 / 8.82 / 170.58 + 0.02 = 170.60.
+    //   Coinsurance 1,725: 487.05 / 60.88 / 1,177.05 + 0.02 = 1,177.07.
+    //   Member 698.80 / 87.34 / 1,688.86 (Σ 2,475.00);
+    //   paid 4,383.55 / 547.95 / 10,593.50 (Σ 15,525.00).
+    // SVC01: NU:0120 and NU:0250 (revenue code only), HC:27447 with SVC04 0360.
     [Fact]
     public async Task InpatientDrg_ClaimLevelCostShare()
     {
         var r = await RunAsync("05-inpatient-drg");
 
         AssertClaim(r, charge: 42500m, allowed: 18000m, paid: 15525m, member: 2475m);
+        Assert.Equal(500m, r.FinalizedEvent.DeductibleApplied);
+        Assert.Equal(250m, r.FinalizedEvent.CopayApplied);
+        Assert.Equal(1725m, r.FinalizedEvent.CoinsuranceApplied);
+        Assert.Equal(new[] { 4383.55m, 547.95m, 10593.50m },
+            r.FinalizedClaim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount));
+        Assert.Equal(18000m, r.BenefitResult.DrgCostShare!.DrgAllowedAmount);
+        Assert.All(r.BenefitResult.Lines, l => Assert.Equal("Inpatient Hospital", l.ServiceTypeCode));
     }
 
     // 06 — A claim that reaches the OOP max.

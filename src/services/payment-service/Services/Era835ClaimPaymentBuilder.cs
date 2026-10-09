@@ -86,6 +86,7 @@ public static class Era835ClaimPaymentBuilder
                     {
                         LineNumber = sl.LineNumber,
                         ProcedureCode = sl.ProcedureCode,
+                        Modifiers = sl.Modifiers?.ToList() ?? new List<string>(),
                         ChargeAmount = sl.ChargeAmount,
                         PaymentAmount = paid,
                         RevenueCode = sl.RevenueCode,

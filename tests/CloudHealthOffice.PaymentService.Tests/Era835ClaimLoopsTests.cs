@@ -199,4 +199,23 @@ public class Era835ClaimLoopsTests
         Assert.Contains("LQ*HE*M15~", edi);
         Assert.DoesNotContain("*M15*", edi);
     }
+
+    // SVC01/SVC04 (005010X221A1 2110): HCPCS with its billed modifiers in
+    // SVC01; an institutional revenue code goes to SVC04 when a HCPCS code is
+    // present, and to SVC01 as NU:{rev} (no trailing separator) when it is not.
+    [Theory]
+    [InlineData("99213", null, new string[0], "SVC*HC:99213*100.00*80.00**1")]
+    [InlineData("11042", null, new[] { "51" }, "SVC*HC:11042:51*100.00*80.00**1")]
+    [InlineData("27447", "0360", new[] { "RT" }, "SVC*HC:27447:RT*100.00*80.00*0360*1")]
+    [InlineData("", "0120", new string[0], "SVC*NU:0120*100.00*80.00**1")]
+    public void Svc_ReportsProcedureModifiersAndRevenueCode(string code, string? revenue, string[] modifiers, string expected)
+    {
+        var line = new ServiceLinePayment
+        {
+            LineNumber = 1, ProcedureCode = code, RevenueCode = revenue, Modifiers = modifiers.ToList(),
+            ChargeAmount = 100m, PaymentAmount = 80m, Units = 1,
+        };
+
+        Assert.Equal(expected, Era835ClaimLoops.Svc(line));
+    }
 }
