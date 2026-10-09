@@ -26,7 +26,9 @@ public sealed class BilledLedger
             ledger.MarkInvoiced(month);
             foreach (var line in invoice.LineItems)
                 ledger.Add(KeyFor(line.CoverageId, line.MemberId), month, line.TotalPremium);
-            foreach (var adjustment in invoice.Adjustments.Where(a => a.ServicePeriodStart.HasValue))
+            // Only the calculator's own retro adjustments count as billing for a month;
+            // a manual adjustment that happens to carry a service period is not reversed.
+            foreach (var adjustment in invoice.Adjustments.Where(a => a.IsRatingRetro && a.ServicePeriodStart.HasValue))
                 ledger.Add(KeyFor(adjustment.CoverageId, adjustment.RelatedMemberId), MonthStart(adjustment.ServicePeriodStart!.Value), adjustment.Amount);
         }
         return ledger;
@@ -82,6 +84,10 @@ public class InvoiceCalculation
 {
     public List<InvoiceLineItem> LineItems { get; set; } = new();
     public List<InvoiceAdjustment> Adjustments { get; set; } = new();
+
+    /// <summary>Coverage-months that could not be charged (e.g. no rate table); left off the invoice.</summary>
+    public List<InvoiceCalculationIssue> Issues { get; set; } = new();
+
     public decimal Subtotal => LineItems.Sum(l => l.TotalPremium);
     public decimal TotalAdjustments => Adjustments.Sum(a => a.Amount);
     public decimal Total => Subtotal + TotalAdjustments;
@@ -127,8 +133,7 @@ public sealed class PremiumInvoiceCalculator
 
         foreach (var enrollment in request.Enrollments.OrderBy(e => e.CoverageId, StringComparer.Ordinal))
         {
-            var month = ChargeForMonth(enrollment, period);
-            if (month == null)
+            if (!TryCharge(enrollment, period, result, out var month) || month == null)
                 continue;
             result.LineItems.Add(ToLine(enrollment, month, request.EmployerContributionPercent, isRetro: false));
         }
@@ -145,7 +150,9 @@ public sealed class PremiumInvoiceCalculator
             foreach (var key in keys)
             {
                 byKey.TryGetValue(key, out var enrollment);
-                var charge = enrollment == null ? null : ChargeForMonth(enrollment, month);
+                MonthCharge? charge = null;
+                if (enrollment != null && !TryCharge(enrollment, month, result, out charge))
+                    continue; // not reconciled this time: see result.Issues
                 var expected = charge?.Amount ?? 0m;
                 var billed = request.PriorBilling.Billed(key, month);
                 var difference = expected - billed;
@@ -161,7 +168,8 @@ public sealed class PremiumInvoiceCalculator
                     CoverageId = enrollment?.CoverageId ?? (key.StartsWith("member:") ? null : key),
                     ServicePeriodStart = month,
                     ServicePeriodEnd = month.AddMonths(1).AddDays(-1),
-                    AdjustmentDate = request.BillingDate
+                    AdjustmentDate = request.BillingDate,
+                    IsRatingRetro = true
                 });
             }
         }
@@ -169,7 +177,32 @@ public sealed class PremiumInvoiceCalculator
         return result;
     }
 
-    /// <summary>The coverage's charge for one month, or null if it covers no day of it.</summary>
+    /// <summary>
+    /// Charges one coverage-month. A missing rate table does not fail the
+    /// group's invoice: that coverage-month is left out and reported in
+    /// <see cref="InvoiceCalculation.Issues"/> for someone to fix and re-bill.
+    /// </summary>
+    private bool TryCharge(RatingEnrollment enrollment, DateTime month, InvoiceCalculation result, out MonthCharge? charge)
+    {
+        try
+        {
+            charge = ChargeForMonth(enrollment, month);
+            return true;
+        }
+        catch (RateTableNotFoundException ex)
+        {
+            result.Issues.Add(new InvoiceCalculationIssue(enrollment.CoverageId, BilledLedger.MonthStart(month), ex.Message));
+            charge = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The coverage's charge for one month, or null if it covers no day of it.
+    /// The month is split wherever the rated household or the rate table
+    /// changes (a member added or ended mid-month, a new rate period), and each
+    /// piece is rated with only the members covered then, prorated by day.
+    /// </summary>
     public MonthCharge? ChargeForMonth(RatingEnrollment enrollment, DateTime monthStart)
     {
         var start = BilledLedger.MonthStart(monthStart);
@@ -183,22 +216,40 @@ public sealed class PremiumInvoiceCalculator
         if (from > to)
             return null;
 
-        var charge = new MonthCharge { MonthStart = start, DaysInMonth = daysInMonth };
-        // Split at rate-table boundaries so a mid-month rate change is billed on both sides.
-        var segmentStart = from;
-        while (segmentStart <= to)
+        // Days on which the household changes.
+        var breaks = new SortedSet<DateTime> { from };
+        foreach (var member in enrollment.Members)
         {
-            var table = _rates.Resolve(enrollment.PlanId, segmentStart);
-            var segmentEnd = table.EffectiveTo.HasValue && table.EffectiveTo.Value.Date < to ? table.EffectiveTo.Value.Date : to;
-            var days = (segmentEnd - segmentStart).Days + 1;
-            var rating = PremiumRatingEngine.Rate(table, enrollment);
-            var amount = days == daysInMonth
-                ? rating.MonthlyPremium
-                : PremiumRatingEngine.RoundMoney(rating.MonthlyPremium * days / daysInMonth);
-            charge.Segments.Add(new MonthChargeSegment(segmentStart, segmentEnd, days, rating, amount));
-            segmentStart = segmentEnd.AddDays(1);
+            var memberStart = enrollment.MemberStart(member);
+            if (memberStart > from && memberStart <= to) breaks.Add(memberStart);
+            if (enrollment.MemberEnd(member) is { } memberEnd && memberEnd >= from && memberEnd < to) breaks.Add(memberEnd.AddDays(1));
         }
-        return charge;
+
+        var charge = new MonthCharge { MonthStart = start, DaysInMonth = daysInMonth };
+        var points = breaks.ToList();
+        for (var i = 0; i < points.Count; i++)
+        {
+            var pieceEnd = i + 1 < points.Count ? points[i + 1].AddDays(-1) : to;
+            // Within a piece, split again at rate-table boundaries.
+            var segmentStart = points[i];
+            while (segmentStart <= pieceEnd)
+            {
+                var table = _rates.Resolve(enrollment.PlanId, segmentStart);
+                var segmentEnd = table.EffectiveTo.HasValue && table.EffectiveTo.Value.Date < pieceEnd ? table.EffectiveTo.Value.Date : pieceEnd;
+                var household = enrollment.CoveredOn(segmentStart);
+                if (household.Members.Any(m => m.Relationship == MemberRelationship.Subscriber))
+                {
+                    var days = (segmentEnd - segmentStart).Days + 1;
+                    var rating = PremiumRatingEngine.Rate(table, household);
+                    var amount = days == daysInMonth
+                        ? rating.MonthlyPremium
+                        : PremiumRatingEngine.RoundMoney(rating.MonthlyPremium * days / daysInMonth);
+                    charge.Segments.Add(new MonthChargeSegment(segmentStart, segmentEnd, days, rating, amount));
+                }
+                segmentStart = segmentEnd.AddDays(1);
+            }
+        }
+        return charge.Segments.Count == 0 ? null : charge;
     }
 
     private static InvoiceLineItem ToLine(RatingEnrollment enrollment, MonthCharge charge, decimal employerPercent, bool isRetro)
@@ -262,6 +313,8 @@ public sealed class PremiumInvoiceCalculator
         _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, null)
     };
 }
+
+public sealed record InvoiceCalculationIssue(string CoverageId, DateTime Month, string Message);
 
 public sealed class MonthCharge
 {

@@ -41,6 +41,16 @@ public class AgeCurveTests
     }
 
     [Fact]
+    public void FromJson_RejectsAnAdultRatioAboveThreeToOne()
+    {
+        var act = () => AgeCurve.FromJson("""
+            { "name": "too steep", "bands": [ { "minAge": 0, "maxAge": 20, "factor": 0.5 }, { "minAge": 21, "maxAge": 63, "factor": 1.0 }, { "minAge": 64, "maxAge": null, "factor": 3.01 } ] }
+            """);
+
+        act.Should().Throw<FormatException>().WithMessage("*more than 3.0:1*");
+    }
+
+    [Fact]
     public void FromJson_RejectsAGappedCurve()
     {
         var act = () => AgeCurve.FromJson("""
@@ -210,6 +220,21 @@ public class AgeBandRatingTests
     }
 
     [Fact]
+    public void AgeBand_ADependentAddedMidYear_IsAgedOnTheirOwnStart()
+    {
+        // Spouse born 1981-03-01: 44 (1.397) on 1/1, 45 (1.444 → 433.20) when added on 6/1.
+        var spouse = Member("SP", MemberRelationship.Spouse, D(1981, 3, 1));
+        spouse.EffectiveDate = D(2026, 6, 1);
+        var household = Household("c1", "HMO-SILVER", PlanYearStart, null, Subscriber("S", D(1996, 1, 1)), spouse); // S 30 → 1.135
+
+        var result = PremiumRatingEngine.RateOn(AgeBandTable(), household, D(2026, 6, 1));
+
+        result.Members.Single(m => m.MemberId == "SP").Premium.Should().Be(433.20m);
+        result.Members.Single(m => m.MemberId == "S").Premium.Should().Be(340.50m);
+        PremiumRatingEngine.RateOn(AgeBandTable(), household, D(2026, 5, 31)).Members.Should().ContainSingle();
+    }
+
+    [Fact]
     public void AgeBand_UsesTheTablesOwnCurveWhenGiven()
     {
         var table = AgeBandTable();
@@ -295,14 +320,23 @@ public class CompositeRatingTests
     }
 
     [Fact]
-    public void Composite_TobaccoIsAddedPerUser()
+    public void Composite_TobaccoIsRatedOnTheUsersAgeRatedPremium()
     {
+        // B is 64: age-rated 300 × 3.000 = 900.00; 900.00 × 0.10 = 90.00 on top of 2 × 671.40.
         var table = Composite(671.40m, tobacco: new TobaccoSurcharge { Factor = 1.1m });
+        table.AgeBandBaseRate = 300m;
 
         var result = PremiumRatingEngine.Rate(table, Census()[1]);
 
-        result.TobaccoSurcharge.Should().Be(67.14m);
-        result.MonthlyPremium.Should().Be(1409.94m);
+        result.TobaccoSurcharge.Should().Be(90.00m);
+        result.MonthlyPremium.Should().Be(1432.80m);
+    }
+
+    [Fact]
+    public void Composite_TobaccoNeedsTheAgeBandBaseRate()
+    {
+        Composite(671.40m, tobacco: new TobaccoSurcharge { Factor = 1.1m })
+            .Invoking(t => t.Validate()).Should().Throw<RateTableValidationException>().WithMessage("*AgeBandBaseRate*");
     }
 }
 
@@ -313,6 +347,22 @@ public class RateTableTests
     {
         var table = TierTable(tobacco: new TobaccoSurcharge { Factor = 1.6m });
         table.Invoking(t => t.Validate()).Should().Throw<RateTableValidationException>().WithMessage("*between 1.0 and 1.5*");
+    }
+
+    [Fact]
+    public void Validate_RejectsAFlatTobaccoAmountAboveHalfTheEeRate()
+    {
+        // EE 500: at most 250.00 a month.
+        TierTable(tobacco: new TobaccoSurcharge { Factor = 1.5m, FlatMonthlyAmount = 250.01m })
+            .Invoking(t => t.Validate()).Should().Throw<RateTableValidationException>().WithMessage("*1.5:1*");
+        TierTable(tobacco: new TobaccoSurcharge { Factor = 1.5m, FlatMonthlyAmount = 250m }).Validate();
+    }
+
+    [Fact]
+    public void Validate_RejectsAFlatTobaccoAmountOnAcaMethods()
+    {
+        AgeBandTable(tobacco: new TobaccoSurcharge { Factor = 1.2m, FlatMonthlyAmount = 20m })
+            .Invoking(t => t.Validate()).Should().Throw<RateTableValidationException>().WithMessage("*tier tables only*");
     }
 
     [Fact]

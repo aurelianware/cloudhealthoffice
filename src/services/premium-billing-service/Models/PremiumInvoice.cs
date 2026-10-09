@@ -320,6 +320,12 @@ public class InvoiceAdjustment
 
     /// <summary>Last day of the coverage month the adjustment corrects.</summary>
     public DateTime? ServicePeriodEnd { get; set; }
+
+    /// <summary>
+    /// True for retro adjustments produced by the rating invoice calculator.
+    /// Only these are folded into what later invoices treat as already billed.
+    /// </summary>
+    public bool IsRatingRetro { get; set; }
 }
 
 /// <summary>

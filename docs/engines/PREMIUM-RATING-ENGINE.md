@@ -37,9 +37,14 @@ of one plan that cover the same day, and resolves `(planId, date)` to a table.
 ## Rating methods
 
 Each household (`RatingEnrollment`: one subscriber, their dependents, plan, coverage
-dates) is rated by `PremiumRatingEngine.Rate(table, enrollment)`. The tier is taken
-from the enrollment, or derived: subscriber only is EE; with a spouse or domestic
-partner it is EE+Spouse; with children it is EE+Child(ren); with both it is Family.
+dates) is rated by `PremiumRatingEngine.Rate(table, enrollment)`, or by
+`RateOn(table, enrollment, date)` to rate only the members covered on that date.
+Each member can carry their own `EffectiveDate` and `TerminationDate` (a dependent
+added or dropped later); when these are null, the coverage dates apply. The tier is
+taken from the enrollment, or derived from the members covered: subscriber only is EE;
+with a spouse or domestic partner it is EE+Spouse; with children it is EE+Child(ren);
+with both it is Family. An explicit tier applies to the whole coverage, so leave it
+null when dependents have their own dates.
 
 ### Tier
 
@@ -54,13 +59,15 @@ pays the sum. Family-tier rules:
   with `Rated = false` and a zero premium.
 - Children aged 21 and over are always rated and do not use one of the three places.
 - Ages are fixed at issue or renewal: the age on the plan-year start (`EffectiveFrom`
-  or `AgeDeterminationDate`), or on the coverage start for someone who joins mid-year.
+  or `AgeDeterminationDate`), or on the member's own coverage start for someone who
+  joins mid-year, including a dependent added to an existing coverage.
 
 The age curve is data. The CMS federal default curve (plan years 2018 onward: 0–14 at
 0.765, 21 at 1.000, 64 and older at 3.000) ships as
 `Rating/AgeCurves/federal-default.json` and is embedded in the assembly. A state curve
 is set on the table (`AgeCurve`) or loaded with `AgeCurve.FromJson`. Curves are validated:
-bands must start at age 0, be contiguous, end in one open-ended band and have positive factors.
+bands must start at age 0, be contiguous, end in one open-ended band and have positive factors,
+and the factors for ages 21 and over may range at most 3:1 (45 CFR 147.102(a)(1)(iii)).
 
 ### Composite (45 CFR 147.102(c)(3))
 
@@ -73,16 +80,29 @@ composite table, where it stays fixed for the year:
 - `TierFactors`: total age-rated premium ÷ the sum of the households' tier factors. A household
   pays rate × its tier factor.
 
-Tobacco is excluded when the rate is derived and added for each tobacco user.
+Tobacco is excluded when the rate is derived and added for each tobacco user, on that
+member's age-rated premium (see below).
 
 ## Tobacco surcharge
 
 `TobaccoSurcharge.Factor` is between 1.0 and 1.5 (the ACA maximum). It applies only to
 members at or above `MinimumAge`, which defaults to 21, the federal tobacco age.
 
-- Age band: the member's premium × (Factor − 1).
-- Tier and composite: `FlatMonthlyAmount` per tobacco user if it is set. Otherwise
-  (Factor − 1) × the single-member rate (the EE tier rate, or the composite unit rate).
+- **Age band:** the member's premium × (Factor − 1).
+- **Composite:** the tobacco user's age-rated premium (the table's `AgeBandBaseRate`
+  × their age factor) × (Factor − 1), added to the composite premium. Composite
+  premiums are built from per-member rating (45 CFR 147.102(c)(3)), and the tobacco
+  factor applies to the individual's rate (147.102(a)(1)(iv)). A composite table with
+  tobacco therefore needs `AgeBandBaseRate`.
+- **Tier:** `FlatMonthlyAmount` per tobacco user, at most half the EE rate (the 1.5:1
+  limit, checked when the table is validated and again at rating time). Without it,
+  (Factor − 1) × the EE rate.
+- A flat amount is refused on the ACA methods (age band, composite).
+
+In the small-group market, a tobacco surcharge is allowed only if the employer offers
+a wellness program that lets tobacco users avoid it (45 CFR 147.102(a)(1)(iv) and the wellness-program rules in 45 CFR 146.121). The
+engine does not model that program or its waivers. Turn the surcharge on only where
+that program exists, and handle waivers by marking the member as not rated for tobacco.
 
 ## Invoice calculation
 
@@ -92,17 +112,23 @@ the last invoice), and a `BilledLedger` built from the group's earlier invoices
 (`BilledLedger.FromInvoices`; voided invoices count for nothing).
 
 1. **Current month.** Each coverage active on any day of the month gets one line.
-   A mid-month add or term is prorated by day: monthly premium × covered days ÷ days in month.
-   A rate-table boundary inside the month splits the charge between the two tables.
+   The month is split wherever the household or the rate table changes: a coverage or
+   dependent starting or ending mid-month, or a new rate period. Each piece is rated with
+   only the members covered then and prorated by day (premium × days ÷ days in month).
 2. **Retro.** Each earlier month within `MaxRetroMonths` (default 3) that has an invoice
    is reconciled one coverage at a time. If the correct charge differs from what was billed
-   (line items plus earlier adjustments for that month), the difference becomes an
-   `InvoiceAdjustment` with `CoverageId` and `ServicePeriodStart`/`End`, so a later invoice
-   does not bill it again. The adjustment type is:
+   (line items plus the calculator's earlier retro adjustments for that month), the
+   difference becomes an `InvoiceAdjustment` with `CoverageId`, `ServicePeriodStart`/`End`
+   and `IsRatingRetro`, so a later invoice does not bill it again. Manual adjustments
+   (no `IsRatingRetro`) are never folded in or reversed. Months are re-rated with the
+   members covered in that month, so a dependent added later does not change them. The adjustment type is:
    - `RetroAdd` when nothing was billed for the month;
    - `RetroTerm` when nothing is due, or when coverage ended inside the month;
    - otherwise `RateChange`, for example after a tier change.
    Months that have no invoice are not reconciled; their own billing run bills them.
+3. **Missing rate table.** A coverage-month with no rate table in force is left off the
+   invoice and listed in `InvoiceCalculation.Issues`. The rest of the group's invoice
+   is still produced.
 
 ### Worked example (unit test `MarchInvoice_HandChecked_ProrationRetroAddsAndRetroTerm`)
 

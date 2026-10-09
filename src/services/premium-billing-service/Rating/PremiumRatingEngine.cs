@@ -8,6 +8,16 @@ public class RatedMember
     public MemberRelationship Relationship { get; set; }
     public DateTime DateOfBirth { get; set; }
     public bool TobaccoUser { get; set; }
+
+    /// <summary>
+    /// First day this member is covered; null means from the coverage's
+    /// effective date. A dependent added later has their own date, so earlier
+    /// months are not re-rated with them.
+    /// </summary>
+    public DateTime? EffectiveDate { get; set; }
+
+    /// <summary>Last day this member is covered (inclusive); null means until the coverage ends.</summary>
+    public DateTime? TerminationDate { get; set; }
 }
 
 /// <summary>One subscriber's coverage under one plan: the unit that is rated and billed.</summary>
@@ -34,6 +44,32 @@ public class RatingEnrollment
     public RatedMember Subscriber =>
         Members.FirstOrDefault(m => m.Relationship == MemberRelationship.Subscriber)
         ?? throw new InvalidOperationException($"Coverage {CoverageId} has no subscriber");
+
+    public DateTime MemberStart(RatedMember member) => (member.EffectiveDate ?? EffectiveDate).Date;
+
+    public DateTime? MemberEnd(RatedMember member)
+    {
+        var own = member.TerminationDate?.Date;
+        var coverage = TerminationDate?.Date;
+        if (own == null) return coverage;
+        if (coverage == null) return own;
+        return own < coverage ? own : coverage;
+    }
+
+    public bool IsCovered(RatedMember member, DateTime date) =>
+        date.Date >= MemberStart(member) && (MemberEnd(member) is not { } end || date.Date <= end);
+
+    /// <summary>The same coverage with only the members covered on <paramref name="date"/>.</summary>
+    public RatingEnrollment CoveredOn(DateTime date) => new()
+    {
+        CoverageId = CoverageId,
+        PlanId = PlanId,
+        Tier = Tier,
+        EffectiveDate = EffectiveDate,
+        TerminationDate = TerminationDate,
+        InsuranceLineCode = InsuranceLineCode,
+        Members = Members.Where(m => IsCovered(m, date)).ToList()
+    };
 }
 
 public class MemberRating
@@ -102,15 +138,20 @@ public static class PremiumRatingEngine
     }
 
     /// <summary>
-    /// The date ages are measured on for this household: the table's age date
-    /// (default its effective start, i.e. the plan-year renewal), or the
-    /// coverage start for someone who joined later.
+    /// The date a member's age is measured on: the table's age date (default
+    /// its effective start, i.e. the plan-year renewal), or the member's own
+    /// coverage start when they joined later (a new hire, or a dependent added
+    /// mid-year).
     /// </summary>
-    public static DateTime AgeDate(RateTable table, RatingEnrollment enrollment)
+    public static DateTime AgeDate(RateTable table, RatingEnrollment enrollment, RatedMember member)
     {
         var tableDate = (table.AgeDeterminationDate ?? table.EffectiveFrom).Date;
-        return enrollment.EffectiveDate.Date > tableDate ? enrollment.EffectiveDate.Date : tableDate;
+        var memberStart = enrollment.MemberStart(member);
+        return memberStart > tableDate ? memberStart : tableDate;
     }
+
+    private static int AgeOf(RateTable table, RatingEnrollment enrollment, RatedMember member) =>
+        AgeOn(member.DateOfBirth, AgeDate(table, enrollment, member));
 
     public static RatingResult Rate(RateTable table, RatingEnrollment enrollment)
     {
@@ -123,19 +164,18 @@ public static class PremiumRatingEngine
             throw new ArgumentException($"Coverage {enrollment.CoverageId} must have exactly one subscriber");
 
         var tier = enrollment.Tier ?? DeriveTier(enrollment.Members);
-        var ageDate = AgeDate(table, enrollment);
         var result = new RatingResult { RateTableId = table.Id, Method = table.Method, Tier = tier };
 
         switch (table.Method)
         {
             case RatingMethod.Tier:
-                RateTier(table, enrollment, tier, ageDate, result);
+                RateTier(table, enrollment, tier, result);
                 break;
             case RatingMethod.AgeBand:
-                RateAgeBand(table, enrollment, ageDate, result);
+                RateAgeBand(table, enrollment, result);
                 break;
             case RatingMethod.Composite:
-                RateComposite(table, enrollment, tier, ageDate, result);
+                RateComposite(table, enrollment, tier, result);
                 break;
         }
 
@@ -143,6 +183,10 @@ public static class PremiumRatingEngine
         result.TobaccoSurcharge = result.Members.Sum(m => m.TobaccoSurcharge);
         return result;
     }
+
+    /// <summary>Rates the household as it was on <paramref name="date"/> (members covered that day only).</summary>
+    public static RatingResult RateOn(RateTable table, RatingEnrollment enrollment, DateTime date) =>
+        Rate(table, enrollment.CoveredOn(date));
 
     /// <summary>
     /// The composite rate for a plan year from the group's census, rated on an
@@ -189,14 +233,14 @@ public static class PremiumRatingEngine
         return RoundMoney(total / divisor);
     }
 
-    private static void RateTier(RateTable table, RatingEnrollment enrollment, CoverageTier tier, DateTime ageDate, RatingResult result)
+    private static void RateTier(RateTable table, RatingEnrollment enrollment, CoverageTier tier, RatingResult result)
     {
         var tierRate = table.TierRates!.For(tier);
         var singleRate = table.TierRates.EmployeeOnly;
         foreach (var member in enrollment.Members)
         {
             var isSubscriber = member.Relationship == MemberRelationship.Subscriber;
-            var age = AgeOn(member.DateOfBirth, ageDate);
+            var age = AgeOf(table, enrollment, member);
             result.Members.Add(new MemberRating
             {
                 MemberId = member.MemberId,
@@ -205,23 +249,22 @@ public static class PremiumRatingEngine
                 Rated = isSubscriber,
                 // The tier rate covers the household; it is carried on the subscriber.
                 BasePremium = isSubscriber ? tierRate : 0m,
-                TobaccoSurcharge = PerUserTobacco(table, member, age, singleRate),
+                TobaccoSurcharge = TierTobacco(table, member, age, singleRate),
                 Note = isSubscriber ? $"{tier} tier rate" : "included in tier rate"
             });
         }
     }
 
-    private static void RateComposite(RateTable table, RatingEnrollment enrollment, CoverageTier tier, DateTime ageDate, RatingResult result)
+    private static void RateComposite(RateTable table, RatingEnrollment enrollment, CoverageTier tier, RatingResult result)
     {
         var rate = table.CompositeRate!.Value;
         if (table.CompositeBasis == CompositeBasis.TierFactors)
         {
             var factor = table.CompositeTierFactors!.For(tier);
-            var unit = RoundMoney(rate * table.CompositeTierFactors.EmployeeOnly);
             foreach (var member in enrollment.Members)
             {
                 var isSubscriber = member.Relationship == MemberRelationship.Subscriber;
-                var age = AgeOn(member.DateOfBirth, ageDate);
+                var age = AgeOf(table, enrollment, member);
                 result.Members.Add(new MemberRating
                 {
                     MemberId = member.MemberId,
@@ -229,7 +272,7 @@ public static class PremiumRatingEngine
                     Age = age,
                     Rated = isSubscriber,
                     BasePremium = isSubscriber ? RoundMoney(rate * factor) : 0m,
-                    TobaccoSurcharge = PerUserTobacco(table, member, age, unit),
+                    TobaccoSurcharge = CompositeTobacco(table, member, age),
                     Note = isSubscriber ? $"composite {rate:0.00} × {tier} factor {factor}" : "included in tier factor"
                 });
             }
@@ -237,10 +280,10 @@ public static class PremiumRatingEngine
         }
 
         // PerMember: every rated member pays the composite rate; the three-child cap still applies.
-        var capped = UncountedChildren(table, enrollment, ageDate);
+        var capped = UncountedChildren(table, enrollment);
         foreach (var member in enrollment.Members)
         {
-            var age = AgeOn(member.DateOfBirth, ageDate);
+            var age = AgeOf(table, enrollment, member);
             var rated = !capped.Contains(member);
             result.Members.Add(new MemberRating
             {
@@ -249,21 +292,21 @@ public static class PremiumRatingEngine
                 Age = age,
                 Rated = rated,
                 BasePremium = rated ? rate : 0m,
-                TobaccoSurcharge = rated ? PerUserTobacco(table, member, age, rate) : 0m,
+                TobaccoSurcharge = rated ? CompositeTobacco(table, member, age) : 0m,
                 Note = rated ? "composite per-member rate" : ChildCapNote(table)
             });
         }
     }
 
-    private static void RateAgeBand(RateTable table, RatingEnrollment enrollment, DateTime ageDate, RatingResult result)
+    private static void RateAgeBand(RateTable table, RatingEnrollment enrollment, RatingResult result)
     {
         var curve = table.AgeCurve ?? AgeCurve.FederalDefault;
         var baseRate = table.AgeBandBaseRate!.Value;
-        var capped = UncountedChildren(table, enrollment, ageDate);
+        var capped = UncountedChildren(table, enrollment);
 
         foreach (var member in enrollment.Members)
         {
-            var age = AgeOn(member.DateOfBirth, ageDate);
+            var age = AgeOf(table, enrollment, member);
             var factor = curve.FactorFor(age);
             if (capped.Contains(member))
             {
@@ -298,11 +341,11 @@ public static class PremiumRatingEngine
     }
 
     /// <summary>Children under the cap age beyond the oldest N (default 3) are not rated.</summary>
-    private static HashSet<RatedMember> UncountedChildren(RateTable table, RatingEnrollment enrollment, DateTime ageDate)
+    private static HashSet<RatedMember> UncountedChildren(RateTable table, RatingEnrollment enrollment)
     {
         return enrollment.Members
             .Where(m => m.Relationship is MemberRelationship.Child or MemberRelationship.OtherDependent)
-            .Where(m => AgeOn(m.DateOfBirth, ageDate) < table.ChildCapAge)
+            .Where(m => AgeOf(table, enrollment, m) < table.ChildCapAge)
             .OrderBy(m => m.DateOfBirth)           // oldest first
             .ThenBy(m => m.MemberId, StringComparer.Ordinal)
             .Skip(table.MaxRatedChildrenUnderCapAge)
@@ -315,11 +358,42 @@ public static class PremiumRatingEngine
     private static bool IsTobaccoRated(RateTable table, RatedMember member, int age) =>
         member.TobaccoUser && table.Tobacco != null && age >= table.Tobacco.MinimumAge;
 
-    /// <summary>Tier/composite tobacco: a flat amount, or (factor − 1) × the single-member rate, per user.</summary>
-    private static decimal PerUserTobacco(RateTable table, RatedMember member, int age, decimal singleRate)
+    /// <summary>
+    /// Tier tobacco, per tobacco user: a flat amount, or (factor − 1) × the
+    /// single-member (EE) rate. A flat amount above half the single rate would
+    /// exceed the 1.5:1 limit and is refused.
+    /// </summary>
+    private static decimal TierTobacco(RateTable table, RatedMember member, int age, decimal singleRate)
     {
         if (!IsTobaccoRated(table, member, age))
             return 0m;
-        return table.Tobacco!.FlatMonthlyAmount ?? RoundMoney(singleRate * (table.Tobacco.Factor - 1m));
+        if (table.Tobacco!.FlatMonthlyAmount is { } flat)
+        {
+            if (flat > RoundMoney(singleRate * 0.5m))
+                throw new RateTableValidationException(table.PlanId, new[]
+                {
+                    $"tobacco flat amount {flat:0.00} exceeds half the single rate {singleRate:0.00} (1.5:1 limit)"
+                });
+            return flat;
+        }
+        return RoundMoney(singleRate * (table.Tobacco.Factor - 1m));
+    }
+
+    /// <summary>
+    /// Composite tobacco is rated per member: the tobacco user's age-rated
+    /// premium (the table's AgeBandBaseRate × their age factor) × (factor − 1),
+    /// added to the composite premium. Composite premiums are built from
+    /// per-member rating under 45 CFR 147.102(c)(3), and the tobacco factor
+    /// applies to the individual's rate (45 CFR 147.102(a)(1)(iv)); CMS's 2013
+    /// market reform rule (78 FR 13406) describes applying tobacco per member
+    /// on top of a composite premium. A flat amount is not allowed here.
+    /// </summary>
+    private static decimal CompositeTobacco(RateTable table, RatedMember member, int age)
+    {
+        if (!IsTobaccoRated(table, member, age))
+            return 0m;
+        var curve = table.AgeCurve ?? AgeCurve.FederalDefault;
+        var ageRated = RoundMoney(table.AgeBandBaseRate!.Value * curve.FactorFor(age));
+        return RoundMoney(ageRated * (table.Tobacco!.Factor - 1m));
     }
 }

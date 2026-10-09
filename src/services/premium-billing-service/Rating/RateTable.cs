@@ -87,8 +87,10 @@ public class TobaccoSurcharge
     public decimal Factor { get; set; } = 1.0m;
 
     /// <summary>
-    /// Tier and composite tables only: a fixed monthly amount per tobacco user.
-    /// When null those methods charge (Factor − 1) × the single-member rate.
+    /// Tier tables only: a fixed monthly amount per tobacco user, at most half
+    /// the EE rate (the 1.5:1 limit). When null, tier tables charge
+    /// (Factor − 1) × the EE rate. ACA methods (age band, composite) rate
+    /// tobacco on the member's age-rated premium and do not allow a flat amount.
     /// </summary>
     public decimal? FlatMonthlyAmount { get; set; }
 
@@ -141,7 +143,11 @@ public class RateTable
     /// <summary>At most this many children under <see cref="ChildCapAge"/> are rated per household.</summary>
     public int MaxRatedChildrenUnderCapAge { get; set; } = 3;
 
-    /// <summary>Composite method: the per-enrollee (PerMember) or per-employee (TierFactors) rate.</summary>
+    /// <summary>
+    /// Composite method: the per-enrollee (PerMember) or per-employee (TierFactors) rate.
+    /// A composite table with a tobacco surcharge also needs <see cref="AgeBandBaseRate"/>
+    /// (and optionally <see cref="AgeCurve"/>): tobacco is rated on the member's age-rated premium.
+    /// </summary>
     public decimal? CompositeRate { get; set; }
 
     public CompositeBasis CompositeBasis { get; set; } = CompositeBasis.PerMember;
@@ -202,6 +208,15 @@ public class RateTable
                 errors.Add("Tobacco factor must be between 1.0 and 1.5 (45 CFR 147.102(a)(1)(iv))");
             if (Tobacco.FlatMonthlyAmount is < 0)
                 errors.Add("Tobacco flat amount cannot be negative");
+            if (Tobacco.FlatMonthlyAmount.HasValue && Method != RatingMethod.Tier)
+                errors.Add("A flat tobacco amount is allowed on tier tables only; ACA methods rate tobacco on the member's age-rated premium");
+            if (Tobacco.FlatMonthlyAmount is { } flat && Method == RatingMethod.Tier && TierRates != null
+                && flat > PremiumRatingEngine.RoundMoney(TierRates.EmployeeOnly * 0.5m))
+                errors.Add($"Tobacco flat amount {flat:0.00} exceeds half the EE rate {TierRates.EmployeeOnly:0.00} (1.5:1 limit)");
+            if (Method == RatingMethod.Composite && Tobacco.Factor > 1m && AgeBandBaseRate is not > 0)
+                errors.Add("Composite tobacco rating needs AgeBandBaseRate (tobacco is rated on the member's age-rated premium)");
+            if (Method == RatingMethod.Composite && AgeCurve != null)
+                errors.AddRange(AgeCurve.Problems());
             if (Tobacco.MinimumAge < 0)
                 errors.Add("Tobacco minimum age cannot be negative");
         }

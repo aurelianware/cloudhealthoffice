@@ -134,27 +134,104 @@ public class PremiumInvoiceCalculatorTests
     }
 
     [Fact]
-    public void TierChange_InAnInvoicedMonth_IsARateChangeAdjustment()
+    public void DependentAddedLater_DoesNotRerateEarlierMonths()
     {
-        // cov-A was billed EE (500) for February but was family all along.
-        var enrollments = new List<RatingEnrollment>
-        {
-            Household("cov-A", Plan, D(2026, 1, 1), null, Subscriber("A"),
-                Member("A-SP", MemberRelationship.Spouse, D(1986, 1, 1)), Member("A-C", MemberRelationship.Child, D(2015, 1, 1)))
-        };
+        // Spouse joins cov-A on 3/1. January and February were EE and billed EE: no retro.
+        var spouse = Member("A-SP", MemberRelationship.Spouse, D(1986, 1, 1));
+        spouse.EffectiveDate = D(2026, 3, 1);
+        var enrollments = new List<RatingEnrollment> { Household("cov-A", Plan, D(2026, 1, 1), null, Subscriber("A"), spouse) };
 
         var calculation = Calculator().Calculate(new InvoiceCalculationRequest
         {
             BillingPeriodStart = D(2026, 3, 1),
             BillingDate = D(2026, 2, 20),
-            MaxRetroMonths = 1,
             Enrollments = enrollments,
-            PriorBilling = BilledLedger.FromInvoices(new[] { PriorInvoice(D(2026, 2, 1), ("cov-A", "A", 500m)) })
+            PriorBilling = BilledLedger.FromInvoices(JanuaryAndFebruary())
+        });
+
+        calculation.Adjustments.Where(a => a.CoverageId == "cov-A").Should().BeEmpty();
+        calculation.LineItems.Single().Should().Match<InvoiceLineItem>(l => l.TotalPremium == 1000m && l.CoverageLevel == "ESP");
+    }
+
+    [Fact]
+    public void DependentAddedMidMonth_ProratesEachTier()
+    {
+        // Spouse from 3/15: 3/1–3/14 EE 500 × 14/31 = 225.81; 3/15–3/31 EE+Spouse 1,000 × 17/31 = 548.39.
+        var spouse = Member("A-SP", MemberRelationship.Spouse, D(1986, 1, 1));
+        spouse.EffectiveDate = D(2026, 3, 15);
+
+        var charge = Calculator().ChargeForMonth(Household("cov-A", Plan, D(2026, 1, 1), null, Subscriber("A"), spouse), D(2026, 3, 1))!;
+
+        charge.Segments.Select(s => (s.Rating.Tier, s.Days, s.Amount)).Should().Equal(
+            (CoverageTier.EmployeeOnly, 14, 225.81m),
+            (CoverageTier.EmployeeSpouse, 17, 548.39m));
+        charge.Amount.Should().Be(774.20m);
+    }
+
+    [Fact]
+    public void DependentEndedMidMonth_ProratesEachTier()
+    {
+        // Spouse covered through 2/14 (28-day February): 1,000 × 14/28 + 500 × 14/28 = 750.00.
+        var spouse = Member("A-SP", MemberRelationship.Spouse, D(1986, 1, 1));
+        spouse.TerminationDate = D(2026, 2, 14);
+
+        var charge = Calculator().ChargeForMonth(Household("cov-A", Plan, D(2026, 1, 1), null, Subscriber("A"), spouse), D(2026, 2, 1))!;
+
+        charge.Amount.Should().Be(750.00m);
+    }
+
+    [Fact]
+    public void TrueRateChange_InAnInvoicedMonth_IsARateChangeAdjustment()
+    {
+        // February was billed at an old EE rate of 480; the table in force for February says 500.
+        var calculation = Calculator().Calculate(new InvoiceCalculationRequest
+        {
+            BillingPeriodStart = D(2026, 3, 1),
+            BillingDate = D(2026, 2, 20),
+            MaxRetroMonths = 1,
+            Enrollments = new List<RatingEnrollment> { Household("cov-A", Plan, D(2026, 1, 1), null, Subscriber("A")) },
+            PriorBilling = BilledLedger.FromInvoices(new[] { PriorInvoice(D(2026, 2, 1), ("cov-A", "A", 480m)) })
         });
 
         calculation.Adjustments.Should().ContainSingle()
-            .Which.Should().Match<InvoiceAdjustment>(a => a.Type == AdjustmentType.RateChange && a.Amount == 900m);
-        calculation.LineItems.Single().TotalPremium.Should().Be(1400m);
+            .Which.Should().Match<InvoiceAdjustment>(a => a.Type == AdjustmentType.RateChange && a.Amount == 20m && a.IsRatingRetro);
+    }
+
+    [Fact]
+    public void ManualAdjustmentWithAServicePeriod_IsNotFoldedIntoBilled()
+    {
+        var invoices = JanuaryAndFebruary();
+        invoices[1].Adjustments.Add(new InvoiceAdjustment
+        {
+            Type = AdjustmentType.Credit, Amount = -50m, CoverageId = "cov-A", ServicePeriodStart = D(2026, 2, 1),
+            Description = "Goodwill credit"
+        });
+
+        var ledger = BilledLedger.FromInvoices(invoices);
+
+        ledger.Billed("cov-A", D(2026, 2, 1)).Should().Be(500m);
+    }
+
+    [Fact]
+    public void MissingRateTable_ForARetroMonth_IsAnIssue_NotAFailedInvoice()
+    {
+        // The only table starts 2026-02-01; January was invoiced (by hand) and cannot be re-rated.
+        var table = TierTable();
+        table.EffectiveFrom = D(2026, 2, 1);
+        var calculation = Calculator(table).Calculate(new InvoiceCalculationRequest
+        {
+            BillingPeriodStart = D(2026, 3, 1),
+            BillingDate = D(2026, 2, 20),
+            Enrollments = new List<RatingEnrollment> { Household("cov-A", Plan, D(2026, 1, 1), null, Subscriber("A")) },
+            PriorBilling = BilledLedger.FromInvoices(JanuaryAndFebruary())
+        });
+
+        calculation.LineItems.Single().TotalPremium.Should().Be(500m);
+        calculation.Issues.Should().ContainSingle()
+            .Which.Should().Match<InvoiceCalculationIssue>(i => i.CoverageId == "cov-A" && i.Month == D(2026, 1, 1));
+        // cov-B (billed in January, gone now) is still reconciled.
+        calculation.Adjustments.Should().Contain(a => a.CoverageId == "cov-B");
+        calculation.Adjustments.Should().NotContain(a => a.CoverageId == "cov-A");
     }
 
     [Fact]

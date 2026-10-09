@@ -81,7 +81,19 @@ public sealed class AgeCurve
                 yield return "the last band must be open-ended (maxAge null)";
             }
         }
+
+        // ACA adult ratio: for ages 21 and over, the highest factor may be at
+        // most 3 times the lowest (45 CFR 147.102(a)(1)(iii)).
+        var adult = ordered.Where(b => b.Factor > 0 && (b.MaxAge == null || b.MaxAge >= AdultAge)).Select(b => b.Factor).ToList();
+        if (adult.Count > 0 && adult.Max() > MaxAdultRatio * adult.Min())
+            yield return $"adult factors (ages {AdultAge}+) range {adult.Min()}–{adult.Max()}, more than {MaxAdultRatio}:1";
     }
+
+    /// <summary>Youngest age the 3:1 adult ratio applies to.</summary>
+    public const int AdultAge = 21;
+
+    /// <summary>The ACA limit on the oldest-to-youngest adult factor.</summary>
+    public const decimal MaxAdultRatio = 3.0m;
 
     private static AgeCurve LoadEmbedded(string fileName)
     {
