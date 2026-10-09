@@ -405,6 +405,31 @@ public class ArServiceTests
         handler.CapturedUrls[0].Should().Contain("/v1/ar/cash-postings/CP-1/void");
     }
 
+    [Theory]
+    [InlineData("apply")]
+    [InlineData("void")]
+    public async Task CashPosting409LegacyReconciliation_IsReportedAsSuch_NotAsUnavailable(string action)
+    {
+        var json = JsonSerializer.Serialize(new { error = "x", code = "LegacyPostingRequiresReconciliation", postingId = "CP-1" }, JsonOpts);
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.Conflict, json)));
+
+        Func<Task> act = action == "apply" ? () => sut.ApplyCashPostingAsync("CP-1") : () => sut.VoidCashPostingAsync("CP-1");
+
+        var ex = (await act.Should().ThrowAsync<CashPostingRequiresReconciliationException>()).Which;
+        ex.Message.Should().Contain("finance must reconcile it");
+        ex.PostingId.Should().Be("CP-1");
+    }
+
+    [Fact]
+    public async Task CashPostingOther409_IsStillAnHttpFailure()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.Conflict, "{\"error\":\"other\"}")));
+
+        var act = () => sut.ApplyCashPostingAsync("CP-1");
+
+        await act.Should().ThrowAsync<ServiceUnavailableException>();
+    }
+
     // ════════════════════════════════════════════════════════════════
     // Adjustments — happy paths
     // ════════════════════════════════════════════════════════════════

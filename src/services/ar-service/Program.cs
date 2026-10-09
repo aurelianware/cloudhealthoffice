@@ -48,6 +48,9 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<ICashPostingRepository, MongoCashPostingRepository>();
     builder.Services.AddScoped<IArAdjustmentRepository, MongoArAdjustmentRepository>();
     builder.Services.AddScoped<IArBatchRuleRepository, MongoArBatchRuleRepository>();
+    // Tells the legacy reconciliation tool this database is served by a build that
+    // credits on apply and refuses unreconciled legacy postings (see ArServiceCapabilities).
+    builder.Services.AddHostedService<ArService.Ledger.ArServiceCapabilitiesWriter>();
     Console.WriteLine("Using MongoDB repository");
 }
 else

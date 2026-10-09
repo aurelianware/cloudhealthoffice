@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using ArService.Ledger;
 using ArService.Models;
 using ArService.Repositories;
 using CloudHealthOffice.Infrastructure.Security;
@@ -73,6 +74,7 @@ public class CashPostingController : ControllerBase
         // Posted state is the server's: a client cannot create a posting that claims to be credited already.
         posting.AppliedAmount = 0m;
         posting.UnappliedAmount = posting.Amount;
+        posting.LegacyReconciliation = null;
         foreach (var application in posting.Applications)
         {
             application.PostedEntryId = null;
@@ -93,11 +95,14 @@ public class CashPostingController : ControllerBase
     /// Every referenced balance is checked before anything is written, and an
     /// application already credited is not credited again when a partially
     /// applied posting is applied after more applications were added.
+    /// A posting applied before applying credited balances (legacy) is refused
+    /// with 409 until finance has reconciled it.
     /// </summary>
     [HttpPost("{id}/apply")]
     [ProducesResponseType(typeof(CashPosting), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CashPosting>> ApplyCashPosting(string id)
     {
         var posting = await _cashPostingRepository.GetByIdAsync(id);
@@ -106,6 +111,11 @@ public class CashPostingController : ControllerBase
 
         if (posting.Status == CashPostingStatus.Voided)
             return BadRequest(new { error = "Cannot apply a voided cash posting" });
+
+        // Its applications may already have been corrected by hand: crediting them
+        // now could credit the balances twice. Finance decides first.
+        if (CashPostingLedger.RequiresLegacyReconciliation(posting))
+            return LegacyConflict(posting, "applied");
 
         if (posting.Status == CashPostingStatus.Applied)
             return BadRequest(new { error = "Cash posting is already applied" });
@@ -148,22 +158,12 @@ public class CashPostingController : ControllerBase
             var changed = new HashSet<string>(StringComparer.Ordinal);
             foreach (var application in pending)
             {
-                var entryId = $"cash-{posting.Id}-{posting.Applications.IndexOf(application)}";
+                var index = posting.Applications.IndexOf(application);
+                var entryId = CashPostingLedger.CreditEntryId(posting.Id, index);
                 var balance = balances[application.ArBalanceId];
                 if (balance.PostingEntries.All(e => e.EntryId != entryId))
                 {
-                    Post(balance, new ArPostingEntry
-                    {
-                        EntryId = entryId,
-                        Source = ArPostingSource.CashReceipt,
-                        SourceReferenceId = posting.Id,
-                        SourceReferenceNumber = posting.PostingNumber,
-                        CreditAmount = application.AmountApplied,
-                        PostedAt = now,
-                        PostedBy = postedBy,
-                        Memo = application.Memo,
-                        MemberId = posting.PayerType == PayerType.Member ? posting.PayerReferenceId : null
-                    }, posting.PayerType);
+                    Post(balance, CashPostingLedger.CreditEntry(posting, index, postedBy, now), posting.PayerType);
                     changed.Add(balance.Id);
                 }
                 application.PostedEntryId = entryId;
@@ -203,38 +203,35 @@ public class CashPostingController : ControllerBase
     /// <summary>How many times a balance save is retried against concurrent writers.</summary>
     internal const int MaxConcurrencyAttempts = 5;
 
-    /// <summary>
-    /// Adds the entry to the balance and moves its totals: debits and credits,
-    /// the sponsor or member split by payer, and the closing balance.
-    /// </summary>
-    internal static void Post(ArBalance balance, ArPostingEntry entry, PayerType payerType)
+    /// <summary>See <see cref="CashPostingLedger.Post"/>.</summary>
+    internal static void Post(ArBalance balance, ArPostingEntry entry, PayerType payerType) =>
+        CashPostingLedger.Post(balance, entry, payerType);
+
+    private ObjectResult LegacyConflict(CashPosting posting, string action)
     {
-        balance.PostingEntries.Add(entry);
-        balance.TotalDebits += entry.DebitAmount;
-        balance.TotalCredits += entry.CreditAmount;
-        var net = entry.DebitAmount - entry.CreditAmount;
-        if (payerType == PayerType.Member)
+        _logger.LogWarning("Refused: legacy cash posting {PostingNumber} cannot be {Action} before reconciliation",
+            SanitizeForLog(posting.PostingNumber), action);
+        return Conflict(new
         {
-            balance.MemberDebits += entry.DebitAmount;
-            balance.MemberCredits += entry.CreditAmount;
-            balance.MemberBalance += net;
-        }
-        else if (payerType == PayerType.Sponsor)
-        {
-            balance.SponsorDebits += entry.DebitAmount;
-            balance.SponsorCredits += entry.CreditAmount;
-            balance.SponsorBalance += net;
-        }
-        balance.ClosingBalance = balance.OpeningBalance + balance.TotalDebits - balance.TotalCredits;
+            error = $"Cash posting {posting.PostingNumber} was applied before applying credited AR balances. " +
+                    $"Its applications were never credited and may have been corrected by hand, so it cannot be {action} " +
+                    $"until finance has reconciled it (see {CashPostingLedger.RunbookPath}).",
+            code = CashPostingLedger.LegacyPostingRequiresReconciliation,
+            postingId = posting.Id,
+            runbook = CashPostingLedger.RunbookPath
+        });
     }
 
     /// <summary>
-    /// Void a cash posting
+    /// Void a cash posting. Reverses only credits this service posted: an application
+    /// never credited (legacy, or marked <c>manual-</c> by the reconciliation) is not
+    /// debited. A legacy posting is refused with 409 until finance has reconciled it.
     /// </summary>
     [HttpPost("{id}/void")]
     [ProducesResponseType(typeof(CashPosting), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CashPosting>> VoidCashPosting(string id)
     {
         var posting = await _cashPostingRepository.GetByIdAsync(id);
@@ -244,13 +241,21 @@ public class CashPostingController : ControllerBase
         if (posting.Status == CashPostingStatus.Voided)
             return BadRequest(new { error = "Cash posting is already voided" });
 
+        // Voiding would drop it out of finance's review while any manual correction
+        // stays on the balance; finance decides first.
+        if (CashPostingLedger.RequiresLegacyReconciliation(posting))
+            return LegacyConflict(posting, "voided");
+
         if (posting.Status == CashPostingStatus.Applied)
             return BadRequest(new { error = "Cannot void an applied cash posting — reverse the application first" });
 
         // A partially applied posting has credited balances: debit them back first.
         // Each reversal has a fixed id (rev-{entry}) and debits what the original
         // entry credited, so a retried void never reverses twice.
-        var posted = posting.Applications.Where(a => a.PostedEntryId != null).ToList();
+        // A manual-… id marks an application finance corrected by hand: nothing was
+        // credited here, so there is nothing to reverse (finance reverses its own adjustment).
+        var posted = posting.Applications.Where(a => a.PostedEntryId != null && !CashPostingLedger.IsManualEntryId(a.PostedEntryId)).ToList();
+        var manual = posting.Applications.Count(a => CashPostingLedger.IsManualEntryId(a.PostedEntryId));
         var now = DateTime.UtcNow;
         for (var attempt = 1; ; attempt++)
         {
@@ -309,6 +314,9 @@ public class CashPostingController : ControllerBase
 
         _logger.LogInformation("Voided cash posting {PostingNumber}, reversed {Count} credited application(s)",
             SanitizeForLog(posting.PostingNumber), posted.Count);
+        if (manual > 0)
+            _logger.LogWarning("Voided cash posting {PostingNumber}: {Manual} application(s) were corrected by hand at reconciliation and were not reversed; finance must reverse those adjustments",
+                SanitizeForLog(posting.PostingNumber), manual);
 
         var updated = await _cashPostingRepository.UpdateAsync(posting);
         return Ok(updated);

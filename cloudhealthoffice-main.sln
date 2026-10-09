@@ -269,6 +269,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.TradingPa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CloudHealthOffice.GoldenPath.Tests", "tests\CloudHealthOffice.GoldenPath.Tests\CloudHealthOffice.GoldenPath.Tests.csproj", "{49E3FEE2-A56D-4D4B-9829-F56A08F41DDA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArLegacyPostingReconciliation", "tools\ArLegacyPostingReconciliation\ArLegacyPostingReconciliation.csproj", "{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArLegacyPostingReconciliation.Tests", "tests\ArLegacyPostingReconciliation.Tests\ArLegacyPostingReconciliation.Tests.csproj", "{6DFB6012-E152-4532-9088-F19BD9EB263E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1563,6 +1567,30 @@ Global
 		{49E3FEE2-A56D-4D4B-9829-F56A08F41DDA}.Release|x64.Build.0 = Release|Any CPU
 		{49E3FEE2-A56D-4D4B-9829-F56A08F41DDA}.Release|x86.ActiveCfg = Release|Any CPU
 		{49E3FEE2-A56D-4D4B-9829-F56A08F41DDA}.Release|x86.Build.0 = Release|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Debug|x64.Build.0 = Debug|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Debug|x86.Build.0 = Debug|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Release|x64.ActiveCfg = Release|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Release|x64.Build.0 = Release|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Release|x86.ActiveCfg = Release|Any CPU
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438}.Release|x86.Build.0 = Release|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Debug|x64.Build.0 = Debug|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Debug|x86.Build.0 = Debug|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Release|x64.ActiveCfg = Release|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Release|x64.Build.0 = Release|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Release|x86.ActiveCfg = Release|Any CPU
+		{6DFB6012-E152-4532-9088-F19BD9EB263E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1683,6 +1711,8 @@ Global
 		{91151AB2-3DA6-40F4-9875-A516A3E12805} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{1951C9CD-EBB1-41A0-8A8D-AEBA406539A4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{49E3FEE2-A56D-4D4B-9829-F56A08F41DDA} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{DCDE5668-F1CB-493A-BC4C-6B9B1CEF3438} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{6DFB6012-E152-4532-9088-F19BD9EB263E} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C10C3349-5BEE-4B34-9987-23F0142F9D98}

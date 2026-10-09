@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ArService.Models;
 
@@ -7,6 +8,7 @@ namespace ArService.Models;
 /// Cash receipt — applies payments received to open AR balances with batch posting rules.
 /// QNXT analog: Cash Receipt.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class CashPosting
 {
     [Required]
@@ -60,8 +62,16 @@ public class CashPosting
 
     [StringLength(200)]
     public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Finance's review of a posting applied before applying credited balances (see
+    /// <see cref="LegacyPostingReconciliation"/>). Null for every posting created or applied
+    /// since; set only by the reconciliation tool.
+    /// </summary>
+    public LegacyPostingReconciliation? LegacyReconciliation { get; set; }
 }
 
+[BsonIgnoreExtraElements]
 public class CashApplication
 {
     [Required]
@@ -83,6 +93,9 @@ public class CashApplication
     /// The <see cref="ArPostingEntry.EntryId"/> this application credited on
     /// its AR balance; null until the posting is applied. An application is
     /// credited to its balance once only, however often the posting is applied.
+    /// A value starting <c>manual-</c> marks a legacy application finance corrected by
+    /// hand: it was never credited here, so apply does not credit it and void does not
+    /// reverse it.
     /// </summary>
     public string? PostedEntryId { get; set; }
 

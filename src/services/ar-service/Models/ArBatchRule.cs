@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ArService.Models;
 
@@ -7,6 +8,7 @@ namespace ArService.Models;
 /// Batch posting rule — QNXT equivalent. Controls how outputs from billing runs
 /// and payment runs are automatically posted to GL accounts.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ArBatchRule
 {
     [Required]

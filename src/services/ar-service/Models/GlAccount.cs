@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ArService.Models;
 
@@ -7,6 +8,7 @@ namespace ArService.Models;
 /// GL Account master record — chart of accounts entry with QNXT segment code parity.
 /// Defines account number, type, segment codes, LOB mapping, and premium split configuration.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class GlAccount
 {
     [Required]
@@ -90,6 +92,7 @@ public class GlAccount
 /// <summary>
 /// Standard six-segment COA hierarchy (QNXT segment code parity)
 /// </summary>
+[BsonIgnoreExtraElements]
 public class GlSegmentCodes
 {
     [StringLength(10)]
@@ -117,6 +120,7 @@ public class GlSegmentCodes
         $"{Company}-{Fund}-{Department}-{Program}-{Account}-{SubAccount}";
 }
 
+[BsonIgnoreExtraElements]
 public class PremiumSplitConfig
 {
     public decimal SponsorPercentage { get; set; }
@@ -125,6 +129,7 @@ public class PremiumSplitConfig
     public List<PlanSplitOverride> PlanOverrides { get; set; } = new();
 }
 
+[BsonIgnoreExtraElements]
 public class PlanSplitOverride
 {
     [Required]
