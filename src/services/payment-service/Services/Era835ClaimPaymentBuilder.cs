@@ -86,6 +86,7 @@ public static class Era835ClaimPaymentBuilder
                     {
                         LineNumber = sl.LineNumber,
                         ProcedureCode = sl.ProcedureCode,
+                        Modifiers = sl.Modifiers?.ToList() ?? new List<string>(),
                         ChargeAmount = sl.ChargeAmount,
                         PaymentAmount = paid,
                         RevenueCode = sl.RevenueCode,
@@ -218,6 +219,7 @@ public static class Era835ClaimPaymentBuilder
                     {
                         LineNumber = sl.LineNumber,
                         ProcedureCode = sl.ProcedureCode,
+                        Modifiers = sl.Modifiers.ToList(),
                         ChargeAmount = sl.ChargeAmount,
                         PaidAmount = sl.PaymentAmount,
                         RevenueCode = sl.RevenueCode,
@@ -300,6 +302,9 @@ public static class Era835ClaimPaymentBuilder
             {
                 LineNumber = sl.LineNumber,
                 ProcedureCode = sl.ProcedureCode,
+                // SVC01 of the reversal identifies the same billed service as
+                // the original (HC:code:modifiers / NU:rev, SVC04 rev).
+                Modifiers = sl.Modifiers.ToList(),
                 ChargeAmount = sl.ChargeAmount,
                 PaymentAmount = sl.PaymentAmount,
                 RevenueCode = sl.RevenueCode,

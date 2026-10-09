@@ -1234,6 +1234,8 @@ public class ClaimServiceLineDto
 
     public int LineNumber { get; set; }
     public string ProcedureCode { get; set; } = string.Empty;
+    /// <summary>claims-service <c>ClaimLine.Modifiers</c> as billed; reported in SVC01.</summary>
+    public List<string>? Modifiers { get; set; }
     public decimal ChargeAmount { get; set; }
     public decimal? PaidAmount { get; set; }
     public string? RevenueCode { get; set; }
