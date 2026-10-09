@@ -265,16 +265,241 @@ public class ContractTermsTests
         Assert.Equal(110m, result.AllowedAmount);
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // FACILITY / NON-FACILITY PLACE OF SERVICE (CMS Pub. 100-04 Ch. 12 §20.4.2)
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static FeeSchedule FlatWithFacilityPrice() => new()
+    {
+        Id = "mpfs-flat", TenantId = Tenant, Name = "MPFS flat",
+        Type = FeeScheduleType.MedicareMpfs,
+        EffectiveDate = new DateTime(2026, 1, 1),
+        Lines = [new FeeScheduleLine { ProcedureCode = "99213", Rate = 110m, FacilityRate = 75m }],
+    };
+
+    private static FeeSchedule RvuSchedule() => new()
+    {
+        Id = "mpfs-rvu", TenantId = Tenant, Name = "MPFS RVU",
+        Type = FeeScheduleType.MedicareMpfs,
+        EffectiveDate = new DateTime(2026, 1, 1),
+        ConversionFactor = 33m,
+        Lines =
+        [
+            new FeeScheduleLine
+            {
+                ProcedureCode = "99213", RateType = FeeScheduleRateType.Rvu,
+                WorkRvu = 1.30m, PeRvu = 1.59m, PeRvuFacility = 0.83m, MpRvu = 0.09m,
+            },
+        ],
+    };
+
+    // 99213 at CF 33: non-facility (1.30 + 1.59 + 0.09) × 33 = 98.34; facility (1.30 + 0.83 + 0.09) × 33 = 73.26.
+    private const decimal RvuNonFacility = 98.34m;
+    private const decimal RvuFacility = 73.26m;
+
+    /// <summary>
+    /// Every code in the CMS Place of Service Code Set (plus blank, unassigned and
+    /// malformed values) with the rate setting §20.4.2 gives it.
+    /// </summary>
+    public static TheoryData<string?, bool> CmsPlaceOfServiceTable()
+    {
+        var facility = new HashSet<string>
+        {
+            "02", "19", "21", "22", "23", "24", "26", "31", "34", "41", "42", "51", "52", "53", "56", "61",
+        };
+        string[] assigned =
+        [
+            "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16",
+            "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "31", "32", "33", "34", "41",
+            "42", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "60", "61", "62", "65", "66",
+            "71", "72", "81", "99",
+        ];
+        var data = new TheoryData<string?, bool>();
+        foreach (var pos in assigned) data.Add(pos, facility.Contains(pos));
+        // Blank, unassigned and malformed codes: non-facility.
+        foreach (var pos in new string?[] { null, "", "  ", "00", "28", "40", "98", "XX", "2", "021" })
+            data.Add(pos, false);
+        // Surrounding whitespace is ignored.
+        data.Add(" 21 ", true);
+        return data;
+    }
+
     [Theory]
-    [InlineData("11", false)]
-    [InlineData("12", false)]
-    [InlineData("02", false)]
-    [InlineData("10", false)]
-    [InlineData("21", true)]
-    [InlineData("22", true)]
-    [InlineData(null, false)]
-    public void IsFacilityPlaceOfService_MatchesEngineRule(string? pos, bool expected)
-        => Assert.Equal(expected, RateResolutionService.IsFacilityPlaceOfService(pos));
+    [MemberData(nameof(CmsPlaceOfServiceTable))]
+    public void FacilityPlaceOfService_MatchesCmsTable(string? pos, bool expected)
+    {
+        Assert.Equal(expected, FacilityPlaceOfService.IsFacility(pos));
+        Assert.Equal(expected, RateResolutionService.IsFacilityPlaceOfService(pos));
+    }
+
+    [Theory]
+    [MemberData(nameof(CmsPlaceOfServiceTable))]
+    public async Task FacilityPlaceOfService_DrivesFlatAndRvuRates(string? pos, bool facility)
+    {
+        var flat = await Engine(FlatWithFacilityPrice(), lesserOf: null).ResolveAsync(Request("99213", pos: pos!));
+        var rvu = await Engine(RvuSchedule(), lesserOf: null).ResolveAsync(Request("99213", pos: pos!));
+
+        Assert.Equal(facility ? 75m : 110m, flat.AllowedAmount);
+        Assert.Equal(facility ? RvuFacility : RvuNonFacility, rvu.AllowedAmount);
+    }
+
+    [Fact]
+    public void FacilityPlaceOfService_IsExactlyTheCmsFacilityList()
+        => Assert.Equal(
+            new[] { "02", "19", "21", "22", "23", "24", "26", "31", "34", "41", "42", "51", "52", "53", "56", "61" },
+            FacilityPlaceOfService.Codes.Order(StringComparer.Ordinal));
+
+    // One case per CMS POS whose classification changed. The previous rule made
+    // every POS a facility setting except 11, 12, 02 and 10.
+
+    [Fact]
+    public async Task Pos02_TelehealthOtherThanHome_NowFacility()
+        => await AssertSetting("02", facility: true);
+
+    [Fact]
+    public async Task Pos20_UrgentCare_NowNonFacility()
+        => await AssertSetting("20", facility: false);
+
+    [Fact]
+    public async Task Pos49_IndependentClinic_NowNonFacility()
+        => await AssertSetting("49", facility: false);
+
+    [Fact]
+    public async Task Pos81_IndependentLaboratory_NowNonFacility()
+        => await AssertSetting("81", facility: false);
+
+    [Theory]
+    [InlineData("01")] // Pharmacy
+    [InlineData("03")] // School
+    [InlineData("04")] // Homeless shelter
+    [InlineData("05")] // IHS free-standing facility
+    [InlineData("06")] // IHS provider-based facility
+    [InlineData("07")] // Tribal 638 free-standing facility
+    [InlineData("08")] // Tribal 638 provider-based facility
+    [InlineData("09")] // Prison / correctional facility
+    [InlineData("13")] // Assisted living facility
+    [InlineData("14")] // Group home
+    [InlineData("15")] // Mobile unit
+    [InlineData("16")] // Temporary lodging
+    [InlineData("17")] // Walk-in retail health clinic
+    [InlineData("18")] // Place of employment / worksite
+    [InlineData("20")] // Urgent care facility
+    [InlineData("25")] // Birthing center
+    [InlineData("27")] // Outreach site / street
+    [InlineData("32")] // Nursing facility (and SNF, Part B resident)
+    [InlineData("33")] // Custodial care facility
+    [InlineData("49")] // Independent clinic
+    [InlineData("50")] // Federally qualified health center
+    [InlineData("54")] // Intermediate care facility / individuals with intellectual disabilities
+    [InlineData("55")] // Residential substance abuse treatment facility
+    [InlineData("57")] // Non-residential substance abuse treatment facility
+    [InlineData("58")] // Non-residential opioid treatment facility
+    [InlineData("60")] // Mass immunization center
+    [InlineData("62")] // Comprehensive outpatient rehabilitation facility
+    [InlineData("65")] // End-stage renal disease treatment facility
+    [InlineData("66")] // Programs of All-Inclusive Care for the Elderly (PACE) center
+    [InlineData("71")] // State or local public health clinic
+    [InlineData("72")] // Rural health clinic
+    [InlineData("81")] // Independent laboratory
+    [InlineData("99")] // Other place of service
+    public async Task PreviouslyFacility_NowNonFacility(string pos)
+        => await AssertSetting(pos, facility: false);
+
+    [Theory]
+    [InlineData("10")] // Telehealth in patient's home: non-facility (CY 2024 rule), every date of service
+    [InlineData("11")]
+    [InlineData("12")]
+    public async Task UnchangedNonFacility(string pos)
+        => await AssertSetting(pos, facility: false);
+
+    [Theory]
+    [InlineData("20")]
+    [InlineData("49")]
+    [InlineData("81")]
+    [InlineData("21")]
+    public async Task NoFacilityRate_SingleRateEverywhere(string pos)
+    {
+        var engine = Engine(Commercial(("99213", 110m)), lesserOf: null);
+
+        var result = await engine.ResolveAsync(Request("99213", pos: pos));
+
+        Assert.Equal(110m, result.AllowedAmount);
+    }
+
+    [Theory]
+    [InlineData("13", "131")] // Hospital outpatient: facility type, not read as POS 13
+    [InlineData("11", "111")] // Hospital inpatient: not read as POS 11 (office)
+    [InlineData("83", "831")] // Ambulatory surgery center
+    public async Task InstitutionalLine_AlwaysFacility(string facilityTypeCode, string billType)
+    {
+        var engine = Engine(FlatWithFacilityPrice(), lesserOf: null);
+
+        var result = await engine.ResolveAsync(Request("99213", pos: facilityTypeCode, billType: billType));
+
+        Assert.Equal(75m, result.AllowedAmount);
+    }
+
+    // Review finding 1: an 837I claim with no FacilityTypeCode has no type of bill,
+    // but its POS slot still holds a facility type ("13" = hospital outpatient,
+    // which is POS 13 "assisted living" — non-facility — if read as a CMS POS).
+    [Theory]
+    [InlineData("13", null)]
+    [InlineData("13", "")]
+    [InlineData("11", null)]
+    [InlineData("13", "N/A")]
+    public async Task InstitutionalClaim_WithoutValidBillType_StillFacility(string facilityTypeCode, string? billType)
+    {
+        var request = Request("99213", pos: facilityTypeCode, billType: billType) with { IsInstitutional = true };
+
+        var flat = await Engine(FlatWithFacilityPrice(), lesserOf: null).ResolveAsync(request);
+        var rvu = await Engine(RvuSchedule(), lesserOf: null).ResolveAsync(request);
+
+        Assert.Equal(75m, flat.AllowedAmount);
+        Assert.Equal(RvuFacility, rvu.AllowedAmount);
+    }
+
+    // Review finding 2: only a valid NUBC type of bill marks a professional line as
+    // institutional; junk in BillType leaves it on the POS rule.
+    [Theory]
+    [InlineData("0")]
+    [InlineData("N/A")]
+    [InlineData("11")]
+    [InlineData("1111")]
+    [InlineData("13X")]
+    [InlineData("  ")]
+    public async Task ProfessionalLine_WithJunkBillType_StaysNonFacility(string billType)
+    {
+        var request = Request("99213", pos: "11", billType: billType);
+
+        var flat = await Engine(FlatWithFacilityPrice(), lesserOf: null).ResolveAsync(request);
+        var rvu = await Engine(RvuSchedule(), lesserOf: null).ResolveAsync(request);
+
+        Assert.Equal(110m, flat.AllowedAmount);
+        Assert.Equal(RvuNonFacility, rvu.AllowedAmount);
+    }
+
+    [Theory]
+    [InlineData("131")]
+    [InlineData("0131")]
+    [InlineData(" 131 ")]
+    public async Task ValidBillType_WithoutInstitutionalFlag_IsFacility(string billType)
+    {
+        var result = await Engine(FlatWithFacilityPrice(), lesserOf: null)
+            .ResolveAsync(Request("99213", pos: "11", billType: billType));
+
+        Assert.Equal(75m, result.AllowedAmount);
+    }
+
+    private static async Task AssertSetting(string pos, bool facility)
+    {
+        Assert.Equal(facility, FacilityPlaceOfService.IsFacility(pos));
+
+        var flat = await Engine(FlatWithFacilityPrice(), lesserOf: null).ResolveAsync(Request("99213", pos: pos));
+        Assert.Equal(facility ? 75m : 110m, flat.AllowedAmount);
+
+        var rvu = await Engine(RvuSchedule(), lesserOf: null).ResolveAsync(Request("99213", pos: pos));
+        Assert.Equal(facility ? RvuFacility : RvuNonFacility, rvu.AllowedAmount);
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     // ASSISTANT SURGEON 81 / 82, ROUNDING
@@ -367,7 +592,8 @@ public class ContractTermsTests
         int totalLines = 1,
         List<string>? modifiers = null,
         string? revenueCode = null,
-        decimal units = 1m) => new()
+        decimal units = 1m,
+        string? billType = null) => new()
     {
         TenantId = Tenant,
         ProcedureCode = procedureCode,
@@ -382,5 +608,6 @@ public class ContractTermsTests
         TotalLineCount = totalLines,
         DrgCode = drgCode,
         RevenueCode = revenueCode,
+        BillType = billType,
     };
 }

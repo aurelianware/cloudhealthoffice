@@ -37,12 +37,16 @@ public interface IBenefitRuleGate
     /// "no configured candidate" from "candidates configured but
     /// every predicate rejected" so the calculation engine can emit
     /// the right denial narrative without re-querying the plan.
+    /// <paramref name="x12Code"/> is the X12 code a system-level fallback
+    /// resolved through (<see cref="ServiceCategoryMatch.X12Code"/>); see
+    /// <see cref="BenefitPlanConfig.LookupCategories"/> for the match order.
     /// </summary>
     BenefitRuleGateResult PickApplicable(
         BenefitPlanConfig plan,
         string serviceTypeCode,
         BenefitResolutionRequest request,
-        ClaimLineInput? line);
+        ClaimLineInput? line,
+        string? x12Code = null);
 }
 
 /// <summary>
@@ -77,12 +81,26 @@ public sealed class BenefitRuleGate : IBenefitRuleGate
         BenefitPlanConfig plan,
         string serviceTypeCode,
         BenefitResolutionRequest request,
-        ClaimLineInput? line)
+        ClaimLineInput? line,
+        string? x12Code = null)
     {
-        var candidates = plan.GetCategories(serviceTypeCode);
+        var lookup = plan.LookupCategories(serviceTypeCode, x12Code);
+        var candidates = lookup.Categories;
         if (candidates.Count == 0)
         {
             return new BenefitRuleGateResult(null, 0);
+        }
+
+        if (lookup.FallbackCategory is not null)
+        {
+            // Rollout fallback (ServiceCategoryNames.RolloutFallbackFor): the
+            // plan has no category for what the line resolved to, so cost
+            // share comes from the nearest category it does have. Warning so
+            // the plan gets the specific category authored.
+            _logger.LogWarning(
+                "BenefitRuleGate: plan {PlanId} (tenant {TenantId}) has no benefit category for {ServiceTypeCode}; " +
+                "using rollout fallback category {FallbackCategory}. Author the specific category on the plan.",
+                plan.Id, plan.TenantId, serviceTypeCode, lookup.FallbackCategory);
         }
 
         var memberContext = request.Member;
