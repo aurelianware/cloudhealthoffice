@@ -74,6 +74,16 @@ public class AppealEvent
             : JsonNode.Parse(value) as JsonObject;
     }
 
+    /// <summary>
+    /// The Kafka event for this change, if any. Not part of the audit row
+    /// (ignored by both serializers): the repository writes it into the
+    /// appeal's <see cref="Appeal.Outbox"/> in the same single-document
+    /// update as the change. Set via <c>Services.AppealOutbox</c>.
+    /// </summary>
+    [BsonIgnore]
+    [JsonIgnore]
+    public AppealOutboxMessage? OutboxMessage { get; set; }
+
     public static string BuildPartitionKey(string tenantId, string appealId) =>
         $"{tenantId}:{appealId}";
 }

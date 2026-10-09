@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using AppealsService.Models;
 using AppealsService.Repositories;
+using AppealsService.Services;
 
 namespace AppealsService.Tests.Fakes;
 
@@ -16,7 +17,7 @@ namespace AppealsService.Tests.Fakes;
 /// for atomicity tests: one-shot flag, cleared after the next append
 /// attempt regardless of whether it succeeded or threw.
 /// </summary>
-public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRepository, IAppealEventSink
+public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRepository, IAppealEventSink, IAppealOutboxStore
 {
     private readonly ConcurrentDictionary<string, Appeal> _appeals = new();
     private readonly ConcurrentBag<AppealEvent> _events = new();
@@ -51,6 +52,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         lock (_sync)
         {
             var clone = Clone(appeal);
+            AddOutbox(clone, genesisEvent);
             _appeals[Key(appeal.TenantId, appeal.Id)] = clone;
             AppendEventInternal(genesisEvent);
         }
@@ -150,6 +152,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             var updated = Clone(current);
             AppealStatusTransitionFields.CopyTo(appeal, updated);
             updated.Decision = updated.Decision is null ? null : CloneDecision(updated.Decision);
+            AddOutbox(updated, auditEvent);
             _appeals[key] = updated;
             AppendEventInternal(auditEvent);
             return Task.FromResult(Clone(updated));
@@ -163,6 +166,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             var key = Key(appeal.TenantId, appeal.Id);
             if (!_appeals.TryGetValue(key, out var current)) return Task.FromResult<Appeal?>(null);
             if (current.OverdueAuditEmitted) return Task.FromResult<Appeal?>(null);
+            if (current.Status != appeal.Status) return Task.FromResult<Appeal?>(null);
             if (current.Status != AppealStatus.Submitted
                 && current.Status != AppealStatus.InReview
                 && current.Status != AppealStatus.PendingInfo)
@@ -170,6 +174,7 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
 
             current.OverdueAuditEmitted = true;
             current.UpdatedAt = DateTime.UtcNow;
+            AddOutbox(current, auditEvent);
             _appeals[key] = current;
             AppendEventInternal(auditEvent);
             return Task.FromResult<Appeal?>(Clone(current));
@@ -198,6 +203,8 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
                 if (justificationNote is not null) current.Notes.Add(CloneNote(justificationNote));
                 current.UpdatedAt = appeal.UpdatedAt ?? DateTime.UtcNow;
                 current.UpdatedBy = appeal.UpdatedBy;
+                (current.Outbox ??= new()).AddRange(AppealOutbox.MessagesOf(buildAuditEvents(appeal)).Select(CloneOutbox));
+                AppealOutboxIndex.Refresh(current);
                 _appeals[key] = current;
             }
             else if (!(current.DeadlineExtension.EventId is { Length: > 0 } stored
@@ -218,8 +225,14 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             var key = Key(appeal.TenantId, appeal.Id);
             if (!_appeals.TryGetValue(key, out var current))
                 throw new InvalidOperationException($"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
+            if (IsReplay(current, auditEvent))
+            {
+                AppendEventInternal(auditEvent);
+                return Task.FromResult(Clone(current));
+            }
             current.Notes.Add(note);
             current.UpdatedAt = DateTime.UtcNow;
+            AddOutbox(current, auditEvent);
             _appeals[key] = current;
             AppendEventInternal(auditEvent);
             return Task.FromResult(Clone(current));
@@ -233,10 +246,16 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             var key = Key(appeal.TenantId, appeal.Id);
             if (!_appeals.TryGetValue(key, out var current))
                 throw new InvalidOperationException($"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
+            if (IsReplay(current, auditEvent))
+            {
+                AppendEventInternal(auditEvent);
+                return Task.FromResult(Clone(current));
+            }
             current.Attachments.Add(attachment);
             if (!string.IsNullOrEmpty(attachment.ControlNumber))
                 current.AttachmentControlNumbers.Add(attachment.ControlNumber);
             current.UpdatedAt = DateTime.UtcNow;
+            AddOutbox(current, auditEvent);
             _appeals[key] = current;
             AppendEventInternal(auditEvent);
             return Task.FromResult(Clone(current));
@@ -252,13 +271,19 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             var key = Key(tenantId, appealId);
             if (!_appeals.TryGetValue(key, out var current))
                 throw new InvalidOperationException($"Appeal {appealId} not found for tenant {tenantId}.");
+            if (IsReplay(current, auditEvent))
+            {
+                AppendEventInternal(auditEvent);
+                return Task.FromResult(Clone(current));
+            }
             var attachment = current.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId)
                 ?? throw new InvalidOperationException(
                     $"Attachment {attachmentId} not found on appeal {appealId}.");
             attachment.AcknowledgmentReceived = acknowledgmentReceived;
             attachment.Status = acknowledgmentReceived ? AttachmentStatus.Acknowledged : AttachmentStatus.Sent;
-            if (acknowledgmentReceived) attachment.SentDate = DateTime.UtcNow;
+            if (acknowledgmentReceived) attachment.SentDate = auditEvent.OccurredAt;
             current.UpdatedAt = DateTime.UtcNow;
+            AddOutbox(current, auditEvent);
             _appeals[key] = current;
             AppendEventInternal(auditEvent);
             return Task.FromResult(Clone(current));
@@ -272,8 +297,14 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
             var key = Key(appeal.TenantId, appeal.Id);
             if (!_appeals.TryGetValue(key, out var current))
                 throw new InvalidOperationException($"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
+            if (IsReplay(current, auditEvent))
+            {
+                AppendEventInternal(auditEvent);
+                return Task.FromResult(Clone(current));
+            }
             current.AssignedReviewerId = appeal.AssignedReviewerId;
             current.UpdatedAt = DateTime.UtcNow;
+            AddOutbox(current, auditEvent);
             _appeals[key] = current;
             AppendEventInternal(auditEvent);
             return Task.FromResult(Clone(current));
@@ -424,8 +455,191 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
         ClosedAt = a.ClosedAt,
         ClosedBy = a.ClosedBy,
         ClosureReasonCode = a.ClosureReasonCode,
-        OverdueAuditEmitted = a.OverdueAuditEmitted
+        OverdueAuditEmitted = a.OverdueAuditEmitted,
+        Outbox = a.Outbox?.Select(CloneOutbox).ToList(),
+        OutboxLeaseOwner = a.OutboxLeaseOwner,
+        OutboxLeaseUntil = a.OutboxLeaseUntil,
+        OutboxSequence = a.OutboxSequence,
+        OutboxNextDueAt = a.OutboxNextDueAt,
+        OutboxLeaseUntilMs = a.OutboxLeaseUntilMs,
+        OutboxPendingCount = a.OutboxPendingCount,
+        OutboxOldestPendingAt = a.OutboxOldestPendingAt,
+        OutboxDeadLetteredCount = a.OutboxDeadLetteredCount
     };
+
+    private static AppealOutboxMessage CloneOutbox(AppealOutboxMessage m) => new()
+    {
+        Id = m.Id,
+        IdempotencyKey = m.IdempotencyKey,
+        Sequence = m.Sequence,
+        ExpiresAt = m.ExpiresAt,
+        EventId = m.EventId,
+        EventType = m.EventType,
+        TenantId = m.TenantId,
+        AppealId = m.AppealId,
+        PayloadJson = m.PayloadJson,
+        CreatedAt = m.CreatedAt,
+        Status = m.Status,
+        Attempts = m.Attempts,
+        NextAttemptAt = m.NextAttemptAt,
+        LastError = m.LastError,
+        LastAttemptAt = m.LastAttemptAt,
+        CompletedAt = m.CompletedAt
+    };
+
+    private static void AddOutbox(Appeal target, AppealEvent auditEvent)
+    {
+        (target.Outbox ??= new()).Add(CloneOutbox(AppealOutbox.Require(auditEvent)));
+        AppealOutboxIndex.Refresh(target);
+    }
+
+    private static bool IsReplay(Appeal current, AppealEvent auditEvent)
+    {
+        var key = AppealOutbox.Require(auditEvent).IdempotencyKey;
+        return current.Outbox?.Any(m => m.IdempotencyKey == key) == true;
+    }
+
+    // ── IAppealOutboxStore (Cosmos semantics: read-modify-write + sweep fields) ──
+
+    /// <summary>The stored outbox entries of an appeal (copies), for assertions.</summary>
+    public IReadOnlyList<AppealOutboxMessage> OutboxOf(string tenantId, string appealId)
+    {
+        lock (_sync)
+            return _appeals.TryGetValue(Key(tenantId, appealId), out var a)
+                ? (a.Outbox ?? new()).Select(CloneOutbox).ToList()
+                : new List<AppealOutboxMessage>();
+    }
+
+    /// <summary>Test hook: edit a stored appeal's outbox in place (sweep fields refreshed).</summary>
+    public void EditOutbox(string tenantId, string appealId, Action<Appeal> edit)
+    {
+        lock (_sync)
+        {
+            var a = _appeals[Key(tenantId, appealId)];
+            edit(a);
+            AppealOutboxIndex.Refresh(a);
+        }
+    }
+
+    private bool Mutate(string tenantId, string appealId, Func<Appeal, bool> mutate)
+    {
+        lock (_sync)
+        {
+            if (!_appeals.TryGetValue(Key(tenantId, appealId), out var a)) return false;
+            if (!mutate(a)) return false;
+            AppealOutboxIndex.Refresh(a);
+            return true;
+        }
+    }
+
+    public Task<IReadOnlyList<AppealOutboxKey>> FindDueAsync(DateTime now, int limit, CancellationToken ct = default)
+    {
+        var nowMs = AppealOutboxIndex.ToEpochMs(now);
+        lock (_sync)
+        {
+            IReadOnlyList<AppealOutboxKey> keys = _appeals.Values
+                .Where(a => a.OutboxNextDueAt is { } due && due <= nowMs
+                            && (a.OutboxLeaseUntilMs is null || a.OutboxLeaseUntilMs < nowMs))
+                .OrderBy(a => a.OutboxNextDueAt)
+                .Take(limit)
+                .Select(a => new AppealOutboxKey(a.TenantId, a.Id))
+                .ToList();
+            return Task.FromResult(keys);
+        }
+    }
+
+    public Task<AppealOutboxLease?> TryLeaseAsync(
+        string tenantId, string appealId, string owner, DateTime now, DateTime leaseUntil, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            AppealOutboxLease? lease = null;
+            Mutate(tenantId, appealId, a =>
+            {
+                if (a.OutboxLeaseUntil is { } until && until >= now && a.OutboxLeaseOwner != owner) return false;
+                if (!AppealOutboxIndex.HasDueWork(a.Outbox, now)) return false;
+                a.OutboxLeaseOwner = owner;
+                a.OutboxLeaseUntil = leaseUntil;
+                lease = new AppealOutboxLease((a.Outbox ?? new()).Select(CloneOutbox).ToList(), a.OutboxSequence ?? 0);
+                return true;
+            });
+            return Task.FromResult(lease);
+        }
+    }
+
+    public Task<bool> RenewLeaseAsync(
+        string tenantId, string appealId, string owner, DateTime leaseUntil,
+        AppealOutboxSequenceAssignment? assign, CancellationToken ct = default) =>
+        Task.FromResult(Mutate(tenantId, appealId, a =>
+        {
+            if (a.OutboxLeaseOwner != owner) return false;
+            if (assign is not null)
+            {
+                var entry = a.Outbox?.FirstOrDefault(m => m.Id == assign.EntryId);
+                if (entry is null || entry.Sequence is not null || (a.OutboxSequence ?? 0) != assign.Sequence - 1) return false;
+                entry.Sequence = assign.Sequence;
+                a.OutboxSequence = assign.Sequence;
+            }
+            a.OutboxLeaseUntil = leaseUntil;
+            return true;
+        }));
+
+    public Task<bool> UpdateMessageAsync(
+        string tenantId, string appealId, string owner, AppealOutboxMessage message, CancellationToken ct = default) =>
+        Task.FromResult(Mutate(tenantId, appealId, a =>
+        {
+            if (a.OutboxLeaseOwner != owner) return false;
+            var entry = a.Outbox?.FirstOrDefault(m => m.Id == message.Id && m.Status == AppealOutboxStatus.Pending);
+            if (entry is null) return false;
+            AppealRepository.CopyOutcome(message, entry);
+            return true;
+        }));
+
+    public Task ReleaseLeaseAsync(
+        string tenantId, string appealId, string owner, IReadOnlyCollection<string> pruneIds, CancellationToken ct = default)
+    {
+        Mutate(tenantId, appealId, a =>
+        {
+            if (a.OutboxLeaseOwner == owner)
+            {
+                a.OutboxLeaseOwner = null;
+                a.OutboxLeaseUntil = null;
+            }
+            a.Outbox?.RemoveAll(m => pruneIds.Contains(m.Id) && m.Status != AppealOutboxStatus.Pending);
+            return true;
+        });
+        return Task.CompletedTask;
+    }
+
+    public Task<int> RequeueDeadLetteredAsync(
+        string tenantId, string appealId, string? eventId, CancellationToken ct = default)
+    {
+        var count = 0;
+        Mutate(tenantId, appealId, a => (count = AppealRepository.Requeue(a, eventId)) > 0);
+        return Task.FromResult(count);
+    }
+
+    public Task<int> RequeueAllDeadLetteredAsync(string? tenantId, CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            var total = 0;
+            foreach (var a in _appeals.Values.Where(a => tenantId is null || a.TenantId == tenantId).ToList())
+                Mutate(a.TenantId, a.Id, x => { var n = AppealRepository.Requeue(x, null); total += n; return n > 0; });
+            return Task.FromResult(total);
+        }
+    }
+
+    public Task<AppealOutboxStats> GetStatsAsync(CancellationToken ct = default)
+    {
+        lock (_sync)
+        {
+            var pending = _appeals.Values.SelectMany(a => a.Outbox ?? new())
+                .Where(m => m.Status == AppealOutboxStatus.Pending).ToList();
+            return Task.FromResult(new AppealOutboxStats(pending.Count,
+                pending.Count > 0 ? pending.Min(m => m.CreatedAt) : null));
+        }
+    }
 
     private static AppealDeadlineExtension CloneExtension(AppealDeadlineExtension e) => new()
     {

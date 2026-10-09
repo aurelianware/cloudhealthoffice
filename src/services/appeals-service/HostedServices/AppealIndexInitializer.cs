@@ -1,5 +1,6 @@
 using AppealsService.Models;
 using AppealsService.Repositories;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace AppealsService.HostedServices;
@@ -72,6 +73,31 @@ public sealed class AppealIndexInitializer : IHostedService
                     .Ascending(x => x.MemberId)
                     .Descending(x => x.CreatedAt),
                 new CreateIndexOptions { Name = "ix_tenant_member_created" }),
+            cancellationToken: cancellationToken);
+
+        // Outbox relay sweep: only appeals with a pending event are indexed,
+        // so the index stays as small as the backlog.
+        await appeals.Indexes.CreateOneAsync(
+            new CreateIndexModel<Appeal>(
+                Builders<Appeal>.IndexKeys.Ascending("Outbox.Status"),
+                new CreateIndexOptions<Appeal>
+                {
+                    Name = "ix_outbox_pending",
+                    PartialFilterExpression = new BsonDocument("Outbox.Status", nameof(AppealOutboxStatus.Pending))
+                }),
+            cancellationToken: cancellationToken);
+
+        // Dead-letter retention sweep and bulk replay. A different key
+        // pattern from ix_outbox_pending: older servers refuse two indexes
+        // on one key pattern even with different partial filters.
+        await appeals.Indexes.CreateOneAsync(
+            new CreateIndexModel<Appeal>(
+                Builders<Appeal>.IndexKeys.Ascending("Outbox.Status").Ascending("Outbox.ExpiresAt"),
+                new CreateIndexOptions<Appeal>
+                {
+                    Name = "ix_outbox_dead_lettered",
+                    PartialFilterExpression = new BsonDocument("Outbox.Status", nameof(AppealOutboxStatus.DeadLettered))
+                }),
             cancellationToken: cancellationToken);
 
         var events = _db.GetCollection<AppealEvent>(AppealEventRepositoryMongo.AppealEventsCollectionName);

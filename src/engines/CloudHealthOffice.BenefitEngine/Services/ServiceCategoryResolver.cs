@@ -88,18 +88,11 @@ public sealed record ServiceCategoryClaimContext(
     /// <summary>
     /// "111" → "111", "0111" → "111"; null for anything else ("11",
     /// "111garbage", or a four-digit value without the leading zero such as "1111").
+    /// Delegates to <see cref="CloudHealthOffice.ReferenceData.Domain.NubcTypeOfBill.Normalize"/>,
+    /// the same rule the fee schedule engine uses to decide the facility setting.
     /// </summary>
     public static string? NormalizeTypeOfBill(string? typeOfBill)
-    {
-        if (string.IsNullOrWhiteSpace(typeOfBill)) return null;
-        var tob = typeOfBill.Trim();
-        if (tob.Length == 4)
-        {
-            if (tob[0] != '0') return null;
-            tob = tob[1..];
-        }
-        return tob.Length == 3 && tob.All(char.IsAsciiDigit) ? tob : null;
-    }
+        => CloudHealthOffice.ReferenceData.Domain.NubcTypeOfBill.Normalize(typeOfBill);
 }
 
 public record ServiceCategoryMatch
@@ -108,6 +101,17 @@ public record ServiceCategoryMatch
     public string ServiceTypeDescription { get; init; } = default!;
     public string MatchedBy { get; init; } = default!; // "PlanOverride", "TenantDefault", "SystemDefault"
     public string MatchedRule { get; init; } = default!; // For audit: which rule matched
+
+    /// <summary>
+    /// The X12 5010 service type code a system-level fallback worked out
+    /// before translating it to <see cref="ServiceTypeCode"/> (e.g. "AI" for
+    /// POS 55, which is named Behavioral Health). Null for plan / tenant
+    /// mappings. Plan matching tries it right after the exact name, ahead of
+    /// the name's other X12 codes, so a plan with separate A4 / MH / AI
+    /// categories takes the specific one (see
+    /// <see cref="BenefitPlanConfig.LookupCategories"/>).
+    /// </summary>
+    public string? X12Code { get; init; }
 }
 
 /// <summary>
@@ -437,34 +441,82 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
             ServiceTypeDescription = $"{name} (X12 service type {x12Code})",
             MatchedBy = "SystemDefault",
             MatchedRule = rule,
+            X12Code = x12Code,
         };
     }
 
     /// <summary>
     /// Last-resort fallback for a professional claim: infer the benefit
-    /// category from place of service. This keeps adjudication from failing
-    /// entirely when mappings are incomplete, but logs a warning so the
-    /// mapping gap gets fixed. The POS → X12 table is unchanged; the result is
-    /// the named category (POS 11 → "98" → "Office Visit").
+    /// category from the CMS place of service. This keeps adjudication from
+    /// failing entirely when mappings are incomplete, but logs a warning so
+    /// the mapping gap gets fixed. The result is the named category for the
+    /// X12 service type code in <see cref="ProfessionalPlaceOfServiceMap"/>
+    /// (POS 11 → "98" → "Office Visit").
     /// </summary>
     private static ServiceCategoryMatch? InferFromPlaceOfService(string pos, string procedureCode)
     {
-        var code = pos switch
-        {
-            "11" => "98",
-            "21" or "22" or "23" => "48",
-            "20" or "24" => "50",
-            "31" or "32" => "86",
-            "34" => "42",
-            "51" or "52" or "53" or "54" => "86",
-            "61" or "62" => "48",
-            "71" or "72" => "A4",
-            "81" => "35",
-            _ => null
-        };
-
-        return code is null ? null : SystemDefault(code, $"POS-fallback:{pos}");
+        var key = pos?.Trim() ?? string.Empty;
+        return ProfessionalPlaceOfServiceMap.TryGetValue(key, out var code)
+            ? SystemDefault(code, $"POS-fallback:{key}")
+            : null;
     }
+
+    /// <summary>
+    /// CMS place of service → X12 5010 service type code (element 1365) for
+    /// the professional fallback. Audited against the CMS Place of Service
+    /// code set. A POS that is absent returns null on purpose (CARC 204
+    /// upstream, so the mapping gap is fixed) rather than a guessed category:
+    /// <list type="bullet">
+    ///   <item>12 Home, 13 Assisted Living, 14 Group Home, 15 Mobile Unit,
+    ///     02/10 Telehealth, 01 Pharmacy, 60 Mass Immunization, 65 ESRD,
+    ///     41/42 Ambulance, 99 Other: the setting does not determine the
+    ///     benefit; the procedure code does (tenant / bundle mappings).</item>
+    ///   <item>33 Custodial Care Facility: room, board and personal care with
+    ///     no medical component; no medical category fits.</item>
+    ///   <item>32 Nursing Facility: mostly custodial / long-term care, not a
+    ///     skilled (Medicare Part A) stay, so Skilled Nursing would apply the
+    ///     SNF benefit to non-skilled care; the professional services billed
+    ///     there (nursing facility E&amp;M, therapy, labs) are better decided
+    ///     by their procedure code than by a single setting guess, so 32 is
+    ///     left unmapped like 33 rather than mapped to Office Visit.</item>
+    ///   <item>62 Comprehensive Outpatient Rehabilitation Facility: a CORF
+    ///     bills physical / occupational / speech therapy but also respiratory
+    ///     therapy, social work and psychological services, so the setting
+    ///     does not determine the benefit; the procedure code does.</item>
+    ///   <item>54 Intermediate Care Facility / Individuals with Intellectual
+    ///     Disabilities: long-term care (X12 54), not psychiatric and not
+    ///     skilled nursing; no plan category for it.</item>
+    /// </list>
+    /// 61 (comprehensive inpatient rehabilitation facility) stays inpatient
+    /// hospital: the exact X12 code is AB (rehabilitation – inpatient), which
+    /// has no plan category, and an inpatient rehab stay is an inpatient benefit.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> ProfessionalPlaceOfServiceMap =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["11"] = "98", // Office → Professional (Physician) Visit - Office
+            ["19"] = "50", // Off Campus-Outpatient Hospital → Hospital - Outpatient
+            ["20"] = "UC", // Urgent Care Facility → Urgent Care
+            ["21"] = "48", // Inpatient Hospital → Hospital - Inpatient
+            ["22"] = "50", // On Campus-Outpatient Hospital → Hospital - Outpatient
+            ["23"] = "86", // Emergency Room - Hospital → Emergency Services
+            ["24"] = "13", // Ambulatory Surgical Center → Ambulatory Service Center Facility
+            ["31"] = "AG", // Skilled Nursing Facility → Skilled Nursing Care
+            ["34"] = "45", // Hospice → Hospice
+            ["49"] = "98", // Independent Clinic → Professional Visit - Office
+            ["50"] = "98", // Federally Qualified Health Center → Professional Visit - Office
+            ["51"] = "A4", // Inpatient Psychiatric Facility → Psychiatric
+            ["52"] = "A4", // Psychiatric Facility-Partial Hospitalization → Psychiatric
+            ["53"] = "MH", // Community Mental Health Center → Mental Health
+            ["55"] = "AI", // Residential Substance Abuse Treatment Facility → Substance Abuse
+            ["56"] = "A4", // Psychiatric Residential Treatment Center → Psychiatric
+            ["57"] = "AI", // Non-residential Substance Abuse Treatment Facility → Substance Abuse
+            ["58"] = "AI", // Non-residential Opioid Treatment Facility → Substance Abuse
+            ["61"] = "48", // Comprehensive Inpatient Rehabilitation Facility → Hospital - Inpatient
+            ["71"] = "98", // Public Health Clinic → Professional Visit - Office
+            ["72"] = "98", // Rural Health Clinic → Professional Visit - Office
+            ["81"] = "5",  // Independent Laboratory → Diagnostic Lab
+        };
 }
 
 /// <summary>

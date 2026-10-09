@@ -549,6 +549,53 @@ public static class ChoMetrics
             unit: "{link}",
             description: "Missing transaction links observed while composing claim intelligence");
 
+    /// <summary>
+    /// Appeal event outbox dispatch outcomes (appeals-service). Dimensions:
+    /// <c>cho.outcome</c> (published|failed|dead_lettered|skipped),
+    /// <c>cho.event_type</c>, <c>cho.transient</c>. Never labelled with appeal, member or tenant identity.
+    /// </summary>
+    public static readonly Counter<long> AppealOutboxOutcomes =
+        Meter.CreateCounter<long>(
+            "cho.appeals.outbox.outcomes.total",
+            unit: "{event}",
+            description: "Appeal event outbox dispatch outcomes by result and event type.");
+
+    private static long _appealOutboxPending = -1;
+    private static double _appealOutboxOldestPendingAgeSeconds;
+
+    /// <summary>
+    /// Appeal events waiting in the transactional outbox, all tenants. Alert
+    /// when it keeps growing. Reports nothing until the relay has measured it.
+    /// </summary>
+    public static readonly ObservableGauge<long> AppealOutboxPending =
+        Meter.CreateObservableGauge(
+            "cho.appeals.outbox.pending",
+            () => Interlocked.Read(ref _appealOutboxPending) is var v and >= 0
+                ? new[] { new Measurement<long>(v) }
+                : Array.Empty<Measurement<long>>(),
+            unit: "{event}",
+            description: "Appeal events not yet published to Kafka.");
+
+    /// <summary>
+    /// Age of the oldest pending appeal event, seconds (0 when none). Alert
+    /// above a few minutes: consumers are behind on regulated appeal events.
+    /// </summary>
+    public static readonly ObservableGauge<double> AppealOutboxOldestPendingAge =
+        Meter.CreateObservableGauge(
+            "cho.appeals.outbox.oldest_pending_age",
+            () => Interlocked.Read(ref _appealOutboxPending) >= 0
+                ? new[] { new Measurement<double>(Volatile.Read(ref _appealOutboxOldestPendingAgeSeconds)) }
+                : Array.Empty<Measurement<double>>(),
+            unit: "s",
+            description: "Age of the oldest appeal event not yet published to Kafka.");
+
+    /// <summary>Set by the appeals outbox relay after each backlog measurement.</summary>
+    public static void SetAppealOutboxBacklog(long pending, double oldestPendingAgeSeconds)
+    {
+        Volatile.Write(ref _appealOutboxOldestPendingAgeSeconds, oldestPendingAgeSeconds);
+        Interlocked.Exchange(ref _appealOutboxPending, pending);
+    }
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly

@@ -99,9 +99,21 @@ For `FeeScheduleType.MedicareMpfs` lines with `RateType.Rvu`:
 AllowedAmount = (WorkRVU × WorkGPCI + PeRVU × PeGPCI + MpRVU × MpGPCI) × ConversionFactor
 ```
 
-**Place of service** determines which PE RVU to use:
-- Non-facility POS codes (`11` Office, `12` Home, `02`/`10` Telehealth) → `FeeScheduleLine.PeRvu`
-- All other POS codes → `FeeScheduleLine.PeRvuFacility`
+**Place of service** determines which PE RVU (and, for flat lines, whether
+`FeeScheduleLine.FacilityRate`) to use. The list is defined once in
+`Domain/FacilityPlaceOfService.cs`, per Medicare Claims Processing Manual
+Pub. 100-04, Ch. 12, §20.4.2:
+- Facility POS codes `02`, `19`, `21`, `22`, `23`, `24`, `26`, `31`, `34`, `41`,
+  `42`, `51`, `52`, `53`, `56`, `61` → `FeeScheduleLine.PeRvuFacility`
+- All other POS codes (including `10`, `11`, `12`, `20`, `49`, `81`, `99`, and
+  blank or unknown codes) → `FeeScheduleLine.PeRvu`
+- Institutional lines are always facility; their `PlaceOfServiceCode` is the
+  837I facility type code, not a CMS POS. A line is institutional when the
+  request sets `IsInstitutional` (claim type 837I, even with no type of bill) or
+  carries a valid `BillType` (three digits, or four with a leading zero; the
+  shared `NubcTypeOfBill` rule). A malformed `BillType` ("0", "N/A") is ignored,
+  so a professional line keeps its POS rule.
+- A line without a facility value prices at its single rate everywhere.
 
 **GPCI values** are stored on the `FeeSchedule` document (per locality):
 - `WorkGpci` — physician work geographic adjustment

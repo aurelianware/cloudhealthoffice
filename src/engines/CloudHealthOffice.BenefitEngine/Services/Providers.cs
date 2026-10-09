@@ -163,22 +163,64 @@ public record BenefitPlanConfig
     /// <c>ServiceTypeCode</c> matches, preserving authoring order. Used
     /// by <c>IBenefitRuleGate</c> to walk candidate benefits and pick
     /// the first whose <see cref="BenefitCategoryConfig.Predicate"/>
-    /// is satisfied for the current member encounter.
-    /// <para>
-    /// Exact match first. When nothing matches and the code is one of the
-    /// named categories the resolver's fallbacks emit ("Office Visit",
-    /// "Inpatient Hospital", ...), categories keyed by its X12 service type
-    /// code ("98", "48", ...) match instead, so plans authored with X12 codes
-    /// keep matching (see <see cref="ServiceCategoryNames"/>).
-    /// </para>
+    /// is satisfied for the current member encounter. See
+    /// <see cref="LookupCategories"/> for the match order.
     /// </summary>
-    public IReadOnlyList<BenefitCategoryConfig> GetCategories(string serviceTypeCode)
+    public IReadOnlyList<BenefitCategoryConfig> GetCategories(string serviceTypeCode, string? x12Code = null)
+        => LookupCategories(serviceTypeCode, x12Code).Categories;
+
+    /// <summary>
+    /// Finds the plan categories for a resolved service category. Match
+    /// order, first non-empty wins:
+    /// <list type="number">
+    ///   <item>The exact name (<paramref name="serviceTypeCode"/>).</item>
+    ///   <item>The specific X12 code the resolver used
+    ///     (<paramref name="x12Code"/>, <see cref="ServiceCategoryMatch.X12Code"/>):
+    ///     a POS 55 line resolves to Behavioral Health via AI (substance
+    ///     abuse), so a plan keyed by "AI" takes that category even when it
+    ///     also has an "A4" (psychiatric) category.</item>
+    ///   <item>The name's other X12 codes, primary first (see
+    ///     <see cref="ServiceCategoryNames.X12CodesFor"/>), so plans authored
+    ///     with X12 codes keep matching.</item>
+    ///   <item>Only when nothing above matched: the rollout fallback category
+    ///     (<see cref="ServiceCategoryNames.RolloutFallbackFor"/>, e.g. Urgent
+    ///     Care → Office Visit), by its name and then its X12 codes. Reported
+    ///     on <see cref="BenefitCategoryLookup.FallbackCategory"/> so the
+    ///     caller can log it.</item>
+    /// </list>
+    /// </summary>
+    public BenefitCategoryLookup LookupCategories(string serviceTypeCode, string? x12Code = null)
     {
-        var exact = Matching(serviceTypeCode);
+        var direct = MatchingNameOrCodes(serviceTypeCode, x12Code);
+        if (direct.Count > 0) return new BenefitCategoryLookup(direct, null);
+
+        var fallback = ServiceCategoryNames.RolloutFallbackFor(serviceTypeCode);
+        if (fallback is not null)
+        {
+            var viaFallback = MatchingNameOrCodes(fallback, null);
+            if (viaFallback.Count > 0) return new BenefitCategoryLookup(viaFallback, fallback);
+        }
+
+        return new BenefitCategoryLookup([], null);
+    }
+
+    private List<BenefitCategoryConfig> MatchingNameOrCodes(string name, string? specificX12Code)
+    {
+        var exact = Matching(name);
         if (exact.Count > 0) return exact;
 
-        var x12 = ServiceCategoryNames.X12CodeFor(serviceTypeCode);
-        return x12 is null ? exact : Matching(x12);
+        if (!string.IsNullOrWhiteSpace(specificX12Code))
+        {
+            var specific = Matching(specificX12Code.Trim());
+            if (specific.Count > 0) return specific;
+        }
+
+        foreach (var x12 in ServiceCategoryNames.X12CodesFor(name))
+        {
+            var aliased = Matching(x12);
+            if (aliased.Count > 0) return aliased;
+        }
+        return exact;
     }
 
     private List<BenefitCategoryConfig> Matching(string serviceTypeCode)
@@ -186,6 +228,16 @@ public record BenefitPlanConfig
             .Where(c => string.Equals(c.ServiceTypeCode, serviceTypeCode, StringComparison.OrdinalIgnoreCase))
             .ToList();
 }
+
+/// <summary>
+/// Result of <see cref="BenefitPlanConfig.LookupCategories"/>: the matching
+/// categories, and the rollout fallback category name when they were found
+/// through <see cref="ServiceCategoryNames.RolloutFallbackFor"/> rather than
+/// the resolved category itself (null otherwise).
+/// </summary>
+public sealed record BenefitCategoryLookup(
+    IReadOnlyList<BenefitCategoryConfig> Categories,
+    string? FallbackCategory);
 
 public record BenefitCategoryConfig
 {

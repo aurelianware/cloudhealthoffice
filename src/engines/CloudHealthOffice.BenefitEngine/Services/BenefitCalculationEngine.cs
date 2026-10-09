@@ -454,7 +454,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             };
         }
 
-        var gateResult = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, firstLine);
+        var gateResult = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, firstLine, categoryMatch.X12Code);
         if (gateResult.CandidateCount == 0)
         {
             return new BenefitResolutionResult
@@ -659,7 +659,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // member encounter. The result distinguishes "no benefit
         // configured" (CandidateCount == 0) from "configured but every
         // predicate rejected" (CandidateCount > 0, Selected == null).
-        var gateResult = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, line);
+        var gateResult = _ruleGate.PickApplicable(plan, categoryMatch.ServiceTypeCode, request, line, categoryMatch.X12Code);
         if (gateResult.CandidateCount == 0)
         {
             return CreateDeniedLine(line, billedAmount, allowedAmount,

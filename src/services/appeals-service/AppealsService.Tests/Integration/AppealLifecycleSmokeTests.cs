@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AppealsService.Controllers;
+using AppealsService.HostedServices;
 using AppealsService.Models;
 using AppealsService.Repositories;
 using AppealsService.Services;
@@ -552,16 +553,24 @@ public sealed class AppealsWebApplicationFactory : WebApplicationFactory<Program
             services.RemoveAll<IAppealEventRepository>();
             services.RemoveAll<IAppealEventSink>();
             services.RemoveAll<IAppealFieldEncryptor>();
-            services.RemoveAll<IAppealEventPublisher>();
+            services.RemoveAll<IAppealEventTransport>();
             services.RemoveAll<AppealEventPublisher>();
+            services.RemoveAll<IAppealOutboxDispatcher>();
+            services.RemoveAll<AppealOutboxDispatcher>();
+            services.RemoveAll<IAppealOutboxStore>();
+            services.RemoveAll<AppealRepositoryMongo>();
 
             services.AddSingleton(Repo);
             services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<InMemoryAppealRepository>());
             services.AddSingleton<IAppealEventRepository>(sp => sp.GetRequiredService<InMemoryAppealRepository>());
             services.AddSingleton<IAppealEventSink>(sp => sp.GetRequiredService<InMemoryAppealRepository>());
             services.AddSingleton<IAppealFieldEncryptor, ReversibleAppealFieldEncryptor>();
+            services.AddSingleton<IAppealOutboxStore>(sp => sp.GetRequiredService<InMemoryAppealRepository>());
             services.AddSingleton(Publisher);
-            services.AddSingleton<IAppealEventPublisher>(sp => sp.GetRequiredService<RecordingAppealEventPublisher>());
+            services.AddSingleton<IAppealEventTransport>(sp => sp.GetRequiredService<RecordingAppealEventPublisher>());
+            // Inline dispatch publishes before the response returns, so the
+            // recorded calls are visible to the test right after the request.
+            services.AddSingleton<IAppealOutboxDispatcher>(_ => Publisher.DispatcherFor(Repo));
         });
     }
 

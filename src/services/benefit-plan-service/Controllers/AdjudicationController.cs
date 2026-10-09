@@ -520,6 +520,9 @@ public class AdjudicationController : ControllerBase
                 LengthOfStay = request.LengthOfStay,
                 RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode,
                 BillType = request.BillType,
+                // 837I prices at the facility rate even without a valid bill type;
+                // a junk BillType on a professional claim stays non-facility.
+                IsInstitutional = claimTypeCode == "837I",
             }).ToList();
 
             pricingResults = await MeasureStageAsync(

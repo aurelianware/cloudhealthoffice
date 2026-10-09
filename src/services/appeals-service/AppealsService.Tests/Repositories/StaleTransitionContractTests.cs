@@ -41,7 +41,7 @@ public abstract class StaleTransitionContractTests
     private static DateTime TruncateToMs(DateTime d) =>
         new(d.Ticks - d.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
 
-    private static AppealEvent Event(Appeal a, AppealEventType type, AppealStatus? from = null, AppealStatus? to = null) => new()
+    private static AppealEvent Event(Appeal a, AppealEventType type, AppealStatus? from = null, AppealStatus? to = null) => new AppealEvent()
     {
         TenantId = a.TenantId,
         AppealId = a.Id,
@@ -50,7 +50,7 @@ public abstract class StaleTransitionContractTests
         FromStatus = from,
         ToStatus = to,
         ActorId = "user1"
-    };
+    }.Queued(a);
 
     private static AppealAttachment Attachment(string id, string? controlNumber) => new()
     {

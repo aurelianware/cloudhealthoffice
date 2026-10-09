@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
+using AppealsService.HostedServices;
 using AppealsService.Middleware;
 using AppealsService.Models;
 using AppealsService.Repositories;
@@ -47,7 +48,7 @@ public class AppealsController : ControllerBase
     private readonly IAppealRepository _appeals;
     private readonly IAppealEventRepository _events;
     private readonly IAppealFieldEncryptor _encryptor;
-    private readonly IAppealEventPublisher _publisher;
+    private readonly IAppealOutboxDispatcher _outbox;
     private readonly ILogger<AppealsController> _logger;
     private readonly ICurrentActor _currentActor;
     private readonly IAppealHolidayCalendarProvider _holidays;
@@ -73,7 +74,7 @@ public class AppealsController : ControllerBase
         IAppealRepository appeals,
         IAppealEventRepository events,
         IAppealFieldEncryptor encryptor,
-        IAppealEventPublisher publisher,
+        IAppealOutboxDispatcher outbox,
         ILogger<AppealsController> logger,
         ICurrentActor currentActor,
         IAppealHolidayCalendarProvider holidays)
@@ -81,7 +82,7 @@ public class AppealsController : ControllerBase
         _appeals = appeals;
         _events = events;
         _encryptor = encryptor;
-        _publisher = publisher;
+        _outbox = outbox;
         _logger = logger;
         _currentActor = currentActor;
         _holidays = holidays;
@@ -166,9 +167,10 @@ public class AppealsController : ControllerBase
 
         var genesis = BuildEvent(appeal, AppealEventType.AppealCreated,
             fromStatus: null, toStatus: AppealStatus.Draft, actor, request.EventId);
+        AppealOutbox.Created(genesis, appeal, HttpContext.TraceIdentifier);
 
         var created = await _appeals.CreateAsync(appeal, genesis, ct);
-        await _publisher.PublishCreatedAsync(created, actor, HttpContext.TraceIdentifier, ct);
+        await _outbox.NotifyChangedAsync(created.TenantId, created.Id, ct);
 
         var view = await DecryptForResponseAsync(created, ct);
         return CreatedAtAction(nameof(GetAppealById), new { id = created.Id }, view);
@@ -271,6 +273,64 @@ public class AppealsController : ControllerBase
         return Ok(new AppealHistoryResponse { Items = events.ToList() });
     }
 
+    /// <summary>
+    /// Replay dead-lettered Kafka events of one appeal in the caller's
+    /// tenant: moves them (all, or the one named by <paramref name="eventId"/>)
+    /// back to pending with a fresh attempt budget and nudges the relay.
+    /// Same event ids, so consumers that already saw one de-duplicate it.
+    /// Admin-only (operator remediation, see docs/architecture/appeals-event-outbox.md).
+    /// </summary>
+    [HttpPost("{id}/outbox/replay")]
+    [RequirePermission("appeals:admin,platform:admin")]
+    [ProducesResponseType(typeof(OutboxReplayResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReplayDeadLetteredEvents(
+        [FromRoute] string id,
+        [FromQuery] string? eventId,
+        [FromServices] IAppealOutboxStore outboxStore,
+        CancellationToken ct)
+    {
+        var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
+        if (appeal == null) return NotFound();
+
+        var requeued = await outboxStore.RequeueDeadLetteredAsync(TenantId, id, eventId, ct);
+        _logger.LogWarning(
+            "Outbox replay by {Actor}: requeued {Count} dead-lettered event(s) for appeal {AppealId} (eventId filter {EventId})",
+            LogSanitizer.SafeForLog(Actor), requeued, LogSanitizer.SafeForLog(id), LogSanitizer.SafeForLog(eventId));
+        if (requeued > 0) await _outbox.NotifyChangedAsync(TenantId, id, ct);
+        return Ok(new OutboxReplayResponse { Requeued = requeued });
+    }
+
+    /// <summary>
+    /// Bulk replay: every dead-lettered event of every appeal in the caller's
+    /// tenant (e.g. after fixing a broker-side cause). Same auth as the
+    /// per-appeal replay; the relay publishes them on its next sweep.
+    /// </summary>
+    [HttpPost("outbox/replay")]
+    [RequirePermission("appeals:admin,platform:admin")]
+    [ProducesResponseType(typeof(OutboxReplayResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReplayTenantDeadLetteredEvents(
+        [FromServices] IAppealOutboxStore outboxStore, CancellationToken ct)
+    {
+        var requeued = await outboxStore.RequeueAllDeadLetteredAsync(TenantId, ct);
+        _logger.LogWarning("Tenant-wide outbox replay by {Actor}: requeued {Count} dead-lettered event(s)",
+            LogSanitizer.SafeForLog(Actor), requeued);
+        return Ok(new OutboxReplayResponse { Requeued = requeued });
+    }
+
+    /// <summary>Platform-wide bulk replay across every tenant. <c>platform:admin</c> only.</summary>
+    [HttpPost("outbox/replay-all-tenants")]
+    [RequirePermission("platform:admin")]
+    [ProducesResponseType(typeof(OutboxReplayResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ReplayPlatformDeadLetteredEvents(
+        [FromServices] IAppealOutboxStore outboxStore, CancellationToken ct)
+    {
+        var requeued = await outboxStore.RequeueAllDeadLetteredAsync(tenantId: null, ct);
+        _logger.LogWarning("Platform-wide outbox replay by {Actor}: requeued {Count} dead-lettered event(s)",
+            LogSanitizer.SafeForLog(Actor), requeued);
+        return Ok(new OutboxReplayResponse { Requeued = requeued });
+    }
+
     // ── Lifecycle transitions ───────────────────────────────────────────
 
     [HttpPost("{id}/submit")]
@@ -340,8 +400,10 @@ public class AppealsController : ControllerBase
                     ["context"] = "request-info"
                 };
 
+                AppealOutbox.NoteAdded(noteAudit, stored, note, HttpContext.TraceIdentifier);
+
                 var withNote = await _appeals.AppendNoteAsync(stored, note, noteAudit, ct);
-                await _publisher.PublishNoteAddedAsync(withNote, note, actor, HttpContext.TraceIdentifier, ct);
+                await _outbox.NotifyChangedAsync(withNote.TenantId, withNote.Id, ct);
 
                 view = await DecryptForResponseAsync(withNote, ct);
             }
@@ -411,6 +473,10 @@ public class AppealsController : ControllerBase
         var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
         if (appeal == null) return NotFound();
 
+        // Same idempotency key already committed: a retry. Return the
+        // stored result and append nothing (no second note / outbox entry).
+        if (IsReplay(appeal, request.EventId)) return Ok(await DecryptForResponseAsync(appeal, ct));
+
         var actor = Actor;
         var note = new AppealNote
         {
@@ -428,8 +494,10 @@ public class AppealsController : ControllerBase
             ["isInternal"] = note.IsInternal
         };
 
+        AppealOutbox.NoteAdded(auditEvent, appeal, note, HttpContext.TraceIdentifier);
+
         var updated = await _appeals.AppendNoteAsync(appeal, note, auditEvent, ct);
-        await _publisher.PublishNoteAddedAsync(updated, note, actor, HttpContext.TraceIdentifier, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
         var view = await DecryptForResponseAsync(updated, ct);
         return Ok(view);
@@ -447,6 +515,10 @@ public class AppealsController : ControllerBase
 
         var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
         if (appeal == null) return NotFound();
+
+        // Same idempotency key already committed: a retry. Return the
+        // stored result and append nothing (no second note / outbox entry).
+        if (IsReplay(appeal, request.EventId)) return Ok(await DecryptForResponseAsync(appeal, ct));
 
         var actor = Actor;
         var now = DateTime.UtcNow;
@@ -478,8 +550,10 @@ public class AppealsController : ControllerBase
             ["uploadedAt"] = attachment.UploadedAt.ToString("o")
         };
 
+        AppealOutbox.AttachmentAdded(auditEvent, appeal, attachment, HttpContext.TraceIdentifier);
+
         var updated = await _appeals.AppendAttachmentAsync(appeal, attachment, auditEvent, ct);
-        await _publisher.PublishAttachmentAddedAsync(updated, attachment, actor, HttpContext.TraceIdentifier, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
         var view = await DecryptForResponseAsync(updated, ct);
         return Ok(view);
@@ -500,6 +574,10 @@ public class AppealsController : ControllerBase
         var attachment = appeal.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId);
         if (attachment == null) return NotFound();
 
+        // Same idempotency key already committed: a retry. Return the
+        // stored result and append nothing (no second note / outbox entry).
+        if (IsReplay(appeal, request?.EventId)) return Ok(await DecryptForResponseAsync(appeal, ct));
+
         var acknowledged = request?.AcknowledgmentReceived ?? true;
         var actor = Actor;
 
@@ -511,12 +589,18 @@ public class AppealsController : ControllerBase
             ["acknowledgmentReceived"] = acknowledged
         };
 
+        // The attachment as the repository will persist it: the sent date
+        // is the audit row's time when acknowledged.
+        AppealOutbox.AttachmentAcknowledged(auditEvent, appeal, new AppealAttachment
+        {
+            AttachmentId = attachmentId,
+            AcknowledgmentReceived = acknowledged,
+            SentDate = acknowledged ? auditEvent.OccurredAt : attachment.SentDate
+        }, HttpContext.TraceIdentifier);
+
         var updated = await _appeals.AcknowledgeAttachmentAsync(
             TenantId, id, attachmentId, acknowledged, auditEvent, ct);
-
-        var ackAtt = updated.Attachments.First(a => a.AttachmentId == attachmentId);
-        await _publisher.PublishAttachmentAcknowledgedAsync(
-            updated, ackAtt, actor, HttpContext.TraceIdentifier, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
         var view = await DecryptForResponseAsync(updated, ct);
         return Ok(view);
@@ -534,6 +618,10 @@ public class AppealsController : ControllerBase
 
         var appeal = await _appeals.GetByIdAsync(TenantId, id, ct);
         if (appeal == null) return NotFound();
+
+        // Same idempotency key already committed: a retry. Return the
+        // stored result and append nothing (no second note / outbox entry).
+        if (IsReplay(appeal, request.EventId)) return Ok(await DecryptForResponseAsync(appeal, ct));
 
         // Idempotent: same reviewer already assigned → 200, no second event.
         if (appeal.AssignedReviewerId == request.AssignedReviewerId)
@@ -553,6 +641,8 @@ public class AppealsController : ControllerBase
             ["assignedReviewerId"] = request.AssignedReviewerId,
             ["previousReviewerId"] = previous
         };
+
+        AppealOutbox.Assigned(auditEvent, appeal, previous, HttpContext.TraceIdentifier);
 
         var updated = await _appeals.AssignReviewerAsync(appeal, auditEvent, ct);
 
@@ -575,11 +665,11 @@ public class AppealsController : ControllerBase
                 ["isInternal"] = note.IsInternal,
                 ["context"] = "reassignment-reason"
             };
+            AppealOutbox.NoteAdded(noteAudit, updated, note, HttpContext.TraceIdentifier);
             updated = await _appeals.AppendNoteAsync(updated, note, noteAudit, ct);
-            await _publisher.PublishNoteAddedAsync(updated, note, actor, HttpContext.TraceIdentifier, ct);
         }
 
-        await _publisher.PublishAssignedAsync(updated, previous, actor, HttpContext.TraceIdentifier, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
         var view = await DecryptForResponseAsync(updated, ct);
         return Ok(view);
@@ -749,12 +839,12 @@ public class AppealsController : ControllerBase
 
     /// <summary>
     /// Commit (or, for a same-EventId replay, re-drive) an extension:
-    /// guarded write of the extension + justification note, idempotent audit
-    /// appends, then the Kafka publishes. Every step is safe to repeat, so a
-    /// retry after a partial failure completes whatever was left undone.
-    /// Everything after the write is derived from the PERSISTED (winning)
-    /// extension, never the proposed one: a concurrent same-EventId request
-    /// may have committed a different note id, actor and timestamp.
+    /// guarded write of the extension + justification note + their outbox
+    /// events, then idempotent audit appends. Every step is safe to repeat,
+    /// so a retry after a partial failure completes whatever was left undone.
+    /// The audit rows are derived from the PERSISTED (winning) extension,
+    /// never the proposed one: a concurrent same-EventId request may have
+    /// committed a different note id, actor and timestamp.
     /// </summary>
     private async Task<IActionResult> CompleteExtensionAsync(
         Appeal appeal, AppealNote? justificationNote, CancellationToken ct)
@@ -771,21 +861,10 @@ public class AppealsController : ControllerBase
                 "The appeal was extended or closed concurrently; only one extension is permitted.");
         }
 
-        var winner = updated.DeadlineExtension!;
-        var correlationId = winner.CorrelationId ?? HttpContext.TraceIdentifier;
-        var note = winner.JustificationNoteId is { } noteId
-            ? updated.Notes.FirstOrDefault(n => n.NoteId == noteId)
-            : null;
-        if (note != null)
-        {
-            // Stable id + original time so a replayed publish is the same
-            // logical event (matches the audit row's EventId).
-            var hasStableId = !string.IsNullOrEmpty(winner.EventId);
-            await _publisher.PublishNoteAddedAsync(updated, note, winner.ExtendedBy, correlationId, ct,
-                eventId: hasStableId ? JustificationNoteEventId(winner) : null,
-                occurredAt: hasStableId ? winner.ExtendedAt : null);
-        }
-        await _publisher.PublishDeadlineExtendedAsync(updated, winner.ExtendedBy, correlationId, ct);
+        // The winning write put the extension and justification-note events
+        // in the outbox atomically with the extension; a replay only nudges
+        // the relay (it never enqueues a second copy).
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
         return Ok(await DecryptForResponseAsync(updated, ct));
     }
@@ -815,6 +894,7 @@ public class AppealsController : ControllerBase
             ["writtenNoticeSentAt"] = extension.WrittenNoticeSentAt.ToUniversalTime().ToString("o"),
             ["regulatoryBasis"] = extension.RegulatoryBasis
         };
+        AppealOutbox.DeadlineExtended(extensionEvent, appeal, extension.CorrelationId);
         var events = new List<AppealEvent> { extensionEvent };
 
         if (extension.JustificationNoteId is { } noteId)
@@ -829,6 +909,15 @@ public class AppealsController : ControllerBase
                 ["isInternal"] = true,
                 ["context"] = "deadline-extension"
             };
+            // Deterministic from the extension record (the note is written
+            // with CreatedAt = ExtendedAt), so any rebuild is the same event.
+            AppealOutbox.NoteAdded(noteEvent, appeal, new AppealNote
+            {
+                NoteId = noteId,
+                CreatedBy = extension.ExtendedBy,
+                CreatedAt = extension.ExtendedAt,
+                IsInternal = true
+            }, extension.CorrelationId);
             events.Add(noteEvent);
         }
 
@@ -887,6 +976,7 @@ public class AppealsController : ControllerBase
 
         var auditEvent = BuildEvent(appeal, AppealEventType.AppealStatusChanged,
             fromStatus: from, toStatus: to, actor, eventId);
+        AppealOutbox.StatusChanged(auditEvent, appeal, from, to, HttpContext.TraceIdentifier);
 
         Appeal updated;
         try
@@ -898,7 +988,7 @@ public class AppealsController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        await _publisher.PublishStatusChangedAsync(updated, from, to, actor, HttpContext.TraceIdentifier, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
         var result = await DecryptForResponseAsync(updated, ct);
         return Ok(result);
@@ -966,6 +1056,7 @@ public class AppealsController : ControllerBase
             ["decisionType"] = appeal.Decision?.DecisionType.ToString(),
             ["approvedAmount"] = appeal.Decision?.ApprovedAmount
         };
+        AppealOutbox.Closed(auditEvent, appeal, from, HttpContext.TraceIdentifier);
 
         Appeal updated;
         try
@@ -977,7 +1068,7 @@ public class AppealsController : ControllerBase
             return ConflictTransition(ex);
         }
 
-        await _publisher.PublishClosedAsync(updated, from, actor, HttpContext.TraceIdentifier, ct);
+        await _outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
         var view = await DecryptForResponseAsync(updated, ct);
         return Ok(view);
@@ -995,11 +1086,12 @@ public class AppealsController : ControllerBase
             ["currentStatus"] = appeal.Status.ToString(),
             ["targetResponseDate"] = appeal.TargetResponseDate?.ToString("o")
         };
+        AppealOutbox.OverdueObserved(auditEvent, appeal, HttpContext.TraceIdentifier);
 
         var persisted = await _appeals.TryTransitionToOverdueAsync(appeal, auditEvent, ct);
         if (persisted != null)
         {
-            await _publisher.PublishOverdueObservedAsync(persisted, actor, HttpContext.TraceIdentifier, ct);
+            await _outbox.NotifyChangedAsync(persisted.TenantId, persisted.Id, ct);
             return persisted;
         }
 
@@ -1008,6 +1100,15 @@ public class AppealsController : ControllerBase
         appeal.OverdueAuditEmitted = true;
         return appeal;
     }
+
+    /// <summary>
+    /// True when <paramref name="eventId"/> (the client's idempotency key) is
+    /// already in the appeal's outbox — the change committed before. Holds
+    /// for as long as the entry is retained (AppealOutbox:SentRetention /
+    /// caps); the repositories re-check it inside the write against races.
+    /// </summary>
+    private static bool IsReplay(Appeal appeal, string? eventId) =>
+        !string.IsNullOrEmpty(eventId) && appeal.Outbox?.Any(m => m.IdempotencyKey == eventId) == true;
 
     private static AppealEvent BuildEvent(
         Appeal appeal,
@@ -1405,4 +1506,10 @@ public class AppealListResponse
 public class AppealHistoryResponse
 {
     public List<AppealEvent> Items { get; set; } = new();
+}
+
+public class OutboxReplayResponse
+{
+    /// <summary>Dead-lettered events moved back to pending.</summary>
+    public int Requeued { get; set; }
 }

@@ -448,6 +448,31 @@ public class PaymentEstimateServiceTests
         h.CapturedPricingRequests!.Should().OnlyContain(r => r.TenantId == "tenant-XYZ");
     }
 
+    [Theory]
+    [InlineData("Institutional", "131", true)]
+    [InlineData("Institutional", null, true)]
+    [InlineData("Professional", "N/A", false)]
+    [InlineData("Dental", null, false)]
+    public async Task FacilitySettingInputs_FlowToPricingRequests(string claimType, string? billType, bool institutional)
+    {
+        // Same BillType / institutional flag AdjudicationController sends, so an
+        // institutional estimate prices at the facility rate adjudication allows.
+        var h = new Harness();
+        h.SetupPricing(Pricing((1, 200m, 150m, RateSource.ContractedRate)));
+        h.SetupBenefit(Benefit(true, PayableLine(1, 150m, coinsurance: 30m)));
+
+        await h.Build().EstimateAsync(Tenant, Request(Line(1, "99213", 200m)) with
+        {
+            ClaimType = claimType,
+            BillType = billType,
+            LineOfBusiness = null,
+        });
+
+        var request = h.CapturedPricingRequests!.Should().ContainSingle().Subject;
+        request.BillType.Should().Be(billType);
+        request.IsInstitutional.Should().Be(institutional);
+    }
+
     [Fact]
     public async Task Authority_IsSimulation_WhenBenefitEngineInAugmentMode()
     {

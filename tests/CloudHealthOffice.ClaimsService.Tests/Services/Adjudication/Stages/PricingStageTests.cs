@@ -403,8 +403,33 @@ public class PricingStageTests
             Assert.Null(r.LengthOfStay);
             Assert.Null(r.RevenueCode);
             Assert.Null(r.BillType);
+            Assert.False(r.IsInstitutional);
         });
     }
+
+    [Fact]
+    public void BuildRequests_InstitutionalClaimWithoutFacilityTypeCode_MarkedInstitutional()
+    {
+        // Review finding: no Institutional.FacilityTypeCode → no type of bill, but the
+        // claim is still 837I and its POS slot holds the facility type ("13"), so the
+        // engine must be told it is institutional (facility rate), not read "13" as a CMS POS.
+        var ctx = BuildInpatientContext();
+        ctx.Claim.Institutional!.FacilityTypeCode = null;
+        ctx.Claim.PlaceOfServiceCode = "13";
+
+        var requests = PricingStage.BuildRequests(ctx);
+
+        Assert.All(requests, r =>
+        {
+            Assert.Null(r.BillType);
+            Assert.True(r.IsInstitutional);
+            Assert.Equal("13", r.PlaceOfServiceCode);
+        });
+    }
+
+    [Fact]
+    public void BuildRequests_InstitutionalClaim_MarkedInstitutional()
+        => Assert.All(PricingStage.BuildRequests(BuildInpatientContext()), r => Assert.True(r.IsInstitutional));
 
     [Fact]
     public void BuildRequests_InpatientDrgClaim_SendsDrgLengthOfStayRevenueCodeAndBillTypeOnEveryLine()

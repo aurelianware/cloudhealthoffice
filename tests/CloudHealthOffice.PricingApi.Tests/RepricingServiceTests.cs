@@ -84,6 +84,31 @@ public class RepricingServiceTests
         result.Lines[0].Breakdown.FacilityIndicator.Should().Be("Non-Facility");
     }
 
+    [Theory]
+    [InlineData("20", 110.00, "Non-Facility")] // Urgent care (was facility before the CMS list)
+    [InlineData("49", 110.00, "Non-Facility")] // Independent clinic (was facility)
+    [InlineData("81", 110.00, "Non-Facility")] // Independent laboratory (was facility)
+    [InlineData("10", 110.00, "Non-Facility")] // Telehealth in patient's home
+    [InlineData("02", 75.00, "Facility")]      // Telehealth other than home (was non-facility)
+    public async Task RepriceClaimAsync_CmsSiteOfServiceRule(string placeOfService, double expected, string indicator)
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupFeeEntry(scheduleId, "99213", nonFacilityRate: 110.00m, facilityRate: 75.00m);
+
+        var request = BuildRequest(scheduleId, ClaimType.Professional,
+            placeOfService: placeOfService,
+            lines: new[]
+            {
+                new ClaimLineRequest { LineNumber = 1, ProcedureCode = "99213", Units = 1 }
+            });
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines[0].AllowedAmount.Should().Be((decimal)expected);
+        result.Lines[0].Breakdown.FacilityIndicator.Should().Be(indicator);
+    }
+
     [Fact]
     public async Task RepriceClaimAsync_MultipleUnits_MultipliesRate()
     {
