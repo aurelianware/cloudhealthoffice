@@ -215,7 +215,10 @@ public enum NcciEditType
 /// <summary>
 /// Metadata about the NCCI/MUE table version currently loaded.
 /// Returned by INcciEditService.GetTableVersionAsync() for audit/display.
+/// The type has no Id member, so Mongo assigns <c>_id</c> on upsert;
+/// ignoring extra elements lets the document read back.
 /// </summary>
+[MongoDB.Bson.Serialization.Attributes.BsonIgnoreExtraElements]
 public class NcciTableVersion
 {
     public string TenantId { get; set; } = string.Empty;

@@ -1,4 +1,5 @@
 using CloudHealthOffice.NcciEngine.Data;
+using CloudHealthOffice.NcciEngine.Import;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Persistence;
 using CloudHealthOffice.NcciEngine.Services;
@@ -41,6 +42,7 @@ public static class NcciEngineServiceCollectionExtensions
     {
         services.AddSingleton<NcciLookupCache>();
         services.AddScoped<INcciEditService, NcciEditService>();
+        services.AddScoped<INcciQuarterlyLoader, NcciQuarterlyLoader>();
         return new NcciEngineBuilder(services);
     }
 

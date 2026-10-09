@@ -128,6 +128,10 @@ internal class NcciEditService : INcciEditService
         NcciScrubResult result,
         CancellationToken ct)
     {
+        // CMS publishes separate practitioner and outpatient-hospital PTP
+        // tables; rows with no setting (seed data) apply to both.
+        var setting = NcciSettings.ForClaimType(request.ClaimType);
+
         // Group lines by service date for same-date-of-service comparisons
         var byDate = request.ServiceLines
             .GroupBy(l => l.ServiceDate)
@@ -154,11 +158,13 @@ internal class NcciEditService : INcciEditService
                         codeA,
                         codeB,
                         effectiveDate,
+                        setting,
                         lookupCt => _repository.GetEditPairAsync(
                             request.TenantId,
                             codeA,
                             codeB,
                             effectiveDate,
+                            setting,
                             lookupCt),
                         ct);
 
@@ -167,11 +173,13 @@ internal class NcciEditService : INcciEditService
                         codeB,
                         codeA,
                         effectiveDate,
+                        setting,
                         lookupCt => _repository.GetEditPairAsync(
                             request.TenantId,
                             codeB,
                             codeA,
                             effectiveDate,
+                            setting,
                             lookupCt),
                         ct);
 
@@ -242,6 +250,7 @@ internal class NcciEditService : INcciEditService
     {
         // Determine the POS type for the whole claim (professional vs facility)
         bool isProfessional = request.ClaimType == "837P";
+        var setting = NcciSettings.ForClaimType(request.ClaimType);
 
         // Group by (ProcedureCode, ServiceDate) — unit aggregation is per code per DOS
         var groups = request.ServiceLines
@@ -258,7 +267,8 @@ internal class NcciEditService : INcciEditService
                 request.TenantId,
                 normalizedCode,
                 effectiveDate,
-                lookupCt => _repository.GetMueEntryAsync(request.TenantId, normalizedCode, effectiveDate, lookupCt),
+                setting,
+                lookupCt => _repository.GetMueEntryAsync(request.TenantId, normalizedCode, effectiveDate, setting, lookupCt),
                 ct);
 
             result.MueChecked++;

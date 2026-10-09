@@ -21,6 +21,7 @@ internal sealed class NcciLookupCache
         string column1Code,
         string column2Code,
         DateOnly serviceDate,
+        string? setting,
         Func<CancellationToken, Task<NcciEditPair?>> factory,
         CancellationToken ct)
     {
@@ -28,7 +29,8 @@ internal sealed class NcciLookupCache
             tenantId,
             NormalizeCode(column1Code),
             NormalizeCode(column2Code),
-            serviceDate);
+            serviceDate,
+            setting);
 
         return GetOrCreateAsync(_pairs, key, factory, ct);
     }
@@ -37,10 +39,11 @@ internal sealed class NcciLookupCache
         string tenantId,
         string procedureCode,
         DateOnly serviceDate,
+        string? setting,
         Func<CancellationToken, Task<MueEntry?>> factory,
         CancellationToken ct)
     {
-        var key = new MueCacheKey(tenantId, NormalizeCode(procedureCode), serviceDate);
+        var key = new MueCacheKey(tenantId, NormalizeCode(procedureCode), serviceDate, setting);
         return GetOrCreateAsync(_mues, key, factory, ct);
     }
 
@@ -133,10 +136,12 @@ internal sealed class NcciLookupCache
         string TenantId,
         string Column1Code,
         string Column2Code,
-        DateOnly ServiceDate);
+        DateOnly ServiceDate,
+        string? Setting);
 
     private sealed record MueCacheKey(
         string TenantId,
         string ProcedureCode,
-        DateOnly ServiceDate);
+        DateOnly ServiceDate,
+        string? Setting);
 }
