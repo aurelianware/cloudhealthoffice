@@ -230,6 +230,30 @@ public class Appeal
     public bool OverdueAuditEmitted { get; set; }
 
     /// <summary>
+    /// Transactional outbox: Kafka events for changes to this appeal that
+    /// have not been published yet (plus recently sent / skipped entries
+    /// kept for <c>AppealOutbox:SentRetention</c>, and dead-lettered ones).
+    /// Every repository mutation appends its event here in the same
+    /// single-document write as the change itself, which is atomic on a
+    /// standalone mongod and in Cosmos alike. Internal bookkeeping: API
+    /// responses never carry it — the response view leaves it null and
+    /// <c>WhenWritingNull</c> omits it, while Cosmos still persists it.
+    /// </summary>
+    [BsonIgnoreIfNull]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<AppealOutboxMessage>? Outbox { get; set; }
+
+    /// <summary>Dispatcher instance currently publishing this appeal's outbox.</summary>
+    [BsonIgnoreIfNull]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OutboxLeaseOwner { get; set; }
+
+    /// <summary>Lease expiry; another dispatcher may take over after it.</summary>
+    [BsonIgnoreIfNull]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTime? OutboxLeaseUntil { get; set; }
+
+    /// <summary>
     /// Projects the persisted status into the status the caller observes —
     /// the raw <see cref="Status"/> today; overdue is NOT a status (it's a
     /// read-time projection on <see cref="IsOverdue"/>). This method is

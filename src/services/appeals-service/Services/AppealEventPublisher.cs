@@ -7,18 +7,24 @@ using Confluent.Kafka;
 namespace AppealsService.Services;
 
 /// <summary>
-/// Kafka producer for <c>appeal.status-changed.v1</c>. Mirrors the shape
+/// Kafka transport for <c>appeal.status-changed.v1</c>. Mirrors the shape
 /// of <c>ConsentService.Services.ConsentEventPublisher</c> and
 /// <c>PersonalRepresentativeService.Services.PersonalRepEventPublisher</c>:
 /// - <see cref="IHostedService"/> + <see cref="IAsyncDisposable"/>.
-/// - Degraded mode when <c>Kafka:BootstrapServers</c> is unset — publish
-///   becomes a no-op; service still boots. DB is the source of truth.
+/// - Disabled when <c>Kafka:BootstrapServers</c> is unset — the service
+///   still boots; events stay in the appeal outbox.
 /// - Single topic, ten event types distinguished by the <c>event-type</c>
 ///   header.
 /// - Partition key = <c>appealId</c> (per-appeal ordering preserved).
-/// - Headers: <c>tenant-id</c>, <c>event-type</c>, <c>event-version</c>.
+/// - Headers: <c>tenant-id</c>, <c>event-type</c>, <c>event-version</c>,
+///   <c>event-id</c> (idempotency key for consumer de-duplication).
+///
+/// Only <c>AppealOutboxDispatcher</c> calls <see cref="ProduceAsync"/>, and
+/// a failure is thrown, never swallowed: the dispatcher keeps the event in
+/// the outbox and retries. The payload builders below are the field
+/// whitelist for every event (see the wire-shape records).
 /// </summary>
-public sealed class AppealEventPublisher : IAppealEventPublisher, IAppealEventPublisherReadiness, IHostedService, IAsyncDisposable
+public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService, IAsyncDisposable
 {
     public const string StatusChangedTopic = "appeal.status-changed.v1";
     public const string EventVersion = "1.0";
@@ -37,14 +43,14 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IAppealEventPu
     private readonly ILogger<AppealEventPublisher> _logger;
     private readonly IConfiguration _configuration;
     private IProducer<string, string>? _producer;
-    private bool _available;
+    private volatile bool _available;
     private readonly TaskCompletionSource<AppealEventPublisherState> _started =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <inheritdoc />
     public Task<AppealEventPublisherState> Started => _started.Task;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter() },
@@ -62,7 +68,8 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IAppealEventPu
         var bootstrapServers = _configuration["Kafka:BootstrapServers"];
         if (string.IsNullOrEmpty(bootstrapServers))
         {
-            _logger.LogWarning("Kafka:BootstrapServers not configured — appeal event publisher disabled");
+            _logger.LogWarning(
+                "Kafka:BootstrapServers not configured — appeal event publishing disabled; events stay in the appeal outbox");
             _started.TrySetResult(AppealEventPublisherState.Disabled);
             return Task.CompletedTask;
         }
@@ -95,7 +102,7 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IAppealEventPu
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Kafka producer init failed — appeal event publisher running in degraded mode");
+            _logger.LogWarning(ex, "Kafka producer init failed — appeal events stay in the outbox until a restart succeeds");
             _producer?.Dispose();
             _producer = null;
             _available = false;
@@ -107,6 +114,7 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IAppealEventPu
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        _available = false;
         try
         {
             _producer?.Flush(TimeSpan.FromSeconds(5));
@@ -117,120 +125,61 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IAppealEventPu
         }
         _producer?.Dispose();
         _producer = null;
-        _available = false;
         return Task.CompletedTask;
     }
 
-    public Task PublishCreatedAsync(Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task ProduceAsync(AppealOutboxMessage outbox, CancellationToken ct)
     {
-        var evt = BuildCreatedPayload(appeal, actor, correlationId);
-        return ProduceAsync(appeal, AppealCreatedType, evt, ct);
-    }
-
-    public Task PublishStatusChangedAsync(
-        Appeal appeal, AppealStatus fromStatus, AppealStatus toStatus,
-        string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildStatusChangedPayload(appeal, fromStatus, toStatus, actor, correlationId);
-        return ProduceAsync(appeal, AppealStatusChangedType, evt, ct);
-    }
-
-    public Task PublishClosedAsync(
-        Appeal appeal, AppealStatus fromStatus, string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildClosedPayload(appeal, fromStatus, actor, correlationId);
-        return ProduceAsync(appeal, AppealClosedType, evt, ct);
-    }
-
-    public Task PublishNoteAddedAsync(
-        Appeal appeal, AppealNote note, string actor, string? correlationId, CancellationToken ct = default,
-        string? eventId = null, DateTime? occurredAt = null)
-    {
-        var evt = BuildNoteAddedPayload(appeal, note, actor, correlationId, eventId, occurredAt);
-        return ProduceAsync(appeal, AppealNoteAddedType, evt, ct);
-    }
-
-    public Task PublishAttachmentAddedAsync(
-        Appeal appeal, AppealAttachment attachment, string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildAttachmentAddedPayload(appeal, attachment, actor, correlationId);
-        return ProduceAsync(appeal, AppealAttachmentAddedType, evt, ct);
-    }
-
-    public Task PublishAttachmentAcknowledgedAsync(
-        Appeal appeal, AppealAttachment attachment, string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildAttachmentAcknowledgedPayload(appeal, attachment, actor, correlationId);
-        return ProduceAsync(appeal, AppealAttachmentAcknowledgedType, evt, ct);
-    }
-
-    public Task PublishOverdueObservedAsync(Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildOverdueObservedPayload(appeal, actor, correlationId);
-        return ProduceAsync(appeal, AppealOverdueObservedType, evt, ct);
-    }
-
-    public Task PublishAssignedAsync(
-        Appeal appeal, string? previousReviewerId, string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildAssignedPayload(appeal, previousReviewerId, actor, correlationId);
-        return ProduceAsync(appeal, AppealAssignedType, evt, ct);
-    }
-
-    public Task PublishDeadlineExtendedAsync(
-        Appeal appeal, string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildDeadlineExtendedPayload(appeal, actor, correlationId);
-        return ProduceAsync(appeal, AppealDeadlineExtendedType, evt, ct);
-    }
-
-    public Task PublishStatusMigratedAsync(
-        Appeal appeal, string legacyStatus, AppealClosureReasonCode mappedReasonCode,
-        string actor, string? correlationId, CancellationToken ct = default)
-    {
-        var evt = BuildStatusMigratedPayload(appeal, legacyStatus, mappedReasonCode, actor, correlationId);
-        return ProduceAsync(appeal, AppealStatusMigratedType, evt, ct);
-    }
-
-    private async Task ProduceAsync<TPayload>(Appeal appeal, string eventType, TPayload payload, CancellationToken ct)
-    {
-        if (!_available || _producer == null)
-        {
-            _logger.LogDebug("Kafka producer unavailable; skipping {EventType} for appeal {AppealId}",
-                LogSanitizer.SafeForLog(eventType), LogSanitizer.SafeForLog(appeal.Id));
-            return;
-        }
+        var producer = _producer;
+        if (!_available || producer == null)
+            throw new AppealEventTransportUnavailableException("Kafka producer is not available.");
 
         var message = new Message<string, string>
         {
-            Key = appeal.Id,
-            Value = JsonSerializer.Serialize(payload, JsonOptions),
+            Key = outbox.AppealId,
+            Value = outbox.PayloadJson,
             Headers = new Headers
             {
-                { "tenant-id", Encoding.UTF8.GetBytes(appeal.TenantId) },
-                { "event-type", Encoding.UTF8.GetBytes(eventType) },
-                { "event-version", Encoding.UTF8.GetBytes(EventVersion) }
+                { "tenant-id", Encoding.UTF8.GetBytes(outbox.TenantId) },
+                { "event-type", Encoding.UTF8.GetBytes(outbox.EventType) },
+                { "event-version", Encoding.UTF8.GetBytes(EventVersion) },
+                { "event-id", Encoding.UTF8.GetBytes(outbox.EventId) }
             }
         };
 
-        try
-        {
-            await _producer.ProduceAsync(StatusChangedTopic, message, ct);
-            _logger.LogInformation("Published {EventType} for appeal {AppealId}",
-                LogSanitizer.SafeForLog(eventType), LogSanitizer.SafeForLog(appeal.Id));
-        }
-        catch (ProduceException<string, string> ex)
-        {
-            _logger.LogError(ex, "Failed to publish {EventType} for appeal {AppealId}: {Reason}",
-                LogSanitizer.SafeForLog(eventType), LogSanitizer.SafeForLog(appeal.Id),
-                LogSanitizer.SafeForLog(ex.Error.Reason));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error publishing {EventType} for appeal {AppealId}",
-                LogSanitizer.SafeForLog(eventType), LogSanitizer.SafeForLog(appeal.Id));
-        }
+        // Throws ProduceException on a broker NACK or timeout; the
+        // dispatcher records the failure and retries.
+        await producer.ProduceAsync(StatusChangedTopic, message, ct);
     }
+
+    /// <inheritdoc />
+    public bool IsTransient(Exception error) => IsTransientError(error);
+
+    /// <summary>
+    /// Broker / network conditions — a Kafka outage — are transient; errors
+    /// about the message itself (too large, invalid, not authorized) are not.
+    /// </summary>
+    internal static bool IsTransientError(Exception error) => error switch
+    {
+        AppealEventTransportUnavailableException => true,
+        OperationCanceledException => true,
+        KafkaException k => k.Error.Code is ErrorCode.Local_MsgTimedOut
+            or ErrorCode.Local_Transport
+            or ErrorCode.Local_AllBrokersDown
+            or ErrorCode.Local_TimedOut
+            or ErrorCode.Local_QueueFull
+            or ErrorCode.Local_Resolve
+            or ErrorCode.RequestTimedOut
+            or ErrorCode.NetworkException
+            or ErrorCode.BrokerNotAvailable
+            or ErrorCode.LeaderNotAvailable
+            or ErrorCode.NotLeaderForPartition
+            or ErrorCode.NotEnoughReplicas
+            or ErrorCode.NotEnoughReplicasAfterAppend
+            or ErrorCode.NotCoordinatorForGroup,
+        _ => false
+    };
 
     // ── Payload builders (internal for field-whitelist tests) ───────────
 

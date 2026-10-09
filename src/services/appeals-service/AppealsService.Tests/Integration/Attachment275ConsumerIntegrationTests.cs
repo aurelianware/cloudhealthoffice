@@ -94,7 +94,7 @@ public class Attachment275ConsumerIntegrationTests
         var sink = new RecordingAttachment275DeadLetterSink();
         var mapper = new Attachment275EnvelopeMapper();
         var consumer = new Attachment275ConsumerHostedService(
-            repository, publisher, encryptor, sink, mapper,
+            repository, publisher.DispatcherFor(repository), encryptor, sink, mapper,
             NullLogger<Attachment275ConsumerHostedService>.Instance);
         return (consumer, repository, publisher, sink);
     }

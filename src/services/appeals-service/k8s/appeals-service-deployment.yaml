@@ -112,9 +112,11 @@ spec:
             configMapKeyRef:
               name: appeals-service-config
               key: AppealEncryption__AcceptedKeyVersions__0
-        # Kafka — empty BootstrapServers puts the publisher in degraded
-        # mode (service boots, publishes are silent no-ops). Populate the
-        # secret when the broker is ready for appeal.status-changed.v1.
+        # Kafka — empty BootstrapServers disables publishing (service boots;
+        # appeal events stay pending in each appeal's outbox and are
+        # delivered once the broker is configured — see
+        # docs/architecture/appeals-event-outbox.md). Populate the secret
+        # when the broker is ready for appeal.status-changed.v1.
         - name: Kafka__BootstrapServers
           valueFrom:
             secretKeyRef:

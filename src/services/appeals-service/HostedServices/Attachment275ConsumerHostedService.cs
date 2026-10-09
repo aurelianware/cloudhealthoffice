@@ -50,7 +50,7 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
     // the hosted service's message-handling logic exercisable without a
     // fake IServiceProvider.
     private readonly IAppealRepository? _testRepository;
-    private readonly IAppealEventPublisher? _testPublisher;
+    private readonly IAppealOutboxDispatcher? _testOutbox;
     private readonly IAppealFieldEncryptor? _testEncryptor;
     private readonly IAttachment275DeadLetterSink? _testDeadLetterSink;
     private readonly Attachment275EnvelopeMapper? _testMapper;
@@ -67,14 +67,14 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
 
     internal Attachment275ConsumerHostedService(
         IAppealRepository repository,
-        IAppealEventPublisher publisher,
+        IAppealOutboxDispatcher outbox,
         IAppealFieldEncryptor encryptor,
         IAttachment275DeadLetterSink deadLetterSink,
         Attachment275EnvelopeMapper mapper,
         ILogger<Attachment275ConsumerHostedService> logger)
     {
         _testRepository = repository;
-        _testPublisher = publisher;
+        _testOutbox = outbox;
         _testEncryptor = encryptor;
         _testDeadLetterSink = deadLetterSink;
         _testMapper = mapper;
@@ -257,7 +257,7 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
             return await RouteAsync(
                 envelope,
                 _testRepository,
-                _testPublisher!,
+                _testOutbox!,
                 _testEncryptor!,
                 _testDeadLetterSink!,
                 _testMapper!,
@@ -271,7 +271,7 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
         return await RouteAsync(
             envelope,
             sp.GetRequiredService<IAppealRepository>(),
-            sp.GetRequiredService<IAppealEventPublisher>(),
+            sp.GetRequiredService<IAppealOutboxDispatcher>(),
             sp.GetRequiredService<IAppealFieldEncryptor>(),
             sp.GetRequiredService<IAttachment275DeadLetterSink>(),
             sp.GetRequiredService<Attachment275EnvelopeMapper>(),
@@ -281,7 +281,7 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
     private async Task<Attachment275HandleOutcome> RouteAsync(
         Attachment275EnvelopeDto envelope,
         IAppealRepository repository,
-        IAppealEventPublisher publisher,
+        IAppealOutboxDispatcher outbox,
         IAppealFieldEncryptor encryptor,
         IAttachment275DeadLetterSink deadLetterSink,
         Attachment275EnvelopeMapper mapper,
@@ -329,8 +329,11 @@ public sealed class Attachment275ConsumerHostedService : BackgroundService
                 }
             };
 
+            // The AppealAttachmentAdded event commits with the attachment.
+            AppealOutbox.AttachmentAdded(auditEvent, appeal, attachment, correlationId);
+
             var updated = await repository.AppendAttachmentAsync(appeal, attachment, auditEvent, ct);
-            await publisher.PublishAttachmentAddedAsync(updated, attachment, IngressActor, correlationId, ct);
+            await outbox.NotifyChangedAsync(updated.TenantId, updated.Id, ct);
 
             _logger.LogInformation(
                 "275 attachment routed: tenantId={TenantId} appealId={AppealId} attachmentId={AttachmentId} controlNumber={ControlNumber}",

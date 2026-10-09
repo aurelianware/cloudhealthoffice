@@ -35,7 +35,7 @@ public class Attachment275ConsumerTests
         var deadLetterSink = new RecordingAttachment275DeadLetterSink();
         var mapper = new Attachment275EnvelopeMapper();
         var consumer = new Attachment275ConsumerHostedService(
-            repository, publisher, encryptor, deadLetterSink, mapper,
+            repository, publisher.DispatcherFor(repository), encryptor, deadLetterSink, mapper,
             NullLogger<Attachment275ConsumerHostedService>.Instance);
         return new Harness(consumer, repository, publisher, encryptor, deadLetterSink, mapper);
     }

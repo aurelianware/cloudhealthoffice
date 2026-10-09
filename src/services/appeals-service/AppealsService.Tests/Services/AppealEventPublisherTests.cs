@@ -272,10 +272,10 @@ public class AppealEventPublisherTests
         AssertNoEncryptedFieldValues(payload);
     }
 
-    // ── Degraded mode ───────────────────────────────────────────────────
+    // ── Disabled mode: no silent drop ───────────────────────────────────
 
     [Fact]
-    public async Task DegradedMode_WhenBootstrapServersEmpty_PublishIsNoOp()
+    public async Task DisabledMode_ProduceThrows_InsteadOfSilentlyDropping()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -286,15 +286,32 @@ public class AppealEventPublisherTests
 
         var publisher = new AppealEventPublisher(NullLogger<AppealEventPublisher>.Instance, config);
         await publisher.StartAsync(CancellationToken.None);
+        (await publisher.Started).Should().Be(AppealEventPublisherState.Disabled);
 
-        // Should not throw — degraded-mode publish is a silent no-op.
-        await publisher.PublishCreatedAsync(NewAppeal(), "user1", "corr1");
-        await publisher.PublishStatusChangedAsync(
-            NewAppeal(), AppealStatus.Draft, AppealStatus.Submitted, "user1", "corr1");
-        await publisher.PublishClosedAsync(NewAppeal(), AppealStatus.InReview, "user1", "corr1");
-        await publisher.PublishStatusMigratedAsync(
-            NewAppeal(), "Approved", AppealClosureReasonCode.Approved, "system", "corr1");
+        // The outbox dispatcher must learn the event was NOT delivered, so
+        // it stays in the outbox; the old path returned as if it had been.
+        var message = new AppealOutboxMessage
+        {
+            EventId = "e1", EventType = AppealEventPublisher.AppealCreatedType,
+            TenantId = "t1", AppealId = "a1", PayloadJson = "{}"
+        };
+        var act = () => publisher.ProduceAsync(message, CancellationToken.None);
+        await act.Should().ThrowAsync<AppealEventTransportUnavailableException>();
+        publisher.IsTransient(new AppealEventTransportUnavailableException("x")).Should().BeTrue();
 
         await publisher.StopAsync(CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData(Confluent.Kafka.ErrorCode.Local_MsgTimedOut, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.Local_AllBrokersDown, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.Local_Transport, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.MsgSizeTooLarge, false)]
+    [InlineData(Confluent.Kafka.ErrorCode.InvalidMsg, false)]
+    [InlineData(Confluent.Kafka.ErrorCode.TopicAuthorizationFailed, false)]
+    public void IsTransient_Separates_Outages_From_Rejected_Messages(Confluent.Kafka.ErrorCode code, bool transient)
+    {
+        AppealEventPublisher.IsTransientError(new Confluent.Kafka.KafkaException(code)).Should().Be(transient);
+        AppealEventPublisher.IsTransientError(new InvalidOperationException("boom")).Should().BeFalse();
     }
 }

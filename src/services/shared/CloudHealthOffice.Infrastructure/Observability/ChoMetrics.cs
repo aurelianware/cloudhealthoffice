@@ -549,6 +549,17 @@ public static class ChoMetrics
             unit: "{link}",
             description: "Missing transaction links observed while composing claim intelligence");
 
+    /// <summary>
+    /// Appeal event outbox dispatch outcomes (appeals-service). Dimensions:
+    /// <c>cho.outcome</c> (published|failed|dead_lettered|skipped),
+    /// <c>cho.event_type</c>, <c>cho.transient</c>. Never labelled with appeal, member or tenant identity.
+    /// </summary>
+    public static readonly Counter<long> AppealOutboxOutcomes =
+        Meter.CreateCounter<long>(
+            "cho.appeals.outbox.outcomes.total",
+            unit: "{event}",
+            description: "Appeal event outbox dispatch outcomes by result and event type.");
+
     private static string GetAssemblyVersion()
     {
         return typeof(ChoMetrics).Assembly
