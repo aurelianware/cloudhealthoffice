@@ -177,7 +177,7 @@ public class RepricingService : IRepricingService
         var resultSet = await engine.ResolveBatchAsync(engineRequests);
         var results = resultSet.LineResults.ToDictionary(r => r.LineNumber);
 
-        var isFacility = RateResolutionService.IsFacilityPlaceOfService(engineRequests.FirstOrDefault()?.PlaceOfServiceCode);
+        var isFacility = EngineDomain.FacilityPlaceOfService.IsFacility(engineRequests.FirstOrDefault()?.PlaceOfServiceCode);
         var perStayLines = resultSet.LineResults.Count(r => r.IsPerStayRate);
         var drgNotFoundReported = false;
         var priced = new List<PricedLine>(request.Lines.Count);

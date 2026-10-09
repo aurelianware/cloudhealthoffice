@@ -156,7 +156,7 @@ public class FeeScheduleLine
     /// Optional facility price for a <see cref="FeeScheduleRateType.FlatRate"/> line
     /// (the CMS MPFS "facility price" column). When set, it replaces <see cref="Rate"/>
     /// for claim lines rendered in a facility place of service (see
-    /// <c>RateResolutionService.IsFacilityPlaceOfService</c>); <see cref="Rate"/> is then
+    /// <see cref="FacilityPlaceOfService"/>); <see cref="Rate"/> is then
     /// the non-facility price. Null = one price for every place of service.
     /// </summary>
     public decimal? FacilityRate { get; set; }
@@ -359,8 +359,9 @@ public record PricingRequest
 
     /// <summary>
     /// Three-character type of bill (837I CLM05-1 facility type + CLM05-3
-    /// frequency). Informational — carried for audit; not used in rate
-    /// selection today.
+    /// frequency). Its presence marks the line as institutional, which always takes
+    /// the facility rate (<see cref="PlaceOfServiceCode"/> then holds the facility type
+    /// code, not a CMS place of service); its value is otherwise carried for audit.
     /// </summary>
     public string? BillType { get; init; }
 }
