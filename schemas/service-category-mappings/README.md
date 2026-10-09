@@ -21,8 +21,14 @@ resolution order is:
    `ServiceCategoryResolver`. Institutional claims: type of bill /
    facility type and revenue code (11x → Inpatient Hospital, 13x →
    Outpatient Hospital, REV 045x → Emergency Room). Professional claims:
-   place of service (POS 11 → Office Visit, POS 21/22/23 → Inpatient
-   Hospital). Both emit the category names used in this bundle.
+   CMS place of service (POS 11 → Office Visit, 21 → Inpatient Hospital,
+   19/22 → Outpatient Hospital, 23 → Emergency Room, 20 → Urgent Care,
+   24 → Outpatient Surgery, 31/32 → Skilled Nursing, 34 → Hospice,
+   51–58 (except 54) → Behavioral Health, 62 → Physical Therapy,
+   81 → Laboratory; the full table and the codes it deliberately leaves
+   unmapped are documented on `ServiceCategoryResolver.ProfessionalPlaceOfServiceMap`).
+   Both emit the category names used in this bundle; no bundle change was
+   needed for the POS table, since every category it emits is already here.
 
 Without this bundle, the resolver depends solely on POS inference and
 operator-authored mappings. New tenants that haven't authored mappings
@@ -127,10 +133,19 @@ CHO-curated. Version 2 added **Outpatient Hospital** (HCPCS G0463,
 REV 0510–0519 clinic, REV 0760–0769 treatment / observation room), the
 category the institutional fallback assigns to 13x bills. Like every
 entry, it carries no cost share: cost share is authored on the plan.
-The bundle covers ~19 categories across professional
+The bundle covers ~20 categories across professional
 E&M, inpatient, outpatient hospital, outpatient surgery, emergency, urgent care, pharmacy,
 behavioral health, preventive, maternity, imaging, laboratory, DME,
-vision, home health, physical therapy, ambulance, and skilled nursing.
+vision, home health, hospice, physical therapy, ambulance, and skilled nursing.
+
+Version 3 added **Hospice** (HCPCS Q5001–Q5010 hospice care by setting,
+REV 0650–0659 hospice services). The institutional fallback already
+assigned Hospice to 81x/82x bills, and the corrected professional
+place-of-service fallback now assigns it to POS 34 (it previously
+assigned Home Health), so plans need the category in the default
+vocabulary. Apply it per tenant with the seeder admin endpoint
+(`POST /api/v1/service-category-mappings/seed-system-defaults`); the
+version bump makes that call re-apply the bundle.
 
 Future bundles may incorporate authoritative third-party sources
 (X12 5010 service-type code list, CMS HCPCS service-type mapping)

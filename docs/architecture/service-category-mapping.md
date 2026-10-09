@@ -56,7 +56,10 @@ ships:
      anything else is ignored.
    - **Place of service** (professional claims, and institutional claims
      whose place of service is a real CMS POS): POS 11 → Office Visit,
-     POS 21/22/23 → Inpatient Hospital, etc. The claims-service 837I
+     POS 21 → Inpatient Hospital, POS 19/22 → Outpatient Hospital, POS 23
+     → Emergency Room, POS 81 → Laboratory, etc. (full table, and the POS
+     codes deliberately left unmapped, on
+     `ServiceCategoryResolver.ProfessionalPlaceOfServiceMap`). The claims-service 837I
      mapping stores CLM05-1 (facility type) in the place-of-service slot
      and marks it (`PlaceOfServiceIsFacilityType`); that value is read as a
      facility type and never as a POS.

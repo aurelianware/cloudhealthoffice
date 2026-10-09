@@ -160,7 +160,9 @@ public record BenefitPlanConfig
     /// named categories the resolver's fallbacks emit ("Office Visit",
     /// "Inpatient Hospital", ...), categories keyed by its X12 service type
     /// code ("98", "48", ...) match instead, so plans authored with X12 codes
-    /// keep matching (see <see cref="ServiceCategoryNames"/>).
+    /// keep matching (see <see cref="ServiceCategoryNames"/>). A name with
+    /// several X12 codes (Behavioral Health: A4, MH, AI) tries them in order
+    /// and takes the first code the plan has.
     /// </para>
     /// </summary>
     public IReadOnlyList<BenefitCategoryConfig> GetCategories(string serviceTypeCode)
@@ -168,8 +170,12 @@ public record BenefitPlanConfig
         var exact = Matching(serviceTypeCode);
         if (exact.Count > 0) return exact;
 
-        var x12 = ServiceCategoryNames.X12CodeFor(serviceTypeCode);
-        return x12 is null ? exact : Matching(x12);
+        foreach (var x12 in ServiceCategoryNames.X12CodesFor(serviceTypeCode))
+        {
+            var aliased = Matching(x12);
+            if (aliased.Count > 0) return aliased;
+        }
+        return exact;
     }
 
     private List<BenefitCategoryConfig> Matching(string serviceTypeCode)

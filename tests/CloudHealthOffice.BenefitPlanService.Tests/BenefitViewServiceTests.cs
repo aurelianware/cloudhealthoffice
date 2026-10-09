@@ -84,6 +84,14 @@ public class BenefitViewServiceTests
     }
 
     [Fact]
+    public void Outpatient_Surgery_fallback_category_maps_to_Hospital()
+    {
+        // The benefit engine's POS 24 (ambulatory surgical center) fallback
+        // emits "Outpatient Surgery", a system-defaults bundle category.
+        Assert.Equal((BenefitCategoryMap.Hospital, true), BenefitCategoryMap.Resolve("Outpatient Surgery"));
+    }
+
+    [Fact]
     public async Task Unknown_service_category_falls_through_to_Other()
     {
         var plan = SamplePlan(new Benefit { ServiceCategory = "Acupuncture" });

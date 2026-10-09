@@ -59,6 +59,7 @@ public static class BenefitCategoryMap
             ["outpatient"]                  = Hospital,
             ["outpatient hospital"]         = Hospital,
             ["surgery"]                     = Hospital,
+            ["outpatient surgery"]          = Hospital,   // system-defaults / POS 24 fallback category
 
             // Pharmacy (tier detail carried separately in PharmacyDetail)
             ["pharmacy"]                    = Pharmacy,
