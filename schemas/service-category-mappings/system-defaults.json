@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "source": "CHO-curated. Bundle codes are operator-friendly text labels matching common Benefit.ServiceCategory values authored by plan administrators today. X12 5010 service-type-code alignment is intentionally deferred to a future translation-layer capability — see schemas/service-category-mappings/README.md for the full rationale.",
   "notes": "Procedure-code ranges drawn from common CPT/HCPCS layout: E&M 99201-99499, surgical 10000-69999, radiology 70000-79999, pathology 80000-89999, medicine 90000-99199, HCPCS Level II J/K/E/L codes. CDT and ASA codes are not included in this bundle. Operators ship plan-specific overrides via the admin write API (POST /api/v1/service-category-mappings).",
   "mappings": [
@@ -46,6 +46,7 @@
     {
       "serviceTypeCode": "Outpatient Hospital",
       "serviceTypeDescription": "Hospital outpatient facility services (clinic, treatment and observation room)",
+      "since": 2,
       "rules": [
         { "priority": 10, "codeType": "HCPCS", "codePattern": "G0463", "codeRangeEnd": "G0463" },
         { "priority": 20, "codeType": "REV", "codePattern": "0510", "codeRangeEnd": "0519" },
@@ -152,6 +153,14 @@
         { "priority": 10, "codeType": "HCPCS", "codePattern": "G0151", "codeRangeEnd": "G0164" },
         { "priority": 20, "codeType": "REV", "codePattern": "0550", "codeRangeEnd": "0599" },
         { "priority": 30, "codeType": "CPT", "codePattern": "99500", "codeRangeEnd": "99602", "placeOfServiceCode": "12" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Hospice",
+      "serviceTypeDescription": "Hospice care (routine, continuous and inpatient respite / general inpatient)",
+      "since": 3,
+      "rules": [
+        { "priority": 10, "codeType": "REV", "codePattern": "0650", "codeRangeEnd": "0659" }
       ]
     },
     {

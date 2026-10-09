@@ -84,13 +84,13 @@ public class ServiceCategoryFallbackPlanMatchTests
         Assert.Equal(70m, line.PlanPaidAmount);
     }
 
-    [Theory]
-    [InlineData("21")]
-    [InlineData("22")]
-    [InlineData("23")]
-    public async Task ProfessionalHospitalPos_OnNameKeyedPlan_PaysUnderInpatientBenefit(string pos)
+    // Only POS 21 is inpatient. POS 22 (on-campus outpatient hospital) and
+    // POS 23 (hospital emergency room) used to land here as well; see
+    // ServiceCategoryResolverPlaceOfServiceTests for where they go now.
+    [Fact]
+    public async Task ProfessionalInpatientPos21_OnNameKeyedPlan_PaysUnderInpatientBenefit()
     {
-        var line = await Adjudicate(NameKeyedPlan, "99223", pos);
+        var line = await Adjudicate(NameKeyedPlan, "99223", "21");
 
         Assert.True(line.IsCovered, line.DenialReasonDescription);
         Assert.Equal(ServiceCategoryNames.InpatientHospital, line.ServiceTypeCode);
@@ -145,6 +145,13 @@ public class ServiceCategoryFallbackPlanMatchTests
     [InlineData("48", ServiceCategoryNames.InpatientHospital)]
     [InlineData("50", ServiceCategoryNames.OutpatientHospital)]
     [InlineData("86", ServiceCategoryNames.EmergencyRoom)]
+    [InlineData("UC", ServiceCategoryNames.UrgentCare)]
+    [InlineData("13", ServiceCategoryNames.OutpatientSurgery)]
+    [InlineData("AG", ServiceCategoryNames.SkilledNursing)]
+    [InlineData("45", ServiceCategoryNames.Hospice)]
+    [InlineData("A4", ServiceCategoryNames.BehavioralHealth)]
+    [InlineData("5", ServiceCategoryNames.Laboratory)]
+    [InlineData("PT", ServiceCategoryNames.PhysicalTherapy)]
     public void SharedMap_RoundTrips(string x12, string name)
     {
         Assert.Equal(name, ServiceCategoryNames.NameFor(x12));
