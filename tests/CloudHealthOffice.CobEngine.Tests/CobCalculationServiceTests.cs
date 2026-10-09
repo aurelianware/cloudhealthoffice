@@ -28,7 +28,7 @@ public class CobCalculationServiceTests
 
         // effectiveBalance = 500 - 300 = 200
         // secondaryPay = min(350, 200) = 200
-        // memberResp = max(0, 500 - 300 - 200) = 0
+        // memberResp = min(150, max(0, allowed 500 - 300 - 200)) = 0
         Assert.Equal(200m, result.SecondaryPlanPayment);
         Assert.Equal(0m, result.MemberResponsibility);
         Assert.Equal(150m, result.CobReduction); // 350 - 200
@@ -134,7 +134,10 @@ public class CobCalculationServiceTests
 
         // maxBenefit = 500 - 100 = 400; secondary pays 400 - 250 = 150
         Assert.Equal(150m, result.SecondaryPlanPayment);
-        Assert.Equal(200m, result.MemberResponsibility); // 600 - 250 - 150
+        // min(pre-COB 100, allowed 500 - 250 - 150) = 100. The $100 of billed
+        // over allowed is the provider's contractual write-off, not member
+        // liability (the old billed-based formula said 600 - 250 - 150 = 200).
+        Assert.Equal(100m, result.MemberResponsibility);
         Assert.Equal(250m, result.CobReduction); // 400 - 150
         Assert.True(result.CobApplied);
     }
@@ -154,7 +157,7 @@ public class CobCalculationServiceTests
         });
 
         Assert.Equal(0m, result.SecondaryPlanPayment);
-        Assert.Equal(100m, result.MemberResponsibility); // 500 - 400 - 0
+        Assert.Equal(100m, result.MemberResponsibility); // min(100, 500 - 400 - 0)
     }
 
     [Fact]
@@ -171,13 +174,15 @@ public class CobCalculationServiceTests
             Model = CobModel.NonDuplication
         });
 
-        // memberResp = max(0, 500 - 450 - 0) = 50
+        // memberResp = min(80, max(0, allowed 400 - 450 - 0)) = 0: the
+        // primary paid more than this plan allows, so nothing is left to owe.
         Assert.Equal(0m, result.SecondaryPlanPayment);
-        Assert.Equal(50m, result.MemberResponsibility);
+        Assert.Equal(0m, result.MemberResponsibility);
+        Assert.Equal(320m, result.CobReduction);
     }
 
     [Fact]
-    public void NonDuplication_PrimaryExceedsSecondaryBenefit_MemberRespIsRemainingBalance()
+    public void NonDuplication_PrimaryExceedsSecondaryBenefit_MemberRespIsRemainingAllowedBalance()
     {
         var result = Make().Calculate(new CobLineInput
         {
@@ -186,13 +191,39 @@ public class CobCalculationServiceTests
             SecondaryAllowedAmount = 400m,
             SecondaryMemberResponsibilityBeforeCob = 80m,
             SecondaryPlanPaymentBeforeCob = 320m,
-            PrimaryPayerPayment = 480m,
+            PrimaryPayerPayment = 350m,
             Model = CobModel.NonDuplication
         });
 
-        // memberResp = max(0, 500 - 480 - 0) = 20
+        // memberResp = min(80, allowed 400 - 350 - 0) = 50
         Assert.Equal(0m, result.SecondaryPlanPayment);
-        Assert.Equal(20m, result.MemberResponsibility);
+        Assert.Equal(50m, result.MemberResponsibility);
+    }
+
+    [Theory]
+    [InlineData(CobModel.Complementary)]
+    [InlineData(CobModel.NonDuplication)]
+    public void MemberResponsibility_NeverAbovePreCobCostShare_NorBilledBalance(CobModel model)
+    {
+        // Billed 1000, allowed 400: a billed-based balance would be 1000 -
+        // 100 - secondary; the member owes at most the pre-COB $80.
+        var result = Make().Calculate(new CobLineInput
+        {
+            LineNumber = 1,
+            BilledAmount = 1000m,
+            SecondaryAllowedAmount = 400m,
+            SecondaryMemberResponsibilityBeforeCob = 80m,
+            SecondaryPlanPaymentBeforeCob = 320m,
+            PrimaryPayerPayment = 100m,
+            Model = model
+        });
+
+        Assert.InRange(result.MemberResponsibility, 0m, 80m);
+        Assert.True(result.CobReduction >= 0m);
+        // OA-23 the caller reports = allowed - member - secondary payment;
+        // it covers at least the plan's COB savings.
+        var oa23 = 400m - result.MemberResponsibility - result.SecondaryPlanPayment;
+        Assert.True(oa23 >= result.CobReduction);
     }
 
     // ── CalculateAll ──────────────────────────────────────────────────────

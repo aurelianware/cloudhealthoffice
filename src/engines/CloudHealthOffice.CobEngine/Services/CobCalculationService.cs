@@ -11,7 +11,6 @@ namespace CloudHealthOffice.CobEngine.Services;
 ///
 ///   1. effectiveBalance   = max(0, billedAmount - primaryPayerPayment)
 ///   2. secondaryPlanPay   = min(secondaryPlanPayBeforeCob, effectiveBalance)
-///   3. memberResp         = max(0, billedAmount - primaryPayerPayment - secondaryPlanPay)
 ///
 ///   Effect: total paid never exceeds billed; secondary absorbs up to its own allowed
 ///   minus what primary already paid.
@@ -24,10 +23,27 @@ namespace CloudHealthOffice.CobEngine.Services;
 ///      (what secondary would have paid if it were primary)
 ///   2. If primaryPayment >= maxSecondaryBenefit → secondary pays nothing
 ///   3. Otherwise → secondary pays (maxSecondaryBenefit - primaryPayment)
-///   4. memberResp = max(0, billedAmount - primaryPayment - secondaryPlanPay)
+///
+/// MEMBER RESPONSIBILITY (both models):
+///   memberResp = min(secondaryMemberRespBeforeCob,
+///                    max(0, secondaryAllowed - primaryPayment - secondaryPlanPay))
+///
+///   The member owes the part of this plan's ALLOWED amount that neither payer
+///   paid, and never more than the cost share this plan would have charged as
+///   the only payer. Billed − allowed is the provider's contractual write-off
+///   (CO-45), not member liability, so the balance is measured against allowed,
+///   not billed. Complementary COB therefore usually shrinks the member's cost
+///   share (the primary's payment covers it first); non-duplication leaves it
+///   whole unless the primary paid more than this plan's own benefit.
 ///
 /// CAS segment (835 reporting):
-///   The COB reduction is reported as OA-23 ("Impact of prior payer adjudication").
+///   <see cref="CobLineResult.CobReduction"/> is this plan's COB savings
+///   (pre-COB payment − secondary payment). The OA-23 ("Impact of prior payer
+///   adjudication") a caller reports is that saving plus the cost share the
+///   member no longer owes (secondaryMemberRespBeforeCob − memberResp) — i.e.
+///   allowed − memberResp − secondaryPlanPay — so that with the PR entries
+///   reduced to memberResp the line still balances (charge − ΣCAS = paid).
+///   Both parts are non-negative, so OA-23 is never negative.
 /// </summary>
 public class CobCalculationService : ICobCalculationService
 {
@@ -53,7 +69,7 @@ public class CobCalculationService : ICobCalculationService
         // Reduction = what the secondary intended to pay vs. what it actually pays after COB
         var cobReduction = i.SecondaryPlanPaymentBeforeCob - secondaryPay;
 
-        var memberResp = Math.Max(0, i.BilledAmount - i.PrimaryPayerPayment - secondaryPay);
+        var memberResp = MemberResponsibility(i, secondaryPay);
 
         return new CobLineResult
         {
@@ -90,7 +106,7 @@ public class CobCalculationService : ICobCalculationService
             cobReduction = i.SecondaryPlanPaymentBeforeCob - secondaryPay;
         }
 
-        var memberResp = Math.Max(0, i.BilledAmount - i.PrimaryPayerPayment - secondaryPay);
+        var memberResp = MemberResponsibility(i, secondaryPay);
 
         return new CobLineResult
         {
@@ -102,4 +118,17 @@ public class CobCalculationService : ICobCalculationService
             CobApplied           = cobReduction != 0
         };
     }
+
+    // ── Member responsibility ─────────────────────────────────────────────
+
+    /// <summary>
+    /// What the member still owes after both payers: the part of this plan's
+    /// allowed amount neither payer paid, capped at the member's pre-COB cost
+    /// share (COB never makes the member owe more than this plan alone would)
+    /// and floored at zero. See the class summary.
+    /// </summary>
+    private static decimal MemberResponsibility(CobLineInput i, decimal secondaryPay) =>
+        Math.Min(
+            Math.Max(0, i.SecondaryMemberResponsibilityBeforeCob),
+            Math.Max(0, i.SecondaryAllowedAmount - i.PrimaryPayerPayment - secondaryPay));
 }
