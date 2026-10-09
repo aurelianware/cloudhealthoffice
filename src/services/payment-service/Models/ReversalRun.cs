@@ -204,9 +204,9 @@ public class ReversalRun
 public class ReversalRunCriteria
 {
     /// <summary>
-    /// Filter by billing/pay-to provider NPI on the predecessor claim.
+    /// Filter by the payee (billing provider) NPI on the predecessor claim.
     /// Applied post-fetch by <c>ReversalRunService</c> against
-    /// <c>ClaimDto.PayToProviderNPI ?? ClaimDto.BillingProviderNPI</c>.
+    /// <c>ClaimDto.PayeeNpi</c> (the billing provider NPI; 5010 has no pay-to NPI).
     /// </summary>
     [StringLength(10)]
     public string? ProviderNPI { get; set; }

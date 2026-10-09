@@ -412,6 +412,38 @@ public class ReversalRunServiceTests
         Assert.Empty(executed.MissingPaidAmountClaimIds);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteReversalRunAsync_PayeeAddress_IsTheOriginalPayments_NotThePredecessorsPayToAddress(bool originalHadAddress)
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
+        // The predecessor now carries a 2010AB pay-to address (e.g. the
+        // original was paid before 2010AB was parsed, without N3/N4).
+        var claim = BuildClaim("pred-1", approvedAmount: 800m);
+        claim.PayToAddress = new PayeeAddress { Line1 = "PO BOX 9", City = "SPRINGFIELD", State = "IL", PostalCode = "62701" };
+        SetupClaimResponse("pred-1", claim);
+        var original = SeedOriginalPayment("pred-1", paid: 800m);
+        var originalAddress = new PayeeAddress { Line1 = "PO BOX 1", City = "SPRINGFIELD", State = "IL", PostalCode = "62701" };
+        if (originalHadAddress) original.PayeeAddress = originalAddress;
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        PassThroughEnvelopes();
+        var captured = new List<Payment>();
+        _paymentRepo.CreateAsync(Arg.Do<Payment>(captured.Add)).Returns(call => call.Arg<Payment>());
+
+        await CreateService().ExecuteReversalRunAsync(run.Id);
+
+        var reversal = Assert.Single(captured);
+        if (originalHadAddress)
+            Assert.Same(originalAddress, reversal.PayeeAddress);
+        else
+            Assert.Null(reversal.PayeeAddress);
+    }
+
     [Fact]
     public async Task ExecuteReversalRunAsync_RealGenerator_Bpr02Zero_RecoupmentCarriedForward_RecordedAsReceivable()
     {

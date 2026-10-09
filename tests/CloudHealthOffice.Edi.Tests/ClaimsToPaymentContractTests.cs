@@ -218,23 +218,112 @@ public class ClaimsToPaymentContractTests
     }
 
     /// <summary>
-    /// claims-service carries no pay-to provider (837 2010AB): payToProviderNPI
-    /// never arrives, so the payee is the billing provider, named by
+    /// 5010 has no pay-to provider NPI or name (837 2010AB is an address
+    /// only, X12 RFI 1522): the payee is the billing provider, named by
     /// billingProviderName. A long name is cut to N102's 60 characters only
     /// when the 835 is written.
     /// </summary>
     [Fact]
-    public async Task NoPayToProviderOnTheWire_PayeeIsTheBillingProvider()
+    public async Task PayeeIsTheBillingProvider_LongNameCutOnlyInN102()
     {
         var claim = AdjudicatedClaim(Claims.ClaimStatus.Approved);
         claim.BillingProviderName = new string('N', 300);
 
         var dto = await RoundTrip(claim);
 
-        Assert.Null(dto.PayToProviderNPI);
-        Assert.False(dto.HasDistinctPayToProvider);
-        Assert.Equal(300, dto.PayeeNameOr(dto.BillingProviderNPI).Length);
-        Assert.Equal(new string('N', 60), Pay.Era835Names.N102(dto.PayeeNameOr(dto.BillingProviderNPI)));
+        Assert.Equal("1234567893", dto.PayeeNpi);
+        Assert.Null(dto.PayToAddress);
+        Assert.Null(dto.PayToPlan);
+        Assert.Equal(300, dto.PayeeNameOr(dto.PayeeNpi).Length);
+        Assert.Equal(new string('N', 60), Pay.Era835Names.N102(dto.PayeeNameOr(dto.PayeeNpi)));
+    }
+
+    // 837 with Loop 2010AB (pay-to address) and, on a subrogation demand,
+    // Loop 2010AC (pay-to plan). Synthetic data; NPIs are check-digit-valid test numbers.
+    private static string Pay837(string version, string bht06, bool payToPlan)
+    {
+        var claimSegments = version.Contains("223")
+            ? new[] { "CLM*PCN-PAYTO*300.00***13:A:1**A*Y*Y", "DTP*434*RD8*20260105-20260106", "CL1*1*7*01", "HI*ABK:R0789", "LX*1", "SV2*0450*HC:99283*300.00*UN*1", "DTP*472*D8*20260105" }
+            : new[] { "CLM*PCN-PAYTO*300.00***11:B:1*Y*A*Y*Y", "HI*ABK:J069", "LX*1", "SV1*HC:99213*300.00*UN*1***1", "DTP*472*D8*20260110" };
+        var body = new List<string>
+        {
+            $"BHT*0019*00*BATCH0001*20260115*1200*{bht06}",
+            "NM1*41*2*ACME BILLING*****46*SUB001", "PER*IC*BILLING DESK*TE*5555550100", "NM1*40*2*CHO PAYER*****46*CHO",
+            "HL*1**20*1", "NM1*85*2*SYNTHETIC FAMILY CLINIC*****XX*1234567893", "N3*100 MAIN ST", "N4*SPRINGFIELD*IL*62701", "REF*EI*123456789",
+            "NM1*87*2", "N3*PO BOX 1234", "N4*SPRINGFIELD*IL*627010001",
+        };
+        if (payToPlan)
+            body.AddRange(new[] { "NM1*PE*2*SYNTHETIC MEDICAID PLAN*****PI*PLAN01", "N3*1 PLAN WAY", "N4*CAPITAL CITY*IL*62701", "REF*EI*000000001" });
+        body.AddRange(new[] { "HL*2*1*22*0", "SBR*P*18*GRP001******CI", "NM1*IL*1*TESTPATIENT*ALEX****MI*MEM0001", "DMG*D8*19800101*F", "NM1*PR*2*CHO PAYER*****PI*CHO" });
+        body.AddRange(claimSegments);
+        var segments = new List<string>
+        {
+            "ISA*00*          *00*          *ZZ*SUB001         *ZZ*CHO            *260115*1200*^*00501*000000101*0*T*:",
+            $"GS*HC*SUB001*CHO*20260115*1200*101*X*{version}", $"ST*837*0001*{version}",
+        };
+        segments.AddRange(body);
+        segments.Add($"SE*{body.Count + 2}*0001");
+        segments.Add("GE*1*101");
+        segments.Add("IEA*1*000000101");
+        return string.Join("~", segments) + "~";
+    }
+
+    /// <summary>837 text → SNIP → parser → mapper → stored claim → claim search wire → ClaimDto.</summary>
+    private static async Task<Pay.ClaimDto> FromEdi(string edi)
+    {
+        var validation = new ClaimsService.EDI.Validation.X12837SnipValidator().Validate(edi);
+        Assert.Empty(validation.AllIssues);
+        var parsed = Assert.Single(ClaimsService.EDI.Inbound.X12837Parser.Parse(edi));
+        var claim = ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(parsed, "tenant-1").ToClaim();
+        claim.Id = "clm-payto";
+        claim.Status = Claims.ClaimStatus.Approved;
+        claim.AdjudicationResult = new Claims.AdjudicationResult { AllowedAmount = 300m, PayerPayment = 300m };
+        return await RoundTrip(claim);
+    }
+
+    [Theory]
+    [InlineData("005010X222A1")]
+    [InlineData("005010X223A2")]
+    public async Task PayToAddressFrom2010AB_ReachesThe835_AsPayeeN3N4_UnderTheBillingProvider(string version)
+    {
+        var dto = await FromEdi(Pay837(version, "CH", payToPlan: false));
+
+        Assert.Null(dto.PayToPlan);
+        var payment = new PayModels.Payment
+        {
+            CheckNumber = "0001000001", PaymentMethod = "CHK", TotalPaymentAmount = 300m, PaymentDate = new DateTime(2026, 4, 2),
+            PayerName = "CHO", PayerId = "CHO",
+            // As PaymentRunService builds a payment from its claims.
+            PayeeName = dto.PayeeNameOr(dto.PayeeNpi), PayeeNPI = dto.PayeeNpi,
+            PayeeAddress = Pay.PaymentRunService.SharedPayToAddress(new[] { dto }),
+            ClaimPayments = new List<PayModels.ClaimPayment>
+            {
+                Pay.Era835ClaimPaymentBuilder.Build(dto, denied: false,
+                    new Pay.CarcRarcMappingService(Microsoft.Extensions.Logging.Abstractions.NullLogger<Pay.CarcRarcMappingService>.Instance)),
+            },
+        };
+        var edi = new Pay.EraGeneratorService(Microsoft.Extensions.Logging.Abstractions.NullLogger<Pay.EraGeneratorService>.Instance)
+            .Generate835(payment, new Pay.TradingPartnerInfo { OriginatingCompanyId = "1123456789" });
+        var segments = edi.Split('~').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+
+        var n1 = segments.FindIndex(s => s.StartsWith("N1*PE*", StringComparison.Ordinal));
+        Assert.Equal("N1*PE*SYNTHETIC FAMILY CLINIC*XX*1234567893", segments[n1]);
+        Assert.Equal("N3*PO BOX 1234", segments[n1 + 1]);
+        Assert.Equal("N4*SPRINGFIELD*IL*627010001", segments[n1 + 2]);
+    }
+
+    [Theory]
+    [InlineData("005010X222A1")]
+    [InlineData("005010X223A2")]
+    public async Task PayToPlanFrom2010AC_ReachesPaymentService_NotAsThePayeeNpi(string version)
+    {
+        var dto = await FromEdi(Pay837(version, "31", payToPlan: true));
+
+        Assert.Equal(("SYNTHETIC MEDICAID PLAN", "PI", "PLAN01", "000000001"),
+            (dto.PayToPlan!.Name, dto.PayToPlan.IdentifierQualifier, dto.PayToPlan.Identifier, dto.PayToPlan.TaxId));
+        Assert.Equal(("1 PLAN WAY", "CAPITAL CITY"), (dto.PayToPlan.Address!.Line1, dto.PayToPlan.Address.City));
+        Assert.Equal("PO BOX 1234", dto.PayToAddress!.Line1);
+        Assert.Equal("1234567893", dto.PayeeNpi); // the plan has no NPI; PaymentRunService leaves such claims out
     }
 
     /// <summary>

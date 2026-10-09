@@ -182,31 +182,128 @@ public class Era835InstitutionalClpAndPayeeTests
         Assert.Equal("ACME CLINIC", new ClaimDto { ProviderName = "  ACME CLINIC " }.PayeeNameOr("x"));
     }
 
-    // ── Pay-to provider: N102 never names a different organization than N104 ──
+    // ── Payee: the billing provider; 5010 has no pay-to provider NPI or name ──
 
     [Fact]
-    public void DistinctPayToNpi_PayeeNameIsThePayToNpi_NotTheBillingProviderName()
+    public void LegacyPayToProviderNpiOnTheWire_IsIgnored_PayeeIsTheBillingProvider()
     {
-        var dto = new ClaimDto
-        {
-            BillingProviderNPI = "1234567893", PayToProviderNPI = "1999999976", ProviderName = "ACME BILLING GROUP",
-        };
+        const string json = """
+            {"billingProviderNPI":"1234567893","payToProviderNPI":"1999999976","billingProviderName":"ACME CLINIC"}
+            """;
 
-        Assert.True(dto.HasDistinctPayToProvider);
-        Assert.Equal("1999999976", dto.PayeeNameOr(dto.BillingProviderNPI));
+        var dto = JsonSerializer.Deserialize<ClaimDto>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
+        Assert.Equal("1234567893", dto.PayeeNpi);
+        Assert.Equal("ACME CLINIC", dto.PayeeNameOr(dto.PayeeNpi));
+    }
+
+    [Fact]
+    public void ClaimsServiceWire_PayToAddressAndPayToPlan_Deserialize()
+    {
+        const string json = """
+            {"billingProviderNPI":"1234567893",
+             "payToAddress":{"line1":"PO BOX 1234","city":"SPRINGFIELD","state":"IL","postalCode":"627010001"},
+             "payToPlan":{"name":"SYNTHETIC MEDICAID PLAN","identifierQualifier":"PI","identifier":"PLAN01","taxId":"000000001",
+                          "address":{"line1":"1 PLAN WAY","city":"CAPITAL CITY","state":"IL","postalCode":"62701"}}}
+            """;
+
+        var dto = JsonSerializer.Deserialize<ClaimDto>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+
+        Assert.Equal(("PO BOX 1234", "SPRINGFIELD", "IL", "627010001"),
+            (dto.PayToAddress!.Line1, dto.PayToAddress.City, dto.PayToAddress.State, dto.PayToAddress.PostalCode));
+        Assert.Equal(("SYNTHETIC MEDICAID PLAN", "PI", "PLAN01", "000000001", "1 PLAN WAY"),
+            (dto.PayToPlan!.Name, dto.PayToPlan.IdentifierQualifier, dto.PayToPlan.Identifier, dto.PayToPlan.TaxId, dto.PayToPlan.Address!.Line1));
+        Assert.Equal("1234567893", dto.PayeeNpi);
+    }
+
+    // ── Payee N3/N4 (1000B) from the 837 2010AB pay-to address ─────────────
+
+    [Fact]
+    public void PayeeAddressSegments_FullAddress_N3WithBothLines_N4WithCityStateZip()
+    {
+        var segments = Era835Names.PayeeAddressSegments(new PayeeAddress
+        {
+            Line1 = "PO BOX 1234", Line2 = "DEPT 7", City = "SPRINGFIELD", State = "IL", PostalCode = "627010001",
+        });
+
+        Assert.Equal(new[] { "N3*PO BOX 1234*DEPT 7~", "N4*SPRINGFIELD*IL*627010001~" }, segments);
+    }
+
+    [Fact]
+    public void PayeeAddressSegments_ForeignAddress_KeepsCountry_DropsTrailingEmpties()
+    {
+        Assert.Equal(new[] { "N3*1 RUE X~", "N4*PARIS**75001*FR~" },
+            Era835Names.PayeeAddressSegments(new PayeeAddress { Line1 = "1 RUE X", City = "PARIS", PostalCode = "75001", CountryCode = "FR" }));
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("1234567893")]
-    [InlineData(" 1234567893 ")]
-    public void PayToNpiAbsentOrSameAsBilling_PayeeNameIsTheBillingProviderName(string? payTo)
+    [InlineData("", "SPRINGFIELD")]
+    [InlineData("PO BOX 1", "")]
+    [InlineData("  ", "SPRINGFIELD")]
+    public void PayeeAddressSegments_WithoutStreetOrCity_NoSegments(string line1, string city)
     {
-        var dto = new ClaimDto { BillingProviderNPI = "1234567893", PayToProviderNPI = payTo, ProviderName = "ACME CLINIC" };
+        Assert.Empty(Era835Names.PayeeAddressSegments(new PayeeAddress { Line1 = line1, City = city, State = "IL", PostalCode = "62701" }));
+        Assert.Empty(Era835Names.PayeeAddressSegments(null));
+    }
 
-        Assert.False(dto.HasDistinctPayToProvider);
-        Assert.Equal("ACME CLINIC", dto.PayeeNameOr(dto.BillingProviderNPI));
+    [Fact]
+    public void PayeeAddressSegments_CutsToX12Lengths_AndReplacesDelimiters()
+    {
+        var segments = Era835Names.PayeeAddressSegments(new PayeeAddress
+        {
+            Line1 = new string('A', 70), City = "SPRING*FIELD~" + new string('C', 40), State = "IL", PostalCode = "62701",
+        });
+
+        Assert.Equal("N3*" + new string('A', 55) + "~", segments[0]);
+        var n4 = segments[1].TrimEnd('~').Split('*');
+        Assert.Equal(30, n4[1].Length);
+        Assert.StartsWith("SPRING FIELD ", n4[1]);
+    }
+
+    private static Payment WithPayeeAddress(Payment payment, PayeeAddress? address)
+    {
+        payment.PayeeAddress = address;
+        return payment;
+    }
+
+    private static List<string[]> Segs(string edi) =>
+        edi.Split('~').Select(s => s.Trim()).Where(s => s.Length > 0).Select(s => s.Split('*')).ToList();
+
+    [Fact]
+    public void SingleAndBatchEra_PayeeAddress_N3N4FollowN1PE_AndSE01CountsThem()
+    {
+        var address = new PayeeAddress { Line1 = "PO BOX 1234", City = "SPRINGFIELD", State = "IL", PostalCode = "62701" };
+        var single = new EraGeneratorService(NullLogger<EraGeneratorService>.Instance)
+            .Generate835(WithPayeeAddress(PayeeOnly("ACME CLINIC"), address), new TradingPartnerInfo { OriginatingCompanyId = "1123456789" });
+        var batch = new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance)
+            .GenerateBatch(new[] { new EraPaymentInput { TradingPartnerId = "TP", Payment = WithPayeeAddress(PayeeOnly("ACME CLINIC"), address) } },
+                new Dictionary<string, TradingPartnerInfo> { ["TP"] = new() { OriginatingCompanyId = "1123456789" } })
+            .Single().EdiContent;
+
+        foreach (var edi in new[] { single, batch })
+        {
+            var segs = Segs(edi);
+            var n1 = segs.FindIndex(s => s[0] == "N1" && s[1] == "PE");
+            Assert.Equal(new[] { "N3", "PO BOX 1234" }, segs[n1 + 1]);
+            Assert.Equal(new[] { "N4", "SPRINGFIELD", "IL", "62701" }, segs[n1 + 2]);
+            var st = segs.FindIndex(s => s[0] == "ST");
+            var se = segs.FindIndex(s => s[0] == "SE");
+            Assert.Equal((se - st + 1).ToString(), segs[se][1]);
+        }
+    }
+
+    [Fact]
+    public void BatchEra_PaymentsToDifferentAddresses_NoPayeeN3N4()
+    {
+        var a = WithPayeeAddress(PayeeOnly("ACME CLINIC"), new PayeeAddress { Line1 = "PO BOX 1", City = "SPRINGFIELD", State = "IL", PostalCode = "62701" });
+        var b = WithPayeeAddress(PayeeOnly("ACME CLINIC"), new PayeeAddress { Line1 = "PO BOX 2", City = "SPRINGFIELD", State = "IL", PostalCode = "62701" });
+
+        var edi = new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance)
+            .GenerateBatch(new[] { new EraPaymentInput { TradingPartnerId = "TP", Payment = a }, new EraPaymentInput { TradingPartnerId = "TP", Payment = b } },
+                new Dictionary<string, TradingPartnerInfo> { ["TP"] = new() { OriginatingCompanyId = "1123456789" } })
+            .Single().EdiContent;
+
+        Assert.DoesNotContain(Segs(edi), s => s[0] is "N3" or "N4");
     }
 
     // ── N102 length: 60 in 005010; billingProviderName can be 300 ──────────

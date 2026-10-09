@@ -138,7 +138,17 @@ BPR  — Financial information (envelope-wide sum)
 TRN  — Reassociation trace number (first claim's check number)
 DTM  — Production date
 N1*PR — Payer identification (1000A loop)
-N1*PE — Payee identification (1000B loop)
+N1*PE — Payee identification (1000B loop): the billing provider
+        (837 2010AA name, N103 = XX, N104 = billing NPI). 5010 has no
+        pay-to provider name or NPI: 837 2010AB is an address only
+        (X12 RFI 1522/1606), and the NPI on the claim flows to the 835
+        (X12 RFI 1559). N102 is cut to 60 characters.
+N3 / N4 — Payee address: the 837 2010AB pay-to address, only when
+        every payment in the envelope is to that payee at that address
+        (omitted otherwise). A reversal repeats the original payment's
+        N3/N4: none when the original had none. Claims naming a 2010AC
+        pay-to plan are left out of payment runs (see "Pay-to plan
+        claims (837 2010AC)" below).
 [2100 loop — repeated per claim; order per 005010X221A1]
    CLP  — Claim header (status code, amounts)
    CAS  — Claim-level adjustments (header CAS from CarcRarcMapper)
@@ -156,6 +166,43 @@ PLB  — Provider-level adjustments (when batch carries PLB rows)
 SE   — Transaction set trailer (count includes ST and SE)
 GE / IEA  — Functional group / interchange trailers
 ```
+
+### Pay-to plan claims (837 2010AC)
+
+The 837 Loop 2010AC pay-to plan is used only on a subrogation demand
+(BHT06 = `31`; SNIP rule `L4-2010AC-BHT06` reports it on any other
+BHT06). On such a claim the plan, not the billing provider's NPI, is the
+entity to be paid (X12 RFI 1107). A payment run pays providers by NPI, so:
+
+- An Approved claim with a pay-to plan is not reserved, paid, finalized
+  in claims-service or remitted. It stays Approved.
+- A Denied claim with a pay-to plan is not remitted to the billing
+  provider's trading partner either.
+- Both are listed in `PaymentRun.PayToPlanClaimIds` with a warning. An
+  Approved claim already paid in payment-service is reported as already
+  paid instead.
+
+Limitations:
+
+- **Re-warned on every run.** Nothing records that a pay-to plan claim
+  was set aside, so every run whose criteria match it lists it again: an
+  Approved one until it leaves Approved status in claims-service, a Denied
+  one (Denied is final) for as long as run criteria match it.
+- **No manual-payment path yet.** There is no endpoint or screen to pay
+  or remit a pay-to plan claim to the plan, or to mark it settled. An
+  operator has to settle it outside payment-service.
+- **Claims ingested before 2010AC was parsed.** A subrogation claim
+  imported before this change has no `PayToPlan`, so a run treats it as an
+  ordinary claim and pays the billing provider. These claims can't be
+  identified from stored data. claims-service does not keep the raw 837
+  or BHT06: the claim document has neither, and
+  `ClaimImportTransaction` keeps only the file name, ST02 and the SNIP
+  outcome. The only way to find them is to search the original 837 files
+  (where the submitter or the intake pipeline still has them) for
+  a BHT segment with BHT06 = `31` or an `NM1*PE` segment, and use `ClaimImportTransaction.FileName`
+  / `ClaimNumber` to map them back to stored claims. Until that is done,
+  scope runs (submission dates) to exclude the backlog if subrogation
+  demands are expected in it.
 
 ## CARC/RARC mapping precedence (Decision 6)
 
