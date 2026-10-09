@@ -35,6 +35,15 @@ public record BenefitResolutionRequest
     /// carries the facility type code, not a CMS place-of-service code.
     /// </summary>
     public string? TypeOfBill { get; init; }
+
+    /// <summary>
+    /// True when the lines' <see cref="ClaimLineInput.PlaceOfService"/> holds
+    /// CLM05-1, the institutional facility type code, rather than a CMS place
+    /// of service — set by the claims-service 837I mapping. The service
+    /// category resolver then never reads it as a place of service. False
+    /// (the default) means it is a real CMS place of service.
+    /// </summary>
+    public bool PlaceOfServiceIsFacilityType { get; init; }
     public string? AdmitDate { get; init; }
     public string? DischargeDate { get; init; }
     public bool IsEmergency { get; init; }

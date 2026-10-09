@@ -461,6 +461,9 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 : new Dictionary<int, decimal>(),
             ClaimType = MapClaimType(claim.ClaimType),
             TypeOfBill = claim.TypeOfBill,
+            // Claims-service stores CLM05-1 (facility type) as the claim's
+            // place of service on an institutional claim.
+            PlaceOfServiceIsFacilityType = claim.ClaimType == ClaimsService.Models.ClaimType.Institutional,
             LineOfBusiness = (int)claim.LineOfBusiness,
             Member = BuildMemberContext(context.ResolvedMember, claim, serviceDate),
             // DRG / all-inclusive per-diem stays: cost share once per stay.

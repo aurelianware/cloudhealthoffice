@@ -24,7 +24,8 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
         Rules = [new ProcedureCodeRule { Priority = 20, CodeType = "REV", CodePattern = "0100", CodeRangeEnd = "0219" }],
     };
 
-    private static readonly ServiceCategoryClaimContext Inpatient837I = new("837I", "111");
+    // As claims-service sends an 837I: TOB composed, and the POS slot holds CLM05-1.
+    private static readonly ServiceCategoryClaimContext Inpatient837I = new("837I", "111", PlaceOfServiceIsFacilityType: true);
 
     private static Task<ServiceCategoryMatch?> Resolve(
         ServiceCategoryClaimContext? claim,
@@ -54,7 +55,7 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
     {
         var match = await Resolve(Inpatient837I, revenueCode);
 
-        Assert.Equal(ServiceCategoryResolver.InpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.InpatientHospital, match!.ServiceTypeCode);
         Assert.Equal("SystemDefault", match.MatchedBy);
         Assert.Equal("TOB-fallback:11", match.MatchedRule);
     }
@@ -66,16 +67,16 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
     {
         var match = await Resolve(new ServiceCategoryClaimContext("837I", typeOfBill), revenueCode: "0250");
 
-        Assert.Equal(ServiceCategoryResolver.InpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.InpatientHospital, match!.ServiceTypeCode);
     }
 
     [Fact]
     public async Task Institutional_WithoutTypeOfBill_ReadsFacilityTypeFromClm05Slot()
     {
-        // ClaimType 837I but no composed TOB: the POS slot still carries CLM05-1.
-        var match = await Resolve(new ServiceCategoryClaimContext("837I", null), revenueCode: "0250", placeOfService: "11");
+        // claims-service 837I without a composed TOB: the POS slot carries CLM05-1.
+        var match = await Resolve(new ServiceCategoryClaimContext("837I", null, PlaceOfServiceIsFacilityType: true), revenueCode: "0250", placeOfService: "11");
 
-        Assert.Equal(ServiceCategoryResolver.InpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.InpatientHospital, match!.ServiceTypeCode);
         Assert.Equal("FacilityType-fallback:11", match.MatchedRule);
     }
 
@@ -84,7 +85,7 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
     {
         var match = await Resolve(new ServiceCategoryClaimContext(null, "111"), revenueCode: "0250");
 
-        Assert.Equal(ServiceCategoryResolver.InpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.InpatientHospital, match!.ServiceTypeCode);
     }
 
     [Fact]
@@ -92,7 +93,7 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
     {
         var match = await Resolve(new ServiceCategoryClaimContext("837I", "131"), revenueCode: "0300", placeOfService: "13");
 
-        Assert.Equal(ServiceCategoryResolver.OutpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.OutpatientHospital, match!.ServiceTypeCode);
         Assert.Equal("TOB-fallback:13", match.MatchedRule);
     }
 
@@ -104,7 +105,7 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
     {
         var match = await Resolve(new ServiceCategoryClaimContext("837I", "131"), revenueCode, placeOfService: "13");
 
-        Assert.Equal(ServiceCategoryResolver.EmergencyRoom, match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.EmergencyRoom, match!.ServiceTypeCode);
         Assert.StartsWith("REV-fallback:045", match.MatchedRule);
     }
 
@@ -113,18 +114,97 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
     {
         var match = await Resolve(new ServiceCategoryClaimContext("837I", "831"), revenueCode: "0450", placeOfService: "83");
 
-        Assert.Equal(ServiceCategoryResolver.EmergencyRoom, match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.EmergencyRoom, match!.ServiceTypeCode);
     }
 
     [Fact]
     public async Task Institutional_Unrecognized_ReturnsNullRatherThanAProfessionalGuess()
     {
         // Facility type 83 (ASC) with a non-specific revenue code: no
-        // institutional inference, and no POS fallback (POS 83 is not a
-        // CMS place of service anyway; facility type 11 would have been office).
-        var match = await Resolve(new ServiceCategoryClaimContext("837I", "831"), revenueCode: "0360", placeOfService: "83");
+        // institutional inference. The POS slot holds CLM05-1 ("11" here),
+        // so there is no POS fallback either: read as POS 11 it would be office.
+        var match = await Resolve(
+            new ServiceCategoryClaimContext("837I", "831", PlaceOfServiceIsFacilityType: true),
+            revenueCode: "0360", placeOfService: "11");
 
         Assert.Null(match);
+    }
+
+    [Fact]
+    public async Task Clm05FacilityType21_WithoutTob_IsSkilledNursing()
+    {
+        // claims-service 837I: CLM05-1 = 21 (skilled nursing facility inpatient).
+        var match = await Resolve(
+            new ServiceCategoryClaimContext("837I", null, PlaceOfServiceIsFacilityType: true),
+            revenueCode: "0250", placeOfService: "21");
+
+        Assert.Equal(ServiceCategoryNames.SkilledNursing, match!.ServiceTypeCode);
+        Assert.Equal("FacilityType-fallback:21", match.MatchedRule);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("837P")]
+    [InlineData("837I")] // sync API: institutional, but PlaceOfService is a CMS POS
+    public async Task CmsPos21_IsReadAsPlaceOfService_NotAsFacilityType(string? claimType)
+    {
+        var claim = claimType is null ? null : new ServiceCategoryClaimContext(claimType, null);
+
+        var match = await Resolve(claim, revenueCode: "0250", placeOfService: "21", procedureCode: "99223");
+
+        Assert.Equal(ServiceCategoryNames.InpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal("POS-fallback:21", match.MatchedRule);
+    }
+
+    [Fact]
+    public async Task SyncApi_BillType111_WithCmsPos21_IsInpatientHospital()
+    {
+        // MakeDrgStayRequest shape: BillType "111" + POS "21". The TOB decides;
+        // POS 21 is never read as facility type 21 (skilled nursing).
+        var match = await Resolve(new ServiceCategoryClaimContext("837I", "111"), revenueCode: "0250", placeOfService: "21");
+
+        Assert.Equal(ServiceCategoryNames.InpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal("TOB-fallback:11", match.MatchedRule);
+    }
+
+    [Theory]
+    [InlineData("111", "111")]
+    [InlineData("0111", "111")]
+    [InlineData(" 131 ", "131")]
+    [InlineData("11", null)]
+    [InlineData("111garbage", null)]
+    [InlineData("1111", null)] // four digits without the leading zero
+    [InlineData("01a1", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void TypeOfBill_IsThreeDigitsOrFourWithLeadingZero(string? typeOfBill, string? expected)
+    {
+        Assert.Equal(expected, ServiceCategoryClaimContext.NormalizeTypeOfBill(typeOfBill));
+    }
+
+    [Theory]
+    [InlineData("11")]
+    [InlineData("111garbage")]
+    [InlineData("1111")]
+    public async Task MalformedTypeOfBill_CountsAsNoTypeOfBill(string typeOfBill)
+    {
+        // No claim type and a malformed TOB: not institutional, so POS 11 is
+        // an office visit, as for any professional claim.
+        var match = await Resolve(new ServiceCategoryClaimContext(null, typeOfBill), revenueCode: null, placeOfService: "11", procedureCode: "99213");
+
+        Assert.Equal(ServiceCategoryNames.OfficeVisit, match!.ServiceTypeCode);
+        Assert.Equal("POS-fallback:11", match.MatchedRule);
+    }
+
+    [Fact]
+    public async Task MalformedTypeOfBill_On837I_FallsBackToTheClm05FacilityType()
+    {
+        var match = await Resolve(
+            new ServiceCategoryClaimContext("837I", "1111", PlaceOfServiceIsFacilityType: true),
+            revenueCode: "0250", placeOfService: "13");
+
+        Assert.Equal(ServiceCategoryNames.OutpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal("FacilityType-fallback:13", match.MatchedRule);
     }
 
     [Theory]
@@ -136,7 +216,7 @@ public class ServiceCategoryResolverInstitutionalFallbackTests
 
         var match = await Resolve(claim, revenueCode: null, placeOfService: "11", procedureCode: "99213");
 
-        Assert.Equal("98", match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.OfficeVisit, match!.ServiceTypeCode);
         Assert.Equal("POS-fallback:11", match.MatchedRule);
     }
 

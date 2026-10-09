@@ -71,7 +71,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
     /// <summary>Claim type and type of bill for the resolver's institutional fallback.</summary>
     private static ServiceCategoryClaimContext ClaimContext(BenefitResolutionRequest request) =>
-        new(request.ClaimType, request.TypeOfBill);
+        new(request.ClaimType, request.TypeOfBill, request.PlaceOfServiceIsFacilityType);
 
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
