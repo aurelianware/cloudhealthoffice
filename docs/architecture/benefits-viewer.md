@@ -41,6 +41,8 @@ portal owns display labels for. Current buckets:
 - `Pharmacy` (with a `PharmacyDetail` sub-object carrying the raw tier label)
 - `DurableMedicalEquipment`
 - `MentalHealth`, `Maternity`, `Preventive`
+- `Laboratory`, `Imaging`, `Therapy` (physical / occupational / speech)
+- `HomeHealth`, `Hospice`, `SkilledNursing`
 - `Other` (fall-through)
 
 When a raw value does not map, the service emits a structured

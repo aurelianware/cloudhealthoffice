@@ -149,6 +149,12 @@ public class BenefitViewService : IBenefitViewService
             BenefitCategoryMap.MentalHealth     => "Mental Health / Behavioral Health",
             BenefitCategoryMap.Maternity        => "Maternity",
             BenefitCategoryMap.Preventive       => "Preventive Care",
+            BenefitCategoryMap.Laboratory       => "Lab Services",
+            BenefitCategoryMap.Imaging          => "Imaging",
+            BenefitCategoryMap.Therapy          => "Therapy Services",
+            BenefitCategoryMap.HomeHealth       => "Home Health Care",
+            BenefitCategoryMap.Hospice          => "Hospice",
+            BenefitCategoryMap.SkilledNursing   => "Skilled Nursing",
             _                                   => string.IsNullOrWhiteSpace(benefit.ServiceCategory) ? "Other" : benefit.ServiceCategory,
         };
     }

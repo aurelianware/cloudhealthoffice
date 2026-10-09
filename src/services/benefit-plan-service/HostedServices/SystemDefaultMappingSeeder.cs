@@ -10,8 +10,9 @@ namespace BenefitPlanService.HostedServices;
 /// <summary>
 /// Loads the curated <c>system-defaults.json</c> bundle into a tenant's
 /// service-category mapping store the first time the tenant is seen, and
-/// re-applies when the bundle's version is bumped (capability BP 5.6 —
-/// Service Category Mapping).
+/// applies only what is new when the bundle's version is bumped
+/// (capability BP 5.6 — Service Category Mapping; see
+/// <see cref="EnsureTenantSeededAsync"/>).
 ///
 /// <para>
 /// <b>Per-installation seed, per-tenant application.</b> The seed file is
@@ -102,8 +103,32 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
     /// <summary>
     /// Stamp the loaded seed bundle onto <paramref name="tenantId"/> if no
     /// matching <c>SystemDefaultsApplied</c> record exists for the bundle's
-    /// current version. Returns the number of mappings written (zero on
+    /// current version. Returns the number of mapping rows written (zero on
     /// no-op or when the bundle is unavailable).
+    ///
+    /// <para>
+    /// <b>First seed</b> (no record): every bundle mapping is written.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Version bump</b> (record at an older version): only the delta is
+    /// written, never the whole bundle again. Reads sort newest-first and the
+    /// first matching row wins, so re-inserting every default would let fresh
+    /// default rows outrank the tenant's own mappings, bring back defaults
+    /// the tenant deleted, and duplicate every category. The delta is:
+    /// <list type="number">
+    ///   <item>rules introduced after the recorded version (a mapping's or a
+    ///     rule's <c>since</c> in the bundle; absent means version 1) — rules
+    ///     from versions already applied are never re-created, even when the
+    ///     tenant has since deleted them; and</item>
+    ///   <item>of those, only rules whose codes no existing tenant-default row
+    ///     already covers (same code type, overlapping code / range /
+    ///     wildcard, active or not): a new default only fills a gap, it never
+    ///     changes how a code the tenant already maps resolves.</item>
+    /// </list>
+    /// Each mapping with at least one remaining rule is written as one new
+    /// row. Re-running at the recorded version is a no-op.
+    /// </para>
     /// </summary>
     public async Task<int> EnsureTenantSeededAsync(string tenantId, CancellationToken ct = default)
     {
@@ -120,11 +145,40 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
             return 0;
         }
 
+        var fromVersion = applied?.AppliedSeedVersion ?? 0;
+        var isDelta = fromVersion > 0;
+
+        // Tenant-default rows already in place. Only consulted on a version
+        // bump; plan-scoped overrides are evaluated before tenant defaults by
+        // the resolver, so they always win and need no protection here.
+        List<ProcedureCodeRule> existingRules = isDelta
+            ? (await writeRepo.ListAsync(tenantId, null, ct)).SelectMany(m => m.Rules).ToList()
+            : [];
+
         // Seed mappings are tenant-default scope (BenefitPlanId == null).
         // Plan-specific overrides are operator-authored only.
         var written = 0;
+        var skippedCovered = 0;
         foreach (var seed in _bundle.Mappings)
         {
+            var rules = new List<SeedRule>();
+            foreach (var rule in seed.Rules)
+            {
+                if (EffectiveSince(seed, rule) <= fromVersion) continue; // applied before; never re-create
+                if (isDelta && existingRules.Any(e => Overlaps(rule, e)))
+                {
+                    skippedCovered++;
+                    _logger.LogInformation(
+                        "SystemDefaultMappingSeeder: tenant={Tenant} already maps {CodeType} {CodePattern}-{CodeRangeEnd}; " +
+                        "not adding the v{Version} default rule for {ServiceTypeCode}",
+                        Sanitize(tenantId), rule.CodeType, rule.CodePattern, rule.CodeRangeEnd ?? rule.CodePattern,
+                        _bundle.Version, seed.ServiceTypeCode);
+                    continue;
+                }
+                rules.Add(rule);
+            }
+            if (rules.Count == 0) continue;
+
             var mapping = new ServiceCategoryMapping
             {
                 Id = Guid.NewGuid(),
@@ -132,7 +186,7 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
                 BenefitPlanId = null,
                 ServiceTypeCode = seed.ServiceTypeCode,
                 ServiceTypeDescription = seed.ServiceTypeDescription,
-                Rules = seed.Rules.Select(r => new ProcedureCodeRule
+                Rules = rules.Select(r => new ProcedureCodeRule
                 {
                     Id = Guid.NewGuid(),
                     Priority = r.Priority,
@@ -158,10 +212,55 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
         }, ct);
 
         _logger.LogInformation(
-            "SystemDefaultMappingSeeder: applied bundle version={Version} mappings={Count} tenant={Tenant}",
-            _bundle.Version, written, Sanitize(tenantId));
+            "SystemDefaultMappingSeeder: applied bundle version={Version} (from version={FromVersion}) " +
+            "mappings={Count} rulesAlreadyCovered={Skipped} tenant={Tenant}",
+            _bundle.Version, fromVersion, written, skippedCovered, Sanitize(tenantId));
 
         return written;
+    }
+
+    /// <summary>The bundle version a rule was introduced in: the rule's <c>since</c>, else its mapping's, else 1.</summary>
+    internal static int EffectiveSince(SeedMapping mapping, SeedRule rule) => rule.Since ?? mapping.Since ?? 1;
+
+    /// <summary>
+    /// True when <paramref name="existing"/> could match any code
+    /// <paramref name="seed"/> matches: same code type (REV rules only
+    /// against REV rules) and overlapping code spans. POS / modifier /
+    /// revenue-code qualifiers are ignored on purpose, so the check errs on
+    /// the side of leaving the tenant's mapping alone.
+    /// </summary>
+    internal static bool Overlaps(SeedRule seed, ProcedureCodeRule existing)
+    {
+        var seedIsRev = IsRevenue(seed.CodeType);
+        if (seedIsRev != IsRevenue(existing.CodeType)) return false;
+        if (!seedIsRev && !string.Equals(seed.CodeType?.Trim(), existing.CodeType?.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var (lo1, hi1) = Span(seed.CodePattern, seed.CodeRangeEnd, seedIsRev);
+        var (lo2, hi2) = Span(existing.CodePattern, existing.CodeRangeEnd, seedIsRev);
+        return string.CompareOrdinal(lo1, hi2) <= 0 && string.CompareOrdinal(lo2, hi1) <= 0;
+    }
+
+    private static bool IsRevenue(string? codeType) =>
+        string.Equals(codeType?.Trim(), "REV", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Inclusive [low, high] code span of a rule: range, prefix wildcard, or exact code.</summary>
+    private static (string Low, string High) Span(string? pattern, string? rangeEnd, bool isRevenue)
+    {
+        string Norm(string v)
+        {
+            var t = v.Trim().ToUpperInvariant();
+            return isRevenue && t.Length < 4 && !t.EndsWith('*') ? t.PadLeft(4, '0') : t;
+        }
+
+        var p = Norm(pattern ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(rangeEnd)) return (p, Norm(rangeEnd));
+        if (p.EndsWith('*'))
+        {
+            var prefix = p[..^1];
+            return (prefix, prefix + char.MaxValue);
+        }
+        return (p, p);
     }
 
     private SeedBundle LoadBundle()
@@ -205,6 +304,13 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
             if (m.Rules.Count == 0)
                 throw new InvalidOperationException(
                     $"Seed bundle at '{path}' mapping '{m.ServiceTypeCode}' has no rules.");
+            foreach (var since in m.Rules.Select(r => r.Since).Append(m.Since).OfType<int>())
+            {
+                if (since < 1 || since > bundle.Version)
+                    throw new InvalidOperationException(
+                        $"Seed bundle at '{path}' mapping '{m.ServiceTypeCode}' declares since={since}; " +
+                        $"it must be between 1 and the bundle version ({bundle.Version}).");
+            }
         }
 
         return bundle;
@@ -240,6 +346,14 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
     {
         public string ServiceTypeCode { get; set; } = default!;
         public string ServiceTypeDescription { get; set; } = default!;
+
+        /// <summary>
+        /// Bundle version the mapping was introduced in (absent = 1). A
+        /// version bump seeds a tenant only with mappings / rules introduced
+        /// after the version the tenant last applied.
+        /// </summary>
+        public int? Since { get; set; }
+
         public List<SeedRule> Rules { get; set; } = [];
     }
 
@@ -254,5 +368,8 @@ public sealed class SystemDefaultMappingSeeder : IHostedService
         public string? PlaceOfServiceCode { get; set; }
         public string? RequiredModifier { get; set; }
         public string? RevenueCode { get; set; }
+
+        /// <summary>Bundle version the rule was added in, when later than its mapping's <see cref="SeedMapping.Since"/>.</summary>
+        public int? Since { get; set; }
     }
 }
