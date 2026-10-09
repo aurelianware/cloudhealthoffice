@@ -126,6 +126,97 @@ public class X12837PayToLoopTests
         }
     }
 
+    // ── One ST, several HLs: each claim keeps its own HL's data ───────
+
+    /// <summary>
+    /// The 2000A/2000B part of a sample body (from its HL*20 onward), with
+    /// HL ids renumbered from <paramref name="firstHl"/>, the billing
+    /// provider NPI, subscriber member id and claim id replaced, and
+    /// <paramref name="payToLoops"/> inserted after 2010AA.
+    /// </summary>
+    private static List<string> BillingProviderBlock(bool institutional, int firstHl, string npi, string memberId, string claimId, params string[] payToLoops)
+    {
+        var body = institutional ? InstitutionalBody(claimId) : ProfessionalBody(claimId);
+        var block = body.Skip(body.FindIndex(s => s.StartsWith("HL*1*", StringComparison.Ordinal))).ToList();
+        block.Replace("HL*1*", $"HL*{firstHl}**20*1");
+        block.Replace("HL*2*", $"HL*{firstHl + 1}*{firstHl}*22*0");
+        var nm185 = block.FindIndex(s => s.StartsWith("NM1*85*", StringComparison.Ordinal));
+        block[nm185] = block[nm185][..block[nm185].LastIndexOf('*')] + "*" + npi;
+        block.Replace("NM1*IL*", $"NM1*IL*1*TESTPATIENT*{memberId}****MI*{memberId}");
+        block.InsertRange(block.FindIndex(s => s.StartsWith($"HL*{firstHl + 1}*", StringComparison.Ordinal)), payToLoops);
+        return block;
+    }
+
+    /// <summary>BHT and 1000A/1000B of a sample body (everything before its HL*20).</summary>
+    private static List<string> Header(bool institutional, string bht06 = "CH")
+    {
+        var body = institutional ? InstitutionalBody() : ProfessionalBody();
+        var header = body.Take(body.FindIndex(s => s.StartsWith("HL*1*", StringComparison.Ordinal))).ToList();
+        header[0] = header[0][..header[0].LastIndexOf('*')] + "*" + bht06;
+        return header;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Parse_SingleSt_TwoBillingProviders_EachClaimKeepsItsOwnHl(bool institutional)
+    {
+        // One ST: provider A (pay-to address A, no pay-to plan) with PCN-A,
+        // then provider B (pay-to address B and a pay-to plan) with PCN-B.
+        // PCN-A must not pick up B's NPI, member, pay-to address or plan
+        // (a stray 2010AC would wrongly exclude PCN-A from payment).
+        var body = Header(institutional, bht06: "31");
+        body.AddRange(BillingProviderBlock(institutional, 1, "1234567893", "MEM-A", "PCN-A",
+            "NM1*87*2", "N3*PO BOX A", "N4*SPRINGFIELD*IL*62701"));
+        body.AddRange(BillingProviderBlock(institutional, 3, "1003000126", "MEM-B", "PCN-B",
+            ["NM1*87*2", "N3*PO BOX B", "N4*CHICAGO*IL*60601", .. PayToPlanLoop]));
+        var edi = Wrap(institutional ? InstitutionalVersion : ProfessionalVersion, body);
+
+        var claims = X12837Parser.Parse(edi);
+
+        Assert.Equal(2, claims.Count);
+        var a = claims.Single(c => c.ClaimId == "PCN-A");
+        var b = claims.Single(c => c.ClaimId == "PCN-B");
+        Assert.Equal(("1234567893", "MEM-A", "PO BOX A"), (a.BillingProvider.Npi, a.Subscriber.MemberId, a.PayToAddress!.Line1));
+        Assert.Null(a.PayToPlan);
+        Assert.Equal(("1003000126", "MEM-B", "PO BOX B"), (b.BillingProvider.Npi, b.Subscriber.MemberId, b.PayToAddress!.Line1));
+        Assert.Equal("PLAN01", b.PayToPlan!.IdentificationCode);
+        Assert.Equal(2, a.ServiceLines.Count);
+        Assert.Equal(2, b.ServiceLines.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Parse_SingleSt_TwoSubscribersUnderOneBillingProvider_EachClaimKeepsItsOwnSubscriber(bool institutional)
+    {
+        // One HL*20 with a pay-to address; HL*22 subscriber A (who is the
+        // patient) with PCN-A, then HL*22 subscriber B with an HL*23
+        // dependent and PCN-B.
+        var body = Header(institutional);
+        body.AddRange(BillingProviderBlock(institutional, 1, "1234567893", "MEM-A", "PCN-A", PayToAddressLoop));
+        var second = BillingProviderBlock(institutional, 1, "1234567893", "MEM-B", "PCN-B");
+        second = second.Skip(second.FindIndex(s => s.StartsWith("HL*2*", StringComparison.Ordinal))).ToList();
+        second.Replace("HL*2*", "HL*3*1*22*1");
+        second.InsertRange(second.FindIndex(s => s.StartsWith("CLM*", StringComparison.Ordinal)),
+            ["HL*4*3*23*0", "PAT*19", "NM1*QC*1*TESTCHILD*JO", "DMG*D8*20150101*M"]);
+        body.AddRange(second);
+        var edi = Wrap(institutional ? InstitutionalVersion : ProfessionalVersion, body);
+
+        var claims = X12837Parser.Parse(edi);
+
+        Assert.Equal(2, claims.Count);
+        var a = claims.Single(c => c.ClaimId == "PCN-A");
+        var b = claims.Single(c => c.ClaimId == "PCN-B");
+        Assert.Equal("MEM-A", a.Subscriber.MemberId);
+        Assert.Null(a.Patient);
+        Assert.Equal("MEM-B", b.Subscriber.MemberId);
+        Assert.Equal(("TESTCHILD", "19"), (b.Patient!.LastName, b.Patient.RelationshipCode));
+        // Both claims sit under the one HL*20, so both carry its pay-to address.
+        Assert.Equal(("PO BOX 1234", "PO BOX 1234"), (a.PayToAddress!.Line1, b.PayToAddress!.Line1));
+        Assert.Equal(2, a.ServiceLines.Count);
+    }
+
     // ── Mapper → stored claim → claim search wire ────────────────────
 
     [Theory]
@@ -199,10 +290,30 @@ public class X12837PayToLoopTests
     {
         var edi = Professional(body => InsertAfterBillingProvider(body, "NM1*87*2*ACME PAYEE*****XX*1234567893", "N3*PO BOX 1", "N4*SPRINGFIELD*IL*62701"));
 
-        var issues = Validate(edi).AllIssues.Where(i => i.RuleId == "L2-2010AB-NOT-USED").ToList();
+        var result = Validate(edi);
+        var issues = result.AllIssues.Where(i => i.RuleId == "L2-2010AB-NOT-USED").ToList();
 
         Assert.Equal(new int?[] { 3, 8, 9 }, issues.Select(i => i.ElementPosition));
         Assert.All(issues, i => Assert.Equal(("I10", SnipLevel.ImplementationGuide), (i.ElementErrorCode, i.Level)));
+        // The 4010-style NM1*87*2*NAME*****XX*NPI is still common: it warns
+        // but never rejects the transaction set.
+        Assert.All(issues, i => Assert.Equal(SnipSeverity.Warning, i.Severity));
+        Assert.DoesNotContain(result.AllIssues, i => i.Severity == SnipSeverity.Error);
+        Assert.NotEqual("R", result.AcknowledgmentCode);
+        Assert.Equal("PO BOX 1", Assert.Single(X12837Parser.Parse(edi)).PayToAddress!.Line1);
+    }
+
+    [Fact]
+    public void Snip_PayToAddressRepeatedInOneBillingProviderLoop_IsAWarning()
+    {
+        var edi = Professional(body => InsertAfterBillingProvider(body,
+            ["NM1*87*2", "N3*PO BOX 1", "N4*SPRINGFIELD*IL*62701", .. PayToAddressLoop]));
+
+        var result = Validate(edi);
+
+        var issue = Assert.Single(result.AllIssues);
+        Assert.Equal(("L2-2010AB-REPEAT", SnipSeverity.Warning, "2010AB", "5"), (issue.RuleId, issue.Severity, issue.Loop, issue.SegmentErrorCode));
+        Assert.NotEqual("R", result.AcknowledgmentCode);
     }
 
     [Theory]

@@ -126,7 +126,7 @@ public class Claim
 
     /// <summary>
     /// Pay-to plan: 837 Loop 2010AC (NM1*PE), sent on a subrogation demand
-    /// (BHT06 = 31) or by a factoring agent. The plan, not the billing
+    /// (BHT06 = 31), the only case it is used (SNIP L4-2010AC-BHT06). The plan, not the billing
     /// provider, is the entity to be paid. Null when the 837 had none.
     /// </summary>
     public ClaimPayToPlan? PayToPlan { get; set; }
@@ -595,16 +595,6 @@ public class ClaimLine
     public LineAdjudicationResult? AdjudicationResult { get; set; }
 }
 
-/// <summary>
-/// Institutional (837I / UB-04) claim header detail. Additive: a document
-/// without it deserializes to <c>null</c>.
-///
-/// <para>
-/// The DRG is the one <i>billed</i> on the claim (HI*DR). CHO does not run
-/// an MS-DRG grouper; a DRG-priced claim without a billed DRG finds no DRG
-/// rate and pends for pricing rather than being grouped.
-/// </para>
-/// </summary>
 /// <summary>A postal address carried on a claim (837 N3/N4).</summary>
 [BsonIgnoreExtraElements]
 public class ClaimAddress
@@ -661,6 +651,16 @@ public class ClaimPayToPlan
     public ClaimAddress? Address { get; set; }
 }
 
+/// <summary>
+/// Institutional (837I / UB-04) claim header detail. Additive: a document
+/// without it deserializes to <c>null</c>.
+///
+/// <para>
+/// The DRG is the one <i>billed</i> on the claim (HI*DR). CHO does not run
+/// an MS-DRG grouper; a DRG-priced claim without a billed DRG finds no DRG
+/// rate and pends for pricing rather than being grouped.
+/// </para>
+/// </summary>
 [BsonIgnoreExtraElements]
 public class InstitutionalClaimDetails
 {

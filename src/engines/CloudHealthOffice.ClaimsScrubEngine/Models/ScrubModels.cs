@@ -52,7 +52,7 @@ public record X12837Claim
 
     /// <summary>
     /// Loop 2010AC pay-to plan (NM1*PE): the plan paid on a subrogation
-    /// demand (BHT06 = 31) or a factoring agent. Null when absent.
+    /// demand (BHT06 = 31), the only case the loop is used. Null when absent.
     /// </summary>
     public PayToPlan? PayToPlan { get; init; }
 

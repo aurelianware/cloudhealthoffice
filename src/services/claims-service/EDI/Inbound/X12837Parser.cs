@@ -255,6 +255,11 @@ public static class X12837Parser
                     break;
 
                 case "HL":
+                    // A new HL closes the open claim: 2300 never spans an HL,
+                    // and the claim must be built from its own HL's billing
+                    // provider / subscriber / patient / pay-to state, not the
+                    // next HL's.
+                    FlushClaim();
                     var levelCode = seg.Element(2);
                     if (levelCode == "20")
                     {

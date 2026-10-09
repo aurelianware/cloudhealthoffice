@@ -5,10 +5,6 @@ using System.Collections.Generic;
 
 namespace PaymentService.Models;
 
-/// <summary>
-/// Represents an 835 Electronic Remittance Advice (ERA) payment transaction
-/// Tracks claim payments, adjustments, and remittance details from payers
-/// </summary>
 /// <summary>835 1000B payee N3/N4 address (from the 837 Loop 2010AB pay-to address).</summary>
 public class PayeeAddress
 {
@@ -37,6 +33,10 @@ public class PayeeAddress
     private static string? Norm(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
 }
 
+/// <summary>
+/// Represents an 835 Electronic Remittance Advice (ERA) payment transaction
+/// Tracks claim payments, adjustments, and remittance details from payers
+/// </summary>
 public class Payment
 {
     /// <summary>

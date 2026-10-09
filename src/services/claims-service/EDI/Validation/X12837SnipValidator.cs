@@ -900,11 +900,20 @@ public sealed class X12837SnipValidator : ISnip837Validator
 
             if (nm1.E(2) is not ("1" or "2"))
                 Report(L2, "L2-NM102", "2010AB NM102 entity type must be 1 or 2.", nm1, 2, elemCode: "7", dataRef: "1065", badValue: nm1.E(2));
+            // Warn only: many submitters still send the 4010-style
+            // NM1*87*2*NAME*****XX*NPI. The name/id are ignored (the payee
+            // is the 2010AA billing provider), so they are no reason to
+            // reject the whole transaction set.
             for (var n = 3; n <= 12; n++)
             {
                 if (nm1.E(n) is null) continue;
-                Report(L2, "L2-2010AB-NOT-USED", $"2010AB NM1{n:00} is not used: the pay-to address loop carries no name or identifier in 5010.", nm1, n, elemCode: "I10");
+                Report(L2, "L2-2010AB-NOT-USED", $"2010AB NM1{n:00} is not used: the pay-to address loop carries no name or identifier in 5010 (ignored).", nm1, n, elemCode: "I10", warnOnly: true);
             }
+
+            // 2010AB repeats at most once per 2000A. The parser keeps the
+            // last one, so a second NM1*87 is reported, but only as a warning.
+            foreach (var extra in hl.Segs.Where(s => s.Id == "NM1" && s.Loop == "2010AB").Skip(1))
+                Report(L2, "L2-2010AB-REPEAT", "2010AB pay-to address appears more than once in this billing provider loop; only the last one is used.", extra, segCode: "5", warnOnly: true);
 
             var loopSegs = hl.Segs.Where(s => s.Loop == "2010AB").ToList();
             if (!loopSegs.Any(s => s.Id == "N3"))

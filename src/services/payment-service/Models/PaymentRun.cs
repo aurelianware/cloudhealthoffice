@@ -160,7 +160,7 @@ public class PaymentRun
 
     /// <summary>
     /// Claims not paid or remitted because they name a pay-to plan (837 Loop
-    /// 2010AC: a subrogation demand or factoring agent). The plan, not the
+    /// 2010AC: a subrogation demand, BHT06 = 31), approved or denied. The plan, not the
     /// billing provider, is the entity to be paid; a payment run pays
     /// providers by NPI, so such a claim is left for manual handling.
     /// </summary>

@@ -575,6 +575,37 @@ public class PaymentRunServiceBatchedTests
         Assert.Contains(result.Warnings, w => w.Contains("c-subro") && w.Contains("2010AC"));
         Assert.Equal(new[] { "c-ok" }, Assert.Single(payments).ClaimPayments.Select(c => c.ClaimId));
         Assert.DoesNotContain(Segments(Assert.Single(envelopes).EdiContent), s => s[0] == "CLP" && s[1] == "CLM-c-subro");
+        // Left alone: not reserved, not finalized in claims-service (stays Approved).
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "c-subro");
+        Assert.Contains(_reservations.All, r => r.ClaimId == "c-ok");
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/c-subro/"));
+        Assert.Contains(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/c-ok/"));
+        Assert.DoesNotContain("c-subro", result.ClaimIds);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DeniedPayToPlanClaim_NotRemittedToTheBillingProvider_Listed()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var subrogation = Denied("d-subro");
+        subrogation.PayToPlan = new PayToPlanDto { Name = "SYNTHETIC MEDICAID PLAN", IdentifierQualifier = "PI", Identifier = "PLAN01", TaxId = "000000001" };
+        SetupClaimsResponse(new[] { ClaimWithLines("c-ok", 80m, 80m) }, new[] { subrogation, Denied("d-ok") });
+        var (envelopes, payments) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(PaymentRunStatus.Completed, result.Status);
+        Assert.Equal(new[] { "d-subro" }, result.PayToPlanClaimIds);
+        Assert.Contains(result.Warnings, w => w.Contains("Denied claim d-subro") && w.Contains("2010AC"));
+        Assert.Equal(new[] { "d-ok" }, result.RemittedDeniedClaimIds);
+        var envelope = Assert.Single(envelopes);
+        Assert.DoesNotContain("d-subro", envelope.ClaimIds);
+        Assert.DoesNotContain(Segments(envelope.EdiContent), s => s[0] == "CLP" && s[1] == "CLM-d-subro");
+        Assert.DoesNotContain(payments.SelectMany(p => p.ClaimPayments), cp => cp.ClaimId == "d-subro");
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "d-subro");
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/d-subro/"));
     }
 
     // ── Denials: zero-pay claims in the run's 835 ─────────────────────────

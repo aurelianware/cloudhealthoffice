@@ -139,10 +139,10 @@ public class PaymentRunService : IPaymentRunService
             //         payable, at their plan-paid amount (never billed or
             //         allowed); a claim without one is listed on the run.
             var fetched = await FetchClaimsAsync(paymentRun.TenantId, paymentRun.Criteria, ClaimStatus.Approved);
+            var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
             // A claim naming a pay-to plan (837 2010AC) is paid to the plan,
             // not to a provider NPI: neither paid nor remitted by a run.
-            fetched = ExcludePayToPlan(fetched, paymentRun);
-            var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
+            claims = ExcludePayToPlan(claims, paymentRun, denied: false);
             claims = ExcludeNotPayable(claims, paymentRun);
             claims = ExcludeUnbalancedServiceLines(claims, paymentRun, denied: false);
 
@@ -626,21 +626,16 @@ public class PaymentRunService : IPaymentRunService
     }
 
     /// <summary>
-    /// Keeps only claims that are payable: claims-service status Approved
-    /// (the search asks for status=Approved; anything else returned — Pended,
-    /// Denied, with a possibly stale payerPayment — is refused here too), and
-    /// a plan-paid amount (<c>adjudicationResult.payerPayment</c>). The amount
-    /// paid is the plan's payment, never the billed charge or the allowed
-    /// amount. A claim without one is not reserved or paid, stays Approved in
-    /// claims-service, and is listed on the run for someone to correct.
-    /// </summary>
-    /// <summary>
     /// Leaves out claims that name a pay-to plan (837 Loop 2010AC). On those
     /// the plan is the entity to be paid for the subrogation (X12 RFI 1107);
     /// paying the billing provider's NPI, as a run does, would pay the wrong
-    /// party. They are listed on the run for manual handling.
+    /// party, and remitting a denial to the billing provider's trading partner
+    /// would send it to the wrong party. Approved and denied alike, they are
+    /// not reserved, finalized, paid or remitted, and are listed on the run
+    /// (<see cref="PaymentRun.PayToPlanClaimIds"/>) for manual handling. Nothing
+    /// is recorded, so every later run lists them again.
     /// </summary>
-    private List<ClaimDto> ExcludePayToPlan(List<ClaimDto> claims, PaymentRun paymentRun)
+    private List<ClaimDto> ExcludePayToPlan(List<ClaimDto> claims, PaymentRun paymentRun, bool denied)
     {
         var kept = new List<ClaimDto>(claims.Count);
         foreach (var claim in claims)
@@ -653,7 +648,7 @@ public class PaymentRunService : IPaymentRunService
 
             paymentRun.PayToPlanClaimIds.Add(claim.Id);
             paymentRun.Warnings.Add(
-                $"Claim {claim.Id} not paid or remitted: it names a pay-to plan (837 Loop 2010AC, subrogation demand), " +
+                $"{(denied ? "Denied claim" : "Claim")} {claim.Id} not paid or remitted: it names a pay-to plan (837 Loop 2010AC, subrogation demand), " +
                 "which is the entity to be paid instead of the billing provider; a payment run pays providers by NPI, so it needs manual handling");
         }
         return kept;
@@ -674,6 +669,15 @@ public class PaymentRunService : IPaymentRunService
             : null;
     }
 
+    /// <summary>
+    /// Keeps only claims that are payable: claims-service status Approved
+    /// (the search asks for status=Approved; anything else returned — Pended,
+    /// Denied, with a possibly stale payerPayment — is refused here too), and
+    /// a plan-paid amount (<c>adjudicationResult.payerPayment</c>). The amount
+    /// paid is the plan's payment, never the billed charge or the allowed
+    /// amount. A claim without one is not reserved or paid, stays Approved in
+    /// claims-service, and is listed on the run for someone to correct.
+    /// </summary>
     private List<ClaimDto> ExcludeNotPayable(List<ClaimDto> claims, PaymentRun paymentRun)
     {
         var payable = new List<ClaimDto>(claims.Count);
@@ -819,8 +823,13 @@ public class PaymentRunService : IPaymentRunService
                 remitted.Count, paymentRun.PaymentRunNumber);
         }
 
-        var withReason = new List<ClaimDto>(candidates.Count);
-        foreach (var claim in candidates.Where(c => !remitted.Contains(c.Id)))
+        // A denied subrogation demand (837 2010AC) is no more the billing
+        // provider's to receive than a paid one: it is not remitted to the
+        // billing provider's trading partner either.
+        var notRemitted = ExcludePayToPlan(candidates.Where(c => !remitted.Contains(c.Id)).ToList(), paymentRun, denied: true);
+
+        var withReason = new List<ClaimDto>(notRemitted.Count);
+        foreach (var claim in notRemitted)
         {
             if (!string.IsNullOrWhiteSpace(claim.AdjudicationResult?.DenialReasonCode)
                 || claim.AdjudicationResult?.AdjustmentReasons is { Count: > 0 })
@@ -1361,7 +1370,7 @@ public class ClaimDto
 
     /// <summary>
     /// claims-service <c>Claim.PayToPlan</c>: the 837 Loop 2010AC pay-to plan
-    /// (subrogation demand or factoring agent). When present the plan is the
+    /// (subrogation demand, BHT06 = 31). When present the plan is the
     /// entity to be paid (X12 RFI 1107), not the billing provider.
     /// </summary>
     public PayToPlanDto? PayToPlan { get; set; }
@@ -1437,10 +1446,6 @@ public class ClaimDto
 }
 
 /// <summary>
-/// Mirrors <c>ClaimsService.Models.InstitutionalClaimDetails</c> for the fields
-/// the 835 CLP segment reports.
-/// </summary>
-/// <summary>
 /// claims-service <c>ClaimPayToPlan</c>: the 837 Loop 2010AC pay-to plan.
 /// </summary>
 public class PayToPlanDto
@@ -1457,6 +1462,10 @@ public class PayToPlanDto
     public PayeeAddress? Address { get; set; }
 }
 
+/// <summary>
+/// Mirrors <c>ClaimsService.Models.InstitutionalClaimDetails</c> for the fields
+/// the 835 CLP segment reports.
+/// </summary>
 public class InstitutionalClaimDto
 {
     /// <summary>Facility type code, the first two digits of the type of bill (837I CLM05-1): CLP08.</summary>
