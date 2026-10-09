@@ -443,6 +443,7 @@ public sealed class ChoBenefitPlanProviderEngineSeamTests
             string tenantId, Guid benefitPlanId, DateOnly serviceDate,
             string procedureCode, string codeType, string placeOfService,
             IReadOnlyList<string> modifiers, string? revenueCode,
+            ServiceCategoryClaimContext? claim = null,
             CancellationToken ct = default)
             => Task.FromResult<ServiceCategoryMatch?>(new ServiceCategoryMatch
             {

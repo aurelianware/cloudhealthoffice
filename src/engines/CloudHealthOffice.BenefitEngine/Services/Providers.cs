@@ -147,8 +147,7 @@ public record BenefitPlanConfig
     /// gate so age/gender/diagnosis predicates are honoured.
     /// </summary>
     public BenefitCategoryConfig? GetFirstCategory(string serviceTypeCode)
-        => Categories.FirstOrDefault(c =>
-            string.Equals(c.ServiceTypeCode, serviceTypeCode, StringComparison.OrdinalIgnoreCase));
+        => GetCategories(serviceTypeCode).FirstOrDefault();
 
     /// <summary>
     /// Returns every <see cref="BenefitCategoryConfig"/> whose
@@ -156,8 +155,24 @@ public record BenefitPlanConfig
     /// by <c>IBenefitRuleGate</c> to walk candidate benefits and pick
     /// the first whose <see cref="BenefitCategoryConfig.Predicate"/>
     /// is satisfied for the current member encounter.
+    /// <para>
+    /// Exact match first. When nothing matches and the code is one of the
+    /// named categories the resolver's fallbacks emit ("Office Visit",
+    /// "Inpatient Hospital", ...), categories keyed by its X12 service type
+    /// code ("98", "48", ...) match instead, so plans authored with X12 codes
+    /// keep matching (see <see cref="ServiceCategoryNames"/>).
+    /// </para>
     /// </summary>
     public IReadOnlyList<BenefitCategoryConfig> GetCategories(string serviceTypeCode)
+    {
+        var exact = Matching(serviceTypeCode);
+        if (exact.Count > 0) return exact;
+
+        var x12 = ServiceCategoryNames.X12CodeFor(serviceTypeCode);
+        return x12 is null ? exact : Matching(x12);
+    }
+
+    private List<BenefitCategoryConfig> Matching(string serviceTypeCode)
         => Categories
             .Where(c => string.Equals(c.ServiceTypeCode, serviceTypeCode, StringComparison.OrdinalIgnoreCase))
             .ToList();

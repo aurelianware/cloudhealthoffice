@@ -65,6 +65,14 @@ public record PaymentEstimateRequest
     public string ClaimType { get; init; } = "Professional";
 
     /// <summary>
+    /// Institutional: NUBC type of bill, three digits (e.g. "111") or four
+    /// with the leading zero ("0111"). Optional. When no service category
+    /// mapping matches, the estimate infers the category from it (e.g. 11x →
+    /// Inpatient Hospital, 13x → Outpatient Hospital). Malformed values are ignored.
+    /// </summary>
+    public string? BillType { get; init; }
+
+    /// <summary>
     /// Line of business name (e.g. "Commercial", "Medicare", "Medicaid",
     /// "CHIP", "Exchange"). Optional; drives operating-mode routing and
     /// LOB-specific rules. Note that dental is a <see cref="ClaimType"/>,

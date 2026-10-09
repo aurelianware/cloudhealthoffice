@@ -17,8 +17,12 @@ resolution order is:
 3. **System-level fallback** — the bundle in this directory, applied
    per-tenant by `SystemDefaultMappingSeeder` on first read or on admin
    trigger.
-4. **POS-code inference** — last-resort heuristic baked into
-   `ServiceCategoryResolver` (POS 11 → Professional Visit, etc.).
+4. **System-level inference** — last-resort heuristic baked into
+   `ServiceCategoryResolver`. Institutional claims: type of bill /
+   facility type and revenue code (11x → Inpatient Hospital, 13x →
+   Outpatient Hospital, REV 045x → Emergency Room). Professional claims:
+   place of service (POS 11 → Office Visit, POS 21/22/23 → Inpatient
+   Hospital). Both emit the category names used in this bundle.
 
 Without this bundle, the resolver depends solely on POS inference and
 operator-authored mappings. New tenants that haven't authored mappings
@@ -64,9 +68,13 @@ historically used different identifier conventions:
 - **Plan authors** type free-text categories like `"Office Visit"`,
   `"Inpatient Hospital"`.
 
-These do not match. As a result, current adjudication via the POS
-fallback produces denial code `18 — No benefit category mapping` for any
-plan whose `Benefit.ServiceCategory` values aren't X12 codes.
+These did not match, so adjudication via the POS fallback denied any
+plan whose `Benefit.ServiceCategory` values aren't X12 codes. **Resolved
+for the fallback:** both resolver fallbacks now emit the category names
+in this bundle (via `ServiceCategoryNames`, a single X12 code → name map),
+and `BenefitPlanConfig.GetCategories` falls back to the X12 code of a
+name it cannot match exactly, so plans still keyed by `"98"` / `"48"`
+keep matching.
 
 This bundle takes a deliberate position: **operator-friendly text labels
 that match the plan-author convention.** A plan with
@@ -115,8 +123,12 @@ the same bundle version are no-ops.
 
 ## Bundle source
 
-CHO-curated for v1. The bundle covers ~18 categories across professional
-E&M, inpatient, outpatient surgery, emergency, urgent care, pharmacy,
+CHO-curated. Version 2 added **Outpatient Hospital** (HCPCS G0463,
+REV 0510–0519 clinic, REV 0760–0769 treatment / observation room), the
+category the institutional fallback assigns to 13x bills. Like every
+entry, it carries no cost share: cost share is authored on the plan.
+The bundle covers ~19 categories across professional
+E&M, inpatient, outpatient hospital, outpatient surgery, emergency, urgent care, pharmacy,
 behavioral health, preventive, maternity, imaging, laboratory, DME,
 vision, home health, physical therapy, ambulance, and skilled nursing.
 

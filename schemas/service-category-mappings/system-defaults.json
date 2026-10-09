@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "source": "CHO-curated. Bundle codes are operator-friendly text labels matching common Benefit.ServiceCategory values authored by plan administrators today. X12 5010 service-type-code alignment is intentionally deferred to a future translation-layer capability — see schemas/service-category-mappings/README.md for the full rationale.",
   "notes": "Procedure-code ranges drawn from common CPT/HCPCS layout: E&M 99201-99499, surgical 10000-69999, radiology 70000-79999, pathology 80000-89999, medicine 90000-99199, HCPCS Level II J/K/E/L codes. CDT and ASA codes are not included in this bundle. Operators ship plan-specific overrides via the admin write API (POST /api/v1/service-category-mappings).",
   "mappings": [
@@ -41,6 +41,15 @@
         { "priority": 12, "codeType": "CPT", "codePattern": "10000", "codeRangeEnd": "69999", "placeOfServiceCode": "19" },
         { "priority": 20, "codeType": "REV", "codePattern": "0360", "codeRangeEnd": "0369" },
         { "priority": 21, "codeType": "REV", "codePattern": "0490", "codeRangeEnd": "0499" }
+      ]
+    },
+    {
+      "serviceTypeCode": "Outpatient Hospital",
+      "serviceTypeDescription": "Hospital outpatient facility services (clinic, treatment and observation room)",
+      "rules": [
+        { "priority": 10, "codeType": "HCPCS", "codePattern": "G0463", "codeRangeEnd": "G0463" },
+        { "priority": 20, "codeType": "REV", "codePattern": "0510", "codeRangeEnd": "0519" },
+        { "priority": 21, "codeType": "REV", "codePattern": "0760", "codeRangeEnd": "0769" }
       ]
     },
     {
