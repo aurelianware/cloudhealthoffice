@@ -160,21 +160,22 @@ public class CostShareFinalizationSeamTests
     //   Line 1 (allowed 100): pre-COB deductible 100 → normal 0. Prior paid
     //     40 + 30 = 70; the secondary left the member 30 → balance 30. Pay 0;
     //     member 30 (PR-1 30); OA-23 = 100 − 30 = 70.
-    //   Line 2 (allowed 100): priced against the deductible left after what
-    //     the member owes on line 1 (120 − 30 = 90) in both modes, so the 835
-    //     does not depend on the setting: deductible 90, copay 10 → cost
-    //     share 100, normal 0. Prior paid 50 + 20 = 70; secondary PR 30 →
-    //     balance 30. Pay 0; member 30 (PR-1 30); OA-23 = 70.
-    // Deductible credit: NAIC full (the default) credits line 1 with the 100
-    // applied before COB (PR-1 is 30) and line 2 with the 20 left in the
-    // accumulator — 120, the deductible met; member-paid only credits the
-    // PR-1 amounts, 60. The event carries DeductibleCredited; the OOP and
-    // service rollups take the member's 60 either way.
+    //   Line 2 (allowed 100), prior paid 50 + 20 = 70, secondary PR 30 →
+    //     balance 30:
+    //     NAIC full (default): line 1 credited the 100 applied before COB, so
+    //       20 of the 120 deductible is left: deductible 20, copay 20,
+    //       coinsurance 20% × 60 = 12 → cost share 52, normal 48. Pay 30;
+    //       member 0; OA-23 = 70. Credited 20 → 120 in total (met).
+    //     Member-paid only: line 1 credited its PR-1 30, so 90 is left:
+    //       deductible 90, copay 10 → normal 0. Pay 0; member 30 (PR-1 30);
+    //       OA-23 = 70. Credited 30 + 30 = 60.
+    // The event carries DeductibleCredited; the OOP and service rollups take
+    // the member's share.
     [Theory]
-    [InlineData(CobDeductibleCredit.NaicFullCredit, 120)]
-    [InlineData(CobDeductibleCredit.MemberPaidOnly, 60)]
+    [InlineData(CobDeductibleCredit.NaicFullCredit, 120, 30, 30)]
+    [InlineData(CobDeductibleCredit.MemberPaidOnly, 60, 0, 60)]
     public async Task TertiaryPayerCob_FromClaimPayerData_ReachesAccumulatorDeltas(
-        CobDeductibleCredit credit, decimal expectedDeductibleDelta)
+        CobDeductibleCredit credit, decimal expectedDeductibleDelta, decimal expectedPaid, decimal expectedMember)
     {
         static ClaimAdjustmentReason Cas(string group, string carc, decimal amount) =>
             new() { GroupCode = group, ReasonCode = carc, Amount = amount };
@@ -209,24 +210,27 @@ public class CostShareFinalizationSeamTests
             });
         var engine = ctx.BenefitResolutionResult!;
 
-        engine.Totals.TotalPlanPaid.Should().Be(0m);
-        engine.Totals.TotalMemberResponsibility.Should().Be(60m);
-        engine.Totals.TotalDeductible.Should().Be(60m);
+        engine.Totals.TotalPlanPaid.Should().Be(expectedPaid);
+        engine.Totals.TotalMemberResponsibility.Should().Be(expectedMember);
+        engine.Totals.TotalDeductible.Should().Be(expectedMember);
         engine.Totals.TotalDeductibleCredited.Should().Be(expectedDeductibleDelta);
         ctx.AdjudicationResult!.DeductibleCreditedAmount.Should().Be(expectedDeductibleDelta);
 
         claim.ClaimLines[0].AdjudicationResult!.AdjustmentReasons
             .Select(r => (r.GroupCode, r.ReasonCode, r.Amount)).Should().Equal(
                 ("CO", "45", 50m), ("PR", "1", 30m), ("OA", "23", 70m));
+        var line2Pr1 = expectedMember - 30m;
+        var line2Cas = new List<(string, string, decimal)> { ("CO", "45", 100m) };
+        if (line2Pr1 > 0) line2Cas.Add(("PR", "1", line2Pr1));
+        line2Cas.Add(("OA", "23", 70m));
         claim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons
-            .Select(r => (r.GroupCode, r.ReasonCode, r.Amount)).Should().Equal(
-                ("CO", "45", 100m), ("PR", "1", 30m), ("OA", "23", 70m));
+            .Select(r => (r.GroupCode, r.ReasonCode, r.Amount)).Should().Equal(line2Cas);
 
-        evt.LineItems.Select(l => l.DeductibleApplied).Should().Equal(30m, 30m);
+        evt.LineItems.Select(l => l.DeductibleApplied).Should().Equal(30m, line2Pr1);
         var (deductible, oop, services) = AccumulatorDomainService.ComputeDeltas(evt);
         deductible.Should().Be(expectedDeductibleDelta);
-        oop.Should().Be(60m);
-        services.Sum(s => s.UsedDelta).Should().Be(60m);
+        oop.Should().Be(expectedMember);
+        services.Sum(s => s.UsedDelta).Should().Be(expectedMember);
 
         AssertClaimTotalsMatchLineCas(claim);
         AssertLinesBalance(ctx, claim);

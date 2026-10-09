@@ -234,36 +234,17 @@ public class AccumulatorWorkingSet
     private static decimal Remaining(AccumulatorEntry entry)
         => Math.Max(0, entry.LimitAmount - entry.CurrentAccumulated);
 
-    /// <summary>
-    /// Deductible credited on this claim beyond what the member owes (NAIC
-    /// full COB credit, see <see cref="ApplyDeductibleWithCredit"/>), by
-    /// network tier. The accumulators carry it; the remaining deductible this
-    /// claim's own later lines are priced against does not, so the credit
-    /// changes only the accumulators, never this claim's 835.
-    /// </summary>
-    private readonly Dictionary<NetworkTier, decimal> _deductibleCreditOffset = new();
-
-    private decimal CreditOffset(NetworkTier tier) => _deductibleCreditOffset.GetValueOrDefault(tier);
-
     // ═══════════════════════════════════════════════════════════════════
     // DEDUCTIBLE
     // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// The deductible still to apply when pricing this claim's next unit —
-    /// excluding any NAIC COB credit given on this claim's earlier units
-    /// (see <see cref="ApplyDeductibleWithCredit"/>).
+    /// The deductible still to apply when pricing this claim's next unit.
+    /// Includes any NAIC COB credit given on this claim's earlier units
+    /// (see <see cref="ApplyDeductibleWithCredit"/>): deductible the plan
+    /// credited is met for the rest of the claim too.
     /// </summary>
     public decimal GetRemainingDeductible(NetworkTier networkTier)
-    {
-        var offset = CreditOffset(networkTier);
-        return offset == 0
-            ? GetRemainingDeductibleInAccumulators(networkTier)
-            : RemainingDeductible(networkTier, e => Math.Max(0, e.LimitAmount - (e.CurrentAccumulated - offset)));
-    }
-
-    /// <summary>The deductible remaining in the accumulators themselves (credits included).</summary>
-    private decimal GetRemainingDeductibleInAccumulators(NetworkTier networkTier)
         => RemainingDeductible(networkTier, Remaining);
 
     private decimal RemainingDeductible(NetworkTier networkTier, Func<AccumulatorEntry, decimal> remaining)
@@ -328,29 +309,19 @@ public class AccumulatorWorkingSet
     /// deductible on the 835 (PR-1); <paramref name="toCredit"/> is what the
     /// plan's setting credits — the same amount, or under NAIC full credit
     /// the deductible the plan applied before COB (NAIC MDL-120 §7).
-    ///
-    /// When <paramref name="toCredit"/> equals <paramref name="memberOwes"/>
-    /// this is exactly <see cref="ApplyDeductible"/>. Otherwise the credit is
-    /// limited to the deductible left in the accumulators (it never takes
-    /// them past the limit), and the difference from
-    /// <paramref name="memberOwes"/> is kept out of
-    /// <see cref="GetRemainingDeductible"/>, so this claim's later lines are
-    /// priced exactly as without the credit: the 835 does not change, only
-    /// the accumulators (and so the claims that follow).
+    /// The credit is limited to the deductible left in the accumulators (it
+    /// never takes them past the limit). It counts as met for this claim's
+    /// later units as well as for the claims that follow: the plan prices the
+    /// rest of the claim as it would have with no other coverage.
     /// </summary>
     public decimal ApplyDeductibleWithCredit(decimal memberOwes, decimal toCredit, NetworkTier networkTier)
     {
         memberOwes = Math.Max(0, memberOwes);
-        toCredit = Math.Max(0, toCredit);
-        if (toCredit == memberOwes && CreditOffset(networkTier) == 0)
-        {
-            ApplyDeductible(memberOwes, networkTier);
-            return memberOwes;
-        }
-
-        var credited = Math.Min(toCredit, GetRemainingDeductibleInAccumulators(networkTier));
+        toCredit = Math.Max(memberOwes, toCredit);
+        var credited = toCredit == memberOwes
+            ? memberOwes
+            : Math.Min(toCredit, Math.Max(memberOwes, GetRemainingDeductible(networkTier)));
         ApplyDeductible(credited, networkTier);
-        _deductibleCreditOffset[networkTier] = CreditOffset(networkTier) + credited - memberOwes;
         return credited;
     }
 
@@ -499,7 +470,6 @@ public class AccumulatorWorkingSet
         }
 
         _pendingUpdates.Clear();
-        _deductibleCreditOffset.Clear();
     }
 
     // ═══════════════════════════════════════════════════════════════════

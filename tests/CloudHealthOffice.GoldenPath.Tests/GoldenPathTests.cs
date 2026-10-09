@@ -202,11 +202,13 @@ public class GoldenPathTests
     //   so balance = min(150 − 81.37, 40.00) = $40.00. We pay min(72, 40) = $40.00;
     //   member min(78, 40 − 40) = $0. OA-23 = 150 − 0 − 40 = $110.00.
     //   SVC: 400 − (250 + 110) = 40 ✓.
-    // L2: the deductible is priced as on the 835 (the NAIC credit on L1 is
-    //   accumulator-only), so $60 left: deductible $60 + 20% × 40 = $8 → $68,
-    //   normal $32. Prior paid 72 + 18.63 = $90.63; balance = min(100 − 90.63,
-    //   18.00) = $9.37. We pay $9.37, member $0, OA-23 = 100 − 9.37 = $90.63.
-    //   SVC: 180 − (80 + 90.63) = 9.37 ✓.
+    // L2: under NAIC full credit the $60 credited on L1 meets the deductible
+    //   for L2 too: coinsurance 20% × 100 = $20, normal $80. Prior paid
+    //   72 + 18.63 = $90.63; balance = min(100 − 90.63, 18.00) = $9.37. We pay
+    //   min(80, 9.37) = $9.37, member $0, OA-23 = 100 − 9.37 = $90.63.
+    //   SVC: 180 − (80 + 90.63) = 9.37 ✓. (Under MemberPaidOnly L2 still
+    //   meets $60 of deductible — normal $32 — but the $9.37 balance binds
+    //   first, so this 835 is the same in both modes.)
     // Claim: charge 580, allowed 250, plan $49.37 (CLP04, BPR02), member $0;
     //   CLP02 = 3 (processed as tertiary).
     // Accumulators (NAIC full credit, the plan default): deductible +$60 —

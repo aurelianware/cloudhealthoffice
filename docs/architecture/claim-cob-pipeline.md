@@ -423,21 +423,26 @@ Applies only when the plan is not the first payer:
 
 | Value | Deductible accumulator | 835 |
 |---|---|---|
-| `NaicFullCredit` (default) | the deductible our own adjudication applied before COB (already limited to the remaining deductible and by the OOP cap), including deductible a prior payer paid | unchanged (PR-1 = what the member owes) |
-| `MemberPaidOnly` | only the PR-1 the member owes after COB (behavior before this setting) — self-funded ERISA plans with non-duplication / carve-out provisions | unchanged |
+| `NaicFullCredit` (default) | the deductible our own adjudication applied before COB (already limited to the remaining deductible and by the OOP cap), including deductible a prior payer paid | the unit itself: PR-1 = what the member owes; later lines of the same claim treat the credited deductible as met, so their PR-1 is lower than under `MemberPaidOnly` |
+| `MemberPaidOnly` | only the PR-1 the member owes after COB (behavior before this setting) — self-funded ERISA plans with non-duplication / carve-out provisions | as before this setting |
 | `NoDeductible` | nothing: the deductible is not applied | no PR-1 (the deductible is skipped as a later payer) — Medicaid-secondary plans |
 
 Source: MDL-120 §7, "the secondary plan shall credit to its plan deductible
 any amounts it would have credited to its deductible in the absence of other
 health care coverage."
 
-**The 835 does not change.** The credit beyond PR-1 is accumulator-only:
-`AccumulatorWorkingSet.ApplyDeductibleWithCredit` keeps it out of the
-remaining deductible the claim's own later lines are priced against, so a
-multi-line claim prices every line exactly as under `MemberPaidOnly`; the
-total credited never passes the deductible limit (a later line whose PR-1
-the credit already covered credits $0). Claims that follow see the credited
-deductible.
+**Within the claim.** Under `NaicFullCredit` the plan prices the claim as
+it would have with no other coverage (MDL-120 §7), so the deductible
+credited on an earlier line counts as met for the claim's later lines
+(`AccumulatorWorkingSet.ApplyDeductibleWithCredit` writes the credit to the
+working accumulators the later lines read). Their pre-COB deductible, and so
+the member's share and PR-1, drop; each line still balances (charge − ΣCAS =
+paid, one positive OA-23, no negative CAS) and CLP04 = Σ SVC03. **This
+changes the 835 of multi-line secondary and tertiary claims under the
+default setting** compared with `MemberPaidOnly`, where later lines still
+meet the deductible the member did not pay. The total credited never passes
+the deductible limit. A DRG stay is one unit, so the setting does not change
+its 835.
 
 **OOP maximum.** MDL-120 requires deductible credit only; it says nothing
 about the out-of-pocket maximum, and what other plans paid is not the

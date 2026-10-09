@@ -984,11 +984,11 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // health care coverage"), including deductible a prior payer paid.
         // deductibleBeforeCob already respects the remaining deductible
         // (step 4) and the OOP cap (step 6); the working set also keeps the
-        // credit within the deductible left in the accumulators. The 835 is
-        // unaffected: the credit beyond PR-1 is kept out of the remaining
-        // deductible this claim's later lines are priced against
-        // (AccumulatorWorkingSet.ApplyDeductibleWithCredit), so it changes
-        // the accumulators — and the claims that follow — only.
+        // credit within the deductible left in the accumulators. This
+        // unit's 835 is unaffected; the credited deductible counts as met for
+        // this claim's later lines too (AccumulatorWorkingSet
+        // .ApplyDeductibleWithCredit), so they are priced as the plan would
+        // have priced them with no other coverage, and their PR-1 drops.
         oopEligible =
             (deductibleCountsToOop ? deductibleAmount : 0)
             + (copayCountsToOop ? finalCopay : 0)

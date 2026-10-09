@@ -164,10 +164,9 @@ public enum CobDeductibleCredit
     /// other health care coverage." The deductible accumulators get the
     /// deductible this plan's own adjudication applied before COB (already
     /// limited to the remaining deductible and by the OOP cap), including
-    /// deductible a prior payer paid. The credit beyond what the member owes
-    /// is accumulator-only: it does not lower the deductible this claim's
-    /// later lines are priced against, and never takes the accumulator past
-    /// its limit.
+    /// deductible a prior payer paid. The credit counts as met for this
+    /// claim's later lines as well as for later claims (so a later line's
+    /// PR-1 drops), and never takes the accumulator past its limit.
     /// </summary>
     NaicFullCredit = 0,
 
