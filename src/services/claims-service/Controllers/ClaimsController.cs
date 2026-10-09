@@ -1745,8 +1745,9 @@ public class ClaimsController : ControllerBase
                     },
                     HttpContext.RequestAborted);
 
-                if (rerun.Outcome != ClaimAdjudicationOutcome.Pass
-                    && !await HoldsResolutionLockAsync(claimId, lockToken))
+                if (rerun.ResolutionLockLost
+                    || (rerun.Outcome != ClaimAdjudicationOutcome.Pass
+                        && !await HoldsResolutionLockAsync(claimId, lockToken)))
                 {
                     // The re-run outlived the lock and its write was refused:
                     // another examiner's resolution owns the claim now.

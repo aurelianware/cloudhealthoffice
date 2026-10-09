@@ -615,6 +615,8 @@ public class ClaimRepositoryMongo : IClaimRepository
                 b.Eq(c => c.TenantId, tenantId),
                 b.Eq(c => c.Id, head.Id),
                 b.Not(b.In(c => c.Status, ClaimRepository.FinalDispositions)));
+            if (requiredResolutionLockToken is not null)
+                pendFilter = b.And(pendFilter, b.Eq(c => c.ResolutionLock!.Token, requiredResolutionLockToken));
             var pendUpdate = Builders<Claim>.Update.Set(c => c.Status, ClaimStatus.Pended);
             await _collection.UpdateOneAsync(pendFilter, pendUpdate, cancellationToken: ct);
             return true;
@@ -629,7 +631,8 @@ public class ClaimRepositoryMongo : IClaimRepository
                     ClaimRepository.MapStatusToVersionState(resolvedStatus.Value),
                     ct,
                     adjudicationResult,
-                    head.Status)
+                    head.Status,
+                    requiredResolutionLockToken)
                 .ConfigureAwait(false);
         }
 
@@ -718,13 +721,20 @@ public class ClaimRepositoryMongo : IClaimRepository
         ClaimVersionState desiredVersionState,
         CancellationToken ct,
         AdjudicationResult? incomingAdjudication = null,
-        ClaimStatus? preWriteStatus = null)
+        ClaimStatus? preWriteStatus = null,
+        string? requiredResolutionLockToken = null)
     {
         var b = Builders<Claim>.Filter;
+        // Follow-up 1 (PR #1279 review): an approval re-run's status write is
+        // fenced on the same resolution lock as its projection write.
+        var lockFence = requiredResolutionLockToken is null
+            ? b.Empty
+            : b.Eq(c => c.ResolutionLock!.Token, requiredResolutionLockToken);
         var statusFilter = b.And(
             b.Eq(c => c.TenantId, tenantId),
             b.Eq(c => c.Id, rowId),
-            b.Not(b.In(c => c.Status, ClaimRepository.SynchronousWritebackBlockedStatuses)));
+            b.Not(b.In(c => c.Status, ClaimRepository.SynchronousWritebackBlockedStatuses)),
+            lockFence);
         var statusUpdate = Builders<Claim>.Update
             .Set(c => c.Status, desiredStatus)
             .Set(c => c.VersionState, desiredVersionState);
@@ -771,7 +781,8 @@ public class ClaimRepositoryMongo : IClaimRepository
             var repairFilter = b.And(
                 b.Eq(c => c.TenantId, tenantId),
                 b.Eq(c => c.Id, rowId),
-                repairEvidenceFilter);
+                repairEvidenceFilter,
+                lockFence);
 
             var repairResult = await _collection.UpdateOneAsync(repairFilter, statusUpdate, cancellationToken: ct);
             if (repairResult.MatchedCount > 0)

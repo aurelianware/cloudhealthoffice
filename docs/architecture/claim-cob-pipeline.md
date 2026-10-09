@@ -516,9 +516,14 @@ ever recorded**. Approval now re-adjudicates it:
    accepted any Submitted / Adjudicated row, so resolver A's re-run that
    outlived its lock could overwrite resolver B's finalized claim (paid 112
    over B's 58), or land between B's re-run and B's re-read and have B
-   finalize and publish A's amounts. A refused write rejects the re-run;
-   the resolver sees it no longer holds the lock and returns the lost-lock
-   409. A denial checks the lock is still held (`HoldsResolutionLockAsync`:
+   finalize and publish A's amounts. The follow-up status write
+   (`isPend` / guarded status patch) carries the same fence. A refused
+   write marks the run `ResolutionLockLost`: the orchestrator then **emits
+   nothing** — no audit `ClaimVersionAdjudicated` event, no Service Bus
+   message, no adjustment callback (a Reject callback would move an
+   in-flight adjustment AwaitingReadjudication → Failed, and the new
+   holder's Pass would then be a no-op, leaving the predecessor unreversed)
+   — and the resolver returns the lost-lock 409. A denial checks the lock is still held (`HoldsResolutionLockAsync`:
    Pended, this token, unexpired) immediately before reversing the engine
    accumulators, and aborts with the same 409 if not.
 6. **Audit.** Every resolution appends an `ExaminerResolutionRecord` to
@@ -880,16 +885,22 @@ on secondary/tertiary claims; past accumulators are not rewritten.
   log, can make it inexact (never more than the row recorded).
 - **Cosmos reversal uniqueness** relies on the versioned write and lease (no
   unique key policy is created from code); Mongo also has the unique index.
-- **Tombstone fence snapshot.** The `ClaimTombstoned` row goes on the
-  snapshot the *reversing* claim resolves to (its member and service date).
-  A replacement that changes the member or plan year fences a different
-  snapshot than the stalled original would write; the lease check and the
-  conditional completion still apply, but a stalled append computed before
-  the takeover is then not forced to conflict.
-- **Lock fence scope.** The approval re-run's *projection write* is fenced on
-  the resolution lock; the engine accumulator writes a re-run makes before
-  Persistence (claims pended after benefit calculation) are idempotent per
-  claim id, not per resolver.
+- **Tombstone fence snapshot.** The zero-delta `ClaimTombstoned` row is
+  appended on the snapshot the *reversing* claim resolves to (its member and
+  service date), not necessarily the original's. A replacement that changes
+  the member or plan year therefore does not force a stalled original's
+  append to conflict: that append (computed before the takeover) can still
+  land on the original's snapshot. The lease check on later passes and the
+  conditional completion still apply. Not fixed here.
+- **Lock fence scope — accumulators are not fenced.** The approval re-run's
+  projection and status writes are fenced on the resolution lock, but its
+  `BenefitCalculationStage` (Order 300) engine accumulator writes are not:
+  they happen in Production before Persistence and know nothing of the lock.
+  If A's re-run outlives its lock after benefit calculation, and the new
+  holder B then *denies* the claim, A's accumulator writes can remain
+  applied (B's denial reversal runs before or concurrently with them; the
+  engine's writes are idempotent per claim id, not per resolver). Not fixed
+  here.
 - **Store clamp.** Only `ChoAccumulatorService` (Mongo / Cosmos) clamps at
   write time; the Redis accumulator service does not.
 - 2320/2430 `AMT*EAF` (remaining patient liability) is not read; patient

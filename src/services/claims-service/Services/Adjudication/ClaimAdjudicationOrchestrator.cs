@@ -260,6 +260,23 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         context.ExaminerApproval = approval;
 
         await RunPipelineAsync(context, ct).ConfigureAwait(false);
+
+        // PR #1279 B1: the fenced write was refused — another resolver holds
+        // the lock and owns the outcome. Emitting this run's Reject (audit,
+        // Service Bus, adjustment callback) would fail an adjustment the new
+        // holder is about to finalize. Emit nothing.
+        if (context.ResolutionLockLost)
+        {
+            _logger.LogWarning(
+                "Approval re-run for claim {ClaimId} lost its resolution lock; nothing emitted",
+                SanitizeForLog(claimId));
+            return new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Reject,
+                "The examiner resolution lock is no longer held.")
+            {
+                ResolutionLockLost = true,
+            };
+        }
+
         await EmitAdjudicatedEventAsync(context, ct).ConfigureAwait(false);
 
         var outcome = ResolveFinalOutcome(context);

@@ -131,6 +131,13 @@ public sealed record ApprovalReadjudicationResult(
 {
     /// <summary>The pends the re-run overrode ("{stage}: {code}: {reason}"), for the audit record.</summary>
     public IReadOnlyList<string> OverriddenPends { get; init; } = [];
+
+    /// <summary>
+    /// The re-run's write was refused because the resolution lock was taken
+    /// over; nothing was persisted or emitted. The caller returns the
+    /// lost-lock 409.
+    /// </summary>
+    public bool ResolutionLockLost { get; init; }
 }
 
 /// <summary>

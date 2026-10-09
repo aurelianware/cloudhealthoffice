@@ -1459,7 +1459,10 @@ public class ClaimRepository : IClaimRepository
                     rowId,
                     new PartitionKey(tenantId),
                     new List<PatchOperation> { PatchOperation.Set("/status", ClaimStatus.Pended) },
-                    new PatchItemRequestOptions { FilterPredicate = FinalDispositionFilterPredicate },
+                    new PatchItemRequestOptions
+                    {
+                        FilterPredicate = WithResolutionLockFence(FinalDispositionFilterPredicate, requiredResolutionLockToken),
+                    },
                     ct);
             }
             catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
@@ -1483,7 +1486,8 @@ public class ClaimRepository : IClaimRepository
                     MapStatusToVersionState(resolvedStatus.Value),
                     ct,
                     adjudicationResult,
-                    head.Status)
+                    head.Status,
+                    requiredResolutionLockToken)
                 .ConfigureAwait(false);
         }
 
@@ -1586,14 +1590,18 @@ public class ClaimRepository : IClaimRepository
         ClaimVersionState desiredVersionState,
         CancellationToken ct,
         AdjudicationResult? incomingAdjudication = null,
-        ClaimStatus? preWriteStatus = null)
+        ClaimStatus? preWriteStatus = null,
+        string? requiredResolutionLockToken = null)
     {
         var statusOps = new List<PatchOperation>
         {
             PatchOperation.Set("/status", desiredStatus),
             PatchOperation.Set("/versionState", desiredVersionState),
         };
-        var options = new PatchItemRequestOptions { FilterPredicate = SynchronousWritebackBlockedFilterPredicate };
+        var options = new PatchItemRequestOptions
+        {
+            FilterPredicate = WithResolutionLockFence(SynchronousWritebackBlockedFilterPredicate, requiredResolutionLockToken),
+        };
 
         try
         {
@@ -1624,7 +1632,10 @@ public class ClaimRepository : IClaimRepository
                 var repairFilter = desiredStatus == ClaimStatus.Denied
                     ? ContradictoryApprovedRepairFilterPredicate
                     : ContradictoryDeniedRepairFilterPredicate;
-                var repairOptions = new PatchItemRequestOptions { FilterPredicate = repairFilter };
+                var repairOptions = new PatchItemRequestOptions
+                {
+                    FilterPredicate = WithResolutionLockFence(repairFilter, requiredResolutionLockToken),
+                };
                 try
                 {
                     await _container.PatchItemAsync<Claim>(rowId, new PartitionKey(tenantId), statusOps, repairOptions, ct);
@@ -1684,6 +1695,19 @@ public class ClaimRepository : IClaimRepository
     /// <summary>Cosmos patch FilterPredicate for <see cref="IsFinalDisposition"/> — built from <see cref="FinalDispositions"/>; Pended is deliberately absent (re-pending is allowed).</summary>
     private static readonly string FinalDispositionFilterPredicate =
         BuildStatusNotInFilterPredicate(FinalDispositions);
+
+    /// <summary>
+    /// <paramref name="predicate"/> ("FROM c WHERE …"), additionally requiring
+    /// the resolution lock <paramref name="lockToken"/> when one is given
+    /// (an approval re-run's writes, PR #1278 follow-up 1).
+    /// </summary>
+    internal static string WithResolutionLockFence(string predicate, string? lockToken)
+    {
+        if (lockToken is null) return predicate;
+        const string prefix = "FROM c WHERE ";
+        var condition = predicate.StartsWith(prefix, StringComparison.Ordinal) ? predicate[prefix.Length..] : predicate;
+        return $"{prefix}({condition}) AND c.resolutionLock.token = '{ResolutionLockTokenLiteral(lockToken)}'";
+    }
 
     private static string BuildStatusNotInFilterPredicate(IReadOnlyList<ClaimStatus> blockedStatuses) =>
         $"FROM c WHERE NOT (c.status IN ({string.Join(",", blockedStatuses.Select(s => $"'{CosmosStatusLiteral(s)}'"))}))";

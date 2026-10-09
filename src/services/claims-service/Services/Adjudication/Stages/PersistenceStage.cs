@@ -89,6 +89,7 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
 
             if (!written && context.ExaminerApproval?.ResolutionLockToken is not null)
             {
+                context.ResolutionLockLost = true;
                 _logger.LogWarning(
                     "Approval re-run for claim {ClaimVersionId} did not persist: the examiner resolution lock " +
                     "is no longer held (another resolution took over)",
