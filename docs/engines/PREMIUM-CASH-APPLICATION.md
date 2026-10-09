@@ -175,10 +175,22 @@ reversal id is `rev-{entry}`, so a retried void does not reverse twice.
 of it. **Create** clears any client-supplied posted state (`PostedEntryId`, `PostedAt`,
 `AppliedAmount`).
 
-**Postings applied before this change.** A posting that was `PartiallyApplied` under the old code
-has applications without `PostedEntryId`; they were never credited. Applying it again now credits
-them for the first time. If operations already compensated by hand (for example with a manual
-adjustment), this credits the balance twice. Review such postings before re-applying them.
+**Postings applied before this change (legacy).** A posting the old code applied has
+applications without `PostedEntryId`, which were never credited. Finance may already have
+corrected those balances by hand, so crediting them now could credit a balance twice.
+
+- **Which postings:** status `PartiallyApplied` or `Applied`, an application with an amount, and
+  no `PostedEntryId` on any application (`CashPostingLedger.IsLegacy`).
+- **Guard:** ar-service refuses to apply or void such a posting. It returns 409
+  `LegacyPostingRequiresReconciliation` until finance has reviewed it.
+- **Reconciliation:** finance marks each application `CORRECTED_MANUALLY` or `APPLY_CREDIT`,
+  and `tools/ArLegacyPostingReconciliation` carries the decisions out, with an audit record per
+  application:
+  - `CORRECTED_MANUALLY` sets the sentinel id `manual-{posting}-{index}`. Apply never credits
+    that application and void never debits it.
+  - `APPLY_CREDIT` posts the same `cash-{posting}-{index}` entry that apply would.
+- **This is a deploy blocker.** See
+  [AR legacy posting reconciliation](../operations/AR-LEGACY-POSTING-RECONCILIATION.md).
 
 ## Storage
 
