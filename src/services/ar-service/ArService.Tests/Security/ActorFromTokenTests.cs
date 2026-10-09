@@ -93,7 +93,7 @@ public class ActorFromTokenTests
     {
         var repo = new Mock<ICashPostingRepository>();
         repo.Setup(r => r.CreateAsync(It.IsAny<CashPosting>())).ReturnsAsync((CashPosting p) => p);
-        var controller = new CashPostingController(repo.Object, _actor, Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, new FakeArBalanceRepository(), _actor, Mock.Of<ILogger<CashPostingController>>());
 
         var result = await controller.CreateCashPosting(new CashPosting { CreatedBy = Attacker });
 

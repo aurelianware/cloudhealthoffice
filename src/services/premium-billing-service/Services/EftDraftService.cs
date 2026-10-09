@@ -970,26 +970,27 @@ public class EftDraftService : IEftDraftService
 
         await _draftRepository.UpdateAsync(draft);
 
-        // Reverse the payment on the invoice if one was recorded
-        var invoice = await _invoiceRepository.GetByIdAsync(draft.InvoiceId);
-        if (invoice != null)
+        // Reverse the payment on the invoice if one was recorded. Re-read and
+        // re-applied on a concurrent change, so a payment recorded meanwhile is kept.
+        var returnNote = $"ACH return ({draft.ReturnCode}): {draft.ReturnReason}";
+        await InvoiceWrites.UpdateWithRetryAsync(_invoiceRepository, draft.InvoiceId, null, invoice =>
         {
-            // Add a negative adjustment for the returned draft
+            if (invoice.Adjustments.Any(a => a.Description == returnNote))
+                return false; // already reversed (a retried return)
+
+            // Add a zero adjustment recording the returned draft
             invoice.Adjustments.Add(new InvoiceAdjustment
             {
                 Type = AdjustmentType.Other,
-                Description = $"ACH return ({draft.ReturnCode}): {draft.ReturnReason}",
+                Description = returnNote,
                 Amount = 0, // Don't change the invoice total; the payment reversal handles balance
                 AdjustmentDate = DateTime.UtcNow
             });
 
             // Remove the payment that was recorded for this draft
-            var draftPayment = invoice.Payments.FirstOrDefault(p =>
-                p.ReferenceNumber == draft.TraceNumber || p.ReferenceNumber == draft.StripePaymentIntentId);
+            var draftPayment = invoice.Payments.FirstOrDefault(p => IsDraftPayment(p, draft));
             if (draftPayment != null)
-            {
                 invoice.Payments.Remove(draftPayment);
-            }
 
             invoice.RecalculateTotals();
             invoice.LastUpdatedBy = actor;
@@ -999,9 +1000,8 @@ public class EftDraftService : IEftDraftService
                 invoice.Status = InvoiceStatus.PartiallyPaid;
             else if (invoice.BalanceDue > 0)
                 invoice.Status = invoice.DueDate < DateTime.UtcNow ? InvoiceStatus.Overdue : InvoiceStatus.Sent;
-
-            await _invoiceRepository.UpdateAsync(invoice);
-        }
+            return true;
+        });
 
         _logger.LogWarning(
             "ACH return processed for draft {DraftId}, invoice {InvoiceNumber}: {ReturnCode} - {ReturnReason}",
@@ -1024,29 +1024,39 @@ public class EftDraftService : IEftDraftService
         var draft = await _draftRepository.GetByIdAsync(draftId)
             ?? throw new InvalidOperationException($"Draft {draftId} not found");
 
-        if (draft.Status != EftDraftStatus.Submitted && draft.Status != EftDraftStatus.Processing)
+        // A draft already Settled is settled again idempotently: if an earlier
+        // attempt marked it Settled but failed before the invoice payment was
+        // saved, this records the missing payment; otherwise it does nothing.
+        if (draft.Status != EftDraftStatus.Submitted && draft.Status != EftDraftStatus.Processing
+            && draft.Status != EftDraftStatus.Settled)
             throw new InvalidOperationException($"Cannot settle draft in {draft.Status} state");
 
-        draft.Status = EftDraftStatus.Settled;
-        draft.SettledAt = DateTime.UtcNow;
-        draft.LastUpdatedBy = actor;
-        await _draftRepository.UpdateAsync(draft);
-
-        // Record payment on the invoice
-        var invoice = await _invoiceRepository.GetByIdAsync(draft.InvoiceId);
-        if (invoice != null)
+        if (draft.Status != EftDraftStatus.Settled)
         {
-            var payment = new InvoicePayment
+            draft.Status = EftDraftStatus.Settled;
+            draft.SettledAt = DateTime.UtcNow;
+            draft.LastUpdatedBy = actor;
+            await _draftRepository.UpdateAsync(draft);
+        }
+
+        // Record the payment on the invoice, once. Re-read and re-applied on a
+        // concurrent change, so neither this payment nor the other one is lost.
+        var recorded = false;
+        await InvoiceWrites.UpdateWithRetryAsync(_invoiceRepository, draft.InvoiceId, null, invoice =>
+        {
+            if (invoice.Payments.Any(p => IsDraftPayment(p, draft)))
+                return false;
+
+            invoice.Payments.Add(new InvoicePayment
             {
+                PaymentId = DraftPaymentId(draft),
                 Amount = draft.Amount,
-                PaymentDate = DateTime.UtcNow,
+                PaymentDate = draft.SettledAt ?? DateTime.UtcNow,
                 PaymentMethod = draft.Method == EftMethod.StripeAch ? "StripeACH" : "ACH",
                 ReferenceNumber = draft.TraceNumber ?? draft.StripePaymentIntentId,
                 ReceivedDate = DateTime.UtcNow,
                 RecordedBy = actor
-            };
-
-            invoice.Payments.Add(payment);
+            });
             invoice.RecalculateTotals();
             invoice.LastUpdatedBy = actor;
 
@@ -1054,15 +1064,27 @@ public class EftDraftService : IEftDraftService
                 invoice.Status = InvoiceStatus.Paid;
             else if (invoice.TotalPaid > 0)
                 invoice.Status = InvoiceStatus.PartiallyPaid;
+            recorded = true;
+            return true;
+        });
 
-            await _invoiceRepository.UpdateAsync(invoice);
-        }
-
-        _logger.LogInformation("Draft {DraftId} settled for invoice {InvoiceNumber}, amount ${Amount:N2}",
-            draft.Id, draft.InvoiceNumber, draft.Amount);
+        _logger.LogInformation("Draft {DraftId} settled for invoice {InvoiceNumber}, amount ${Amount:N2}{Note}",
+            draft.Id, draft.InvoiceNumber, draft.Amount, recorded ? string.Empty : " (payment was already on the invoice)");
 
         return draft;
     }
+
+    /// <summary>The payment a settled draft puts on its invoice has this id.</summary>
+    internal static string DraftPaymentId(EftDraft draft) => $"eft-{draft.Id}";
+
+    /// <summary>
+    /// The invoice payment recorded for this draft: by its fixed id, or (payments
+    /// recorded before the id was fixed) by the draft's trace or PaymentIntent reference.
+    /// </summary>
+    private static bool IsDraftPayment(InvoicePayment payment, EftDraft draft) =>
+        payment.PaymentId == DraftPaymentId(draft)
+        || (payment.ReferenceNumber != null
+            && (payment.ReferenceNumber == draft.TraceNumber || payment.ReferenceNumber == draft.StripePaymentIntentId));
 
     public async Task ProcessStripeWebhookAsync(string json, string stripeSignature)
     {

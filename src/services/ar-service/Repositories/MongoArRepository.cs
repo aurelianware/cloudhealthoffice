@@ -230,11 +230,22 @@ public class MongoArBalanceRepository : IArBalanceRepository
 
     public async Task<ArBalance> UpdateAsync(ArBalance balance)
     {
+        var f = Builders<ArBalance>.Filter;
+        var expected = balance.Version;
+        // Documents saved before versioning have no Version field: version 0 matches them too.
+        var versionFilter = expected == 0
+            ? f.Or(f.Eq(x => x.Version, 0L), f.Exists(x => x.Version, false))
+            : f.Eq(x => x.Version, expected);
+        var filter = f.And(f.Eq(x => x.Id, balance.Id), f.Eq(x => x.TenantId, balance.TenantId), versionFilter);
+
         balance.LastUpdatedAt = DateTime.UtcNow;
-        var filter = Builders<ArBalance>.Filter.And(
-            Builders<ArBalance>.Filter.Eq(x => x.Id, balance.Id),
-            Builders<ArBalance>.Filter.Eq(x => x.TenantId, balance.TenantId));
-        await _collection.ReplaceOneAsync(filter, balance);
+        balance.Version = expected + 1;
+        var result = await _collection.ReplaceOneAsync(filter, balance);
+        if (result.MatchedCount == 0)
+        {
+            balance.Version = expected;
+            throw new ArConcurrencyException($"AR balance {balance.Id} was changed by someone else; re-read it and retry");
+        }
         _logger.LogInformation("Updated AR balance {BalanceId}", SanitizeForLog(balance.Id));
         return balance;
     }

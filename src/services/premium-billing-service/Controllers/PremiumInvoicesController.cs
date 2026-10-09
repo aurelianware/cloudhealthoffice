@@ -87,6 +87,11 @@ public class PremiumInvoicesController : ControllerBase
             var invoice = await _billingService.RecordPaymentAsync(id, request);
             return Ok(invoice);
         }
+        catch (ConcurrencyConflictException ex)
+        {
+            // Kept changing under us after retries: the caller may retry.
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -107,6 +112,11 @@ public class PremiumInvoicesController : ControllerBase
             var invoice = await _billingService.VoidInvoiceAsync(id, request.Reason);
             return Ok(invoice);
         }
+        catch (ConcurrencyConflictException ex)
+        {
+            // Kept changing under us after retries: the caller may retry.
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -125,6 +135,11 @@ public class PremiumInvoicesController : ControllerBase
         {
             var invoice = await _billingService.MarkInvoiceSentAsync(id);
             return Ok(invoice);
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            // Kept changing under us after retries: the caller may retry.
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -170,6 +185,8 @@ public class PremiumInvoicesController : ControllerBase
             sponsorsSuspended = result.SponsorsSuspended,
             suspensionRetries = result.SuspensionRetries,
             suspensionFailures = result.SuspensionFailures,
+            invoiceFailures = result.InvoiceFailures,
+            skippedAfterConflict = result.SkippedAfterConflict,
             message = result.SuspensionFailures.Count == 0
                 ? $"{result.DelinquentCount} invoices marked delinquent"
                 : $"{result.DelinquentCount} invoices marked delinquent; {result.SuspensionFailures.Count} sponsor suspension(s) " +
@@ -177,10 +194,14 @@ public class PremiumInvoicesController : ControllerBase
         };
 
         // A failed suspension is not a success: 502 tells a scheduler or the
-        // portal that sponsor-service did not do what was asked.
-        return result.SuspensionFailures.Count == 0
+        // portal that sponsor-service did not do what was asked. Invoices this
+        // run could not process (the rest were) answer 207 so the run is not
+        // mistaken for a complete success.
+        if (result.SuspensionFailures.Count > 0)
+            return StatusCode(StatusCodes.Status502BadGateway, body);
+        return result.InvoiceFailures.Count == 0
             ? Ok(body)
-            : StatusCode(StatusCodes.Status502BadGateway, body);
+            : StatusCode(StatusCodes.Status207MultiStatus, body);
     }
 }
 

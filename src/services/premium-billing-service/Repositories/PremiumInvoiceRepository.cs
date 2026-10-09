@@ -7,6 +7,12 @@ public interface IPremiumInvoiceRepository
 {
     Task<PremiumInvoice?> GetByIdAsync(string id);
     Task<IEnumerable<PremiumInvoice>> GetByGroupNumberAsync(string groupNumber);
+
+    /// <summary>
+    /// Invoices with this invoice number (normally one; a reissued period can
+    /// leave a voided one beside it). Used to match remittance references.
+    /// </summary>
+    Task<IEnumerable<PremiumInvoice>> GetByInvoiceNumberAsync(string invoiceNumber);
     Task<IEnumerable<PremiumInvoice>> GetByBillingPeriodAsync(DateTime billingPeriodStart);
     Task<IEnumerable<PremiumInvoice>> GetByStatusAsync(InvoiceStatus status);
     Task<IEnumerable<PremiumInvoice>> SearchAsync(
@@ -27,6 +33,12 @@ public interface IPremiumInvoiceRepository
     Task<IEnumerable<PremiumInvoice>> ListByMemberAsync(string memberId, int take = 12);
 
     Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice);
+
+    /// <summary>
+    /// Saves the invoice if nobody saved it since it was read (Mongo: same
+    /// <see cref="PremiumInvoice.Version"/>; Cosmos: same ETag). Otherwise
+    /// throws <see cref="ConcurrencyConflictException"/>: re-read and retry.
+    /// </summary>
     Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice);
     Task DeleteAsync(string id);
 }
@@ -78,6 +90,17 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
             "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.groupNumber = @groupNumber ORDER BY c.billingPeriodStart DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@groupNumber", groupNumber);
+
+        return await ExecuteQueryAsync(query);
+    }
+
+    public async Task<IEnumerable<PremiumInvoice>> GetByInvoiceNumberAsync(string invoiceNumber)
+    {
+        var tenantId = GetTenantId();
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.invoiceNumber = @invoiceNumber")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@invoiceNumber", invoiceNumber);
 
         return await ExecuteQueryAsync(query);
     }
@@ -196,9 +219,20 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
     public async Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice)
     {
         invoice.LastUpdatedAt = DateTime.UtcNow;
-        var response = await _container.ReplaceItemAsync(invoice, invoice.Id, new PartitionKey(invoice.TenantId));
-        _logger.LogInformation("Updated premium invoice {InvoiceNumber}", invoice.InvoiceNumber);
-        return response.Resource;
+        invoice.Version++;
+        try
+        {
+            var options = invoice.ETag == null ? null : new ItemRequestOptions { IfMatchEtag = invoice.ETag };
+            var response = await _container.ReplaceItemAsync(invoice, invoice.Id, new PartitionKey(invoice.TenantId), options);
+            response.Resource.ETag = response.ETag;
+            _logger.LogInformation("Updated premium invoice {InvoiceNumber}", invoice.InvoiceNumber);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            invoice.Version--;
+            throw new ConcurrencyConflictException($"Invoice {invoice.InvoiceNumber} was changed by someone else; re-read it and retry");
+        }
     }
 
     public async Task DeleteAsync(string id)

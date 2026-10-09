@@ -34,6 +34,7 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         public Mock<ISponsorServiceClient> Sponsors { get; } = new();
         public Mock<ICoverageServiceClient> Coverage { get; } = new();
         public Mock<IStripeAchService> Stripe { get; } = new();
+        public Mock<ISponsorAccountRepository> Accounts { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -52,6 +53,8 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
                 services.RemoveAll<ISponsorServiceClient>();
                 services.RemoveAll<ICoverageServiceClient>();
                 services.RemoveAll<IStripeAchService>();
+                services.RemoveAll<ISponsorAccountRepository>();
+                services.AddSingleton(Accounts.Object);
                 services.AddSingleton(Runs.Object);
                 services.AddSingleton(Invoices.Object);
                 services.AddSingleton(Drafts.Object);
@@ -90,6 +93,14 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         _factory.Sponsors.Reset();
         _factory.Coverage.Reset();
         _factory.Stripe.Reset();
+        _factory.Accounts.Reset();
+        _factory.Accounts.Setup(a => a.UpdateAsync(It.IsAny<string>(), It.IsAny<Action<SponsorAccount>>()))
+            .ReturnsAsync((string group, Action<SponsorAccount> change) =>
+            {
+                var account = new SponsorAccount { GroupNumber = group };
+                change(account);
+                return account;
+            });
 
         _factory.Runs.Setup(r => r.SearchAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<BillingRunStatus?>()))
             .ReturnsAsync(new List<BillingRun>());
@@ -262,9 +273,10 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
     [Fact]
     public async Task RecordPayment_RecordsWhoRecordedIt()
     {
-        var invoice = new PremiumInvoice { TenantId = Tenant, Id = "inv-1", Status = InvoiceStatus.Sent };
+        var invoice = new PremiumInvoice { TenantId = Tenant, Id = "inv-1", GroupNumber = "GRP001", Status = InvoiceStatus.Sent };
         invoice.LineItems.Add(new InvoiceLineItem { MemberId = "m1", TotalPremium = 100m });
         _factory.Invoices.Setup(r => r.GetByIdAsync("inv-1")).ReturnsAsync(invoice);
+        _factory.Invoices.Setup(r => r.GetByGroupNumberAsync("GRP001")).ReturnsAsync(new[] { invoice });
 
         var response = await Client(Tenant, ChoRolePermissions.Finance).PostAsJsonAsync(
             "/api/v1/premium-invoices/inv-1/payments", new { amount = 40m, paymentDate = "2026-03-05T00:00:00Z" });
@@ -272,6 +284,8 @@ public class PremiumBillingPipelineAuthTests : IClassFixture<PremiumBillingPipel
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         invoice.Payments.Single().RecordedBy.Should().Be(User);
         invoice.LastUpdatedBy.Should().Be(User);
+        // The sponsor's account balance is refreshed with the payment.
+        _factory.Accounts.Verify(a => a.UpdateAsync("GRP001", It.IsAny<Action<SponsorAccount>>()), Times.Once);
     }
 
     // ── permissions ───────────────────────────────────────────────────
