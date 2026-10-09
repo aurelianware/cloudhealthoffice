@@ -11,12 +11,13 @@ public class CashPostingControllerTests
 {
     private readonly Mock<ICashPostingRepository> _cashPostingRepo;
     private readonly CashPostingController _controller;
+    private readonly FakeArBalanceRepository _balances = FakeArBalanceRepository.AutoCreating("acct-1");
 
     public CashPostingControllerTests()
     {
         _cashPostingRepo = new Mock<ICashPostingRepository>();
         var logger = new Mock<ILogger<CashPostingController>>();
-        _controller = new CashPostingController(_cashPostingRepo.Object, new TestActor(), logger.Object);
+        _controller = new CashPostingController(_cashPostingRepo.Object, _balances, new TestActor(), logger.Object);
     }
 
     private static CashPosting CreatePosting(

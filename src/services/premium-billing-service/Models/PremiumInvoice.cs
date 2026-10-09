@@ -177,6 +177,17 @@ public class PremiumInvoice
     public SponsorSuspensionRecord? SponsorSuspension { get; set; }
 
     /// <summary>
+    /// Optimistic concurrency (Mongo): incremented on every save; saving a
+    /// stale copy throws <see cref="Repositories.ConcurrencyConflictException"/>.
+    /// </summary>
+    public long Version { get; set; }
+
+    /// <summary>Optimistic concurrency (Cosmos); set by Cosmos DB.</summary>
+    [JsonPropertyName("_etag")]
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    public string? ETag { get; set; }
+
+    /// <summary>
     /// Recalculate computed totals from line items, adjustments, and payments
     /// </summary>
     public void RecalculateTotals()
@@ -368,6 +379,21 @@ public class InvoicePayment
     /// <summary>Who recorded the payment (token subject, or "stripe-webhook").</summary>
     [StringLength(200)]
     public string? RecordedBy { get; set; }
+
+    /// <summary>Remittance batch (820 or lockbox) the payment was applied from.</summary>
+    [StringLength(100)]
+    public string? RemittanceBatchId { get; set; }
+
+    /// <summary>Item line within the remittance batch.</summary>
+    public int? RemittanceLine { get; set; }
+
+    /// <summary>Member the payment was remitted for (820 individual remittance).</summary>
+    [StringLength(50)]
+    public string? MemberId { get; set; }
+
+    /// <summary>Exceptions-queue item the payment was applied from.</summary>
+    [StringLength(200)]
+    public string? RemittanceExceptionId { get; set; }
 }
 
 public enum SponsorSuspensionState

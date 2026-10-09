@@ -28,6 +28,7 @@ public class PremiumBillingService : IPremiumBillingService
     private readonly ICoverageServiceClient _coverageClient;
     private readonly ICurrentActor _actor;
     private readonly ILogger<PremiumBillingService> _logger;
+    private readonly ISponsorAccountRepository? _sponsorAccounts;
 
     public PremiumBillingService(
         IBillingRunRepository billingRunRepository,
@@ -35,8 +36,10 @@ public class PremiumBillingService : IPremiumBillingService
         ISponsorServiceClient sponsorClient,
         ICoverageServiceClient coverageClient,
         ICurrentActor actor,
-        ILogger<PremiumBillingService> logger)
+        ILogger<PremiumBillingService> logger,
+        ISponsorAccountRepository? sponsorAccounts = null)
     {
+        _sponsorAccounts = sponsorAccounts;
         _billingRunRepository = billingRunRepository;
         _invoiceRepository = invoiceRepository;
         _sponsorClient = sponsorClient;
@@ -163,12 +166,6 @@ public class PremiumBillingService : IPremiumBillingService
 
     public async Task<PremiumInvoice> RecordPaymentAsync(string invoiceId, RecordPaymentRequest request)
     {
-        var invoice = await _invoiceRepository.GetByIdAsync(invoiceId)
-            ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
-
-        if (invoice.Status == InvoiceStatus.Voided || invoice.Status == InvoiceStatus.WriteOff)
-            throw new InvalidOperationException($"Cannot record payment on {invoice.Status} invoice");
-
         var payment = new InvoicePayment
         {
             Amount = request.Amount,
@@ -179,56 +176,71 @@ public class PremiumBillingService : IPremiumBillingService
             RecordedBy = ActorId
         };
 
-        invoice.Payments.Add(payment);
-        invoice.RecalculateTotals();
-        invoice.LastUpdatedBy = ActorId;
-
-        // Update status based on balance
-        if (invoice.BalanceDue <= 0)
-            invoice.Status = InvoiceStatus.Paid;
-        else if (invoice.TotalPaid > 0)
-            invoice.Status = InvoiceStatus.PartiallyPaid;
+        // Re-read and re-applied on a concurrent change; a conflict that persists
+        // reaches the API as 409 (ConcurrencyConflictException).
+        var updated = await InvoiceWrites.UpdateWithRetryAsync(_invoiceRepository, invoiceId, null, invoice =>
+        {
+            if (invoice.Status == InvoiceStatus.Voided || invoice.Status == InvoiceStatus.WriteOff)
+                throw new InvalidOperationException($"Cannot record payment on {invoice.Status} invoice");
+            if (invoice.Payments.Any(p => p.PaymentId == payment.PaymentId))
+                return false;
+            invoice.Payments.Add(payment);
+            invoice.RecalculateTotals();
+            invoice.LastUpdatedBy = ActorId;
+            PremiumInvoiceStatus.ApplyPaymentStatus(invoice);
+            return true;
+        }) ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
 
         _logger.LogInformation("Recorded payment of ${Amount:N2} on invoice {InvoiceNumber}, balance due: ${BalanceDue:N2}",
-            request.Amount, invoice.InvoiceNumber, invoice.BalanceDue);
+            request.Amount, updated.InvoiceNumber, updated.BalanceDue);
 
-        return await _invoiceRepository.UpdateAsync(invoice);
+        // The sponsor's account balance follows the invoice it was paid on.
+        if (_sponsorAccounts != null && !string.IsNullOrEmpty(updated.GroupNumber))
+            await SponsorAccountBalances.RefreshAsync(_invoiceRepository, _sponsorAccounts, updated.GroupNumber, request.PaymentDate);
+
+        return updated;
     }
 
     public async Task<PremiumInvoice> VoidInvoiceAsync(string invoiceId, string reason)
     {
-        var invoice = await _invoiceRepository.GetByIdAsync(invoiceId)
-            ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
-
-        if (invoice.Status == InvoiceStatus.Paid)
-            throw new InvalidOperationException("Cannot void a fully paid invoice");
-
-        invoice.Status = InvoiceStatus.Voided;
-        invoice.LastUpdatedBy = ActorId;
-        invoice.Adjustments.Add(new InvoiceAdjustment
+        var updated = await InvoiceWrites.UpdateWithRetryAsync(_invoiceRepository, invoiceId, null, invoice =>
         {
-            Type = AdjustmentType.Other,
-            Description = $"Invoice voided: {reason}",
-            Amount = 0,
-            AdjustmentDate = DateTime.UtcNow
-        });
+            if (invoice.Status == InvoiceStatus.Paid)
+                throw new InvalidOperationException("Cannot void a fully paid invoice");
+            if (invoice.Status == InvoiceStatus.Voided)
+                return false;
 
-        _logger.LogInformation("Voided invoice {InvoiceNumber}: {Reason}", invoice.InvoiceNumber, SanitizeForLog(reason));
+            invoice.Status = InvoiceStatus.Voided;
+            invoice.LastUpdatedBy = ActorId;
+            invoice.Adjustments.Add(new InvoiceAdjustment
+            {
+                Type = AdjustmentType.Other,
+                Description = $"Invoice voided: {reason}",
+                Amount = 0,
+                AdjustmentDate = DateTime.UtcNow
+            });
+            return true;
+        }) ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
 
-        return await _invoiceRepository.UpdateAsync(invoice);
+        _logger.LogInformation("Voided invoice {InvoiceNumber}: {Reason}", updated.InvoiceNumber, SanitizeForLog(reason));
+
+        // A voided invoice no longer counts toward the sponsor's open balance.
+        if (_sponsorAccounts != null && !string.IsNullOrEmpty(updated.GroupNumber))
+            await SponsorAccountBalances.RefreshAsync(_invoiceRepository, _sponsorAccounts, updated.GroupNumber, null);
+
+        return updated;
     }
 
     public async Task<PremiumInvoice> MarkInvoiceSentAsync(string invoiceId)
     {
-        var invoice = await _invoiceRepository.GetByIdAsync(invoiceId)
-            ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
-
-        if (invoice.Status != InvoiceStatus.Generated)
-            throw new InvalidOperationException($"Can only mark Generated invoices as Sent, current: {invoice.Status}");
-
-        invoice.Status = InvoiceStatus.Sent;
-        invoice.LastUpdatedBy = ActorId;
-        return await _invoiceRepository.UpdateAsync(invoice);
+        return await InvoiceWrites.UpdateWithRetryAsync(_invoiceRepository, invoiceId, null, invoice =>
+        {
+            if (invoice.Status != InvoiceStatus.Generated)
+                throw new InvalidOperationException($"Can only mark Generated invoices as Sent, current: {invoice.Status}");
+            invoice.Status = InvoiceStatus.Sent;
+            invoice.LastUpdatedBy = ActorId;
+            return true;
+        }) ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
     }
 
     public async Task<IEnumerable<PremiumInvoice>> GetOverdueInvoicesAsync()
@@ -286,35 +298,23 @@ public class PremiumBillingService : IPremiumBillingService
 
         foreach (var invoice in overdueInvoices)
         {
-            // Check if grace period has expired
-            if (invoice.GracePeriodExpires.HasValue && now > invoice.GracePeriodExpires.Value
-                && invoice.Status != InvoiceStatus.Delinquent)
+            // One invoice failing (a conflict that persists, a database error) must not
+            // stop the run for the others: it is reported and picked up by the next run.
+            try
             {
-                invoice.Status = InvoiceStatus.Delinquent;
-                invoice.LastUpdatedBy = actor;
-                result.DelinquentCount++;
-
-                _logger.LogWarning(
-                    "Invoice {InvoiceNumber} for group {GroupNumber} marked delinquent. Balance: ${BalanceDue:N2}",
-                    invoice.InvoiceNumber, invoice.GroupNumber, invoice.BalanceDue);
-
-                await SuspendSponsorAsync(invoice, actor, outcomes, result);
-                await _invoiceRepository.UpdateAsync(invoice);
+                await ProcessDelinquencyAsync(invoice, now, actor, outcomes, result);
             }
-            else if (invoice.Status == InvoiceStatus.Delinquent
-                     && invoice.SponsorSuspension?.State == SponsorSuspensionState.Failed)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // A suspension that failed on an earlier run is retried until it succeeds.
-                result.SuspensionRetries++;
-                await SuspendSponsorAsync(invoice, actor, outcomes, result);
-                await _invoiceRepository.UpdateAsync(invoice);
-            }
-            else if (invoice.Status == InvoiceStatus.Sent || invoice.Status == InvoiceStatus.PartiallyPaid)
-            {
-                // Mark as overdue if past due date but within grace period
-                invoice.Status = InvoiceStatus.Overdue;
-                invoice.LastUpdatedBy = actor;
-                await _invoiceRepository.UpdateAsync(invoice);
+                result.InvoiceFailures.Add(new DelinquencyInvoiceFailure
+                {
+                    InvoiceId = invoice.Id,
+                    InvoiceNumber = invoice.InvoiceNumber,
+                    GroupNumber = invoice.GroupNumber,
+                    Error = ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message
+                });
+                _logger.LogError(ex, "Delinquency processing failed for invoice {InvoiceNumber}; the run continues",
+                    SanitizeForLog(invoice.InvoiceNumber));
             }
         }
 
@@ -323,9 +323,93 @@ public class PremiumBillingService : IPremiumBillingService
                 "Delinquency processing: {Failed} sponsor suspension(s) failed and are recorded on their invoices for retry",
                 result.SuspensionFailures.Count);
 
-        _logger.LogInformation("Delinquency processing complete: {Count} invoices marked delinquent", result.DelinquentCount);
+        _logger.LogInformation("Delinquency processing complete: {Count} invoices marked delinquent, {Failed} invoice(s) failed",
+            result.DelinquentCount, result.InvoiceFailures.Count);
         return result;
     }
+
+    private enum DelinquencyStep { NewlyDelinquent, SuspensionRetry, Overdue }
+
+    /// <summary>
+    /// Moves one overdue invoice along (Overdue, or Delinquent with sponsor
+    /// suspension). On a save conflict the invoice is re-read and re-evaluated:
+    /// if a payment made it no longer overdue, it is left alone. Counters and
+    /// failures are recorded only for the save that succeeded.
+    /// </summary>
+    private async Task ProcessDelinquencyAsync(PremiumInvoice listed, DateTime now, string actor,
+        Dictionary<string, SponsorSuspensionOutcome> outcomes, DelinquencyRunResult result)
+    {
+        var invoice = (PremiumInvoice?)listed;
+        for (var attempt = 1; ; attempt++)
+        {
+            if (invoice == null || !IsStillOverdue(invoice, now))
+            {
+                if (attempt > 1)
+                    result.SkippedAfterConflict++;
+                return;
+            }
+
+            DelinquencyStep step;
+            SponsorSuspensionFailure? failure = null;
+            if (invoice.GracePeriodExpires.HasValue && now > invoice.GracePeriodExpires.Value
+                && invoice.Status != InvoiceStatus.Delinquent)
+            {
+                step = DelinquencyStep.NewlyDelinquent;
+                invoice.Status = InvoiceStatus.Delinquent;
+                invoice.LastUpdatedBy = actor;
+                failure = RecordSuspension(invoice, actor, await SuspensionOutcomeAsync(invoice, outcomes, result));
+            }
+            else if (invoice.Status == InvoiceStatus.Delinquent
+                     && invoice.SponsorSuspension?.State == SponsorSuspensionState.Failed)
+            {
+                // A suspension that failed on an earlier run is retried until it succeeds.
+                step = DelinquencyStep.SuspensionRetry;
+                failure = RecordSuspension(invoice, actor, await SuspensionOutcomeAsync(invoice, outcomes, result));
+            }
+            else if (invoice.Status == InvoiceStatus.Sent || invoice.Status == InvoiceStatus.PartiallyPaid)
+            {
+                // Mark as overdue if past due date but within grace period
+                step = DelinquencyStep.Overdue;
+                invoice.Status = InvoiceStatus.Overdue;
+                invoice.LastUpdatedBy = actor;
+            }
+            else
+            {
+                return;
+            }
+
+            try
+            {
+                await _invoiceRepository.UpdateAsync(invoice);
+            }
+            catch (ConcurrencyConflictException) when (attempt < InvoiceWrites.MaxAttempts)
+            {
+                invoice = await _invoiceRepository.GetByIdAsync(listed.Id);
+                continue;
+            }
+
+            switch (step)
+            {
+                case DelinquencyStep.NewlyDelinquent:
+                    result.DelinquentCount++;
+                    _logger.LogWarning(
+                        "Invoice {InvoiceNumber} for group {GroupNumber} marked delinquent. Balance: ${BalanceDue:N2}",
+                        invoice.InvoiceNumber, invoice.GroupNumber, invoice.BalanceDue);
+                    break;
+                case DelinquencyStep.SuspensionRetry:
+                    result.SuspensionRetries++;
+                    break;
+            }
+            if (failure != null)
+                result.SuspensionFailures.Add(failure);
+            return;
+        }
+    }
+
+    /// <summary>The same test as the overdue query: still owes money, past due, not closed.</summary>
+    private static bool IsStillOverdue(PremiumInvoice invoice, DateTime now) =>
+        invoice.BalanceDue > 0 && invoice.DueDate < now
+        && invoice.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Paid);
 
     // --- Private helper methods ---
 
@@ -440,12 +524,10 @@ public class PremiumBillingService : IPremiumBillingService
     }
 
     /// <summary>
-    /// Asks sponsor-service to suspend the invoice's sponsor and records the
-    /// outcome on the invoice. A failure (including 401/403) is logged as an
-    /// error, recorded, added to the run result and retried on the next run.
+    /// Asks sponsor-service to suspend the invoice's sponsor, once per group
+    /// per run (a re-evaluated invoice reuses the answer).
     /// </summary>
-    private async Task SuspendSponsorAsync(
-        PremiumInvoice invoice, string actor,
+    private async Task<SponsorSuspensionOutcome> SuspensionOutcomeAsync(PremiumInvoice invoice,
         Dictionary<string, SponsorSuspensionOutcome> outcomes, DelinquencyRunResult result)
     {
         if (!outcomes.TryGetValue(invoice.GroupNumber, out var outcome))
@@ -456,7 +538,16 @@ public class PremiumBillingService : IPremiumBillingService
             if (outcome.Success)
                 result.SponsorsSuspended++;
         }
+        return outcome;
+    }
 
+    /// <summary>
+    /// Records the suspension outcome on the invoice. A failure (including
+    /// 401/403) is logged as an error and returned for the run result; it is
+    /// retried on the next run.
+    /// </summary>
+    private SponsorSuspensionFailure? RecordSuspension(PremiumInvoice invoice, string actor, SponsorSuspensionOutcome outcome)
+    {
         var record = invoice.SponsorSuspension ?? new SponsorSuspensionRecord();
         record.Attempts++;
         record.LastAttemptAt = DateTime.UtcNow;
@@ -471,23 +562,23 @@ public class PremiumBillingService : IPremiumBillingService
             record.SuspendedAt = DateTime.UtcNow;
             _logger.LogWarning("Suspended sponsor {GroupNumber} due to premium delinquency (invoice {InvoiceNumber})",
                 SanitizeForLog(invoice.GroupNumber), SanitizeForLog(invoice.InvoiceNumber));
-            return;
+            return null;
         }
 
         record.State = SponsorSuspensionState.Failed;
         record.LastError = outcome.Error is { Length: > 1000 } e ? e[..1000] : outcome.Error;
-        result.SuspensionFailures.Add(new SponsorSuspensionFailure
+        _logger.LogError(
+            "Failed to suspend sponsor {GroupNumber} for delinquent invoice {InvoiceNumber} (attempt {Attempt}, status {StatusCode}): {Error}",
+            SanitizeForLog(invoice.GroupNumber), SanitizeForLog(invoice.InvoiceNumber), record.Attempts,
+            outcome.StatusCode, SanitizeForLog(outcome.Error));
+        return new SponsorSuspensionFailure
         {
             InvoiceId = invoice.Id,
             InvoiceNumber = invoice.InvoiceNumber,
             GroupNumber = invoice.GroupNumber,
             StatusCode = outcome.StatusCode,
             Error = record.LastError
-        });
-        _logger.LogError(
-            "Failed to suspend sponsor {GroupNumber} for delinquent invoice {InvoiceNumber} (attempt {Attempt}, status {StatusCode}): {Error}",
-            SanitizeForLog(invoice.GroupNumber), SanitizeForLog(invoice.InvoiceNumber), record.Attempts,
-            outcome.StatusCode, SanitizeForLog(outcome.Error));
+        };
     }
 }
 
@@ -505,6 +596,20 @@ public class DelinquencyRunResult
 
     /// <summary>Suspensions that failed in this run; each is recorded on its invoice and retried next run.</summary>
     public List<SponsorSuspensionFailure> SuspensionFailures { get; set; } = new();
+
+    /// <summary>Invoices that could not be processed in this run (the others were); picked up by the next run.</summary>
+    public List<DelinquencyInvoiceFailure> InvoiceFailures { get; set; } = new();
+
+    /// <summary>Invoices that a concurrent change (usually a payment) took out of overdue while this run was saving them.</summary>
+    public int SkippedAfterConflict { get; set; }
+}
+
+public class DelinquencyInvoiceFailure
+{
+    public string InvoiceId { get; set; } = string.Empty;
+    public string InvoiceNumber { get; set; } = string.Empty;
+    public string GroupNumber { get; set; } = string.Empty;
+    public string Error { get; set; } = string.Empty;
 }
 
 public class SponsorSuspensionFailure
