@@ -29,7 +29,7 @@ ships:
 1. A real Cosmos / Mongo storage backend implementing the read seam.
 2. An admin write API for authoring tenant-default and plan-specific
    override mappings.
-3. A curated CHO seed bundle with ~18 operator-friendly categories
+3. A curated CHO seed bundle with ~19 operator-friendly categories
    covering the common claim shapes.
 
 ## Resolution flow
@@ -41,9 +41,25 @@ ships:
    `MatchedBy = "PlanOverride"`.
 2. **Tenant-level default** — read mappings keyed by `(tenantId, null)`.
    `MatchedBy = "TenantDefault"`.
-3. **POS-code inference fallback** — built into the resolver, not the
-   repository. POS 11 → X12 service type 98, POS 21/22/23 → 48, etc.
-   `MatchedBy = "SystemDefault"`.
+3. **System-level inference fallback** — built into the resolver, not
+   the repository. `MatchedBy = "SystemDefault"`. Both branches work out
+   an X12 service type code and translate it to the category name plans
+   use through one shared map (`ServiceCategoryNames`):
+   - **Institutional** (claim type 837I or a valid type of bill): type of
+     bill / facility type, then revenue code. Inpatient bills (11x/12x/41x
+     → Inpatient Hospital, 18x/21x/22x/28x → Skilled Nursing, 81x/82x →
+     Hospice) cover every line of the stay, including ER revenue codes
+     (ER leading to the admission is bundled into the stay). Otherwise REV
+     045x → Emergency Room, REV 0100–0219 → Inpatient Hospital, then
+     13x/14x/43x/85x → Outpatient Hospital, 32x–34x → Home Health. The
+     type of bill must be three digits or four with a leading zero;
+     anything else is ignored.
+   - **Place of service** (professional claims, and institutional claims
+     whose place of service is a real CMS POS): POS 11 → Office Visit,
+     POS 21/22/23 → Inpatient Hospital, etc. The claims-service 837I
+     mapping stores CLM05-1 (facility type) in the place-of-service slot
+     and marks it (`PlaceOfServiceIsFacilityType`); that value is read as a
+     facility type and never as a POS.
 4. **Null** — when no mapping matches and no POS inference applies, the
    resolver returns null and `BenefitCalculationEngine` denies the line
    with code 18 ("No benefit category mapping").
@@ -170,9 +186,12 @@ This produces a known incoherence with X12 5010 standards:
   (Professional Visit), `"48"` (Inpatient Hospital), `"86"` (ER).
 - **Operator-authored `Benefit.ServiceCategory`** is typically free-text
   like `"Office Visit"`, `"Inpatient Hospital"`, `"ER"`.
-- **The two surfaces don't match.** Adjudication via the POS fallback
-  produces a denial code 18 (No benefit category mapping) for any plan
-  whose `Benefit.ServiceCategory` values aren't X12 codes.
+- **The two surfaces didn't match.** Adjudication via the POS fallback
+  denied any plan whose `Benefit.ServiceCategory` values aren't X12 codes.
+  **Resolved for the fallback:** the resolver fallbacks now emit category
+  names, and `BenefitPlanConfig.GetCategories` falls back to a name's X12
+  code (`ServiceCategoryNames.X12CodeFor`) when no category matches it
+  exactly, so plans keyed by X12 codes keep matching.
 
 **BP 5.6 takes a deliberate position**: the seed bundle uses
 **operator-friendly text labels** matching the plan-author convention.

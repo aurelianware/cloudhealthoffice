@@ -106,3 +106,30 @@ public interface IAppealEventPublisher
         string? correlationId,
         CancellationToken ct = default);
 }
+
+/// <summary>Outcome of <see cref="AppealEventPublisher"/>'s start.</summary>
+public enum AppealEventPublisherState
+{
+    /// <summary>Producer built; events are produced.</summary>
+    Available,
+
+    /// <summary>
+    /// <c>Kafka:BootstrapServers</c> is unset: publishing is off for the
+    /// whole service by configuration (degraded mode, every event type).
+    /// </summary>
+    Disabled,
+
+    /// <summary>Kafka is configured but the producer could not be built.</summary>
+    Unavailable
+}
+
+/// <summary>
+/// Lets a startup task wait for the publisher's <c>StartAsync</c> instead
+/// of depending on hosted-service registration order: before the
+/// publisher starts, a publish is silently skipped.
+/// </summary>
+public interface IAppealEventPublisherReadiness
+{
+    /// <summary>Completes when the publisher has started, with the resulting state.</summary>
+    Task<AppealEventPublisherState> Started { get; }
+}

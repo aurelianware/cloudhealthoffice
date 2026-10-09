@@ -143,7 +143,7 @@ public class EraGeneratorService : IEraGeneratorService
         // NM109 qualifier: XX=NPI
         var payeeNpiQual = string.IsNullOrEmpty(payment.PayeeNPI) ? "" : $"*XX*{payment.PayeeNPI}";
         sb.Append(Seg(ref segmentCount, true,
-            $"N1*PE*{Esc(payment.PayeeName)}{payeeNpiQual}~"));
+            $"N1*PE*{Era835Names.N102(payment.PayeeName)}{payeeNpiQual}~"));
 
         // ── 2000 / 2100 loops — one CLP per claim ───────────────────────
         foreach (var claimPay in payment.ClaimPayments)

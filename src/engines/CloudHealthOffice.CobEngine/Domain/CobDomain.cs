@@ -125,7 +125,8 @@ public record CobLineInput
     /// <summary>Total billed (submitted) charge for this line.</summary>
     public decimal BilledAmount { get; init; }
 
-    /// <summary>Amount this secondary payer allowed (from its own fee schedule).</summary>
+    /// <summary>Amount this secondary payer allowed (from its own fee schedule).
+    /// Required by both models: member responsibility is measured against it.</summary>
     public decimal SecondaryAllowedAmount { get; init; }
 
     /// <summary>Member responsibility produced by the secondary's own cost-sharing waterfall,
@@ -159,16 +160,28 @@ public record CobLineResult
     /// <summary>Secondary plan payment after COB adjustment.</summary>
     public decimal SecondaryPlanPayment { get; init; }
 
-    /// <summary>Final member responsibility after both payers have applied.</summary>
+    /// <summary>
+    /// Final member responsibility after both payers have applied: the part
+    /// of this plan's allowed amount neither payer paid, never more than
+    /// <see cref="CobLineInput.SecondaryMemberResponsibilityBeforeCob"/>. The
+    /// caller reduces its PR-1/2/3 entries to this amount.
+    /// </summary>
     public decimal MemberResponsibility { get; init; }
 
     /// <summary>
     /// Amount by which the secondary plan payment was reduced due to COB
-    /// (reported as OA/23 CAS segment on the 835).
+    /// (this plan's COB savings). The 835 OA-23 adds the cost share the
+    /// member no longer owes to this amount — see
+    /// <see cref="Services.CobCalculationService"/>.
     /// </summary>
     public decimal CobReduction { get; init; }
 
-    /// <summary>True if COB logic changed any amounts; false if COB was a no-op.</summary>
+    /// <summary>
+    /// True if COB logic changed any amount — the plan payment
+    /// (<see cref="CobReduction"/> ≠ 0) or the member responsibility (e.g.
+    /// the primary covered the cost share while this plan still pays its
+    /// full benefit); false if COB was a no-op.
+    /// </summary>
     public bool CobApplied { get; init; }
 }
 

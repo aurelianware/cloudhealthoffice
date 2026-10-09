@@ -23,13 +23,7 @@ public static class Era835ClaimLoops
     {
         var sb = new StringBuilder();
 
-        // CLP01 patient control number, CLP02 status (1 processed, 4 denied,
-        // 22 reversal), CLP03 charge, CLP04 payment, CLP05 patient
-        // responsibility, CLP06 filing indicator, CLP07 payer claim control number.
-        Append(sb, ref segmentCount,
-            $"CLP*{cp.PatientControlNumber}*{cp.ClaimStatusCode}" +
-            $"*{cp.ChargeAmount:F2}*{cp.PaymentAmount:F2}*{cp.PatientResponsibilityAmount:F2}" +
-            $"*HM*{cp.PayerClaimControlNumber ?? cp.ClaimId}");
+        Append(sb, ref segmentCount, Clp(cp));
 
         // CAS — claim adjustments, directly after CLP. Up to 6 adjustment triplets per segment.
         foreach (var casGroup in cp.ClaimAdjustments.GroupBy(a => a.GroupCode))
@@ -56,6 +50,27 @@ public static class Era835ClaimLoops
             sb.Append(BuildServiceLineLoop(sl, ref segmentCount));
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The CLP segment. CLP01 patient control number, CLP02 status (1
+    /// processed, 4 denied, 22 reversal), CLP03 charge, CLP04 payment, CLP05
+    /// patient responsibility, CLP06 filing indicator, CLP07 payer claim
+    /// control number. An institutional claim adds CLP08 facility type code,
+    /// CLP09 claim frequency code and CLP11 DRG (CLP10, patient status, is
+    /// not sent); elements it does not have are left empty and trailing empty
+    /// elements dropped, so a payment recorded without them ends at CLP07.
+    /// </summary>
+    public static string Clp(ClaimPayment cp)
+    {
+        var clp = $"CLP*{cp.PatientControlNumber}*{cp.ClaimStatusCode}" +
+            $"*{cp.ChargeAmount:F2}*{cp.PaymentAmount:F2}*{cp.PatientResponsibilityAmount:F2}" +
+            $"*HM*{cp.PayerClaimControlNumber ?? cp.ClaimId}";
+        if (!cp.IsInstitutional)
+            return clp;
+
+        var institutional = $"*{Esc(cp.FacilityTypeCode)}*{Esc(cp.ClaimFrequencyCode)}**{Esc(cp.DrgCode)}".TrimEnd('*');
+        return clp + institutional;
     }
 
     /// <summary>

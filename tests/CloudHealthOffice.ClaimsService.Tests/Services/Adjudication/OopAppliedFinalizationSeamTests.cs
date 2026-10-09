@@ -138,7 +138,7 @@ public class OopAppliedFinalizationSeamTests
         categoryResolver.ResolveAsync(
                 Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
-                Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                Arg.Any<string?>(), Arg.Any<ServiceCategoryClaimContext?>(), Arg.Any<CancellationToken>())
             .Returns(new ServiceCategoryMatch
             {
                 ServiceTypeCode = OfficeVisit,
