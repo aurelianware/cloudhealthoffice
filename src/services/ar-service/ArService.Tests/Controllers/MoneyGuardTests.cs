@@ -21,7 +21,7 @@ public class MoneyGuardTests
     {
         // If applications sum to MORE than the receipt amount, cash reconciliation breaks
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, FakeArBalanceRepository.AutoCreating("gl-1"), new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -42,7 +42,7 @@ public class MoneyGuardTests
     {
         // Even one penny over is an error — no tolerance
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, FakeArBalanceRepository.AutoCreating("gl-1"), new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 100.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -60,7 +60,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_ExactAmount_Succeeds()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, FakeArBalanceRepository.AutoCreating("gl-1"), new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 5000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -85,7 +85,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_PartialAmount_SetsPartiallyApplied()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, FakeArBalanceRepository.AutoCreating("gl-1"), new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 10000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -107,7 +107,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_NegativeApplicationAmount_ReturnsBadRequest()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, FakeArBalanceRepository.AutoCreating("gl-1"), new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Pending);
         posting.Applications = new()
@@ -125,7 +125,7 @@ public class MoneyGuardTests
     public async Task ApplyCashPosting_AlreadyApplied_ReturnsBadRequest()
     {
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, FakeArBalanceRepository.AutoCreating("gl-1"), new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Applied);
         repo.Setup(r => r.GetByIdAsync("cp-1")).ReturnsAsync(posting);
@@ -140,7 +140,7 @@ public class MoneyGuardTests
     {
         // Can't void cash that's already been applied to balances
         var repo = new Mock<ICashPostingRepository>();
-        var controller = new CashPostingController(repo.Object, new TestActor(), Mock.Of<ILogger<CashPostingController>>());
+        var controller = new CashPostingController(repo.Object, FakeArBalanceRepository.AutoCreating("gl-1"), new TestActor(), Mock.Of<ILogger<CashPostingController>>());
 
         var posting = CreateCashPosting(amount: 1000.00m, status: CashPostingStatus.Applied);
         repo.Setup(r => r.GetByIdAsync("cp-1")).ReturnsAsync(posting);

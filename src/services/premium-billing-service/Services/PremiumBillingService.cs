@@ -28,6 +28,7 @@ public class PremiumBillingService : IPremiumBillingService
     private readonly ICoverageServiceClient _coverageClient;
     private readonly ICurrentActor _actor;
     private readonly ILogger<PremiumBillingService> _logger;
+    private readonly ISponsorAccountRepository? _sponsorAccounts;
 
     public PremiumBillingService(
         IBillingRunRepository billingRunRepository,
@@ -35,8 +36,10 @@ public class PremiumBillingService : IPremiumBillingService
         ISponsorServiceClient sponsorClient,
         ICoverageServiceClient coverageClient,
         ICurrentActor actor,
-        ILogger<PremiumBillingService> logger)
+        ILogger<PremiumBillingService> logger,
+        ISponsorAccountRepository? sponsorAccounts = null)
     {
+        _sponsorAccounts = sponsorAccounts;
         _billingRunRepository = billingRunRepository;
         _invoiceRepository = invoiceRepository;
         _sponsorClient = sponsorClient;
@@ -182,17 +185,18 @@ public class PremiumBillingService : IPremiumBillingService
         invoice.Payments.Add(payment);
         invoice.RecalculateTotals();
         invoice.LastUpdatedBy = ActorId;
-
-        // Update status based on balance
-        if (invoice.BalanceDue <= 0)
-            invoice.Status = InvoiceStatus.Paid;
-        else if (invoice.TotalPaid > 0)
-            invoice.Status = InvoiceStatus.PartiallyPaid;
+        PremiumInvoiceStatus.ApplyPaymentStatus(invoice);
 
         _logger.LogInformation("Recorded payment of ${Amount:N2} on invoice {InvoiceNumber}, balance due: ${BalanceDue:N2}",
             request.Amount, invoice.InvoiceNumber, invoice.BalanceDue);
 
-        return await _invoiceRepository.UpdateAsync(invoice);
+        var updated = await _invoiceRepository.UpdateAsync(invoice);
+
+        // The sponsor's account balance follows the invoice it was paid on.
+        if (_sponsorAccounts != null && !string.IsNullOrEmpty(invoice.GroupNumber))
+            await SponsorAccountBalances.RefreshAsync(_invoiceRepository, _sponsorAccounts, invoice.GroupNumber, request.PaymentDate);
+
+        return updated;
     }
 
     public async Task<PremiumInvoice> VoidInvoiceAsync(string invoiceId, string reason)

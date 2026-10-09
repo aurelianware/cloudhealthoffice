@@ -542,6 +542,41 @@ public class PremiumBillingServiceTests
     }
 
     [Fact]
+    public async Task RecordPaymentAsync_RefreshesTheSponsorAccountBalance()
+    {
+        var invoice = new PremiumInvoice
+        {
+            Id = "inv-1",
+            InvoiceNumber = "INV-GRP001-2026-03",
+            GroupNumber = "GRP001",
+            Status = InvoiceStatus.Sent,
+            LineItems = { new InvoiceLineItem { MemberId = "m1", TotalPremium = 1000 } }
+        };
+        invoice.RecalculateTotals();
+        var other = new PremiumInvoice { Id = "inv-2", GroupNumber = "GRP001", Status = InvoiceStatus.Sent, LineItems = { new InvoiceLineItem { TotalPremium = 250 } } };
+        other.RecalculateTotals();
+        _invoiceRepo.Setup(r => r.GetByIdAsync("inv-1")).ReturnsAsync(invoice);
+        _invoiceRepo.Setup(r => r.UpdateAsync(It.IsAny<PremiumInvoice>())).ReturnsAsync((PremiumInvoice inv) => inv);
+        _invoiceRepo.Setup(r => r.GetByGroupNumberAsync("GRP001")).ReturnsAsync(new[] { invoice, other });
+
+        var account = new SponsorAccount { GroupNumber = "GRP001", UnappliedCredit = 50m };
+        var accounts = new Mock<ISponsorAccountRepository>();
+        accounts.Setup(a => a.UpdateAsync("GRP001", It.IsAny<Action<SponsorAccount>>()))
+            .ReturnsAsync((string _, Action<SponsorAccount> change) => { change(account); return account; });
+        var service = new PremiumBillingService.Services.PremiumBillingService(
+            _billingRunRepo.Object, _invoiceRepo.Object,
+            new SponsorServiceClient(_httpClientFactory.Object, NullLogger<SponsorServiceClient>.Instance),
+            new CoverageServiceClient(_httpClientFactory.Object, NullLogger<CoverageServiceClient>.Instance),
+            _actor.Object, NullLogger<PremiumBillingService.Services.PremiumBillingService>.Instance, accounts.Object);
+
+        await service.RecordPaymentAsync("inv-1", new RecordPaymentRequest { Amount = 400, PaymentDate = new DateTime(2026, 3, 5) });
+
+        account.OpenInvoiceBalance.Should().Be(850m); // 600 left on inv-1 + 250 on inv-2
+        account.NetBalance.Should().Be(800m);
+        account.LastPaymentAt.Should().Be(new DateTime(2026, 3, 5));
+    }
+
+    [Fact]
     public async Task RecordPaymentAsync_VoidedInvoice_ThrowsInvalidOperation()
     {
         var invoice = new PremiumInvoice { Id = "inv-1", Status = InvoiceStatus.Voided };

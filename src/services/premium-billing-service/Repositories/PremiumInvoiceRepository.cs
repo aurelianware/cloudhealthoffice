@@ -7,6 +7,12 @@ public interface IPremiumInvoiceRepository
 {
     Task<PremiumInvoice?> GetByIdAsync(string id);
     Task<IEnumerable<PremiumInvoice>> GetByGroupNumberAsync(string groupNumber);
+
+    /// <summary>
+    /// Invoices with this invoice number (normally one; a reissued period can
+    /// leave a voided one beside it). Used to match remittance references.
+    /// </summary>
+    Task<IEnumerable<PremiumInvoice>> GetByInvoiceNumberAsync(string invoiceNumber);
     Task<IEnumerable<PremiumInvoice>> GetByBillingPeriodAsync(DateTime billingPeriodStart);
     Task<IEnumerable<PremiumInvoice>> GetByStatusAsync(InvoiceStatus status);
     Task<IEnumerable<PremiumInvoice>> SearchAsync(
@@ -78,6 +84,17 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
             "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.groupNumber = @groupNumber ORDER BY c.billingPeriodStart DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@groupNumber", groupNumber);
+
+        return await ExecuteQueryAsync(query);
+    }
+
+    public async Task<IEnumerable<PremiumInvoice>> GetByInvoiceNumberAsync(string invoiceNumber)
+    {
+        var tenantId = GetTenantId();
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.invoiceNumber = @invoiceNumber")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@invoiceNumber", invoiceNumber);
 
         return await ExecuteQueryAsync(query);
     }

@@ -78,6 +78,15 @@ public class CashApplication
 
     [StringLength(500)]
     public string? Memo { get; set; }
+
+    /// <summary>
+    /// The <see cref="ArPostingEntry.EntryId"/> this application credited on
+    /// its AR balance; null until the posting is applied. An application is
+    /// credited to its balance once only, however often the posting is applied.
+    /// </summary>
+    public string? PostedEntryId { get; set; }
+
+    public DateTime? PostedAt { get; set; }
 }
 
 public enum PaymentMethod { Check = 1, Eft = 2, Wire = 3, Ach = 4, CreditCard = 5, Other = 99 }

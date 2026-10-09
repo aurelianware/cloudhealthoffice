@@ -63,6 +63,9 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepositoryMongo>();
     builder.Services.AddScoped<IBillingRunRepository, BillingRunRepositoryMongo>();
     builder.Services.AddScoped<IEftDraftRepository, EftDraftRepositoryMongo>();
+    builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryMongo>();
+    builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryMongo>();
+    builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -85,6 +88,10 @@ else
     builder.Services.AddScoped<IPremiumInvoiceRepository, PremiumInvoiceRepository>();
     builder.Services.AddScoped<IBillingRunRepository, BillingRunRepository>();
     builder.Services.AddScoped<IEftDraftRepository, EftDraftRepository>();
+    // Containers RemittanceBatches, RemittanceExceptions and SponsorAccounts, partition key /tenantId.
+    builder.Services.AddScoped<IRemittanceBatchRepository, RemittanceBatchRepositoryCosmos>();
+    builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryCosmos>();
+    builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryCosmos>();
     Console.WriteLine("Using Cosmos DB repository");
 }
 
@@ -93,6 +100,8 @@ builder.Services.AddScoped<IPremiumBillingService, PremiumBillingService.Service
 builder.Services.AddSingleton<INachaFileService, NachaFileService>();
 builder.Services.AddScoped<IStripeAchService, StripeAchService>();
 builder.Services.AddScoped<IEftDraftService, EftDraftService>();
+// 820 / lockbox cash application and the exceptions queue.
+builder.Services.AddScoped<ICashApplicationService, CashApplicationService>();
 builder.Services.AddScoped<ISponsorServiceClient, SponsorServiceClient>();
 builder.Services.AddScoped<ICoverageServiceClient, CoverageServiceClient>();
 // Sponsor bank details come from sponsor-service's service-only full read of

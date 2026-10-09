@@ -348,6 +348,17 @@ public class InvoicePayment
     /// <summary>Who recorded the payment (token subject, or "stripe-webhook").</summary>
     [StringLength(200)]
     public string? RecordedBy { get; set; }
+
+    /// <summary>Remittance batch (820 or lockbox) the payment was applied from.</summary>
+    [StringLength(100)]
+    public string? RemittanceBatchId { get; set; }
+
+    /// <summary>Item line within the remittance batch.</summary>
+    public int? RemittanceLine { get; set; }
+
+    /// <summary>Member the payment was remitted for (820 individual remittance).</summary>
+    [StringLength(50)]
+    public string? MemberId { get; set; }
 }
 
 public enum SponsorSuspensionState
