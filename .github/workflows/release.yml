@@ -1,0 +1,119 @@
+name: Publish Release
+
+# Run manually from the Actions tab (works from a phone browser):
+# Actions → Publish Release → Run workflow.
+#
+# Prerequisites, merged to main first:
+#   - docs/releases/RELEASE_NOTES_<version>.md (first line "# <version> — <name>")
+#   - a "## [X.Y.Z] - YYYY-MM-DD" section in CHANGELOG.md with a real date
+#
+# Tags main at the current commit, publishes the release with the notes as its
+# body, marks it Latest, and opens an Announcements discussion.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag, e.g. v5.1.0"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate and show the release body without publishing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  discussions: write
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Validate inputs
+        id: validate
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::version must look like v5.1.0 (got '$VERSION')"; exit 1
+          fi
+          semver="${VERSION#v}"
+
+          notes="docs/releases/RELEASE_NOTES_${VERSION}.md"
+          if [ ! -f "$notes" ]; then
+            echo "::error::$notes not found on main. Merge the release notes first."; exit 1
+          fi
+
+          title="$(head -n1 "$notes" | sed -E 's/^#[[:space:]]+//')"
+          if [ -z "$title" ] || ! grep -q "^${VERSION}" <<<"$title"; then
+            echo "::error::First line of $notes must be '# ${VERSION} — <name>' (got '$title')"; exit 1
+          fi
+
+          if ! grep -qE "^## \[${semver//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md needs '## [${semver}] - YYYY-MM-DD' with a real date."; exit 1
+          fi
+
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::Tag ${VERSION} already exists."; exit 1
+          fi
+
+          prerelease=false
+          [[ "$VERSION" == *-* ]] && prerelease=true
+
+          {
+            echo "notes=$notes"
+            echo "title=$title"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build release body
+        env:
+          NOTES: ${{ steps.validate.outputs.notes }}
+        run: |
+          set -euo pipefail
+          python3 -I scripts/ci/prepare-release-body.py \
+            "$NOTES" "$GITHUB_REPOSITORY" main "$RUNNER_TEMP/release-body.md"
+          {
+            echo "### Release body preview"
+            echo
+            cat "$RUNNER_TEMP/release-body.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          TITLE: ${{ steps.validate.outputs.title }}
+          PRERELEASE: ${{ steps.validate.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          args=(
+            "$VERSION"
+            --repo "$GITHUB_REPOSITORY"
+            --target "$GITHUB_SHA"
+            --title "$TITLE"
+            --notes-file "$RUNNER_TEMP/release-body.md"
+            --discussion-category "Announcements"
+          )
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease --latest=false)
+          else
+            args+=(--latest)
+          fi
+          url="$(gh release create "${args[@]}")"
+          echo "Published: $url"
+          echo "Published [$TITLE]($url)" >> "$GITHUB_STEP_SUMMARY"
