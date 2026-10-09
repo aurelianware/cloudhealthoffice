@@ -529,6 +529,15 @@ public class ProviderAdjustment
     /// Description of adjustment
     /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// PLB01: the provider (NPI) this adjustment belongs to. Null means the
+    /// 835's payee. A batched 835 that spans several payee NPIs emits one PLB
+    /// segment per provider, so a forward balance or a receivable recovery is
+    /// attributed to the provider it belongs to.
+    /// </summary>
+    [StringLength(80)]
+    public string? ProviderIdentifier { get; set; }
 }
 
 public enum PaymentStatus

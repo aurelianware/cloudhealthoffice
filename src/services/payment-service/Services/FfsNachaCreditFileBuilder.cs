@@ -33,6 +33,24 @@ public static class FfsNachaCreditFileBuilder
     /// <summary>Largest amount one entry can carry: 10 digits of cents.</summary>
     public const decimal MaxEntryAmount = 99_999_999.99m;
 
+    /// <summary>Most credits one batch can hold: entry + addenda count must fit 6 digits.</summary>
+    public const int MaxEntries = 499_999;
+
+    /// <summary>The batch and file control totals are 12 digits of cents.</summary>
+    public const long MaxTotalCents = 999_999_999_999L;
+
+    /// <summary>
+    /// The ABA routing number check digit: 3·(d1+d4+d7) + 7·(d2+d5+d8) + (d3+d6+d9) ≡ 0 (mod 10).
+    /// </summary>
+    public static bool IsValidAbaRoutingNumber(string? routing)
+    {
+        if (!IsDigits(routing, 9))
+            return false;
+        var d = routing!.Select(c => c - '0').ToArray();
+        var sum = 3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + (d[2] + d[5] + d[8]);
+        return sum % 10 == 0;
+    }
+
     public static FfsNachaBuiltFile Build(FfsNachaFileHeader header, IReadOnlyList<FfsNachaCreditEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(header);
@@ -40,8 +58,17 @@ public static class FfsNachaCreditFileBuilder
         header.Validate();
         if (entries.Count == 0)
             throw new InvalidOperationException("A NACHA credit file needs at least one entry.");
-        if (entries.Count > 9_999_999)
-            throw new InvalidOperationException("Too many entries for one batch.");
+        // The batch control's entry/addenda count is 6 digits and each credit
+        // is an entry plus an addenda record.
+        if (entries.Count > MaxEntries)
+            throw new InvalidOperationException(
+                $"A NACHA batch holds at most {MaxEntries:N0} credits (entry + addenda count is 6 digits); this run has {entries.Count:N0}. Split the run.");
+        foreach (var entry in entries)
+            entry.Validate();
+        var totalCents = entries.Sum(e => Cents(e.Amount));
+        if (totalCents > MaxTotalCents)
+            throw new InvalidOperationException(
+                $"The NACHA credit total {totalCents / 100m:F2} does not fit the 12-digit control total (at most {MaxTotalCents / 100m:F2}). Split the run.");
 
         var records = new List<string>
         {
@@ -126,7 +153,7 @@ public static class FfsNachaCreditFileBuilder
         ServiceClassCreditsOnly,
         Alpha(h.CompanyName, 16),
         Alpha(h.CompanyDiscretionaryData, 20),
-        Alpha(h.CompanyId, 10),
+        h.CompanyId,                                                        // validated: identical to the addenda TRN03
         StandardEntryClass,
         Alpha(HealthcareEntryDescription, 10),
         h.FileCreatedAt.ToString("yyMMdd", CultureInfo.InvariantCulture),   // company descriptive date
@@ -163,7 +190,7 @@ public static class FfsNachaCreditFileBuilder
         entryHash,
         0L.ToString("000000000000", CultureInfo.InvariantCulture),
         creditCents.ToString("000000000000", CultureInfo.InvariantCulture),
-        Alpha(h.CompanyId, 10),
+        h.CompanyId,
         new string(' ', 19),
         new string(' ', 6),
         h.OriginatingDfi,
@@ -250,8 +277,11 @@ public sealed class FfsNachaFileHeader
             problems.Add("immediate origin (Nacha:ImmediateOrigin) must be 1-10 characters");
         if (string.IsNullOrWhiteSpace(CompanyName))
             problems.Add("company name (Nacha:CompanyName) is missing");
-        if (string.IsNullOrWhiteSpace(CompanyId) || CompanyId.Length != 10)
-            problems.Add("company identification must be exactly 10 characters (the 835 TRN03, Era:OriginatingCompanyId)");
+        // Written as is into both the batch header/control and every addenda
+        // TRN03, so it must already be in its final form: 10 upper-case
+        // letters or digits (typically "1" + the payer's TIN), as in the 835.
+        if (CompanyId is not { Length: 10 } || !CompanyId.All(c => char.IsAsciiDigit(c) || char.IsAsciiLetterUpper(c)))
+            problems.Add("company identification must be exactly 10 upper-case letters or digits (the 835 TRN03, Era:OriginatingCompanyId)");
         if (!FfsNachaCreditFileBuilder.IsDigits(OriginatingDfi, 8))
             problems.Add("originating DFI (Nacha:OriginatingDfi) must be the ODFI's first 8 routing digits");
         if (FileIdModifier is not { Length: 1 } || !char.IsAsciiLetterUpper(FileIdModifier[0]) && !char.IsAsciiDigit(FileIdModifier[0]))
@@ -285,6 +315,8 @@ public sealed class FfsNachaCreditEntry
     {
         if (!FfsNachaCreditFileBuilder.IsDigits(RoutingNumber, 9))
             throw new InvalidOperationException("A NACHA entry needs a 9-digit receiving routing number.");
+        if (!FfsNachaCreditFileBuilder.IsValidAbaRoutingNumber(RoutingNumber))
+            throw new InvalidOperationException("A NACHA entry's receiving routing number fails the ABA check digit.");
         if (string.IsNullOrWhiteSpace(AccountNumber) || AccountNumber.Length > 17)
             throw new InvalidOperationException("A NACHA entry needs an account number of at most 17 characters.");
         if (Amount <= 0m || Amount > FfsNachaCreditFileBuilder.MaxEntryAmount)

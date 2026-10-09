@@ -242,6 +242,12 @@ public sealed class FfsEftFileService : IFfsEftFileService
                 lookups[npi] = lookup;
             }
 
+            // An approved account whose routing number fails the ABA check digit
+            // cannot be credited (the bank would reject the whole file): check.
+            if (lookup.Status == PayeeAccountLookupStatus.Eft
+                && !FfsNachaCreditFileBuilder.IsValidAbaRoutingNumber(lookup.Account!.RoutingNumber))
+                lookup = PayeeAccountLookup.NoEft("the approved bank account's routing number fails the ABA check digit");
+
             switch (lookup.Status)
             {
                 case PayeeAccountLookupStatus.Eft:

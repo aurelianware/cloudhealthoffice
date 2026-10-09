@@ -45,12 +45,22 @@ public sealed class InMemoryPaymentRepository : IPaymentRepository
     /// <summary>When true, the next CreateAsync throws (the insert was attempted; the run keeps its reservations).</summary>
     public bool FailNextCreate { get; set; }
 
+    /// <summary>When true, the next CreateAsync stores the payment and then throws (a write that landed but timed out).</summary>
+    public bool StoreThenFailNextCreate { get; set; }
+
     public Task<Payment> CreateAsync(Payment payment)
     {
         if (FailNextCreate)
         {
             FailNextCreate = false;
             throw new InvalidOperationException("payment store unavailable");
+        }
+        if (StoreThenFailNextCreate)
+        {
+            StoreThenFailNextCreate = false;
+            if (_tenant != null) payment.TenantId = _tenant;
+            lock (_items) _items.Add(payment);
+            throw new TimeoutException("payment insert timed out");
         }
         if (_tenant != null) payment.TenantId = _tenant;
         lock (_items) _items.Add(payment);

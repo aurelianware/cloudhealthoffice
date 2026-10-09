@@ -500,6 +500,79 @@ public class ReversalRunServiceTests
         Assert.Contains(executed.Warnings, w => w.Contains(record.Id) && w.Contains("later payment runs recover it"));
     }
 
+    /// <summary>One reversal whose (substituted) 835 carries <paramref name="envelope"/>'s forward balance.</summary>
+    private ReversalRunService ServiceReturningEnvelope(EraEnvelope envelope, IProviderReceivableLedger ledger)
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
+        SetupClaimResponse("pred-1", BuildClaim("pred-1", approvedAmount: 650m));
+        SeedOriginalPayment("pred-1", paid: 650m);
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        _batchGen.GenerateBatch(Arg.Any<IEnumerable<EraPaymentInput>>(), Arg.Any<IReadOnlyDictionary<string, TradingPartnerInfo>>())
+            .Returns(new List<EraEnvelope> { envelope });
+        return new ReversalRunService(
+            _paymentRepo, _runRepo, _batchGen, _envelopeRepo, _tpClient, _httpFactory, NullLogger<ReversalRunService>.Instance,
+            _configuration, _actor, _actor.SeparationOfDuties(), _reservations, _mapper, ledger);
+    }
+
+    private static EraEnvelope ReversalEnvelope(decimal forward, IReadOnlyDictionary<string, decimal> byProvider) =>
+        new("TP-A", "ISA~", 1, 0m, "000000001", new[] { "pred-1" }, IsReversal: true, ForwardBalanceAmount: forward, ForwardBalanceByProvider: byProvider);
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_ForwardBalanceSpanningTwoNpis_OpensOneReceivablePerNpiForItsOwnNet()
+    {
+        var store = new InMemoryProviderReceivableRepository();
+        var ledger = new ProviderReceivableLedger(store, _configuration, NullLogger<ProviderReceivableLedger>.Instance);
+        var service = ServiceReturningEnvelope(
+            ReversalEnvelope(-650m, new Dictionary<string, decimal> { ["1234567890"] = -500m, ["2222222222"] = -150m }), ledger);
+
+        var executed = await service.ExecuteReversalRunAsync("rr-1");
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        Assert.Equal(new[] { ("1234567890", 500m), ("2222222222", 150m) },
+            store.All.OrderBy(r => r.ProviderNpi).Select(r => (r.ProviderNpi, r.OriginalAmount)));
+        Assert.Equal(new[] { ("1234567890", 500m), ("2222222222", 150m) },
+            executed.OutstandingReceivables.Select(r => (r.ProviderNpi!, r.Amount)));
+        Assert.All(executed.OutstandingReceivables, r => Assert.NotNull(r.ReceivableId));
+        Assert.Equal(650m, executed.OutstandingReceivableAmount);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_UnattributableForwardBalance_OpensNoReceivable_AndWarns()
+    {
+        var store = new InMemoryProviderReceivableRepository();
+        var ledger = new ProviderReceivableLedger(store, _configuration, NullLogger<ProviderReceivableLedger>.Instance);
+        var service = ServiceReturningEnvelope(ReversalEnvelope(-60m, new Dictionary<string, decimal>()), ledger);
+
+        var executed = await service.ExecuteReversalRunAsync("rr-1");
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        Assert.Empty(store.All);
+        var onRun = Assert.Single(executed.OutstandingReceivables);
+        Assert.Null(onRun.ProviderNpi);
+        Assert.Null(onRun.ReceivableId);
+        Assert.Contains(executed.Warnings, w => w.Contains("cannot be attributed to one provider"));
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_LedgerFails_RunStillCompletes_ReceivableReportedUnrecorded()
+    {
+        var ledger = Substitute.For<IProviderReceivableLedger>();
+        ledger.RecordForwardBalanceAsync(default!, default!, default, default!, default!, default, default, default)
+            .ReturnsForAnyArgs<Task<ProviderReceivableRecord>>(_ => throw new TimeoutException("mongo timeout"));
+        var service = ServiceReturningEnvelope(
+            ReversalEnvelope(-650m, new Dictionary<string, decimal> { ["1234567890"] = -650m }), ledger);
+
+        var executed = await service.ExecuteReversalRunAsync("rr-1");
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        Assert.Null(Assert.Single(executed.OutstandingReceivables).ReceivableId);
+        Assert.Contains(executed.Warnings, w => w.Contains("UNRECORDED") && w.Contains("1234567890"));
+    }
+
     [Fact]
     public async Task ExecuteReversalRunAsync_NoRecordedPayment_NotReversed_Reported_NotReserved()
     {

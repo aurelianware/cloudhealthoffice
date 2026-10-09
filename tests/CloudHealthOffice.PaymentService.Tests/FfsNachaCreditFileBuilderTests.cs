@@ -216,6 +216,77 @@ public class FfsNachaCreditFileBuilderTests
             FfsNachaCreditFileBuilder.Build(Header(), new[] { Entry(routing, account, value, "T1") }));
     }
 
+    private static FfsNachaFileHeader HeaderWithCompanyId(string companyId)
+    {
+        var h = Header();
+        return new FfsNachaFileHeader
+        {
+            ImmediateDestination = h.ImmediateDestination, ImmediateOrigin = h.ImmediateOrigin,
+            CompanyName = h.CompanyName, CompanyId = companyId, OriginatingDfi = h.OriginatingDfi,
+            FileCreatedAt = h.FileCreatedAt, EffectiveEntryDate = h.EffectiveEntryDate,
+        };
+    }
+
+    [Fact]
+    public void A_lower_case_company_id_is_refused_so_batch_and_addenda_trn03_cannot_differ()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            FfsNachaCreditFileBuilder.Build(HeaderWithCompanyId("1abcdefghi"), new[] { Entry("021000021", "111", 1m, "T1") }));
+        Assert.Contains("upper-case", ex.Message);
+    }
+
+    [Fact]
+    public void An_alphanumeric_company_id_is_written_identically_in_the_batch_and_the_addenda()
+    {
+        var file = FfsNachaCreditFileBuilder.Build(HeaderWithCompanyId("1ABC123456"), new[] { Entry("021000021", "111", 1m, "T1") });
+        var records = file.Content.TrimEnd('\n').Split('\n');
+
+        Assert.Equal("1ABC123456", records[1][40..50]);
+        Assert.Equal("1ABC123456", records[4][44..54]);
+        Assert.Equal("TRN*1*T1*1ABC123456\\", records[3][3..83].TrimEnd());
+    }
+
+    [Theory]
+    [InlineData("021000021", true)]
+    [InlineData("026009593", true)]
+    [InlineData("091000019", true)]
+    [InlineData("021000022", false)]
+    [InlineData("123456789", false)]
+    [InlineData("12345678", false)]
+    public void The_aba_check_digit_is_validated(string routing, bool valid)
+    {
+        Assert.Equal(valid, FfsNachaCreditFileBuilder.IsValidAbaRoutingNumber(routing));
+    }
+
+    [Fact]
+    public void An_entry_whose_routing_number_fails_the_aba_check_digit_is_refused()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            FfsNachaCreditFileBuilder.Build(Header(), new[] { Entry("021000022", "111", 1m, "T1") }));
+        Assert.Contains("ABA", ex.Message);
+    }
+
+    [Fact]
+    public void More_credits_than_the_six_digit_entry_addenda_count_allows_are_refused_up_front()
+    {
+        var entry = Entry("021000021", "111", 1m, "T1");
+        var entries = Enumerable.Repeat(entry, FfsNachaCreditFileBuilder.MaxEntries + 1).ToList();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => FfsNachaCreditFileBuilder.Build(Header(), entries));
+        Assert.Contains("499,999", ex.Message);
+    }
+
+    [Fact]
+    public void A_total_that_does_not_fit_twelve_digits_is_refused_up_front()
+    {
+        var entries = Enumerable.Range(0, 101)
+            .Select(i => Entry("021000021", "A" + i, FfsNachaCreditFileBuilder.MaxEntryAmount, "T" + i))
+            .ToList();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => FfsNachaCreditFileBuilder.Build(Header(), entries));
+        Assert.Contains("12-digit", ex.Message);
+    }
+
     [Fact]
     public void A_trace_with_x12_delimiters_is_refused()
     {

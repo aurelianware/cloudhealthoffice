@@ -85,6 +85,62 @@ public class BatchEraGeneratorReversalTests
         Assert.Equal(-800m, envelopes[0].ForwardBalanceAmount);  // carried forward (PLB FB)
     }
 
+    private static EraPaymentInput ReversalInputFor(string npi, decimal amount, string claimId)
+    {
+        var input = ReversalInput("TP-A", amount);
+        input.Payment.PayeeNPI = npi;
+        input.Payment.ClaimPayments[0].ClaimId = claimId;
+        return input;
+    }
+
+    [Fact]
+    public void GenerateBatch_ReversalSpanningTwoNpis_OnePlbFbPerNpiWithItsOwnNet_835StillBalances()
+    {
+        var inputs = new[]
+        {
+            ReversalInputFor("1111111111", -100m, "c-a1"),
+            ReversalInputFor("2222222222", -50m, "c-b1"),
+            ReversalInputFor("1111111111", -30m, "c-a2"),
+        };
+
+        var envelope = Assert.Single(_generator.GenerateBatch(inputs, Partners("TP-A")));
+
+        Assert.Equal(0m, envelope.TotalPaymentAmount);
+        Assert.Equal(-180m, envelope.ForwardBalanceAmount);
+        Assert.Equal(new Dictionary<string, decimal> { ["1111111111"] = -130m, ["2222222222"] = -50m }, envelope.ForwardBalanceByProvider);
+
+        var segments = Segments(envelope.EdiContent);
+        var plbs = segments.Where(s => s[0] == "PLB").ToList();
+        Assert.Equal(2, plbs.Count);
+        Assert.Equal(new[] { ("1111111111", "FB:R-CHK001", -130m), ("2222222222", "FB:R-CHK001", -50m) },
+            plbs.Select(p => (p[1], p[3], decimal.Parse(p[4]))));
+        var clp04 = segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4]));
+        Assert.Equal(0m, clp04 - plbs.Sum(p => decimal.Parse(p[4])));   // BPR02 = sum CLP04 - sum PLB = 0
+    }
+
+    [Fact]
+    public void GenerateBatch_NetsOfMixedSignAcrossNpis_SingleFb_NotAttributedToAProvider()
+    {
+        var positive = ReversalInputFor("2222222222", 40m, "c-b1");
+        positive.Payment.ClaimPayments[0].ClaimStatusCode = "1";
+        var inputs = new[] { ReversalInputFor("1111111111", -100m, "c-a1"), positive };
+
+        var envelope = Assert.Single(_generator.GenerateBatch(inputs, Partners("TP-A")));
+
+        Assert.Equal(-60m, envelope.ForwardBalanceAmount);
+        Assert.Empty(envelope.ForwardBalanceByProvider!);
+        var plb = Assert.Single(Segments(envelope.EdiContent).Where(s => s[0] == "PLB"));
+        Assert.Equal(-60m, decimal.Parse(plb[4]));
+    }
+
+    [Fact]
+    public void GenerateBatch_SingleNpiReversal_AttributesTheWholeBalanceToIt()
+    {
+        var envelope = Assert.Single(_generator.GenerateBatch(new[] { ReversalInput("TP-A", -800m) }, Partners("TP-A")));
+
+        Assert.Equal(new Dictionary<string, decimal> { ["1234567890"] = -800m }, envelope.ForwardBalanceByProvider);
+    }
+
     private static List<string[]> Segments(string edi) =>
         edi.Split('~', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Split('*')).ToList();
 

@@ -974,6 +974,8 @@ public class PaymentRunService : IPaymentRunService
         // FB/WO), before the payment exists: the ledger is written first, so a
         // concurrent run cannot take the same dollars; if the insert fails the
         // recovery is reversed in the ledger.
+        // ApplyRecoveriesAsync is all or nothing: a failure part way reverses
+        // what it applied and leaves the payment untouched before it throws.
         if (_receivables != null)
             await _receivables.ApplyRecoveriesAsync(paymentRun.TenantId, payment, paymentRun.Id, paymentRun.PaymentRunNumber, approver);
 
@@ -983,10 +985,47 @@ public class PaymentRunService : IPaymentRunService
         }
         catch (Exception ex) when (_receivables != null && payment.ReceivableOffsets.Count > 0)
         {
-            _logger.LogError(ex, "Payment {PaymentId} could not be inserted; reversing its receivable recoveries", payment.Id);
-            await _receivables.ReverseRecoveriesAsync(paymentRun.TenantId, payment, approver,
-                $"payment {payment.Id} of run {paymentRun.PaymentRunNumber} was not issued ({ex.GetType().Name})");
+            await ReverseRecoveriesOfUnissuedPaymentAsync(payment, paymentRun, approver, ex);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// The payment insert reported a failure. Its receivable recoveries are
+    /// reversed only when the payment is known not to exist: a write that
+    /// landed although it timed out keeps them (they match the stored PLBs). A
+    /// failure here is logged, never thrown, so the insert's own exception is
+    /// what the run reports.
+    /// </summary>
+    private async Task ReverseRecoveriesOfUnissuedPaymentAsync(Payment payment, PaymentRun paymentRun, string approver, Exception insertError)
+    {
+        try
+        {
+            if (await _paymentRepository.GetByIdAsync(payment.Id) != null)
+            {
+                _logger.LogWarning(insertError,
+                    "Payment {PaymentId} reported an insert failure but is stored; its receivable recoveries are kept", payment.Id);
+                return;
+            }
+        }
+        catch (Exception lookupError)
+        {
+            _logger.LogCritical(lookupError,
+                "Payment {PaymentId} insert failed and whether it is stored cannot be told; its receivable recoveries ({Receivables}) are kept and need a person",
+                payment.Id, string.Join(", ", payment.ReceivableOffsets.Select(o => o.ReceivableId)));
+            return;
+        }
+
+        _logger.LogError(insertError, "Payment {PaymentId} could not be inserted; reversing its receivable recoveries", payment.Id);
+        try
+        {
+            await _receivables!.ReverseRecoveriesAsync(paymentRun.TenantId, payment, approver,
+                $"payment {payment.Id} of run {paymentRun.PaymentRunNumber} was not issued ({insertError.GetType().Name})");
+        }
+        catch (Exception reverseError)
+        {
+            _logger.LogCritical(reverseError,
+                "Receivable recoveries by unissued payment {PaymentId} could not all be reversed; they need a person", payment.Id);
         }
     }
 
@@ -1024,6 +1063,8 @@ public class PaymentRunService : IPaymentRunService
 
             result[group.Key] = lookup.Status switch
             {
+                PayeeAccountLookupStatus.Eft when !FfsNachaCreditFileBuilder.IsValidAbaRoutingNumber(lookup.Account!.RoutingNumber)
+                    => ("CHK", "the approved bank account's routing number fails the ABA check digit"),
                 PayeeAccountLookupStatus.Eft => ("ACH", null),
                 PayeeAccountLookupStatus.NoEftAccount => ("CHK", lookup.Reason ?? "no approved EFT account"),
                 _ => throw new InvalidOperationException(

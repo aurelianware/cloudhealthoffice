@@ -37,11 +37,16 @@ public interface IProviderReceivableLedger
     /// <paramref name="payment"/>, records it in <see cref="Payment.ReceivableOffsets"/>,
     /// and lowers <see cref="Payment.TotalPaymentAmount"/> (never below zero).
     /// The ledger is written before this returns. Call before the payment is inserted.
+    /// All or nothing: when it throws, every recovery it made has been reversed
+    /// (or logged as needing a person) and the payment is as it was.
     /// </summary>
     Task<IReadOnlyList<ReceivableOffset>> ApplyRecoveriesAsync(
         string tenantId, Payment payment, string runId, string runNumber, string? recoveredBy);
 
-    /// <summary>Reverses the recoveries a payment made when the payment was never issued.</summary>
+    /// <summary>
+    /// Reverses the recoveries a payment made when the payment was never issued.
+    /// Throws (after trying every receivable) when any could not be reversed.
+    /// </summary>
     Task ReverseRecoveriesAsync(string tenantId, Payment payment, string? by, string reason);
 
     Task<IReadOnlyList<ProviderReceivableRecord>> SearchAsync(string tenantId, string? providerNpi = null, ReceivableStatus? status = null);
@@ -99,7 +104,9 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
         var now = _time.GetUtcNow().UtcDateTime;
         var record = new ProviderReceivableRecord
         {
-            Id = ProviderReceivableRecord.IdFor(ReceivableOrigin.ReversalForwardBalance, tenantId, eraEnvelopeId),
+            // One receivable per provider per origin 835 (an 835 can carry
+            // several providers' forward balances, each its own PLB FB).
+            Id = ProviderReceivableRecord.IdFor(ReceivableOrigin.ReversalForwardBalance, tenantId, $"{eraEnvelopeId}|{providerNpi}"),
             TenantId = tenantId,
             ProviderNpi = providerNpi,
             TradingPartnerId = tradingPartnerId,
@@ -147,30 +154,62 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
         if (payment.IsReversal || string.IsNullOrEmpty(payment.PayeeNPI) || payment.TotalPaymentAmount <= 0m)
             return offsets;
 
-        var outstanding = await _repository.ListOutstandingAsync(tenantId, payment.PayeeNPI);
-        foreach (var candidate in outstanding)
+        // All or nothing: if any receivable fails part way, every recovery this
+        // payment already made is reversed and the payment is left as it was,
+        // so no offset is ever recorded against a payment that is not issued.
+        var originalAmount = payment.TotalPaymentAmount;
+        var originalOffsets = payment.ReceivableOffsets.Count;
+        var originalAdjustments = payment.ProviderAdjustments.Count;
+        var touched = new List<string>();
+        try
         {
-            if (payment.TotalPaymentAmount <= 0m)
-                break;
-
-            var applied = await ApplyOneAsync(tenantId, candidate.Id, payment, runId, runNumber, recoveredBy);
-            if (applied == null)
-                continue;
-
-            offsets.Add(applied);
-            payment.ReceivableOffsets.Add(applied);
-            payment.ProviderAdjustments.Add(new ProviderAdjustment
+            var outstanding = await _repository.ListOutstandingAsync(tenantId, payment.PayeeNPI);
+            foreach (var candidate in outstanding)
             {
-                AdjustmentIdentifier = applied.AdjustmentCode,
-                ReferenceIdentification = applied.Reference,
-                Amount = applied.Amount,
-                FiscalPeriodEnd = payment.PaymentDate,
-                Description = $"Recovery of provider receivable {applied.ReceivableId}",
-            });
-            payment.TotalPaymentAmount -= applied.Amount;
-        }
+                if (payment.TotalPaymentAmount <= 0m)
+                    break;
 
-        return offsets;
+                // Touched before the write: a write that landed although it
+                // reported a failure is reversed too.
+                touched.Add(candidate.Id);
+                var applied = await ApplyOneAsync(tenantId, candidate.Id, payment, runId, runNumber, recoveredBy);
+                if (applied == null)
+                    continue;
+
+                offsets.Add(applied);
+                payment.ReceivableOffsets.Add(applied);
+                payment.ProviderAdjustments.Add(new ProviderAdjustment
+                {
+                    AdjustmentIdentifier = applied.AdjustmentCode,
+                    ReferenceIdentification = applied.Reference,
+                    Amount = applied.Amount,
+                    FiscalPeriodEnd = payment.PaymentDate,
+                    Description = $"Recovery of provider receivable {applied.ReceivableId}",
+                    // PLB01: the payee this payment pays, even in a multi-payee 835.
+                    ProviderIdentifier = payment.PayeeNPI,
+                });
+                payment.TotalPaymentAmount -= applied.Amount;
+            }
+
+            return offsets;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Receivable recovery for payment {PaymentId} (run {RunNumber}) failed part way; reversing the {Count} recoveries it made",
+                payment.Id, runNumber, offsets.Count);
+            var unreversed = await ReverseForPaymentAsync(tenantId, payment.Id, touched, recoveredBy,
+                $"recovery for payment {payment.Id} of run {runNumber} failed part way ({ex.GetType().Name})");
+            if (unreversed.Count > 0)
+                _logger.LogCritical(
+                    "Receivables {ReceivableIds} keep a recovery by payment {PaymentId}, which is not issued; they need a person",
+                    string.Join(", ", unreversed), payment.Id);
+
+            payment.TotalPaymentAmount = originalAmount;
+            payment.ReceivableOffsets.RemoveRange(originalOffsets, payment.ReceivableOffsets.Count - originalOffsets);
+            payment.ProviderAdjustments.RemoveRange(originalAdjustments, payment.ProviderAdjustments.Count - originalAdjustments);
+            throw;
+        }
     }
 
     private async Task<ReceivableOffset?> ApplyOneAsync(
@@ -179,12 +218,13 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
         for (var attempt = 0; attempt < MaxConflictRetries; attempt++)
         {
             var current = await _repository.GetAsync(tenantId, receivableId);
-            if (current == null || current.OutstandingAmount <= 0m)
+            if (current == null)
                 return null;
 
+            // Before the "nothing outstanding" check: a retried step whose
+            // recovery closed the receivable must still get its offset back.
             if (current.HasLiveRecoveryFor(payment.Id))
             {
-                // A retried step: the ledger already holds this payment's recovery.
                 var amountAlready = current.Entries.Last(e => e.Type == ReceivableEntryType.Recovered && e.PaymentId == payment.Id).Amount;
                 return new ReceivableOffset
                 {
@@ -194,6 +234,9 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
                     Reference = current.OriginTraceNumber,
                 };
             }
+
+            if (current.OutstandingAmount <= 0m)
+                return null;
 
             var amount = Math.Min(current.OutstandingAmount, payment.TotalPaymentAmount);
             if (amount <= 0m)
@@ -223,26 +266,62 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
 
     public async Task ReverseRecoveriesAsync(string tenantId, Payment payment, string? by, string reason)
     {
-        foreach (var offset in payment.ReceivableOffsets)
-        {
-            for (var attempt = 0; attempt < MaxConflictRetries; attempt++)
-            {
-                var current = await _repository.GetAsync(tenantId, offset.ReceivableId);
-                if (current == null || !current.HasLiveRecoveryFor(payment.Id))
-                    break;
+        var unreversed = await ReverseForPaymentAsync(
+            tenantId, payment.Id, payment.ReceivableOffsets.Select(o => o.ReceivableId).ToList(), by, reason);
+        if (unreversed.Count > 0)
+            throw new InvalidOperationException(
+                $"Recoveries by payment {payment.Id} could not be reversed on receivables {string.Join(", ", unreversed)}; they need a person.");
+    }
 
-                var expected = current.Version;
-                current.ReverseRecovery(payment.Id, by, _time.GetUtcNow().UtcDateTime, reason);
-                current.Version = expected + 1;
-                if (await _repository.TryReplaceAsync(current, expected))
+    /// <summary>
+    /// Reverses the live recovery <paramref name="paymentId"/> holds on each
+    /// receivable (none is a no-op). Returns the receivables where it could not
+    /// (conflicts kept coming, or the store failed); each is logged as an error.
+    /// </summary>
+    private async Task<List<string>> ReverseForPaymentAsync(
+        string tenantId, string paymentId, IReadOnlyCollection<string> receivableIds, string? by, string reason)
+    {
+        var unreversed = new List<string>();
+        foreach (var receivableId in receivableIds.Distinct(StringComparer.Ordinal))
+        {
+            var done = false;
+            try
+            {
+                for (var attempt = 0; attempt < MaxConflictRetries && !done; attempt++)
                 {
-                    _logger.LogWarning(
-                        "AUDIT provider receivable {ReceivableId}: recovery by payment {PaymentId} reversed ({Reason}); {Outstanding:F2} outstanding",
-                        current.Id, payment.Id, Sanitize(reason), current.OutstandingAmount);
-                    break;
+                    var current = await _repository.GetAsync(tenantId, receivableId);
+                    if (current == null || !current.HasLiveRecoveryFor(paymentId))
+                    {
+                        done = true;
+                        break;
+                    }
+
+                    var expected = current.Version;
+                    current.ReverseRecovery(paymentId, by, _time.GetUtcNow().UtcDateTime, reason);
+                    current.Version = expected + 1;
+                    if (await _repository.TryReplaceAsync(current, expected))
+                    {
+                        _logger.LogWarning(
+                            "AUDIT provider receivable {ReceivableId}: recovery by payment {PaymentId} reversed ({Reason}); {Outstanding:F2} outstanding",
+                            current.Id, paymentId, Sanitize(reason), current.OutstandingAmount);
+                        done = true;
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Reversing the recovery by payment {PaymentId} on receivable {ReceivableId} failed", paymentId, receivableId);
+            }
+
+            if (!done)
+            {
+                _logger.LogError(
+                    "The recovery by payment {PaymentId} on receivable {ReceivableId} could not be reversed; it needs a person",
+                    paymentId, receivableId);
+                unreversed.Add(receivableId);
+            }
         }
+        return unreversed;
     }
 
     public Task<IReadOnlyList<ProviderReceivableRecord>> SearchAsync(string tenantId, string? providerNpi = null, ReceivableStatus? status = null)

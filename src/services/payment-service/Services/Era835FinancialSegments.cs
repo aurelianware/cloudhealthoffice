@@ -91,6 +91,63 @@ public static class Era835FinancialSegments
     }
 
     /// <summary>
+    /// <see cref="WithForwardBalance"/> for an 835 that may carry several payee
+    /// NPIs (a batched envelope). When the envelope nets below zero and every
+    /// provider's own net is zero or negative (a reversal envelope), each
+    /// provider with a negative net gets its own PLB FB (PLB01 = its NPI,
+    /// amount = its own net), so what each provider owes is attributed to it and
+    /// sum(CLP04) - sum(PLB) = BPR02 = 0 still holds. <c>ByProvider</c> lists
+    /// those amounts. When the nets are mixed (one provider's positive net would
+    /// absorb another's negative one) or a provider has no NPI, the balance is
+    /// carried forward as a single FB against the 835's payee, as before, and
+    /// <c>ByProvider</c> is empty unless there is exactly one provider: such a
+    /// balance cannot be attributed and the caller must not open a receivable
+    /// against one provider for it.
+    /// </summary>
+    public static (decimal BprAmount, List<ProviderAdjustment> ProviderAdjustments, decimal ForwardBalance, IReadOnlyDictionary<string, decimal> ByProvider)
+        WithForwardBalanceByProvider(
+            IReadOnlyList<(string? ProviderNpi, decimal Net)> netsByProvider,
+            IEnumerable<ProviderAdjustment> providerAdjustments,
+            string traceNumber,
+            DateTime fiscalPeriodEnd)
+    {
+        var byProvider = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        var netAmount = netsByProvider.Sum(n => n.Net);
+        var plbs = providerAdjustments.ToList();
+        if (netAmount >= 0m)
+            return (netAmount, plbs, 0m, byProvider);
+
+        var nets = netsByProvider
+            .GroupBy(n => n.ProviderNpi ?? string.Empty, StringComparer.Ordinal)
+            .Select(g => (Npi: g.Key, Net: g.Sum(x => x.Net)))
+            .ToList();
+
+        var attributable = nets.All(n => n.Npi.Length > 0) && nets.All(n => n.Net <= 0m);
+        if (!attributable || nets.Count == 1)
+        {
+            var (bpr, single, forward) = WithForwardBalance(netAmount, plbs, traceNumber, fiscalPeriodEnd);
+            if (nets.Count == 1 && nets[0].Npi.Length > 0)
+                byProvider[nets[0].Npi] = netAmount;
+            return (bpr, single, forward, byProvider);
+        }
+
+        foreach (var (npi, net) in nets.Where(n => n.Net < 0m))
+        {
+            plbs.Add(new ProviderAdjustment
+            {
+                AdjustmentIdentifier = Era835FinancialSegmentBuilder.ForwardBalanceCode,
+                ReferenceIdentification = traceNumber,
+                Amount = net,
+                FiscalPeriodEnd = fiscalPeriodEnd,
+                Description = "Negative balance carried forward (provider receivable)",
+                ProviderIdentifier = npi,
+            });
+            byProvider[npi] = net;
+        }
+        return (0m, plbs, netAmount, byProvider);
+    }
+
+    /// <summary>
     /// The balancing problem of one claim's service lines, or null: when a
     /// claim carries service lines, the sum of their payments (SVC03) must
     /// equal the claim payment (CLP04).

@@ -108,6 +108,36 @@ public class FfsEftFileServiceTests
     }
 
     [Fact]
+    public async Task An_approved_account_failing_the_aba_check_digit_is_paid_by_check()
+    {
+        var h = TwoPartners();
+        h.Accounts.Eft(NpiC, routing: "021000022");
+        var run = await h.ExecuteRunAsync(FfsRunHarness.Claim("c1", NpiA, 100m), FfsRunHarness.Claim("c3", NpiC, 30m));
+
+        var fallback = Assert.Single(run.CheckFallbacks);
+        Assert.Equal(NpiC, fallback.PayeeNpi);
+        Assert.Contains("ABA check digit", fallback.Reason);
+        Assert.Equal("CHK", h.Payments.All.Single(p => p.PayeeNPI == NpiC).PaymentMethod);
+
+        var outcome = await h.EftFiles().GenerateAsync(run.Id, "approver-2");
+        Assert.Equal(new[] { NpiA }, Assert.Single(outcome.Run.EftFile!.Entries).PayeeNpis);
+    }
+
+    [Fact]
+    public async Task An_account_that_starts_failing_the_aba_check_after_execution_falls_back_at_file_time()
+    {
+        var h = TwoPartners();
+        var run = await h.ExecuteRunAsync(FfsRunHarness.Claim("c1", NpiA, 100m), FfsRunHarness.Claim("c3", NpiC, 30m));
+        h.Accounts.Eft(NpiC, routing: "021000022", account: "777700001111", tin: "98-7654321");
+
+        var outcome = await h.EftFiles().GenerateAsync(run.Id, "approver-2");
+
+        var fallback = Assert.Single(outcome.Run.EftFile!.CheckFallbacks);
+        Assert.Equal((NpiC, true), (fallback.PayeeNpi, fallback.NeedsAttention));
+        Assert.Contains("ABA", fallback.Reason);
+    }
+
+    [Fact]
     public async Task Regenerating_the_file_for_a_run_yields_the_same_file()
     {
         var h = TwoPartners();
