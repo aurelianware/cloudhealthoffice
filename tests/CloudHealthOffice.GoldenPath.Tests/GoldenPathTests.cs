@@ -147,10 +147,12 @@ public class GoldenPathTests
 
     // 06 — A claim that reaches the OOP max.
     // Deductible met; $2,980 of the $3,000 OOP max already used → $20 left.
+    // The cap reduces the patient-responsibility amount itself (no OA-23).
     // Line 1 99214 billed 400, allowed 150: CO-45 250; coinsurance 20% × 150 = $30,
-    //   OOP cap leaves $20 → OA-23 −$10; member $20, plan $130.
+    //   OOP cap leaves $20 → PR-2 reduced to $20; member $20, plan $130
+    //   (400 − 250 − 20 = 130 ✓).
     // Line 2 99213 billed 180, allowed 100: CO-45 80; coinsurance $20, OOP max now
-    //   met → OA-23 −$20; member $0, plan $100.
+    //   met → PR-2 reduced to $0 and dropped; member $0, plan $100 (180 − 80 = 100 ✓).
     // Claim: charge 580, allowed 250, member $20, plan $230.
     [Fact]
     public async Task OopMaxReached()
@@ -159,5 +161,16 @@ public class GoldenPathTests
 
         AssertClaim(r, charge: 580m, allowed: 250m, paid: 230m, member: 20m);
         Assert.Equal(20m, r.FinalizedEvent.OopApplied);
+        Assert.Equal(20m, r.FinalizedEvent.CoinsuranceApplied);
+        Assert.Equal(new[] { 130m, 100m },
+            r.FinalizedClaim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount));
+        Assert.Equal(
+            new[] { ("CO", "45", 250m), ("PR", "2", 20m) },
+            r.FinalizedClaim.ClaimLines[0].AdjudicationResult!.AdjustmentReasons
+                .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.Equal(
+            new[] { ("CO", "45", 80m) },
+            r.FinalizedClaim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons
+                .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
     }
 }
