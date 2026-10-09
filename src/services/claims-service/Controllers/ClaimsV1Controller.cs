@@ -8,6 +8,7 @@ using ClaimsService.Repositories;
 using ClaimsService.Services;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
+using Snip = ClaimsService.EDI.Validation;
 
 namespace ClaimsService.Controllers;
 
@@ -50,6 +51,8 @@ public class ClaimsV1Controller : ControllerBase
     private readonly ICurrentActor _actor;
     private readonly ILogger<ClaimsV1Controller> _logger;
     private readonly int _raw837MaxConcurrency;
+    private readonly Snip.ISnip837Validator _snipValidator;
+    private readonly Snip.Snip837ValidationOptions _snipOptions;
 
     public ClaimsV1Controller(
         ClaimAdapterFactory adapterFactory,
@@ -58,8 +61,12 @@ public class ClaimsV1Controller : ControllerBase
         IClaimImportTransactionRepository importTransactions,
         IConfiguration configuration,
         ICurrentActor actor,
-        ILogger<ClaimsV1Controller> logger)
+        ILogger<ClaimsV1Controller> logger,
+        Snip.ISnip837Validator? snipValidator = null,
+        Microsoft.Extensions.Options.IOptions<Snip.Snip837ValidationOptions>? snipOptions = null)
     {
+        _snipOptions = snipOptions?.Value ?? new Snip.Snip837ValidationOptions();
+        _snipValidator = snipValidator ?? new Snip.X12837SnipValidator(_snipOptions);
         _adapterFactory = adapterFactory;
         _submissionService = submissionService;
         _eobProjector = eobProjector;
@@ -148,10 +155,36 @@ public class ClaimsV1Controller : ControllerBase
             ediContent = await reader.ReadToEndAsync(ct);
         }
 
-        List<CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim> parsedClaims;
+        // WEDI SNIP 1–5 runs before anything is parsed or mapped. Claims in a
+        // transaction set the validation rejects are reported (and logged as
+        // rejected imports) but never submitted.
+        Snip.SnipValidationResult? snip = null;
+        string? acknowledgment = null;
+        List<(CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim Claim, List<string>? SnipErrors)> parsedClaims;
         try
         {
-            parsedClaims = ClaimsService.EDI.Inbound.X12837Parser.Parse(ediContent);
+            if (_snipOptions.Enabled)
+            {
+                snip = _snipValidator.Validate(ediContent);
+                acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip, new Snip.X12999AcknowledgmentBuilder.Options
+                {
+                    ControlNumber = Random.Shared.NextInt64(1, 1_000_000_000),
+                });
+
+                if (snip.Document is null)
+                {
+                    _logger.LogWarning("Uploaded 837 file {FileName} is not readable X12", SanitizeForLog(file.FileName));
+                    return BadRequest(SnipFailure(file.FileName, "Could not parse 837 file: the file is not a readable X12 interchange.", snip, acknowledgment));
+                }
+
+                parsedClaims = ClaimsBySnipOutcome(snip);
+            }
+            else
+            {
+                parsedClaims = ClaimsService.EDI.Inbound.X12837Parser.Parse(ediContent)
+                    .Select(c => (c, (List<string>?)null))
+                    .ToList();
+            }
         }
         catch (ClaimsService.EDI.Inbound.X12FormatException ex)
         {
@@ -161,7 +194,10 @@ public class ClaimsV1Controller : ControllerBase
 
         if (parsedClaims.Count == 0)
         {
-            return BadRequest(new { error = "No CLM (claim) segments found in the uploaded file." });
+            const string noClaims = "No CLM (claim) segments found in the uploaded file.";
+            return snip is null
+                ? BadRequest(new { error = noClaims })
+                : BadRequest(SnipFailure(file.FileName, noClaims, snip, acknowledgment));
         }
 
         var tenantId = GetTenantId();
@@ -169,8 +205,9 @@ public class ClaimsV1Controller : ControllerBase
         var correlationId = ResolveCorrelationId();
 
         _logger.LogInformation(
-            "Parsed uploaded 837 file {FileName} for tenant {TenantId}: {Count} claim(s), submitting with max concurrency {MaxConcurrency}",
-            SanitizeForLog(file.FileName), SanitizeForLog(tenantId), parsedClaims.Count, _raw837MaxConcurrency);
+            "Parsed uploaded 837 file {FileName} for tenant {TenantId}: {Count} claim(s), {Rejected} rejected by SNIP validation ({Ack}), submitting with max concurrency {MaxConcurrency}",
+            SanitizeForLog(file.FileName), SanitizeForLog(tenantId), parsedClaims.Count,
+            parsedClaims.Count(c => c.SnipErrors is not null), snip?.AcknowledgmentCode ?? "n/a", _raw837MaxConcurrency);
 
         var results = new Raw837ClaimResult[parsedClaims.Count];
         await Parallel.ForEachAsync(
@@ -182,24 +219,30 @@ public class ClaimsV1Controller : ControllerBase
             },
             async (index, cancellationToken) =>
         {
-            var parsed = parsedClaims[index];
+            var (parsed, snipErrors) = parsedClaims[index];
             var adapterClaim = ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(parsed, tenantId);
-            var result = await _submissionService.SubmitAsync(
-                adapterClaim,
-                tenantId,
-                actorId,
-                correlationId,
-                cancellationToken);
+            ClaimSubmissionResult? result = null;
+            if (snipErrors is null)
+            {
+                result = await _submissionService.SubmitAsync(
+                    adapterClaim,
+                    tenantId,
+                    actorId,
+                    correlationId,
+                    cancellationToken);
+            }
 
-            var errors = result.Success
-                ? []
-                : result.Errors.Select(e => $"{e.Field}: {e.Message}").ToList();
+            var errors = snipErrors
+                ?? (result!.Success
+                    ? []
+                    : result.Errors.Select(e => $"{e.Field}: {e.Message}").ToList());
+            var success = result?.Success == true;
 
             results[index] = new Raw837ClaimResult
             {
                 ClaimNumber = parsed.ClaimId,
-                Success = result.Success,
-                ClaimId = result.Claim?.Id,
+                Success = success,
+                ClaimId = result?.Claim?.Id,
                 Errors = errors
             };
 
@@ -211,10 +254,10 @@ public class ClaimsV1Controller : ControllerBase
                 {
                     TenantId = tenantId,
                     ClaimNumber = parsed.ClaimId,
-                    ClaimId = result.Claim?.Id,
+                    ClaimId = result?.Claim?.Id,
                     MemberId = adapterClaim.MemberId,
                     FileName = file.FileName,
-                    Status = result.Success ? "Accepted" : "Rejected",
+                    Status = success ? "Accepted" : "Rejected",
                     Errors = errors
                 });
             }
@@ -234,9 +277,121 @@ public class ClaimsV1Controller : ControllerBase
             FileName = file.FileName,
             TotalClaims = parsedClaims.Count,
             SucceededCount = results.Count(r => r.Success),
-            Results = results.ToList()
+            Results = results.ToList(),
+            AcknowledgmentCode = snip?.AcknowledgmentCode,
+            Acknowledgment999 = acknowledgment,
+            SnipIssues = snip?.AllIssues.ToList() ?? [],
         });
     }
+
+    /// <summary>
+    /// Runs WEDI SNIP 1–5 validation on a raw 837 without submitting
+    /// anything, and returns the findings and the 999 acknowledgment.
+    /// Uses the same per-level Reject/Warn configuration as the import.
+    /// </summary>
+    [HttpPost("import/raw837/validate")]
+    [RequestSizeLimit(20_000_000)]
+    [ProducesResponseType(typeof(Raw837ImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Raw837ImportResult>> ValidateRaw837(
+        [FromForm] IFormFile file,
+        CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { error = "A non-empty 837 file is required." });
+        }
+
+        string ediContent;
+        using (var reader = new StreamReader(file.OpenReadStream()))
+        {
+            ediContent = await reader.ReadToEndAsync(ct);
+        }
+
+        var snip = _snipValidator.Validate(ediContent);
+        var acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip, new Snip.X12999AcknowledgmentBuilder.Options
+        {
+            ControlNumber = Random.Shared.NextInt64(1, 1_000_000_000),
+        });
+
+        return Ok(new Raw837ImportResult
+        {
+            FileName = file.FileName,
+            AcknowledgmentCode = snip.AcknowledgmentCode,
+            Acknowledgment999 = acknowledgment,
+            SnipIssues = snip.AllIssues.ToList(),
+        });
+    }
+
+    /// <summary>
+    /// Parses each transaction set on its own so every claim is tied to the
+    /// SNIP outcome of the set it came from. Claims in a rejected set carry
+    /// that set's error messages (the claim's own first, then set-level ones).
+    /// </summary>
+    private static List<(CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim Claim, List<string>? SnipErrors)> ClaimsBySnipOutcome(
+        Snip.SnipValidationResult snip)
+    {
+        var doc = snip.Document!;
+        var accepted = snip.AcceptedTransactionSets.ToHashSet();
+        var envelopeErrors = snip.EnvelopeIssues
+            .Where(i => i.Severity == Snip.SnipSeverity.Error)
+            .Select(i => $"SNIP {(int)i.Level} {i.RuleId}: {i.Message}")
+            .ToList();
+        var claims = new List<(CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim, List<string>?)>();
+
+        foreach (var ts in snip.TransactionSets)
+        {
+            var segments = new List<ClaimsService.EDI.Inbound.X12Segment>();
+            if (doc.Segments[ts.InterchangeSegmentIndex].Id == "ISA")
+                segments.Add(doc.Segments[ts.InterchangeSegmentIndex]);
+            var last = Math.Min(ts.EndSegmentIndex, doc.Segments.Count - 1);
+            for (var i = ts.StartSegmentIndex; i <= last; i++)
+            {
+                if (i > ts.StartSegmentIndex && doc.Segments[i].Id is "ST" or "GE" or "IEA" or "GS" or "ISA") break;
+                segments.Add(doc.Segments[i]);
+            }
+
+            var parsed = ClaimsService.EDI.Inbound.X12837Parser.Parse(new ClaimsService.EDI.Inbound.X12Document
+            {
+                Segments = segments,
+                ElementSeparator = doc.ElementSeparator,
+                ComponentSeparator = doc.ComponentSeparator,
+            });
+
+            foreach (var claim in parsed)
+            {
+                if (accepted.Contains(ts))
+                {
+                    claims.Add((claim, null));
+                    continue;
+                }
+
+                var errors = ts.Issues
+                    .Where(i => i.Severity == Snip.SnipSeverity.Error)
+                    .OrderByDescending(i => i.ClaimId == claim.ClaimId)
+                    .Where(i => i.ClaimId is null || i.ClaimId == claim.ClaimId)
+                    .Select(i => $"SNIP {(int)i.Level} {i.RuleId}: {i.Message}")
+                    .Concat(envelopeErrors)
+                    .Take(20)
+                    .ToList();
+                if (errors.Count == 0)
+                    errors.Add("SNIP: the transaction set containing this claim was rejected.");
+                claims.Add((claim, errors));
+            }
+        }
+
+        return claims;
+    }
+
+    private static Raw837ImportResult SnipFailure(
+        string fileName, string error, Snip.SnipValidationResult snip, string? acknowledgment) => new()
+    {
+        FileName = fileName,
+        Error = error,
+        AcknowledgmentCode = snip.AcknowledgmentCode,
+        Acknowledgment999 = acknowledgment,
+        SnipIssues = snip.AllIssues.ToList(),
+    };
 
     /// <summary>
     /// Most recent 837 import transactions for the tenant, newest first —
@@ -406,6 +561,22 @@ public class Raw837ImportResult
     public int TotalClaims { get; set; }
     public int SucceededCount { get; set; }
     public List<Raw837ClaimResult> Results { get; set; } = [];
+
+    /// <summary>Set when the file as a whole could not be imported.</summary>
+    public string? Error { get; set; }
+
+    /// <summary>
+    /// SNIP outcome for the file, as in 999 AK9: A accepted, E accepted with
+    /// errors, P partially accepted (some transaction sets rejected), R rejected.
+    /// Null when SNIP validation is disabled.
+    /// </summary>
+    public string? AcknowledgmentCode { get; set; }
+
+    /// <summary>The X12 999 acknowledgment (005010X231A1) for the file.</summary>
+    public string? Acknowledgment999 { get; set; }
+
+    /// <summary>Every SNIP finding, with level, loop/segment/element position and message.</summary>
+    public List<ClaimsService.EDI.Validation.SnipIssue> SnipIssues { get; set; } = [];
 }
 
 public class Raw837ClaimResult

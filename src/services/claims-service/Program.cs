@@ -325,6 +325,16 @@ builder.Services.AddScoped<IFeeSchedulePricingClient, HttpFeeSchedulePricingClie
 // per-tenant rule overrides remain a Phase 2 surface.
 builder.Services.AddClaimsScrubEngine();
 
+// Raw 837 intake: WEDI SNIP 1–5 validation before parse/map, with a 999.
+// Per-level Reject/Warn/Off under ClaimsImport:Snip (see Snip837ValidationOptions).
+// An ISnipCodeSetReference, when registered, adds code-set membership checks.
+builder.Services.Configure<ClaimsService.EDI.Validation.Snip837ValidationOptions>(
+    builder.Configuration.GetSection(ClaimsService.EDI.Validation.Snip837ValidationOptions.SectionName));
+builder.Services.AddSingleton<ClaimsService.EDI.Validation.ISnip837Validator>(sp =>
+    new ClaimsService.EDI.Validation.X12837SnipValidator(
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ClaimsService.EDI.Validation.Snip837ValidationOptions>>(),
+        sp.GetService<ClaimsService.EDI.Validation.ISnipCodeSetReference>()));
+
 // 5.7 — NCCI / MUE engine (class library). Auto-detect repository binds
 // to whichever backend AddChoInfrastructure registered (IMongoDatabase
 // when MongoDb:ConnectionString is set; CosmosClient otherwise). Seed

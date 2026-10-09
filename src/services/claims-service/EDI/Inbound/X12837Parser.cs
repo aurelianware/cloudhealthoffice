@@ -28,9 +28,14 @@ namespace ClaimsService.EDI.Inbound;
 /// </summary>
 public static class X12837Parser
 {
-    public static List<X12837Claim> Parse(string ediContent)
+    public static List<X12837Claim> Parse(string ediContent) => Parse(X12Tokenizer.Tokenize(ediContent));
+
+    /// <summary>
+    /// Parses an already-tokenized document — e.g. one transaction set cut
+    /// out of a file after SNIP validation accepted it.
+    /// </summary>
+    public static List<X12837Claim> Parse(X12Document doc)
     {
-        var doc = X12Tokenizer.Tokenize(ediContent);
         var componentSep = doc.ComponentSeparator;
 
         var claims = new List<X12837Claim>();

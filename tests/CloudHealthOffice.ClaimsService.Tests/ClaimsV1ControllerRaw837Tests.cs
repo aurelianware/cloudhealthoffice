@@ -22,10 +22,16 @@ namespace CloudHealthOffice.ClaimsService.Tests;
 /// </summary>
 public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
 {
-    // One CLM segment, professional, POS 11, CPT 99213 — same shape as
-    // scripts/smoke/834-to-837-e2e-smoke.sh's payload.
-    private const string SingleClaimSample =
-        "ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *260101*0000*^*00501*000000001*0*P*:~GS*HC*SENDER*RECEIVER*20260101*0000*1*X*005010X222A1~ST*837*0001*005010X222A1~BHT*0019*18*CLM-RAW837-0001*20260101*0000*CH~NM1*41*2*SUBMITTER*****46*SENDER~PER*IC*SUBMITTER*TE*0000000000~NM1*40*2*RECEIVER*****46*RECEIVER~HL*1**20*1~NM1*85*2*MEDICAL GROUP*****XX*1234567890~N3*ADDRESS ON FILE~N4*CITY*CA*94102~HL*2*1*22*0~SBR*P*18*****CI~NM1*IL*1*SMITH*JOHN****MI*MEM-RAW837~NM1*PR*2*PAYER*****PI*PAYERID~CLM*CLM-RAW837-0001*150.00***11:B:1*Y*A*Y*Y~DTP*472*RD8*20260101-20260101~HI*ABK:J06.9~LX*1~SV1*HC:99213*150.00*UN*1*11**1~DTP*472*RD8*20260101-20260101~SE*17*0001~GE*1*1~IEA*1*000000001~";
+    // One SNIP-clean 837P claim (two lines, POS 11); see EDI/Snip/Snip837Samples.
+    private static readonly string SingleClaimSample = SnipCleanClaim("CLM-RAW837-0001");
+
+    private static string SnipCleanClaim(string claimId, Action<List<string>>? mutate = null)
+    {
+        var body = EDI.Snip.Snip837Samples.ProfessionalBody(claimId);
+        EDI.Snip.Snip837Samples.Replace(body, "NM1*IL", "NM1*IL*1*TESTPATIENT*ALEX****MI*MEM-RAW837");
+        mutate?.Invoke(body);
+        return EDI.Snip.Snip837Samples.Wrap(EDI.Snip.Snip837Samples.ProfessionalVersion, body);
+    }
 
     private readonly ClaimsApiFactory _factory;
     private readonly HttpClient _client;
@@ -146,6 +152,82 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
             result.Results,
             first => Assert.Equal("CLM-RAW837-0001", first.ClaimNumber),
             second => Assert.Equal("CLM-RAW837-0002", second.ClaimNumber));
+    }
+
+    [Fact]
+    public async Task ImportRaw837_Clean_ReturnsAccepted999()
+    {
+        _service
+            .SubmitAsync(Arg.Any<AdapterClaim>(), "test-tenant",
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ClaimSubmissionResult.Ok(ci.Arg<AdapterClaim>()));
+
+        var response = await _client.PostAsync("/api/v1/claims/import/raw837", BuildFileContent(SingleClaimSample));
+
+        var result = await response.Content.ReadFromJsonAsync<Raw837ImportResult>();
+        Assert.Equal("A", result!.AcknowledgmentCode);
+        Assert.Contains("AK9*A*1*1*1~", result.Acknowledgment999);
+        Assert.Empty(result.SnipIssues);
+    }
+
+    [Fact]
+    public async Task ImportRaw837_SnipRejectedSet_IsNotSubmittedAndIsLoggedWithSnipErrors()
+    {
+        var unbalanced = SnipCleanClaim("CLM-RAW837-0009",
+            b => EDI.Snip.Snip837Samples.Replace(b, "CLM*", "CLM*CLM-RAW837-0009*999.00***11:B:1*Y*A*Y*Y"));
+
+        var response = await _client.PostAsync("/api/v1/claims/import/raw837", BuildFileContent(unbalanced));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<Raw837ImportResult>();
+        Assert.Equal("R", result!.AcknowledgmentCode);
+        Assert.Contains("IK3*CLM*16*2300*8~", result.Acknowledgment999);
+        var issue = Assert.Single(result.SnipIssues);
+        Assert.Equal(("L3-CLM-BALANCE", "CLM-RAW837-0009"), (issue.RuleId, issue.ClaimId));
+        Assert.False(result.Results.Single().Success);
+        Assert.Contains(result.Results.Single().Errors, e => e.Contains("L3-CLM-BALANCE"));
+
+        await _service.DidNotReceiveWithAnyArgs().SubmitAsync(default!, default!, default, default, default);
+        await _transactions.Received(1).CreateAsync(Arg.Is<ClaimImportTransaction>(t =>
+            t.ClaimNumber == "CLM-RAW837-0009" && t.Status == "Rejected"
+            && t.Errors.Any(e => e.Contains("SNIP 3"))));
+    }
+
+    [Fact]
+    public async Task ImportRaw837_OneOfTwoSetsRejected_SubmitsOnlyTheAcceptedSet()
+    {
+        _service
+            .SubmitAsync(Arg.Any<AdapterClaim>(), "test-tenant",
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ClaimSubmissionResult.Ok(ci.Arg<AdapterClaim>()));
+
+        var good = EDI.Snip.Snip837Samples.ProfessionalBody("CLM-GOOD");
+        var bad = EDI.Snip.Snip837Samples.ProfessionalBody("CLM-BAD");
+        EDI.Snip.Snip837Samples.Replace(bad, "NM1*85", "NM1*85*2*ACME MEDICAL GROUP*****XX*1234567890");
+        var edi = EDI.Snip.Snip837Samples.Wrap(EDI.Snip.Snip837Samples.ProfessionalVersion, good, bad);
+
+        var response = await _client.PostAsync("/api/v1/claims/import/raw837", BuildFileContent(edi));
+
+        var result = await response.Content.ReadFromJsonAsync<Raw837ImportResult>();
+        Assert.Equal("P", result!.AcknowledgmentCode);
+        Assert.Equal(1, result.SucceededCount);
+        Assert.Equal(["CLM-GOOD", "CLM-BAD"], result.Results.Select(r => r.ClaimNumber));
+        await _service.Received(1).SubmitAsync(Arg.Is<AdapterClaim>(c => c.ClaimNumber == "CLM-GOOD"),
+            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ValidateRaw837_ReturnsIssuesAnd999WithoutSubmitting()
+    {
+        var response = await _client.PostAsync("/api/v1/claims/import/raw837/validate",
+            BuildFileContent(SnipCleanClaim("CLM-V", b => EDI.Snip.Snip837Samples.RemoveSegment(b, "DTP*472"))));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<Raw837ImportResult>();
+        Assert.Equal("R", result!.AcknowledgmentCode);
+        Assert.Contains(result.SnipIssues, i => i.RuleId == "L4-DTP472" && i.Level == global::ClaimsService.EDI.Validation.SnipLevel.Situational);
+        Assert.StartsWith("ISA*", result.Acknowledgment999);
+        await _service.DidNotReceiveWithAnyArgs().SubmitAsync(default!, default!, default, default, default);
     }
 
     [Fact]
