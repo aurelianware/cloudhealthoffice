@@ -196,7 +196,7 @@ public class ReversalRunService : IReversalRunService
                 var npi = run.Criteria.ProviderNPI;
                 adjustments = adjustments
                     .Where(a => predecessors.TryGetValue(a.PredecessorClaimId, out var p)
-                        && string.Equals(p.PayToProviderNPI ?? p.BillingProviderNPI, npi, StringComparison.Ordinal))
+                        && string.Equals(p.PayeeNpi, npi, StringComparison.Ordinal))
                     .ToList();
                 if (adjustments.Count == 0)
                 {
@@ -213,7 +213,7 @@ public class ReversalRunService : IReversalRunService
             var environment = _configuration["TradingPartners:Environment"] ?? "Production";
             var resolvedTradingPartners = await ResolveTradingPartnersAsync(
                 predecessors.Values
-                    .Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI)
+                    .Select(c => c.PayeeNpi)
                     .Where(n => !string.IsNullOrEmpty(n))
                     .Distinct(StringComparer.Ordinal),
                 run.TenantId,
@@ -260,7 +260,7 @@ public class ReversalRunService : IReversalRunService
                     continue;
                 }
 
-                var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
+                var providerNpi = pred.PayeeNpi;
                 string? tradingPartnerId = null;
                 if (!string.IsNullOrEmpty(providerNpi)
                     && resolvedTradingPartners.TryGetValue(providerNpi, out var partner))
@@ -282,7 +282,7 @@ public class ReversalRunService : IReversalRunService
                 // payment-service recorded for the predecessor, never its
                 // approved or billed amount. No recorded payment (or an
                 // unbalanced one): not reversed, listed for an operator.
-                var (original, notReversible) = await FindOriginalClaimPaymentAsync(pred.Id);
+                var (original, originalPayeeAddress, notReversible) = await FindOriginalClaimPaymentAsync(pred.Id);
                 if (original is null)
                 {
                     run.MissingPaidAmountClaimIds.Add(pred.Id);
@@ -334,7 +334,7 @@ public class ReversalRunService : IReversalRunService
                 }
 
                 var checkNumber = $"R-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
-                var payment = await BuildReversalPaymentAsync(pred, reversalClaim, run, tradingPartnerId, checkNumber, approver);
+                var payment = await BuildReversalPaymentAsync(pred, reversalClaim, originalPayeeAddress, run, tradingPartnerId, checkNumber, approver);
 
                 issuedPayments.Add(payment);
                 run.PaymentIds.Add(payment.Id);
@@ -729,21 +729,22 @@ public class ReversalRunService : IReversalRunService
 
     /// <summary>
     /// The claim payment payment-service recorded for <paramref name="claimId"/>
-    /// in its (non-reversal) payment, or null with the reason when there is
-    /// none, or more than one so the amount paid is ambiguous.
+    /// in its (non-reversal) payment, with that payment's payee N3/N4 address,
+    /// or null with the reason when there is none, or more than one so the
+    /// amount paid is ambiguous.
     /// </summary>
-    private async Task<(ClaimPayment? Original, string? Reason)> FindOriginalClaimPaymentAsync(string claimId)
+    private async Task<(ClaimPayment? Original, PayeeAddress? PayeeAddress, string? Reason)> FindOriginalClaimPaymentAsync(string claimId)
     {
         var payments = await _paymentRepository.GetByClaimIdAsync(claimId) ?? Enumerable.Empty<Payment>();
         var recorded = payments
             .Where(p => !p.IsReversal)
-            .SelectMany(p => p.ClaimPayments.Where(cp => cp.ClaimId == claimId))
+            .SelectMany(p => p.ClaimPayments.Where(cp => cp.ClaimId == claimId).Select(cp => (Claim: cp, p.PayeeAddress)))
             .ToList();
         return recorded.Count switch
         {
-            1 => (recorded[0], null),
-            0 => (null, "payment-service holds no recorded payment for it, so the amount paid is unknown"),
-            _ => (null, $"payment-service holds {recorded.Count} recorded payments for it, so the amount paid is ambiguous"),
+            1 => (recorded[0].Claim, recorded[0].PayeeAddress, null),
+            0 => (null, null, "payment-service holds no recorded payment for it, so the amount paid is unknown"),
+            _ => (null, null, $"payment-service holds {recorded.Count} recorded payments for it, so the amount paid is ambiguous"),
         };
     }
 
@@ -756,12 +757,13 @@ public class ReversalRunService : IReversalRunService
     private async Task<Payment> BuildReversalPaymentAsync(
         ClaimDto pred,
         ClaimPayment reversalClaim,
+        PayeeAddress? originalPayeeAddress,
         ReversalRun run,
         string? tradingPartnerId,
         string checkNumber,
         string approver)
     {
-        var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
+        var providerNpi = pred.PayeeNpi;
         var payment = new Payment
         {
             CheckNumber = checkNumber,
@@ -773,6 +775,11 @@ public class ReversalRunService : IReversalRunService
             PayerId = _configuration["Payer:Id"] ?? "CHO",
             PayeeName = pred.PayeeNameOr(string.IsNullOrWhiteSpace(providerNpi) ? "Provider" : providerNpi),
             PayeeNPI = providerNpi,
+            // The original payment's payee N3/N4, not the predecessor's
+            // current pay-to address: reversing a payment made without N3/N4
+            // (before 2010AB was parsed, or with claims that disagreed on the
+            // address) adds none either.
+            PayeeAddress = originalPayeeAddress,
             TradingPartnerId = tradingPartnerId,
             // Recouped, not yet voided in claims-service; Posted once voided.
             Status = PaymentStatus.PaidPendingFinalize,
