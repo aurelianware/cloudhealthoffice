@@ -429,17 +429,42 @@ public sealed class BenefitPlanValidationService : IBenefitPlanValidationService
         var now = DateTime.UtcNow;
         var serviceDate = request.ServiceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         var charge = request.ChargeAmount.ToString("0.00", CultureInfo.InvariantCulture);
+        // claims-service runs WEDI SNIP 1–5 on raw 837s before import, so this
+        // synthetic claim is built to pass it: SE01 is counted, the billing
+        // provider carries a tax id, the subscriber-patient carries DMG (a
+        // placeholder birth date; claim mapping does not use it), and BHT04 is
+        // never earlier than the service date (a future-dated validation
+        // claim would otherwise fail the "service after creation date" rule).
+        var created = request.ServiceDate.Date > now.Date ? request.ServiceDate.Date : now;
+        var transaction = new List<string>
+        {
+            "ST*837*0001*005010X222A1",
+            $"BHT*0019*18*{claimNumber}*{created:yyyyMMdd}*{now:HHmm}*CH",
+            "NM1*41*2*PLAN VALIDATOR*****46*BPVALIDATOR",
+            "PER*IC*PLAN VALIDATOR*TE*0000000000",
+            "NM1*40*2*CLOUD HEALTH OFFICE*****46*CHORECEIVER",
+            "HL*1**20*1",
+            $"NM1*85*2*SYNTHETIC MEDICAL GROUP*****XX*{request.ProviderNpi}",
+            "N3*ADDRESS ON FILE",
+            "N4*PHOENIX*AZ*85001",
+            "REF*EI*999999999",
+            "HL*2*1*22*0",
+            "SBR*P*18*******CI",
+            $"NM1*IL*1*VALIDATOR*PLAN****MI*{memberId}",
+            "DMG*D8*19000101*U",
+            "NM1*PR*2*CLOUD HEALTH OFFICE*****PI*CHOPAYER",
+            $"CLM*{claimNumber}*{charge}***11:B:1*Y*A*Y*Y",
+            "HI*ABK:J069",
+            "LX*1",
+            $"SV1*HC:{request.ProcedureCode}*{charge}*UN*1*11**1",
+            $"DTP*472*D8*{serviceDate}",
+        };
+        transaction.Add($"SE*{transaction.Count + 1}*0001");
+
         return $"ISA*00*          *00*          *ZZ*BPVALIDATOR    *ZZ*CHORECEIVER    *{now:yyMMdd}*{now:HHmm}*^*00501*000000001*0*P*:~" +
                $"GS*HC*BPVALIDATOR*CHORECEIVER*{now:yyyyMMdd}*{now:HHmm}*1*X*005010X222A1~" +
-               $"ST*837*0001*005010X222A1~BHT*0019*18*{claimNumber}*{now:yyyyMMdd}*{now:HHmm}*CH~" +
-               "NM1*41*2*PLAN VALIDATOR*****46*BPVALIDATOR~PER*IC*PLAN VALIDATOR*TE*0000000000~" +
-               "NM1*40*2*CLOUD HEALTH OFFICE*****46*CHORECEIVER~HL*1**20*1~" +
-               $"NM1*85*2*SYNTHETIC MEDICAL GROUP*****XX*{request.ProviderNpi}~N3*ADDRESS ON FILE~N4*PHOENIX*AZ*85001~" +
-               $"HL*2*1*22*0~SBR*P*18*****CI~NM1*IL*1*VALIDATOR*PLAN****MI*{memberId}~" +
-               "NM1*PR*2*CLOUD HEALTH OFFICE*****PI*CHOPAYER~" +
-               $"CLM*{claimNumber}*{charge}***11:B:1*Y*A*Y*Y~DTP*472*D8*{serviceDate}~HI*ABK:J06.9~" +
-               $"LX*1~SV1*HC:{request.ProcedureCode}*{charge}*UN*1*11**1~DTP*472*D8*{serviceDate}~" +
-               "SE*19*0001~GE*1*1~IEA*1*000000001~";
+               string.Join("~", transaction) + "~" +
+               "GE*1*1~IEA*1*000000001~";
     }
 
     private static void ValidateSyntheticRequest(SyntheticClaimValidationRequest request)

@@ -60,6 +60,68 @@ Evaluator / integration                POST /api/v1/claims/import/raw837
                                    Claim.Status = Approved / Denied / Pended
 ```
 
+## SNIP validation and the 999
+
+Before a raw 837 is parsed or mapped, `X12837SnipValidator`
+(`claims-service/EDI/Validation`) checks it against WEDI SNIP levels 1–5 for 837P
+(005010X222A1) and 837I (005010X223A2/A3). It reports every finding as a `SnipIssue`
+with the level, rule id, loop, segment id and position (counting from ST = 1), element
+and component position, and a message. It does not throw on bad input.
+
+| Level | What is checked |
+| --- | --- |
+| 1 Syntax | ISA fixed widths; ISA/IEA, GS/GE and ST/SE control numbers and counts; duplicate ST02; unknown segment ids; X12 mandatory elements; numeric and date/time formats |
+| 2 Implementation guide | BHT values; 1000A/1000B; HL hierarchy (sequence, parents, child codes); required 2010AA/2000B/2010BA/2010BB/2000C segments (incl. billing tax id); CLM05 and CLM06–09; principal diagnosis; at most 12 diagnoses (837P); LX numbering; SV1/SV2 and their qualifiers; DTP*434 on 837I |
+| 3 Balancing | CLM02 = ΣSV102 (837P) / ΣSV203 (837I) |
+| 4 Situational | DTP*472 on every 837P line, and on 837I outpatient lines when the statement covers more than one day; 837I inpatient (TOB x1x) needs DTP*435 and CL1; line dates inside the statement period and not after BHT04; NPI check digit (Luhn, prefix 80840); billing address not a PO Box; subscriber-is-patient (SBR02=18) needs DMG and no 2000C; frequency 7/8 needs REF*F8; SV107 pointers point at existing diagnoses |
+| 5 Code sets | ICD-10-CM format (no decimal point) and no ICD-9 qualifiers on or after 2015-10-01; ICD-10-PCS format; CPT/HCPCS and modifier formats; CMS place-of-service list; revenue code and type-of-bill formats. Membership checks run only when an `ISnipCodeSetReference` is registered. |
+
+Each level's action is configurable under `ClaimsImport:Snip`:
+
+```json
+"ClaimsImport": { "Snip": { "Enabled": true, "Level1": "Reject", "Level2": "Reject",
+                            "Level3": "Reject", "Level4": "Reject", "Level5": "Warn" } }
+```
+
+These values are also the defaults. Level 5 warns by default because, without a code-set
+reference, its checks are format checks only.
+
+- `Reject` rejects the transaction set: 999 IK5 `R`.
+- `Warn` reports the finding but accepts the set: IK3/IK4 detail with IK5 `E`.
+- `Off` skips the level.
+
+`POST /api/v1/claims/import/raw837` validates first:
+
+- It submits only claims from accepted transaction sets.
+- Claims from rejected sets come back with `Success = false` and their SNIP messages, and are
+  written to the import-transaction log as `Rejected`.
+- The response adds `acknowledgmentCode`, `acknowledgment999` and `snipIssues`.
+  `acknowledgmentCode` takes the AK9 values: `A`, `E`, `P` (partially accepted) or `R`.
+  `acknowledgment999` is the X12 999 (005010X231A1), with IK3 (segment, position, loop,
+  IK304), `CTX*CLM01`, IK4 (element, data element reference, IK403, and a copy of the bad
+  value for code values only) and IK5/AK9.
+- An unreadable file returns 400 with no 999. A TA1 would cover that case and is out of scope.
+
+`POST /api/v1/claims/import/raw837/validate` runs the same validation and returns the
+findings and the 999 without submitting anything.
+
+Rules and limits:
+
+- **Envelope rejections reach the 999.**
+  - An ISA/IEA error at a rejecting Level 1 rejects every set in that interchange (IK5 R, AK9 R).
+  - A GS/GE error (GS01/04/06/08, GE count or control, a missing GE) rejects its group, with AK905 codes.
+  - With Level 1 set to `Warn`, these group codes are listed in AK9 under `E` and nothing is rejected. With `Off`, they are not emitted.
+  - The 999 always acknowledges exactly the transaction sets that the import submits.
+- **One 999 interchange per inbound interchange.** Each is addressed to that interchange's sender and echoes its ISA15 (`T`/`P`). AK101 echoes GS01.
+- **Inpatient vs outpatient** (837I) comes from the full CLM05-1 facility type and classification code:
+  - Inpatient: 11, 12, 18, 21, 22, 28, 41, 65, 66, 86.
+  - Outpatient: 13, 14, 23, 43, 71–77, 79, 83, 85.
+  - Codes in neither table, such as home health and hospice, only produce warnings for the DTP*435, CL1 and line DTP*472 rules.
+- **Finding caps.** Findings are capped per transaction set and per file (`MaxFindingsPerTransactionSet` and `MaxFindingsPerFile`, default 1,000 each), with a single "too many findings" entry when a cap is hit. Findings dropped by a cap still count toward acceptance. The 999 lists at most 1,000 IK3 loops per set.
+- **Never throws.** A file cut off mid-transaction-set is rejected with L1 findings. An unexpected failure becomes an `L1-VALIDATION-FAILED` finding.
+- **Echoed values.** Segment ids are echoed only as valid 2–3 character ids; anything else is replaced with `???`.
+- **Import record.** Each `ClaimImportTransaction` records its transaction set's ST02 and IK5 code and the 999's ISA13. The 999 text itself is returned in the response and is not stored.
+
 ## Why `BenefitPlanId` starts blank
 
 `X12837ClaimMapper` deliberately does not try to resolve `BenefitPlanId`/`CoverageId` from
@@ -102,7 +164,10 @@ import history — accepted/rejected status and error text — without needing r
 
 ## Troubleshooting
 
-### 837 file rejected at upload (400)
+### 837 file rejected at upload (400) or claims rejected by SNIP
+- `acknowledgmentCode` is `R`/`P` → read `snipIssues` (or the 999's IK3/IK4): each names
+  the level, rule, loop and segment position. Fix the file or, if a level should only warn
+  for this deployment, set `ClaimsImport:Snip:LevelN` to `Warn`.
 - No `CLM` segments found → not a valid 837, or wrong transaction type.
 - Parse failure → check the error message; `X12837Parser` throws `X12FormatException` with
   the specific segment/reason.
