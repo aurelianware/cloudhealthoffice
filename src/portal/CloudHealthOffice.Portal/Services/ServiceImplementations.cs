@@ -322,6 +322,29 @@ public class ClaimsService : IClaimsService
         }
     }
 
+    public async Task<List<ClaimDuplicateMatch>> GetDuplicateMatchesAsync(string claimId)
+    {
+        var baseUrl = _configuration["Services:ClaimsService"];
+        try
+        {
+            var response = await _httpClient.GetAsync(
+                $"{baseUrl}/claims/{Uri.EscapeDataString(claimId)}/duplicate-matches");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new List<ClaimDuplicateMatch>();
+            }
+
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<List<ClaimDuplicateMatch>>(JsonOptions)
+                ?? new List<ClaimDuplicateMatch>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
+            throw new ServiceUnavailableException("Claims Service", ex);
+        }
+    }
+
     private string GetClaimsServiceRootUrl()
     {
         var baseUrl = (_configuration["Services:ClaimsService"] ?? string.Empty).TrimEnd('/');

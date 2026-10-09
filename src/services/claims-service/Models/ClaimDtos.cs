@@ -127,3 +127,60 @@ public class ClaimsSummary
     public decimal AverageProcessingDays { get; set; }
     public decimal ApprovalRate { get; set; }
 }
+
+/// <summary>
+/// One prior claim that the duplicate-claim stage matched against this claim,
+/// returned by <c>GET /api/claims/{id}/duplicate-matches</c> for the
+/// examiner's "Possible duplicates" panel. Built from
+/// <see cref="PendDetails.DuplicateFindings"/> plus a tenant-scoped read of
+/// the matched claim. Carries only claim-level fields the claim-detail view
+/// already shows (claim number, service dates, billed amount, status); no
+/// member or provider demographics.
+/// </summary>
+public class ClaimDuplicateMatch
+{
+    /// <summary>Per-version id of the matched prior claim (link target).</summary>
+    public string MatchedClaimId { get; set; } = string.Empty;
+
+    /// <summary>Claim number of the matched prior claim.</summary>
+    public string? MatchedClaimNumber { get; set; }
+
+    /// <summary>
+    /// "Exact" when any flagged line is an exact duplicate of this claim,
+    /// otherwise "Suspect".
+    /// </summary>
+    public string MatchType { get; set; } = string.Empty;
+
+    /// <summary>
+    /// False when the matched claim could not be read (e.g. purged or not
+    /// visible to this tenant); the summary fields below are then null.
+    /// </summary>
+    public bool MatchedClaimFound { get; set; }
+
+    public DateTime? ServiceDateFrom { get; set; }
+    public DateTime? ServiceDateTo { get; set; }
+    public decimal? BilledAmount { get; set; }
+    public string? Status { get; set; }
+
+    /// <summary>Fields that matched on every flagged line against this claim.</summary>
+    public List<string> MatchedFields { get; set; } = new();
+
+    /// <summary>Per-line pairings that produced this match, in line order.</summary>
+    public List<ClaimDuplicateLineMatch> Lines { get; set; } = new();
+}
+
+/// <summary>One service line on this claim paired with a line on the matched claim.</summary>
+public class ClaimDuplicateLineMatch
+{
+    public int LineNumber { get; set; }
+    public int? MatchedLineNumber { get; set; }
+
+    /// <summary>"Exact" or "Suspect".</summary>
+    public string MatchType { get; set; } = string.Empty;
+
+    /// <summary>DUP001 (exact) or DUP002 (suspect).</summary>
+    public string RuleId { get; set; } = string.Empty;
+
+    public List<string> MatchedFields { get; set; } = new();
+    public string? Message { get; set; }
+}

@@ -209,11 +209,47 @@ the 835's adjustments:
 - On a denial the header entry with the denial CARC, whatever amount it
   arrived with, carries what the other adjustments leave unexplained.
 
-Generation checks, once lines carry CAS, that each line satisfies
-SVC02 - sum(line CAS) = SVC03 and the claim CLP03 - sum(CAS, claim and
-lines) = CLP04, and throws otherwise. A payment run checks the same
-before reserving: a claim that would fail is not paid and is listed in
-`UnbalancedServiceLineClaimIds`.
+Generation checks, once lines carry CAS, that every line satisfies
+SVC02 - sum(line CAS) = SVC03 (a line without CAS must then be paid in
+full) and the claim CLP03 - sum(CAS, claim and lines) = CLP04; for a
+claim remitted at claim level (no SVC) with header CAS, that CLP03 -
+sum(CAS) = CLP04. It throws otherwise. A claim whose SVC loops carry no CAS
+(payments recorded before line CAS, which keep the claim-level CAS in the
+header) is not checked. A payment run checks the same before reserving: a claim that
+would fail is not paid and is listed in `UnbalancedServiceLineClaimIds`.
+
+### Reversals (CLP02 = 22)
+
+A reversal's claim and line loops are the original remittance's, built
+by `Era835ClaimPaymentBuilder.BuildReversal` from the claim payment
+payment-service recorded for the predecessor:
+
+- CLP02 = `22`; CLP03 (charge), CLP04 (paid) and CLP05 (patient
+  responsibility) negated; every claim-level CAS amount negated.
+- Each SVC repeats the original line with SVC02 and SVC03 negated and its
+  CAS amounts negated, so the line still balances in the negative
+  (`SVC*HC:99213*-200.00*-120.00**1~CAS*CO*45*-50.00~CAS*PR*1*-20.00**2*-10.00~LQ*HE*N130`).
+  Remark codes (MOA/MIA, `LQ*HE`), units, dates and identifiers are
+  repeated unchanged; a zero amount stays `0.00`.
+- The adjustments are the recorded ones when the original carried them
+  (its lines carry CAS, or, remitted at claim level, its header does).
+  An original recorded before line CAS existed gets the adjustments the
+  builder derives from the predecessor claim, priced at the recorded
+  charge and paid amounts, with the fallbacks above: a single-line claim
+  takes the claim-level CAS; any other line gets its NCCI edit CARC, else
+  `CO-45` (CO with the denial CARC on a denial, CLP02 = 4). So reversals
+  of payments made before line CAS still generate.
+
+The reversal run applies the same per-line and per-claim check before
+reserving: a reversal whose adjustments would not balance is not
+recouped and is listed in `ReversalRun.UnbalancedServiceLineClaimIds`,
+and 835 generation refuses it; this includes a claim-level reversal whose
+header CAS does not explain the charge. Stored reversal payments from
+before this change (positive CLP03, no line CAS) are not checked, so their
+835s still regenerate.
+Denials are never recorded as payments, so a reversal run reverses only
+paid claims; a recorded denial (CLP02 = 4) would reverse with CLP04 =
+0.00 and its denial CAS negated.
 
 ## Check number allocation
 
@@ -358,8 +394,9 @@ run after this ships remits every earlier denial its criteria match; set
 backlog.
 
 A reversal recoups the amount payment-service recorded for the
-predecessor's original claim payment (claim and line amounts, sign-flipped),
-never its approved or billed amount. With no single recorded payment the
+predecessor's original claim payment (claim and line amounts and CAS,
+negated; see [Reversals](#reversals-clp02--22)), never its approved or
+billed amount. With no single recorded payment the
 claim is not reversed (`ReversalRun.MissingPaidAmountClaimIds`); with an
 unbalanced recorded payment, `ReversalRun.UnbalancedServiceLineClaimIds`.
 
