@@ -23,10 +23,11 @@ namespace AppealsService.HostedServices;
 ///
 /// Idempotent — re-running finds zero eligible records and exits cleanly.
 /// Bounded batches (100 per scan, configurable via
-/// <c>AppealMigration:BatchSize</c>). Runs in <see cref="StartAsync"/> so
-/// the subsequent <see cref="AppealIndexInitializer"/> sees a consistent
-/// schema — the unique <c>ux_tenant_appeal_number</c> index would
-/// otherwise fail to build if duplicate AppealNumbers exist.
+/// <c>AppealMigration:BatchSize</c>). Waits for the appeal event
+/// publisher to start before migrating anything (see
+/// <see cref="StartAsync"/>), so each row's <c>AppealStatusMigrated</c>
+/// event is produced rather than skipped; if the publisher fails to
+/// start, nothing is migrated and the next start retries.
 ///
 /// Also scans for duplicate <c>AppealNumber</c> values under the same
 /// tenant and logs them as warnings BEFORE the index initializer attempts
@@ -59,6 +60,8 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
     private readonly IMongoDatabase _db;
     private readonly IAppealEventSink _events;
     private readonly IAppealEventPublisher _publisher;
+    private readonly IAppealEventPublisherReadiness _publisherReadiness;
+    private readonly CancellationTokenSource _stopping = new();
     private readonly IConfiguration _configuration;
     private readonly ILogger<AppealStatusMigrationHostedService> _logger;
 
@@ -66,24 +69,115 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
         IMongoDatabase db,
         IAppealEventSink events,
         IAppealEventPublisher publisher,
+        IAppealEventPublisherReadiness publisherReadiness,
         IConfiguration configuration,
         ILogger<AppealStatusMigrationHostedService> logger)
     {
         _db = db;
         _events = events;
         _publisher = publisher;
+        _publisherReadiness = publisherReadiness;
         _configuration = configuration;
         _logger = logger;
     }
 
+    /// <summary>
+    /// The migration run when it had to wait for the publisher; <c>null</c>
+    /// when it ran inside <see cref="StartAsync"/>. Exposed for tests.
+    /// </summary>
+    internal Task? DeferredRun { get; private set; }
+
+    /// <summary>
+    /// Runs the duplicate / ambiguity scans, then the migration — but only
+    /// once <see cref="IAppealEventPublisherReadiness.Started"/> completes:
+    /// before the publisher's own <c>StartAsync</c> a publish is silently
+    /// skipped, and each migrated row's <c>AppealStatusMigrated</c> event
+    /// would be lost. Already started → migrate here. Not yet (registered
+    /// after this service) → migrate in the background once it starts, so
+    /// sequential hosted-service startup cannot deadlock.
+    /// </summary>
     public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        var raw = _db.GetCollection<BsonDocument>(AppealRepositoryMongo.AppealsCollectionName);
+
+        await WarnDuplicateAppealNumbersAsync(raw, cancellationToken);
+        await WarnAmbiguousIntegerStatusesAsync(raw, cancellationToken);
+
+        if (_publisherReadiness.Started.IsCompleted)
+        {
+            await MigrateWhenPublisherReadyAsync(background: false, cancellationToken);
+            return;
+        }
+
+        _logger.LogInformation("AppealStatusMigration waiting for the appeal event publisher to start.");
+        DeferredRun = Task.Run(() => MigrateWhenPublisherReadyAsync(background: true, _stopping.Token), CancellationToken.None);
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _stopping.Cancel();
+        if (DeferredRun is { } run)
+            await Task.WhenAny(run, Task.Delay(Timeout.Infinite, cancellationToken));
+    }
+
+    /// <summary>
+    /// Waits (bounded by <c>AppealMigration:PublisherReadyTimeoutSeconds</c>,
+    /// default 60) for the publisher. Unavailable or never started → the
+    /// run is skipped with an error and every legacy row stays as it is, so
+    /// the next start migrates it and emits its event. Disabled by
+    /// configuration (no <c>Kafka:BootstrapServers</c>) → the service
+    /// publishes no events at all, so migrate with a warning; the audit row
+    /// is still written.
+    /// </summary>
+    private async Task MigrateWhenPublisherReadyAsync(bool background, CancellationToken ct)
+    {
+        try
+        {
+            var timeout = TimeSpan.FromSeconds(
+                _configuration.GetValue<double?>("AppealMigration:PublisherReadyTimeoutSeconds") ?? 60);
+            var started = _publisherReadiness.Started;
+            if (await Task.WhenAny(started, Task.Delay(timeout, ct)) != started)
+            {
+                if (ct.IsCancellationRequested) return;
+                _logger.LogError(
+                    "AppealStatusMigration skipped: the appeal event publisher did not start within {Timeout}. " +
+                    "Legacy rows are left unmigrated and will be migrated (and published) on the next start.",
+                    timeout);
+                return;
+            }
+
+            switch (await started)
+            {
+                case AppealEventPublisherState.Unavailable:
+                    _logger.LogError(
+                        "AppealStatusMigration skipped: the appeal event publisher failed to start. " +
+                        "Legacy rows are left unmigrated and will be migrated (and published) on the next start.");
+                    return;
+                case AppealEventPublisherState.Disabled:
+                    _logger.LogWarning(
+                        "AppealStatusMigration running with Kafka publishing disabled by configuration: " +
+                        "AppealStatusMigrated events are not published (audit rows are still written).");
+                    break;
+            }
+
+            await RunMigrationAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("AppealStatusMigration cancelled; remaining legacy rows migrate on the next start.");
+        }
+        catch (Exception ex) when (background)
+        {
+            // Background run: nothing awaits it, so log rather than lose the failure.
+            _logger.LogError(ex, "AppealStatusMigration failed; remaining legacy rows migrate on the next start.");
+        }
+    }
+
+    private async Task RunMigrationAsync(CancellationToken cancellationToken)
     {
         var batchSize = _configuration.GetValue<int?>("AppealMigration:BatchSize") ?? 100;
         var raw = _db.GetCollection<BsonDocument>(AppealRepositoryMongo.AppealsCollectionName);
         var typed = _db.GetCollection<Appeal>(AppealRepositoryMongo.AppealsCollectionName);
-
-        await WarnDuplicateAppealNumbersAsync(raw, cancellationToken);
-        await WarnAmbiguousIntegerStatusesAsync(raw, cancellationToken);
 
         var found = 0;
         var migrated = 0;
@@ -130,7 +224,6 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
             found, migrated, errors);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
     /// A stored field's element name under the <see cref="Appeal"/> class

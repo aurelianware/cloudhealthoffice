@@ -58,6 +58,17 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "appeals:write";
 });
 
+// ── Kafka producer (appeal lifecycle events) ─────────────────────────
+// Always registered; degraded-mode-silent if Kafka:BootstrapServers is unset.
+// Registered BEFORE the database block so its StartAsync runs ahead of the
+// status migration's. The migration does not rely on that order: it waits
+// on IAppealEventPublisherReadiness, because a publish before the
+// producer's StartAsync is silently skipped.
+builder.Services.AddSingleton<AppealEventPublisher>();
+builder.Services.AddSingleton<IAppealEventPublisher>(sp => sp.GetRequiredService<AppealEventPublisher>());
+builder.Services.AddSingleton<IAppealEventPublisherReadiness>(sp => sp.GetRequiredService<AppealEventPublisher>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AppealEventPublisher>());
+
 // ── Database Configuration ───────────────────────────────────────────
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
 var databaseProvider = builder.Services.AddChoDatabase(builder.Configuration);
@@ -154,12 +165,6 @@ builder.Services.AddSingleton<IAppealHolidayCalendarProvider>(sp =>
     new ConfiguredAppealHolidayCalendarProvider(
         sp.GetRequiredService<IConfiguration>().GetSection(AppealHolidayOptions.SectionName).Get<AppealHolidayOptions>()
         ?? new AppealHolidayOptions()));
-
-// ── Kafka producer (appeal lifecycle events) ─────────────────────────
-// Always registered; degraded-mode-silent if Kafka:BootstrapServers is unset.
-builder.Services.AddSingleton<AppealEventPublisher>();
-builder.Services.AddSingleton<IAppealEventPublisher>(sp => sp.GetRequiredService<AppealEventPublisher>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<AppealEventPublisher>());
 
 // ── Kafka consumer (X12 275 attachment ingress) ──────────────────────
 // Subscribes to the attachments-in topic, routes appeal-context 275s to
