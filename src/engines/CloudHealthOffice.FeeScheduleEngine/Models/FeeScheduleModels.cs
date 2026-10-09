@@ -156,7 +156,7 @@ public class FeeScheduleLine
     /// Optional facility price for a <see cref="FeeScheduleRateType.FlatRate"/> line
     /// (the CMS MPFS "facility price" column). When set, it replaces <see cref="Rate"/>
     /// for claim lines rendered in a facility place of service (see
-    /// <c>RateResolutionService.IsFacilityPlaceOfService</c>); <see cref="Rate"/> is then
+    /// <see cref="FacilityPlaceOfService"/>); <see cref="Rate"/> is then
     /// the non-facility price. Null = one price for every place of service.
     /// </summary>
     public decimal? FacilityRate { get; set; }
@@ -359,10 +359,23 @@ public record PricingRequest
 
     /// <summary>
     /// Three-character type of bill (837I CLM05-1 facility type + CLM05-3
-    /// frequency). Informational — carried for audit; not used in rate
-    /// selection today.
+    /// frequency; "0111" is also accepted). A <b>valid</b> type of bill
+    /// (<see cref="CloudHealthOffice.ReferenceData.Domain.NubcTypeOfBill"/>) marks the
+    /// line as institutional, which always takes the facility rate
+    /// (<see cref="PlaceOfServiceCode"/> then holds the facility type code, not a CMS
+    /// place of service). A malformed value ("0", "N/A") is ignored for the facility
+    /// decision; the value is otherwise carried for audit.
     /// </summary>
     public string? BillType { get; init; }
+
+    /// <summary>
+    /// True when the claim is institutional (837I / ClaimType Institutional),
+    /// whether or not a valid <see cref="BillType"/> could be built. An institutional
+    /// line always takes the facility rate, because its
+    /// <see cref="PlaceOfServiceCode"/> holds the CLM05-1 facility type code (e.g.
+    /// "13"), not a CMS place of service. Callers set it from the claim type.
+    /// </summary>
+    public bool IsInstitutional { get; init; }
 }
 
 /// <summary>

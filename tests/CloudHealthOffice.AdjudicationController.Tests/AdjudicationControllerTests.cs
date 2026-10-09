@@ -483,6 +483,141 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         Assert.Null(line.LengthOfStay);
         Assert.Null(line.RevenueCode);
         Assert.Null(line.BillType);
+        Assert.False(line.IsInstitutional);
+    }
+
+    // ── Facility setting: institutional claim type vs. a valid bill type ──
+
+    private async Task<IReadOnlyList<PricingRequest>> CapturePricingRequestsAsync(AdjudicationRequest request)
+    {
+        SetupNewPipelineDefaults();
+        SetupScrubPass();
+        SetupNcciPass();
+        SetupRateResult(allowedAmount: 150m);
+        SetupBenefitResult(allowedAmount: 150m);
+
+        IReadOnlyList<PricingRequest>? captured = null;
+        _factory.RateEngine
+            .ResolveBatchAsync(Arg.Do<IReadOnlyList<PricingRequest>>(r => captured = r), Arg.Any<CancellationToken>());
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(captured);
+        return captured!;
+    }
+
+    /// <summary>Prices requests with the real engine against 99213 at $110 non-facility / $75 facility.</summary>
+    internal static async Task<decimal> PriceAtFacilityScheduleAsync(IReadOnlyList<PricingRequest> requests)
+    {
+        var schedules = Substitute.For<IFeeScheduleRepository>();
+        schedules.GetDefaultForPlanAsync(default!, default!, default, default)
+            .ReturnsForAnyArgs(new FeeSchedule
+            {
+                Id = "MPFS-FAC", TenantId = TenantId, Name = "MPFS",
+                Type = FeeScheduleType.MedicareMpfs,
+                EffectiveDate = new DateTime(2026, 1, 1),
+                Lines = [new FeeScheduleLine { ProcedureCode = "99213", Rate = 110m, FacilityRate = 75m }],
+            });
+        var engine = new RateResolutionService(
+            schedules, Substitute.For<IProviderContractRepository>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<RateResolutionService>.Instance);
+        var priced = await engine.ResolveBatchAsync(requests, CancellationToken.None);
+        return Assert.Single(priced.LineResults).AllowedAmount;
+    }
+
+    [Fact]
+    public async Task Adjudicate_InstitutionalClaimWithoutBillType_PricesAtFacilityRate()
+    {
+        // 837I with no bill type: the POS slot holds the facility type "13"
+        // (hospital outpatient), which is non-facility if read as a CMS POS.
+        var baseRequest = MakeAdjudicationRequest();
+        var request = baseRequest with
+        {
+            ClaimType = "Institutional",
+            BillType = null,
+            Lines = baseRequest.Lines.Select(l => l with { PlaceOfService = "13" }).ToList(),
+        };
+
+        var captured = await CapturePricingRequestsAsync(request);
+
+        var line = Assert.Single(captured);
+        Assert.True(line.IsInstitutional);
+        Assert.Null(line.BillType);
+        Assert.Equal(75m, await PriceAtFacilityScheduleAsync(captured));
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("N/A")]
+    [InlineData("11")]
+    public async Task Adjudicate_ProfessionalClaimWithJunkBillType_PricesAtNonFacilityRate(string billType)
+    {
+        var request = MakeAdjudicationRequest() with { ClaimType = "Professional", BillType = billType };
+
+        var captured = await CapturePricingRequestsAsync(request);
+
+        var line = Assert.Single(captured);
+        Assert.False(line.IsInstitutional);
+        Assert.Equal(110m, await PriceAtFacilityScheduleAsync(captured));
+    }
+
+    /// <summary>
+    /// Estimate vs. adjudication parity: the payment estimate and sync adjudication
+    /// of the same claim send the same facility-setting inputs (claim type, bill type,
+    /// place of service) to the fee schedule engine and so price at the same rate.
+    /// </summary>
+    [Theory]
+    [InlineData("Institutional", null, "13", 75)]   // 837I, no bill type: facility
+    [InlineData("Institutional", "131", "13", 75)]  // 837I with TOB: facility
+    [InlineData("Professional", "131", "11", 75)]   // valid TOB marks the line institutional
+    [InlineData("Professional", "N/A", "11", 110)]  // junk TOB: POS rule, office = non-facility
+    [InlineData("Professional", null, "22", 75)]    // POS 22 on-campus outpatient: facility
+    public async Task Estimate_And_Adjudicate_PriceTheSameFacilitySetting(
+        string claimType, string? billType, string pos, int expectedAllowed)
+    {
+        var adjudicationBase = MakeAdjudicationRequest();
+        var adjudication = await CapturePricingRequestsAsync(adjudicationBase with
+        {
+            ClaimType = claimType,
+            BillType = billType,
+            Lines = adjudicationBase.Lines.Select(l => l with { PlaceOfService = pos }).ToList(),
+        });
+
+        IReadOnlyList<PricingRequest>? estimate = null;
+        var rateEngine = Substitute.For<IRateResolutionService>();
+        rateEngine.ResolveBatchAsync(Arg.Do<IReadOnlyList<PricingRequest>>(r => estimate = r), Arg.Any<CancellationToken>())
+            .Returns(new PricingResultSet { LineResults = [] });
+        var estimator = new PaymentEstimateService(
+            rateEngine, _factory.BenefitEngine, _factory.ProviderIntegrityGate, _factory.PriorAuthEngine,
+            _factory.OperatingModeProvider, new ClaimTypeRouter(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PaymentEstimateService>.Instance);
+        await estimator.EstimateAsync(TenantId, new BenefitPlanService.Models.Estimate.PaymentEstimateRequest
+        {
+            MemberId = "MBR-001",
+            BenefitPlanId = PlanId,
+            ProviderNpi = "1234567890",
+            ServiceDate = new DateOnly(2026, 1, 15),
+            ClaimType = claimType,
+            BillType = billType,
+            Lines =
+            [
+                new BenefitPlanService.Models.Estimate.PaymentEstimateLineRequest
+                {
+                    LineNumber = 1, ProcedureCode = "99213", ChargeAmount = 200m, PlaceOfService = pos,
+                    DiagnosisCodes = ["Z00.00"],
+                },
+            ],
+        });
+
+        var a = Assert.Single(adjudication);
+        var e = Assert.Single(estimate!);
+        Assert.Equal(a.IsInstitutional, e.IsInstitutional);
+        Assert.Equal(a.BillType, e.BillType);
+        Assert.Equal(a.PlaceOfServiceCode, e.PlaceOfServiceCode);
+        Assert.Equal(expectedAllowed, await PriceAtFacilityScheduleAsync(adjudication));
+        Assert.Equal(expectedAllowed, await PriceAtFacilityScheduleAsync(estimate!));
     }
 
     // ── Synchronous DRG stay through the real fee schedule and benefit engines ──

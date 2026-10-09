@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted. Phase 1 (one engine) is implemented. Phases 2 to 5 (one contract
-model) are planned for later PRs.
+Accepted. Phase 1 (one engine) is implemented. The engine's facility rule now
+follows the CMS site-of-service list (section 5; the facility rule risk is fixed).
+Phases 2 to 5 (one contract model) are planned for later PRs.
 
 ## Context
 
@@ -267,6 +268,44 @@ implemented, rather than silently ignoring them.
 - provider-contracts-service is the only contract writer. The engine owns only
   schedules and evaluation.
 
+### 5. Facility rule follows CMS (fixed)
+
+The engine's facility / non-facility rule used to be "facility everywhere except
+POS 11, 12, 02 and 10". That paid urgent care (20), independent clinic (49),
+independent lab (81) and most other settings at the facility rate, and telehealth
+other than home (02) at the non-facility rate. It is now one shared definition,
+`CloudHealthOffice.FeeScheduleEngine.Domain.FacilityPlaceOfService`, which
+`RateResolutionService` (adjudication and benefit-plan-service `resolve-rates`)
+and PricingApi `RepricingService` both use. No other copy exists: the
+BenefitEngine and claims-service have no facility-rate POS list
+(`ServiceCategoryResolver`'s POS table maps benefit categories, not rates).
+
+- **Facility rate:** POS 02, 19, 21, 22, 23, 24, 26, 31, 34, 41, 42, 51, 52, 53,
+  56, 61. Source: Medicare Claims Processing Manual, Pub. 100-04, Ch. 12,
+  §20.4.2 "Site of Service Payment Differential" (Rev. 12823, effective
+  2024-10-08), with code meanings from the CMS Place of Service Code Set.
+- **Non-facility rate:** every other code, including 10, 11, 12, 20, 49, 50,
+  81 and 99, and blank or unknown codes.
+- **Telehealth.** From CY 2024, POS 02 is paid at the facility rate and POS 10
+  at the non-facility rate (CY 2024 MPFS final rule, MLN MM13452). POS 10 was
+  new in 2022, and Medicare telehealth in CY 2022 to 2023 was generally billed
+  with the in-person POS and modifier 95, so the rule is not date-dependent.
+- **Institutional lines.** An 837I line carries the facility type code (CLM05-1)
+  in `PlaceOfServiceCode`, which is not a CMS POS. A request flagged
+  `IsInstitutional` (callers set it from the claim type, so an 837I claim with
+  no buildable type of bill still counts) or carrying a valid `BillType`
+  (`NubcTypeOfBill`, the rule the benefit engine also uses) is always a facility
+  setting and its facility type code is never read against the POS list. A
+  malformed `BillType` on a professional claim is ignored. Estimates send the
+  same claim type and bill type as adjudication, so both price alike. Before, facility types 11 and 12 (hospital inpatient) were read
+  as POS 11 / 12 and took the non-facility rate; other facility types
+  already took the facility rate.
+- **Not modelled:** §20.4.2's code-level exceptions (professional component of
+  diagnostic tests, outpatient therapy and CORF services always non-facility)
+  are carried by the fee schedule's values, not by POS.
+- A line with no facility rate (no `FacilityRate`, no `PeRvuFacility`) still
+  prices at its single rate in every setting.
+
 ## Consequences
 
 ### Positive
@@ -283,8 +322,11 @@ implemented, rather than silently ignoring them.
 - **DRG on multi-line claims.** The case rate is now allocated across lines by
   billed charges, or evenly when no charges are sent. Before, the whole amount
   sat on line 1. The total is unchanged.
-- **Facility rule.** POS 20, 49, 50, 81 and others now take the facility price
-  (the engine's rule), and POS 02 takes the non-facility price.
+- **Facility rule.** Phase 1 made POS 20, 49, 50, 81 and others take the
+  facility price (the engine's rule then), and POS 02 the non-facility price.
+  Section 5 fixes this: only the CMS facility list (02, 19, 21 to 24, 26, 31,
+  34, 41, 42, 51 to 53, 56, 61) takes the facility price, and every other POS,
+  including 20, 49, 50, 81 and unknown codes, takes the non-facility price.
 - **Modifiers.** 81 is now 16% (was 10%). 66 is now unadjusted with a
   "by report" warning (was 25%). 22, 53 and AS now adjust. 50 and the assistant
   modifiers honour the line flags.
@@ -302,7 +344,7 @@ implemented, rather than silently ignoring them.
 
 | Risk | Mitigation |
 | --- | --- |
-| The engine's facility rule is not the CMS rule. It treats POS 20, 49, 81 and others as facility settings and POS 02 as non-facility. PricingApi now inherits it. | Fix once, in the engine, in a dedicated PR with CMS POS tables and adjudication regression tests. The parity tests keep both entry points identical while it changes. |
+| ~~The engine's facility rule is not the CMS rule. It treats POS 20, 49, 81 and others as facility settings and POS 02 as non-facility. PricingApi now inherits it.~~ **Fixed** (section 5). | One shared CMS list (`FacilityPlaceOfService`), a table test over the whole POS code set, and parity tests showing both entry points agree on POS 20, 49 and 81. |
 | Backfill merges two contract documents with different ids, plan scoping and network enums. | Deterministic id mapping, a conflict report that blocks cutover, and the shadow-compare window. |
 | Dual read doubles pricing work for adjudicated claims. | Engine schedule caching already exists (`CachingFeeScheduleRepository`). Shadow pricing is off the payment path and sampled if needed. |
 | Lesser-of interacts with COB and per-stay allocation. | Lesser-of is applied before benefits, as the allowed amount. It is per-stay for DRG and per diem, and covered by tests. COB stays downstream of allowed. |
@@ -315,6 +357,10 @@ implemented, rather than silently ignoring them.
 ## References
 
 - `src/engines/CloudHealthOffice.FeeScheduleEngine/Services/RateResolutionService.cs`
+- `src/engines/CloudHealthOffice.FeeScheduleEngine/Domain/FacilityPlaceOfService.cs`
+- Medicare Claims Processing Manual, Pub. 100-04, Ch. 12, §20.4.2 (https://www.cms.gov/regulations-and-guidance/guidance/manuals/downloads/clm104c12.pdf)
+- CMS Place of Service Code Set (https://www.cms.gov/medicare/coding-billing/place-of-service-codes/code-sets)
+- MLN MM13452, CY 2024 Medicare Physician Fee Schedule final rule summary (https://www.cms.gov/files/document/mm13452-medicare-physician-fee-schedule-final-rule-summary-cy-2024.pdf)
 - `src/services/CloudHealthOffice.PricingApi/Services/RepricingService.cs`
 - `src/services/CloudHealthOffice.PricingApi/Services/Engine/`
 - `src/services/claims-service/Services/Adjudication/Stages/PricingStage.cs`

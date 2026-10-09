@@ -68,7 +68,7 @@ public class UnifiedPricingParityTests
         ("71046", 0.18m, 0.67m, 0.12m, 0.04m, 0),
     ];
 
-    public static TheoryData<string> PlacesOfService => new() { "11", "22", "21", "02" };
+    public static TheoryData<string> PlacesOfService => new() { "11", "22", "21", "02", "10", "20", "49", "81" };
 
     [Theory]
     [MemberData(nameof(PlacesOfService))]
@@ -100,6 +100,62 @@ public class UnifiedPricingParityTests
 
         adjudicated.LineResults[0].AllowedAmount.Should().Be(Math.Round(2.98m * Cf, 2));
         repriced.Lines[0].AllowedAmount.Should().Be(adjudicated.LineResults[0].AllowedAmount);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FACILITY / NON-FACILITY (CMS Pub. 100-04 Ch. 12 §20.4.2)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Urgent care (20), independent clinic (49) and independent lab (81) are
+    /// non-facility settings: both entry points pay the non-facility RVU amount and
+    /// the Pricing API labels the line "Non-Facility".
+    /// </summary>
+    [Theory]
+    [InlineData("20")]
+    [InlineData("49")]
+    [InlineData("81")]
+    public async Task NonFacilityPos_PricingApiAndAdjudicationAgree_AtNonFacilityRate(string pos)
+    {
+        var claim = new[] { Line("99213", units: 1, billed: 150m) };
+        var nonFacility = Math.Round((1.30m + 1.59m + 0.09m) * Cf, 2);
+
+        var (adjudicated, repriced) = await PriceBothWays(
+            claim, pos, ApiClaimType.Professional, drgCode: null,
+            canonical: CanonicalRbrvs(), legacy: LegacyRbrvs());
+        AssertParity(adjudicated, repriced);
+        adjudicated.LineResults[0].AllowedAmount.Should().Be(nonFacility);
+        repriced.Lines[0].Breakdown.FacilityIndicator.Should().Be("Non-Facility");
+
+        var (adjudicatedSame, repricedSame) = await PriceBothWaysCanonical(
+            claim, pos, ApiClaimType.Professional, drgCode: null, Rbrvs, CanonicalRbrvs());
+        AssertParity(adjudicatedSame, repricedSame);
+        repricedSame.Lines[0].AllowedAmount.Should().Be(nonFacility);
+        repricedSame.Lines[0].Breakdown.FacilityIndicator.Should().Be("Non-Facility");
+    }
+
+    /// <summary>A flat schedule with a facility price: 20/49/81 take the non-facility price on both paths.</summary>
+    [Theory]
+    [InlineData("20", 110.00)]
+    [InlineData("49", 110.00)]
+    [InlineData("81", 110.00)]
+    [InlineData("22", 75.00)]
+    public async Task FlatFacilityPrice_PricingApiAndAdjudicationAgree(string pos, double expected)
+    {
+        var schedule = new FeeSchedule
+        {
+            Id = "FLAT_FACILITY_2025", TenantId = Tenant, Name = "Flat with facility price",
+            Type = EngineFeeScheduleType.MedicareMpfs,
+            EffectiveDate = new DateTime(2025, 1, 1),
+            Lines = [new FeeScheduleLine { ProcedureCode = "99213", Rate = 110m, FacilityRate = 75m }],
+        };
+
+        var (adjudicated, repriced) = await PriceBothWaysCanonical(
+            [Line("99213", units: 1, billed: 150m)], pos, ApiClaimType.Professional, drgCode: null,
+            schedule.Id, schedule);
+
+        AssertParity(adjudicated, repriced);
+        repriced.Lines[0].AllowedAmount.Should().Be((decimal)expected);
     }
 
     // ═══════════════════════════════════════════════════════════════════

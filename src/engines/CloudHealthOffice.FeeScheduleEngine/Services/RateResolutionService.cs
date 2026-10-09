@@ -1,6 +1,7 @@
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Persistence;
+using CloudHealthOffice.ReferenceData.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Services;
@@ -20,15 +21,6 @@ public class RateResolutionService : IRateResolutionService
     private readonly IFeeScheduleRepository _feeScheduleRepo;
     private readonly IProviderContractRepository _contractRepo;
     private readonly ILogger<RateResolutionService> _logger;
-
-    // Facility POS codes per CMS (11 = office; all others generally treated as facility)
-    private static readonly HashSet<string> NonFacilityPosCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "11", // Office
-        "12", // Home
-        "02", // Telehealth (non-facility)
-        "10", // Telehealth (non-facility, home)
-    };
 
     private static readonly string[] AssistantSurgeonModifiers =
     [
@@ -61,13 +53,30 @@ public class RateResolutionService : IRateResolutionService
     }
 
     /// <summary>
-    /// The engine's facility / non-facility rule: every place of service is a
-    /// facility setting except office (11), home (12) and telehealth (02, 10).
+    /// The engine's facility / non-facility rule: the CMS MPFS site-of-service
+    /// differential defined once in <see cref="FacilityPlaceOfService"/> (facility
+    /// rate only for POS 02, 19, 21–24, 26, 31, 34, 41, 42, 51–53, 56, 61).
     /// It selects facility PE RVUs and <see cref="FeeScheduleLine.FacilityRate"/>.
     /// Public so callers that display the setting (PricingApi) use the same rule.
     /// </summary>
     public static bool IsFacilityPlaceOfService(string? placeOfServiceCode)
-        => !string.IsNullOrEmpty(placeOfServiceCode) && !NonFacilityPosCodes.Contains(placeOfServiceCode);
+        => FacilityPlaceOfService.IsFacility(placeOfServiceCode);
+
+    /// <summary>
+    /// Whether a claim line takes the facility rate. An institutional line — the
+    /// claim type is institutional (<see cref="PricingRequest.IsInstitutional"/>) or it
+    /// carries a valid <see cref="PricingRequest.BillType"/> — is billed by a facility
+    /// and is always a facility setting: its <see cref="PricingRequest.PlaceOfServiceCode"/>
+    /// then holds the 837I CLM05-1 facility type code ("13" = hospital outpatient),
+    /// which is not a CMS place of service and is never read against the POS list.
+    /// A malformed bill type ("0", "N/A") does not make a line institutional; the
+    /// validity rule is <see cref="NubcTypeOfBill"/>, shared with the benefit engine.
+    /// A professional line uses <see cref="IsFacilityPlaceOfService"/>.
+    /// </summary>
+    internal static bool IsFacilitySetting(PricingRequest request)
+        => request.IsInstitutional
+           || NubcTypeOfBill.IsValid(request.BillType)
+           || IsFacilityPlaceOfService(request.PlaceOfServiceCode);
 
     /// <summary>
     /// Per-line resolution output for batch pricing: the result, the matched
@@ -757,7 +766,7 @@ public class RateResolutionService : IRateResolutionService
             case FeeScheduleType.MedicareMpfs:
             case FeeScheduleType.MedicareOpps:
             {
-                var amount = CalculateMedicareLineAmount(schedule, line, request.PlaceOfServiceCode);
+                var amount = CalculateMedicareLineAmount(schedule, line, IsFacilitySetting(request));
                 return (amount, RateSource.MedicareMpfs, schedule.Type, null, false);
             }
 
@@ -790,7 +799,7 @@ public class RateResolutionService : IRateResolutionService
                 if (line.RateType == FeeScheduleRateType.PercentOfBilled)
                     return (request.BilledAmount * line.Rate, source, schedule.Type, null, true);
 
-                return (FlatLineRate(line, request.PlaceOfServiceCode), source, schedule.Type, null, false);
+                return (FlatLineRate(line, IsFacilitySetting(request)), source, schedule.Type, null, false);
             }
         }
     }
@@ -825,13 +834,13 @@ public class RateResolutionService : IRateResolutionService
         if (medicaidLine.RateType == FeeScheduleRateType.FlatRate
             && !medicaidSchedule.PercentOfMedicare.HasValue)
         {
-            return (FlatLineRate(medicaidLine, request.PlaceOfServiceCode), null);
+            return (FlatLineRate(medicaidLine, IsFacilitySetting(request)), null);
         }
 
         // Strategy 3: Inline RVU on the Medicaid line itself
         if (medicaidLine.RateType == FeeScheduleRateType.Rvu)
         {
-            var rvuAmount = CalculateRvuAmount(medicaidSchedule, medicaidLine, request.PlaceOfServiceCode);
+            var rvuAmount = CalculateRvuAmount(medicaidSchedule, medicaidLine, IsFacilitySetting(request));
             if (medicaidSchedule.PercentOfMedicare.HasValue)
                 rvuAmount *= medicaidSchedule.PercentOfMedicare.Value;
             return (Math.Round(rvuAmount, 2), null);
@@ -860,7 +869,7 @@ public class RateResolutionService : IRateResolutionService
                 if (baseLine is not null)
                 {
                     var medicareRate = CalculateMedicareLineAmount(
-                        baseSchedule, baseLine, request.PlaceOfServiceCode);
+                        baseSchedule, baseLine, IsFacilitySetting(request));
 
                     var medicaidRate = medicareRate * medicaidSchedule.PercentOfMedicare.Value;
 
@@ -941,7 +950,7 @@ public class RateResolutionService : IRateResolutionService
                 };
 
                 if (usable)
-                    return (CalculateMedicareLineAmount(baseSchedule, baseLine!, request.PlaceOfServiceCode), null);
+                    return (CalculateMedicareLineAmount(baseSchedule, baseLine!, IsFacilitySetting(request)), null);
 
                 referenceFailure =
                     $"Medicare reference schedule {schedule.BaseMpfsFeeScheduleId} has no usable Medicare rate " +
@@ -961,7 +970,7 @@ public class RateResolutionService : IRateResolutionService
                     LogSanitizer.SafeForLog(request.ProcedureCode), LogSanitizer.SafeForLog(referenceFailure));
             }
 
-            return (CalculateRvuAmount(schedule, line, request.PlaceOfServiceCode), null);
+            return (CalculateRvuAmount(schedule, line, IsFacilitySetting(request)), null);
         }
 
         return (null, referenceFailure
@@ -973,29 +982,28 @@ public class RateResolutionService : IRateResolutionService
 
     /// <summary>Medicare allowed amount for a Medicare schedule line (RVU-based or stored flat rate).</summary>
     private static decimal CalculateMedicareLineAmount(
-        FeeSchedule schedule, FeeScheduleLine line, string placeOfServiceCode)
+        FeeSchedule schedule, FeeScheduleLine line, bool isFacility)
         => line.RateType == FeeScheduleRateType.Rvu
-            ? CalculateRvuAmount(schedule, line, placeOfServiceCode)
-            : FlatLineRate(line, placeOfServiceCode);
+            ? CalculateRvuAmount(schedule, line, isFacility)
+            : FlatLineRate(line, isFacility);
 
     /// <summary>
     /// The dollar rate of a flat-rate line: its <see cref="FeeScheduleLine.FacilityRate"/>
     /// in a facility place of service when one is set, otherwise <see cref="FeeScheduleLine.Rate"/>.
     /// </summary>
-    private static decimal FlatLineRate(FeeScheduleLine line, string placeOfServiceCode)
+    private static decimal FlatLineRate(FeeScheduleLine line, bool isFacility)
         => line.RateType == FeeScheduleRateType.FlatRate
            && line.FacilityRate is { } facilityRate
-           && IsFacilityPlaceOfService(placeOfServiceCode)
+           && isFacility
             ? facilityRate
             : line.Rate;
 
     private static decimal CalculateRvuAmount(
-        FeeSchedule schedule, FeeScheduleLine line, string placeOfServiceCode)
+        FeeSchedule schedule, FeeScheduleLine line, bool isFacility)
     {
         if (!schedule.ConversionFactor.HasValue)
             return line.Rate; // fall back to stored rate if CF missing
 
-        var isFacility = IsFacilityPlaceOfService(placeOfServiceCode);
         var peRvu = (isFacility ? line.PeRvuFacility : line.PeRvu) ?? line.PeRvu ?? 0m;
 
         var total = (line.WorkRvu ?? 0m) * schedule.WorkGpci
