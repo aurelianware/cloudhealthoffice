@@ -146,6 +146,15 @@ else
     Console.WriteLine("[dev] IAppealFieldEncryptor = NoOp (appeal body fields stored plaintext). Configure AppealEncryption to enable.");
 }
 
+// ── Holiday calendar for working-day clocks ──────────────────────────
+// U.S. federal holidays by default; AppealHolidays adds per-tenant and
+// per-state holidays. Resolved right after Build() so a malformed entry
+// fails startup rather than the first deadline computation.
+builder.Services.AddSingleton<IAppealHolidayCalendarProvider>(sp =>
+    new ConfiguredAppealHolidayCalendarProvider(
+        sp.GetRequiredService<IConfiguration>().GetSection(AppealHolidayOptions.SectionName).Get<AppealHolidayOptions>()
+        ?? new AppealHolidayOptions()));
+
 // ── Kafka producer (appeal lifecycle events) ─────────────────────────
 // Always registered; degraded-mode-silent if Kafka:BootstrapServers is unset.
 builder.Services.AddSingleton<AppealEventPublisher>();
@@ -185,6 +194,8 @@ builder.Services.AddChoHealthChecks(options =>
 builder.Services.AddChoObservability(builder.Configuration);
 
 var app = builder.Build();
+
+_ = app.Services.GetRequiredService<IAppealHolidayCalendarProvider>();
 
 app.UseChoObservability();
 
