@@ -2,6 +2,7 @@ using CloudHealthOffice.NcciEngine.Domain;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Services;
 using CloudHealthOffice.NcciEngine.Data;
+using CloudHealthOffice.NcciEngine.Import;
 using BenefitPlanService.Middleware;
 using CloudHealthOffice.Infrastructure.Security;
 using Microsoft.AspNetCore.Mvc;
@@ -21,19 +22,108 @@ namespace BenefitPlanService.Controllers;
 ///   GET  /api/v1/ncci/version            — table version info for the tenant
 ///   POST /api/v1/ncci/import             — import a quarterly CMS update
 ///   POST /api/v1/ncci/seed               — seed baseline data (dev/new tenant)
+///   POST /api/v1/ncci/cms-load           — load one public CMS PTP/MUE quarterly file
 /// </summary>
 [ApiController]
 [Route("api/v1/ncci")]
 public class NcciController : ControllerBase
 {
     private readonly INcciEditService _ncciService;
+    private readonly INcciQuarterlyLoader _loader;
     private readonly ILogger<NcciController> _logger;
 
-    public NcciController(INcciEditService ncciService, ILogger<NcciController> logger)
+    public NcciController(
+        INcciEditService ncciService,
+        INcciQuarterlyLoader loader,
+        ILogger<NcciController> logger)
     {
         _ncciService = ncciService;
+        _loader = loader;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Load one public CMS NCCI quarterly file, as CMS publishes it, into
+    /// the tenant's NCCI/MUE tables. Upload the extracted file (the
+    /// tab-delimited PTP <c>.txt</c>, or the MUE <c>.csv</c>) as
+    /// multipart field <c>file</c>. Idempotent: an identical file for the
+    /// same quarter/kind/setting/part is reported as <c>alreadyLoaded</c>
+    /// and not rewritten unless <c>force=true</c>. See
+    /// docs/engines/NCCI-CMS-QUARTERLY-LOAD.md for where to get the files.
+    /// Requires the service's default write permission (settings:manage).
+    /// </summary>
+    /// <param name="file">The CMS file.</param>
+    /// <param name="quarter">CMS release quarter, e.g. 2026Q4.</param>
+    /// <param name="kind">ptp or mue.</param>
+    /// <param name="setting">practitioner or outpatient-hospital.</param>
+    /// <param name="part">Optional part label (f1..f4) for a PTP table split across files.</param>
+    /// <param name="force">Reload even when this exact file was already loaded.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Load completed (or skipped as already loaded)</response>
+    /// <response code="400">Bad parameters, or the file holds no rows in the CMS layout</response>
+    [HttpPost("cms-load")]
+    [RequestSizeLimit(CmsLoadMaxBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = CmsLoadMaxBytes)]
+    [ProducesResponseType<NcciLoadResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<NcciLoadResult>> LoadCmsFile(
+        IFormFile? file,
+        [FromForm] string? quarter,
+        [FromForm] string? kind,
+        [FromForm] string? setting,
+        [FromForm] string? part = null,
+        [FromForm] bool force = false,
+        CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "A non-empty CMS file is required (multipart field 'file')." });
+
+        NcciCmsFileKind fileKind;
+        switch (kind?.Trim().ToLowerInvariant())
+        {
+            case "ptp": fileKind = NcciCmsFileKind.Ptp; break;
+            case "mue": fileKind = NcciCmsFileKind.Mue; break;
+            default: return BadRequest(new { message = "kind must be 'ptp' or 'mue'." });
+        }
+
+        var subject = User.FindFirst(ChoClaimTypes.Subject)?.Value;
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await _loader.LoadAsync(new NcciLoadRequest
+            {
+                TenantId = TenantId,
+                Quarter = quarter?.Trim().ToUpperInvariant() ?? string.Empty,
+                FileKind = fileKind,
+                Setting = setting ?? string.Empty,
+                Part = part,
+                FileName = file.FileName,
+                LoadedBy = subject,
+                Force = force,
+            }, stream, ct);
+
+            _logger.LogInformation(
+                "AUDIT NCCI CMS load: {Kind} {Setting} {Quarter} by {Subject} in tenant {TenantId}: {Loaded} loaded, {Rejected} rejected, already loaded: {AlreadyLoaded}",
+                result.FileKind, result.Setting, SanitizeForLog(result.Quarter), SanitizeForLog(subject),
+                SanitizeForLog(TenantId), result.RowsLoaded, result.RowsRejected, result.AlreadyLoaded);
+
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidDataException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    // The deployed NGINX ingress caps request bodies at 100m
+    // (infrastructure/k8s/nginx-ingress-config.yaml, infrastructure/helm/nginx-ingress-values.yaml);
+    // stay under it with room for multipart overhead. CMS splits the
+    // practitioner PTP table into parts (f1–f4), each well below this.
+    internal const long CmsLoadMaxBytes = 95_000_000;
 
     /// <summary>
     /// Tenant from the validated token (set by the shared TenantMiddleware).

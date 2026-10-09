@@ -75,8 +75,35 @@ public class NcciEditPair
 
     /// <summary>
     /// Quarter this pair was terminated, or null if still active.
+    /// For CMS-loaded rows this is the file's Deletion Date, which is
+    /// exclusive: the edit is not in effect on that date.
     /// </summary>
     public DateTime? TerminationDate { get; set; }
+
+    /// <summary>
+    /// Which CMS PTP table the pair came from (<see cref="NcciSettings"/>).
+    /// Null means the row applies to every setting (built-in seed rows and
+    /// rows imported before settings were tracked).
+    /// </summary>
+    public string? Setting { get; set; }
+
+    /// <summary>CMS "PTP Edit Rationale" text, when loaded from a CMS file.</summary>
+    public string? Rationale { get; set; }
+
+    /// <summary>CMS "*=in existence prior to 1996" flag.</summary>
+    public bool ExistedPrior1996 { get; set; }
+
+    /// <summary>Quarter label of the CMS release that last wrote this row (e.g. "2026Q4").</summary>
+    public string? SourceQuarter { get; set; }
+
+    /// <summary>
+    /// "{Setting}:{Part}" of the CMS file that last wrote this row. A later
+    /// load of the same file slot reconciles rows it no longer lists.
+    /// </summary>
+    public string? SourceKey { get; set; }
+
+    /// <summary>Id of the load that last wrote this row.</summary>
+    public string? LoadId { get; set; }
 }
 
 /// <summary>
@@ -133,6 +160,58 @@ public class MueEntry
     /// Date this MUE entry was retired, or null if still active.
     /// </summary>
     public DateTime? TerminationDate { get; set; }
+
+    /// <summary>
+    /// Which CMS MUE table the entry came from (<see cref="NcciSettings"/>).
+    /// Null means the row applies to every setting (built-in seed rows).
+    /// </summary>
+    public string? Setting { get; set; }
+
+    /// <summary>CMS "MUE Rationale" text, when loaded from a CMS file.</summary>
+    public string? Rationale { get; set; }
+
+    /// <summary>Quarter label of the CMS release that last wrote this row (e.g. "2026Q4").</summary>
+    public string? SourceQuarter { get; set; }
+}
+
+/// <summary>
+/// CMS publishes separate PTP and MUE tables per setting. The values are
+/// stored as strings (not an enum) so the persisted shape is the same
+/// under every serializer the repositories use.
+/// </summary>
+public static class NcciSettings
+{
+    /// <summary>Practitioner tables; applied to professional (837P) claims.</summary>
+    public const string Practitioner = "PRACTITIONER";
+
+    /// <summary>Outpatient hospital tables; applied to institutional (837I) claims.</summary>
+    public const string OutpatientHospital = "OUTPATIENT_HOSPITAL";
+
+    /// <summary>
+    /// Marks a claim type CMS publishes no NCCI table for (e.g. 837D). It
+    /// matches no CMS-loaded row, only setting-less (seed / legacy) rows.
+    /// </summary>
+    public const string None = "NONE";
+
+    /// <summary>The setting whose tables apply to a claim type ("837P" / "837I"); <see cref="None"/> otherwise.</summary>
+    public static string ForClaimType(string? claimType) => claimType?.Trim().ToUpperInvariant() switch
+    {
+        "837P" or "PROFESSIONAL" => Practitioner,
+        "837I" or "INSTITUTIONAL" => OutpatientHospital,
+        _ => None,
+    };
+
+    /// <summary>Parse a setting name; accepts the constants and common aliases.</summary>
+    public static bool TryParse(string? value, out string setting)
+    {
+        setting = value?.Trim().ToUpperInvariant().Replace('-', '_').Replace(' ', '_') switch
+        {
+            "PRACTITIONER" or "PRA" or "PROFESSIONAL" => Practitioner,
+            "OUTPATIENT_HOSPITAL" or "OPH" or "HOSPITAL" or "OUTPATIENT" => OutpatientHospital,
+            _ => string.Empty,
+        };
+        return setting.Length > 0;
+    }
 }
 
 /// <summary>

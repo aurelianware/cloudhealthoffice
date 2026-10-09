@@ -16,6 +16,9 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\engines\CloudHealthOffice.NcciEngine\CloudHealthOffice.NcciEngine.csproj" />
   </ItemGroup>
 </Project>

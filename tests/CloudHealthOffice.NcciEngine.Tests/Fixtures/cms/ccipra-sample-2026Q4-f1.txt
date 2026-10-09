@@ -1,0 +1,12 @@
+CPT codes, descriptions and other data only are copyright 2025 American Medical Association. All rights reserved. SYNTHETIC TEST FIXTURE - not CMS data.
+Medicare NCCI Procedure to Procedure (PTP) Edits - Practitioner Services - synthetic sample in the CMS tab-delimited layout
+Column 1	Column 2	*=in existence prior to 1996	Effective Date	Deletion Date *=no data	Modifier 0=not allowed 1=allowed 9=not applicable	PTP Edit Rationale
+99213	36415	*	19960101	*	0	Misuse of column two code with column one code
+45380	45378		20000101	*	0	Standards of medical / surgical practice
+70553	70551		20000101	*	1	Mutually exclusive procedures
+97110	97010		20030101	20261001	1	CPT Manual or CMS manual coding instructions
+93460	93458		20110101	20110101	9	Misuse of column two code with column one code
+0001U	G0480		20260701	*	1	Laboratory panel
+99999	ABC		20200101	*	1	Malformed: column 2 is not a code
+99214	36415		notadate	*	0	Malformed: bad effective date
+99215	36415		20200101	*	2	Malformed: bad modifier indicator

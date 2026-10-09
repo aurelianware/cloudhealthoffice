@@ -1,0 +1,5 @@
+CPT codes, descriptions and other data only are copyright 2025 American Medical Association. All rights reserved. SYNTHETIC TEST FIXTURE - not CMS data.
+Medicare NCCI Procedure to Procedure (PTP) Edits - Outpatient Hospital Services - synthetic sample in the CMS tab-delimited layout
+Column 1	Column 2	*=in existence prior to 1996	Effective Date	Deletion Date *=no data	Modifier 0=not allowed 1=allowed 9=not applicable	PTP Edit Rationale
+99213	36415	*	19960101	*	1	Misuse of column two code with column one code
+45380	45378		20000101	*	0	Standards of medical / surgical practice
