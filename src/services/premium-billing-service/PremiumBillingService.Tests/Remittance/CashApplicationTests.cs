@@ -23,6 +23,7 @@ public sealed class CashApplicationTests : IAsyncLifetime
     private readonly MongoRunnerFixture _mongo;
     private IMongoDatabase _database = null!;
     private IPremiumInvoiceRepository _invoices = null!;
+    private HookedInvoiceRepository _hooked = null!;
     private IRemittanceBatchRepository _batches = null!;
     private IRemittanceExceptionRepository _exceptions = null!;
     private ISponsorAccountRepository _accounts = null!;
@@ -37,6 +38,7 @@ public sealed class CashApplicationTests : IAsyncLifetime
         http.HttpContext.Items["TenantId"] = Tenant;
 
         _invoices = new PremiumInvoiceRepositoryMongo(_database, http, NullLogger<PremiumInvoiceRepositoryMongo>.Instance);
+        _hooked = new HookedInvoiceRepository(_invoices);
         _batches = new RemittanceBatchRepositoryMongo(_database, http);
         _exceptions = new RemittanceExceptionRepositoryMongo(_database, http);
         _accounts = new SponsorAccountRepositoryMongo(_database, http);
@@ -45,7 +47,7 @@ public sealed class CashApplicationTests : IAsyncLifetime
         actor.SetupGet(a => a.UserId).Returns("finance-user-1");
         actor.SetupGet(a => a.TenantId).Returns(Tenant);
         actor.SetupGet(a => a.IsAuthenticated).Returns(true);
-        _service = new CashApplicationService(_batches, _exceptions, _invoices, _accounts, actor.Object,
+        _service = new CashApplicationService(_batches, _exceptions, _hooked, _accounts, actor.Object,
             NullLogger<CashApplicationService>.Instance);
         return Task.CompletedTask;
     }
@@ -214,8 +216,8 @@ public sealed class CashApplicationTests : IAsyncLifetime
         var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
 
         var batch = await Apply820(new Synthetic820.Transaction { Amount = 1100.00m, Trace = "INDIV-1" }
-            .Individual("1", "EMP-1", "MBR-1", "SAMPLE", "ALEX").Rmr("INV-GRP001-2026-03", 600.00m, qualifier: "AZ")
-            .Individual("2", "EMP-2", "MBR-2", "TEST", "JORDAN").Rmr("INV-GRP001-2026-03", 500.00m, qualifier: "AZ"));
+            .Individual("1", "EMP-1", "MBR-1", "SAMPLE", "ALEX").Rmr("INV-GRP001-2026-03", 600.00m)
+            .Individual("2", "EMP-2", "MBR-2", "TEST", "JORDAN").Rmr("INV-GRP001-2026-03", 500.00m));
 
         batch.Applications.Select(a => (a.Outcome, a.AppliedAmount, a.UnappliedCreditAmount, a.MemberId)).Should().Equal(
             (CashApplicationOutcome.PartialPayment, 600.00m, 0m, "MBR-1"),
@@ -377,5 +379,200 @@ public sealed class CashApplicationTests : IAsyncLifetime
         var account = (await _accounts.GetAsync(Group))!;
         account.UnappliedCredit.Should().Be(80m);
         account.Entries.Should().HaveCount(8);
+    }
+
+    // ── review fixes ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task NegativeLine_SendsTheWholePaymentToTheQueue_SoAppliedNeverExceedsReceived()
+    {
+        // +100 on the invoice, −20 recoupment, 80 received: crediting 100 would post more than arrived.
+        var invoice = await Invoice("INV-GRP001-2026-03", 100.00m);
+
+        var batch = await Apply820(new Synthetic820.Transaction { Amount = 80.00m, Trace = "NEG-1" }
+            .Organization().Rmr("INV-GRP001-2026-03", 100.00m).Rmr("INV-GRP001-2026-02", -20.00m));
+
+        batch.AppliedAmount.Should().Be(0m);
+        batch.Applications.Should().OnlyContain(a => a.Outcome == CashApplicationOutcome.Exception);
+        var queued = (await _exceptions.ListAsync()).Single();
+        queued.Reason.Should().Be(RemittanceExceptionReason.NegativeLineInPayment);
+        queued.Amount.Should().Be(80.00m);
+        (await Reload(invoice)).TotalPaid.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task DebitFlag_PostsNothing()
+    {
+        var invoice = await Invoice("INV-GRP001-2026-03", 100.00m);
+
+        var batch = await Apply820(new Synthetic820.Transaction { Amount = 100.00m, Trace = "DEBIT-1", CreditDebit = "D" }
+            .Organization().Rmr("INV-GRP001-2026-03", 100.00m));
+
+        batch.Status.Should().Be(RemittanceBatchStatus.NotPosted);
+        batch.Warnings.Should().Contain(w => w.Contains("BPR03 is D"));
+        (await Reload(invoice)).TotalPaid.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task SameCheck_ByLockboxAndBy820_IsPostedOnce()
+    {
+        var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
+        const string csv = """
+            lockbox,batch,item,deposit_date,check_number,payer_id,check_amount,invoice_number,amount
+            LB7,001,1,2026-03-05,55501,EMPLOYER-A,1000.00,INV-GRP001-2026-03,1000.00
+            """;
+        await _service.ApplyAsync(LockboxCsvParser.Parse(csv).Single());
+
+        // The employer also sends an 820 for the same check (TRN02 = check number, BPR04 = CHK).
+        var batch = await Apply820(new Synthetic820.Transaction { Amount = 1000.00m, Trace = "55501", Method = "CHK" }
+            .Organization().Rmr("INV-GRP001-2026-03", 1000.00m));
+
+        batch.AppliedAmount.Should().Be(0m);
+        (await _exceptions.ListAsync()).Single().Reason.Should().Be(RemittanceExceptionReason.PossibleDuplicate);
+        var saved = await Reload(invoice);
+        saved.TotalPaid.Should().Be(1000.00m);
+        saved.Payments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task LockboxBatchAndItemNumbers_RepeatingNextDay_AreDifferentChecks()
+    {
+        await Invoice("INV-GRP001-2026-03", 1000.00m);
+        const string csv = """
+            batch,item,deposit_date,check_number,payer_id,check_amount,invoice_number,amount
+            001,1,2026-03-05,70001,EMPLOYER-A,400.00,INV-GRP001-2026-03,400.00
+            001,1,2026-03-06,70002,EMPLOYER-A,300.00,INV-GRP001-2026-03,300.00
+            """;
+
+        var checks = LockboxCsvParser.Parse(csv);
+        foreach (var check in checks)
+            await _service.ApplyAsync(check);
+
+        checks.Select(c => c.TraceNumber).Should().OnlyHaveUniqueItems();
+        var account = (await _accounts.GetAsync(Group))!;
+        account.OpenInvoiceBalance.Should().Be(300.00m);
+    }
+
+    [Fact]
+    public async Task FailedPartWay_ReuploadResumes_WithoutApplyingAnythingTwice()
+    {
+        var march = await Invoice("INV-GRP001-2026-03", 1000.00m);
+        var feb = await Invoice("INV-GRP001-2026-02", 500.00m);
+        var transaction = new Synthetic820.Transaction { Amount = 1600.00m, Trace = "RESUME-1" }
+            .Organization().Rmr("INV-GRP001-2026-03", 1000.00m).Rmr("INV-GRP001-2026-02", 600.00m);
+        _hooked.BeforeUpdate = (n, _) => n == 2 ? throw new TimeoutException("database went away") : Task.CompletedTask;
+
+        await FluentActions.Invoking(() => Apply820(transaction)).Should().ThrowAsync<TimeoutException>();
+        var stuck = (await _batches.SearchAsync()).Single();
+        stuck.Status.Should().Be(RemittanceBatchStatus.Processing);
+        stuck.Applications.Should().ContainSingle().Which.LineNumber.Should().Be(1);
+
+        _hooked.BeforeUpdate = null;
+        var batch = await Apply820(transaction);
+
+        batch.Status.Should().Be(RemittanceBatchStatus.Completed);
+        batch.Warnings.Should().Contain(w => w.StartsWith("Resumed"));
+        (await Reload(march)).Payments.Should().ContainSingle();
+        (await Reload(feb)).Payments.Should().ContainSingle().Which.Amount.Should().Be(500.00m);
+        (await _accounts.GetAsync(Group))!.UnappliedCredit.Should().Be(100.00m);
+
+        await FluentActions.Invoking(() => Apply820(transaction)).Should().ThrowAsync<DuplicateRemittanceException>();
+    }
+
+    [Fact]
+    public async Task ConcurrentPayment_OnTheSameInvoice_IsNotOverwritten_AndTheSplitUsesTheFreshBalance()
+    {
+        var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
+        // Between our read and our save, someone records a 700.00 payment by hand.
+        _hooked.BeforeUpdate = async (n, _) =>
+        {
+            if (n != 1) return;
+            var other = (await _invoices.GetByIdAsync(invoice.Id))!;
+            other.Payments.Add(new InvoicePayment { Amount = 700.00m, PaymentDate = DateTime.UtcNow, ReferenceNumber = "MANUAL" });
+            other.RecalculateTotals();
+            await _invoices.UpdateAsync(other);
+        };
+
+        var batch = await Apply820(new Synthetic820.Transaction { Amount = 500.00m, Trace = "RACE-1" }
+            .Organization().Rmr("INV-GRP001-2026-03", 500.00m));
+
+        var app = batch.Applications.Single();
+        app.AppliedAmount.Should().Be(300.00m);
+        app.UnappliedCreditAmount.Should().Be(200.00m);
+        var saved = await Reload(invoice);
+        saved.Payments.Select(p => p.ReferenceNumber).Should().BeEquivalentTo("MANUAL", "RACE-1");
+        saved.BalanceDue.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task InvoiceRepository_RefusesAStaleSave()
+    {
+        var invoice = await Invoice("INV-GRP001-2026-03", 1000.00m);
+        var first = (await _invoices.GetByIdAsync(invoice.Id))!;
+        var second = (await _invoices.GetByIdAsync(invoice.Id))!;
+        await _invoices.UpdateAsync(first);
+
+        await FluentActions.Invoking(() => _invoices.UpdateAsync(second)).Should().ThrowAsync<ConcurrencyConflictException>();
+    }
+
+    [Fact]
+    public async Task Exception_ResolvedTwiceAtOnce_PostsOnce()
+    {
+        await Invoice("INV-GRP001-2026-03", 1000.00m);
+        await Apply820(new Synthetic820.Transaction { Amount = 250.00m, Trace = "TWICE-1" }.Organization().Rmr("UNKNOWN", 250.00m));
+        var queued = (await _exceptions.ListAsync()).Single();
+        var credit = new ResolveRemittanceExceptionRequest { Action = RemittanceExceptionAction.CreditSponsorAccount, GroupNumber = Group, Note = "advance" };
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+        {
+            try { await _service.ResolveExceptionAsync(queued.Id, credit); return true; }
+            catch (InvalidOperationException) { return false; }
+        }));
+
+        results.Count(r => r).Should().Be(1);
+        (await _accounts.GetAsync(Group))!.UnappliedCredit.Should().Be(250.00m);
+        (await _exceptions.GetByIdAsync(queued.Id))!.Status.Should().Be(RemittanceExceptionStatus.Credited);
+    }
+
+    [Fact]
+    public async Task CreditToAnUnknownGroup_IsRefused_AndTheExceptionStaysOpen()
+    {
+        await Apply820(new Synthetic820.Transaction { Amount = 10.00m, Trace = "TYPO-GRP" }.Organization().Rmr("UNKNOWN", 10.00m));
+        var queued = (await _exceptions.ListAsync()).Single();
+
+        var act = () => _service.ResolveExceptionAsync(queued.Id, new ResolveRemittanceExceptionRequest
+        {
+            Action = RemittanceExceptionAction.CreditSponsorAccount, GroupNumber = "GRP-TYPO", Note = "x"
+        });
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*GRP-TYPO*");
+        (await _exceptions.GetByIdAsync(queued.Id))!.Status.Should().Be(RemittanceExceptionStatus.Open);
+        (await _accounts.GetAsync("GRP-TYPO")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PolicyNumberQualifier_IsNotMatchedAsAnInvoice()
+    {
+        var invoice = await Invoice("INV-GRP001-2026-03", 100.00m);
+
+        var batch = await Apply820(new Synthetic820.Transaction { Amount = 100.00m, Trace = "AZ-1" }
+            .Individual("1", "EMP-1", "MBR-1", "SAMPLE", "ALEX").Rmr("INV-GRP001-2026-03", 100.00m, qualifier: "AZ"));
+
+        batch.Applications.Single().Outcome.Should().Be(CashApplicationOutcome.Exception);
+        (await _exceptions.ListAsync()).Single().Reason.Should().Be(RemittanceExceptionReason.UnsupportedReferenceQualifier);
+        (await Reload(invoice)).TotalPaid.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task InvoiceOfAnotherGroup_ThanTheOnePaid_IsAnException()
+    {
+        var other = await Invoice("INV-GRP002-2026-03", 100.00m, group: "GRP002");
+
+        var batch = await Apply820(new Synthetic820.Transaction { Amount = 100.00m, Trace = "GRP-1", Group = "GRP001" }
+            .Organization().Rmr("INV-GRP002-2026-03", 100.00m));
+
+        (await _exceptions.ListAsync()).Single().Reason.Should().Be(RemittanceExceptionReason.GroupMismatch);
+        (await Reload(other)).TotalPaid.Should().Be(0m);
+        batch.AppliedAmount.Should().Be(0m);
     }
 }

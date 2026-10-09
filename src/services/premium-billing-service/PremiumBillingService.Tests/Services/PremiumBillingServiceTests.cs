@@ -577,6 +577,30 @@ public class PremiumBillingServiceTests
     }
 
     [Fact]
+    public async Task VoidInvoiceAsync_RefreshesTheSponsorAccountBalance()
+    {
+        var invoice = new PremiumInvoice { Id = "inv-1", GroupNumber = "GRP001", Status = InvoiceStatus.Sent, LineItems = { new InvoiceLineItem { TotalPremium = 1000 } } };
+        invoice.RecalculateTotals();
+        _invoiceRepo.Setup(r => r.GetByIdAsync("inv-1")).ReturnsAsync(invoice);
+        _invoiceRepo.Setup(r => r.UpdateAsync(It.IsAny<PremiumInvoice>())).ReturnsAsync((PremiumInvoice inv) => inv);
+        _invoiceRepo.Setup(r => r.GetByGroupNumberAsync("GRP001")).ReturnsAsync(new[] { invoice });
+        var account = new SponsorAccount { GroupNumber = "GRP001", OpenInvoiceBalance = 1000m, NetBalance = 1000m };
+        var accounts = new Mock<ISponsorAccountRepository>();
+        accounts.Setup(a => a.UpdateAsync("GRP001", It.IsAny<Action<SponsorAccount>>()))
+            .ReturnsAsync((string _, Action<SponsorAccount> change) => { change(account); return account; });
+        var service = new PremiumBillingService.Services.PremiumBillingService(
+            _billingRunRepo.Object, _invoiceRepo.Object,
+            new SponsorServiceClient(_httpClientFactory.Object, NullLogger<SponsorServiceClient>.Instance),
+            new CoverageServiceClient(_httpClientFactory.Object, NullLogger<CoverageServiceClient>.Instance),
+            _actor.Object, NullLogger<PremiumBillingService.Services.PremiumBillingService>.Instance, accounts.Object);
+
+        await service.VoidInvoiceAsync("inv-1", "billed in error");
+
+        account.OpenInvoiceBalance.Should().Be(0m);
+        account.NetBalance.Should().Be(0m);
+    }
+
+    [Fact]
     public async Task RecordPaymentAsync_VoidedInvoice_ThrowsInvalidOperation()
     {
         var invoice = new PremiumInvoice { Id = "inv-1", Status = InvoiceStatus.Voided };

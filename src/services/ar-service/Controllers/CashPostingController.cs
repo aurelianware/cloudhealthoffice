@@ -70,6 +70,14 @@ public class CashPostingController : ControllerBase
         posting.PostingNumber = $"CP-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
         posting.Status = CashPostingStatus.Pending;
         posting.CreatedBy = _actor.UserId;
+        // Posted state is the server's: a client cannot create a posting that claims to be credited already.
+        posting.AppliedAmount = 0m;
+        posting.UnappliedAmount = posting.Amount;
+        foreach (var application in posting.Applications)
+        {
+            application.PostedEntryId = null;
+            application.PostedAt = null;
+        }
 
         _logger.LogInformation("Creating cash posting {PostingNumber} for payer {PayerName}",
             SanitizeForLog(posting.PostingNumber), SanitizeForLog(posting.PayerName));
@@ -112,59 +120,70 @@ public class CashPostingController : ControllerBase
         if (appliedAmount > posting.Amount)
             return BadRequest(new { error = $"Over-application: applied {appliedAmount:C} exceeds receipt amount {posting.Amount:C}" });
 
-        // Every balance an unposted application credits must exist and belong to
-        // the application's GL account; all are checked before any is written.
-        var pending = posting.Applications.Where(a => a.PostedEntryId == null && a.AmountApplied > 0).ToList();
-        var balances = new Dictionary<string, ArBalance>(StringComparer.Ordinal);
-        foreach (var application in pending)
-        {
-            if (!balances.TryGetValue(application.ArBalanceId, out var target))
-            {
-                target = await _balanceRepository.GetByIdAsync(application.ArBalanceId);
-                if (target == null)
-                    return BadRequest(new { error = $"AR balance {application.ArBalanceId} not found" });
-                balances[application.ArBalanceId] = target;
-            }
-            if (!string.Equals(target.GlAccountId, application.GlAccountId, StringComparison.Ordinal))
-                return BadRequest(new { error = $"AR balance {application.ArBalanceId} belongs to GL account {target.GlAccountId}, not {application.GlAccountId}" });
-        }
-
+        // Credit the balances. Entry ids are fixed per posting and application, so a
+        // retry (after a concurrent save of a balance, or a failure before the posting
+        // was saved) finds what was already credited and does not credit it twice.
         var postedBy = _actor.UserId;
         var now = DateTime.UtcNow;
-        foreach (var application in pending)
+        var pending = posting.Applications.Where(a => a.PostedEntryId == null && a.AmountApplied > 0).ToList();
+        var credited = 0;
+        for (var attempt = 1; ; attempt++)
         {
-            // The entry id is fixed per posting and application, so if an earlier
-            // attempt credited the balance but failed before saving the posting,
-            // retrying finds the entry and does not credit it twice.
-            var entryId = $"cash-{posting.Id}-{posting.Applications.IndexOf(application)}";
-            var balance = balances[application.ArBalanceId];
-            if (balance.PostingEntries.Any(e => e.EntryId == entryId))
+            // Every balance an unposted application credits must exist and belong to
+            // the application's GL account; all are checked before any is written.
+            var balances = new Dictionary<string, ArBalance>(StringComparer.Ordinal);
+            foreach (var application in pending)
             {
-                application.PostedEntryId = entryId;
-                application.PostedAt ??= now;
-                continue;
+                if (!balances.TryGetValue(application.ArBalanceId, out var target))
+                {
+                    target = await _balanceRepository.GetByIdAsync(application.ArBalanceId);
+                    if (target == null)
+                        return BadRequest(new { error = $"AR balance {application.ArBalanceId} not found" });
+                    balances[application.ArBalanceId] = target;
+                }
+                if (!string.Equals(target.GlAccountId, application.GlAccountId, StringComparison.Ordinal))
+                    return BadRequest(new { error = $"AR balance {application.ArBalanceId} belongs to GL account {target.GlAccountId}, not {application.GlAccountId}" });
             }
 
-            var entry = new ArPostingEntry
+            var changed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var application in pending)
             {
-                EntryId = entryId,
-                Source = ArPostingSource.CashReceipt,
-                SourceReferenceId = posting.Id,
-                SourceReferenceNumber = posting.PostingNumber,
-                CreditAmount = application.AmountApplied,
-                PostedAt = now,
-                PostedBy = postedBy,
-                Memo = application.Memo,
-                MemberId = posting.PayerType == PayerType.Member ? posting.PayerReferenceId : null
-            };
-            Post(balance, entry, posting.PayerType);
-            application.PostedEntryId = entry.EntryId;
-            application.PostedAt = now;
-        }
-        foreach (var balance in balances.Values)
-        {
-            balance.LastUpdatedAt = now;
-            await _balanceRepository.UpdateAsync(balance);
+                var entryId = $"cash-{posting.Id}-{posting.Applications.IndexOf(application)}";
+                var balance = balances[application.ArBalanceId];
+                if (balance.PostingEntries.All(e => e.EntryId != entryId))
+                {
+                    Post(balance, new ArPostingEntry
+                    {
+                        EntryId = entryId,
+                        Source = ArPostingSource.CashReceipt,
+                        SourceReferenceId = posting.Id,
+                        SourceReferenceNumber = posting.PostingNumber,
+                        CreditAmount = application.AmountApplied,
+                        PostedAt = now,
+                        PostedBy = postedBy,
+                        Memo = application.Memo,
+                        MemberId = posting.PayerType == PayerType.Member ? posting.PayerReferenceId : null
+                    }, posting.PayerType);
+                    changed.Add(balance.Id);
+                }
+                application.PostedEntryId = entryId;
+                application.PostedAt ??= now;
+            }
+
+            try
+            {
+                foreach (var balance in balances.Values.Where(b => changed.Contains(b.Id)))
+                {
+                    balance.LastUpdatedAt = now;
+                    await _balanceRepository.UpdateAsync(balance);
+                }
+                credited = changed.Count;
+                break;
+            }
+            catch (ArConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                // Another writer saved a balance first: re-read and apply on top.
+            }
         }
 
         posting.AppliedAmount = appliedAmount;
@@ -175,11 +194,14 @@ public class CashPostingController : ControllerBase
         posting.LastUpdatedAt = now;
 
         _logger.LogInformation("Applied cash posting {PostingNumber}, applied={AppliedAmount}, credited {Count} balance(s)",
-            SanitizeForLog(posting.PostingNumber), posting.AppliedAmount, balances.Count);
+            SanitizeForLog(posting.PostingNumber), posting.AppliedAmount, credited);
 
         var updated = await _cashPostingRepository.UpdateAsync(posting);
         return Ok(updated);
     }
+
+    /// <summary>How many times a balance save is retried against concurrent writers.</summary>
+    internal const int MaxConcurrencyAttempts = 5;
 
     /// <summary>
     /// Adds the entry to the balance and moves its totals: debits and credits,
@@ -226,36 +248,60 @@ public class CashPostingController : ControllerBase
             return BadRequest(new { error = "Cannot void an applied cash posting — reverse the application first" });
 
         // A partially applied posting has credited balances: debit them back first.
+        // Each reversal has a fixed id (rev-{entry}) and debits what the original
+        // entry credited, so a retried void never reverses twice.
         var posted = posting.Applications.Where(a => a.PostedEntryId != null).ToList();
-        var balances = new Dictionary<string, ArBalance>(StringComparer.Ordinal);
-        foreach (var application in posted)
-        {
-            if (balances.ContainsKey(application.ArBalanceId))
-                continue;
-            var balance = await _balanceRepository.GetByIdAsync(application.ArBalanceId);
-            if (balance == null)
-                return BadRequest(new { error = $"AR balance {application.ArBalanceId} credited by this posting no longer exists; cannot reverse it" });
-            balances[application.ArBalanceId] = balance;
-        }
         var now = DateTime.UtcNow;
-        foreach (var application in posted)
+        for (var attempt = 1; ; attempt++)
         {
-            Post(balances[application.ArBalanceId], new ArPostingEntry
+            var balances = new Dictionary<string, ArBalance>(StringComparer.Ordinal);
+            foreach (var application in posted)
             {
-                Source = ArPostingSource.CashReceipt,
-                SourceReferenceId = posting.Id,
-                SourceReferenceNumber = $"REV-{posting.PostingNumber}",
-                DebitAmount = application.AmountApplied,
-                PostedAt = now,
-                PostedBy = _actor.UserId,
-                Memo = $"Void of {posting.PostingNumber} (reverses entry {application.PostedEntryId})",
-                MemberId = posting.PayerType == PayerType.Member ? posting.PayerReferenceId : null
-            }, posting.PayerType);
-        }
-        foreach (var balance in balances.Values)
-        {
-            balance.LastUpdatedAt = now;
-            await _balanceRepository.UpdateAsync(balance);
+                if (balances.ContainsKey(application.ArBalanceId))
+                    continue;
+                var balance = await _balanceRepository.GetByIdAsync(application.ArBalanceId);
+                if (balance == null)
+                    return BadRequest(new { error = $"AR balance {application.ArBalanceId} credited by this posting no longer exists; cannot reverse it" });
+                balances[application.ArBalanceId] = balance;
+            }
+
+            var changed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var application in posted)
+            {
+                var balance = balances[application.ArBalanceId];
+                var reversalId = $"rev-{application.PostedEntryId}";
+                if (balance.PostingEntries.Any(e => e.EntryId == reversalId))
+                    continue;
+                var original = balance.PostingEntries.FirstOrDefault(e => e.EntryId == application.PostedEntryId);
+                if (original == null)
+                    continue; // never reached the balance: nothing to reverse
+                Post(balance, new ArPostingEntry
+                {
+                    EntryId = reversalId,
+                    Source = ArPostingSource.CashReceipt,
+                    SourceReferenceId = posting.Id,
+                    SourceReferenceNumber = $"REV-{posting.PostingNumber}",
+                    DebitAmount = original.CreditAmount,
+                    PostedAt = now,
+                    PostedBy = _actor.UserId,
+                    Memo = $"Void of {posting.PostingNumber} (reverses entry {original.EntryId})",
+                    MemberId = original.MemberId
+                }, posting.PayerType);
+                changed.Add(balance.Id);
+            }
+
+            try
+            {
+                foreach (var balance in balances.Values.Where(b => changed.Contains(b.Id)))
+                {
+                    balance.LastUpdatedAt = now;
+                    await _balanceRepository.UpdateAsync(balance);
+                }
+                break;
+            }
+            catch (ArConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+            }
         }
 
         posting.Status = CashPostingStatus.Voided;

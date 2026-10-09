@@ -12,6 +12,9 @@ public interface IRemittanceBatchRepository
 
     Task<RemittanceBatch> UpdateAsync(RemittanceBatch batch);
 
+    /// <summary>Batches with this cross-source key (same check/trace number, amount and date).</summary>
+    Task<IEnumerable<RemittanceBatch>> FindByCrossSourceKeyAsync(string crossSourceKey);
+
     Task<IEnumerable<RemittanceBatch>> SearchAsync(DateTime? receivedFrom = null, DateTime? receivedTo = null, int page = 1, int pageSize = 50);
 }
 
@@ -20,8 +23,16 @@ public interface IRemittanceExceptionRepository
 {
     Task<RemittanceException?> GetByIdAsync(string id);
     Task<IEnumerable<RemittanceException>> ListAsync(RemittanceExceptionStatus? status = null, int page = 1, int pageSize = 50);
+    /// <summary>Inserts the exception; when one with its id exists, returns that one instead.</summary>
     Task<RemittanceException> CreateAsync(RemittanceException exception);
+
     Task<RemittanceException> UpdateAsync(RemittanceException exception);
+
+    /// <summary>
+    /// Moves the exception from <paramref name="from"/> to <paramref name="to"/>
+    /// only if it is still in <paramref name="from"/>; false when someone else moved it first.
+    /// </summary>
+    Task<bool> TryTransitionAsync(string id, RemittanceExceptionStatus from, RemittanceExceptionStatus to);
 }
 
 /// <summary>Sponsor receivable accounts (open balance and unapplied credit).</summary>

@@ -88,6 +88,21 @@ public class Edi820ParserTests
     }
 
     [Fact]
+    public void Parse_ReadsBpr03Ref38AndCheckNumber_AndRoundsAmountsToCents()
+    {
+        var edi = Synthetic820.Single(new Synthetic820.Transaction { Amount = 10m, Trace = "77001", Method = "CHK", CreditDebit = "D", Group = "GRP009" }
+                .Organization().Rmr("INV-X", 10m))
+            .Replace("RMR*IK*INV-X**10.00", "RMR*IK*INV-X**10.005");
+
+        var advice = Edi820Parser.Parse(edi).Single();
+
+        advice.CreditDebitFlag.Should().Be("D");
+        advice.GroupReference.Should().Be("GRP009");
+        advice.CheckNumber.Should().Be("77001");
+        advice.Items.Single().Amount.Should().Be(10.01m);
+    }
+
+    [Fact]
     public void Parse_RejectsMissingTrn()
     {
         var edi = Synthetic820.Single(new Synthetic820.Transaction { Amount = 5m, Trace = "GONE" }.Organization().Rmr("INV-X", 5m))
@@ -131,7 +146,7 @@ public class LockboxCsvParserTests
         checks.Should().HaveCount(2);
         var first = checks[0];
         first.Source.Should().Be(RemittanceSource.Lockbox);
-        first.TraceNumber.Should().Be("LBX-001-1");
+        first.TraceNumber.Should().Be("LBX-0-20260306-001-1-10001");
         first.PayerId.Should().Be("EMPLOYER-A");
         first.PayerName.Should().Be("Synthetic Employer, Inc.");
         first.CheckNumber.Should().Be("10001");
@@ -141,6 +156,22 @@ public class LockboxCsvParserTests
             (1, "INV-GRP001-2026-03", 1000.00m), (2, "INV-GRP001-2026-02", 500.00m));
         checks[1].PayerName.Should().BeNull();
         checks[1].Items.Single().Amount.Should().Be(250.00m);
+    }
+
+    [Fact]
+    public void Parse_TraceIncludesLockboxDateAndCheck_SoNextDaysBatchNumbersDoNotCollide()
+    {
+        const string csv = """
+            lockbox,batch,item,deposit_date,check_number,payer_id,check_amount,invoice_number,amount,group_number
+            LB7,001,1,2026-03-05,70001,EMPLOYER-A,100.004,INV-1,100.004,GRP001
+            LB7,001,1,2026-03-06,70002,EMPLOYER-A,50.00,INV-2,50.00,GRP001
+            """;
+
+        var checks = LockboxCsvParser.Parse(csv);
+
+        checks.Select(c => c.TraceNumber).Should().Equal("LBX-LB7-20260305-001-1-70001", "LBX-LB7-20260306-001-1-70002");
+        checks[0].PaymentAmount.Should().Be(100.00m);
+        checks[0].GroupReference.Should().Be("GRP001");
     }
 
     [Fact]

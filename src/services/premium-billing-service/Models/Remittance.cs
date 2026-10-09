@@ -47,6 +47,16 @@ public class RemittanceAdvice
     /// <summary>820 BPR01 transaction handling code (C, D, I, P, U, X); null for lockbox.</summary>
     public string? TransactionHandlingCode { get; set; }
 
+    /// <summary>820 BPR03: C (credit to the payee) or D (debit); a debit is never posted as cash.</summary>
+    public string? CreditDebitFlag { get; set; }
+
+    /// <summary>
+    /// The group the payer says it is paying for: 820 REF*38 (master policy
+    /// number) in the header, or the lockbox group_number column. When given,
+    /// an invoice of another group is not paid from this payment.
+    /// </summary>
+    public string? GroupReference { get; set; }
+
     /// <summary>820 BPR04 (ACH, CHK, FWT, BOP, NON) / "CHK" for lockbox.</summary>
     public string? PaymentMethod { get; set; }
 
@@ -140,7 +150,10 @@ public enum CashApplicationOutcome
     Overpayment,
 
     /// <summary>Not applied: see the exceptions queue.</summary>
-    Exception
+    Exception,
+
+    /// <summary>A zero-amount item: nothing to apply.</summary>
+    Skipped
 }
 
 /// <summary>
@@ -163,10 +176,21 @@ public class RemittanceBatch
     public string PayerId { get; set; } = string.Empty;
     public string? PayerName { get; set; }
     public string? TransactionHandlingCode { get; set; }
+    public string? CreditDebitFlag { get; set; }
+    public string? GroupReference { get; set; }
     public string? PaymentMethod { get; set; }
     public string? CheckNumber { get; set; }
     public decimal PaymentAmount { get; set; }
     public DateTime PaymentDate { get; set; }
+
+    /// <summary>
+    /// Check (or trace) number, amount and date: the same payment arriving by
+    /// another source (820 and lockbox) has the same key and is not posted twice.
+    /// </summary>
+    public string? CrossSourceKey { get; set; }
+
+    /// <summary>Exceptions this payment queued (also payment-level ones that no item row points to).</summary>
+    public List<BatchExceptionRef> Exceptions { get; set; } = new();
 
     public RemittanceBatchStatus Status { get; set; } = RemittanceBatchStatus.Processing;
 
@@ -191,6 +215,9 @@ public class RemittanceBatch
     [StringLength(200)]
     public string? ProcessedBy { get; set; }
 
+    public static string CrossSourceKeyFor(string? checkNumber, string traceNumber, decimal amount, DateTime paymentDate) =>
+        $"{(string.IsNullOrWhiteSpace(checkNumber) ? traceNumber : checkNumber).Trim().ToUpperInvariant()}|{amount:0.00}|{paymentDate:yyyyMMdd}";
+
     /// <summary>The batch id for a payment: one per tenant, source, payer and trace number.</summary>
     public static string IdFor(string tenantId, RemittanceSource source, string payerId, string traceNumber)
     {
@@ -198,6 +225,12 @@ public class RemittanceBatch
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(key));
         return $"rmt-{Convert.ToHexString(hash)[..32].ToLowerInvariant()}";
     }
+}
+
+public class BatchExceptionRef
+{
+    public string Id { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
 }
 
 /// <summary>What happened to one remittance item.</summary>
@@ -243,12 +276,27 @@ public enum RemittanceExceptionReason
     UnallocatedRemainder,
 
     /// <summary>The items add up to more than the money received; nothing in the payment was posted.</summary>
-    DetailExceedsPayment
+    DetailExceedsPayment,
+
+    /// <summary>A negative item (reversal or recoupment) in the payment; nothing in the payment was posted.</summary>
+    NegativeLineInPayment,
+
+    /// <summary>The same check or trace number, amount and date already arrived by another source.</summary>
+    PossibleDuplicate,
+
+    /// <summary>The invoice belongs to another group than the one the payer named (REF*38).</summary>
+    GroupMismatch,
+
+    /// <summary>The RMR01 qualifier does not identify an invoice (e.g. a policy number).</summary>
+    UnsupportedReferenceQualifier
 }
 
 public enum RemittanceExceptionStatus
 {
     Open,
+
+    /// <summary>Claimed by a person; being applied, credited or dismissed.</summary>
+    Resolving,
 
     /// <summary>A person applied it to an invoice.</summary>
     Applied,
@@ -301,6 +349,15 @@ public class RemittanceException
 
     public string? AppliedInvoiceId { get; set; }
     public string? CreditedGroupNumber { get; set; }
+
+    /// <summary>Optimistic concurrency (Cosmos); set by Cosmos DB.</summary>
+    [JsonPropertyName("_etag")]
+    [BsonIgnore]
+    public string? ETag { get; set; }
+
+    /// <summary>One id per batch, item line and reason, so a resumed batch does not queue it twice.</summary>
+    public static string IdFor(string batchId, int lineNumber, RemittanceExceptionReason reason) =>
+        $"{batchId}-{lineNumber}-{reason}".ToLowerInvariant();
 }
 
 /// <summary>

@@ -219,7 +219,13 @@ public class PremiumBillingService : IPremiumBillingService
 
         _logger.LogInformation("Voided invoice {InvoiceNumber}: {Reason}", invoice.InvoiceNumber, SanitizeForLog(reason));
 
-        return await _invoiceRepository.UpdateAsync(invoice);
+        var updated = await _invoiceRepository.UpdateAsync(invoice);
+
+        // A voided invoice no longer counts toward the sponsor's open balance.
+        if (_sponsorAccounts != null && !string.IsNullOrEmpty(invoice.GroupNumber))
+            await SponsorAccountBalances.RefreshAsync(_invoiceRepository, _sponsorAccounts, invoice.GroupNumber, null);
+
+        return updated;
     }
 
     public async Task<PremiumInvoice> MarkInvoiceSentAsync(string invoiceId)

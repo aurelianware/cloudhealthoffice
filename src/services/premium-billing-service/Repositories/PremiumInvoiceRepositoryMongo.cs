@@ -144,11 +144,22 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice)
     {
+        var f = Builders<PremiumInvoice>.Filter;
+        var expected = invoice.Version;
+        // Invoices saved before versioning have no Version field: version 0 matches them too.
+        var versionFilter = expected == 0
+            ? f.Or(f.Eq(x => x.Version, 0L), f.Exists(x => x.Version, false))
+            : f.Eq(x => x.Version, expected);
+        var filter = f.And(f.Eq(x => x.Id, invoice.Id), f.Eq(x => x.TenantId, invoice.TenantId), versionFilter);
+
         invoice.LastUpdatedAt = DateTime.UtcNow;
-        var filter = Builders<PremiumInvoice>.Filter.And(
-            Builders<PremiumInvoice>.Filter.Eq(x => x.Id, invoice.Id),
-            Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, invoice.TenantId));
-        await _collection.ReplaceOneAsync(filter, invoice);
+        invoice.Version = expected + 1;
+        var result = await _collection.ReplaceOneAsync(filter, invoice);
+        if (result.MatchedCount == 0)
+        {
+            invoice.Version = expected;
+            throw new ConcurrencyConflictException($"Invoice {invoice.InvoiceNumber} was changed by someone else; re-read it and retry");
+        }
         _logger.LogInformation("Updated premium invoice {InvoiceNumber}", invoice.InvoiceNumber);
         return invoice;
     }

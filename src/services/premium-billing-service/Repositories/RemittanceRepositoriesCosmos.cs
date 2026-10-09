@@ -49,6 +49,14 @@ public sealed class RemittanceBatchRepositoryCosmos : IRemittanceBatchRepository
     public async Task<RemittanceBatch> UpdateAsync(RemittanceBatch batch) =>
         (await _container.ReplaceItemAsync(batch, batch.Id, new PartitionKey(batch.TenantId))).Resource;
 
+    public async Task<IEnumerable<RemittanceBatch>> FindByCrossSourceKeyAsync(string crossSourceKey)
+    {
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.tenantId = @tenantId AND c.crossSourceKey = @key")
+            .WithParameter("@tenantId", RepositoryTenant.From(_http))
+            .WithParameter("@key", crossSourceKey);
+        return await CosmosQuery.ToListAsync<RemittanceBatch>(_container, query);
+    }
+
     public async Task<IEnumerable<RemittanceBatch>> SearchAsync(DateTime? receivedFrom = null, DateTime? receivedTo = null, int page = 1, int pageSize = 50)
     {
         var text = "SELECT * FROM c WHERE c.tenantId = @tenantId";
@@ -99,7 +107,33 @@ public sealed class RemittanceExceptionRepositoryCosmos : IRemittanceExceptionRe
     public async Task<RemittanceException> CreateAsync(RemittanceException exception)
     {
         exception.TenantId = RepositoryTenant.From(_http);
-        return (await _container.CreateItemAsync(exception, new PartitionKey(exception.TenantId))).Resource;
+        try
+        {
+            return (await _container.CreateItemAsync(exception, new PartitionKey(exception.TenantId))).Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            return (await GetByIdAsync(exception.Id))!;
+        }
+    }
+
+    public async Task<bool> TryTransitionAsync(string id, RemittanceExceptionStatus from, RemittanceExceptionStatus to)
+    {
+        var tenant = RepositoryTenant.From(_http);
+        try
+        {
+            var read = await _container.ReadItemAsync<RemittanceException>(id, new PartitionKey(tenant));
+            var item = read.Resource;
+            if (item.Status != from)
+                return false;
+            item.Status = to;
+            await _container.ReplaceItemAsync(item, id, new PartitionKey(tenant), new ItemRequestOptions { IfMatchEtag = read.ETag });
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.PreconditionFailed)
+        {
+            return false;
+        }
     }
 
     public async Task<RemittanceException> UpdateAsync(RemittanceException exception) =>

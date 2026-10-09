@@ -18,6 +18,10 @@ internal sealed class Synthetic820
         public string Trace { get; init; } = "TRACE0001";
         public string Originator { get; init; } = "1512345678";
         public string PaymentDate { get; init; } = "20260305";
+        public string Method { get; init; } = "ACH";
+        public string CreditDebit { get; init; } = "C";
+        /// <summary>REF*38 master policy (group) number; null leaves the segment out.</summary>
+        public string? Group { get; init; } = "GRP001";
         public List<string> Body { get; } = new();
 
         public Transaction Organization(string number = "1") { Body.Add($"ENT*{number}*2L*FI*999000111"); return this; }
@@ -43,19 +47,20 @@ internal sealed class Synthetic820
     public Synthetic820 Add(Transaction t, int controlNumber = 0)
     {
         var st = (controlNumber == 0 ? _transactions.Count + 1 : controlNumber).ToString("0000", CultureInfo.InvariantCulture);
-        var segments = new List<string>
+        var segments = new List<string?>
         {
             $"ST*820*{st}*005010X218",
-            $"BPR*{t.HandlingCode}*{Money(t.Amount)}*C*ACH*CCP*01*011000015*DA*0000000001*{t.Originator}**01*021000021*DA*0000000002*{t.PaymentDate}",
+            $"BPR*{t.HandlingCode}*{Money(t.Amount)}*{t.CreditDebit}*{t.Method}*CCP*01*011000015*DA*0000000001*{t.Originator}**01*021000021*DA*0000000002*{t.PaymentDate}",
             $"TRN*1*{t.Trace}*{t.Originator}",
-            "REF*38*SYNTH-GROUP",
+            t.Group == null ? null : $"REF*38*{t.Group}",
             "DTM*582****RD8*20260301-20260331",
             "N1*PE*SYNTHETIC HEALTH PLAN*FI*000000001",
             "N1*PR*SYNTHETIC EMPLOYER INC*FI*000000002",
         };
+        segments.RemoveAll(s => s == null);
         segments.AddRange(t.Body);
         segments.Add($"SE*{segments.Count + 1}*{st}");
-        _transactions.Add(string.Join("~\n", segments));
+        _transactions.Add(string.Join("~\n", segments!));
         return this;
     }
 

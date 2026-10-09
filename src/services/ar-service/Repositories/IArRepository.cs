@@ -11,6 +11,12 @@ public interface IGlAccountRepository
     Task<GlAccount> UpdateAsync(GlAccount account);
 }
 
+/// <summary>The document changed since it was read; re-read and retry.</summary>
+public sealed class ArConcurrencyException : Exception
+{
+    public ArConcurrencyException(string message) : base(message) { }
+}
+
 public interface IArBalanceRepository
 {
     Task<ArBalance?> GetByIdAsync(string id);
@@ -18,6 +24,11 @@ public interface IArBalanceRepository
         bool? isReconciled = null, int page = 1, int pageSize = 50);
     Task<IEnumerable<ArBalance>> GetByAccountIdAsync(string accountId);
     Task<ArBalance> CreateAsync(ArBalance balance);
+    /// <summary>
+    /// Saves the balance if nobody saved it since it was read (same
+    /// <see cref="ArBalance.Version"/>), and increments the version.
+    /// Throws <see cref="ArConcurrencyException"/> otherwise.
+    /// </summary>
     Task<ArBalance> UpdateAsync(ArBalance balance);
 
     /// <summary>

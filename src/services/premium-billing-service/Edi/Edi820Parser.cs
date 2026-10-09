@@ -119,6 +119,7 @@ public static class Edi820Parser
                     _sawBpr = true;
                     Advice.TransactionHandlingCode = El(seg, 1);
                     Advice.PaymentAmount = Amount(El(seg, 2), "BPR02", position);
+                    Advice.CreditDebitFlag = NullIfEmpty(El(seg, 3));
                     Advice.PaymentMethod = NullIfEmpty(El(seg, 4));
                     var date = El(seg, 16);
                     if (date.Length > 0)
@@ -128,6 +129,11 @@ public static class Edi820Parser
                     _sawTrn = true;
                     Advice.TraceNumber = El(seg, 2);
                     _originatorId = NullIfEmpty(El(seg, 3));
+                    break;
+                case "REF":
+                    // Header REF*38: the master policy (group) number the payer is paying for.
+                    if (El(seg, 1) == "38" && _entityNumber == null && Advice.Items.Count == 0)
+                        Advice.GroupReference = NullIfEmpty(El(seg, 2));
                     break;
                 case "N1":
                     if (El(seg, 1) == "PR")
@@ -196,6 +202,9 @@ public static class Edi820Parser
             if (!_sawTrn || string.IsNullOrWhiteSpace(Advice.TraceNumber))
                 throw new FormatException($"Transaction set {ControlNumber} has no TRN trace number");
             Advice.PayerId = _originatorId ?? _payerN1Id ?? string.Empty;
+            // For a check payment TRN02 is the check number (ties an 820 to the same check in a lockbox file).
+            if (string.Equals(Advice.PaymentMethod, "CHK", StringComparison.OrdinalIgnoreCase))
+                Advice.CheckNumber = Advice.TraceNumber;
             if (string.IsNullOrWhiteSpace(Advice.PayerId))
                 throw new FormatException($"Transaction set {ControlNumber} names no payer (TRN03 or N1*PR N104)");
             return Advice;
@@ -226,7 +235,7 @@ public static class Edi820Parser
             if (!decimal.TryParse(value, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
                     CultureInfo.InvariantCulture, out var amount))
                 throw new FormatException($"Segment {position}: {element} '{value}' is not an amount");
-            return amount;
+            return Math.Round(amount, 2, MidpointRounding.AwayFromZero);
         }
 
         private static DateTime Date(string value, string element, int position)

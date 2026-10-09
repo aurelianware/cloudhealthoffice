@@ -135,6 +135,19 @@ public class RemittancesController : ControllerBase
             {
                 result.Rejected.Add(new RejectedRemittance { TraceNumber = advice.TraceNumber, PayerId = advice.PayerId, Error = ex.Message });
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One payment failing part-way must not lose the others in the file. Its batch stays
+                // Processing with the items done so far; uploading the file again resumes it.
+                _logger.LogError(ex, "{Kind} payment with trace {Trace} failed part-way; re-upload resumes it",
+                    kind, advice.TraceNumber.Replace("\r", string.Empty).Replace("\n", string.Empty));
+                result.Rejected.Add(new RejectedRemittance
+                {
+                    TraceNumber = advice.TraceNumber,
+                    PayerId = advice.PayerId,
+                    Error = "Posting failed part-way; upload the file again to resume this payment (items already applied are not applied twice)"
+                });
+            }
         }
 
         _logger.LogInformation("{Kind} upload: {Posted} payment(s) recorded, {Duplicates} duplicate(s), {Rejected} rejected",
@@ -188,8 +201,14 @@ public class SponsorAccountsController : ControllerBase
     [HttpPost("{groupNumber}/refresh")]
     [RequirePermission("finance:write")]
     [ProducesResponseType(typeof(SponsorAccount), StatusCodes.Status200OK)]
-    public async Task<ActionResult<SponsorAccount>> Refresh(string groupNumber) =>
-        Ok(await SponsorAccountBalances.RefreshAsync(_invoices, _accounts, groupNumber, null));
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SponsorAccount>> Refresh(string groupNumber)
+    {
+        // Refreshing an unknown group would create an empty account for a typo.
+        if (!await SponsorAccountBalances.GroupExistsAsync(_invoices, _accounts, groupNumber))
+            return NotFound(new { error = $"Group {groupNumber} has no invoices or account" });
+        return Ok(await SponsorAccountBalances.RefreshAsync(_invoices, _accounts, groupNumber, null));
+    }
 }
 
 public class RemittanceUploadResult

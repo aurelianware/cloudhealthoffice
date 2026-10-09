@@ -185,6 +185,13 @@ public sealed class RemittanceEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RefreshingAnUnknownGroup_Is404()
+    {
+        (await Finance().PostAsync("/api/v1/sponsor-accounts/GRP-TYPO/refresh", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await Finance().PostAsync("/api/v1/sponsor-accounts/GRP001/refresh", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Lockbox_UploadAppliesChecks()
     {
         const string csv = "batch,item,deposit_date,check_number,payer_id,check_amount,invoice_number,amount\n" +

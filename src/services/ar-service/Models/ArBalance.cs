@@ -60,6 +60,12 @@ public class ArBalance
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Optimistic concurrency: incremented on every save; a save of a stale
+    /// copy fails with <see cref="Repositories.ArConcurrencyException"/>.
+    /// </summary>
+    public long Version { get; set; }
 }
 
 /// <summary>

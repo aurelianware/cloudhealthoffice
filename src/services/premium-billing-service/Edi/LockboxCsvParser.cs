@@ -10,10 +10,14 @@ namespace PremiumBillingService.Edi;
 ///
 /// The first row is a header naming these columns (any order, case-insensitive):
 /// <c>batch, item, deposit_date, check_number, payer_id, payer_name, check_amount,
-/// invoice_number, amount</c>. Each row is one remittance stub. Rows with the same
-/// batch and item are one check; its check_amount must be the same on every row.
-/// The trace number is <c>LBX-{batch}-{item}</c>, so re-uploading a file is refused
-/// per check rather than posted twice. Dates are yyyy-MM-dd or MM/dd/yyyy.
+/// invoice_number, amount</c>, plus optional <c>lockbox</c> (lockbox number) and
+/// <c>group_number</c>. Each row is one remittance stub. Rows with the same
+/// deposit date, batch and item are one check; its check_amount must be the same
+/// on every row. The trace number is
+/// <c>LBX-{lockbox}-{deposit yyyyMMdd}-{batch}-{item}-{check}</c>: banks restart batch
+/// and item numbers every day, so the date (and lockbox and check number) keep one
+/// day's check from being taken for another's. Re-uploading a file is refused per
+/// check rather than posted twice. Dates are yyyy-MM-dd or MM/dd/yyyy.
 /// </summary>
 public static class LockboxCsvParser
 {
@@ -37,8 +41,10 @@ public static class LockboxCsvParser
             throw new FormatException($"The lockbox header is missing: {string.Join(", ", missing)}");
         int Col(string name) => header.IndexOf(name);
         var payerNameCol = Col("payer_name");
+        var lockboxCol = Col("lockbox");
+        var groupCol = Col("group_number");
 
-        var checks = new Dictionary<(string Batch, string Item), RemittanceAdvice>();
+        var checks = new Dictionary<(DateTime Date, string Batch, string Item), RemittanceAdvice>();
         var order = new List<RemittanceAdvice>();
         for (var r = 1; r < rows.Count; r++)
         {
@@ -52,24 +58,28 @@ public static class LockboxCsvParser
                 throw new FormatException($"Line {line}: batch and item are required");
 
             var checkAmount = Amount(F(Col("check_amount")), "check_amount", line);
-            if (!checks.TryGetValue((batch, item), out var advice))
+            var depositDate = Date(F(Col("deposit_date")), line);
+            if (!checks.TryGetValue((depositDate, batch, item), out var advice))
             {
                 var payerId = F(Col("payer_id"));
                 if (payerId.Length == 0)
                     throw new FormatException($"Line {line}: payer_id is required");
+                var lockbox = lockboxCol >= 0 && F(lockboxCol).Length > 0 ? F(lockboxCol) : "0";
+                var checkNumber = F(Col("check_number"));
                 advice = new RemittanceAdvice
                 {
                     Source = RemittanceSource.Lockbox,
                     SourceFileName = sourceFileName,
-                    TraceNumber = $"LBX-{batch}-{item}",
+                    TraceNumber = $"LBX-{lockbox}-{depositDate:yyyyMMdd}-{batch}-{item}-{checkNumber}",
+                    GroupReference = groupCol >= 0 && F(groupCol).Length > 0 ? F(groupCol) : null,
                     PayerId = payerId,
                     PayerName = payerNameCol >= 0 && F(payerNameCol).Length > 0 ? F(payerNameCol) : null,
                     PaymentMethod = "CHK",
                     CheckNumber = F(Col("check_number")) is { Length: > 0 } cn ? cn : null,
                     PaymentAmount = checkAmount,
-                    PaymentDate = Date(F(Col("deposit_date")), line)
+                    PaymentDate = depositDate
                 };
-                checks[(batch, item)] = advice;
+                checks[(depositDate, batch, item)] = advice;
                 order.Add(advice);
             }
             else if (advice.PaymentAmount != checkAmount)
@@ -96,7 +106,7 @@ public static class LockboxCsvParser
         var cleaned = value.Replace("$", string.Empty).Replace(",", string.Empty);
         if (!decimal.TryParse(cleaned, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var amount))
             throw new FormatException($"Line {line}: {column} '{value}' is not an amount");
-        return amount;
+        return Math.Round(amount, 2, MidpointRounding.AwayFromZero);
     }
 
     private static DateTime Date(string value, int line)

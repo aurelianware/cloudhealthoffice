@@ -44,6 +44,10 @@ public sealed class RemittanceBatchRepositoryMongo : IRemittanceBatchRepository
         return batch;
     }
 
+    public async Task<IEnumerable<RemittanceBatch>> FindByCrossSourceKeyAsync(string crossSourceKey) =>
+        await _collection.Find(Builders<RemittanceBatch>.Filter.And(Tenant(),
+            Builders<RemittanceBatch>.Filter.Eq(x => x.CrossSourceKey, crossSourceKey))).ToListAsync();
+
     public async Task<IEnumerable<RemittanceBatch>> SearchAsync(DateTime? receivedFrom = null, DateTime? receivedTo = null, int page = 1, int pageSize = 50)
     {
         var f = Builders<RemittanceBatch>.Filter;
@@ -84,8 +88,24 @@ public sealed class RemittanceExceptionRepositoryMongo : IRemittanceExceptionRep
     public async Task<RemittanceException> CreateAsync(RemittanceException exception)
     {
         exception.TenantId = RepositoryTenant.From(_http);
-        await _collection.InsertOneAsync(exception);
-        return exception;
+        try
+        {
+            await _collection.InsertOneAsync(exception);
+            return exception;
+        }
+        catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return (await GetByIdAsync(exception.Id))!;
+        }
+    }
+
+    public async Task<bool> TryTransitionAsync(string id, RemittanceExceptionStatus from, RemittanceExceptionStatus to)
+    {
+        var f = Builders<RemittanceException>.Filter;
+        var result = await _collection.UpdateOneAsync(
+            f.And(Tenant(), f.Eq(x => x.Id, id), f.Eq(x => x.Status, from)),
+            Builders<RemittanceException>.Update.Set(x => x.Status, to));
+        return result.ModifiedCount == 1;
     }
 
     public async Task<RemittanceException> UpdateAsync(RemittanceException exception)
