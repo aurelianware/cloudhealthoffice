@@ -27,6 +27,14 @@ public record BenefitResolutionRequest
     public int? LineOfBusiness { get; init; }
 
     public string? ClaimType { get; init; } // 837P, 837I, 837D
+
+    /// <summary>
+    /// NUBC type of bill for an institutional claim (facility type CLM05-1 +
+    /// frequency CLM05-3, e.g. "111"). Used by the service category resolver's
+    /// fallback when no mapping matches: on an 837I the line's place of service
+    /// carries the facility type code, not a CMS place-of-service code.
+    /// </summary>
+    public string? TypeOfBill { get; init; }
     public string? AdmitDate { get; init; }
     public string? DischargeDate { get; init; }
     public bool IsEmergency { get; init; }

@@ -460,6 +460,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 ? new Dictionary<int, decimal>(pricing.AllowedAmounts)
                 : new Dictionary<int, decimal>(),
             ClaimType = MapClaimType(claim.ClaimType),
+            TypeOfBill = claim.TypeOfBill,
             LineOfBusiness = (int)claim.LineOfBusiness,
             Member = BuildMemberContext(context.ResolvedMember, claim, serviceDate),
             // DRG / all-inclusive per-diem stays: cost share once per stay.
@@ -539,7 +540,9 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         // POS falls back to the claim-level value when the line override
         // is missing — ServiceCategoryResolver uses POS for rule matching
         // and for system-level fallback inference, so dropping it would
-        // shift category resolution.
+        // shift category resolution. On an 837I the claim-level value is
+        // CLM05-1 (facility type); the resolver knows that from the
+        // request's ClaimType / TypeOfBill and does not read it as POS.
         var pos = !string.IsNullOrEmpty(line.PlaceOfServiceCode)
             ? line.PlaceOfServiceCode
             : claim.PlaceOfServiceCode;

@@ -42,7 +42,31 @@ public interface IServiceCategoryResolver
         string placeOfService,
         IReadOnlyList<string> modifiers,
         string? revenueCode,
+        ServiceCategoryClaimContext? claim = null,
         CancellationToken ct = default);
+}
+
+/// <summary>
+/// Claim-level context for the system-level fallback in
+/// <see cref="IServiceCategoryResolver.ResolveAsync"/>. On an 837I the
+/// claim's place-of-service slot carries CLM05-1, the facility type code
+/// (the first two digits of the type of bill), not a CMS place-of-service
+/// code: "11" is a hospital inpatient bill, not an office. The resolver
+/// therefore needs to know whether the claim is institutional before it
+/// infers anything from that value.
+/// </summary>
+/// <param name="ClaimType">"837P", "837I" or "837D" (the engine's claim type), or null.</param>
+/// <param name="TypeOfBill">
+/// NUBC type of bill, three characters (facility type + frequency, e.g.
+/// "111") or four with the leading zero ("0111"); null when unknown.
+/// </param>
+public sealed record ServiceCategoryClaimContext(string? ClaimType, string? TypeOfBill)
+{
+    /// <summary>An institutional claim: claim type 837I, or a type of bill is present.</summary>
+    public bool IsInstitutional =>
+        string.Equals(ClaimType?.Trim(), "837I", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(ClaimType?.Trim(), "Institutional", StringComparison.OrdinalIgnoreCase)
+        || !string.IsNullOrWhiteSpace(TypeOfBill);
 }
 
 public record ServiceCategoryMatch
@@ -78,6 +102,7 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
         string placeOfService,
         IReadOnlyList<string> modifiers,
         string? revenueCode,
+        ServiceCategoryClaimContext? claim = null,
         CancellationToken ct = default)
     {
         // 1. Try plan-specific overrides first
@@ -98,7 +123,29 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
             return match with { MatchedBy = "TenantDefault" };
         }
 
-        // 3. System-level fallback — use place of service to infer broad category
+        // 3. System-level fallback. Institutional claims: infer from the
+        //    type of bill / facility type and the revenue code — never from
+        //    place of service, which on an 837I holds CLM05-1 (facility type
+        //    "11" = hospital inpatient, not POS 11 = office). Professional
+        //    claims: infer the broad category from place of service.
+        if (claim is { IsInstitutional: true })
+        {
+            var institutional = InferInstitutional(claim.TypeOfBill, placeOfService, revenueCode);
+            if (institutional is not null)
+            {
+                _logger.LogWarning(
+                    "No explicit mapping for institutional {CodeType} {ProcedureCode} REV {RevenueCode} — " +
+                    "falling back to type-of-bill / revenue-code inference ({Rule}): {ServiceTypeCode}",
+                    codeType, procedureCode, revenueCode, institutional.MatchedRule, institutional.ServiceTypeCode);
+                return institutional;
+            }
+
+            _logger.LogError(
+                "No service category mapping found for institutional {CodeType} {ProcedureCode} REV {RevenueCode} TOB {TypeOfBill}",
+                codeType, procedureCode, revenueCode, claim.TypeOfBill);
+            return null;
+        }
+
         var fallback = InferFromPlaceOfService(placeOfService, procedureCode);
         if (fallback is not null)
         {
@@ -249,6 +296,100 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
         // Exact match
         return string.Equals(procedureCode, rule.CodePattern, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Last-resort fallback for an institutional (UB-04 / 837I) claim, using
+    /// NUBC conventions. The facility type is the first two digits of the
+    /// type of bill (leading zero dropped: "0111" and "111" are both facility
+    /// type "11"); without a type of bill it is the place-of-service value,
+    /// which on an 837I carries CLM05-1, the same two digits.
+    /// <list type="number">
+    ///   <item>An inpatient bill (11x/12x hospital, 18x/28x swing bed,
+    ///     21x/22x SNF, 41x, 81x/82x hospice) is one stay under one benefit:
+    ///     every line takes the facility's category, whatever its revenue code
+    ///     (an ER visit that led to the admission is part of the stay).</item>
+    ///   <item>Otherwise the line's revenue code decides when it is specific:
+    ///     045x emergency room, 010x–021x accommodation (inpatient).</item>
+    ///   <item>Otherwise the outpatient / other facility type: 13x/14x/43x
+    ///     hospital outpatient, 85x critical access hospital outpatient,
+    ///     32x–34x home health.</item>
+    /// </list>
+    /// Returns null when nothing is recognized (CARC 204 upstream) rather than
+    /// guessing a professional category.
+    /// <para>
+    /// Categories are the named benefit categories plans are authored with
+    /// (the vocabulary of <c>schemas/service-category-mappings/system-defaults.json</c>:
+    /// "Inpatient Hospital", "Emergency Room", "Skilled Nursing", "Home Health"),
+    /// since the engine matches a plan benefit by exact service type code.
+    /// </para>
+    /// </summary>
+    private static ServiceCategoryMatch? InferInstitutional(string? typeOfBill, string placeOfService, string? revenueCode)
+    {
+        var facilityType = FacilityTypeFromBill(typeOfBill);
+        var facilitySource = "TOB";
+        if (facilityType is null && placeOfService is { Length: 2 } && char.IsDigit(placeOfService[0]) && char.IsDigit(placeOfService[1]))
+        {
+            facilityType = placeOfService;
+            facilitySource = "FacilityType";
+        }
+
+        var (inpatientCode, inpatientDesc) = facilityType switch
+        {
+            "11" or "12" or "41" => (InpatientHospital, "Inpatient hospital (type of bill 11x/12x/41x)"),
+            "18" or "21" or "22" or "28" => (SkilledNursing, "Skilled nursing / swing bed (type of bill 18x/21x/22x/28x)"),
+            "81" or "82" => (Hospice, "Hospice (type of bill 81x/82x)"),
+            _ => ((string?)null, (string?)null),
+        };
+        if (inpatientCode is not null)
+            return SystemDefault(inpatientCode, inpatientDesc!, $"{facilitySource}-fallback:{facilityType}");
+
+        var revenue = NormalizeRevenueCode(revenueCode);
+        if (revenue is not null && int.TryParse(revenue, out var rev))
+        {
+            if (rev is >= 450 and <= 459)
+                return SystemDefault(EmergencyRoom, "Emergency room (revenue code 045x)", $"REV-fallback:{revenue}");
+            if (rev is >= 100 and <= 219)
+                return SystemDefault(InpatientHospital, "Inpatient accommodation (revenue code 0100-0219)", $"REV-fallback:{revenue}");
+        }
+
+        var (code, desc) = facilityType switch
+        {
+            "13" or "14" or "43" or "85" => (OutpatientHospital, "Outpatient hospital (type of bill 13x/14x/43x/85x)"),
+            "32" or "33" or "34" => (HomeHealth, "Home health (type of bill 32x-34x)"),
+            _ => ((string?)null, (string?)null),
+        };
+        return code is null ? null : SystemDefault(code, desc!, $"{facilitySource}-fallback:{facilityType}");
+    }
+
+    /// <summary>Institutional fallback category: inpatient hospital stay.</summary>
+    public const string InpatientHospital = "Inpatient Hospital";
+    /// <summary>Institutional fallback category: hospital outpatient.</summary>
+    public const string OutpatientHospital = "Outpatient Hospital";
+    /// <summary>Institutional fallback category: emergency room (revenue code 045x).</summary>
+    public const string EmergencyRoom = "Emergency Room";
+    /// <summary>Institutional fallback category: skilled nursing facility / swing bed.</summary>
+    public const string SkilledNursing = "Skilled Nursing";
+    /// <summary>Institutional fallback category: home health agency.</summary>
+    public const string HomeHealth = "Home Health";
+    /// <summary>Institutional fallback category: hospice.</summary>
+    public const string Hospice = "Hospice";
+
+    /// <summary>Facility type (first two digits) of a NUBC type of bill: "111" or "0111" → "11".</summary>
+    private static string? FacilityTypeFromBill(string? typeOfBill)
+    {
+        if (string.IsNullOrWhiteSpace(typeOfBill)) return null;
+        var tob = typeOfBill.Trim();
+        if (tob.Length == 4 && tob[0] == '0') tob = tob[1..];
+        return tob.Length >= 2 && char.IsDigit(tob[0]) && char.IsDigit(tob[1]) ? tob[..2] : null;
+    }
+
+    private static ServiceCategoryMatch SystemDefault(string code, string description, string rule) => new()
+    {
+        ServiceTypeCode = code,
+        ServiceTypeDescription = description,
+        MatchedBy = "SystemDefault",
+        MatchedRule = rule,
+    };
 
     /// <summary>
     /// Last-resort fallback: infer benefit category from place of service.

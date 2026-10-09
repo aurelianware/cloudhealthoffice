@@ -622,7 +622,7 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         var planProvider = Substitute.For<IBenefitPlanProvider>();
         planProvider.GetPlanAsync(PlanId, Arg.Any<CancellationToken>()).Returns(plan);
         var resolver = Substitute.For<IServiceCategoryResolver>();
-        resolver.ResolveAsync(default!, default, default, default!, default!, default!, default!, default, default)
+        resolver.ResolveAsync(default!, default, default, default!, default!, default!, default!, default, default, default)
             .ReturnsForAnyArgs(new ServiceCategoryMatch
             {
                 ServiceTypeCode = "48", ServiceTypeDescription = "Hospital - Inpatient",

@@ -69,6 +69,10 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     /// </summary>
     public const string AllowedExceedsBilledPendCode = "PRICING";
 
+    /// <summary>Claim type and type of bill for the resolver's institutional fallback.</summary>
+    private static ServiceCategoryClaimContext ClaimContext(BenefitResolutionRequest request) =>
+        new(request.ClaimType, request.TypeOfBill);
+
     private static string SanitizeForLog(string? value) =>
         string.IsNullOrEmpty(value) ? string.Empty : value.Replace("\r", "").Replace("\n", "");
 
@@ -432,7 +436,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             plan.TenantId, request.BenefitPlanId, request.ServiceDate,
             firstLine.ProcedureCode, firstLine.CodeType ?? "CPT",
             firstLine.PlaceOfService, firstLine.Modifiers,
-            firstLine.RevenueCode, ct);
+            firstLine.RevenueCode, ClaimContext(request), ct);
 
         if (categoryMatch is null)
         {
@@ -610,7 +614,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             plan.TenantId, request.BenefitPlanId, request.ServiceDate,
             line.ProcedureCode, line.CodeType ?? "CPT",
             line.PlaceOfService, line.Modifiers,
-            line.RevenueCode, ct);
+            line.RevenueCode, ClaimContext(request), ct);
 
         // CARC 204 (not covered under the patient's current benefit plan):
         // the procedure maps to no benefit category on this plan. 96 is

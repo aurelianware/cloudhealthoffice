@@ -62,13 +62,14 @@ public class GoldenPathFoundBugsTests
         Assert.Contains(cas, s => s[1] == "PR" && s[2] == "2" && s[3] == "20.00");
     }
 
-    // Without a tenant REV mapping, an 837I stay is categorized by POS
+    // Without a tenant REV mapping, an 837I stay used to be categorized by POS
     // inference on PlaceOfServiceCode — which for an 837I is CLM05-1, the
-    // facility type code ("11" = hospital inpatient), so the stay is treated
+    // facility type code ("11" = hospital inpatient), so the stay was treated
     // as POS 11 (office) → service type 98 and denied CO-96 on a plan with
-    // no "98" benefit. The fallback should use the bill type / an inpatient
-    // category for institutional claims.
-    [Fact(Skip = "bug: 837I POS fallback reads CLM05-1 facility type '11' as place of service 11 (office); an unmapped inpatient stay is denied as an office visit")]
+    // no "98" benefit. Fixed: the resolver's fallback for institutional
+    // claims infers from the type of bill and revenue code (TOB 111 →
+    // Inpatient Hospital), so the stay is approved under the inpatient benefit.
+    [Fact]
     public async Task InpatientStay_WithoutRevenueMapping_IsNotAnOfficeVisit()
     {
         var scenario = GoldenInputs.Scenario();
@@ -83,5 +84,6 @@ public class GoldenPathFoundBugsTests
         var r = await _harness.RunAsync(withoutRev, GoldenInputs.Edi837("05-inpatient-drg"));
 
         Assert.All(r.BenefitResult.Lines, l => Assert.NotEqual("98", l.ServiceTypeCode));
+        Assert.Contains(r.BenefitResult.Lines, l => l.ServiceTypeCode == "Inpatient Hospital");
     }
 }

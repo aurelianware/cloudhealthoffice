@@ -1550,7 +1550,7 @@ internal class FixedCategoryResolver : IServiceCategoryResolver
     public Task<ServiceCategoryMatch?> ResolveAsync(
         string tenantId, Guid benefitPlanId, DateOnly serviceDate,
         string procedureCode, string codeType, string placeOfService,
-        IReadOnlyList<string> modifiers, string? revenueCode, CancellationToken ct)
+        IReadOnlyList<string> modifiers, string? revenueCode, ServiceCategoryClaimContext? claim, CancellationToken ct)
     {
         return Task.FromResult<ServiceCategoryMatch?>(new ServiceCategoryMatch
         {
@@ -1598,6 +1598,6 @@ internal class UnmappedCategoryResolver : IServiceCategoryResolver
     public Task<ServiceCategoryMatch?> ResolveAsync(
         string tenantId, Guid benefitPlanId, DateOnly serviceDate,
         string procedureCode, string codeType, string placeOfService,
-        IReadOnlyList<string> modifiers, string? revenueCode, CancellationToken ct)
+        IReadOnlyList<string> modifiers, string? revenueCode, ServiceCategoryClaimContext? claim, CancellationToken ct)
         => Task.FromResult<ServiceCategoryMatch?>(null);
 }
