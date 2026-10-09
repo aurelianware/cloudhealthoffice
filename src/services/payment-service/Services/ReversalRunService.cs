@@ -16,7 +16,7 @@ namespace PaymentService.Services;
 /// <c>GET /api/v1/adjustments?status=PendingReversal</c> surface to
 /// materialize a batch, then for each adjustment:
 /// <list type="bullet">
-///   <item><description>Constructs a negative-amount <see cref="Payment"/> sign-flipping the predecessor's payment + CAS data; sets <c>ClaimPayment.ClaimStatusCode = "22"</c>.</description></item>
+///   <item><description>Constructs a negative-amount <see cref="Payment"/> from the predecessor's recorded claim payment via <see cref="Era835ClaimPaymentBuilder.BuildReversal"/>: CLP02 = "22", CLP03/04/05, SVC02/03 and every claim and line CAS amount negated, so each line and the claim balance in the negative.</description></item>
 ///   <item><description>Generates one reversal 835 envelope per trading partner via <see cref="IBatchEraGeneratorService"/>; persists with <see cref="EraEnvelopeRecord.ReversalRunId"/> set.</description></item>
 ///   <item><description>Calls <c>POST /api/claims/{id}/void</c> on claims-service; the claims-service hook transitions the originating adjustment <c>PendingReversal → Active</c> on success.</description></item>
 /// </list>
@@ -54,6 +54,7 @@ public class ReversalRunService : IReversalRunService
     private readonly ICurrentActor _actor;
     private readonly IRunSeparationOfDuties _separationOfDuties;
     private readonly IClaimReservationRepository _reservations;
+    private readonly ICarcRarcMappingService _carcRarcMapper;
 
     public ReversalRunService(
         IPaymentRepository paymentRepository,
@@ -66,9 +67,11 @@ public class ReversalRunService : IReversalRunService
         IConfiguration configuration,
         ICurrentActor actor,
         IRunSeparationOfDuties separationOfDuties,
-        IClaimReservationRepository reservations)
+        IClaimReservationRepository reservations,
+        ICarcRarcMappingService carcRarcMapper)
     {
         _reservations = reservations;
+        _carcRarcMapper = carcRarcMapper;
         _paymentRepository = paymentRepository;
         _reversalRunRepository = reversalRunRepository;
         _batchEraGenerator = batchEraGenerator;
@@ -295,6 +298,19 @@ public class ReversalRunService : IReversalRunService
                     continue;
                 }
 
+                // The reversal's 2100/2110 loops: the original's, every
+                // amount negated. Each line and the claim must balance (the
+                // check 835 generation applies), or it is not reversed.
+                var reversalClaim = Era835ClaimPaymentBuilder.BuildReversal(original, pred, _carcRarcMapper);
+                var casProblems = Era835FinancialSegments.AdjustmentBalanceProblems(reversalClaim);
+                if (casProblems.Count > 0)
+                {
+                    run.UnbalancedServiceLineClaimIds.Add(pred.Id);
+                    run.Warnings.Add(
+                        $"Predecessor {pred.Id} (adjustment {adj.Id}) not reversed: its reversal's adjustments do not balance ({string.Join("; ", casProblems)})");
+                    continue;
+                }
+
                 // One reversal per claim, even across concurrent runs.
                 var reservedNow = await _reservations.TryReserveAsync(new ClaimReservation
                 {
@@ -315,7 +331,7 @@ public class ReversalRunService : IReversalRunService
                 }
 
                 var checkNumber = $"R-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
-                var payment = await BuildReversalPaymentAsync(pred, original, run, tradingPartnerId, checkNumber, approver);
+                var payment = await BuildReversalPaymentAsync(pred, reversalClaim, run, tradingPartnerId, checkNumber, approver);
 
                 issuedPayments.Add(payment);
                 run.PaymentIds.Add(payment.Id);
@@ -349,8 +365,9 @@ public class ReversalRunService : IReversalRunService
             run.TotalAdjustments = adjustments.Count;
 
             // Step 5 — batched 835 reversal generation. CLP02="22" was set
-            //          upstream when constructing the Payment; CAS amounts
-            //          are sign-flipped on each ClaimPayment.
+            //          upstream when constructing the Payment; charge, paid
+            //          and CAS amounts (claim and line) are negated on each
+            //          ClaimPayment.
             var partnerInfos = BuildTradingPartnerInfos(resolvedTradingPartners);
             var envelopes = _batchEraGenerator.GenerateBatch(eraInputs, partnerInfos);
 
@@ -662,37 +679,27 @@ public class ReversalRunService : IReversalRunService
         };
     }
 
+    /// <summary>
+    /// The reversal payment: <paramref name="reversalClaim"/> (the original
+    /// claim payment negated, CLP02 = 22, from
+    /// <see cref="Era835ClaimPaymentBuilder.BuildReversal"/>), recouping what
+    /// the original actually paid.
+    /// </summary>
     private async Task<Payment> BuildReversalPaymentAsync(
         ClaimDto pred,
-        ClaimPayment original,
+        ClaimPayment reversalClaim,
         ReversalRun run,
         string? tradingPartnerId,
         string checkNumber,
         string approver)
     {
         var providerNpi = pred.PayToProviderNPI ?? pred.BillingProviderNPI;
-        // What the original payment actually paid, from payment-service's record.
-        var originalPaid = original.PaymentAmount;
-
-        // Mirror the original CAS data (sign-flipped). We don't have the
-        // payment-service's Payment row from the original PaymentRun in
-        // hand — we work from the claim's AdjudicationResult, which is the
-        // source of truth and is what the original payment was built from.
-        var headerCas = (pred.AdjudicationResult?.AdjustmentReasons ?? new List<ClaimAdjustmentReasonDto>())
-            .Select(r => new ClaimAdjustment
-            {
-                GroupCode = r.GroupCode,
-                ReasonCode = r.ReasonCode,
-                Amount = -r.Amount,
-                ReasonDescription = r.Description,
-            })
-            .ToList();
-
         var payment = new Payment
         {
             CheckNumber = checkNumber,
             PaymentMethod = ReversalPaymentMethod,
-            TotalPaymentAmount = -originalPaid,
+            // The negated recorded payment (CLP04 of the reversal).
+            TotalPaymentAmount = reversalClaim.PaymentAmount,
             PaymentDate = run.ExecutionStartedAt ?? DateTime.UtcNow,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
             PayerId = _configuration["Payer:Id"] ?? "CHO",
@@ -706,46 +713,7 @@ public class ReversalRunService : IReversalRunService
             RunId = run.Id,
             RunNumber = run.ReversalRunNumber,
             IsReversal = true,
-            ClaimPayments = new List<ClaimPayment>
-            {
-                new ClaimPayment
-                {
-                    ClaimId = pred.Id,
-                    PatientControlNumber = pred.ClaimNumber,
-                    // CLP02 "22" — Reversal of Previous Payment (X12
-                    // 005010X221A1). Set upstream of BatchEraGeneratorService
-                    // per Premise C; the generator emits whatever's in the
-                    // ClaimPayment.
-                    ClaimStatusCode = "22",
-                    ChargeAmount = original.ChargeAmount,
-                    PaymentAmount = -originalPaid,
-                    PatientResponsibilityAmount = -original.PatientResponsibilityAmount,
-                    PayerClaimControlNumber = pred.PayerClaimControlNumber,
-                    MemberId = pred.MemberId,
-                    RenderingProviderNPI = pred.RenderingProviderNPI,
-                    ClaimAdjustments = headerCas,
-                    // The original's recorded lines, payment sign-flipped.
-                    ServiceLines = original.ServiceLines
-                        .Select(sl => new ServiceLinePayment
-                        {
-                            LineNumber = sl.LineNumber,
-                            ProcedureCode = sl.ProcedureCode,
-                            ChargeAmount = sl.ChargeAmount,
-                            PaymentAmount = -sl.PaymentAmount,
-                            RevenueCode = sl.RevenueCode,
-                            Units = sl.Units,
-                            ServiceDateFrom = sl.ServiceDateFrom,
-                            ServiceDateTo = sl.ServiceDateTo,
-                            // No per-line CAS data on the claims-service
-                            // ClaimDto today; reversal envelopes carry the
-                            // header-level sign-flipped CAS only. Phase 2
-                            // surfaces line CAS once claims-service projects
-                            // EditFailures into the read DTO.
-                            Adjustments = new List<ServiceLineAdjustment>(),
-                        })
-                        .ToList(),
-                },
-            },
+            ClaimPayments = new List<ClaimPayment> { reversalClaim },
         };
         return await _paymentRepository.CreateAsync(payment);
     }

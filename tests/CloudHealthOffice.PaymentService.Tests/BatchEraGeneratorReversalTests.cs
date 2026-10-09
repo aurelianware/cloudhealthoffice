@@ -57,7 +57,9 @@ public class BatchEraGeneratorReversalTests
                         ClaimId = "c-rev",
                         PatientControlNumber = "CLM-001",
                         ClaimStatusCode = clp02,
-                        ChargeAmount = 1000m,
+                        // X12 reversal convention: CLP03 is negated with CLP04 and CLP05,
+                        // and CLP03 - sum(CAS) = CLP04 (the PR-1 -200 below).
+                        ChargeAmount = amount - 200m,
                         PaymentAmount = amount,
                         PatientResponsibilityAmount = -200m,
                         ClaimAdjustments = new List<ClaimAdjustment>

@@ -106,19 +106,38 @@ public static class Era835FinancialSegments
     }
 
     /// <summary>
-    /// The adjustment balancing problems of one claim. Once its lines carry
-    /// CAS: each line with CAS must satisfy SVC02 - sum(line CAS) = SVC03, and
-    /// the claim CLP03 - sum(CAS, claim and lines) = CLP04. Empty when it
-    /// balances, or when no line carries CAS (claim-level CAS, or a reversal
-    /// whose lines carry none, is not checked here).
+    /// The adjustment balancing problems of one claim, payment or reversal
+    /// (CLP02 = 22, every amount negated) alike:
+    /// <list type="bullet">
+    /// <item>Once its lines carry CAS: every line must satisfy SVC02 -
+    /// sum(line CAS) = SVC03 (a line without CAS must be paid in full), and
+    /// the claim CLP03 - sum(CAS, claim and lines) = CLP04.</item>
+    /// <item>A claim remitted at claim level (no SVC) with header CAS: CLP03 -
+    /// sum(CAS) = CLP04.</item>
+    /// </list>
+    /// Not checked (empty): a claim with no CAS at all; a claim whose SVC
+    /// loops carry none (payments recorded before lines carried CAS keep
+    /// their claim-level CAS in the header); and a reversal recorded before
+    /// reversals negated CLP03 (<see cref="IsLegacyReversal"/>), so the 835s
+    /// of those stored payments still regenerate.
     /// </summary>
     public static IReadOnlyList<string> AdjustmentBalanceProblems(ClaimPayment cp)
     {
         var problems = new List<string>();
         if (!cp.ServiceLines.Any(l => l.Adjustments.Count > 0))
+        {
+            if (cp.ServiceLines.Count == 0 && cp.ClaimAdjustments.Count > 0 && !IsLegacyReversal(cp))
+            {
+                var headerCas = cp.ClaimAdjustments.Sum(a => a.Amount);
+                if (cp.ChargeAmount - headerCas != cp.PaymentAmount)
+                    problems.Add(
+                        $"claim {cp.ClaimId}: charge (CLP03) {cp.ChargeAmount:F2} less adjustments (CAS) {headerCas:F2} " +
+                        $"is {cp.ChargeAmount - headerCas:F2} but the claim payment (CLP04) is {cp.PaymentAmount:F2}");
+            }
             return problems;
+        }
 
-        foreach (var line in cp.ServiceLines.Where(l => l.Adjustments.Count > 0))
+        foreach (var line in cp.ServiceLines)
         {
             var cas = line.Adjustments.Sum(a => a.Amount);
             if (line.ChargeAmount - cas != line.PaymentAmount)
@@ -136,10 +155,20 @@ public static class Era835FinancialSegments
     }
 
     /// <summary>
+    /// A reversal (CLP02 = 22) stored before reversals negated the charge: a
+    /// positive CLP03 with a negative CLP04. Its CAS cannot balance against
+    /// that charge, so it is not checked; reversals built now always carry
+    /// CLP03 &lt;= 0.
+    /// </summary>
+    public static bool IsLegacyReversal(ClaimPayment cp) =>
+        cp.ClaimStatusCode == "22" && cp.ChargeAmount > 0m && cp.PaymentAmount < 0m;
+
+    /// <summary>
     /// Throws <see cref="InvalidOperationException"/> unless the 835 balances:
     /// BPR02 = sum of CLP04 - sum of PLB amounts; for every claim with
     /// service lines, sum of SVC03 = CLP04; and, once lines carry CAS,
-    /// SVC02 - sum(line CAS) = SVC03 and CLP03 - sum(CAS) = CLP04
+    /// SVC02 - sum(line CAS) = SVC03 and CLP03 - sum(CAS) = CLP04, or, for a
+    /// claim-level remittance with header CAS, CLP03 - sum(CAS) = CLP04
     /// (<see cref="AdjustmentBalanceProblems"/>).
     /// </summary>
     public static void EnsureBalanced(
