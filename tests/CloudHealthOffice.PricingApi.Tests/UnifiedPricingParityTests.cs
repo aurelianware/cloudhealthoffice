@@ -16,7 +16,7 @@ using EngineFeeScheduleType = CloudHealthOffice.FeeScheduleEngine.Domain.FeeSche
 namespace CloudHealthOffice.PricingApi.Tests;
 
 /// <summary>
-/// ADR 014 parity: the same contract and the same claim priced through both entry
+/// ADR 016 parity: the same contract and the same claim priced through both entry
 /// points return identical allowed amounts.
 ///
 /// <list type="bullet">
@@ -34,7 +34,7 @@ namespace CloudHealthOffice.PricingApi.Tests;
 ///   <item><b>Cross-store</b> (RBRVS, MPPR, DRG): the Pricing API reads its legacy
 ///   <c>fee_schedule_entries</c> rows, written by the Pricing API loader's own
 ///   factories; adjudication reads the same schedule in the canonical model. This is
-///   also the invariant the ADR 014 backfill must keep.</item>
+///   also the invariant the ADR 016 backfill must keep.</item>
 ///   <item><b>Same store</b> (percent of Medicare, per diem, plus every scenario
 ///   above): both entry points read the canonical store. The legacy store cannot
 ///   express percent-of-Medicare or per-diem terms.</item>

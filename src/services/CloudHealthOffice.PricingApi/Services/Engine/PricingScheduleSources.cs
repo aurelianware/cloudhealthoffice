@@ -27,14 +27,14 @@ public sealed record LoadedPricingSchedule(
 
 /// <summary>
 /// Where the Pricing API reads fee schedules from. Repricing always runs on the
-/// shared rate resolution engine (ADR 014); a source only supplies the schedule
+/// shared rate resolution engine (ADR 016); a source only supplies the schedule
 /// in the engine's model.
 ///
 /// <list type="bullet">
 ///   <item><see cref="LegacyEntryScheduleSource"/> — the Pricing API's own
 ///   <c>fee_schedule_entries</c> store, adapted line by line. Registered today.</item>
 ///   <item><see cref="EngineStoreScheduleSource"/> — the canonical fee schedule
-///   store claims adjudication reads. Wired by the dual-read step of the ADR 014
+///   store claims adjudication reads. Wired by the dual-read step of the ADR 016
 ///   migration; used now by the parity tests.</item>
 /// </list>
 /// </summary>

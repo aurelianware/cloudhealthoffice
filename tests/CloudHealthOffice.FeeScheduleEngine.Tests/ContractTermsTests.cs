@@ -7,7 +7,7 @@ namespace CloudHealthOffice.FeeScheduleEngine.Tests;
 
 /// <summary>
 /// Contract reimbursement terms added for the unified contract pricing work
-/// (ADR 014): lesser-of-billed, flat facility prices, assistant surgeon
+/// (ADR 016): lesser-of-billed, flat facility prices, assistant surgeon
 /// modifiers 81/82 and cent rounding of allowed amounts.
 /// </summary>
 public class ContractTermsTests

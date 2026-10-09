@@ -22,7 +22,7 @@ public interface IRepricingService
 /// Pricing is delegated to <see cref="RateResolutionService"/> — the engine claims
 /// adjudication prices with (benefit-plan-service <c>resolve-rates</c>,
 /// claims-service <c>PricingStage</c>) — so the Pricing API and adjudication return
-/// the same allowed amount for the same claim and contract (ADR 014). This class only
+/// the same allowed amount for the same claim and contract (ADR 016). This class only
 /// translates: the request into the engine's <see cref="EngineModels.PricingRequest"/>
 /// lines, the schedule into the engine's model (<see cref="IPricingScheduleSource"/>),
 /// and the engine's results back into the public response, which is unchanged.

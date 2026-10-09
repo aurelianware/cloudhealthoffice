@@ -53,7 +53,7 @@ try
     builder.Services.AddSingleton<IUsageRepository, MongoUsageRepository>();
 
     // ── Services ──
-    // Repricing runs on the shared rate resolution engine (ADR 014). Schedules come
+    // Repricing runs on the shared rate resolution engine (ADR 016). Schedules come
     // from this service's own store until the dual-read step wires the canonical one.
     builder.Services.AddScoped<IPricingScheduleSource, LegacyEntryScheduleSource>();
     builder.Services.AddScoped<IRepricingService, RepricingService>();

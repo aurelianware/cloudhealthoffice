@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
-    <!-- Repricing delegates to the same rate resolution engine claims adjudication uses (ADR 014). -->
+    <!-- Repricing delegates to the same rate resolution engine claims adjudication uses (ADR 016). -->
     <ProjectReference Include="..\..\engines\CloudHealthOffice.FeeScheduleEngine\CloudHealthOffice.FeeScheduleEngine.csproj" />
   </ItemGroup>
 

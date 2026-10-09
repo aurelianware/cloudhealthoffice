@@ -395,7 +395,7 @@ public class RepricingServiceTests
     /// <summary>
     /// The DRG case rate is paid once per claim and allocated across the lines in
     /// proportion to billed charges: the engine's rule, shared with adjudication
-    /// (ADR 014). Before the Pricing API delegated to the engine it put the whole
+    /// (ADR 016). Before the Pricing API delegated to the engine it put the whole
     /// case rate on line 1; the claim total is unchanged.
     /// </summary>
     [Fact]
