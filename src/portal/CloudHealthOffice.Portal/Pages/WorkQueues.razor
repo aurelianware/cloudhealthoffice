@@ -6,6 +6,7 @@
 @inject IUserContextService UserContextService
 @inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Work Queues - Cloud Health Office</PageTitle>
 
@@ -335,16 +336,48 @@
                 : "Overridden";
         var user = await UserContextService.GetCurrentUserAsync();
 
-        await WorkQueueService.ResolvePendedClaimAsync(
-            claimId,
-            "Approved",
-            "Examiner override — reviewed and approved",
-            agreement,
-            user?.UserId ?? user?.Email ?? "portal-examiner");
+        // A COB pend needs the payer order the examiner confirmed.
+        int? payerSequence = null;
+        var reason = "Examiner override — reviewed and approved";
+        if (string.Equals(item?.QueueReasonCode, "COB", StringComparison.OrdinalIgnoreCase))
+        {
+            var dialog = await DialogService.ShowAsync<CobPayerOrderDialog>("Confirm payer order");
+            var choice = await dialog.Result;
+            if (choice is null || choice.Canceled || choice.Data is not CobPayerOrderDialog.CobPayerOrderChoice picked) return;
+            payerSequence = picked.PayerSequence;
+            reason = picked.Reason;
+        }
+
+        try
+        {
+            var result = await WorkQueueService.ResolvePendedClaimAsync(
+                claimId,
+                "Approved",
+                reason,
+                agreement,
+                user?.UserId ?? user?.Email ?? "portal-examiner",
+                payerSequence);
+            if (result.AwaitingSecondApproval)
+            {
+                Snackbar.Add(result.Message ?? $"Claim {claimId} is waiting for a second approver.", Severity.Info);
+                return;
+            }
+        }
+        catch (ClaimResolutionRefusedException ex)
+        {
+            Snackbar.Add(ex.ToDisplayText(), Severity.Warning);
+            return;
+        }
+        catch (ServiceUnavailableException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
         _allItems.RemoveAll(i => i.ClaimId == claimId);
-        if (_summary != null) _summary.NcciEditFailures = Math.Max(0, _summary.NcciEditFailures - 1);
+        if (_summary != null && string.Equals(item?.QueueReasonCode, "NCCI", StringComparison.OrdinalIgnoreCase))
+            _summary.NcciEditFailures = Math.Max(0, _summary.NcciEditFailures - 1);
         ApplyFilters();
-        Snackbar.Add($"NCCI override applied to {claimId}", Severity.Success);
+        Snackbar.Add($"Override applied to {claimId}", Severity.Success);
     }
 
     private string GetCardClass(string? queueCode)

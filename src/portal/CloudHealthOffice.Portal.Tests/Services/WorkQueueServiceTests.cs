@@ -216,6 +216,80 @@ public class WorkQueueServiceTests
         body.Should().Contain("\"examinerUserId\":\"examiner-1\"");
     }
 
+    // ── PR #1278 round 3 (M5): payer order and the service's refusal ──
+
+    [Fact]
+    public async Task ResolvePendedClaimAsync_SendsThePayerSequence()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.ResolvePendedClaimAsync("CLM-1", "Approved", "EOBs show two payers", null, "examiner-1", payerSequence: 3);
+
+        var body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+        body.Should().Contain("\"payerSequence\":3");
+    }
+
+    [Fact]
+    public async Task OverrideAsync_SendsThePayerSequence()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.OverrideAsync("CLM-1", "confirmed secondary", payerSequence: 2);
+
+        var body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+        body.Should().Contain("\"payerSequence\":2");
+    }
+
+    /// <summary>
+    /// A 409 is the service refusing the approval (here: a COB pend without
+    /// a payer order) — the examiner sees its reason, not "service
+    /// unavailable".
+    /// </summary>
+    [Fact]
+    public async Task ResolvePendedClaimAsync_409_ThrowsTheServicesReason()
+    {
+        var handler = new FakeHandler(HttpStatusCode.Conflict,
+            "{\"error\":\"This claim is pended for coordination of benefits: approving it requires the payer order you confirmed.\"," +
+            "\"outcome\":\"Pend\",\"reasons\":[\"CoordinationOfBenefits: payer-order mismatch\"]}");
+        var sut = CreateService(new HttpClient(handler));
+
+        var ex = await Assert.ThrowsAsync<ClaimResolutionRefusedException>(
+            () => sut.ResolvePendedClaimAsync("CLM-1", "Approved", "ok", null, "examiner-1"));
+
+        ex.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        ex.Message.Should().Contain("requires the payer order");
+        ex.Reasons.Should().Equal("CoordinationOfBenefits: payer-order mismatch");
+        ex.ToDisplayText().Should().Contain("payer-order mismatch");
+    }
+
+    [Fact]
+    public async Task ResolvePendedClaimAsync_403Problem_ThrowsTheDetail()
+    {
+        var handler = new FakeHandler(HttpStatusCode.Forbidden,
+            "{\"title\":\"Payer-order override not permitted\",\"detail\":\"payerSequence 2 disagrees with the 837 SBR01; that needs claims:override-approve.\"}");
+        var sut = CreateService(new HttpClient(handler));
+
+        var ex = await Assert.ThrowsAsync<ClaimResolutionRefusedException>(
+            () => sut.ResolvePendedClaimAsync("CLM-1", "Approved", "ok", null, "examiner-1", 2));
+
+        ex.Message.Should().Contain("claims:override-approve");
+    }
+
+    [Fact]
+    public async Task ResolvePendedClaimAsync_202_IsWaitingForASecondApprover()
+    {
+        var handler = new FakeHandler(HttpStatusCode.Accepted,
+            "{\"status\":\"awaiting-second-approval\",\"message\":\"needs a second, different approver\"}");
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.ResolvePendedClaimAsync("CLM-1", "Approved", "ok", null, "supervisor-1", 1);
+
+        result.AwaitingSecondApproval.Should().BeTrue();
+        result.Message.Should().Contain("second, different approver");
+    }
+
     [Fact]
     public async Task GetQueueSummaryAsync_WhenApiReturnsNull_ReturnsEmptySummary()
     {

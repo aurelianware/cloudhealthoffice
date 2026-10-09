@@ -169,11 +169,18 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// <summary>
     /// Stages whose Pend is a review an examiner resolves by approving the
     /// claim (possible duplicate, provider integrity, network, NCCI edits,
-    /// AI advisory). On an approval re-run their Pend becomes Pass. Not in
-    /// the set: pricing and benefit calculation (a pend there means the
-    /// amounts could not be computed) and coordination of benefits (its pends
-    /// need an examiner-confirmed payer order — see
-    /// <see cref="ExaminerApproval.PayerSequence"/>).
+    /// scrubbing). On an approval re-run their Pend becomes Pass — but only
+    /// when the examiner reviewed that pend (PR #1278 round 3, B1): its code
+    /// is in the claim's persisted pend (<see cref="ExaminerApproval.ReviewedPend"/>),
+    /// and for <see cref="ExactReasonPendCodes"/> its reason is exactly the
+    /// one reviewed. Anything else — a pend the examiner never saw — keeps
+    /// the claim pended and the approval is refused for re-review. Not in the
+    /// set: pricing and benefit calculation (a pend there means the amounts
+    /// could not be computed; benefit calculation applies the same reviewed
+    /// rule itself to its retro-plan / subrogation / spend-down pends) and
+    /// coordination of benefits (its pends need an examiner-confirmed payer
+    /// order — see <see cref="ExaminerApproval.PayerSequence"/>). The AI
+    /// examination stage is advisory and is skipped on an approval re-run.
     /// </summary>
     private static readonly HashSet<string> ExaminerOverridableStages = new(StringComparer.Ordinal)
     {
@@ -181,8 +188,36 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.ProviderIntegrityStage.StageName,
         Stages.NetworkCredentialingStage.StageName,
         Stages.NcciEditsStage.StageName,
-        Stages.AiExaminationStage.StageName,
         Stages.ScrubbingStage.StageName,
+    };
+
+    /// <summary>
+    /// Pend codes whose reason is the finding itself: the examiner's approval
+    /// overrides one only when this exact reason was reviewed. A provider
+    /// integrity check that was reachable when reviewed but is unreachable
+    /// (or newly unverified) now, a duplicate of a different claim, a new
+    /// retro plan change, subrogation / TPL indicator or spend-down is a new
+    /// finding, not the one approved.
+    /// </summary>
+    internal static readonly HashSet<string> ExactReasonPendCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        Stages.ProviderIntegrityStage.MedicalReviewPendCode,
+        Stages.DuplicateClaimStage.DuplicatePendCode,
+        Stages.BenefitCalculationStage.RetroactivePlanChangePendCode,
+        Stages.BenefitCalculationStage.SubrogationReviewPendCode,
+        Stages.BenefitCalculationStage.MedicaidSpendDownPendCode,
+    };
+
+    /// <summary>
+    /// Pend codes for stages that pend without recording one on
+    /// <see cref="ClaimAdjudicationContext.PendDetails"/>, so every pend is
+    /// persisted with a code the examiner sees and a later approval can name.
+    /// </summary>
+    private static string PendCodeForStage(string stageName) => stageName switch
+    {
+        Stages.NetworkCredentialingStage.StageName => "NETWORK",
+        Stages.ScrubbingStage.StageName => "SCRUB",
+        _ => stageName.ToUpperInvariant() is { Length: > 20 } n ? n[..20] : stageName.ToUpperInvariant(),
     };
 
     /// <summary>
@@ -221,7 +256,10 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             .Where(r => r.Outcome != ClaimAdjudicationOutcome.Pass && !string.IsNullOrEmpty(r.Reason))
             .Select(r => $"{r.StageName}: {r.Reason}")
             .ToList();
-        return new ApprovalReadjudicationResult(outcome, reasons.FirstOrDefault(), reasons);
+        return new ApprovalReadjudicationResult(outcome, reasons.FirstOrDefault(), reasons)
+        {
+            OverriddenPends = context.ExaminerOverrides.ToList(),
+        };
     }
 
     private static bool HasMeaningfulAdjudicationProjection(AdapterClaim claim)
@@ -263,7 +301,10 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             var enabled = IsEnabled(stage);
             var shouldSkip = !enabled
-                || (context.ShortCircuited && !stage.IsRequired);
+                || (context.ShortCircuited && !stage.IsRequired)
+                // The AI examination is advice for the examiner; on the
+                // examiner's own approval re-run it has nothing to add (L8).
+                || (context.ExaminerApproval is not null && stage.Name == Stages.AiExaminationStage.StageName);
 
             if (shouldSkip)
             {
@@ -274,6 +315,10 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                     enabled, context.ShortCircuited, stage.IsRequired);
                 continue;
             }
+
+            var pendBefore = context.PendDetails;
+            var codeBefore = pendBefore?.PendCode;
+            var additionalBefore = pendBefore?.AdditionalPendReasons.Count ?? 0;
 
             ClaimAdjudicationStageResult result;
             try
@@ -293,21 +338,28 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                     stage.Name, $"{stage.Name} threw: {ex.GetType().Name}");
             }
 
-            // Examiner approval re-run: a review pend the examiner resolved
-            // passes (recorded in the notes) so the claim prices in
-            // Production and finalizes.
-            if (context.ExaminerApproval is not null
-                && result.Outcome == ClaimAdjudicationOutcome.Pend
-                && ExaminerOverridableStages.Contains(stage.Name))
+            if (result.Outcome == ClaimAdjudicationOutcome.Pend)
             {
-                result = new ClaimAdjudicationStageResult
+                var (pendCode, pendReason) = IdentifyPend(context, stage.Name, result, pendBefore, codeBefore, additionalBefore);
+
+                // Examiner approval re-run: a pend the examiner reviewed
+                // passes (recorded for the audit) so the claim prices in
+                // Production and finalizes. A pend they did not review stays
+                // a Pend and the approval is refused.
+                if (context.ExaminerApproval is { } approval
+                    && ExaminerOverridableStages.Contains(stage.Name)
+                    && approval.Reviewed(pendCode, pendReason, ExactReasonPendCodes.Contains(pendCode)))
                 {
-                    StageName = result.StageName,
-                    Continue = true,
-                    Outcome = ClaimAdjudicationOutcome.Pass,
-                    Reason = result.Reason,
-                    Notes = [.. result.Notes, $"Pend resolved by examiner approval: {result.Reason}"],
-                };
+                    context.ExaminerOverrides.Add($"{stage.Name}: {pendCode}: {pendReason}");
+                    result = new ClaimAdjudicationStageResult
+                    {
+                        StageName = result.StageName,
+                        Continue = true,
+                        Outcome = ClaimAdjudicationOutcome.Pass,
+                        Reason = result.Reason,
+                        Notes = [.. result.Notes, $"Pend resolved by examiner approval: {pendCode}: {pendReason}"],
+                    };
+                }
             }
 
             context.StageResults.Add(result);
@@ -322,6 +374,49 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 context.ShortCircuited = true;
             }
         }
+    }
+
+    /// <summary>
+    /// The (code, reason) of the pend <paramref name="stageName"/> just
+    /// returned: what it recorded on <see cref="ClaimAdjudicationContext.PendDetails"/>
+    /// (a new pend, or an entry added to <see cref="PendDetails.AdditionalPendReasons"/>).
+    /// A stage that recorded nothing gets its code (<see cref="PendCodeForStage"/>)
+    /// recorded here, so the pend is persisted and the examiner sees it.
+    /// The AI examination's pend is advice on an existing pend and records
+    /// nothing.
+    /// </summary>
+    private static (string Code, string? Reason) IdentifyPend(
+        ClaimAdjudicationContext context, string stageName, ClaimAdjudicationStageResult result,
+        PendDetails? pendBefore, string? codeBefore, int additionalBefore)
+    {
+        var pend = context.PendDetails;
+        if (pend is not null && (!ReferenceEquals(pend, pendBefore) || !string.Equals(pend.PendCode, codeBefore, StringComparison.Ordinal)))
+            return (pend.PendCode, pend.PendReason);
+        if (pend is not null && pend.AdditionalPendReasons.Count > additionalBefore)
+        {
+            var (code, reason) = ExaminerApproval.SplitEntry(pend.AdditionalPendReasons[^1]);
+            if (code is not null) return (code, reason);
+        }
+
+        var stageCode = PendCodeForStage(stageName);
+        var stageReason = result.Reason is { Length: > 500 } r ? r[..500] : result.Reason;
+        if (stageName == Stages.AiExaminationStage.StageName)
+            return (stageCode, stageReason);
+        if (pend is null)
+        {
+            context.PendDetails = new PendDetails
+            {
+                PendCode = stageCode,
+                PendReason = stageReason,
+                PendedAt = DateTime.UtcNow,
+            };
+        }
+        else
+        {
+            var entry = $"{stageCode}: {stageReason}";
+            pend.AdditionalPendReasons.Add(entry.Length > 500 ? entry[..500] : entry);
+        }
+        return (stageCode, stageReason);
     }
 
     private async Task EmitAdjudicatedEventAsync(
@@ -379,8 +474,13 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             CorrelationId = context.CorrelationId,
         };
 
+        // An approval re-run is a new adjudication of the same version: a
+        // distinct MessageId, or Service Bus duplicate detection drops it
+        // as a repeat of the original run's message (M6).
         var sendOptions = new SendOptions(
-            MessageId: $"adjudicated:{context.ClaimVersionId}",
+            MessageId: context.ExaminerApproval is { } approval
+                ? $"adjudicated:{context.ClaimVersionId}:approval:{approval.ApprovalId}"
+                : $"adjudicated:{context.ClaimVersionId}",
             CorrelationId: context.CorrelationId,
             Properties: new Dictionary<string, string>(StringComparer.Ordinal)
             {

@@ -204,9 +204,6 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
                 "Claim is missing MemberId; coordination-of-benefits lookup cannot run.");
         }
 
-        if (context.ExaminerApproval?.PayerSequence is int examinerSequence)
-            return ResolveExaminerPayerOrder(context, activity, examinerSequence);
-
         var serviceDate = ResolveEarliestServiceDate(context.Claim);
 
         IReadOnlyList<CobEntry>? entries;
@@ -235,6 +232,11 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
         // null when absent or "U" (unknown).
         var claimSequence = PayerResponsibility.ToSequence(context.Claim.PayerResponsibilityCode);
         activity?.SetTag("cob.claim_sequence", claimSequence);
+
+        // Examiner approval of a COB pend: the payer order they confirmed,
+        // checked against coverage-service and SBR01 (round 3, B2).
+        if (context.ExaminerApproval is { PayerSequence: int examinerSequence } approval)
+            return ResolveExaminerPayerOrder(context, activity, approval, examinerSequence, entries, claimSequence);
 
         if (entries is null)
         {
@@ -381,15 +383,47 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
                 $"{string.Join(", ", missing)}.");
     }
 
+    /// <summary>Pend reason: the examiner's payer sequence is not 1..(payers on the claim).</summary>
+    public const string ExaminerSequenceOutOfRangePendReason = "cob-examiner-sequence-out-of-range";
+
+    /// <summary>
+    /// Pend reason: the examiner's payer sequence disagrees with
+    /// coverage-service or the 837's SBR01 (or coverage-service could not
+    /// corroborate it), and the approver lacks claims:override-approve or
+    /// gave no reason.
+    /// </summary>
+    public const string PayerOrderOverrideRequiredPendReason = "cob-payer-order-override-required";
+
+    /// <summary>
+    /// Pend reason: pricing as primary although the 837 shows a prior payer
+    /// paid more than $0 needs a second, different approver.
+    /// </summary>
+    public const string PrimaryOverPriorPaymentPendReason = "cob-primary-over-prior-payment";
+
     /// <summary>
     /// Examiner approval of a COB pend (<see cref="ExaminerApproval.PayerSequence"/>):
-    /// the examiner confirmed the payer order. 1 → priced as primary. 2 or
-    /// more → priced as that payer, which needs the prior payers' data on the
-    /// 837 for every earlier sequence; otherwise the claim stays pended (the
-    /// approval is refused) with the data problem as the reason.
+    /// the examiner confirmed the payer order. Checked, never clamped
+    /// (round 3, B2 — golden 07 approved as primary paid $152 against $250
+    /// allowed with $172 already paid):
+    /// <list type="bullet">
+    ///   <item><description>it must be 1..N, N = the payers on the claim
+    ///     (2320 loops + this plan);</description></item>
+    ///   <item><description>when it disagrees with coverage-service or the
+    ///     837's SBR01 — or coverage-service cannot corroborate it — the
+    ///     approver must hold claims:override-approve and give a reason
+    ///     (<see cref="ExaminerApproval.PayerOrderOverrideAuthorized"/>);</description></item>
+    ///   <item><description>1 (primary) over a 2320 / 2430 payment above $0
+    ///     needs a second, different approver
+    ///     (<see cref="ExaminerApproval.SecondApproverId"/>).</description></item>
+    /// </list>
+    /// Then 1 → priced as primary; 2 or more → priced as that payer, which
+    /// needs the prior payers' data on the 837 for every earlier sequence.
+    /// Any failure keeps the claim pended (the approval is refused) with the
+    /// reason.
     /// </summary>
     private ClaimAdjudicationStageResult ResolveExaminerPayerOrder(
-        ClaimAdjudicationContext context, Activity? activity, int payerSequence)
+        ClaimAdjudicationContext context, Activity? activity, ExaminerApproval approval, int payerSequence,
+        IReadOnlyList<CobEntry>? entries, int? claimSequence)
     {
         activity?.SetTag("cob.examiner_payer_sequence", payerSequence);
         var classification = new ScenarioClassification(
@@ -401,6 +435,39 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             },
             IsMedicarePrimary: false, PrimaryPayerName: null, PrimaryPayerId: null);
 
+        var payers = (context.Claim.OtherPayers?.Count ?? 0) + 1;
+        if (payerSequence < 1 || payerSequence > payers)
+        {
+            return BuildDataPend(context, activity, classification, ExaminerSequenceOutOfRangePendReason,
+                $"Examiner payer sequence {payerSequence} is outside 1..{payers} (the payers on this claim).");
+        }
+
+        var coverageSequence = entries is null ? (int?)null : Classify(entries).Scenario switch
+        {
+            CobScenario.ChoPrimaryNoSecondary or CobScenario.ChoPrimaryWithSecondary => 1,
+            CobScenario.ChoSecondaryDetected => 2,
+            CobScenario.ChoTertiaryDetected => 3,
+            _ => (int?)null,
+        };
+        var coverageAgrees = coverageSequence is int c && (c >= 3 ? payerSequence >= 3 : payerSequence == c);
+        var sbr01Agrees = claimSequence is null || claimSequence == payerSequence;
+        if ((!coverageAgrees || !sbr01Agrees) && !approval.PayerOrderOverrideAuthorized)
+        {
+            return BuildDataPend(context, activity, classification, PayerOrderOverrideRequiredPendReason,
+                $"Examiner payer sequence {payerSequence} disagrees with " +
+                (coverageSequence is null ? "nothing coverage-service could confirm (unavailable)" : $"coverage-service ({coverageSequence}{(coverageSequence >= 3 ? "+" : "")})") +
+                $" / the 837 SBR01 ('{context.Claim.PayerResponsibilityCode}'); it needs claims:override-approve and a reason.");
+        }
+
+        if (payerSequence == 1 && PriorPaidAmount(context.Claim) > 0m
+            && (string.IsNullOrWhiteSpace(approval.SecondApproverId)
+                || string.Equals(approval.SecondApproverId, approval.ExaminerId, StringComparison.Ordinal)))
+        {
+            return BuildDataPend(context, activity, classification, PrimaryOverPriorPaymentPendReason,
+                $"The 837 shows prior payers paid {PriorPaidAmount(context.Claim):F2}; pricing this plan as primary " +
+                "needs a second, different approver.");
+        }
+
         if (payerSequence >= 2 && PriorPayerDataProblem(context.Claim, payerSequence) is { } problem)
         {
             return BuildDataPend(context, activity, classification, problem.Code,
@@ -411,11 +478,15 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
         {
             Scenario = classification.Scenario,
             ApplyCob = payerSequence >= 2,
-            PayerSequence = Math.Max(1, payerSequence),
+            PayerSequence = payerSequence,
             ConfirmedByExaminer = true,
         };
         return ClaimAdjudicationStageResult.Pass(StageName);
     }
+
+    /// <summary>What the 837's prior payers paid: 2320 AMT*D, else their 2430 SVD02 total.</summary>
+    internal static decimal PriorPaidAmount(AdapterClaim claim) =>
+        (claim.OtherPayers ?? []).Sum(p => p.PaidAmount ?? p.LineAdjudications.Sum(l => l.PaidAmount));
 
     /// <summary>
     /// A COB data / payer-order problem the stage cannot resolve: pend in

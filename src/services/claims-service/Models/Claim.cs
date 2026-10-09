@@ -305,6 +305,27 @@ public class Claim
     public AiExamination? AiExamination { get; set; }
 
     /// <summary>
+    /// Audit trail of examiner resolutions of this claim's pends (PR #1278
+    /// round 3): who approved or denied it, why, the payer order they
+    /// confirmed, and exactly which pends their decision overrode. Persisted
+    /// on the claim and carried on the ClaimVersionResolved event.
+    /// </summary>
+    public List<ExaminerResolutionRecord> ExaminerResolutions { get; set; } = new();
+
+    /// <summary>
+    /// A first approval waiting for a second, different approver (sequence
+    /// 1 over a prior payer that paid). Null when none is waiting.
+    /// </summary>
+    public PendingExaminerApproval? PendingExaminerApproval { get; set; }
+
+    /// <summary>
+    /// Held while an examiner resolution re-adjudicates the claim, so two
+    /// concurrent approvals cannot both re-run and publish (taken with a
+    /// conditional write on Pended + no live lock).
+    /// </summary>
+    public ExaminerResolutionLock? ResolutionLock { get; set; }
+
+    /// <summary>
     /// Prior authorization number (if required)
     /// 837: REF*G1 (2300 loop)
     /// </summary>
@@ -1279,6 +1300,53 @@ public class PendDetails
     /// to the examiner.
     /// </summary>
     public List<string> AdditionalPendReasons { get; set; } = new();
+}
+
+/// <summary>One examiner resolution of a pended claim (see <see cref="Claim.ExaminerResolutions"/>).</summary>
+[BsonIgnoreExtraElements]
+public class ExaminerResolutionRecord
+{
+    /// <summary>Approved | Denied.</summary>
+    public string Disposition { get; set; } = string.Empty;
+
+    /// <summary>Every approver, in order (two for a second-approver sign-off).</summary>
+    public List<string> ApproverIds { get; set; } = new();
+
+    public string? Reason { get; set; }
+
+    /// <summary>The payer order the examiner confirmed for a COB pend.</summary>
+    public int? PayerSequence { get; set; }
+
+    /// <summary>The persisted pends the examiner reviewed ("{code}: {reason}").</summary>
+    public List<string> ReviewedPends { get; set; } = new();
+
+    /// <summary>The pends the approval re-run overrode ("{stage}: {code}: {reason}").</summary>
+    public List<string> OverriddenPends { get; set; } = new();
+
+    /// <summary>When the (first) approver acted.</summary>
+    public DateTime RequestedAt { get; set; }
+
+    /// <summary>When the resolution completed.</summary>
+    public DateTime ResolvedAt { get; set; }
+}
+
+/// <summary>A first approval waiting for a second approver (see <see cref="Claim.PendingExaminerApproval"/>).</summary>
+[BsonIgnoreExtraElements]
+public class PendingExaminerApproval
+{
+    public string RequestedBy { get; set; } = string.Empty;
+    public int? PayerSequence { get; set; }
+    public string? Reason { get; set; }
+    public DateTime RequestedAt { get; set; }
+}
+
+/// <summary>See <see cref="Claim.ResolutionLock"/>.</summary>
+[BsonIgnoreExtraElements]
+public class ExaminerResolutionLock
+{
+    public string Token { get; set; } = string.Empty;
+    public string? LockedBy { get; set; }
+    public DateTime ExpiresAt { get; set; }
 }
 
 /// <summary>

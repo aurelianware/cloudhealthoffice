@@ -137,10 +137,12 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
 
         // Review pends below are what an examiner resolves by approving the
-        // claim (ExaminerApproval): the approval re-run skips them.
-        var examinerApproved = context.ExaminerApproval is not null;
+        // claim (ExaminerApproval) — but only the exact finding they reviewed
+        // (PR #1278 round 3, B1): a new retro plan change, subrogation / TPL
+        // indicator or spend-down still pends and the approval is refused.
 
-        if (!examinerApproved && HasUnreconciledRetroactivePlanChange(context.ResolvedMember, claim.ServiceDateFrom, out var pendReason))
+        if (HasUnreconciledRetroactivePlanChange(context.ResolvedMember, claim.ServiceDateFrom, out var pendReason)
+            && !ApprovedByExaminer(context, RetroactivePlanChangePendCode, pendReason))
         {
             context.PendDetails = new PendDetails
             {
@@ -152,7 +154,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pend(StageName, pendReason);
         }
 
-        if (!examinerApproved && HasUnreviewedSubrogationIndicator(claim, out var subrogationReason))
+        if (HasUnreviewedSubrogationIndicator(claim, out var subrogationReason)
+            && !ApprovedByExaminer(context, SubrogationReviewPendCode, subrogationReason))
         {
             context.PendDetails = new PendDetails
             {
@@ -164,7 +167,8 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pend(StageName, subrogationReason);
         }
 
-        if (!examinerApproved && HasUnmetMedicaidSpendDown(context.ResolvedMember, out var spendDownReason))
+        if (HasUnmetMedicaidSpendDown(context.ResolvedMember, out var spendDownReason)
+            && !ApprovedByExaminer(context, MedicaidSpendDownPendCode, spendDownReason))
         {
             context.PendDetails = new PendDetails
             {
@@ -513,18 +517,23 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     }
 
     /// <summary>
-    /// The engine's coordination-of-benefits input, from the claim's 837
-    /// payer data: this plan's sequence from 2000B SBR01, and every other
-    /// payer sequenced before it (2320 SBR01) with its 2320 AMT*D / CAS and
-    /// 2430 SVD / CAS. Null — no COB — when this plan is the first payer, its
-    /// sequence is unknown (SBR01 U or absent), or no earlier payer is on
-    /// the claim. Standard (complementary) COB is the model: the claim does
-    /// not carry the plan's COB method.
+    /// The approval re-run's examiner reviewed exactly this pend: it is
+    /// recorded as overridden and pricing goes on.
     /// </summary>
+    private static bool ApprovedByExaminer(ClaimAdjudicationContext context, string code, string? reason)
+    {
+        if (context.ExaminerApproval is not { } approval || !approval.Reviewed(code, reason, exactReason: true))
+            return false;
+        context.ExaminerOverrides.Add($"{StageName}: {code}: {reason}");
+        return true;
+    }
+
     /// <summary>
     /// True when the 837 (2000B SBR01) or coverage-service puts this plan
     /// after another payer and COB was not cleared (<see cref="CobOutcome.ApplyCob"/>)
-    /// — except when an examiner confirmed on approval that it is primary.
+    /// — except when an examiner confirmed on approval that it is primary
+    /// (the COB stage checks that confirmation: range, permission and, over
+    /// a prior payment, a second approver).
     /// </summary>
     internal static bool IsLaterPayerWithoutCob(ClaimAdjudicationContext context)
     {
@@ -536,6 +545,15 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         return claimSaysLater || coverageSaysLater;
     }
 
+    /// <summary>
+    /// The engine's coordination-of-benefits input, from the claim's 837
+    /// payer data: this plan's sequence from 2000B SBR01, and every other
+    /// payer sequenced before it (2320 SBR01) with its 2320 AMT*D / CAS and
+    /// 2430 SVD / CAS. Null — no COB — when this plan is the first payer, its
+    /// sequence is unknown (SBR01 U or absent), or no earlier payer is on
+    /// the claim. Standard (complementary) COB is the model: the claim does
+    /// not carry the plan's COB method.
+    /// </summary>
     internal static CobInfo? BuildCob(AdapterClaim claim, int? sequence = null)
     {
         var ourSequence = sequence ?? PayerResponsibility.ToSequence(claim.PayerResponsibilityCode);

@@ -68,12 +68,27 @@ internal sealed class GoldenScenario
     public string? PendingReviewStage { get; init; }
 
     /// <summary>
+    /// Further review stages (Order 120+): each pends with its code and
+    /// reason on the first run, <see cref="ReviewStage.RerunReason"/> on an
+    /// approval re-run (a different finding), or only on the re-run
+    /// (<see cref="ReviewStage.OnlyOnRerun"/> — e.g. provider integrity
+    /// unreachable when the approval re-runs).
+    /// </summary>
+    public IReadOnlyList<ReviewStage> ReviewStages { get; init; } = [];
+
+    /// <summary>Every approval is expected to be refused: the claim stays pended.</summary>
+    public bool ExpectApprovalsRefused { get; init; }
+
+    /// <summary>
     /// Examiner approvals tried in order on a pended claim (the controller's
     /// resolve flow): each re-adjudicates through
     /// <see cref="ClaimAdjudicationOrchestrator.ReadjudicateForApprovalAsync"/>.
     /// Refused ones must write no accumulators; the last must pass.
     /// </summary>
     public IReadOnlyList<ExaminerApproval> Approvals { get; init; } = [];
+
+    /// <summary>See <see cref="ReviewStages"/>.</summary>
+    public sealed record ReviewStage(string Name, string Code, string Reason, string? RerunReason = null, bool OnlyOnRerun = false);
 
     /// <summary>Payment-run date (BPR16); fixed so the 835 is reproducible.</summary>
     public DateTime PaymentDate { get; init; } = new(2026, 5, 15, 0, 0, 0, DateTimeKind.Utc);
@@ -89,6 +104,9 @@ internal sealed record GoldenPathResult(
 {
     /// <summary>Outcome of each examiner approval attempt, in order (empty when the claim did not pend).</summary>
     public IReadOnlyList<ClaimAdjudicationOutcome> ApprovalOutcomes { get; init; } = [];
+
+    /// <summary>The unresolved reasons of each approval attempt, in order.</summary>
+    public IReadOnlyList<IReadOnlyList<string>> ApprovalReasons { get; init; } = [];
 
     /// <summary>Accumulator updates the engine had written before the approval that passed.</summary>
     public int AccumulatorUpdatesBeforeApproval { get; init; }
@@ -195,7 +213,11 @@ internal sealed class GoldenPathHarness
 
             var stageList = new List<IClaimAdjudicationStage>();
             if (scenario.PendingReviewStage is { } reviewStage)
-                stageList.Add(new PendingReviewStage(reviewStage));
+                stageList.Add(new PendingReviewStage(new GoldenScenario.ReviewStage(
+                    reviewStage, "DUPLICATE", "Possible duplicate of an earlier claim.")));
+            var reviewOrder = 121;
+            foreach (var review in scenario.ReviewStages)
+                stageList.Add(new PendingReviewStage(review, reviewOrder++));
             var stages = new IClaimAdjudicationStage[]
             {
                 new CoordinationOfBenefitsStage(
@@ -240,6 +262,7 @@ internal sealed class GoldenPathHarness
 
             // ── examiner resolve flow (pended claims) ───────────────────
             var approvalOutcomes = new List<ClaimAdjudicationOutcome>();
+            var approvalReasons = new List<IReadOnlyList<string>>();
             var updatesBeforeApproval = accumulators.Applied.Count;
             string? pendCode = null;
             if (scenario.Approvals.Count > 0)
@@ -249,13 +272,30 @@ internal sealed class GoldenPathHarness
                 pendCode = adjudicated.PendDetails?.PendCode;
                 // A pended claim is priced read-only: nothing written.
                 Assert.Empty(accumulators.Applied);
+                // ClaimsController.ResolvePendedClaim passes the persisted
+                // pend — what the examiner reviewed.
+                var reviewed = adjudicated.PendDetails;
                 foreach (var approval in scenario.Approvals)
                 {
-                    var rerun = await orchestrator.ReadjudicateForApprovalAsync(tenant, submitted.Id, approval, ct);
+                    var rerun = await orchestrator.ReadjudicateForApprovalAsync(
+                        tenant, submitted.Id, approval with { ReviewedPend = reviewed }, ct);
                     approvalOutcomes.Add(rerun.Outcome);
+                    approvalReasons.Add(rerun.UnresolvedReasons ?? []);
                     if (rerun.Outcome == ClaimAdjudicationOutcome.Pass) break;
                     // A refused approval writes no accumulators either.
                     Assert.Empty(accumulators.Applied);
+                }
+                if (scenario.ExpectApprovalsRefused)
+                {
+                    Assert.DoesNotContain(ClaimAdjudicationOutcome.Pass, approvalOutcomes);
+                    return new GoldenPathResult(adjudicated, null!, null!, null!, null!, string.Empty)
+                    {
+                        ApprovalOutcomes = approvalOutcomes,
+                        ApprovalReasons = approvalReasons,
+                        AccumulatorUpdatesBeforeApproval = updatesBeforeApproval,
+                        PendCode = pendCode,
+                        AccumulatorUpdates = accumulators.Applied.ToList(),
+                    };
                 }
                 Assert.Equal(ClaimAdjudicationOutcome.Pass, approvalOutcomes[^1]);
 
@@ -293,6 +333,7 @@ internal sealed class GoldenPathHarness
                 benefitResult!, run, edi835)
             {
                 ApprovalOutcomes = approvalOutcomes,
+                ApprovalReasons = approvalReasons,
                 AccumulatorUpdatesBeforeApproval = updatesBeforeApproval,
                 PendCode = pendCode,
                 AccumulatorUpdates = accumulators.Applied.ToList(),
@@ -305,24 +346,38 @@ internal sealed class GoldenPathHarness
     }
 
     /// <summary>
-    /// A review stage that pends every claim (a possible duplicate) — what
-    /// an examiner resolves by approving.
+    /// A review stage that pends the claim (a possible duplicate, a provider
+    /// integrity review, …) — what an examiner resolves by approving. It
+    /// records its pend the way the real stages do: a new
+    /// <see cref="Claims.PendDetails"/>, or an additional reason when the
+    /// claim is already pended.
     /// </summary>
-    private sealed class PendingReviewStage(string name) : IClaimAdjudicationStage
+    private sealed class PendingReviewStage(GoldenScenario.ReviewStage review, int order = 120) : IClaimAdjudicationStage
     {
-        public string Name => name;
-        public int Order => 120;
+        public string Name => review.Name;
+        public int Order => order;
         public bool IsRequired => false;
 
         public Task<ClaimAdjudicationStageResult> ExecuteAsync(ClaimAdjudicationContext context, CancellationToken ct)
         {
-            context.PendDetails = new Claims.PendDetails
+            var rerun = context.ExaminerApproval is not null;
+            if (review.OnlyOnRerun && !rerun)
+                return Task.FromResult(ClaimAdjudicationStageResult.Pass(review.Name));
+            var reason = rerun && review.RerunReason is { } changed ? changed : review.Reason;
+            if (context.PendDetails is null)
             {
-                PendCode = "DUPLICATE",
-                PendReason = "Possible duplicate of an earlier claim.",
-                PendedAt = DateTime.UtcNow,
-            };
-            return Task.FromResult(ClaimAdjudicationStageResult.Pend(name, "possible duplicate"));
+                context.PendDetails = new Claims.PendDetails
+                {
+                    PendCode = review.Code,
+                    PendReason = reason,
+                    PendedAt = DateTime.UtcNow,
+                };
+            }
+            else
+            {
+                context.PendDetails.AdditionalPendReasons.Add($"{review.Code}: {reason}");
+            }
+            return Task.FromResult(ClaimAdjudicationStageResult.Pend(review.Name, reason));
         }
     }
 

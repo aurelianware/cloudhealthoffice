@@ -26,7 +26,8 @@ public class GoldenPathTests
         string name, Action<InMemoryAccumulatorService>? prior = null, string? planDocument = null,
         IReadOnlyList<string>? otherCoverage = null,
         string? pendingReviewStage = null, IReadOnlyList<ExaminerApproval>? approvals = null,
-        string? goldenName = null)
+        string? goldenName = null,
+        IReadOnlyList<GoldenScenario.ReviewStage>? reviewStages = null, bool expectRefused = false)
     {
         var scenario = GoldenInputs.Scenario(prior);
         scenario = new GoldenScenario
@@ -39,8 +40,11 @@ public class GoldenPathTests
             OtherCoverage = otherCoverage ?? [],
             PendingReviewStage = pendingReviewStage,
             Approvals = approvals ?? [],
+            ReviewStages = reviewStages ?? [],
+            ExpectApprovalsRefused = expectRefused,
         };
         var result = await _harness.RunAsync(scenario, GoldenInputs.Edi837(name));
+        if (expectRefused) return result; // still pended: no 835
         X12835.AssertBalanced(result.Edi835);
         X12835.AssertMatchesGolden(goldenName ?? name, result.Edi835);
         return result;
@@ -323,10 +327,12 @@ public class GoldenPathTests
 
     // 07 with coverage-service showing no other coverage: the 837 says we
     // are tertiary — a payer-order mismatch, pended. A plain approval is
-    // refused (a COB pend is never paid as primary) and writes nothing. The
-    // examiner confirms payer sequence 3: the re-run applies tertiary COB —
-    // the golden 07 835 ($58.00) — and the deductible gets the NAIC credit
-    // ($60), the OOP $0.
+    // refused (a COB pend is never paid as primary) and writes nothing.
+    // Sequence 3 disagrees with coverage-service (primary), so it needs an
+    // approver with claims:override-approve and a reason (round 3, B2):
+    // without that it is refused too. With it, the re-run applies tertiary
+    // COB — the golden 07 835 ($58.00) — and the deductible gets the NAIC
+    // credit ($60), the OOP $0.
     [Fact]
     public async Task PendedCobMismatch_PlainApprovalRefused_ConfirmedPayerOrderApplies()
     {
@@ -336,15 +342,138 @@ public class GoldenPathTests
             [
                 new ExaminerApproval { ExaminerId = "examiner-1" },
                 new ExaminerApproval { ExaminerId = "examiner-1", PayerSequence = 3 },
+                new ExaminerApproval
+                {
+                    ExaminerId = "supervisor-1", PayerSequence = 3, Reason = "EOBs show two payers",
+                    PayerOrderOverrideAuthorized = true,
+                },
             ]);
 
         Assert.Equal("COB", r.PendCode);
         Assert.Equal(0, r.AccumulatorUpdatesBeforeApproval);
-        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pass },
+            r.ApprovalOutcomes);
+        Assert.Contains(r.ApprovalReasons[1], reason => reason.Contains("claims:override-approve"));
         AssertClaim(r, charge: 580m, allowed: 250m, paid: 58m, member: 0m);
         Assert.Equal(3, r.FinalizedClaim.AdjudicationResult!.CobPayerSequence);
         Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
         Assert.Equal(0m, Written(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    // ── Round 3, B1: the approval overrides only the reviewed pends ────
+
+    /// <summary>
+    /// The examiner reviewed a possible duplicate. When the approval
+    /// re-runs, provider integrity cannot be reached — a pend the examiner
+    /// never saw. It is not overridden: the approval is refused (the API
+    /// answers 409 for re-review) and nothing is written. Before, every
+    /// review-stage pend passed on the re-run and the claim paid a provider
+    /// nobody screened.
+    /// </summary>
+    [Fact]
+    public async Task Approval_NewProviderIntegrityPendOnTheRerun_IsRefused()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            pendingReviewStage: "DuplicateClaim",
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW",
+                    "Billing: Provider integrity check could not be reached.", OnlyOnRerun: true),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Contains(r.ApprovalReasons[0], reason => reason.StartsWith("ProviderIntegrity:"));
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    /// <summary>
+    /// The examiner reviewed "duplicate of CLM-1"; the re-run finds a
+    /// duplicate of a different claim. Same code, a new finding: refused.
+    /// </summary>
+    [Fact]
+    public async Task Approval_DifferentDuplicateOnTheRerun_IsRefused()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("DuplicateClaim", "DUPLICATE",
+                    "Line 1 duplicates CLM-1 line 1.", RerunReason: "Line 1 duplicates CLM-2 line 1."),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    /// <summary>
+    /// The pend the examiner reviewed — a provider-integrity manual review
+    /// and an NCCI edit added after it — is exactly what the re-run finds:
+    /// both are overridden and the claim pays, writing its accumulators.
+    /// </summary>
+    [Fact]
+    public async Task Approval_TheReviewedPendsOnly_AreOverridden()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW", "Billing: manual review required."),
+                new GoldenScenario.ReviewStage("NcciEdits", "NCCI", "1 NCCI/MUE edit failure."),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }]);
+
+        Assert.Equal("MEDREVIEW", r.PendCode);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        AssertClaim(r, charge: 180m, allowed: 100m, paid: 32m, member: 68m);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+    }
+
+    // ── Round 3, B2: payerSequence ────────────────────────────────────
+
+    /// <summary>
+    /// The reviewer's case: golden 07 approved with payerSequence 1 paid
+    /// $152 although the primary and secondary had paid $172 of $250
+    /// allowed — $324 in all. Even an override-authorized approver alone
+    /// cannot price it as primary over a prior payment: it needs a second,
+    /// different approver. Refused; nothing written.
+    /// </summary>
+    [Fact]
+    public async Task Golden07_ApprovedAsPrimary_BySingleApprover_IsRefused()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            otherCoverage: [],
+            approvals:
+            [
+                new ExaminerApproval
+                {
+                    ExaminerId = "supervisor-1", PayerSequence = 1, Reason = "member says no other coverage",
+                    PayerOrderOverrideAuthorized = true,
+                },
+            ],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Contains(r.ApprovalReasons[0], reason => reason.Contains("second, different approver"));
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    [Fact]
+    public async Task Golden07_PayerSequenceOutOfRange_IsRefused_NotClamped()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            otherCoverage: [],
+            approvals:
+            [
+                new ExaminerApproval { ExaminerId = "supervisor-1", PayerSequence = 0, PayerOrderOverrideAuthorized = true, Reason = "x" },
+                new ExaminerApproval { ExaminerId = "supervisor-1", PayerSequence = 4, PayerOrderOverrideAuthorized = true, Reason = "x" },
+            ],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.All(r.ApprovalReasons, reasons => Assert.Contains(reasons, reason => reason.Contains("outside 1..3")));
+        Assert.Empty(r.AccumulatorUpdates);
     }
 
     private static decimal Applied(GoldenPathResult r, AccumulatorType type) =>

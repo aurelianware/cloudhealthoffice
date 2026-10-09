@@ -18,7 +18,24 @@ namespace CloudHealthOffice.ClaimsService.Tests;
 
 public class ClaimsApiFactory : WebApplicationFactory<Program>
 {
-    public IClaimRepository ClaimRepository { get; } = Substitute.For<IClaimRepository>();
+    public IClaimRepository ClaimRepository { get; } = CreateClaimRepository();
+
+    /// <summary>The benefit engine (substitute): a denial of a pended claim reverses its accumulators here.</summary>
+    public IBenefitCalculationEngine BenefitEngine { get; } = Substitute.For<IBenefitCalculationEngine>();
+
+    /// <summary>
+    /// The examiner-resolution lock (round 3, L10) is free by default; tests
+    /// of a concurrent resolution reconfigure it.
+    /// </summary>
+    private static IClaimRepository CreateClaimRepository()
+    {
+        var repository = Substitute.For<IClaimRepository>();
+        repository.TryAcquireResolutionLockAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<DateTime>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        return repository;
+    }
     public IMassAdjudicationRunRepository MassAdjudicationRunRepository { get; } = Substitute.For<IMassAdjudicationRunRepository>();
     public IClaimAcknowledgmentService AcknowledgmentService { get; } = Substitute.For<IClaimAcknowledgmentService>();
     public IAiExaminationAuditRepository AuditRepository { get; } = Substitute.For<IAiExaminationAuditRepository>();
@@ -144,7 +161,7 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             {
                 services.Remove(descriptor);
             }
-            services.AddSingleton(Substitute.For<IBenefitCalculationEngine>());
+            services.AddSingleton(BenefitEngine);
 
             foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IClaimApprovalReadjudicator)).ToList())
                 services.Remove(descriptor);

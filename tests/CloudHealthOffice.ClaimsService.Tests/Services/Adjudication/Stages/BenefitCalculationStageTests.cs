@@ -359,6 +359,55 @@ public partial class BenefitCalculationStageTests
         await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
     }
 
+    /// <summary>
+    /// PR #1278 round 3 (B1): an approval re-run prices past a subrogation /
+    /// TPL pend only when the examiner reviewed exactly that finding; one
+    /// they did not see (another approval, another pend) still pends.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Execute_ApprovalRerun_OverridesTheSubrogationPendOnlyWhenReviewed(bool reviewed)
+    {
+        var claim = BuildClaim(Guid.NewGuid().ToString());
+        claim.RelatedCausesCode = "AA";
+        ClaimAdjudicationContext Context(ExaminerApproval? approval) => new()
+        {
+            TenantId = "tenant-1",
+            ClaimVersionId = claim.Id,
+            Claim = claim,
+            PricingResult = PricedAt(claim, 72m),
+            ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+            ExaminerApproval = approval,
+        };
+        var first = Context(null);
+        await _sut.ExecuteAsync(first, CancellationToken.None);
+        var persisted = first.PendDetails!;
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true });
+
+        var rerun = Context(new ExaminerApproval
+        {
+            ReviewedPend = reviewed
+                ? persisted
+                : new PendDetails { PendCode = "DUPLICATE", PendReason = "possible duplicate" },
+        });
+        var result = await _sut.ExecuteAsync(rerun, CancellationToken.None);
+
+        if (reviewed)
+        {
+            Assert.NotEqual(ClaimAdjudicationOutcome.Pend, result.Outcome);
+            Assert.Equal(new[] { $"BenefitCalculation: SUBRO: {persisted.PendReason}" }, rerun.ExaminerOverrides);
+            await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+            Assert.Empty(rerun.ExaminerOverrides);
+            await _engine.DidNotReceiveWithAnyArgs().CalculateAsync(default!, default);
+        }
+    }
+
     [Fact]
     public async Task Execute_ClaimHasNoRelatedCausesCode_ContinuesToBenefitEngine()
     {

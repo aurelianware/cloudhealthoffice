@@ -307,6 +307,9 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
     public async Task ResolvePendedClaim_CobPend_WithPayerSequence_ReadjudicatesThenApproves()
     {
         var claim = CobPendedClaim();
+        // Secondary per SBR01, with the primary's 2320 on the claim: sequence 2 is in range and agrees.
+        claim.PayerResponsibilityCode = "S";
+        claim.OtherPayers.Add(new ClaimOtherPayer { PayerResponsibilityCode = "P", PayerName = "Aetna", PaidAmount = 60m });
         _repo.GetByIdAsync(claim.Id).Returns(claim);
         _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
 

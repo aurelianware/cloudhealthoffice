@@ -195,6 +195,35 @@ public class ClaimVersionEventPublisherTests : IAsyncLifetime
         evt.Payload!["reason"]!.GetValue<string>().Should().Be("Documentation supports modifier 59");
     }
 
+    /// <summary>
+    /// PR #1278 round 3 (B2): the resolved event carries the persisted audit
+    /// record — approvers, reason, payer order, the pends overridden, times.
+    /// </summary>
+    [Fact]
+    public async Task Resolved_event_carries_the_examiner_resolution_record()
+    {
+        var version = Sample("V-AUDIT", state: ClaimVersionState.Adjudicated);
+        version.ExaminerResolutions.Add(new ExaminerResolutionRecord
+        {
+            Disposition = "Approved",
+            ApproverIds = ["supervisor-1", "supervisor-2"],
+            Reason = "confirmed with the member",
+            PayerSequence = 1,
+            ReviewedPends = ["COB: cob-payer-order-mismatch"],
+            OverriddenPends = ["DuplicateClaim: DUPLICATE: possible duplicate"],
+            RequestedAt = new DateTime(2026, 5, 1, 9, 0, 0, DateTimeKind.Utc),
+            ResolvedAt = new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc),
+        });
+
+        var evt = await _publisher.PublishVersionResolvedAsync(version, "Approved", "confirmed with the member", "supervisor-2", "c");
+
+        var record = evt.Payload!["examinerResolution"]!.AsObject();
+        record["approverIds"]!.AsArray().Select(n => n!.GetValue<string>()).Should().Equal("supervisor-1", "supervisor-2");
+        record["payerSequence"]!.GetValue<int>().Should().Be(1);
+        record["overriddenPends"]!.AsArray().Should().ContainSingle();
+        record["reviewedPends"]![0]!.GetValue<string>().Should().Be("COB: cob-payer-order-mismatch");
+    }
+
     [Fact]
     public async Task Document_id_is_tenant_scoped_for_dedup()
     {

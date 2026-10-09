@@ -156,4 +156,102 @@ public partial class CoordinationOfBenefitsStageTests
         Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
         Assert.False(ctx.CobResult!.ApplyCob);
     }
+
+    // ── PR #1278 round 3, B2: the examiner's payer order ──────────────
+
+    private static ClaimAdjudicationContext Approving(AdapterClaim claim, ExaminerApproval approval)
+    {
+        var ctx = NewContext(claim);
+        ctx.ExaminerApproval = approval;
+        return ctx;
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public async Task Examiner_SequenceOutsideThePayersOnTheClaim_Pends_NotClamped(int sequence)
+    {
+        CoverageSays("P", "S");
+        var ctx = Approving(ClaimAs("T", Payer("P", 112m, "A"), Payer("S", 60m, "B")),
+            new ExaminerApproval { PayerSequence = sequence, PayerOrderOverrideAuthorized = true });
+
+        var result = await NewStage().ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(CoordinationOfBenefitsStage.ExaminerSequenceOutOfRangePendReason, ctx.CobResult!.PendReason);
+        Assert.False(ctx.CobResult.ConfirmedByExaminer);
+    }
+
+    /// <summary>Coverage-service says primary; the examiner says tertiary: needs override authority.</summary>
+    [Fact]
+    public async Task Examiner_DisagreeingWithCoverage_NeedsOverrideAuthority()
+    {
+        CoverageSays();
+        var claim = ClaimAs("T", Payer("P", 112m, "A"), Payer("S", 60m, "B"));
+
+        var plain = Approving(claim, new ExaminerApproval { PayerSequence = 3 });
+        var authorized = Approving(claim, new ExaminerApproval { PayerSequence = 3, PayerOrderOverrideAuthorized = true });
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, (await NewStage().ExecuteAsync(plain, CancellationToken.None)).Outcome);
+        Assert.Equal(CoordinationOfBenefitsStage.PayerOrderOverrideRequiredPendReason, plain.CobResult!.PendReason);
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, (await NewStage().ExecuteAsync(authorized, CancellationToken.None)).Outcome);
+        Assert.Equal(3, authorized.CobResult!.PayerSequence);
+        Assert.True(authorized.CobResult.ApplyCob);
+    }
+
+    /// <summary>Coverage-service unavailable: nothing corroborates the examiner's order.</summary>
+    [Fact]
+    public async Task Examiner_CoverageUnavailable_NeedsOverrideAuthority()
+    {
+        _coverageClient.GetCobEntriesAsync(TenantId, MemberId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<CobEntry>?)null);
+        var ctx = Approving(ClaimAs("S", Payer("P", 80m, "A")), new ExaminerApproval { PayerSequence = 2 });
+
+        await NewStage().ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(CoordinationOfBenefitsStage.PayerOrderOverrideRequiredPendReason, ctx.CobResult!.PendReason);
+    }
+
+    /// <summary>Agreeing with coverage-service and SBR01 needs no override authority.</summary>
+    [Fact]
+    public async Task Examiner_AgreeingWithCoverageAndSbr01_Passes()
+    {
+        CoverageSays("P");
+        var ctx = Approving(ClaimAs("S", Payer("P", 80m, "A")), new ExaminerApproval { PayerSequence = 2 });
+
+        var result = await NewStage().ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        Assert.True(ctx.CobResult!.ApplyCob);
+    }
+
+    /// <summary>
+    /// Primary over a prior payment ($172 on golden 07) needs a second,
+    /// different approver — the same approver twice does not count.
+    /// </summary>
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("supervisor-1", false)]
+    [InlineData("supervisor-2", true)]
+    public async Task Examiner_PrimaryOverPriorPayment_NeedsASecondDifferentApprover(string? second, bool passes)
+    {
+        CoverageSays();
+        var ctx = Approving(ClaimAs("T", Payer("P", 112m, "A"), Payer("S", 60m, "B")), new ExaminerApproval
+        {
+            ExaminerId = "supervisor-1", SecondApproverId = second, PayerSequence = 1, PayerOrderOverrideAuthorized = true,
+        });
+
+        var result = await NewStage().ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(passes ? ClaimAdjudicationOutcome.Pass : ClaimAdjudicationOutcome.Pend, result.Outcome);
+        if (passes)
+        {
+            Assert.Equal(1, ctx.CobResult!.PayerSequence);
+            Assert.True(ctx.CobResult.ConfirmedByExaminer);
+        }
+        else
+        {
+            Assert.Equal(CoordinationOfBenefitsStage.PrimaryOverPriorPaymentPendReason, ctx.CobResult!.PendReason);
+        }
+    }
 }

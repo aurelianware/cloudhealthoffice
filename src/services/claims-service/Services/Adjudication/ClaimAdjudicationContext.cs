@@ -160,6 +160,12 @@ public class ClaimAdjudicationContext
     public ExaminerApproval? ExaminerApproval { get; set; }
 
     /// <summary>
+    /// The pends an approval re-run overrode ("{stage}: {code}: {reason}"),
+    /// for the persisted audit record. Empty outside an approval re-run.
+    /// </summary>
+    public List<string> ExaminerOverrides { get; } = new();
+
+    /// <summary>
     /// AI-backed examination invocation outcome populated by
     /// <see cref="Stages.AiExaminationStage"/> (capability 5.9). Null
     /// until the stage runs. α posture (mirrors 5.4 scrubbing / 5.8 CoB):
