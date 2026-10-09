@@ -218,6 +218,26 @@ public class ClaimsToPaymentContractTests
     }
 
     /// <summary>
+    /// claims-service carries no pay-to provider (837 2010AB): payToProviderNPI
+    /// never arrives, so the payee is the billing provider, named by
+    /// billingProviderName. A long name is cut to N102's 60 characters only
+    /// when the 835 is written.
+    /// </summary>
+    [Fact]
+    public async Task NoPayToProviderOnTheWire_PayeeIsTheBillingProvider()
+    {
+        var claim = AdjudicatedClaim(Claims.ClaimStatus.Approved);
+        claim.BillingProviderName = new string('N', 300);
+
+        var dto = await RoundTrip(claim);
+
+        Assert.Null(dto.PayToProviderNPI);
+        Assert.False(dto.HasDistinctPayToProvider);
+        Assert.Equal(300, dto.PayeeNameOr(dto.BillingProviderNPI).Length);
+        Assert.Equal(new string('N', 60), Pay.Era835Names.N102(dto.PayeeNameOr(dto.BillingProviderNPI)));
+    }
+
+    /// <summary>
     /// claims-service's 837I header detail (<c>Claim.Institutional</c>) and
     /// <c>Claim.ClaimFrequencyCode</c> reach the 835 CLP as CLP08 facility type
     /// code, CLP09 frequency code and CLP11 DRG.

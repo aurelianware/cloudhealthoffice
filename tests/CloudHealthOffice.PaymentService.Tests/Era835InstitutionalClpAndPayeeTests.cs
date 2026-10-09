@@ -181,4 +181,88 @@ public class Era835InstitutionalClpAndPayeeTests
     {
         Assert.Equal("ACME CLINIC", new ClaimDto { ProviderName = "  ACME CLINIC " }.PayeeNameOr("x"));
     }
+
+    // ── Pay-to provider: N102 never names a different organization than N104 ──
+
+    [Fact]
+    public void DistinctPayToNpi_PayeeNameIsThePayToNpi_NotTheBillingProviderName()
+    {
+        var dto = new ClaimDto
+        {
+            BillingProviderNPI = "1234567893", PayToProviderNPI = "1999999976", ProviderName = "ACME BILLING GROUP",
+        };
+
+        Assert.True(dto.HasDistinctPayToProvider);
+        Assert.Equal("1999999976", dto.PayeeNameOr(dto.BillingProviderNPI));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("1234567893")]
+    [InlineData(" 1234567893 ")]
+    public void PayToNpiAbsentOrSameAsBilling_PayeeNameIsTheBillingProviderName(string? payTo)
+    {
+        var dto = new ClaimDto { BillingProviderNPI = "1234567893", PayToProviderNPI = payTo, ProviderName = "ACME CLINIC" };
+
+        Assert.False(dto.HasDistinctPayToProvider);
+        Assert.Equal("ACME CLINIC", dto.PayeeNameOr(dto.BillingProviderNPI));
+    }
+
+    // ── N102 length: 60 in 005010; billingProviderName can be 300 ──────────
+
+    private static Payment PayeeOnly(string payeeName, bool reversal = false)
+    {
+        var cp = new ClaimPayment
+        {
+            ClaimId = "c1", PatientControlNumber = "CLM-1", ClaimStatusCode = reversal ? "22" : "1",
+            ChargeAmount = reversal ? -100m : 100m, PaymentAmount = reversal ? -100m : 100m,
+        };
+        return new Payment
+        {
+            CheckNumber = "0001000001", PaymentMethod = "CHK", TotalPaymentAmount = cp.PaymentAmount,
+            PaymentDate = new DateTime(2026, 4, 2), PayerName = "CHO", PayerId = "CHO",
+            PayeeName = payeeName, PayeeNPI = "1234567893", IsReversal = reversal,
+            ClaimPayments = new List<ClaimPayment> { cp },
+        };
+    }
+
+    private static string N102(string edi) =>
+        edi.Split('~').Select(s => s.Trim().Split('*')).Single(s => s[0] == "N1" && s[1] == "PE")[2];
+
+    private static string BatchN102(Payment payment) => N102(
+        new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance)
+            .GenerateBatch(new[] { new EraPaymentInput { TradingPartnerId = "TP", Payment = payment } },
+                new Dictionary<string, TradingPartnerInfo> { ["TP"] = new() { OriginatingCompanyId = "1123456789" } })
+            .Single().EdiContent);
+
+    private static string SingleN102(Payment payment) => N102(
+        new EraGeneratorService(NullLogger<EraGeneratorService>.Instance)
+            .Generate835(payment, new TradingPartnerInfo { OriginatingCompanyId = "1123456789" }));
+
+    [Theory]
+    [InlineData(60, 60)]
+    [InlineData(61, 60)]
+    [InlineData(300, 60)]
+    public void PayeeName_IsCutAt60_InPaymentReversalAndSingleEraPaths(int length, int expected)
+    {
+        var name = string.Concat(Enumerable.Range(0, length).Select(i => (char)('A' + i % 26)));
+
+        foreach (var n102 in new[] { BatchN102(PayeeOnly(name)), BatchN102(PayeeOnly(name, reversal: true)), SingleN102(PayeeOnly(name)) })
+        {
+            Assert.Equal(expected, n102.Length);
+            Assert.Equal(name[..expected], n102);
+        }
+    }
+
+    [Fact]
+    public void N102_TrimsBeforeAndAfterTheCut_AndReplacesDelimiters()
+    {
+        // 59 characters then a space at position 60: the cut leaves no trailing space.
+        var name = "  " + new string('A', 59) + " B" + new string('C', 20);
+
+        Assert.Equal(new string('A', 59), Era835Names.N102(name));
+        Assert.Equal("ACME CLINIC  LLC", Era835Names.N102(" ACME*CLINIC~:LLC "));
+        Assert.Equal(string.Empty, Era835Names.N102(null));
+    }
 }

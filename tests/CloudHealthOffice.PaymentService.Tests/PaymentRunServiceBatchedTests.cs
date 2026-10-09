@@ -495,6 +495,25 @@ public class PaymentRunServiceBatchedTests
         Assert.Equal(8, b.Single(s => s[0] == "CLP").Length); // professional: ends at CLP07
     }
 
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DistinctPayToNpi_PayeeNameIsThePayToNpi_NotTheBillingProviderName()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var claim = ClaimWithLines("c-payto", 80m, 80m);
+        claim.ProviderName = "ACME BILLING GROUP"; // the billing provider (NPI-A), not the payee
+        claim.PayToProviderNPI = "NPI-B";
+        SetupClaimsResponse(new[] { claim }, Array.Empty<ClaimDto>());
+        var (envelopes, payments) = SetupRealGenerator();
+
+        await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(("NPI-B", "NPI-B"), (Assert.Single(payments).PayeeNPI, payments[0].PayeeName));
+        var segments = Segments(Assert.Single(envelopes).EdiContent);
+        Assert.Equal(new[] { "N1", "PE", "NPI-B", "XX", "NPI-B" }, segments.Single(s => s[0] == "N1" && s[1] == "PE"));
+    }
+
     // ── Denials: zero-pay claims in the run's 835 ─────────────────────────
 
     private void SetupClaimsResponse(IEnumerable<ClaimDto> approved, IEnumerable<ClaimDto> denied)

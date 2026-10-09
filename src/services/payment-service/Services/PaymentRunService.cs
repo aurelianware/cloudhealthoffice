@@ -1131,15 +1131,34 @@ public class ClaimDto
 
     /// <summary>
     /// The billing provider's name (claims-service <c>Claim.BillingProviderName</c>,
-    /// sent as <c>billingProviderName</c>): the payee name in N1*PE (1000B).
-    /// Null when the 837 carried none; see <see cref="PayeeNameOr"/>.
+    /// sent as <c>billingProviderName</c>). Null when the 837 carried none;
+    /// see <see cref="PayeeNameOr"/>.
     /// </summary>
     [JsonPropertyName("billingProviderName")]
     public string? ProviderName { get; set; }
 
-    /// <summary>The N1*PE payee name: <see cref="ProviderName"/>, or <paramref name="fallback"/> when it is blank.</summary>
+    /// <summary>
+    /// True when the claim names a pay-to provider NPI different from the
+    /// billing provider NPI: the payee (N104) is then the pay-to provider.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasDistinctPayToProvider =>
+        !string.IsNullOrWhiteSpace(PayToProviderNPI)
+        && !string.Equals(PayToProviderNPI.Trim(), BillingProviderNPI?.Trim(), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The N1*PE (1000B) payee name. The billing provider's name only when the
+    /// payee is the billing provider: with a distinct pay-to NPI the billing
+    /// name would label a different organization than N104, so the pay-to NPI
+    /// is the name (claims-service sends no pay-to name). Otherwise
+    /// <see cref="ProviderName"/>, or <paramref name="fallback"/> when it is
+    /// blank. Not length-limited here: N102 is cut to 60 characters when the
+    /// 835 is written (<see cref="Era835Names.N102"/>).
+    /// </summary>
     public string PayeeNameOr(string fallback) =>
-        string.IsNullOrWhiteSpace(ProviderName) ? fallback : ProviderName.Trim();
+        HasDistinctPayToProvider ? PayToProviderNPI!.Trim()
+        : string.IsNullOrWhiteSpace(ProviderName) ? fallback
+        : ProviderName.Trim();
 
     public string? PayerClaimControlNumber { get; set; }
 
