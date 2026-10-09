@@ -200,6 +200,66 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
 
     // ── payment runs: releasing money ─────────────────────────────────
 
+    // ── FFS EFT file and provider receivables ─────────────────────────
+
+    [Fact]
+    public async Task EftFile_WithoutPaymentsApprove_Is403_AndNothingIsRead()
+    {
+        PendingRun("run-eft-1", Maker);
+
+        var response = await PreparerWithoutFinanceWrite().PostAsync("/api/paymentruns/run-eft-1/eft-file", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await _f.Runs.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+    }
+
+    [Fact]
+    public async Task EftFile_WithServiceToken_Is403()
+    {
+        PendingRun("run-eft-2", Maker);
+
+        var response = await ServiceToken().PostAsync("/api/paymentruns/run-eft-2/eft-file", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await _f.Runs.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+    }
+
+    [Fact]
+    public async Task EftFile_ForARunThatIsNotCompleted_Is400_AndNoFileIsPinned()
+    {
+        PendingRun("run-eft-3", Maker);
+
+        var response = await As(Approver, ChoRolePermissions.FinanceApprover).PostAsync("/api/paymentruns/run-eft-3/eft-file", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _f.Runs.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+    }
+
+    [Fact]
+    public async Task Receivables_AreReadableWithPaymentsRead_AndScopedToTheTokenTenant()
+    {
+        var store = _f.Services.GetRequiredService<global::PaymentService.Repositories.IProviderReceivableRepository>();
+        await store.CreateIfAbsentAsync(new ProviderReceivableRecord
+        {
+            Id = "rcv-pipeline-1", TenantId = Tenant, ProviderNpi = "1234567890", OriginalAmount = 10m, OutstandingAmount = 10m,
+            OriginatedAt = DateTime.UtcNow.AddDays(-40),
+        });
+        await store.CreateIfAbsentAsync(new ProviderReceivableRecord
+        {
+            Id = "rcv-pipeline-2", TenantId = OtherTenant, ProviderNpi = "1234567890", OriginalAmount = 99m, OutstandingAmount = 99m,
+            OriginatedAt = DateTime.UtcNow,
+        });
+
+        var list = await As(Maker, ChoRolePermissions.Finance).GetFromJsonAsync<List<ProviderReceivableRecord>>("/api/receivables", Json);
+        var aging = await As(Maker, ChoRolePermissions.Finance).GetFromJsonAsync<ReceivableAgingReport>("/api/receivables/aging", Json);
+
+        Assert.Equal(new[] { "rcv-pipeline-1" }, list!.Select(r => r.Id));
+        Assert.Equal(10m, aging!.TotalOutstanding);
+        Assert.Equal(10m, aging.Buckets[ReceivableAgingBucket.Days31To60]);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await As(Maker, ChoRolePermissions.Finance).GetAsync("/api/receivables/rcv-pipeline-2")).StatusCode);
+    }
+
     [Fact]
     public async Task ExecuteRun_WithoutPaymentsApprove_Is403_AndNothingIsReleased()
     {

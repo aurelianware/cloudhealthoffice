@@ -59,6 +59,7 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IEraEnvelopeRepository, EraEnvelopeRepositoryMongo>();
     builder.Services.AddScoped<IClaimReservationRepository, ClaimReservationRepositoryMongo>();
     builder.Services.AddScoped<IReservationAuditLog, ReservationAuditLogMongo>();
+    builder.Services.AddScoped<IProviderReceivableRepository, ProviderReceivableRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -87,8 +88,35 @@ else
     // in-memory fallback. payment-service's canonical store is Mongo;
     // Cosmos paths are dev-only and don't need durable EraEnvelope storage.
     builder.Services.AddSingleton<IEraEnvelopeRepository, InMemoryEraEnvelopeRepository>();
+    // Same for the provider receivable ledger: durable on Mongo only.
+    builder.Services.AddSingleton<IProviderReceivableRepository, InMemoryProviderReceivableRepository>();
     Console.WriteLine("Using Cosmos DB repository");
 }
+
+// Provider receivables: opened by reversal runs whose 835 nets below zero
+// (PLB FB), recovered by later payment runs as a positive PLB (FB, or WO with
+// Receivables:RecoveryAdjustmentCode) that lowers BPR02 and the EFT credit.
+builder.Services.AddScoped<IProviderReceivableLedger, ProviderReceivableLedger>();
+
+// FFS EFT: the payee's approved bank account (dual control) is read from
+// provider-service's service-only payee read, with payment-service's own token
+// inside an approved run execution or EFT-file generation (RunExecutionGrant).
+// Without ProviderService:BaseUrl no account is read: execution keeps the run's
+// payment method and EFT-file generation refuses.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["ProviderService:BaseUrl"]))
+{
+    builder.Services.AddHttpClient(HttpProviderPayeeAccountSource.HttpClientName, client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration["ProviderService:BaseUrl"]!);
+        client.Timeout = TimeSpan.FromSeconds(10);
+    }).AddRunExecutionServiceToken();
+    builder.Services.AddScoped<IProviderPayeeAccountSource, HttpProviderPayeeAccountSource>();
+}
+else
+{
+    builder.Services.AddSingleton<IProviderPayeeAccountSource, UnconfiguredProviderPayeeAccountSource>();
+}
+builder.Services.AddScoped<IFfsEftFileService, FfsEftFileService>();
 
 // Services
 builder.Services.AddScoped<IPaymentRunService, PaymentRunService>();

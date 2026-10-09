@@ -90,10 +90,12 @@ public class ReversalRun
     /// <summary>
     /// What providers owe after this run's 835s: one entry per envelope whose
     /// claims netted below zero. Such an 835 carries BPR02 = 0 and a PLB
-    /// forward-balance (FB) adjustment of the negative balance. payment-service
-    /// has no receivable ledger yet; recovering these amounts (a positive FB
-    /// PLB on a later payment 835, or a refund request) is a follow-up, so they
-    /// are recorded here for finance.
+    /// forward-balance (FB) adjustment of the negative balance. Each one is
+    /// also recorded in the provider receivable ledger
+    /// (<c>ProviderReceivableRecord</c>, <see cref="ProviderReceivable.ReceivableId"/>),
+    /// which later payment runs recover through a positive PLB offset against
+    /// the provider's payments. This list stays as the run's snapshot of what
+    /// it created; the ledger holds what is still outstanding.
     /// </summary>
     public List<ProviderReceivable> OutstandingReceivables { get; set; } = new();
 
@@ -239,6 +241,15 @@ public class ProviderReceivable
 
     /// <summary>Amount owed by the provider (positive).</summary>
     public decimal Amount { get; set; }
+
+    /// <summary>The PLB01 provider (payee NPI) the receivable is owed by.</summary>
+    public string? ProviderNpi { get; set; }
+
+    /// <summary>
+    /// The persisted ledger record (<c>ProviderReceivableRecord.Id</c>) later
+    /// payment runs recover this from. Null when no ledger was configured.
+    /// </summary>
+    public string? ReceivableId { get; set; }
 }
 
 /// <summary>

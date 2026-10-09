@@ -161,6 +161,48 @@ public class PaymentRunsController : ControllerBase
     }
 
     /// <summary>
+    /// Generate (first call) or reproduce (later calls) the NACHA CCD+ credit
+    /// file of a completed ACH payment run: one credit per payee (TIN + approved
+    /// account) per 835 trace, the addenda carrying the 835's TRN. Accounts come
+    /// only from provider-service's approved accounts; payees without one are
+    /// listed as check fallbacks. Returns the file's facts (SHA-256, counts,
+    /// totals, entry hash, masked entries), never its content. A later call must
+    /// reproduce the pinned file byte for byte, else 409 with nothing changed.
+    /// Needs payments:approve (it reads full bank numbers); a service token is refused.
+    /// </summary>
+    [HttpPost("{id}/eft-file")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(PaymentRunEftFile), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<PaymentRunEftFile>> GenerateEftFile(
+        string id, [FromServices] IFfsEftFileService eftFiles, CancellationToken cancellationToken)
+    {
+        if (_actor.IsService)
+            return SeparationOfDuties(new SeparationOfDutiesException(
+                "A service token cannot generate a payment run's EFT file; a user with payments:approve does."));
+        try
+        {
+            var outcome = await eftFiles.GenerateAsync(id, _actor.UserId, cancellationToken);
+            return Ok(outcome.Run.EftFile);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (RunConflictException ex)
+        {
+            return Problem(title: "EFT file differs", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Get payment run by ID
     /// </summary>
     [HttpGet("{id}")]

@@ -72,6 +72,7 @@ public class PaymentApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(TradingPartnersClient);
             services.AddSingleton<IClaimReservationRepository>(new InMemoryClaimReservationRepository());
             services.AddSingleton<IReservationAuditLog>(new InMemoryReservationAuditLog());
+            services.AddSingleton<IProviderReceivableRepository>(new InMemoryProviderReceivableRepository());
         });
     }
 }

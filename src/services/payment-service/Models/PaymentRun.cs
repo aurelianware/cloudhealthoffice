@@ -217,6 +217,29 @@ public class PaymentRun
     public List<ReservationAttention> ReservationsNeedingAttention { get; set; } = new();
 
     /// <summary>
+    /// Payments of an ACH run paid by check because their payee has no approved
+    /// EFT account in provider-service (none approved, EFT not enabled, or no
+    /// payee TIN). Decided at execution, so the payment and its 835 BPR04 say
+    /// CHK; extended when the EFT file finds an account gone since.
+    /// </summary>
+    public List<CheckFallbackPayment> CheckFallbacks { get; set; } = new();
+
+    /// <summary>
+    /// Provider receivables this run recovered from its payments (positive PLB
+    /// FB/WO offsets); <see cref="TotalPaymentAmount"/> is already net of them.
+    /// </summary>
+    public List<PaymentRunReceivableRecovery> ReceivableRecoveries { get; set; } = new();
+
+    /// <summary>Sum of <see cref="ReceivableRecoveries"/>.</summary>
+    public decimal ReceivableRecoveredAmount { get; set; }
+
+    /// <summary>
+    /// The run's NACHA CCD+ credit file, pinned at first generation
+    /// (POST /api/paymentruns/{id}/eft-file). Null until generated.
+    /// </summary>
+    public PaymentRunEftFile? EftFile { get; set; }
+
+    /// <summary>
     /// Payment method for this run (ACH, Check)
     /// </summary>
     [StringLength(10)]

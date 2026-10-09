@@ -107,6 +107,7 @@ public sealed class RunExecutionHost : WebApplicationFactory<Program>
             services.AddSingleton<IEraEnvelopeRepository>(Envelopes);
             services.AddSingleton<IClaimReservationRepository>(Reservations);
             services.AddSingleton<IReservationAuditLog>(Audit);
+            services.AddSingleton<IProviderReceivableRepository>(new InMemoryProviderReceivableRepository());
             services.AddSingleton<TimeProvider>(Clock);
             services.AddHttpClient(ClaimsServiceClient.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => Claims);

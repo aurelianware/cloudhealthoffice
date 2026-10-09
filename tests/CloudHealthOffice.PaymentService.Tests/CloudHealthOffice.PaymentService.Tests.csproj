@@ -17,6 +17,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\payment-service\payment-service.csproj" />
+    <!-- NachaFileFacts: the FFS NACHA file is read back the way the shared transmission library reads it. -->
+    <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.NachaTransmission\CloudHealthOffice.NachaTransmission.csproj" />
     <ProjectReference Include="..\..\src\services\shared\CloudHealthOffice.Infrastructure.Tests\CloudHealthOffice.Infrastructure.Tests.csproj" />
   </ItemGroup>
 </Project>

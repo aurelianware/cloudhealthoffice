@@ -92,7 +92,10 @@ public class EraPaymentInput
 /// <para><c>TotalPaymentAmount</c> is BPR02, never negative. When the
 /// envelope's claims net to less than zero (a reversal recoupment),
 /// BPR02 is 0 and <c>ForwardBalanceAmount</c> is the negative balance
-/// carried forward in the PLB FB adjustment: what the provider owes.</para>
+/// carried forward in the PLB FB adjustment: what the provider owes.
+/// <c>ForwardBalanceByProvider</c> splits it by payee NPI, each carried in its
+/// own PLB FB. It is empty when the balance cannot be attributed to providers
+/// (several NPIs with mixed-sign nets, or a payment without an NPI).</para>
 /// </summary>
 public record EraEnvelope(
     string TradingPartnerId,
@@ -102,7 +105,8 @@ public record EraEnvelope(
     string ControlNumber,
     IReadOnlyList<string> ClaimIds,
     bool IsReversal,
-    decimal ForwardBalanceAmount = 0m);
+    decimal ForwardBalanceAmount = 0m,
+    IReadOnlyDictionary<string, decimal>? ForwardBalanceByProvider = null);
 
 public class BatchEraGeneratorService : IBatchEraGeneratorService
 {
@@ -177,8 +181,11 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
 
         // BPR02 is never negative: a net-negative envelope (reversals) is
         // BPR02 = 0 with the balance carried forward in a PLB FB adjustment.
-        var (totalAmount, allPlbs, forwardBalance) = Era835FinancialSegments.WithForwardBalance(
-            netAmount, inputs.SelectMany(i => i.Payment.ProviderAdjustments), traceCheckNumber, now);
+        // With several payee NPIs in one envelope, each provider's negative
+        // net is carried forward in its own PLB FB (PLB01 = its NPI).
+        var (totalAmount, allPlbs, forwardBalance, forwardByProvider) = Era835FinancialSegments.WithForwardBalanceByProvider(
+            inputs.Select(i => (i.Payment.PayeeNPI, i.Payment.TotalPaymentAmount)).ToList(),
+            inputs.SelectMany(i => i.Payment.ProviderAdjustments), traceCheckNumber, now);
 
         // BPR02 = sum(CLP04) - sum(PLB); sum(SVC03) = CLP04 per claim.
         Era835FinancialSegments.EnsureBalanced(
@@ -235,9 +242,11 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
         }
 
         // ── PLB ─ Provider Level Adjustments (across batch) ────────────
-        if (allPlbs.Any())
+        // One PLB per provider (PLB01), up to six adjustments per segment;
+        // an adjustment without a provider belongs to the 835's payee.
+        foreach (var provider in allPlbs.GroupBy(adj => adj.ProviderIdentifier ?? first.PayeeNPI ?? "PROVIDER", StringComparer.Ordinal))
         {
-            foreach (var chunk in allPlbs.Chunk(6))
+            foreach (var chunk in provider.Chunk(6))
             {
                 var plbAdjustments = string.Concat(
                     chunk.Select(adj =>
@@ -245,7 +254,7 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
 
                 var fiscalDate = chunk.First().FiscalPeriodEnd ?? now;
                 sb.Append(Seg(ref segmentCount, true,
-                    $"PLB*{first.PayeeNPI ?? "PROVIDER"}*{fiscalDate:yyyyMMdd}{plbAdjustments}~"));
+                    $"PLB*{provider.Key}*{fiscalDate:yyyyMMdd}{plbAdjustments}~"));
             }
         }
 
@@ -279,7 +288,8 @@ public class BatchEraGeneratorService : IBatchEraGeneratorService
             ControlNumber: controlNumber,
             ClaimIds: claimIds,
             IsReversal: isReversal,
-            ForwardBalanceAmount: forwardBalance);
+            ForwardBalanceAmount: forwardBalance,
+            ForwardBalanceByProvider: forwardByProvider);
     }
 
     private static string Seg(ref int count, bool counted, string segment)
