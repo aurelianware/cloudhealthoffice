@@ -3,25 +3,54 @@ using CloudHealthOffice.NcciEngine.Domain;
 
 namespace CloudHealthOffice.NcciEngine.Services;
 
+/// <summary>
+/// What a lookup is scoped to: the NCCI setting, whether setting-less seed
+/// rows still apply, and the table <see cref="Models.NcciTableVersion.LoadStamp"/>
+/// the answer was read under.
+/// </summary>
+internal sealed record NcciLookupScope(string? Setting, bool IncludeUnscoped, string? Stamp);
+
 internal sealed class NcciLookupCache
 {
-    // NCCI/MUE reference data is quarterly (CMS cadence); explicit updates go through
-    // ImportQuarterlyUpdateAsync -> InvalidateTenant, which bypasses this TTL entirely.
-    // The TTL only bounds staleness for edits made outside that path, so it can be long
-    // without risking masking a real update -- a short TTL just forces avoidable re-lookups
-    // on every distinct (code-pair, service-date) combination within a single long run.
+    // NCCI/MUE reference data is quarterly (CMS cadence). Every CMS load writes a new
+    // NcciTableVersion.LoadStamp, and lookup entries are keyed by the stamp they were
+    // read under, so a load done by any process (another replica, benefit-plan-service
+    // vs claims-service) retires this process's entries as soon as it re-reads the
+    // version -- at most VersionTtl later. InvalidateTenant clears the local process
+    // immediately. The long TTL only bounds staleness for edits made outside both paths.
     private static readonly TimeSpan DefaultTtl = TimeSpan.FromHours(6);
+
+    /// <summary>How long a process trusts its copy of a tenant's table version.</summary>
+    internal static readonly TimeSpan VersionTtl = TimeSpan.FromSeconds(60);
+
+    private readonly TimeSpan _versionTtl;
+
+    public NcciLookupCache() : this(VersionTtl)
+    {
+    }
+
+    internal NcciLookupCache(TimeSpan versionTtl)
+    {
+        _versionTtl = versionTtl;
+    }
 
     private readonly ConcurrentDictionary<PairCacheKey, CacheEntry<NcciEditPair>> _pairs = new();
     private readonly ConcurrentDictionary<MueCacheKey, CacheEntry<MueEntry>> _mues = new();
+    private readonly ConcurrentDictionary<string, CacheEntry<Models.NcciTableVersion>> _versions = new(StringComparer.Ordinal);
     private long _nextSweepTicks = DateTimeOffset.UtcNow.Add(DefaultTtl).UtcTicks;
+
+    public Task<Models.NcciTableVersion?> GetVersionAsync(
+        string tenantId,
+        Func<CancellationToken, Task<Models.NcciTableVersion?>> factory,
+        CancellationToken ct)
+        => GetOrCreateAsync(_versions, tenantId, factory, ct, _versionTtl);
 
     public Task<NcciEditPair?> GetEditPairAsync(
         string tenantId,
         string column1Code,
         string column2Code,
         DateOnly serviceDate,
-        string? setting,
+        NcciLookupScope scope,
         Func<CancellationToken, Task<NcciEditPair?>> factory,
         CancellationToken ct)
     {
@@ -30,7 +59,7 @@ internal sealed class NcciLookupCache
             NormalizeCode(column1Code),
             NormalizeCode(column2Code),
             serviceDate,
-            setting);
+            scope);
 
         return GetOrCreateAsync(_pairs, key, factory, ct);
     }
@@ -39,16 +68,18 @@ internal sealed class NcciLookupCache
         string tenantId,
         string procedureCode,
         DateOnly serviceDate,
-        string? setting,
+        NcciLookupScope scope,
         Func<CancellationToken, Task<MueEntry?>> factory,
         CancellationToken ct)
     {
-        var key = new MueCacheKey(tenantId, NormalizeCode(procedureCode), serviceDate, setting);
+        var key = new MueCacheKey(tenantId, NormalizeCode(procedureCode), serviceDate, scope);
         return GetOrCreateAsync(_mues, key, factory, ct);
     }
 
     public void InvalidateTenant(string tenantId)
     {
+        _versions.TryRemove(tenantId, out _);
+
         foreach (var key in _pairs.Keys.Where(k => string.Equals(k.TenantId, tenantId, StringComparison.Ordinal)))
         {
             _pairs.TryRemove(key, out _);
@@ -64,17 +95,19 @@ internal sealed class NcciLookupCache
         ConcurrentDictionary<TKey, CacheEntry<T>> cache,
         TKey key,
         Func<CancellationToken, Task<T?>> factory,
-        CancellationToken ct)
+        CancellationToken ct,
+        TimeSpan? ttl = null)
         where TKey : notnull
     {
         MaybeSweep();
 
         var now = DateTimeOffset.UtcNow;
-        var entry = cache.GetOrAdd(key, _ => NewEntry(factory, now));
+        var lifetime = ttl ?? DefaultTtl;
+        var entry = cache.GetOrAdd(key, _ => NewEntry(factory, now, lifetime));
 
         if (entry.ExpiresAt <= now)
         {
-            var replacement = NewEntry(factory, now);
+            var replacement = NewEntry(factory, now, lifetime);
             entry = cache.AddOrUpdate(key, replacement, (_, current) =>
                 current.ExpiresAt <= now ? replacement : current);
         }
@@ -105,6 +138,7 @@ internal sealed class NcciLookupCache
 
         SweepExpired(_pairs, now);
         SweepExpired(_mues, now);
+        SweepExpired(_versions, now);
     }
 
     private static void SweepExpired<TKey, T>(
@@ -121,11 +155,12 @@ internal sealed class NcciLookupCache
 
     private static CacheEntry<T> NewEntry<T>(
         Func<CancellationToken, Task<T?>> factory,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        TimeSpan ttl)
     {
         return new CacheEntry<T>(
             new Lazy<Task<T?>>(() => factory(CancellationToken.None), LazyThreadSafetyMode.ExecutionAndPublication),
-            now.Add(DefaultTtl));
+            now.Add(ttl));
     }
 
     private static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();
@@ -137,11 +172,11 @@ internal sealed class NcciLookupCache
         string Column1Code,
         string Column2Code,
         DateOnly ServiceDate,
-        string? Setting);
+        NcciLookupScope Scope);
 
     private sealed record MueCacheKey(
         string TenantId,
         string ProcedureCode,
         DateOnly ServiceDate,
-        string? Setting);
+        NcciLookupScope Scope);
 }

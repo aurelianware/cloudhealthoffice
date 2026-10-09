@@ -51,7 +51,7 @@ internal class NcciRepositoryMongo : INcciRepository
 
     public async Task<NcciEditPair?> GetEditPairAsync(
         string tenantId, string column1Code, string column2Code,
-        DateOnly serviceDate, string? setting = null, CancellationToken ct = default)
+        DateOnly serviceDate, string? setting = null, bool includeUnscoped = true, CancellationToken ct = default)
     {
         var dos = serviceDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var f = Builders<NcciEditPair>.Filter;
@@ -66,7 +66,9 @@ internal class NcciRepositoryMongo : INcciRepository
                 f.Gt(p => p.TerminationDate, dos)));
 
         if (setting is not null)
-            filter &= f.Or(f.Eq(p => p.Setting, null), f.Eq(p => p.Setting, setting));
+            filter &= includeUnscoped
+                ? f.Or(f.Eq(p => p.Setting, null), f.Eq(p => p.Setting, setting))
+                : f.Eq(p => p.Setting, setting);
 
         return await _pairs
             .Find(filter)
@@ -79,7 +81,7 @@ internal class NcciRepositoryMongo : INcciRepository
 
     public async Task<MueEntry?> GetMueEntryAsync(
         string tenantId, string procedureCode, DateOnly serviceDate,
-        string? setting = null, CancellationToken ct = default)
+        string? setting = null, bool includeUnscoped = true, CancellationToken ct = default)
     {
         var dos = serviceDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var f = Builders<MueEntry>.Filter;
@@ -93,7 +95,9 @@ internal class NcciRepositoryMongo : INcciRepository
                 f.Gt(m => m.TerminationDate, dos)));
 
         if (setting is not null)
-            filter &= f.Or(f.Eq(m => m.Setting, null), f.Eq(m => m.Setting, setting));
+            filter &= includeUnscoped
+                ? f.Or(f.Eq(m => m.Setting, null), f.Eq(m => m.Setting, setting))
+                : f.Eq(m => m.Setting, setting);
 
         return await _mues
             .Find(filter)
@@ -102,24 +106,58 @@ internal class NcciRepositoryMongo : INcciRepository
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<int> ExpireMueEntriesAsync(
+    // ── CMS snapshot reconciliation ───────────────────────────────
+
+    public async Task<(int Expired, int Deleted)> ReconcileMueSnapshotAsync(
         string tenantId, string setting, DateTime quarterStart,
         IReadOnlySet<string> retainedCodes, CancellationToken ct = default)
     {
         var f = Builders<MueEntry>.Filter;
-        var filter = f.And(
-            f.Eq(m => m.TenantId, tenantId),
-            f.Eq(m => m.Setting, setting),
-            f.Lt(m => m.EffectiveDate, quarterStart),
-            f.Or(f.Eq(m => m.TerminationDate, null), f.Gt(m => m.TerminationDate, quarterStart)),
-            f.Nin(m => m.ProcedureCode, retainedCodes));
+        var notRetained = f.Nin(m => m.ProcedureCode, retainedCodes);
 
-        var result = await _mues.UpdateManyAsync(
-            filter,
+        var deleted = await _mues.DeleteManyAsync(
+            f.And(
+                f.Eq(m => m.TenantId, tenantId),
+                f.Eq(m => m.Setting, setting),
+                f.Eq(m => m.EffectiveDate, quarterStart),
+                notRetained),
+            ct);
+
+        var expired = await _mues.UpdateManyAsync(
+            f.And(
+                f.Eq(m => m.TenantId, tenantId),
+                f.Eq(m => m.Setting, setting),
+                f.Lt(m => m.EffectiveDate, quarterStart),
+                f.Or(f.Eq(m => m.TerminationDate, null), f.Gt(m => m.TerminationDate, quarterStart)),
+                notRetained),
             Builders<MueEntry>.Update.Set(m => m.TerminationDate, quarterStart),
             cancellationToken: ct);
 
-        return (int)result.ModifiedCount;
+        return ((int)expired.ModifiedCount, (int)deleted.DeletedCount);
+    }
+
+    public async Task<(int Expired, int Deleted)> ReconcilePtpSnapshotAsync(
+        string tenantId, string sourceKey, string quarter, DateTime quarterStart,
+        string loadId, CancellationToken ct = default)
+    {
+        var f = Builders<NcciEditPair>.Filter;
+        var stale = f.And(
+            f.Eq(p => p.TenantId, tenantId),
+            f.Eq(p => p.SourceKey, sourceKey),
+            f.Ne(p => p.LoadId, loadId));
+
+        var deleted = await _pairs.DeleteManyAsync(
+            f.And(stale, f.Eq(p => p.SourceQuarter, quarter)), ct);
+
+        var expired = await _pairs.UpdateManyAsync(
+            f.And(
+                stale,
+                f.Ne(p => p.SourceQuarter, quarter),
+                f.Or(f.Eq(p => p.TerminationDate, null), f.Gt(p => p.TerminationDate, quarterStart))),
+            Builders<NcciEditPair>.Update.Set(p => p.TerminationDate, quarterStart),
+            cancellationToken: ct);
+
+        return ((int)expired.ModifiedCount, (int)deleted.DeletedCount);
     }
 
     // ── Quarterly Import ──────────────────────────────────────────
@@ -176,12 +214,12 @@ internal class NcciRepositoryMongo : INcciRepository
     }
 
     public async Task<IReadOnlyList<NcciLoadRecord>> ListLoadRecordsAsync(
-        string tenantId, string quarter, CancellationToken ct = default)
+        string tenantId, string? quarter, CancellationToken ct = default)
     {
         var f = Builders<NcciLoadRecord>.Filter;
-        return await _ledger
-            .Find(f.And(f.Eq(r => r.TenantId, tenantId), f.Eq(r => r.Quarter, quarter)))
-            .ToListAsync(ct);
+        var filter = f.Eq(r => r.TenantId, tenantId);
+        if (quarter is not null) filter &= f.Eq(r => r.Quarter, quarter);
+        return await _ledger.Find(filter).ToListAsync(ct);
     }
 
     // ── Version Metadata ──────────────────────────────────────────

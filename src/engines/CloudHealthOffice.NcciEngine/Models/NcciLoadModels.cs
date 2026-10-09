@@ -47,8 +47,11 @@ public class NcciLoadRecord
     /// <summary>Non-blank lines after the first data row that the parser could not read.</summary>
     public int RowsRejected { get; set; }
 
-    /// <summary>Rows from earlier quarters terminated because this release dropped them (MUE only).</summary>
+    /// <summary>Rows from earlier quarters ended at this quarter's start because this file no longer lists them.</summary>
     public int RowsExpired { get; set; }
+
+    /// <summary>Rows from an earlier load of the same quarter and slot removed because this corrected file omits them.</summary>
+    public int RowsDeleted { get; set; }
 
     public DateTime LoadedAt { get; set; }
 
@@ -108,6 +111,7 @@ public sealed class NcciLoadResult
     public int RowsLoaded { get; init; }
     public int RowsRejected { get; init; }
     public int RowsExpired { get; init; }
+    public int RowsDeleted { get; init; }
 
     /// <summary>First few parser rejections (line number and reason), for the operator.</summary>
     public IReadOnlyList<string> Rejections { get; init; } = [];

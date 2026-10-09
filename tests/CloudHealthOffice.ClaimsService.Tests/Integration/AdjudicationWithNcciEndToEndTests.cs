@@ -357,7 +357,7 @@ public class AdjudicationWithNcciEndToEndTests
 
         public Task<NcciEditPair?> GetEditPairAsync(
             string tenantId, string column1Code, string column2Code,
-            DateOnly serviceDate, string? setting = null, CancellationToken ct = default)
+            DateOnly serviceDate, string? setting = null, bool includeUnscoped = true, CancellationToken ct = default)
         {
             var dos = serviceDate.ToDateTime(TimeOnly.MinValue);
             var hit = _pairs.FirstOrDefault(p =>
@@ -371,7 +371,7 @@ public class AdjudicationWithNcciEndToEndTests
 
         public Task<MueEntry?> GetMueEntryAsync(
             string tenantId, string procedureCode,
-            DateOnly serviceDate, string? setting = null, CancellationToken ct = default)
+            DateOnly serviceDate, string? setting = null, bool includeUnscoped = true, CancellationToken ct = default)
         {
             var dos = serviceDate.ToDateTime(TimeOnly.MinValue);
             var hit = _mues.FirstOrDefault(m =>
@@ -388,10 +388,15 @@ public class AdjudicationWithNcciEndToEndTests
             CancellationToken ct = default)
             => Task.FromResult((0, 0));
 
-        public Task<int> ExpireMueEntriesAsync(
+        public Task<(int Expired, int Deleted)> ReconcileMueSnapshotAsync(
             string tenantId, string setting, DateTime quarterStart,
             IReadOnlySet<string> retainedCodes, CancellationToken ct = default)
-            => Task.FromResult(0);
+            => Task.FromResult((0, 0));
+
+        public Task<(int Expired, int Deleted)> ReconcilePtpSnapshotAsync(
+            string tenantId, string sourceKey, string quarter, DateTime quarterStart,
+            string loadId, CancellationToken ct = default)
+            => Task.FromResult((0, 0));
 
         public Task<CloudHealthOffice.NcciEngine.Models.NcciLoadRecord?> GetLoadRecordAsync(
             string tenantId, string id, CancellationToken ct = default)
@@ -402,7 +407,7 @@ public class AdjudicationWithNcciEndToEndTests
             => Task.CompletedTask;
 
         public Task<IReadOnlyList<CloudHealthOffice.NcciEngine.Models.NcciLoadRecord>> ListLoadRecordsAsync(
-            string tenantId, string quarter, CancellationToken ct = default)
+            string tenantId, string? quarter, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<CloudHealthOffice.NcciEngine.Models.NcciLoadRecord>>([]);
 
         public Task<CloudHealthOffice.NcciEngine.Models.NcciTableVersion?> GetCurrentVersionAsync(

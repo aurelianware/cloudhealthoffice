@@ -95,6 +95,15 @@ public class NcciEditPair
 
     /// <summary>Quarter label of the CMS release that last wrote this row (e.g. "2026Q4").</summary>
     public string? SourceQuarter { get; set; }
+
+    /// <summary>
+    /// "{Setting}:{Part}" of the CMS file that last wrote this row. A later
+    /// load of the same file slot reconciles rows it no longer lists.
+    /// </summary>
+    public string? SourceKey { get; set; }
+
+    /// <summary>Id of the load that last wrote this row.</summary>
+    public string? LoadId { get; set; }
 }
 
 /// <summary>
@@ -178,12 +187,18 @@ public static class NcciSettings
     /// <summary>Outpatient hospital tables; applied to institutional (837I) claims.</summary>
     public const string OutpatientHospital = "OUTPATIENT_HOSPITAL";
 
-    /// <summary>The setting whose tables apply to a claim type ("837P" / "837I").</summary>
-    public static string? ForClaimType(string? claimType) => claimType?.Trim().ToUpperInvariant() switch
+    /// <summary>
+    /// Marks a claim type CMS publishes no NCCI table for (e.g. 837D). It
+    /// matches no CMS-loaded row, only setting-less (seed / legacy) rows.
+    /// </summary>
+    public const string None = "NONE";
+
+    /// <summary>The setting whose tables apply to a claim type ("837P" / "837I"); <see cref="None"/> otherwise.</summary>
+    public static string ForClaimType(string? claimType) => claimType?.Trim().ToUpperInvariant() switch
     {
         "837P" or "PROFESSIONAL" => Practitioner,
         "837I" or "INSTITUTIONAL" => OutpatientHospital,
-        _ => null,
+        _ => None,
     };
 
     /// <summary>Parse a setting name; accepts the constants and common aliases.</summary>

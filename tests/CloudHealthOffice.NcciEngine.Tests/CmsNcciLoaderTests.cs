@@ -341,8 +341,195 @@ public class CmsNcciLoaderTests
 
     [Theory]
     [InlineData("837P", NcciSettings.Practitioner)]
+    [InlineData(" professional ", NcciSettings.Practitioner)]
     [InlineData("837I", NcciSettings.OutpatientHospital)]
-    [InlineData("837D", null)]
-    public void NcciSettings_ForClaimType(string claimType, string? expected)
+    [InlineData("837D", NcciSettings.None)]
+    [InlineData(null, NcciSettings.None)]
+    public void NcciSettings_ForClaimType(string? claimType, string expected)
         => Assert.Equal(expected, NcciSettings.ForClaimType(claimType));
+
+    // ── Review follow-ups: snapshots, seed shadowing, cache, version ──
+
+    private static string Ptp(params string[] rows) =>
+        "Column 1\tColumn 2\t*=in existence prior to 1996\tEffective Date\tDeletion Date *=no data\tModifier\tPTP Edit Rationale\n"
+        + string.Join("\n", rows.Select(r => r.Replace('|', '\t'))) + "\n";
+
+    private static string Mue(params string[] rows) =>
+        "HCPCS/CPT Code,Practitioner Services MUE Values,MUE Adjudication Indicator,MUE Rationale\n"
+        + string.Join("\n", rows) + "\n";
+
+    private static async Task<NcciLoadResult> LoadText(
+        NcciQuarterlyLoader loader, string text, string quarter, NcciCmsFileKind kind,
+        string setting = NcciSettings.Practitioner, string? part = null)
+    {
+        using var stream = new MemoryStream(System.Text.Encoding.ASCII.GetBytes(text));
+        return await loader.LoadAsync(new NcciLoadRequest
+        {
+            TenantId = Tenant, Quarter = quarter, FileKind = kind, Setting = setting, Part = part,
+        }, stream);
+    }
+
+    private static async Task<bool> HasPairEdit(Harness h, string claimType, DateOnly dos, string a, string b)
+        => (await h.Service.ScrubAsync(Claim(claimType, dos, (a, 1), (b, 1)))).EditFailures.Any(f => f.RuleId == "NE001");
+
+    private static async Task<bool> HasMueEdit(Harness h, DateOnly dos, string code, decimal units)
+        => (await h.Service.ScrubAsync(Claim("837P", dos, (code, units)))).EditFailures.Any(f => f.RuleId == "NE002");
+
+    [Fact]
+    public async Task Ptp_SameQuarterCorrection_DeletesPairsTheCorrectedFileOmits()
+    {
+        var h = new Harness();
+        await LoadText(h.Loader, Ptp("99213|36415|*|19960101|*|0|r", "45380|45378||20000101|*|0|r"), "2026Q4", NcciCmsFileKind.Ptp);
+        var corrected = await LoadText(h.Loader, Ptp("99213|36415|*|19960101|*|0|r"), "2026Q4", NcciCmsFileKind.Ptp);
+
+        Assert.Equal(1, corrected.RowsDeleted);
+        Assert.DoesNotContain(h.Repo.Pairs, p => p.Column1Code == "45380");
+        Assert.False(await HasPairEdit(h, "837P", new DateOnly(2026, 11, 2), "45380", "45378"));
+    }
+
+    [Fact]
+    public async Task Ptp_NewerQuarterOmittingPair_EndsItAtQuarterStartButKeepsHistory()
+    {
+        var h = new Harness();
+        await LoadText(h.Loader, Ptp("99213|36415|*|19960101|*|0|r", "45380|45378||20000101|*|0|r"), "2026Q4", NcciCmsFileKind.Ptp);
+        var next = await LoadText(h.Loader, Ptp("99213|36415|*|19960101|*|0|r"), "2027Q1", NcciCmsFileKind.Ptp);
+
+        Assert.Equal(1, next.RowsExpired);
+        Assert.True(await HasPairEdit(h, "837P", new DateOnly(2026, 12, 31), "45380", "45378"));
+        Assert.False(await HasPairEdit(h, "837P", new DateOnly(2027, 1, 1), "45380", "45378"));
+    }
+
+    [Fact]
+    public async Task Ptp_OlderQuarterThanLoaded_IsRefused()
+    {
+        var h = new Harness();
+        await LoadText(h.Loader, Ptp("99213|36415|*|19960101|*|0|r"), "2027Q1", NcciCmsFileKind.Ptp);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            LoadText(h.Loader, Ptp("99213|36415|*|19960101|*|0|r"), "2026Q4", NcciCmsFileKind.Ptp));
+    }
+
+    [Fact]
+    public async Task Ptp_SeedRowsNoLongerShadowCmsRowsForLoadedSetting()
+    {
+        var h = new Harness();
+        // Seed row: setting-less, effective 2025 — newer than the CMS row's 2003 effective date.
+        h.Repo.AddEditPair(new NcciEditPair
+        {
+            Id = "seed-97110", TenantId = Tenant, Column1Code = "97110", Column2Code = "97010",
+            ModifierIndicator = NcciModifierIndicator.NotAllowed, EffectiveDate = new DateTime(2025, 1, 1),
+        });
+        await h.Load(PraPtp, "2026Q4", NcciCmsFileKind.Ptp, NcciSettings.Practitioner);
+
+        // CMS deleted the edit on 2026-10-01; the seed row must not keep it alive for 837P.
+        Assert.False(await HasPairEdit(h, "837P", new DateOnly(2026, 10, 2), "97110", "97010"));
+        // No outpatient-hospital CMS PTP table is loaded, so the seed still applies to 837I.
+        Assert.True(await HasPairEdit(h, "837I", new DateOnly(2026, 10, 2), "97110", "97010"));
+        Assert.Contains(NcciSettings.Practitioner, h.Repo.Version!.PtpSettings);
+    }
+
+    [Fact]
+    public async Task UnsupportedClaimType_UsesSeedRowsOnly()
+    {
+        var h = new Harness();
+        h.Repo.AddEditPair(new NcciEditPair
+        {
+            Id = "seed-47563", TenantId = Tenant, Column1Code = "47563", Column2Code = "49320",
+            ModifierIndicator = NcciModifierIndicator.NotAllowed, EffectiveDate = new DateTime(2025, 1, 1),
+        });
+        await h.Load(PraPtp, "2026Q4", NcciCmsFileKind.Ptp, NcciSettings.Practitioner);
+        var dos = new DateOnly(2026, 11, 2);
+
+        Assert.False(await HasPairEdit(h, "837D", dos, "99213", "36415")); // practitioner CMS row
+        Assert.True(await HasPairEdit(h, "837D", dos, "47563", "49320"));  // seed row
+    }
+
+    [Fact]
+    public async Task Mue_ProfessionalAliasClaimType_AppliesPractitionerMue()
+    {
+        var h = new Harness();
+        await h.Load(PraMueQ4, "2026Q4", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
+        var result = await h.Service.ScrubAsync(Claim("professional", new DateOnly(2026, 11, 2), ("36415", 3)));
+        Assert.Contains(result.EditFailures, f => f.RuleId == "NE002");
+    }
+
+    [Fact]
+    public async Task Mue_SameQuarterCorrection_DeletesOmittedCodes()
+    {
+        var h = new Harness();
+        await LoadText(h.Loader, Mue("36415,2,2 Date of Service Edit: Policy,p", "97110,6,2 Date of Service Edit: Policy,p"), "2026Q4", NcciCmsFileKind.Mue);
+        var corrected = await LoadText(h.Loader, Mue("36415,2,2 Date of Service Edit: Policy,p"), "2026Q4", NcciCmsFileKind.Mue);
+
+        Assert.Equal(1, corrected.RowsDeleted);
+        Assert.False(await HasMueEdit(h, new DateOnly(2026, 11, 2), "97110", 7));
+    }
+
+    [Fact]
+    public async Task Mue_OlderQuarterLoadedAfterNewer_EndsAtNewerQuarterStart()
+    {
+        var h = new Harness();
+        await h.Load(PraMueQ1, "2027Q1", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
+        await h.Load(PraMueQ4, "2026Q4", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
+
+        // 97110 is only in the 2026Q4 table: limited in Q4, not active in Q1.
+        Assert.True(await HasMueEdit(h, new DateOnly(2026, 12, 15), "97110", 7));
+        Assert.False(await HasMueEdit(h, new DateOnly(2027, 1, 15), "97110", 7));
+    }
+
+    [Fact]
+    public async Task Mue_SeedRowDoesNotResurfaceAfterCmsRowEnds()
+    {
+        var h = new Harness();
+        h.Repo.AddMueEntry(new MueEntry
+        {
+            Id = "seed-97110", TenantId = Tenant, ProcedureCode = "97110", MaxUnits = 8,
+            AdjudicationIndicator = MueAdjudicationIndicator.DateOfService, EffectiveDate = new DateTime(2025, 1, 1),
+        });
+        await h.Load(PraMueQ4, "2026Q4", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
+        await h.Load(PraMueQ1, "2027Q1", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
+
+        Assert.False(await HasMueEdit(h, new DateOnly(2027, 1, 15), "97110", 9));
+    }
+
+    [Fact]
+    public async Task Load_VersionWriteFails_RetryReloadsInsteadOfReportingAlreadyLoaded()
+    {
+        var h = new Harness();
+        h.Repo.FailVersionWrites = true;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            h.Load(PraMueQ4, "2026Q4", NcciCmsFileKind.Mue, NcciSettings.Practitioner));
+
+        h.Repo.FailVersionWrites = false;
+        var retry = await h.Load(PraMueQ4, "2026Q4", NcciCmsFileKind.Mue, NcciSettings.Practitioner);
+
+        Assert.False(retry.AlreadyLoaded);
+        Assert.Equal("2026Q4", h.Repo.Version!.Quarter);
+        Assert.Equal(NcciTableVersion.CurrentId, h.Repo.Version.Id);
+    }
+
+    [Fact]
+    public async Task Load_InAnotherProcess_IsSeenThroughTheVersionStamp()
+    {
+        var h = new Harness();
+        // A second process (e.g. claims-service) with its own cache over the same store.
+        var otherCache = new NcciLookupCache(TimeSpan.Zero);
+        var other = new NcciEditService(h.Repo, NullLogger<NcciEditService>.Instance, otherCache);
+        var dos = new DateOnly(2026, 11, 2);
+
+        var before = await other.ScrubAsync(Claim("837P", dos, ("99213", 1), ("36415", 1)));
+        Assert.DoesNotContain(before.EditFailures, f => f.RuleId == "NE001"); // cached negative lookup
+
+        await h.Load(PraPtp, "2026Q4", NcciCmsFileKind.Ptp, NcciSettings.Practitioner);
+
+        var after = await other.ScrubAsync(Claim("837P", dos, ("99213", 1), ("36415", 1)));
+        Assert.Contains(after.EditFailures, f => f.RuleId == "NE001");
+    }
+
+    [Fact]
+    public void TableVersion_SerializesCosmosId()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new NcciTableVersion { TenantId = Tenant });
+        Assert.Contains("\"id\":\"current\"", json);
+        var newtonsoft = Newtonsoft.Json.JsonConvert.SerializeObject(new NcciTableVersion { TenantId = Tenant });
+        Assert.Contains("\"id\":\"current\"", newtonsoft);
+    }
 }

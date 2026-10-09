@@ -72,8 +72,22 @@ internal class NcciEditService : INcciEditService
 
         var result = new NcciScrubResult { ClaimId = request.ClaimId };
 
-        await ApplyNcciPairEdits(request, effectiveDate, result, ct);
-        await ApplyMueEdits(request, effectiveDate, result, ct);
+        // CMS publishes separate practitioner and outpatient-hospital tables.
+        // Setting-less seed rows apply until a CMS table for the claim's
+        // setting is loaded; after that the CMS table is authoritative.
+        // Claim types with no CMS table (e.g. 837D) see only seed rows.
+        var version = await _lookupCache.GetVersionAsync(
+            request.TenantId,
+            lookupCt => _repository.GetCurrentVersionAsync(request.TenantId, lookupCt),
+            ct);
+        var setting = NcciSettings.ForClaimType(request.ClaimType);
+        var pairScope = new NcciLookupScope(
+            setting, !(version?.PtpSettings.Contains(setting) ?? false), version?.LoadStamp);
+        var mueScope = new NcciLookupScope(
+            setting, !(version?.MueSettings.Contains(setting) ?? false), version?.LoadStamp);
+
+        await ApplyNcciPairEdits(request, effectiveDate, pairScope, result, ct);
+        await ApplyMueEdits(request, effectiveDate, mueScope, result, ct);
 
         _logger.LogDebug(
             "NCCI scrub for claim {ClaimId}: {PairChecks} pair checks, {MueChecks} MUE checks, {Failures} failures",
@@ -100,6 +114,13 @@ internal class NcciEditService : INcciEditService
         var (pairsWritten, mueWritten) = await _repository.UpsertQuarterAsync(
             tenantId, quarter, pairs, entries, ct);
 
+        // New stamp so other processes' caches retire their entries too.
+        if (await _repository.GetCurrentVersionAsync(tenantId, ct) is { } version)
+        {
+            version.LoadStamp = Guid.NewGuid().ToString("N");
+            await _repository.SaveVersionAsync(version, ct);
+        }
+
         _lookupCache.InvalidateTenant(tenantId);
 
         _logger.LogInformation(
@@ -125,13 +146,10 @@ internal class NcciEditService : INcciEditService
     private async Task ApplyNcciPairEdits(
         NcciScrubRequest request,
         DateOnly effectiveDate,
+        NcciLookupScope scope,
         NcciScrubResult result,
         CancellationToken ct)
     {
-        // CMS publishes separate practitioner and outpatient-hospital PTP
-        // tables; rows with no setting (seed data) apply to both.
-        var setting = NcciSettings.ForClaimType(request.ClaimType);
-
         // Group lines by service date for same-date-of-service comparisons
         var byDate = request.ServiceLines
             .GroupBy(l => l.ServiceDate)
@@ -158,13 +176,14 @@ internal class NcciEditService : INcciEditService
                         codeA,
                         codeB,
                         effectiveDate,
-                        setting,
+                        scope,
                         lookupCt => _repository.GetEditPairAsync(
                             request.TenantId,
                             codeA,
                             codeB,
                             effectiveDate,
-                            setting,
+                            scope.Setting,
+                            scope.IncludeUnscoped,
                             lookupCt),
                         ct);
 
@@ -173,13 +192,14 @@ internal class NcciEditService : INcciEditService
                         codeB,
                         codeA,
                         effectiveDate,
-                        setting,
+                        scope,
                         lookupCt => _repository.GetEditPairAsync(
                             request.TenantId,
                             codeB,
                             codeA,
                             effectiveDate,
-                            setting,
+                            scope.Setting,
+                            scope.IncludeUnscoped,
                             lookupCt),
                         ct);
 
@@ -245,12 +265,13 @@ internal class NcciEditService : INcciEditService
     private async Task ApplyMueEdits(
         NcciScrubRequest request,
         DateOnly effectiveDate,
+        NcciLookupScope scope,
         NcciScrubResult result,
         CancellationToken ct)
     {
-        // Determine the POS type for the whole claim (professional vs facility)
-        bool isProfessional = request.ClaimType == "837P";
-        var setting = NcciSettings.ForClaimType(request.ClaimType);
+        // Professional vs facility, from the same normalization as the setting
+        // (so "professional", " 837p " etc. agree with the lookup).
+        bool isProfessional = scope.Setting == NcciSettings.Practitioner;
 
         // Group by (ProcedureCode, ServiceDate) — unit aggregation is per code per DOS
         var groups = request.ServiceLines
@@ -267,8 +288,9 @@ internal class NcciEditService : INcciEditService
                 request.TenantId,
                 normalizedCode,
                 effectiveDate,
-                setting,
-                lookupCt => _repository.GetMueEntryAsync(request.TenantId, normalizedCode, effectiveDate, setting, lookupCt),
+                scope,
+                lookupCt => _repository.GetMueEntryAsync(
+                    request.TenantId, normalizedCode, effectiveDate, scope.Setting, scope.IncludeUnscoped, lookupCt),
                 ct);
 
             result.MueChecked++;

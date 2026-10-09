@@ -75,7 +75,7 @@ Form fields:
 
 | Field | Values |
 | --- | --- |
-| `file` | the CMS file (max 300 MB) |
+| `file` | the CMS file (max 95 MB — the NGINX ingress caps bodies at 100 MB) |
 | `quarter` | `YYYYQn`, e.g. `2026Q4` |
 | `kind` | `ptp` or `mue` |
 | `setting` | `practitioner` or `outpatient-hospital` (`oph` also accepted) |
@@ -88,33 +88,54 @@ The response reports `rowsLoaded`, `rowsRejected`, the first rejections,
 
 ## What the loader does
 
+- **Streaming.** The upload is copied once to a temporary file (deleted on
+  close) while its SHA-256 is computed, then parsed from disk. PTP rows are
+  written in batches of 5,000, so a full table is never held in memory.
 - **Stable ids.** PTP rows are keyed by tenant, setting, both codes and the
   CMS effective date; MUE rows by tenant, setting, code and quarter start.
   Loading the same file again replaces documents rather than duplicating them.
 - **Ledger.** One `NcciLoadRecord` per (tenant, quarter, kind, setting, part)
   stores the file's SHA-256 and counts (Mongo `ncci_load_ledger`, Cosmos
-  `NcciLoadLedger` partitioned by `/tenantId`). An identical re-run is a
-  no-op; a corrected CMS re-publication (different hash) reloads.
-- **Effective and deletion dates.** PTP rows keep the CMS dates; the deletion
-  date is exclusive (the edit no longer applies on that date). MUE rows carry
-  no dates in the CMS file, so they take the quarter's first day. Earlier
-  quarters stay in place, and the engine uses the latest row in effect on the
-  date of service. When a full (no `part`) MUE table omits a code that an
-  earlier quarter listed, that earlier row ends at the new quarter's start.
+  `NcciLoadLedger`). It is written last, after the rows and the version: an
+  identical re-run is a no-op, a corrected CMS re-publication (different hash)
+  reloads, and a load that failed part-way is retried in full.
+- **PTP snapshots.** Each PTP file is a full snapshot of its slot (setting +
+  part). Rows keep the CMS effective and deletion dates; the deletion date is
+  exclusive (the edit no longer applies on that date). After a load, rows the
+  same slot wrote before but this file omits are deleted when they came from
+  the same quarter (a correction) or ended at the quarter start when they came
+  from an earlier quarter. PTP files carry full history, so loading a quarter
+  older than one already loaded for that setting is refused (400).
+- **MUE snapshots.** MUE rows carry no dates in the CMS file, so they take the
+  quarter's first day and, when a later quarter is already loaded, end at that
+  quarter's start. Rows of the same quarter the file omits are deleted;
+  earlier quarters' rows for codes the file omits end at this quarter's start.
+  Loading Q4 after Q1 therefore never leaves a Q4-only code active in Q1. A
+  load with `part` is not treated as a full table and reconciles nothing.
 - **Settings.** Practitioner rows apply to 837P claims and outpatient hospital
-  rows to 837I claims. Seed rows and rows imported before settings existed
-  have no setting and apply to both.
+  rows to 837I claims. Seed rows (no setting) apply to a setting only until a
+  CMS table of that kind is loaded for it; after that the CMS table is
+  authoritative, so seed rows cannot shadow CMS rows or resurface after a CMS
+  row ends. Claim types CMS publishes no table for (e.g. 837D) see seed rows only.
 - **Version.** `GET /api/v1/ncci/version` moves to the newest quarter loaded,
   with pair and MUE counts summed over that quarter's ledger. Back-filling an
-  older quarter does not move it backward.
-- **Cache.** The engine's lookup cache for the tenant is cleared after each load.
+  older MUE quarter does not move it backward.
+- **Cache, across processes.** Every load writes a new `LoadStamp` on the
+  version record. Lookup caches (benefit-plan-service replicas and
+  claims-service) key entries by stamp and re-read the version at most every
+  60 seconds, so all processes use the new tables within a minute of a load.
 
 ## Operational notes
 
 - Load all of a quarter's files before its effective date; claims are edited
   against whatever is loaded when they adjudicate.
-- The Cosmos backend needs the `NcciLoadLedger` container (partition key
-  `/tenantId`) to exist alongside `NcciPairs`, `MueEntries` and `NcciVersion`.
+- Uploads are limited to 95 MB because the NGINX ingress caps request bodies
+  at 100 MB (`infrastructure/k8s/nginx-ingress-config.yaml`,
+  `infrastructure/helm/nginx-ingress-values.yaml`). CMS ships the large
+  practitioner PTP table as several part files; load each with its `part`.
+- On Cosmos, the host creates any missing NCCI container (`NcciPairs`,
+  `MueEntries`, `NcciVersion`, `NcciLoadLedger`, partition key `/tenantId`) at
+  startup. The version record has id `current`.
 - A full practitioner PTP table holds over a million rows. The Mongo backend
   writes in unordered bulk batches of 1,000; the Cosmos backend upserts one
   item at a time, which is slow and RU-heavy for a full table.

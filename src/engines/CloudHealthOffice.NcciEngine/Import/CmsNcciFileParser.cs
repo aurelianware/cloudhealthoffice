@@ -24,13 +24,35 @@ public sealed record CmsMueRow(
     MueAdjudicationIndicator AdjudicationIndicator,
     string? Rationale);
 
+/// <summary>
+/// Lines a parser could not read: a total count plus the first
+/// <see cref="MaxKept"/> "line N: reason" messages (a garbage file must not
+/// turn into an unbounded list).
+/// </summary>
+public sealed class CmsRejectionLog
+{
+    public const int MaxKept = 1000;
+
+    public int Count { get; private set; }
+
+    public List<string> Sample { get; } = [];
+
+    public void Add(string message)
+    {
+        Count++;
+        if (Sample.Count < MaxKept) Sample.Add(message);
+    }
+}
+
 /// <summary>Rows a parser read plus the lines it could not read.</summary>
 public sealed class CmsParseResult<T>
 {
     public List<T> Rows { get; } = [];
 
-    /// <summary>"line N: reason" for each rejected line.</summary>
-    public List<string> Rejections { get; } = [];
+    public CmsRejectionLog RejectionLog { get; } = new();
+
+    /// <summary>"line N: reason" for rejected lines (first <see cref="CmsRejectionLog.MaxKept"/>).</summary>
+    public List<string> Rejections => RejectionLog.Sample;
 }
 
 /// <summary>
@@ -65,9 +87,25 @@ public sealed class CmsParseResult<T>
 /// </summary>
 public static partial class CmsNcciFileParser
 {
+    /// <summary>Reads a whole PTP file into memory (small files and tests).</summary>
     public static CmsParseResult<CmsPtpRow> ParsePtp(TextReader reader)
     {
         var result = new CmsParseResult<CmsPtpRow>();
+        result.Rows.AddRange(ReadPtp(reader, result.RejectionLog));
+        return result;
+    }
+
+    /// <summary>Reads a whole MUE file into memory.</summary>
+    public static CmsParseResult<CmsMueRow> ParseMue(TextReader reader)
+    {
+        var result = new CmsParseResult<CmsMueRow>();
+        result.Rows.AddRange(ReadMue(reader, result.RejectionLog));
+        return result;
+    }
+
+    /// <summary>Streams PTP rows; lines that do not parse go to <paramref name="rejections"/>.</summary>
+    public static IEnumerable<CmsPtpRow> ReadPtp(TextReader reader, CmsRejectionLog rejections)
+    {
         var seenData = false;
         var lineNumber = 0;
 
@@ -81,20 +119,20 @@ public static partial class CmsNcciFileParser
             if (!looksLikeData)
             {
                 if (seenData)
-                    result.Rejections.Add($"line {lineNumber}: not a PTP row (expected two 5-character codes)");
+                    rejections.Add($"line {lineNumber}: not a PTP row (expected two 5-character codes)");
                 continue;
             }
 
             seenData = true;
             if (fields.Count < 6)
             {
-                result.Rejections.Add($"line {lineNumber}: expected at least 6 columns, found {fields.Count}");
+                rejections.Add($"line {lineNumber}: expected at least 6 columns, found {fields.Count}");
                 continue;
             }
 
             if (!TryParseDate(fields[3], out var effective))
             {
-                result.Rejections.Add($"line {lineNumber}: invalid effective date '{fields[3]}'");
+                rejections.Add($"line {lineNumber}: invalid effective date '{fields[3]}'");
                 continue;
             }
 
@@ -104,7 +142,7 @@ public static partial class CmsNcciFileParser
             {
                 if (!TryParseDate(deletionRaw, out var parsedDeletion))
                 {
-                    result.Rejections.Add($"line {lineNumber}: invalid deletion date '{deletionRaw}'");
+                    rejections.Add($"line {lineNumber}: invalid deletion date '{deletionRaw}'");
                     continue;
                 }
                 deletion = parsedDeletion;
@@ -117,11 +155,11 @@ public static partial class CmsNcciFileParser
                 case "1": modifier = NcciModifierIndicator.Allowed; break;
                 case "9": modifier = NcciModifierIndicator.NotApplicable; break;
                 default:
-                    result.Rejections.Add($"line {lineNumber}: invalid modifier indicator '{fields[5]}' (expected 0, 1 or 9)");
+                    rejections.Add($"line {lineNumber}: invalid modifier indicator '{fields[5]}' (expected 0, 1 or 9)");
                     continue;
             }
 
-            result.Rows.Add(new CmsPtpRow(
+            yield return new CmsPtpRow(
                 lineNumber,
                 fields[0].ToUpperInvariant(),
                 fields[1].ToUpperInvariant(),
@@ -129,15 +167,15 @@ public static partial class CmsNcciFileParser
                 effective,
                 deletion,
                 modifier,
-                fields.Count > 6 && fields[6].Length > 0 ? fields[6] : null));
+                fields.Count > 6 && fields[6].Length > 0 ? fields[6] : null);
         }
 
-        return result;
+        yield break;
     }
 
-    public static CmsParseResult<CmsMueRow> ParseMue(TextReader reader)
+    /// <summary>Streams MUE rows; lines that do not parse go to <paramref name="rejections"/>.</summary>
+    public static IEnumerable<CmsMueRow> ReadMue(TextReader reader, CmsRejectionLog rejections)
     {
-        var result = new CmsParseResult<CmsMueRow>();
         var seenData = false;
         var lineNumber = 0;
 
@@ -166,14 +204,14 @@ public static partial class CmsNcciFileParser
             if (!looksLikeData)
             {
                 if (seenData)
-                    result.Rejections.Add($"line {lineNumber}: not an MUE row (expected a 5-character code)");
+                    rejections.Add($"line {lineNumber}: not an MUE row (expected a 5-character code)");
                 continue;
             }
 
             seenData = true;
             if (!int.TryParse(fields[valueCol], NumberStyles.None, CultureInfo.InvariantCulture, out var maxUnits))
             {
-                result.Rejections.Add($"line {lineNumber}: invalid MUE value '{fields[valueCol]}'");
+                rejections.Add($"line {lineNumber}: invalid MUE value '{fields[valueCol]}'");
                 continue;
             }
 
@@ -185,19 +223,19 @@ public static partial class CmsNcciFileParser
                 case '2': mai = MueAdjudicationIndicator.DateOfService; break;
                 case '3': mai = MueAdjudicationIndicator.DateOfServiceAbsolute; break;
                 default:
-                    result.Rejections.Add($"line {lineNumber}: invalid MUE adjudication indicator '{maiRaw}' (expected 1, 2 or 3)");
+                    rejections.Add($"line {lineNumber}: invalid MUE adjudication indicator '{maiRaw}' (expected 1, 2 or 3)");
                     continue;
             }
 
-            result.Rows.Add(new CmsMueRow(
+            yield return new CmsMueRow(
                 lineNumber,
                 fields[0].ToUpperInvariant(),
                 maxUnits,
                 mai,
-                fields.Count > rationaleCol && fields[rationaleCol].Length > 0 ? fields[rationaleCol] : null));
+                fields.Count > rationaleCol && fields[rationaleCol].Length > 0 ? fields[rationaleCol] : null);
         }
 
-        return result;
+        yield break;
     }
 
     /// <summary>

@@ -119,8 +119,11 @@ public class NcciController : ControllerBase
         }
     }
 
-    // The practitioner PTP table is split across four files of tens of MB each.
-    private const long CmsLoadMaxBytes = 300_000_000;
+    // The deployed NGINX ingress caps request bodies at 100m
+    // (infrastructure/k8s/nginx-ingress-config.yaml, infrastructure/helm/nginx-ingress-values.yaml);
+    // stay under it with room for multipart overhead. CMS splits the
+    // practitioner PTP table into parts (f1–f4), each well below this.
+    internal const long CmsLoadMaxBytes = 95_000_000;
 
     /// <summary>
     /// Tenant from the validated token (set by the shared TenantMiddleware).

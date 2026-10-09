@@ -215,13 +215,42 @@ public enum NcciEditType
 /// <summary>
 /// Metadata about the NCCI/MUE table version currently loaded.
 /// Returned by INcciEditService.GetTableVersionAsync() for audit/display.
-/// The type has no Id member, so Mongo assigns <c>_id</c> on upsert;
-/// ignoring extra elements lets the document read back.
+///
+/// One document per tenant. Cosmos stores it under id "current" (the
+/// repository point-reads that id). Mongo keys it by TenantId and keeps
+/// whatever <c>_id</c> the document already has: <see cref="Id"/> is not
+/// mapped to Mongo, and extra elements (the server-assigned <c>_id</c>)
+/// are ignored on read.
 /// </summary>
 [MongoDB.Bson.Serialization.Attributes.BsonIgnoreExtraElements]
 public class NcciTableVersion
 {
+    public const string CurrentId = "current";
+
+    /// <summary>Cosmos item id; always "current".</summary>
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    [Newtonsoft.Json.JsonProperty("id")]
+    public string Id { get; set; } = CurrentId;
+
     public string TenantId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Changes on every CMS load. Edit lookups are cached per stamp, so
+    /// every process (claims-service, each benefit-plan replica) stops
+    /// using pre-load cache entries once it re-reads the version
+    /// (at most <c>NcciLookupCache.VersionTtl</c> later).
+    /// </summary>
+    public string? LoadStamp { get; set; }
+
+    /// <summary>
+    /// Settings with a CMS PTP table loaded. For these, setting-less seed
+    /// pairs no longer apply: the CMS table is authoritative.
+    /// </summary>
+    public List<string> PtpSettings { get; set; } = new();
+
+    /// <summary>Settings with a CMS MUE table loaded (same rule as <see cref="PtpSettings"/>).</summary>
+    public List<string> MueSettings { get; set; } = new();
 
     /// <summary>
     /// CMS quarter label (e.g., "2025Q1", "2025Q3").

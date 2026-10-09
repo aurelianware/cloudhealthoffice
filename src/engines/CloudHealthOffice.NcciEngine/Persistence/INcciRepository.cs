@@ -15,9 +15,10 @@ public interface INcciRepository
     /// Look up an active NCCI Column 1 / Column 2 edit pair for the
     /// supplied procedure codes and date of service.
     /// Returns null if no active pair exists.
-    /// When <paramref name="setting"/> is given (see <see cref="NcciSettings"/>),
-    /// only rows for that setting or rows with no setting match; when null,
-    /// rows of every setting match.
+    /// <para>Setting filter: when <paramref name="setting"/> is null, rows of
+    /// every setting match (legacy behavior). Otherwise rows for that setting
+    /// match, plus setting-less (seed / legacy) rows when
+    /// <paramref name="includeUnscoped"/> is true.</para>
     /// </summary>
     Task<NcciEditPair?> GetEditPairAsync(
         string tenantId,
@@ -25,6 +26,7 @@ public interface INcciRepository
         string column2Code,
         DateOnly serviceDate,
         string? setting = null,
+        bool includeUnscoped = true,
         CancellationToken ct = default);
 
     // ── MUE Entries ───────────────────────────────────────────────
@@ -32,27 +34,46 @@ public interface INcciRepository
     /// <summary>
     /// Look up the active MUE entry for a procedure code on a given date.
     /// Returns null if no active MUE exists for the code.
-    /// <paramref name="setting"/> filters as for <see cref="GetEditPairAsync"/>.
+    /// The setting filter works as for <see cref="GetEditPairAsync"/>.
     /// </summary>
     Task<MueEntry?> GetMueEntryAsync(
         string tenantId,
         string procedureCode,
         DateOnly serviceDate,
         string? setting = null,
+        bool includeUnscoped = true,
         CancellationToken ct = default);
 
+    // ── CMS snapshot reconciliation ───────────────────────────────
+
     /// <summary>
-    /// Terminate (TerminationDate = <paramref name="quarterStart"/>) every
-    /// still-active MUE row for <paramref name="setting"/> that took effect
-    /// before <paramref name="quarterStart"/> and whose code is not in
-    /// <paramref name="retainedCodes"/> — i.e. codes a new quarterly MUE
-    /// table no longer lists. Returns the number of rows terminated.
+    /// After a full MUE table for <paramref name="setting"/> effective
+    /// <paramref name="quarterStart"/> was upserted: delete rows of that same
+    /// quarter whose code is not in <paramref name="retainedCodes"/> (a
+    /// corrected re-publication dropped them), and end at
+    /// <paramref name="quarterStart"/> every earlier row still active past it
+    /// whose code the new table no longer lists.
     /// </summary>
-    Task<int> ExpireMueEntriesAsync(
+    Task<(int Expired, int Deleted)> ReconcileMueSnapshotAsync(
         string tenantId,
         string setting,
         DateTime quarterStart,
         IReadOnlySet<string> retainedCodes,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// After PTP load <paramref name="loadId"/> wrote file slot
+    /// <paramref name="sourceKey"/> for <paramref name="quarter"/>: rows from
+    /// that slot the load did not rewrite are deleted when they came from the
+    /// same quarter (a correction), or ended at <paramref name="quarterStart"/>
+    /// when they came from an earlier quarter.
+    /// </summary>
+    Task<(int Expired, int Deleted)> ReconcilePtpSnapshotAsync(
+        string tenantId,
+        string sourceKey,
+        string quarter,
+        DateTime quarterStart,
+        string loadId,
         CancellationToken ct = default);
 
     // ── CMS Load Ledger ───────────────────────────────────────────
@@ -63,8 +84,8 @@ public interface INcciRepository
     /// <summary>Insert or replace a CMS load ledger row.</summary>
     Task SaveLoadRecordAsync(NcciLoadRecord record, CancellationToken ct = default);
 
-    /// <summary>Every CMS load ledger row for one quarter.</summary>
-    Task<IReadOnlyList<NcciLoadRecord>> ListLoadRecordsAsync(string tenantId, string quarter, CancellationToken ct = default);
+    /// <summary>CMS load ledger rows for one quarter, or for every quarter when <paramref name="quarter"/> is null.</summary>
+    Task<IReadOnlyList<NcciLoadRecord>> ListLoadRecordsAsync(string tenantId, string? quarter, CancellationToken ct = default);
 
     // ── Quarterly Import ──────────────────────────────────────────
 
