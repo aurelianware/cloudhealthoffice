@@ -23,11 +23,13 @@ namespace AppealsService.HostedServices;
 ///
 /// Idempotent — re-running finds zero eligible records and exits cleanly.
 /// Bounded batches (100 per scan, configurable via
-/// <c>AppealMigration:BatchSize</c>). Waits for the appeal event
-/// publisher to start before migrating anything (see
-/// <see cref="StartAsync"/>), so each row's <c>AppealStatusMigrated</c>
-/// event is produced rather than skipped; if the publisher fails to
-/// start, nothing is migrated and the next start retries.
+/// <c>AppealMigration:BatchSize</c>). Each row's <c>AppealStatusMigrated</c>
+/// Kafka event is pushed onto the appeal's outbox in the same
+/// single-document update that rewrites the status, and the outbox relay
+/// publishes it. So the migration no longer waits for the Kafka producer
+/// (the readiness wait it needed while a publish before the producer
+/// started was silently dropped is gone): Kafka unavailable or disabled
+/// only delays the event, it cannot lose it.
 ///
 /// Also scans for duplicate <c>AppealNumber</c> values under the same
 /// tenant and logs them as warnings BEFORE the index initializer attempts
@@ -59,42 +61,24 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
 
     private readonly IMongoDatabase _db;
     private readonly IAppealEventSink _events;
-    private readonly IAppealEventPublisher _publisher;
-    private readonly IAppealEventPublisherReadiness _publisherReadiness;
-    private readonly CancellationTokenSource _stopping = new();
     private readonly IConfiguration _configuration;
     private readonly ILogger<AppealStatusMigrationHostedService> _logger;
 
     public AppealStatusMigrationHostedService(
         IMongoDatabase db,
         IAppealEventSink events,
-        IAppealEventPublisher publisher,
-        IAppealEventPublisherReadiness publisherReadiness,
         IConfiguration configuration,
         ILogger<AppealStatusMigrationHostedService> logger)
     {
         _db = db;
         _events = events;
-        _publisher = publisher;
-        _publisherReadiness = publisherReadiness;
         _configuration = configuration;
         _logger = logger;
     }
 
     /// <summary>
-    /// The migration run when it had to wait for the publisher; <c>null</c>
-    /// when it ran inside <see cref="StartAsync"/>. Exposed for tests.
-    /// </summary>
-    internal Task? DeferredRun { get; private set; }
-
-    /// <summary>
-    /// Runs the duplicate / ambiguity scans, then the migration — but only
-    /// once <see cref="IAppealEventPublisherReadiness.Started"/> completes:
-    /// before the publisher's own <c>StartAsync</c> a publish is silently
-    /// skipped, and each migrated row's <c>AppealStatusMigrated</c> event
-    /// would be lost. Already started → migrate here. Not yet (registered
-    /// after this service) → migrate in the background once it starts, so
-    /// sequential hosted-service startup cannot deadlock.
+    /// Runs the duplicate / ambiguity scans, then the migration. Does not
+    /// depend on the Kafka producer: events go to the outbox.
     /// </summary>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -103,75 +87,17 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
         await WarnDuplicateAppealNumbersAsync(raw, cancellationToken);
         await WarnAmbiguousIntegerStatusesAsync(raw, cancellationToken);
 
-        if (_publisherReadiness.Started.IsCompleted)
-        {
-            await MigrateWhenPublisherReadyAsync(background: false, cancellationToken);
-            return;
-        }
-
-        _logger.LogInformation("AppealStatusMigration waiting for the appeal event publisher to start.");
-        DeferredRun = Task.Run(() => MigrateWhenPublisherReadyAsync(background: true, _stopping.Token), CancellationToken.None);
-    }
-
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        _stopping.Cancel();
-        if (DeferredRun is { } run)
-            await Task.WhenAny(run, Task.Delay(Timeout.Infinite, cancellationToken));
-    }
-
-    /// <summary>
-    /// Waits (bounded by <c>AppealMigration:PublisherReadyTimeoutSeconds</c>,
-    /// default 60) for the publisher. Unavailable or never started → the
-    /// run is skipped with an error and every legacy row stays as it is, so
-    /// the next start migrates it and emits its event. Disabled by
-    /// configuration (no <c>Kafka:BootstrapServers</c>) → the service
-    /// publishes no events at all, so migrate with a warning; the audit row
-    /// is still written.
-    /// </summary>
-    private async Task MigrateWhenPublisherReadyAsync(bool background, CancellationToken ct)
-    {
         try
         {
-            var timeout = TimeSpan.FromSeconds(
-                _configuration.GetValue<double?>("AppealMigration:PublisherReadyTimeoutSeconds") ?? 60);
-            var started = _publisherReadiness.Started;
-            if (await Task.WhenAny(started, Task.Delay(timeout, ct)) != started)
-            {
-                if (ct.IsCancellationRequested) return;
-                _logger.LogError(
-                    "AppealStatusMigration skipped: the appeal event publisher did not start within {Timeout}. " +
-                    "Legacy rows are left unmigrated and will be migrated (and published) on the next start.",
-                    timeout);
-                return;
-            }
-
-            switch (await started)
-            {
-                case AppealEventPublisherState.Unavailable:
-                    _logger.LogError(
-                        "AppealStatusMigration skipped: the appeal event publisher failed to start. " +
-                        "Legacy rows are left unmigrated and will be migrated (and published) on the next start.");
-                    return;
-                case AppealEventPublisherState.Disabled:
-                    _logger.LogWarning(
-                        "AppealStatusMigration running with Kafka publishing disabled by configuration: " +
-                        "AppealStatusMigrated events are not published (audit rows are still written).");
-                    break;
-            }
-
-            await RunMigrationAsync(ct);
+            await RunMigrationAsync(cancellationToken);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning("AppealStatusMigration cancelled; remaining legacy rows migrate on the next start.");
         }
-        catch (Exception ex) when (background)
-        {
-            // Background run: nothing awaits it, so log rather than lose the failure.
-            _logger.LogError(ex, "AppealStatusMigration failed; remaining legacy rows migrate on the next start.");
-        }
     }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private async Task RunMigrationAsync(CancellationToken cancellationToken)
     {
@@ -314,42 +240,9 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
         var mappedReason = MapLegacyStatus(legacyLabel);
         var now = DateTime.UtcNow;
 
-        // Typed update: the class map supplies the element names and the
-        // enum representation, so the row reads back as Closed through the
-        // repository. A row carrying the camelCase status also has its
-        // camelCase fields rewritten, so it stops matching the legacy filter
-        // (idempotency) and reads as closed under either spelling.
-        var update = Builders<Appeal>.Update
-            .Set(a => a.Status, AppealStatus.Closed)
-            .Set(a => a.ClosureReasonCode, mappedReason)
-            .Set(a => a.ClosedAt, now)
-            .Set(a => a.ClosedBy, MigrationActor)
-            .Set(a => a.UpdatedAt, now)
-            .Set(a => a.UpdatedBy, MigrationActor);
-        if (Fields.Status.Legacy != Fields.Status.Current && doc.Contains(Fields.Status.Legacy))
-        {
-            update = update
-                .Set(Fields.Status.Legacy, AppealStatus.Closed.ToString())
-                .Set(Fields.ClosureReasonCode.Legacy, mappedReason.ToString())
-                .Set(Fields.ClosedAt.Legacy, now)
-                .Set(Fields.ClosedBy.Legacy, MigrationActor)
-                .Set(Fields.UpdatedAt.Legacy, now)
-                .Set(Fields.UpdatedBy.Legacy, MigrationActor);
-        }
-
-        // Re-check the legacy status in the write so two replicas starting
-        // together do not both migrate (and audit) the same row.
-        var filter = new BsonDocumentFilterDefinition<Appeal>(new BsonDocument("$and", new BsonArray
-        {
-            new BsonDocument("_id", doc.GetValue("_id")),
-            BuildLegacyStatusFilter()
-        }));
-        var result = await typed.UpdateOneAsync(filter, update, cancellationToken: ct);
-        if (result.MatchedCount == 0) return false;
-
-        // Build the audit event and the Kafka event from a typed snapshot of
-        // the post-migration record. We populate a minimal Appeal instance
-        // for envelope/headers — the payload only carries legacy/mapped data.
+        // Audit row + Kafka event, built before the write so the event can
+        // ride in it. The payload only carries legacy / mapped data; the
+        // snapshot supplies the envelope.
         var snapshot = new Appeal
         {
             TenantId = tenantId,
@@ -382,10 +275,46 @@ public sealed class AppealStatusMigrationHostedService : IHostedService
                 ["mappedReasonCode"] = mappedReason.ToString()
             }
         };
+        AppealOutbox.StatusMigrated(auditEvent, snapshot, legacyLabel, mappedReason, correlationId: null);
+
+        // Typed update: the class map supplies the element names and the
+        // enum representation, so the row reads back as Closed through the
+        // repository. A row carrying the camelCase status also has its
+        // camelCase fields rewritten, so it stops matching the legacy filter
+        // (idempotency) and reads as closed under either spelling.
+        var update = Builders<Appeal>.Update
+            .Set(a => a.Status, AppealStatus.Closed)
+            .Set(a => a.ClosureReasonCode, mappedReason)
+            .Set(a => a.ClosedAt, now)
+            .Set(a => a.ClosedBy, MigrationActor)
+            .Set(a => a.UpdatedAt, now)
+            .Set(a => a.UpdatedBy, MigrationActor)
+            // The class-map tenant, so the outbox relay (typed reads) finds
+            // camelCase legacy rows too.
+            .Set(a => a.TenantId, tenantId)
+            .Push(a => a.Outbox, auditEvent.OutboxMessage);
+        if (Fields.Status.Legacy != Fields.Status.Current && doc.Contains(Fields.Status.Legacy))
+        {
+            update = update
+                .Set(Fields.Status.Legacy, AppealStatus.Closed.ToString())
+                .Set(Fields.ClosureReasonCode.Legacy, mappedReason.ToString())
+                .Set(Fields.ClosedAt.Legacy, now)
+                .Set(Fields.ClosedBy.Legacy, MigrationActor)
+                .Set(Fields.UpdatedAt.Legacy, now)
+                .Set(Fields.UpdatedBy.Legacy, MigrationActor);
+        }
+
+        // Re-check the legacy status in the write so two replicas starting
+        // together do not both migrate (and audit) the same row.
+        var filter = new BsonDocumentFilterDefinition<Appeal>(new BsonDocument("$and", new BsonArray
+        {
+            new BsonDocument("_id", doc.GetValue("_id")),
+            BuildLegacyStatusFilter()
+        }));
+        var result = await typed.UpdateOneAsync(filter, update, cancellationToken: ct);
+        if (result.MatchedCount == 0) return false;
 
         await _events.AppendAsync(auditEvent, ct);
-        await _publisher.PublishStatusMigratedAsync(
-            snapshot, legacyLabel, mappedReason, MigrationActor, correlationId: null, ct);
 
         _logger.LogInformation(
             "Migrated appeal {AppealId} tenant {TenantId} from legacy status {Legacy} -> Closed + {Reason}",

@@ -160,6 +160,13 @@ public class AppealDtoDriftTests
             .Any(a => a.GetType().FullName == "MongoDB.Bson.Serialization.Attributes.BsonIgnoreAttribute"))
             return true;
 
+        // The transactional-outbox bookkeeping on Appeal (pending Kafka
+        // events and the relay lease) is persistence-only: API responses
+        // never carry it, so the DTO does not mirror it.
+        if (prop.DeclaringType?.FullName == "AppealsService.Models.Appeal"
+            && prop.Name is "Outbox" or "OutboxLeaseOwner" or "OutboxLeaseUntil" or "OutboxSequence")
+            return true;
+
         return false;
     }
 

@@ -58,16 +58,24 @@ builder.Services.AddChoAuthentication(builder.Configuration, builder.Environment
     auth.DefaultWritePermission = "appeals:write";
 });
 
-// ── Kafka producer (appeal lifecycle events) ─────────────────────────
-// Always registered; degraded-mode-silent if Kafka:BootstrapServers is unset.
-// Registered BEFORE the database block so its StartAsync runs ahead of the
-// status migration's. The migration does not rely on that order: it waits
-// on IAppealEventPublisherReadiness, because a publish before the
-// producer's StartAsync is silently skipped.
+// ── Appeal events: transactional outbox + Kafka relay ─────────────────
+// Every appeal change writes its Kafka event into the appeal document's
+// outbox in the same write (see AppealOutbox / docs/architecture/
+// appeals-event-outbox.md). AppealOutboxDispatcher publishes pending
+// entries through the Kafka transport with retry, backoff and dead-letter.
+// Kafka:BootstrapServers unset = publishing disabled by configuration:
+// events stay pending (or are marked skipped with
+// AppealOutbox:SkipWhenKafkaDisabled=true). No startup ordering matters:
+// nothing publishes before the transport has started.
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection(AppealOutboxOptions.SectionName).Get<AppealOutboxOptions>()
+    ?? new AppealOutboxOptions());
 builder.Services.AddSingleton<AppealEventPublisher>();
-builder.Services.AddSingleton<IAppealEventPublisher>(sp => sp.GetRequiredService<AppealEventPublisher>());
-builder.Services.AddSingleton<IAppealEventPublisherReadiness>(sp => sp.GetRequiredService<AppealEventPublisher>());
+builder.Services.AddSingleton<IAppealEventTransport>(sp => sp.GetRequiredService<AppealEventPublisher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AppealEventPublisher>());
+builder.Services.AddSingleton<AppealOutboxDispatcher>();
+builder.Services.AddSingleton<IAppealOutboxDispatcher>(sp => sp.GetRequiredService<AppealOutboxDispatcher>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AppealOutboxDispatcher>());
 
 // ── Database Configuration ───────────────────────────────────────────
 var mongoConnectionString = builder.Configuration["MongoDb:ConnectionString"];
@@ -77,7 +85,9 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
 {
     builder.Services.AddSingleton<IAppealEventRepository, AppealEventRepositoryMongo>();
     builder.Services.AddSingleton<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRequiredService<IAppealEventRepository>());
-    builder.Services.AddSingleton<IAppealRepository, AppealRepositoryMongo>();
+    builder.Services.AddSingleton<AppealRepositoryMongo>();
+    builder.Services.AddSingleton<IAppealRepository>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
+    builder.Services.AddSingleton<IAppealOutboxStore>(sp => sp.GetRequiredService<AppealRepositoryMongo>());
 
     // Registration order matters for IHostedService.StartAsync sequencing:
     // migration runs first so the index initializer sees a consistent
@@ -114,7 +124,7 @@ else
         return new AppealEventRepository(cosmosClient, databaseName);
     });
     builder.Services.AddScoped<IAppealEventSink>(sp => (IAppealEventSink)sp.GetRequiredService<IAppealEventRepository>());
-    builder.Services.AddScoped<IAppealRepository>(sp =>
+    builder.Services.AddScoped<AppealRepository>(sp =>
     {
         var cosmosClient = sp.GetRequiredService<CosmosClient>();
         var configuration = sp.GetRequiredService<IConfiguration>();
@@ -122,6 +132,8 @@ else
         var sink = sp.GetRequiredService<IAppealEventSink>();
         return new AppealRepository(cosmosClient, databaseName, sink);
     });
+    builder.Services.AddScoped<IAppealRepository>(sp => sp.GetRequiredService<AppealRepository>());
+    builder.Services.AddScoped<IAppealOutboxStore>(sp => sp.GetRequiredService<AppealRepository>());
 
     Console.WriteLine("[appeals-service] Using Cosmos DB database provider");
 }
@@ -169,9 +181,8 @@ builder.Services.AddSingleton<IAppealHolidayCalendarProvider>(sp =>
 // ── Kafka consumer (X12 275 attachment ingress) ──────────────────────
 // Subscribes to the attachments-in topic, routes appeal-context 275s to
 // the existing AppendAttachmentAsync path. Degraded-mode-silent if
-// Kafka:BootstrapServers is unset. Registered AFTER AppealEventPublisher
-// so the producer's StartAsync runs first — the consumer's per-message
-// publish call expects the producer to already be available.
+// Kafka:BootstrapServers is unset. Its AppealAttachmentAdded event goes
+// through the outbox like every other change.
 builder.Services.AddSingleton<Attachment275EnvelopeMapper>();
 builder.Services.AddSingleton<IAttachment275DeadLetterSink, LoggingAttachment275DeadLetterSink>();
 builder.Services.AddHostedService<Attachment275ConsumerHostedService>();

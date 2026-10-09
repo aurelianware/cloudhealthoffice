@@ -35,7 +35,7 @@ public class AppealRepositoryClaimLookupTests
         CreatedAt = DateTime.UtcNow
     };
 
-    private static AppealEvent Genesis(Appeal a) => new()
+    private static AppealEvent Genesis(Appeal a) => new AppealEvent()
     {
         TenantId = a.TenantId,
         AppealId = a.Id,
@@ -44,7 +44,7 @@ public class AppealRepositoryClaimLookupTests
         FromStatus = null,
         ToStatus = a.Status,
         ActorId = "test"
-    };
+    }.Queued(a);
 
     [Fact]
     public async Task ReturnsNull_WhenNoAppealsExist()

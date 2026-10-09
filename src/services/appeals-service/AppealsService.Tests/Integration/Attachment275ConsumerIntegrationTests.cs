@@ -94,7 +94,7 @@ public class Attachment275ConsumerIntegrationTests
         var sink = new RecordingAttachment275DeadLetterSink();
         var mapper = new Attachment275EnvelopeMapper();
         var consumer = new Attachment275ConsumerHostedService(
-            repository, publisher, encryptor, sink, mapper,
+            repository, publisher.DispatcherFor(repository), encryptor, sink, mapper,
             NullLogger<Attachment275ConsumerHostedService>.Instance);
         return (consumer, repository, publisher, sink);
     }
@@ -129,7 +129,7 @@ public class Attachment275ConsumerIntegrationTests
             FromStatus = null,
             ToStatus = AppealStatus.Submitted,
             ActorId = "seed"
-        };
+        }.Queued(appeal);
         return await repository.CreateAsync(appeal, genesis);
     }
 
@@ -212,7 +212,7 @@ public class Attachment275ConsumerIntegrationTests
             FromStatus = AppealStatus.Submitted,
             ToStatus = AppealStatus.Closed,
             ActorId = "seed"
-        };
+        }.Queued(seeded);
         seeded.Status = AppealStatus.Closed;
         await repository.TransitionStatusAsync(seeded, transition);
 

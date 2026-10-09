@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AppealsService.Controllers;
 using AppealsService.Models;
+using AppealsService.Services;
 using AppealsService.Tests.Fakes;
 
 namespace AppealsService.Tests.Integration;
@@ -542,8 +543,16 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
             .StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
+    /// <remarks>
+    /// Before the outbox, a same-EventId replay re-published both events
+    /// (consumers de-duplicated on the stable EventId) because the first
+    /// attempt's publish might have been dropped. The events now commit
+    /// with the extension in the appeal's outbox, so a replay neither
+    /// re-enqueues nor re-publishes them: each is delivered exactly once by
+    /// the relay, with the same stable ids.
+    /// </remarks>
     [Fact]
-    public async Task Replay_Republishes_Identical_Payloads_Even_After_A_Status_Transition()
+    public async Task Replay_After_A_Status_Transition_Does_Not_Enqueue_A_Second_Copy()
     {
         _factory.Reset();
         var client = NewClient();
@@ -558,16 +567,15 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
         (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/extend", request, JsonOptions))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var extended = _factory.Publisher.DeadlineExtendedPayloads.ToList();
-        extended.Should().HaveCount(2);
-        extended[1].Should().Be(extended[0], "a replay must republish the same logical event");
-        extended[0].EventId.Should().Be(request.EventId);
-        extended[0].CurrentStatus.Should().Be(nameof(AppealStatus.Submitted));
+        var extended = _factory.Publisher.DeadlineExtendedPayloads.Should().ContainSingle().Subject;
+        extended.EventId.Should().Be(AppealOutbox.WireEventId("tenant-ext", appeal.Id, request.EventId!));
+        extended.CurrentStatus.Should().Be(nameof(AppealStatus.Submitted));
 
-        var notes = _factory.Publisher.NoteAddedPayloads.ToList();
-        notes.Should().HaveCount(2);
-        notes[1].Should().Be(notes[0]);
-        notes[0].EventId.Should().Be($"{request.EventId}:justification-note");
+        var note = _factory.Publisher.NoteAddedPayloads.Should().ContainSingle().Subject;
+        note.EventId.Should().Be(AppealOutbox.WireEventId("tenant-ext", appeal.Id, $"{request.EventId}:justification-note"));
+
+        _factory.Repo.OutboxOf("tenant-ext", appeal.Id)
+            .Count(m => m.IdempotencyKey == request.EventId).Should().Be(1);
     }
 
     [Fact]
