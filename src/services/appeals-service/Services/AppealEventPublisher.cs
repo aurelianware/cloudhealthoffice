@@ -18,7 +18,7 @@ namespace AppealsService.Services;
 /// - Partition key = <c>appealId</c> (per-appeal ordering preserved).
 /// - Headers: <c>tenant-id</c>, <c>event-type</c>, <c>event-version</c>.
 /// </summary>
-public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService, IAsyncDisposable
+public sealed class AppealEventPublisher : IAppealEventPublisher, IAppealEventPublisherReadiness, IHostedService, IAsyncDisposable
 {
     public const string StatusChangedTopic = "appeal.status-changed.v1";
     public const string EventVersion = "1.0";
@@ -38,6 +38,11 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
     private readonly IConfiguration _configuration;
     private IProducer<string, string>? _producer;
     private bool _available;
+    private readonly TaskCompletionSource<AppealEventPublisherState> _started =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <inheritdoc />
+    public Task<AppealEventPublisherState> Started => _started.Task;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -58,6 +63,7 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
         if (string.IsNullOrEmpty(bootstrapServers))
         {
             _logger.LogWarning("Kafka:BootstrapServers not configured — appeal event publisher disabled");
+            _started.TrySetResult(AppealEventPublisherState.Disabled);
             return Task.CompletedTask;
         }
 
@@ -95,6 +101,7 @@ public sealed class AppealEventPublisher : IAppealEventPublisher, IHostedService
             _available = false;
         }
 
+        _started.TrySetResult(_available ? AppealEventPublisherState.Available : AppealEventPublisherState.Unavailable);
         return Task.CompletedTask;
     }
 

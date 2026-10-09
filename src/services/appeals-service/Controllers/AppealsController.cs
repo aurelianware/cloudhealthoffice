@@ -50,6 +50,7 @@ public class AppealsController : ControllerBase
     private readonly IAppealEventPublisher _publisher;
     private readonly ILogger<AppealsController> _logger;
     private readonly ICurrentActor _currentActor;
+    private readonly IAppealHolidayCalendarProvider _holidays;
 
     /// <summary>ProblemDetails type for a create-time deadline override past the regulatory maximum.</summary>
     public const string TargetResponseDateProblemType =
@@ -74,7 +75,8 @@ public class AppealsController : ControllerBase
         IAppealFieldEncryptor encryptor,
         IAppealEventPublisher publisher,
         ILogger<AppealsController> logger,
-        ICurrentActor currentActor)
+        ICurrentActor currentActor,
+        IAppealHolidayCalendarProvider holidays)
     {
         _appeals = appeals;
         _events = events;
@@ -82,6 +84,7 @@ public class AppealsController : ControllerBase
         _publisher = publisher;
         _logger = logger;
         _currentActor = currentActor;
+        _holidays = holidays;
     }
 
     // ── Create / Read ───────────────────────────────────────────────────
@@ -110,7 +113,8 @@ public class AppealsController : ControllerBase
         var regulatoryDeadline = AppealResponseDeadlinePolicy.ComputeTargetResponseDate(
             now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent);
         var enforceableMaximum = AppealResponseDeadlinePolicy.ComputeEnforceableMaximum(
-            now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent);
+            now, request.LineOfBusiness, request.AppealType, request.AppealLevel, request.IsUrgent,
+            _holidays.ForTenant(TenantId));
         if (request.TargetResponseDate.HasValue
             && enforceableMaximum.HasValue
             && request.TargetResponseDate.Value.ToUniversalTime() > enforceableMaximum.Value)
@@ -690,7 +694,8 @@ public class AppealsController : ControllerBase
         var extended = current.AddDays(request.ExtensionDays);
         var receivedAt = (appeal.ReceivedDate ?? appeal.SubmittedDate).ToUniversalTime();
         var ceiling = AppealResponseDeadlinePolicy.ComputeMaxExtendedTargetResponseDate(
-            receivedAt, appeal.LineOfBusiness, appeal.AppealType, appeal.AppealLevel, appeal.IsUrgent);
+            receivedAt, appeal.LineOfBusiness, appeal.AppealType, appeal.AppealLevel, appeal.IsUrgent,
+            _holidays.ForTenant(appeal.TenantId));
         if (ceiling.HasValue && extended > ceiling.Value)
         {
             ModelState.AddModelError(nameof(ExtendDeadlineRequest.ExtensionDays),

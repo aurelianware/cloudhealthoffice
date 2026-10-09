@@ -322,11 +322,12 @@ public class AppealResponseDeadlinePolicyTests
     // ── Expedited State Fair Hearing: 3 working days ────────────────────
 
     [Theory]
-    [InlineData("2026-10-05T09:00:00Z", "2026-10-08T09:00:00Z")] // Monday   -> Thursday
-    [InlineData("2026-10-08T14:30:00Z", "2026-10-13T14:30:00Z")] // Thursday -> Tuesday (spans weekend)
-    [InlineData("2026-10-09T10:00:00Z", "2026-10-14T10:00:00Z")] // Friday   -> Wednesday
-    [InlineData("2026-10-10T10:00:00Z", "2026-10-14T10:00:00Z")] // Saturday -> Wednesday
-    [InlineData("2026-10-11T10:00:00Z", "2026-10-14T10:00:00Z")] // Sunday   -> Wednesday
+    [InlineData("2026-10-19T09:00:00Z", "2026-10-22T09:00:00Z")] // Monday   -> Thursday
+    [InlineData("2026-10-22T14:30:00Z", "2026-10-27T14:30:00Z")] // Thursday -> Tuesday (spans weekend)
+    [InlineData("2026-10-23T10:00:00Z", "2026-10-28T10:00:00Z")] // Friday   -> Wednesday
+    [InlineData("2026-10-24T10:00:00Z", "2026-10-28T10:00:00Z")] // Saturday -> Wednesday
+    [InlineData("2026-10-25T10:00:00Z", "2026-10-28T10:00:00Z")] // Sunday   -> Wednesday
+    [InlineData("2026-10-09T10:00:00Z", "2026-10-15T10:00:00Z")] // Friday before Columbus Day -> Thursday
     public void Expedited_State_Fair_Hearing_Ceiling_Is_Three_Working_Days(string received, string expected)
     {
         var receivedAt = DateTime.Parse(received, null, System.Globalization.DateTimeStyles.AdjustToUniversal);
