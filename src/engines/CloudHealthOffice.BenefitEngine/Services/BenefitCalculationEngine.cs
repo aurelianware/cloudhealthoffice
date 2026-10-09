@@ -494,29 +494,30 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         // Allocate cost-sharing back to the lines for 835 reporting, in
         // proportion to each line's allowed amount (truncated to the cent,
-        // remainder on the last line — see AllocateToLines). Each component
-        // sums exactly to its claim-level value, and per line
-        // MemberResponsibility = deductible + copay + coinsurance − OOP-max
-        // reduction and PlanPaid = allowed − MemberResponsibility, so line
-        // sums reconcile to the claim totals and each line balances.
+        // remainder on the last line — see AllocateToLines). The claim-level
+        // deductible / copay / coinsurance are already reduced by any OOP-max
+        // cap, so each component sums exactly to its claim-level value, and
+        // per line MemberResponsibility = deductible + copay + coinsurance
+        // and PlanPaid = allowed − MemberResponsibility: line sums reconcile
+        // to the claim totals and each line balances with no OA-23.
         var lines = orderedLines;
         var deductibles = AllocateToLines(drgCostShare.DeductibleApplied, allowedByLine, allowedByLine);
         var afterDeductible = allowedByLine.Select((a, i) => a - deductibles[i]).ToList();
         var copays = AllocateToLines(drgCostShare.CopayApplied, allowedByLine, afterDeductible);
         var afterCopay = afterDeductible.Select((a, i) => a - copays[i]).ToList();
         var coinsurances = AllocateToLines(drgCostShare.CoinsuranceApplied, allowedByLine, afterCopay);
-        var rawByLine = lines.Select((_, i) => deductibles[i] + copays[i] + coinsurances[i]).ToList();
-        var members = AllocateToLines(drgCostShare.MemberResponsibility, rawByLine, rawByLine);
+        var members = lines.Select((_, i) => deductibles[i] + copays[i] + coinsurances[i]).ToList();
         // The OOP-counting portion of member responsibility (OopApplies), by
         // the same rule within each line's member share.
         var oopApplied = AllocateToLines(drgCostShare.OopApplied, members, members);
+        // Informational: the cost share the OOP cap forgave, by allowed.
+        var oopReductions = AllocateToLines(drgCostShare.OopMaxReduction, allowedByLine, allowedByLine);
 
         var lineResults = new List<LineBenefitResult>();
         for (var i = 0; i < lines.Count; i++)
         {
             var line = lines[i];
             var lineAllowed = allowedByLine[i];
-            var oopReduction = rawByLine[i] - members[i];
             var contractual = Math.Max(0, line.BilledAmount - lineAllowed);
 
             var lineAdjustments = new List<AdjustmentReason>();
@@ -528,8 +529,6 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 lineAdjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "3", Amount = copays[i] });
             if (coinsurances[i] > 0)
                 lineAdjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "2", Amount = coinsurances[i] });
-            if (oopReduction > 0)
-                lineAdjustments.Add(new AdjustmentReason { GroupCode = "OA", ReasonCode = "23", Amount = -oopReduction });
 
             lineResults.Add(new LineBenefitResult
             {
@@ -550,7 +549,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 CopayAmount = copays[i],
                 CoinsuranceAmount = coinsurances[i],
                 CoinsurancePercent = drgCostShare.CoinsurancePercent,
-                OopMaxReduction = oopReduction,
+                OopMaxReduction = oopReductions[i],
                 MemberResponsibility = members[i],
                 OopAppliedAmount = oopApplied[i],
                 PlanPaidAmount = lineAllowed - members[i],
@@ -801,6 +800,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         }
 
         // ── 4. Apply the waterfall based on copay mode ──
+        // Amounts only: the deductible accumulator is written after the OOP
+        // cap (step 6), with the deductible the member is actually charged.
         var remainingAllowed = allowedAmount;
         decimal deductibleAmount = 0;
         decimal finalCopay = 0;
@@ -814,21 +815,10 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 {
                     finalCopay = Math.Min(copayAmount, remainingAllowed);
                     remainingAllowed -= finalCopay;
-                    adjustments.Add(new AdjustmentReason
-                    {
-                        GroupCode = "PR", ReasonCode = "3", Amount = finalCopay
-                    });
                 }
                 // Coinsurance on remainder
                 if (coinsurancePercent > 0 && remainingAllowed > 0)
-                {
                     coinsuranceAmount = Math.Round(remainingAllowed * coinsurancePercent, 2);
-                    if (coinsuranceAmount > 0)
-                        adjustments.Add(new AdjustmentReason
-                        {
-                            GroupCode = "PR", ReasonCode = "2", Amount = coinsuranceAmount
-                        });
-                }
                 break;
 
             case CopayApplicationMode.InAdditionToDeductible:
@@ -836,80 +826,41 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 if (deductibleApplies)
                 {
                     var deductibleRemaining = accumulators.GetRemainingDeductible(effectiveNetworkTier);
-                    deductibleAmount = Math.Min(remainingAllowed, deductibleRemaining);
-                    if (deductibleAmount > 0)
-                    {
-                        accumulators.ApplyDeductible(deductibleAmount, effectiveNetworkTier);
-                        remainingAllowed -= deductibleAmount;
-                        adjustments.Add(new AdjustmentReason
-                        {
-                            GroupCode = "PR", ReasonCode = "1", Amount = deductibleAmount
-                        });
-                    }
+                    deductibleAmount = Math.Max(0, Math.Min(remainingAllowed, deductibleRemaining));
+                    remainingAllowed -= deductibleAmount;
                 }
-                // Copay on top (does not reduce remaining for coinsurance)
+                // Copay on top of the deductible
                 if (copayAmount > 0)
                 {
-                    finalCopay = Math.Min(copayAmount, remainingAllowed);
+                    finalCopay = Math.Max(0, Math.Min(copayAmount, remainingAllowed));
                     remainingAllowed -= finalCopay;
-                    adjustments.Add(new AdjustmentReason
-                    {
-                        GroupCode = "PR", ReasonCode = "3", Amount = finalCopay
-                    });
                 }
                 // Coinsurance on remainder
                 if (coinsurancePercent > 0 && remainingAllowed > 0)
-                {
                     coinsuranceAmount = Math.Round(remainingAllowed * coinsurancePercent, 2);
-                    if (coinsuranceAmount > 0)
-                        adjustments.Add(new AdjustmentReason
-                        {
-                            GroupCode = "PR", ReasonCode = "2", Amount = coinsuranceAmount
-                        });
-                }
                 break;
 
             default: // AfterDeductible — standard waterfall
                 if (deductibleApplies)
                 {
                     var deductibleRemaining = accumulators.GetRemainingDeductible(effectiveNetworkTier);
-                    deductibleAmount = Math.Min(remainingAllowed, deductibleRemaining);
-                    if (deductibleAmount > 0)
-                    {
-                        accumulators.ApplyDeductible(deductibleAmount, effectiveNetworkTier);
-                        remainingAllowed -= deductibleAmount;
-                        adjustments.Add(new AdjustmentReason
-                        {
-                            GroupCode = "PR", ReasonCode = "1", Amount = deductibleAmount
-                        });
-                    }
+                    deductibleAmount = Math.Max(0, Math.Min(remainingAllowed, deductibleRemaining));
+                    remainingAllowed -= deductibleAmount;
                 }
                 if (copayAmount > 0 && remainingAllowed > 0)
                 {
                     finalCopay = Math.Min(copayAmount, remainingAllowed);
                     remainingAllowed -= finalCopay;
-                    adjustments.Add(new AdjustmentReason
-                    {
-                        GroupCode = "PR", ReasonCode = "3", Amount = finalCopay
-                    });
                 }
                 if (coinsurancePercent > 0 && remainingAllowed > 0)
-                {
                     coinsuranceAmount = Math.Round(remainingAllowed * coinsurancePercent, 2);
-                    if (coinsuranceAmount > 0)
-                        adjustments.Add(new AdjustmentReason
-                        {
-                            GroupCode = "PR", ReasonCode = "2", Amount = coinsuranceAmount
-                        });
-                }
                 break;
         }
 
-        // ── 5. Raw member responsibility ──
-        // Split by whether each component counts toward the OOP max. A rule
-        // with OopApplies=false contributes cost share that neither consumes
-        // nor is capped by the OOP max. Absent rules (e.g. the HDHP-forced
-        // deductible) default to counting.
+        // ── 5. Split by OOP eligibility ──
+        // A rule with OopApplies=false contributes cost share that neither
+        // consumes nor is capped by the OOP max. Absent rules (e.g. the
+        // HDHP-forced deductible) default to counting.
         var deductibleCountsToOop = deductibleRule?.OopApplies ?? true;
         var copayCountsToOop = copayRule?.OopApplies ?? true;
         var coinsuranceCountsToOop = coinsuranceRule?.OopApplies ?? true;
@@ -918,9 +869,14 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             (deductibleCountsToOop ? deductibleAmount : 0)
             + (copayCountsToOop ? finalCopay : 0)
             + (coinsuranceCountsToOop ? coinsuranceAmount : 0);
-        var oopExcluded = deductibleAmount + finalCopay + coinsuranceAmount - oopEligible;
 
         // ── 6. OOP max cap (OOP-eligible portion only) ──
+        // When the cap limits cost share, the PR amounts themselves are
+        // reduced so they total what the member owes; the 835 carries no
+        // negative OA-23. The cap forgives the cost share applied last
+        // first — coinsurance, then copay, then deductible — so the
+        // deductible the member already satisfied on the way to the cap
+        // keeps counting toward the deductible.
         decimal oopMaxReduction = 0;
         if (oopEligible > 0)
         {
@@ -931,23 +887,31 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 oopMaxReduction = oopEligible - oopRemaining;
                 oopEligible = oopRemaining;
 
-                if (oopMaxReduction > 0)
-                {
-                    adjustments.Add(new AdjustmentReason
-                    {
-                        GroupCode = "OA",
-                        ReasonCode = "23",
-                        Amount = -oopMaxReduction
-                    });
-                }
+                var toForgive = oopMaxReduction;
+                if (coinsuranceCountsToOop)
+                    coinsuranceAmount -= Forgive(coinsuranceAmount, ref toForgive);
+                if (copayCountsToOop)
+                    finalCopay -= Forgive(finalCopay, ref toForgive);
+                if (deductibleCountsToOop)
+                    deductibleAmount -= Forgive(deductibleAmount, ref toForgive);
             }
 
             accumulators.ApplyOopMax(oopEligible, effectiveNetworkTier);
         }
 
-        var rawMemberResponsibility = oopEligible + oopExcluded;
+        // Record the deductible actually charged (after any OOP reduction).
+        if (deductibleAmount > 0)
+            accumulators.ApplyDeductible(deductibleAmount, effectiveNetworkTier);
 
-        var memberResponsibility = rawMemberResponsibility;
+        // ── 7. Patient-responsibility CAS (zero entries dropped) ──
+        if (deductibleAmount > 0)
+            adjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "1", Amount = deductibleAmount });
+        if (finalCopay > 0)
+            adjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "3", Amount = finalCopay });
+        if (coinsuranceAmount > 0)
+            adjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "2", Amount = coinsuranceAmount });
+
+        var memberResponsibility = deductibleAmount + finalCopay + coinsuranceAmount;
         var planPaid = allowedAmount - memberResponsibility;
 
         return new CostShareCalcResult
@@ -963,6 +927,17 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             PlanPaid = planPaid,
             Adjustments = adjustments
         };
+    }
+
+    /// <summary>
+    /// Takes up to <paramref name="amount"/> off the outstanding OOP-max
+    /// reduction and returns how much was taken.
+    /// </summary>
+    private static decimal Forgive(decimal amount, ref decimal outstanding)
+    {
+        var take = Math.Min(Math.Max(amount, 0), outstanding);
+        outstanding -= take;
+        return take;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1010,9 +985,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // pre-COB adjustments already balance to preCob.PlanPaidAmount, and
         // secondaryPay = preCob.PlanPaidAmount − cobReduction.
         //
-        // Contrast the OOP-max OA-23 in ApplyCostSharingInternal, which is
-        // correctly NEGATIVE: there the PR-1/2/3 entries carry the uncapped
-        // cost share and the plan pays MORE than allowed − ΣPR.
+        // The OOP max never produces an OA-23: ApplyCostSharingInternal
+        // reduces the PR-1/2/3 amounts themselves to what the member owes,
+        // so the pre-COB adjustments are all non-negative.
         var adjustments = new List<AdjustmentReason>(preCob.Adjustments);
         if (cobReduction > 0)
         {

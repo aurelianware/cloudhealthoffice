@@ -73,6 +73,44 @@ public class Era835ClaimPaymentBuilderTests
     }
 
     [Fact]
+    public void OopMaxCappedLine_WithCob_ReducedPrAndPositiveOa23_PassThroughBalanced()
+    {
+        // Engine shape after the OOP-max cap: the coinsurance PR-2 is already
+        // reduced to the $20 the member owes (no negative OOP OA-23); the
+        // only OA-23 is the positive secondary-payer reduction.
+        var claim = new ClaimDto
+        {
+            Id = "c-oop", ClaimNumber = "CLM-OOP", BillingProviderNPI = "NPI-A", MemberId = "M1",
+            Status = ClaimStatus.Approved, TotalChargeAmount = 5000m,
+            AdjudicationResult = new ClaimAdjudicationDto { PayerPayment = 2500m, PatientResponsibility = 20m },
+            ServiceLines = new List<ClaimServiceLineDto>
+            {
+                new()
+                {
+                    LineNumber = 1, ProcedureCode = "99223", ChargeAmount = 5000m, Units = 1,
+                    AdjudicationResult = new ClaimLineAdjudicationDto
+                    {
+                        PaidAmount = 2500m,
+                        AdjustmentReasons = new List<ClaimLineAdjustmentReasonDto>
+                        {
+                            Adj("CO", "45", 2000m), Adj("PR", "2", 20m), Adj("OA", "23", 480m),
+                        },
+                    },
+                },
+            },
+        };
+
+        var cp = Era835ClaimPaymentBuilder.Build(claim, denied: false, Mapper);
+
+        Assert.Empty(cp.ClaimAdjustments);
+        Assert.Equal(new[] { ("CO", "45", 2000m), ("PR", "2", 20m), ("OA", "23", 480m) },
+            cp.ServiceLines[0].Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.All(cp.ServiceLines[0].Adjustments, a => Assert.True(a.Amount >= 0m));
+        Assert.Equal(20m, cp.PatientResponsibilityAmount);
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(cp));
+    }
+
+    [Fact]
     public void NcciEdit_SameCarcAsLineAdjustment_NotDoubleCounted_RarcKept()
     {
         var claim = EngineClaim();
