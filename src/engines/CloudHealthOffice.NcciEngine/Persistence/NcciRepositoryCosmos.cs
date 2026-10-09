@@ -9,10 +9,12 @@ namespace CloudHealthOffice.NcciEngine.Persistence;
 /// <summary>
 /// Cosmos DB implementation of INcciRepository.
 ///
-/// Container layout (all partitioned by /tenantId):
-///   ncci-pairs     — NcciEditPair documents, id = stable key
-///   mue-entries    — MueEntry documents, id = stable key
-///   ncci-version   — NcciTableVersion document, id = "current"
+/// Container layout (all partitioned by /tenantId; created at startup by
+/// <see cref="NcciCosmosContainerInitializer"/> when missing):
+///   NcciPairs      — NcciEditPair documents, id = stable key
+///   MueEntries     — MueEntry documents, id = stable key
+///   NcciVersion    — NcciTableVersion document, id = "current"
+///   NcciLoadLedger — NcciLoadRecord documents, one per CMS file slot
 ///
 /// Lookups are point-reads (O(1) RU) when the composite key is known.
 /// Quarterly import uses batch upsert via TransactionalBatch where
@@ -31,18 +33,27 @@ internal class NcciRepositoryCosmos : INcciRepository
         IConfiguration configuration,
         ILogger<NcciRepositoryCosmos> logger)
     {
-        var db = configuration["CosmosDb:DatabaseName"] ?? "CloudHealthOffice";
-        _pairContainer    = cosmosClient.GetContainer(db, configuration["NcciEngine:PairContainer"]    ?? "NcciPairs");
-        _mueContainer     = cosmosClient.GetContainer(db, configuration["NcciEngine:MueContainer"]     ?? "MueEntries");
-        _versionContainer = cosmosClient.GetContainer(db, configuration["NcciEngine:VersionContainer"] ?? "NcciVersion");
+        var names = NcciCosmosContainers.Resolve(configuration);
+        _pairContainer    = cosmosClient.GetContainer(names.Database, names.Pairs);
+        _mueContainer     = cosmosClient.GetContainer(names.Database, names.Mues);
+        _versionContainer = cosmosClient.GetContainer(names.Database, names.Version);
+        _ledgerContainer  = cosmosClient.GetContainer(names.Database, names.LoadLedger);
         _logger = logger;
     }
+
+    private readonly Container _ledgerContainer;
+
+    // Setting filter: null @setting matches every row; otherwise rows of that
+    // setting, plus setting-less (seed / legacy) rows when @unscoped is true.
+    private const string SettingClause =
+        "  AND (@setting = null OR c.setting = @setting " +
+        "       OR (@unscoped = true AND (NOT IS_DEFINED(c.setting) OR c.setting = null))) ";
 
     // ── NCCI Edit Pairs ────────────────────────────────────────────
 
     public async Task<NcciEditPair?> GetEditPairAsync(
         string tenantId, string column1Code, string column2Code,
-        DateOnly serviceDate, CancellationToken ct = default)
+        DateOnly serviceDate, string? setting = null, bool includeUnscoped = true, CancellationToken ct = default)
     {
         // We query for the most-recent pair whose EffectiveDate <= serviceDate
         // and whose TerminationDate is null or > serviceDate.
@@ -54,11 +65,14 @@ internal class NcciRepositoryCosmos : INcciRepository
             "  AND c.column2Code = @col2 " +
             "  AND c.effectiveDate <= @dos " +
             "  AND (NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate > @dos) " +
+            SettingClause +
             "ORDER BY c.effectiveDate DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@col1", column1Code)
             .WithParameter("@col2", column2Code)
-            .WithParameter("@dos", serviceDate.ToString("yyyy-MM-dd"));
+            .WithParameter("@dos", serviceDate.ToString("yyyy-MM-dd"))
+            .WithParameter("@setting", setting)
+            .WithParameter("@unscoped", includeUnscoped);
 
         using var feed = _pairContainer.GetItemQueryIterator<NcciEditPair>(
             query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
@@ -75,7 +89,8 @@ internal class NcciRepositoryCosmos : INcciRepository
     // ── MUE Entries ───────────────────────────────────────────────
 
     public async Task<MueEntry?> GetMueEntryAsync(
-        string tenantId, string procedureCode, DateOnly serviceDate, CancellationToken ct = default)
+        string tenantId, string procedureCode, DateOnly serviceDate,
+        string? setting = null, bool includeUnscoped = true, CancellationToken ct = default)
     {
         var query = new QueryDefinition(
             "SELECT TOP 1 * FROM c " +
@@ -83,10 +98,13 @@ internal class NcciRepositoryCosmos : INcciRepository
             "  AND c.procedureCode = @code " +
             "  AND c.effectiveDate <= @dos " +
             "  AND (NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate > @dos) " +
+            SettingClause +
             "ORDER BY c.effectiveDate DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@code", procedureCode)
-            .WithParameter("@dos", serviceDate.ToString("yyyy-MM-dd"));
+            .WithParameter("@dos", serviceDate.ToString("yyyy-MM-dd"))
+            .WithParameter("@setting", setting)
+            .WithParameter("@unscoped", includeUnscoped);
 
         using var feed = _mueContainer.GetItemQueryIterator<MueEntry>(
             query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
@@ -98,6 +116,126 @@ internal class NcciRepositoryCosmos : INcciRepository
         }
 
         return null;
+    }
+
+    // ── CMS snapshot reconciliation ───────────────────────────────
+    // Dates are stored as ISO-8601 strings; "yyyy-MM-dd" prefixes compare
+    // lexicographically, as in the lookup queries above.
+
+    public async Task<(int Expired, int Deleted)> ReconcileMueSnapshotAsync(
+        string tenantId, string setting, DateTime quarterStart,
+        IReadOnlySet<string> retainedCodes, CancellationToken ct = default)
+    {
+        var start = quarterStart.ToString("yyyy-MM-dd");
+        var query = new QueryDefinition(
+            "SELECT * FROM c " +
+            "WHERE c.tenantId = @tenantId " +
+            "  AND c.setting = @setting " +
+            "  AND (STARTSWITH(c.effectiveDate, @start) OR (c.effectiveDate < @start " +
+            "       AND (NOT IS_DEFINED(c.terminationDate) OR c.terminationDate = null OR c.terminationDate > @start)))")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@setting", setting)
+            .WithParameter("@start", start);
+
+        int expired = 0, deleted = 0;
+        var pk = new PartitionKey(tenantId);
+        using var feed = _mueContainer.GetItemQueryIterator<MueEntry>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = pk });
+
+        while (feed.HasMoreResults)
+        {
+            foreach (var entry in await feed.ReadNextAsync(ct))
+            {
+                if (retainedCodes.Contains(entry.ProcedureCode)) continue;
+                if (entry.EffectiveDate.Date == quarterStart.Date)
+                {
+                    await _mueContainer.DeleteItemAsync<MueEntry>(entry.Id, pk, cancellationToken: ct);
+                    deleted++;
+                }
+                else
+                {
+                    entry.TerminationDate = quarterStart;
+                    await _mueContainer.UpsertItemAsync(entry, pk, cancellationToken: ct);
+                    expired++;
+                }
+            }
+        }
+
+        return (expired, deleted);
+    }
+
+    public async Task<(int Expired, int Deleted)> ReconcilePtpSnapshotAsync(
+        string tenantId, string sourceKey, string quarter, DateTime quarterStart,
+        string loadId, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.sourceKey = @sourceKey AND c.loadId != @loadId")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@sourceKey", sourceKey)
+            .WithParameter("@loadId", loadId);
+
+        int expired = 0, deleted = 0;
+        var pk = new PartitionKey(tenantId);
+        using var feed = _pairContainer.GetItemQueryIterator<NcciEditPair>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = pk });
+
+        while (feed.HasMoreResults)
+        {
+            foreach (var pair in await feed.ReadNextAsync(ct))
+            {
+                if (pair.SourceQuarter == quarter)
+                {
+                    await _pairContainer.DeleteItemAsync<NcciEditPair>(pair.Id, pk, cancellationToken: ct);
+                    deleted++;
+                }
+                else if (pair.TerminationDate is null || pair.TerminationDate > quarterStart)
+                {
+                    pair.TerminationDate = quarterStart;
+                    await _pairContainer.UpsertItemAsync(pair, pk, cancellationToken: ct);
+                    expired++;
+                }
+            }
+        }
+
+        return (expired, deleted);
+    }
+
+    // ── CMS Load Ledger ───────────────────────────────────────────
+
+    public async Task<NcciLoadRecord?> GetLoadRecordAsync(string tenantId, string id, CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await _ledgerContainer.ReadItemAsync<NcciLoadRecord>(
+                id, new PartitionKey(tenantId), cancellationToken: ct);
+            return response.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task SaveLoadRecordAsync(NcciLoadRecord record, CancellationToken ct = default)
+    {
+        await _ledgerContainer.UpsertItemAsync(
+            record, new PartitionKey(record.TenantId), cancellationToken: ct);
+    }
+
+    public async Task<IReadOnlyList<NcciLoadRecord>> ListLoadRecordsAsync(
+        string tenantId, string? quarter, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND (@quarter = null OR c.quarter = @quarter)")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@quarter", quarter);
+
+        var records = new List<NcciLoadRecord>();
+        using var feed = _ledgerContainer.GetItemQueryIterator<NcciLoadRecord>(
+            query, requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        while (feed.HasMoreResults)
+            records.AddRange(await feed.ReadNextAsync(ct));
+        return records;
     }
 
     // ── Quarterly Import ──────────────────────────────────────────
