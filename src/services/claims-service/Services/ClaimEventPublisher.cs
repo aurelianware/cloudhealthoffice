@@ -226,7 +226,12 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
                 ?? l.AdjudicationResult?.PatientResponsibility
                 ?? 0m,
             PlanPaid = l.AdjudicationResult?.PaidAmount ?? 0m,
-            MemberResponsibility = l.AdjudicationResult?.PatientResponsibility ?? 0m
+            MemberResponsibility = l.AdjudicationResult?.PatientResponsibility ?? 0m,
+            // NAIC full deductible credit as a later payer: the engine
+            // credited more deductible than the member owes (PR-1).
+            DeductibleCredited = CreditedIfDifferent(
+                l.AdjudicationResult?.DeductibleCreditedAmount,
+                SumPatientResponsibility(l.AdjudicationResult, "1")),
         }).ToList();
 
         var status = claim.Status switch
@@ -270,9 +275,13 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             OopApplied = adj?.OopAppliedAmount ?? adj?.PatientResponsibility ?? 0m,
             PlanPaid = adj?.PayerPayment ?? 0m,
             MemberResponsibility = adj?.PatientResponsibility ?? 0m,
+            DeductibleCredited = CreditedIfDifferent(adj?.DeductibleCreditedAmount, adj?.DeductibleAmount ?? 0m),
             LineItems = lines
         };
     }
+
+    private static decimal? CreditedIfDifferent(decimal? credited, decimal applied) =>
+        credited is { } c && c != applied ? c : null;
 
     private static decimal SumPatientResponsibility(LineAdjudicationResult? line, string carc) =>
         line?.AdjustmentReasons

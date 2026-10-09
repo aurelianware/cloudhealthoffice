@@ -83,6 +83,33 @@ public static class X12837Parser
         ServiceLine? currentLine = null;
         var claimOpen = false;
 
+        // Coordination of benefits. SBR01 of the 2000B loop is the receiving
+        // payer's responsibility sequence; it is captured at CLM (the claim's
+        // own 2000B precedes it). After CLM and before the first LX, an SBR
+        // opens loop 2320 (other subscriber) for another payer, whose 2330B
+        // NM1*PR, AMT*D and CAS follow; within a line, SVD opens loop 2430
+        // (that payer's line adjudication) and the CAS after it belong to it.
+        string? subscriberPayerResponsibility = null;
+        string? claimPayerResponsibility = null;
+        var hlSinceClaim = false;
+        List<OtherPayer> otherPayers = [];
+        bool InOtherPayerLoop() => claimOpen && !hlSinceClaim && currentLine is null && otherPayers.Count > 0;
+
+        static List<ClaimAdjustmentEntry> ParseCas(X12Segment seg)
+        {
+            // CAS01 group, then up to six (CARC, amount, quantity) triplets.
+            var entries = new List<ClaimAdjustmentEntry>();
+            var group = seg.Element(0) ?? string.Empty;
+            for (var i = 1; i < seg.Elements.Count; i += 3)
+            {
+                var reason = seg.Element(i);
+                if (string.IsNullOrEmpty(reason)) continue;
+                if (!decimal.TryParse(seg.Element(i + 1), NumberStyles.Number, CultureInfo.InvariantCulture, out var amount)) continue;
+                entries.Add(new ClaimAdjustmentEntry { GroupCode = group, ReasonCode = reason, Amount = amount });
+            }
+            return entries;
+        }
+
         // NM108/NM109 (id qualifier + id) are always the trailing pair of
         // an NM1 segment when present — but how many blank elements
         // precede them varies between generators in this codebase (e.g.
@@ -181,8 +208,13 @@ public static class X12837Parser
                 },
                 ServiceLines = [.. serviceLines],
                 TotalClaimedAmount = totalCharge,
-                ParsedAt = DateTime.UtcNow.ToString("o")
+                ParsedAt = DateTime.UtcNow.ToString("o"),
+                PayerResponsibilityCode = claimPayerResponsibility,
+                OtherPayers = otherPayers.Count > 0 ? [.. otherPayers] : null,
             });
+
+            claimPayerResponsibility = null;
+            otherPayers = [];
 
             claimId = string.Empty;
             totalCharge = 0m;
@@ -235,6 +267,7 @@ public static class X12837Parser
                     break;
 
                 case "HL":
+                    hlSinceClaim = true;
                     var levelCode = seg.Element(2);
                     if (levelCode == "23")
                     {
@@ -255,11 +288,83 @@ public static class X12837Parser
                     }
                     break;
 
+                case "SBR" when claimOpen && !hlSinceClaim && currentLine is null:
+                    // Loop 2320 — another payer on this claim.
+                    otherPayers.Add(new OtherPayer { PayerResponsibilityCode = seg.Element(0) ?? string.Empty });
+                    lastNm1Context = null;
+                    break;
+
                 case "SBR":
+                    subscriberPayerResponsibility = seg.Element(0);
                     if (subscriber is not null && !insideDependentLoop)
                     {
                         subscriber = subscriber with { GroupNumber = seg.Element(2) };
                     }
+                    break;
+
+                case "NM1" when InOtherPayerLoop():
+                {
+                    // Loops 2330A–I (other subscriber, other payer and its
+                    // providers): only 2330B NM1*PR is kept. Marked so the
+                    // N3/N4/REF/DMG handlers below never read these as the
+                    // claim's own billing provider or subscriber.
+                    lastNm1Context = "2330:" + seg.Element(0);
+                    if (seg.Element(0) == "PR")
+                    {
+                        var (_, payerId) = TrailingIdPair(seg);
+                        otherPayers[^1] = otherPayers[^1] with { PayerName = seg.Element(2), PayerId = payerId };
+                    }
+                    break;
+                }
+
+                case "AMT" when InOtherPayerLoop() && seg.Element(0) == "D":
+                    // 2320 AMT*D — payer paid amount.
+                    if (decimal.TryParse(seg.Element(1), NumberStyles.Number, CultureInfo.InvariantCulture, out var payerPaid))
+                    {
+                        otherPayers[^1] = otherPayers[^1] with { PaidAmount = payerPaid };
+                    }
+                    break;
+
+                case "CAS" when InOtherPayerLoop():
+                    // 2320 CAS — claim-level adjustments by this payer.
+                    otherPayers[^1] = otherPayers[^1] with
+                    {
+                        ClaimAdjustments = [.. otherPayers[^1].ClaimAdjustments, .. ParseCas(seg)]
+                    };
+                    break;
+
+                case "SVD" when claimOpen && currentLine is not null:
+                {
+                    // 2430 — another payer's adjudication of this line.
+                    decimal.TryParse(seg.Element(1), NumberStyles.Number, CultureInfo.InvariantCulture, out var linePaid);
+                    currentLine = currentLine with
+                    {
+                        OtherPayerAdjudications =
+                        [
+                            .. currentLine.OtherPayerAdjudications ?? [],
+                            new LineOtherPayerAdjudication { PayerId = seg.Element(0), PaidAmount = linePaid },
+                        ]
+                    };
+                    break;
+                }
+
+                case "CAS" when claimOpen && currentLine is { OtherPayerAdjudications.Count: > 0 }:
+                {
+                    // 2430 CAS — belongs to the SVD it follows.
+                    var adjudications = currentLine.OtherPayerAdjudications!;
+                    var last = adjudications[^1];
+                    currentLine = currentLine with
+                    {
+                        OtherPayerAdjudications =
+                        [
+                            .. adjudications.Take(adjudications.Count - 1),
+                            last with { Adjustments = [.. last.Adjustments, .. ParseCas(seg)] },
+                        ]
+                    };
+                    break;
+                }
+
+                case "DMG" when InOtherPayerLoop():
                     break;
 
                 case "NM1":
@@ -375,6 +480,8 @@ public static class X12837Parser
                 case "CLM":
                     FlushClaim();
                     claimOpen = true;
+                    hlSinceClaim = false;
+                    claimPayerResponsibility = subscriberPayerResponsibility;
                     claimId = seg.Element(0) ?? string.Empty;
                     decimal.TryParse(seg.Element(1), out totalCharge);
                     var clmComposite = seg.Element(4) is { } c4 ? X12Tokenizer.SplitComponents(c4, componentSep) : [];

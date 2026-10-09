@@ -8,6 +8,8 @@ using EnginePlanType = CloudHealthOffice.BenefitEngine.Domain.PlanType;
 using ModelPlanType = BenefitPlanService.Models.PlanType;
 using EngineFamilyAccumulatorModel = CloudHealthOffice.BenefitEngine.Domain.FamilyAccumulatorModel;
 using ModelFamilyAccumulatorModel = BenefitPlanService.Models.FamilyAccumulatorModel;
+using EngineCobDeductibleCredit = CloudHealthOffice.BenefitEngine.Domain.CobDeductibleCredit;
+using ModelCobDeductibleCredit = BenefitPlanService.Models.CobDeductibleCredit;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace BenefitPlanService.Services;
@@ -148,6 +150,7 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
             FamilyAccumulatorModel = MapFamilyAccumulatorModel(plan.FamilyAccumulatorModel),
             AcaIndividualCap = acaCaps?.IndividualCap,
             IsAcaCapEnforced = ResolveIsAcaCapEnforced(plan),
+            CobDeductibleCredit = MapCobDeductibleCredit(plan.CobDeductibleCredit),
             IsHdhp = plan.PlanType == ModelPlanType.HDHP,
             HdhpDeductibleExemptServices = ResolveHdhpExemptServices(plan),
             Categories = categories
@@ -213,6 +216,18 @@ public class ChoBenefitPlanProvider : IBenefitPlanProvider
         {
             ModelFamilyAccumulatorModel.Aggregate => EngineFamilyAccumulatorModel.Aggregate,
             _ => EngineFamilyAccumulatorModel.Embedded,
+        };
+
+    /// <summary>
+    /// Plan COB deductible setting → engine. Anything but the two opt-outs
+    /// (including a legacy document's default) is NAIC full credit.
+    /// </summary>
+    private static EngineCobDeductibleCredit MapCobDeductibleCredit(ModelCobDeductibleCredit value)
+        => value switch
+        {
+            ModelCobDeductibleCredit.MemberPaidOnly => EngineCobDeductibleCredit.MemberPaidOnly,
+            ModelCobDeductibleCredit.NoDeductible => EngineCobDeductibleCredit.NoDeductible,
+            _ => EngineCobDeductibleCredit.NaicFullCredit,
         };
 
     private static string SanitizeForLog(string? value)

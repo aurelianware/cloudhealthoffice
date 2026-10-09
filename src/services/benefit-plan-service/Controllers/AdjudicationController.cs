@@ -623,7 +623,8 @@ public class AdjudicationController : ControllerBase
                     PrimaryPayerId             = request.Cob.PrimaryPayerId,
                     PrimaryPayerName           = request.Cob.PrimaryPayerName,
                     PrimaryPayerPaymentByLine  = request.Cob.PrimaryPayerPaymentByLine,
-                    PrimaryAllowedByLine       = request.Cob.PrimaryAllowedByLine
+                    PrimaryAllowedByLine       = request.Cob.PrimaryAllowedByLine,
+                    PriorPayers                = request.Cob.PriorPayers
                 }
             };
 
@@ -1334,6 +1335,14 @@ public record AdjudicationCobInfo
 
     /// <summary>Primary payer allowed per line (non-duplication model).</summary>
     public Dictionary<int, decimal> PrimaryAllowedByLine { get; init; } = [];
+
+    /// <summary>
+    /// Every payer that adjudicated before this plan (837 2320/2330B claim
+    /// level: AMT*D, CAS; 2430 line level: SVD02, CAS), with its sequence
+    /// (1 primary, 2 secondary, ...). Required for tertiary and later; when
+    /// empty, <see cref="PrimaryPayerPaymentByLine"/> is the only prior payer.
+    /// </summary>
+    public List<CloudHealthOffice.CobEngine.Domain.PriorPayerAdjudication> PriorPayers { get; init; } = [];
 }
 
 public record AdjudicationLineRequest

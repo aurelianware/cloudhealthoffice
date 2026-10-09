@@ -147,6 +147,28 @@ public sealed class PlanLimitValidator : IPlanLimitValidator
                 cap: caps.FamilyCap);
         }
 
+        // COB deductible crediting: one of the three named settings
+        // (NaicFullCredit, MemberPaidOnly, NoDeductible). A numeric value
+        // outside the enum would silently project as NAIC full credit.
+        if (!Enum.IsDefined(plan.CobDeductibleCredit))
+        {
+            ChoMetrics.PlanLimitValidationFailures.Add(
+                1,
+                new KeyValuePair<string, object?>("cho.caller", caller.ToString()),
+                new KeyValuePair<string, object?>("cho.tenant_id", plan.TenantId ?? string.Empty),
+                new KeyValuePair<string, object?>("cho.reason", "InvalidCobDeductibleCredit"));
+
+            throw new PlanLimitValidationException(
+                plan.PlanId,
+                plan.VersionId,
+                planYear,
+                field: "cobDeductibleCredit",
+                message: $"cobDeductibleCredit ({(int)plan.CobDeductibleCredit}) is not a supported value. " +
+                         "Use NaicFullCredit (default), MemberPaidOnly or NoDeductible.",
+                supplied: (int)plan.CobDeductibleCredit,
+                cap: 0);
+        }
+
         WarnOnAmbiguousAggregateLimits(plan, cs, caller);
 
         _logger.LogDebug(

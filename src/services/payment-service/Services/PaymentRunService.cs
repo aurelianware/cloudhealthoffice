@@ -1292,6 +1292,13 @@ public class PaymentRunService : IPaymentRunService
 
 public class ClaimDto
 {
+    /// <summary>
+    /// claims-service <c>Claim.PayerResponsibilityCode</c>: the 837 2000B
+    /// SBR01 sequence this plan paid in (P, S, T, A–H). Drives CLP02
+    /// (1/2/3 — processed as primary / secondary / tertiary).
+    /// </summary>
+    public string? PayerResponsibilityCode { get; set; }
+
     public string Id { get; set; } = string.Empty;
     public string ClaimNumber { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;

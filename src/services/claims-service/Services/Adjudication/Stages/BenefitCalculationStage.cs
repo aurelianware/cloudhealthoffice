@@ -4,6 +4,8 @@ using ClaimsService.Services.Resolution;
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.CobEngine.Domain;
+using CobInfo = CloudHealthOffice.BenefitEngine.Models.CobInfo;
 using ClaimsAdj = ClaimsService.Models.AdjudicationResult;
 using ClaimsLineAdj = ClaimsService.Models.LineAdjudicationResult;
 
@@ -471,8 +473,66 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             DrgAllowedAmount = perStay?.ClaimAllowed,
             LengthOfStay = perStay?.LengthOfStay,
             InpatientPricingMethod = perStay?.Method,
+            Cob = BuildCob(claim),
         };
     }
+
+    /// <summary>
+    /// The engine's coordination-of-benefits input, from the claim's 837
+    /// payer data: this plan's sequence from 2000B SBR01, and every other
+    /// payer sequenced before it (2320 SBR01) with its 2320 AMT*D / CAS and
+    /// 2430 SVD / CAS. Null — no COB — when this plan is the first payer, its
+    /// sequence is unknown (SBR01 U or absent), or no earlier payer is on
+    /// the claim. Standard (complementary) COB is the model: the claim does
+    /// not carry the plan's COB method.
+    /// </summary>
+    internal static CobInfo? BuildCob(AdapterClaim claim)
+    {
+        var ourSequence = PayerResponsibility.ToSequence(claim.PayerResponsibilityCode);
+        if (ourSequence is not >= 2)
+            return null;
+
+        var priorPayers = (claim.OtherPayers ?? [])
+            .Select(p => (Payer: p, Sequence: PayerResponsibility.ToSequence(p.PayerResponsibilityCode)))
+            .Where(p => p.Sequence is { } s && s < ourSequence)
+            .OrderBy(p => p.Sequence)
+            .Select(p => new PriorPayerAdjudication
+            {
+                Sequence = p.Sequence!.Value,
+                PayerId = p.Payer.PayerId,
+                PayerName = p.Payer.PayerName,
+                ClaimPaidAmount = p.Payer.PaidAmount,
+                ClaimAdjustments = p.Payer.ClaimAdjustments.Select(ToPriorPayerAdjustment).ToList(),
+                Lines = p.Payer.LineAdjudications
+                    .Select(l => new PriorPayerLineAdjudication
+                    {
+                        LineNumber = l.LineNumber,
+                        PaidAmount = l.PaidAmount,
+                        Adjustments = l.Adjustments.Select(ToPriorPayerAdjustment).ToList(),
+                    })
+                    .ToList(),
+            })
+            .ToList();
+        if (priorPayers.Count == 0)
+            return null;
+
+        var primary = priorPayers[0];
+        return new CobInfo
+        {
+            PayerSequence = ourSequence.Value,
+            UseComplementaryModel = true,
+            PrimaryPayerId = primary.PayerId,
+            PrimaryPayerName = primary.PayerName,
+            PriorPayers = priorPayers,
+        };
+    }
+
+    private static PriorPayerAdjustment ToPriorPayerAdjustment(ClaimAdjustmentReason a) => new()
+    {
+        GroupCode = a.GroupCode,
+        ReasonCode = a.ReasonCode,
+        Amount = a.Amount,
+    };
 
     private sealed record PerStayPricing(
         InpatientPricingMethod Method, decimal ClaimAllowed, string? DrgCode, int? LengthOfStay);
@@ -633,6 +693,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             CopayAmount = totals.TotalCopay,
             PatientResponsibility = totals.TotalMemberResponsibility,
             OopAppliedAmount = totals.TotalOopApplied,
+            DeductibleCreditedAmount = totals.TotalDeductibleCredited,
             PayerPayment = totals.TotalPlanPaid,
             DenialReasonCode = result.Success ? null : result.DenialReasonCode,
             DenialReason = result.Success ? null : result.DenialReasonDescription,
@@ -656,6 +717,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 PaidAmount = l.PlanPaidAmount,
                 PatientResponsibility = l.MemberResponsibility,
                 OopAppliedAmount = l.OopAppliedAmount,
+                DeductibleCreditedAmount = l.DeductibleCreditedAmount,
                 AdjustmentReasons = MergeAdjustments(
                     MapLineAdjustments(l),
                     i < priorLines.Count ? priorLines[i].AdjustmentReasons : null),

@@ -101,6 +101,15 @@ public record BenefitPlanConfig
     /// </summary>
     public bool IsAcaCapEnforced { get; init; }
 
+    // ── Coordination of benefits ──
+
+    /// <summary>
+    /// How this plan credits its deductible when it pays secondary or later.
+    /// Defaults to <see cref="CobDeductibleCredit.NaicFullCredit"/> (NAIC
+    /// MDL-120 §7). See <see cref="CobDeductibleCredit"/>.
+    /// </summary>
+    public CobDeductibleCredit CobDeductibleCredit { get; init; } = CobDeductibleCredit.NaicFullCredit;
+
     // ── HDHP / HSA ──
 
     /// <summary>

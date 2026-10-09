@@ -5,6 +5,7 @@ using CloudHealthOffice.OperatingMode;
 using CobLineInput = CloudHealthOffice.CobEngine.Domain.CobLineInput;
 using CobLineResult = CloudHealthOffice.CobEngine.Domain.CobLineResult;
 using CobModel = CloudHealthOffice.CobEngine.Domain.CobModel;
+using PriorPayerAmount = CloudHealthOffice.CobEngine.Domain.PriorPayerAmount;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
@@ -500,7 +501,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             effectiveNetworkTier, request.IsEmergency, plan,
             categoryMatch.ServiceTypeCode,
             CobFor(request.Cob, lineNumber: 0, totalBilled, drgAllowed,
-                request.Cob?.PrimaryPayerPaymentByLine.Values.Sum() ?? 0));
+                () => PriorPayersForStay(request)));
 
         // Allocate cost-sharing back to the lines for 835 reporting, in
         // proportion to each line's allowed amount (truncated to the cent,
@@ -522,6 +523,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // The OOP-counting portion of member responsibility (OopApplies), by
         // the same rule within each line's member share.
         var oopApplied = AllocateToLines(drgCostShare.OopApplied, members, members);
+        // Deductible credited to the accumulators: the PR-1 shares when it is
+        // the PR-1 total; otherwise (NAIC full credit as a later payer) the
+        // credited amount by allowed, by the same rule.
+        var deductiblesCredited = drgCostShare.DeductibleCredited == drgCostShare.DeductibleApplied
+            ? deductibles
+            : AllocateToLines(drgCostShare.DeductibleCredited, allowedByLine, allowedByLine);
         // Informational: the cost share the OOP cap forgave, by allowed.
         var oopReductions = AllocateToLines(drgCostShare.OopMaxReduction, allowedByLine, allowedByLine);
         // COB OA-23 by allowed; Σ caps = stay allowed − member = paid + OA-23,
@@ -571,6 +578,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 OopMaxReduction = oopReductions[i],
                 MemberResponsibility = members[i],
                 OopAppliedAmount = oopApplied[i],
+                DeductibleCreditedAmount = deductiblesCredited[i],
                 PlanPaidAmount = lineAllowed - members[i] - cobOa23s[i],
                 IsDrgPriced = true,
                 // Line-level CAS consistent with the allocated amounts
@@ -609,6 +617,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 OopMaxReduction = drgCostShare.OopMaxReduction,
                 MemberResponsibility = drgCostShare.MemberResponsibility,
                 PlanPaidAmount = drgCostShare.PlanPaid,
+                DeductibleCreditedAmount = drgCostShare.DeductibleCredited,
                 Adjustments = drgCostShare.Adjustments
             }
         };
@@ -699,7 +708,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             categoryMatch.ServiceTypeCode, benefitCategory.ServiceTypeDescription,
             benefitCategory.AuthRequired,
             CobFor(request.Cob, line.LineNumber, billedAmount, allowedAmount,
-                request.Cob?.PrimaryPayerPaymentByLine.GetValueOrDefault(line.LineNumber, 0) ?? 0));
+                () => PriorPayersForLine(request, line.LineNumber)));
 
         if (benefitCategory.VisitLimit.HasValue)
         {
@@ -759,6 +768,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             OopMaxReduction = costShareResult.OopMaxReduction,
             MemberResponsibility = costShareResult.MemberResponsibility,
             OopAppliedAmount = costShareResult.OopApplied,
+            DeductibleCreditedAmount = costShareResult.DeductibleCredited,
             PlanPaidAmount = costShareResult.PlanPaid,
             Adjustments = costShareResult.Adjustments
         };
@@ -821,6 +831,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             }
             // Exempt services (preventive): use the category's own rules as-is
         }
+
+        // ── 3b. COB deductible setting: a NoDeductible plan (e.g. Medicaid
+        // secondary) neither applies nor credits its deductible when it is
+        // not the first payer. Overrides the HDHP deductible-first rule.
+        if (cob is not null && plan.CobDeductibleCredit == CobDeductibleCredit.NoDeductible)
+            deductibleApplies = false;
 
         // ── 4. Apply the waterfall based on copay mode ──
         // Amounts only: the deductible accumulator is written after the OOP
@@ -934,6 +950,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         //         + cost share the primary's payment covered,
         // so charge − ΣCAS = paid still holds and no CAS is negative.
         var planPaid = allowedAmount - (deductibleAmount + finalCopay + coinsuranceAmount);
+        // The deductible this plan applied as if it were the only plan
+        // (after the OOP cap, before COB): what NAIC full credit credits.
+        var deductibleBeforeCob = deductibleAmount;
         decimal cobOa23 = 0;
         if (cob is not null)
         {
@@ -949,19 +968,38 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             cobOa23 = allowedAmount - (deductibleAmount + finalCopay + coinsuranceAmount) - planPaid;
         }
 
-        // ── 8. Accumulators record what the member actually owes ──
-        // After the OOP cap and COB: the OOP-counting part of the final
-        // PR amounts, and the deductible actually charged. The OOP-eligible
-        // amount is recomputed from the components (after the cap alone it
-        // equals the OOP remaining).
+        // ── 8. Accumulators ──
+        // OOP: what the member actually owes after the OOP cap and COB — the
+        // OOP-counting part of the final PR amounts, recomputed from the
+        // components (after the cap alone it equals the OOP remaining). NAIC
+        // MDL-120 §7 requires a secondary plan to credit its deductible, not
+        // its OOP maximum, and what other plans paid is not the member's
+        // out-of-pocket spending, so this holds under every
+        // CobDeductibleCredit setting.
+        // Deductible: the deductible charged (PR-1) — except that as a later
+        // payer under NaicFullCredit (the default) the plan credits the
+        // deductible it would have applied with no other coverage
+        // (MDL-120 §7: "shall credit to its plan deductible any amounts it
+        // would have credited to its deductible in the absence of other
+        // health care coverage"), including deductible a prior payer paid.
+        // deductibleBeforeCob already respects the remaining deductible
+        // (step 4) and the OOP cap (step 6); the working set also keeps the
+        // credit within the deductible left in the accumulators. The 835 is
+        // unaffected: the credit beyond PR-1 is kept out of the remaining
+        // deductible this claim's later lines are priced against
+        // (AccumulatorWorkingSet.ApplyDeductibleWithCredit), so it changes
+        // the accumulators — and the claims that follow — only.
         oopEligible =
             (deductibleCountsToOop ? deductibleAmount : 0)
             + (copayCountsToOop ? finalCopay : 0)
             + (coinsuranceCountsToOop ? coinsuranceAmount : 0);
         if (oopEligible > 0)
             accumulators.ApplyOopMax(oopEligible, effectiveNetworkTier);
-        if (deductibleAmount > 0)
-            accumulators.ApplyDeductible(deductibleAmount, effectiveNetworkTier);
+        var deductibleToCredit = cob is not null && plan.CobDeductibleCredit == CobDeductibleCredit.NaicFullCredit
+            ? Math.Max(deductibleBeforeCob, deductibleAmount)
+            : deductibleAmount;
+        var deductibleCredited = accumulators.ApplyDeductibleWithCredit(
+            deductibleAmount, deductibleToCredit, effectiveNetworkTier);
 
         // ── 9. Patient-responsibility CAS (zero entries dropped), COB OA-23 ──
         if (deductibleAmount > 0)
@@ -987,6 +1025,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             OopApplied = oopEligible,
             PlanPaid = planPaid,
             CobOa23 = cobOa23,
+            DeductibleCredited = deductibleCredited,
             Adjustments = adjustments
         };
     }
@@ -1006,42 +1045,53 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     // COB
     // ═══════════════════════════════════════════════════════════════════
 
-    // COB convention (secondary payer, PayerSequence 2), the same on the
-    // per-line path and the DRG / per-diem claim-level path:
+    // COB convention (this plan secondary, tertiary or later — PayerSequence
+    // ≥ 2), the same on the per-line path and the DRG / per-diem claim-level
+    // path:
     //
     //   1. This plan adjudicates as if primary: allowed, deductible, copay,
     //      coinsurance, OOP-max cap (PR amounts already reduced by the cap).
-    //   2. CloudHealthOffice.CobEngine applies the requested model —
-    //      complementary (pay up to our normal benefit, but no more than the
-    //      charge left after the primary) or non-duplication (pay only what
-    //      our normal benefit exceeds the primary's payment by).
-    //   3. The member owes what is left of our allowed amount after both
-    //      payers, never more than the pre-COB cost share. PR-1/2/3 are
-    //      reduced to that amount (coinsurance, then copay, then deductible —
-    //      the OOP cap's order), so ΣPR = MemberResponsibility; zero PR
-    //      entries are dropped.
-    //   4. One positive OA-23 carries the rest of allowed − paid (our COB
-    //      savings plus the cost share the primary covered). No CAS is ever
+    //   2. Every earlier payer's paid amount and patient responsibility for
+    //      the unit come from the claim's 2320/2430 data (line-level 2430
+    //      when present, else the claim-level amount prorated by charge —
+    //      CobEngine PriorPayerAllocator).
+    //   3. CloudHealthOffice.CobEngine applies the requested model —
+    //      standard / complementary (pay up to our normal benefit, no more
+    //      than allowed − all prior payments, nor more than the last prior
+    //      payer's patient responsibility) or non-duplication (pay only what
+    //      our normal benefit exceeds all prior payments by). NAIC MDL-120
+    //      §6.A(4), §7 — see CobCalculationService.
+    //   4. The member owes what is left after all payers, never more than
+    //      the pre-COB cost share. PR-1/2/3 are reduced to that amount
+    //      (coinsurance, then copay, then deductible — the OOP cap's order),
+    //      so ΣPR = MemberResponsibility; zero PR entries are dropped.
+    //   5. One positive OA-23 carries the rest of allowed − paid (our COB
+    //      savings plus the cost share the prior payers covered — the total
+    //      prior-payer reduction, however many payers). No CAS is ever
     //      negative and charge − ΣCAS = paid.
-    //   5. Deductible and OOP accumulators record the reduced PR amounts —
-    //      what the member actually owes on this claim.
+    //   6. The OOP accumulators record the reduced PR amounts — what the
+    //      member actually owes. The deductible accumulators follow the
+    //      plan's CobDeductibleCredit: NaicFullCredit (default) credits the
+    //      pre-COB deductible (MDL-120 §7), MemberPaidOnly the reduced PR-1,
+    //      NoDeductible applies and credits none.
     //
     // The DRG path computes all of this once for the stay, then allocates
-    // the reduced PR components and the OA-23 to the lines (truncated to the
-    // cent, remainder on the last line).
+    // the reduced PR components, the credited deductible and the OA-23 to
+    // the lines (truncated to the cent, remainder on the last line).
 
     private static readonly ICobCalculationService CobCalculator = new CobCalculationService();
 
     /// <summary>
     /// Builds the COB step for <see cref="ApplyCostSharingInternal"/>, or
-    /// null when this plan is not the secondary payer.
-    /// <paramref name="primaryPaid"/> is the primary payer's payment for the
-    /// same unit (one line, or the whole stay).
+    /// null when this plan is the first payer.
+    /// <paramref name="priorPayers"/> yields every earlier payer's amounts
+    /// for the same unit (one line, or the whole stay).
     /// </summary>
     private static Func<decimal, CobLineResult>? CobFor(
-        CobInfo? cob, int lineNumber, decimal billed, decimal allowed, decimal primaryPaid)
+        CobInfo? cob, int lineNumber, decimal billed, decimal allowed,
+        Func<IReadOnlyList<PriorPayerAmount>> priorPayers)
     {
-        if (cob is not { PayerSequence: 2 })
+        if (cob is null || cob.PayerSequence < 2)
             return null;
 
         return memberBeforeCob => CobCalculator.Calculate(new CobLineInput
@@ -1051,9 +1101,54 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             SecondaryAllowedAmount = allowed,
             SecondaryMemberResponsibilityBeforeCob = memberBeforeCob,
             SecondaryPlanPaymentBeforeCob = allowed - memberBeforeCob,
-            PrimaryPayerPayment = primaryPaid,
+            PriorPayers = priorPayers(),
             Model = cob.UseComplementaryModel ? CobModel.Complementary : CobModel.NonDuplication,
         });
+    }
+
+    private static IReadOnlyList<PriorPayerAllocator.ClaimLineCharge> LineCharges(BenefitResolutionRequest request) =>
+        request.Lines.Select(l => new PriorPayerAllocator.ClaimLineCharge(l.LineNumber, l.BilledAmount)).ToList();
+
+    /// <summary>
+    /// Every prior payer's amounts for one line: from
+    /// <see cref="CobInfo.PriorPayers"/> when given, else the legacy
+    /// secondary-only <see cref="CobInfo.PrimaryPayerPaymentByLine"/>.
+    /// </summary>
+    private static IReadOnlyList<PriorPayerAmount> PriorPayersForLine(BenefitResolutionRequest request, int lineNumber)
+    {
+        var cob = request.Cob!;
+        if (cob.PriorPayers.Count == 0)
+        {
+            return [new PriorPayerAmount
+            {
+                Sequence = 1,
+                PaidAmount = cob.PrimaryPayerPaymentByLine.GetValueOrDefault(lineNumber, 0),
+            }];
+        }
+
+        var byLine = PriorPayerAllocator.AllocateToLines(LineCharges(request), cob.PriorPayers, cob.PayerSequence);
+        return byLine.TryGetValue(lineNumber, out var amounts) ? amounts : [];
+    }
+
+    /// <summary>
+    /// Every prior payer's amounts for a whole DRG / per-diem stay: each
+    /// payer's line amounts summed (the legacy primary map: every value,
+    /// any key, so a claim-level amount keyed outside the line numbers
+    /// still counts).
+    /// </summary>
+    private static IReadOnlyList<PriorPayerAmount> PriorPayersForStay(BenefitResolutionRequest request)
+    {
+        var cob = request.Cob!;
+        if (cob.PriorPayers.Count == 0)
+        {
+            return [new PriorPayerAmount
+            {
+                Sequence = 1,
+                PaidAmount = cob.PrimaryPayerPaymentByLine.Values.Sum(),
+            }];
+        }
+
+        return PriorPayerAllocator.AllocateToClaim(LineCharges(request), cob.PriorPayers, cob.PayerSequence);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1223,6 +1318,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             TotalOopMaxReduction = lines.Sum(l => l.OopMaxReduction),
             TotalMemberResponsibility = lines.Sum(l => l.MemberResponsibility),
             TotalOopApplied = lines.Sum(l => l.OopAppliedAmount),
+            TotalDeductibleCredited = lines.Sum(l => l.DeductibleCreditedAmount),
             TotalPlanPaid = lines.Sum(l => l.PlanPaidAmount)
         };
     }
@@ -1255,6 +1351,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         public decimal PlanPaid { get; init; }
         /// <summary>Positive COB OA-23 (0 when not secondary).</summary>
         public decimal CobOa23 { get; init; }
+        /// <summary>Deductible credited to the accumulators (see CobDeductibleCredit).</summary>
+        public decimal DeductibleCredited { get; init; }
         public List<AdjustmentReason> Adjustments { get; init; } = [];
     }
 }

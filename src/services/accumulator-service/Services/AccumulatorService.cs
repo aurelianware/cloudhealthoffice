@@ -325,7 +325,11 @@ public class AccumulatorService : IAccumulatorService
         // the producer didn't populate lines.
         if (evt.LineItems.Count > 0)
         {
-            var deductible = evt.LineItems.Sum(l => l.DeductibleApplied);
+            // The deductible accumulator takes the credited deductible when
+            // the producer sent one (a plan paying secondary or later with
+            // NAIC full credit); the service rollup below stays the member's
+            // cost share.
+            var deductible = evt.LineItems.Sum(l => l.DeductibleCredited ?? l.DeductibleApplied);
             var oop = evt.LineItems.Sum(l => l.OopApplied);
             var services = evt.LineItems
                 .GroupBy(l => string.IsNullOrWhiteSpace(l.BenefitCategory) ? evt.BenefitCategory : l.BenefitCategory)
@@ -350,7 +354,7 @@ public class AccumulatorService : IAccumulatorService
                 Unit = "USD"
             });
         }
-        return (evt.DeductibleApplied, evt.OopApplied, categoryRollup);
+        return (evt.DeductibleCredited ?? evt.DeductibleApplied, evt.OopApplied, categoryRollup);
     }
 
     private static void ApplyServiceDeltas(AccumulatorSnapshot snapshot, List<ServiceAccumulatorDelta> deltas)

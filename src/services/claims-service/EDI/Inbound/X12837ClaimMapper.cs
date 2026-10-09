@@ -82,6 +82,11 @@ public static class X12837ClaimMapper
             ClaimLines = claimLines,
             Institutional = institutional,
 
+            PayerResponsibilityCode = string.IsNullOrWhiteSpace(source.PayerResponsibilityCode)
+                ? null
+                : source.PayerResponsibilityCode.Trim(),
+            OtherPayers = MapOtherPayers(source),
+
             Status = ClaimStatus.Submitted,
             SubmittedDate = DateTime.UtcNow,
 
@@ -89,6 +94,54 @@ public static class X12837ClaimMapper
             EDI837ControlNumber = source.TransactionControlNumber,
         };
     }
+
+    /// <summary>
+    /// 2320/2330B other payers with their 2430 line adjudication. A 2430
+    /// SVD01 names its payer by the 2330B NM109 identifier; an SVD whose
+    /// identifier matches no 2330B payer is attributed to the only other
+    /// payer when there is exactly one, and otherwise dropped (it cannot be
+    /// placed in the payer order).
+    /// </summary>
+    private static List<ClaimOtherPayer> MapOtherPayers(EngineModels.X12837Claim source)
+    {
+        var payers = (source.OtherPayers ?? [])
+            .Select(p => new ClaimOtherPayer
+            {
+                PayerResponsibilityCode = p.PayerResponsibilityCode.Trim(),
+                PayerName = p.PayerName,
+                PayerId = p.PayerId,
+                PaidAmount = p.PaidAmount,
+                ClaimAdjustments = p.ClaimAdjustments.Select(MapAdjustment).ToList(),
+            })
+            .ToList();
+        if (payers.Count == 0)
+            return payers;
+
+        foreach (var line in source.ServiceLines)
+        {
+            foreach (var svd in line.OtherPayerAdjudications ?? [])
+            {
+                var payer = payers.FirstOrDefault(p =>
+                                !string.IsNullOrEmpty(p.PayerId)
+                                && string.Equals(p.PayerId, svd.PayerId?.Trim(), StringComparison.OrdinalIgnoreCase))
+                            ?? (payers.Count == 1 ? payers[0] : null);
+                payer?.LineAdjudications.Add(new ClaimOtherPayerLine
+                {
+                    LineNumber = line.LineNumber,
+                    PaidAmount = svd.PaidAmount,
+                    Adjustments = svd.Adjustments.Select(MapAdjustment).ToList(),
+                });
+            }
+        }
+        return payers;
+    }
+
+    private static ClaimAdjustmentReason MapAdjustment(EngineModels.ClaimAdjustmentEntry a) => new()
+    {
+        GroupCode = a.GroupCode,
+        ReasonCode = a.ReasonCode,
+        Amount = a.Amount,
+    };
 
     // Platform ClaimType is 1-based (Professional=1,...); the engine's is
     // 0-based (Professional=0,...) — same trap ClaimToX12837Mapper's

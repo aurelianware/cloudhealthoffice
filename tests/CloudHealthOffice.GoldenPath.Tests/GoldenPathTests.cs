@@ -1,3 +1,4 @@
+using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.GoldenPath.Tests.Harness;
 using CloudHealthOffice.Testing.Mongo;
 using Claims = ClaimsService.Models;
@@ -20,9 +21,22 @@ public class GoldenPathTests
 
     public GoldenPathTests(MongoRunnerFixture mongo) => _harness = new GoldenPathHarness(mongo);
 
-    private async Task<GoldenPathResult> RunAsync(string name, Action<InMemoryAccumulatorService>? prior = null)
+    private async Task<GoldenPathResult> RunAsync(
+        string name, Action<InMemoryAccumulatorService>? prior = null, string? planDocument = null)
     {
-        var result = await _harness.RunAsync(GoldenInputs.Scenario(prior), GoldenInputs.Edi837(name));
+        var scenario = GoldenInputs.Scenario(prior);
+        if (planDocument is not null)
+        {
+            scenario = new GoldenScenario
+            {
+                PlanDocument = planDocument,
+                FeeSchedules = scenario.FeeSchedules,
+                Contracts = scenario.Contracts,
+                CategoryMappings = scenario.CategoryMappings,
+                PriorAccumulators = scenario.PriorAccumulators,
+            };
+        }
+        var result = await _harness.RunAsync(scenario, GoldenInputs.Edi837(name));
         X12835.AssertBalanced(result.Edi835);
         X12835.AssertMatchesGolden(name, result.Edi835);
         return result;
@@ -173,4 +187,84 @@ public class GoldenPathTests
             r.FinalizedClaim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons
                 .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
     }
+
+    // 07 — We are the TERTIARY payer (2000B SBR*T) on a two-line claim.
+    // Member has met $440 of the $500 deductible ($60 left), OOP $440.
+    // Our allowed: 99214 $150 (billed 400, CO-45 250); 99213 $100 (billed 180, CO-45 80).
+    // Primary (2320 SBR*P, OTHERPAYER1) reported line level (2430):
+    //   L1 SVD02 $40, PR-1 $100; L2 SVD02 $72, PR-2 $18 (AMT*D $112).
+    // Secondary (2320 SBR*S, OTHERPAYER2) reported claim level only: AMT*D $60,
+    //   CAS OA-23 462, PR-1 50, PR-2 8 (PR $58). No 2430 → prorated by charge
+    //   400 : 180 → paid L1 60 × 400/580 = 41.379 → $41.37, L2 $18.63;
+    //   PR L1 58 × 400/580 = $40.00, L2 $18.00.
+    // L1: pre-COB deductible $60 + 20% × 90 = $18 → cost share $78, normal benefit $72.
+    //   Prior paid 40 + 41.37 = $81.37; the member owes $40.00 after the secondary,
+    //   so balance = min(150 − 81.37, 40.00) = $40.00. We pay min(72, 40) = $40.00;
+    //   member min(78, 40 − 40) = $0. OA-23 = 150 − 0 − 40 = $110.00.
+    //   SVC: 400 − (250 + 110) = 40 ✓.
+    // L2: the deductible is priced as on the 835 (the NAIC credit on L1 is
+    //   accumulator-only), so $60 left: deductible $60 + 20% × 40 = $8 → $68,
+    //   normal $32. Prior paid 72 + 18.63 = $90.63; balance = min(100 − 90.63,
+    //   18.00) = $9.37. We pay $9.37, member $0, OA-23 = 100 − 9.37 = $90.63.
+    //   SVC: 180 − (80 + 90.63) = 9.37 ✓.
+    // Claim: charge 580, allowed 250, plan $49.37 (CLP04, BPR02), member $0;
+    //   CLP02 = 3 (processed as tertiary).
+    // Accumulators (NAIC full credit, the plan default): deductible +$60 —
+    //   what we would have applied with no other coverage, capped at the $60
+    //   left — even though the member owes no PR-1; OOP +$0.
+    [Fact]
+    public async Task TertiaryCob_TwoPriorPayers_LineAndClaimLevel()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m));
+
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 49.37m, member: 0m);
+        Assert.Equal("T", r.FinalizedClaim.PayerResponsibilityCode);
+        Assert.Equal(new[] { "P", "S" }, r.FinalizedClaim.OtherPayers.Select(p => p.PayerResponsibilityCode));
+        Assert.Equal(new[] { 40m, 9.37m },
+            r.FinalizedClaim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount));
+        Assert.Equal(
+            new[] { ("CO", "45", 250m), ("OA", "23", 110m) },
+            r.FinalizedClaim.ClaimLines[0].AdjudicationResult!.AdjustmentReasons
+                .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.Equal(
+            new[] { ("CO", "45", 80m), ("OA", "23", 90.63m) },
+            r.FinalizedClaim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons
+                .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.Equal("3", X12835.Segments(r.Edi835).Single(s => s[0] == "CLP")[2]);
+
+        // The member owes nothing; the deductible is credited with the $60
+        // our plan applied before COB (NAIC MDL-120 §7), the OOP with $0.
+        Assert.Equal(0m, r.FinalizedEvent.DeductibleApplied);
+        Assert.Equal(60m, r.FinalizedEvent.DeductibleCredited);
+        Assert.Equal(new decimal?[] { 60m, null }, r.FinalizedEvent.LineItems.Select(l => l.DeductibleCredited));
+        Assert.Equal(0m, r.FinalizedEvent.OopApplied);
+        Assert.Equal(60m, Applied(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(0m, Applied(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    // 07 again with the plan set to MemberPaidOnly: the deductible setting
+    // changes only the accumulators. The 835 matches the same golden file
+    // byte for byte; the deductible is credited with what the member owes ($0).
+    [Fact]
+    public async Task TertiaryCob_MemberPaidOnlyPlan_Same835_DeductibleNotCredited()
+    {
+        var plan = GoldenInputs.PlanDocument.Replace(
+            "\"familyAccumulatorModel\": \"Embedded\",",
+            "\"familyAccumulatorModel\": \"Embedded\",\n  \"cobDeductibleCredit\": \"MemberPaidOnly\",");
+        Assert.Contains("MemberPaidOnly", plan);
+
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m), plan);
+
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 49.37m, member: 0m);
+        Assert.Null(r.FinalizedEvent.DeductibleCredited);
+        Assert.All(r.FinalizedEvent.LineItems, l => Assert.Null(l.DeductibleCredited));
+        Assert.Equal(0m, Applied(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(0m, Applied(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    private static decimal Applied(GoldenPathResult r, AccumulatorType type) =>
+        r.BenefitResult.AccumulatorSnapshot
+            .Single(s => s.Type == type && s.Scope == AccumulatorScope.Individual
+                && s.NetworkTier == CloudHealthOffice.BenefitEngine.Domain.NetworkTier.InNetwork)
+            .AmountApplied;
 }

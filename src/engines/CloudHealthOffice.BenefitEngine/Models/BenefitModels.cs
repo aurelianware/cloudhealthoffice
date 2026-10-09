@@ -128,14 +128,38 @@ public record MemberContext
     public IReadOnlyCollection<string>? DiagnosisCodes { get; init; }
 }
 
+/// <summary>
+/// COB context for a claim on which this plan is not the first payer.
+/// </summary>
 public record CobInfo
 {
+    /// <summary>
+    /// This plan's payer responsibility sequence (837 2000B SBR01: P = 1,
+    /// S = 2, T = 3, A–H = 4–11). COB is applied when it is 2 or more.
+    /// </summary>
     public int PayerSequence { get; init; } = 1;
+
+    /// <summary>true = standard / complementary COB (NAIC MDL-120 §7), false = non-duplication.</summary>
     public bool UseComplementaryModel { get; init; } = true;
     public string? PrimaryPayerId { get; init; }
     public string? PrimaryPayerName { get; init; }
+
+    /// <summary>
+    /// Legacy secondary-only input: the primary payer's payment by line.
+    /// Used only when <see cref="PriorPayers"/> is empty.
+    /// </summary>
     public Dictionary<int, decimal> PrimaryPayerPaymentByLine { get; init; } = [];
     public Dictionary<int, decimal> PrimaryAllowedByLine { get; init; } = [];
+
+    /// <summary>
+    /// Every payer that adjudicated before this plan (837 loops 2320/2330B
+    /// at claim level, 2430 at line level), with paid amounts and CAS
+    /// adjustments. Payers whose sequence is not below
+    /// <see cref="PayerSequence"/> are ignored. See
+    /// <see cref="CloudHealthOffice.CobEngine.Services.PriorPayerAllocator"/>
+    /// for how claim- and line-level amounts become per-line amounts.
+    /// </summary>
+    public List<CloudHealthOffice.CobEngine.Domain.PriorPayerAdjudication> PriorPayers { get; init; } = [];
 }
 
 public record ClaimLineInput
@@ -202,6 +226,10 @@ public record DrgCostShareResult
     public decimal OopMaxReduction { get; init; }
     public decimal MemberResponsibility { get; init; }
     public decimal PlanPaidAmount { get; init; }
+
+    /// <summary>Deductible credited to the accumulators for the stay; see
+    /// <see cref="LineBenefitResult.DeductibleCreditedAmount"/>.</summary>
+    public decimal DeductibleCreditedAmount { get; init; }
     public List<AdjustmentReason> Adjustments { get; init; } = [];
 }
 
@@ -243,6 +271,20 @@ public record LineBenefitResult
     /// </summary>
     public decimal OopAppliedAmount { get; init; }
 
+    /// <summary>
+    /// Deductible credited to the deductible accumulators for this line.
+    /// Equals <see cref="DeductibleAmount"/> (the PR-1 the member owes)
+    /// except when this plan is secondary or later and the plan's
+    /// <see cref="CobDeductibleCredit"/> is
+    /// <see cref="CobDeductibleCredit.NaicFullCredit"/>: then it is the
+    /// deductible this plan would have applied with no other coverage
+    /// (NAIC MDL-120 §7), including deductible a prior payer covered.
+    /// Downstream deductible accumulation (ClaimFinalizedEvent
+    /// DeductibleCredited) must use this; the 835 uses
+    /// <see cref="DeductibleAmount"/>.
+    /// </summary>
+    public decimal DeductibleCreditedAmount { get; init; }
+
     public decimal PlanPaidAmount { get; init; }
     public List<AdjustmentReason> Adjustments { get; init; } = [];
     public string? DenialReasonCode { get; init; }
@@ -277,6 +319,9 @@ public record ClaimTotals
 
     /// <summary>Sum of <see cref="LineBenefitResult.OopAppliedAmount"/>.</summary>
     public decimal TotalOopApplied { get; init; }
+
+    /// <summary>Sum of <see cref="LineBenefitResult.DeductibleCreditedAmount"/>.</summary>
+    public decimal TotalDeductibleCredited { get; init; }
 
     public decimal TotalPlanPaid { get; init; }
 }

@@ -146,6 +146,47 @@ public enum FamilyAccumulatorModel
     Aggregate
 }
 
+/// <summary>
+/// How a plan credits its deductible when it pays secondary, tertiary or
+/// later (coordination of benefits). Only the deductible accumulators are
+/// affected; the 835 (PR-1 = what the member owes after COB) is the same
+/// under <see cref="NaicFullCredit"/> and <see cref="MemberPaidOnly"/>.
+/// The OOP accumulators always record only what the member owes after COB:
+/// NAIC MDL-120 §7 requires deductible credit only, and amounts other plans
+/// paid are not the member's out-of-pocket spending.
+/// </summary>
+public enum CobDeductibleCredit
+{
+    /// <summary>
+    /// Default. NAIC Coordination of Benefits Model Regulation (MDL-120,
+    /// 2013) §7: "the secondary plan shall credit to its plan deductible any
+    /// amounts it would have credited to its deductible in the absence of
+    /// other health care coverage." The deductible accumulators get the
+    /// deductible this plan's own adjudication applied before COB (already
+    /// limited to the remaining deductible and by the OOP cap), including
+    /// deductible a prior payer paid. The credit beyond what the member owes
+    /// is accumulator-only: it does not lower the deductible this claim's
+    /// later lines are priced against, and never takes the accumulator past
+    /// its limit.
+    /// </summary>
+    NaicFullCredit = 0,
+
+    /// <summary>
+    /// Credit only the deductible the member still owes after COB (PR-1).
+    /// For self-funded ERISA plans (not subject to state COB regulation)
+    /// with non-duplication or carve-out provisions.
+    /// </summary>
+    MemberPaidOnly = 1,
+
+    /// <summary>
+    /// The deductible is neither applied nor credited when this plan is not
+    /// the first payer — e.g. a Medicaid plan paying secondary, which carries
+    /// no member deductible. As primary the plan applies its deductible as
+    /// configured.
+    /// </summary>
+    NoDeductible = 2,
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SERVICE CATEGORY MAPPING
 // ═══════════════════════════════════════════════════════════════════

@@ -351,6 +351,110 @@ work, scheduled for the post-Phase-1 roadmap window, covers:
    through 5.10 in Phase 2.
 6. **coverage-service contract fixes** — items D9.1 and D9.2 above.
 
+## COB calculation: secondary, tertiary and later payers
+
+The detection stage above reads coverage-service. The *calculation* runs
+inside the benefit engine (`BenefitCalculationStage`, Order 300) from the
+payer data on the 837 itself, on both the per-line and DRG / per-diem paths.
+
+### Where the data comes from
+
+| 837 (005010X222A1 / X223A2) | Claim field | Engine input |
+|---|---|---|
+| 2000B `SBR01` (P/S/T/A–H/U) | `Claim.PayerResponsibilityCode` | `CobInfo.PayerSequence` (1, 2, 3, 4–11) |
+| 2320 `SBR01` | `ClaimOtherPayer.PayerResponsibilityCode` | `PriorPayerAdjudication.Sequence` |
+| 2330B `NM1*PR` NM103 / NM109 | `PayerName` / `PayerId` | same |
+| 2320 `AMT*D` (payer paid amount) | `ClaimOtherPayer.PaidAmount` | `ClaimPaidAmount` |
+| 2320 `CAS` (claim-level adjustments) | `ClaimAdjustments` | `ClaimAdjustments` |
+| 2430 `SVD02` / `CAS` (line adjudication; SVD01 = 2330B NM109) | `LineAdjudications` | `Lines` |
+
+`X12837Parser` reads these loops (and keeps 2330A–I `NM1`/`N3`/`N4`/`DMG`
+from overwriting the claim's own subscriber and billing provider);
+`X12837ClaimMapper` attaches each 2430 to its payer by SVD01.
+`BenefitCalculationStage.BuildCob` sends the engine every other payer whose
+sequence is below ours. No COB when we are primary, our sequence is unknown
+(`U` / absent), or no earlier payer is on the claim. The model is standard
+(complementary); the claim does not carry a plan COB method.
+
+### Line vs claim level (`PriorPayerAllocator`)
+
+Per prior payer: a line it reported in 2430 takes its SVD02 and 2430 PR CAS.
+The rest of its 2320 AMT*D (claim paid − Σ SVD02) is prorated by charge
+across the lines it did not report (all lines when it reported every line);
+a shortfall (TR3: AMT*D = Σ 2430 SVD02 − Σ 2320 CAS) comes off the 2430 line
+payments in proportion. 2320 PR CAS is prorated by charge the same way.
+Shares are truncated to the cent, remainder on the last line. A DRG stay
+uses each payer's sums (= AMT*D). X12 leaves SVD vs AMT*D to the payer
+("Payers should indicate what prior payer payment amount impacted their
+payment for the specific line", RFI #2806); 2430 is the line-specific one.
+
+### The calculation (`CobCalculationService`)
+
+Sources: NAIC Coordination of Benefits Model Regulation (MDL-120, 2013):
+§7 (the secondary "shall calculate the benefits it would have paid ... in
+the absence of other health care coverage and apply that calculated amount
+to any allowable expense under its plan that is unpaid by the primary plan",
+total benefits of all plans ≤ 100% of the allowable expense) and §6.A(4)
+("Each secondary plan shall take into consideration the benefits of the
+primary plan or plans and the benefits of any other plan ... [that] has its
+benefits determined before those of that secondary plan").
+
+Per unit (line or stay):
+
+```
+priorPaid = Σ every prior payer's paid amount
+balance   = min(allowed − priorPaid, last prior payer's PR when reported), ≥ 0
+standard  : paid = min(normal benefit, balance)
+non-dup   : paid = min(max(0, normal benefit − priorPaid), balance)
+member    = min(pre-COB cost share, balance − paid)
+OA-23     = allowed − member − paid      (one positive amount: all prior payers' impact)
+```
+
+The PR-1/2/3 amounts are reduced to `member` (coinsurance, copay, then
+deductible); charge − ΣCAS = paid on every line and claim; no negative CAS.
+CLP02 is 2 (processed as secondary) or 3 (tertiary; also payers 4–11, which
+835 has no code for).
+
+## Deductible credit on secondary and later plans
+
+Per-plan setting `cobDeductibleCredit` on the benefit plan document
+(`BenefitPlan.CobDeductibleCredit` → engine `BenefitPlanConfig.CobDeductibleCredit`).
+Applies only when the plan is not the first payer:
+
+| Value | Deductible accumulator | 835 |
+|---|---|---|
+| `NaicFullCredit` (default) | the deductible our own adjudication applied before COB (already limited to the remaining deductible and by the OOP cap), including deductible a prior payer paid | unchanged (PR-1 = what the member owes) |
+| `MemberPaidOnly` | only the PR-1 the member owes after COB (behavior before this setting) — self-funded ERISA plans with non-duplication / carve-out provisions | unchanged |
+| `NoDeductible` | nothing: the deductible is not applied | no PR-1 (the deductible is skipped as a later payer) — Medicaid-secondary plans |
+
+Source: MDL-120 §7, "the secondary plan shall credit to its plan deductible
+any amounts it would have credited to its deductible in the absence of other
+health care coverage."
+
+**The 835 does not change.** The credit beyond PR-1 is accumulator-only:
+`AccumulatorWorkingSet.ApplyDeductibleWithCredit` keeps it out of the
+remaining deductible the claim's own later lines are priced against, so a
+multi-line claim prices every line exactly as under `MemberPaidOnly`; the
+total credited never passes the deductible limit (a later line whose PR-1
+the credit already covered credits $0). Claims that follow see the credited
+deductible.
+
+**OOP maximum.** MDL-120 requires deductible credit only; it says nothing
+about the out-of-pocket maximum, and what other plans paid is not the
+member's out-of-pocket spending. The OOP accumulators therefore always get
+the member's share after COB, under every setting.
+
+The engine writes the credited deductible to its working accumulators
+(`LineBenefitResult.DeductibleCreditedAmount`, DRG lines allocated by
+allowed); claims-service stores it (`DeductibleCreditedAmount`) and
+publishes it as `ClaimFinalizedEvent.DeductibleCredited` (only when it
+differs from PR-1); accumulator-service's `ComputeDeltas` credits it to the
+deductible and keeps PR-1 for the service rollup.
+
+**Default change.** Plans without the field (every plan before this change)
+are NAIC full credit. Accumulators for claims adjudicated from now on differ
+on secondary/tertiary claims; past accumulators are not rewritten.
+
 ## Cross-references
 
 - [`claim-adjudication-pipeline.md`](./claim-adjudication-pipeline.md) —

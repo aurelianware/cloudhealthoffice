@@ -47,6 +47,60 @@ public record X12837Claim
     public decimal TotalClaimedAmount { get; init; }
     public string? RawEdi { get; init; }
     public string ParsedAt { get; init; } = default!;
+
+    /// <summary>
+    /// 2000B SBR01 — the receiving payer's responsibility sequence for this
+    /// claim (P primary, S secondary, T tertiary, A–H payers four to eleven,
+    /// U unknown).
+    /// </summary>
+    public string? PayerResponsibilityCode { get; init; }
+
+    /// <summary>
+    /// 2320 / 2330B — the other payers on the claim, with what each one that
+    /// already adjudicated paid (AMT*D) and adjusted (CAS) at claim level.
+    /// Line-level adjudication (2430) is on <see cref="ServiceLine.OtherPayerAdjudications"/>.
+    /// </summary>
+    public List<OtherPayer>? OtherPayers { get; init; }
+}
+
+/// <summary>An adjustment (CAS) a payer reported: group code, CARC, amount.</summary>
+public record ClaimAdjustmentEntry
+{
+    public string GroupCode { get; init; } = default!;
+    public string ReasonCode { get; init; } = default!;
+    public decimal Amount { get; init; }
+}
+
+/// <summary>Loop 2320 (other subscriber information) with its 2330B other payer.</summary>
+public record OtherPayer
+{
+    /// <summary>2320 SBR01 — this payer's responsibility sequence (P/S/T/A–H/U).</summary>
+    public string PayerResponsibilityCode { get; init; } = default!;
+
+    /// <summary>2330B NM103.</summary>
+    public string? PayerName { get; init; }
+
+    /// <summary>2330B NM109 — matched by 2430 SVD01.</summary>
+    public string? PayerId { get; init; }
+
+    /// <summary>2320 AMT*D — payer paid amount.</summary>
+    public decimal? PaidAmount { get; init; }
+
+    /// <summary>2320 CAS — claim-level adjustments.</summary>
+    public List<ClaimAdjustmentEntry> ClaimAdjustments { get; init; } = [];
+}
+
+/// <summary>Loop 2430 (line adjudication information).</summary>
+public record LineOtherPayerAdjudication
+{
+    /// <summary>SVD01 — the other payer's identifier (2330B NM109).</summary>
+    public string? PayerId { get; init; }
+
+    /// <summary>SVD02 — the amount the other payer paid for the line.</summary>
+    public decimal PaidAmount { get; init; }
+
+    /// <summary>2430 CAS — the other payer's adjustments to the line.</summary>
+    public List<ClaimAdjustmentEntry> Adjustments { get; init; } = [];
 }
 
 public record ClaimSubmitter
@@ -225,6 +279,9 @@ public record ServiceLine
 
     /// <summary>CTP05-1 drug unit of measure (F2, GR, ME, ML, UN).</summary>
     public string? DrugUnitOfMeasure { get; init; }
+
+    /// <summary>2430 — other payers' adjudication of this line.</summary>
+    public List<LineOtherPayerAdjudication>? OtherPayerAdjudications { get; init; }
 }
 
 // ============================================================================

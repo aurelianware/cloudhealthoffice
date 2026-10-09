@@ -207,6 +207,21 @@ public class Claim
     public InstitutionalClaimDetails? Institutional { get; set; }
 
     /// <summary>
+    /// 837 2000B SBR01: this plan's payer responsibility sequence for the
+    /// claim (P primary, S secondary, T tertiary, A–H payers four to eleven,
+    /// U unknown). Null when the claim did not come from an 837 carrying it.
+    /// </summary>
+    [StringLength(1)]
+    public string? PayerResponsibilityCode { get; set; }
+
+    /// <summary>
+    /// 837 loops 2320 / 2330B / 2430: the other payers on the claim and what
+    /// each one that already adjudicated paid and adjusted, at claim and line
+    /// level. Feeds the benefit engine's coordination-of-benefits input.
+    /// </summary>
+    public List<ClaimOtherPayer> OtherPayers { get; set; } = new();
+
+    /// <summary>
     /// Three-character type of bill (UB-04 FL4 without the leading zero):
     /// the two-digit facility type code (837I CLM05-1) followed by the
     /// claim frequency code (CLM05-3, <see cref="ClaimFrequencyCode"/>).
@@ -838,6 +853,15 @@ public class AdjudicationResult
     public decimal? OopAppliedAmount { get; set; }
 
     /// <summary>
+    /// Deductible the benefit engine credited to the deductible accumulators.
+    /// Differs from the PR-1 deductible only when this plan paid secondary or
+    /// later under NAIC full deductible credit (the plan credits the deductible
+    /// it would have applied with no other coverage). Null on claims adjudicated
+    /// before the field existed; readers fall back to the PR-1 deductible.
+    /// </summary>
+    public decimal? DeductibleCreditedAmount { get; set; }
+
+    /// <summary>
     /// Payer payment amount (what payer will pay provider)
     /// 835: CLP04 - patient responsibility
     /// </summary>
@@ -916,10 +940,60 @@ public class LineAdjudicationResult
     public decimal? OopAppliedAmount { get; set; }
 
     /// <summary>
+    /// Deductible the benefit engine credited to the deductible accumulators.
+    /// Differs from the PR-1 deductible only when this plan paid secondary or
+    /// later under NAIC full deductible credit (the plan credits the deductible
+    /// it would have applied with no other coverage). Null on claims adjudicated
+    /// before the field existed; readers fall back to the PR-1 deductible.
+    /// </summary>
+    public decimal? DeductibleCreditedAmount { get; set; }
+
+    /// <summary>
     /// Adjustment reasons for this line
     /// 835: CAS segment (line-level)
     /// </summary>
     public List<ClaimAdjustmentReason> AdjustmentReasons { get; set; } = new();
+}
+
+/// <summary>
+/// Another payer on the claim (837 loop 2320 other subscriber information,
+/// 2330B other payer name, 2430 line adjudication information).
+/// </summary>
+public class ClaimOtherPayer
+{
+    /// <summary>2320 SBR01 — this payer's responsibility sequence (P/S/T/A–H/U).</summary>
+    [StringLength(1)]
+    public string PayerResponsibilityCode { get; set; } = string.Empty;
+
+    /// <summary>2330B NM103.</summary>
+    [StringLength(60)]
+    public string? PayerName { get; set; }
+
+    /// <summary>2330B NM109 (matched by 2430 SVD01).</summary>
+    [StringLength(80)]
+    public string? PayerId { get; set; }
+
+    /// <summary>2320 AMT*D — what the payer paid on the claim. Null when not reported.</summary>
+    public decimal? PaidAmount { get; set; }
+
+    /// <summary>2320 CAS — the payer's claim-level adjustments.</summary>
+    public List<ClaimAdjustmentReason> ClaimAdjustments { get; set; } = new();
+
+    /// <summary>2430 — the payer's line-level adjudication.</summary>
+    public List<ClaimOtherPayerLine> LineAdjudications { get; set; } = new();
+}
+
+/// <summary>One 837 loop 2430: another payer's adjudication of a claim line.</summary>
+public class ClaimOtherPayerLine
+{
+    /// <summary>The claim line (LX) the 2430 loop belongs to.</summary>
+    public int LineNumber { get; set; }
+
+    /// <summary>SVD02 — what the payer paid for the line.</summary>
+    public decimal PaidAmount { get; set; }
+
+    /// <summary>2430 CAS — the payer's adjustments to the line.</summary>
+    public List<ClaimAdjustmentReason> Adjustments { get; set; } = new();
 }
 
 /// <summary>

@@ -43,6 +43,21 @@ public static class Era835ClaimPaymentBuilder
     /// amount. A denial: CLP02 = 4, CLP04 = 0, its denial CARC carrying the
     /// part of the charge no other adjustment explains, RARCs in MIA/MOA.
     /// </summary>
+    /// <summary>
+    /// CLP02 for a processed (not denied) claim from the 837 SBR01 sequence
+    /// this plan paid in: S → 2 (processed as secondary), T → 3 (processed as
+    /// tertiary). The 835 has no code past tertiary, so payers four to eleven
+    /// (A–H) also report 3 — processed after the primary and secondary.
+    /// Anything else (P, U, absent) → 1, processed as primary.
+    /// </summary>
+    public static string ProcessedAsCode(string? payerResponsibilityCode) =>
+        payerResponsibilityCode?.Trim().ToUpperInvariant() switch
+        {
+            "S" => "2",
+            "T" or "A" or "B" or "C" or "D" or "E" or "F" or "G" or "H" => "3",
+            _ => "1",
+        };
+
     public static ClaimPayment Build(ClaimDto claim, bool denied, ICarcRarcMappingService mapper)
     {
         ArgumentNullException.ThrowIfNull(claim);
@@ -125,8 +140,8 @@ public static class Era835ClaimPaymentBuilder
         {
             ClaimId = claim.Id,
             PatientControlNumber = claim.ClaimNumber,
-            // CLP02: 1 = processed as primary, 4 = denied.
-            ClaimStatusCode = denied ? "4" : "1",
+            // CLP02: 1/2/3 = processed as primary/secondary/tertiary, 4 = denied.
+            ClaimStatusCode = denied ? "4" : ProcessedAsCode(claim.PayerResponsibilityCode),
             // CLP03 total charge, CLP04 plan paid (0 for a denial), CLP05 member responsibility.
             ChargeAmount = claim.TotalChargeAmount,
             PaymentAmount = claimPaid,

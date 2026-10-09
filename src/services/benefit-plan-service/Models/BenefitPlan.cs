@@ -119,6 +119,19 @@ public class BenefitPlan
     [JsonPropertyName("familyAccumulatorModel")]
     public FamilyAccumulatorModel FamilyAccumulatorModel { get; set; } = FamilyAccumulatorModel.Embedded;
 
+    /// <summary>
+    /// How this plan credits its deductible when it pays secondary, tertiary
+    /// or later (coordination of benefits). Defaults to
+    /// <see cref="CobDeductibleCredit.NaicFullCredit"/>; plan documents
+    /// written before the field existed hydrate with the default. Affects
+    /// only the deductible accumulators, never the 835, except
+    /// <see cref="CobDeductibleCredit.NoDeductible"/>, which does not apply
+    /// the deductible at all when the plan is not the first payer. See
+    /// docs/architecture/claim-cob-pipeline.md.
+    /// </summary>
+    [JsonPropertyName("cobDeductibleCredit")]
+    public CobDeductibleCredit CobDeductibleCredit { get; set; } = CobDeductibleCredit.NaicFullCredit;
+
     // ---------------------------------------------------------------------
     // Version identity (5.1 — Plan Identity & Versioning)
     //
@@ -663,4 +676,36 @@ public enum FamilyAccumulatorModel
     /// the engine config). Common in HDHP / HSA plans.
     /// </summary>
     Aggregate = 2
+}
+
+/// <summary>
+/// Deductible crediting when the plan pays secondary or later. Mirrors
+/// <see cref="CloudHealthOffice.BenefitEngine.Domain.CobDeductibleCredit"/>
+/// (same boundary stance as <see cref="FamilyAccumulatorModel"/>);
+/// <see cref="ChoBenefitPlanProvider"/> projects it onto the engine config.
+/// Serialized by name ("NaicFullCredit", "MemberPaidOnly", "NoDeductible").
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum CobDeductibleCredit
+{
+    /// <summary>
+    /// Default. NAIC Coordination of Benefits Model Regulation (MDL-120) §7:
+    /// credit the deductible the plan would have credited with no other
+    /// coverage — the pre-COB deductible from the plan's own adjudication,
+    /// capped by the remaining deductible — including deductible a prior
+    /// payer paid.
+    /// </summary>
+    NaicFullCredit = 1,
+
+    /// <summary>
+    /// Credit only the deductible the member still owes after COB. For
+    /// self-funded ERISA plans with non-duplication or carve-out provisions.
+    /// </summary>
+    MemberPaidOnly = 2,
+
+    /// <summary>
+    /// Neither apply nor credit the deductible when the plan is not the first
+    /// payer (e.g. Medicaid secondary plans that carry no deductible).
+    /// </summary>
+    NoDeductible = 3
 }
