@@ -64,8 +64,9 @@ public class CostShareFinalizationSeamTests
         AssertLinesBalance(ctx, claim);
     }
 
-    // OOP max 130: line 1 consumes 100, line 2's raw 52 caps at 30 — the
-    // engine reports PR-1 20 / PR-3 20 / PR-2 12 plus OA-23 −22.
+    // OOP max 130: line 1 consumes 100, line 2's raw 52 (deductible 20,
+    // copay 20, coinsurance 12) caps at 30. The cap forgives coinsurance
+    // first, then copay: PR-1 20 / PR-3 10, no PR-2 and no OA-23.
     [Fact]
     public async Task OopMaxReached_DeductibleStillCounted_OopDeltaCapped()
     {
@@ -74,14 +75,79 @@ public class CostShareFinalizationSeamTests
 
         engine.Totals.TotalOopMaxReduction.Should().Be(22m);
         engine.Totals.TotalMemberResponsibility.Should().Be(130m);
+        engine.Totals.TotalDeductible.Should().Be(120m);
+        engine.Totals.TotalCopay.Should().Be(10m);
+        engine.Totals.TotalCoinsurance.Should().Be(0m);
 
         var line2 = claim.ClaimLines[1].AdjudicationResult!;
-        line2.AdjustmentReasons.Should().ContainEquivalentOf(
-            new { GroupCode = "OA", ReasonCode = "23", Amount = -22m });
+        line2.AdjustmentReasons.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)).Should().Equal(
+            ("CO", "45", 100m), ("PR", "1", 20m), ("PR", "3", 10m));
+        claim.ClaimLines.SelectMany(l => l.AdjudicationResult!.AdjustmentReasons)
+            .Should().OnlyContain(r => r.Amount > 0m);
 
-        var (deductible, oop, _) = AccumulatorDomainService.ComputeDeltas(evt);
+        // Per line the finalized cost share equals member responsibility and
+        // the OOP-applied amount.
+        evt.LineItems.Select(l => l.DeductibleApplied).Should().Equal(100m, 20m);
+        evt.LineItems.Select(l => l.CopayApplied).Should().Equal(0m, 10m);
+        evt.LineItems.Select(l => l.CoinsuranceApplied).Should().Equal(0m, 0m);
+        evt.LineItems.Should().OnlyContain(l =>
+            l.DeductibleApplied + l.CopayApplied + l.CoinsuranceApplied == l.MemberResponsibility
+            && l.OopApplied == l.MemberResponsibility);
+
+        var (deductible, oop, services) = AccumulatorDomainService.ComputeDeltas(evt);
         deductible.Should().Be(engine.Totals.TotalDeductible).And.Be(120m);
         oop.Should().Be(130m);
+        services.Sum(s => s.UsedDelta).Should().Be(130m);
+
+        AssertClaimTotalsMatchLineCas(claim);
+        AssertLinesBalance(ctx, claim);
+    }
+
+    // Secondary payer (complementary COB). Line 1: no primary payment, so
+    // COB changes nothing (deductible 100, plan 0). Line 2: pre-COB the
+    // member owes 52 (deductible 20, copay 20, coinsurance 12) and the plan
+    // pays 48; the primary paid 30, so the plan still pays 48 and the member
+    // owes 100 − 30 − 48 = 22. PR shrinks coinsurance-first to PR-1 20 /
+    // PR-3 2, the positive OA-23 is 30, and the finalized event and the
+    // accumulator deltas carry the reduced amounts.
+    [Fact]
+    public async Task SecondaryPayerCob_PrEqualsMemberLiability_ReachesAccumulatorDeltas()
+    {
+        var (ctx, claim, evt) = await AdjudicateAndFinalizeAsync(
+            oopMax: 3_000m,
+            cob: new CloudHealthOffice.BenefitEngine.Models.CobInfo
+            {
+                PayerSequence = 2,
+                UseComplementaryModel = true,
+                PrimaryPayerPaymentByLine = new() { [2] = 30m },
+            });
+        var engine = ctx.BenefitResolutionResult!;
+
+        engine.Totals.TotalDeductible.Should().Be(120m);
+        engine.Totals.TotalCopay.Should().Be(2m);
+        engine.Totals.TotalCoinsurance.Should().Be(0m);
+        engine.Totals.TotalMemberResponsibility.Should().Be(122m);
+        engine.Totals.TotalPlanPaid.Should().Be(48m);
+
+        var line2 = claim.ClaimLines[1].AdjudicationResult!;
+        line2.AdjustmentReasons.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)).Should().Equal(
+            ("CO", "45", 100m), ("PR", "1", 20m), ("PR", "3", 2m), ("OA", "23", 30m));
+        claim.ClaimLines.SelectMany(l => l.AdjudicationResult!.AdjustmentReasons)
+            .Should().OnlyContain(r => r.Amount > 0m);
+        claim.ClaimLines.Should().OnlyContain(l =>
+            l.AdjudicationResult!.AdjustmentReasons.Where(r => r.GroupCode == "PR").Sum(r => r.Amount)
+                == l.AdjudicationResult.PatientResponsibility);
+
+        evt.LineItems.Select(l => l.DeductibleApplied).Should().Equal(100m, 20m);
+        evt.LineItems.Select(l => l.CopayApplied).Should().Equal(0m, 2m);
+        evt.LineItems.Select(l => l.CoinsuranceApplied).Should().Equal(0m, 0m);
+        evt.LineItems.Select(l => l.OopApplied).Should().Equal(100m, 22m);
+        evt.LineItems.Select(l => l.MemberResponsibility).Should().Equal(100m, 22m);
+
+        var (deductible, oop, services) = AccumulatorDomainService.ComputeDeltas(evt);
+        deductible.Should().Be(120m);
+        oop.Should().Be(122m);
+        services.Sum(s => s.UsedDelta).Should().Be(122m);
 
         AssertClaimTotalsMatchLineCas(claim);
         AssertLinesBalance(ctx, claim);
@@ -158,7 +224,8 @@ public class CostShareFinalizationSeamTests
     }
 
     private static async Task<(ClaimAdjudicationContext Ctx, Claim Claim, ClaimFinalizedEvent Event)>
-        AdjudicateAndFinalizeAsync(decimal oopMax)
+        AdjudicateAndFinalizeAsync(
+            decimal oopMax, CloudHealthOffice.BenefitEngine.Models.CobInfo? cob = null)
     {
         var plan = new BenefitPlanConfig
         {
@@ -205,7 +272,7 @@ public class CostShareFinalizationSeamTests
         categoryResolver.ResolveAsync(
                 Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
-                Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                Arg.Any<string?>(), Arg.Any<ServiceCategoryClaimContext?>(), Arg.Any<CancellationToken>())
             .Returns(new ServiceCategoryMatch
             {
                 ServiceTypeCode = OfficeVisit,
@@ -225,8 +292,13 @@ public class CostShareFinalizationSeamTests
             new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
             NullLogger<BenefitCalculationEngine>.Instance);
 
+        // claims-service does not populate Cob yet (CHO-secondary claims pend
+        // in CoordinationOfBenefitsStage), so a secondary-payer seam injects
+        // it on the way into the real engine.
+        IBenefitCalculationEngine stageEngine = cob is null ? engine : new WithCob(engine, cob);
+
         var stage = new BenefitCalculationStage(
-            engine,
+            stageEngine,
             Substitute.For<IMemberResolver>(),
             Substitute.For<IAuthorizationValidationClient>(),
             NullLogger<BenefitCalculationStage>.Instance);
@@ -293,5 +365,28 @@ public class CostShareFinalizationSeamTests
         };
 
         return (ctx, claim, ClaimEventPublisher.BuildFinalizedEvent(claim, "tenant-1"));
+    }
+
+    private sealed class WithCob(
+        IBenefitCalculationEngine inner,
+        CloudHealthOffice.BenefitEngine.Models.CobInfo cob) : IBenefitCalculationEngine
+    {
+        public Task<CloudHealthOffice.BenefitEngine.Models.BenefitResolutionResult> CalculateAsync(
+            CloudHealthOffice.BenefitEngine.Models.BenefitResolutionRequest request, CancellationToken ct = default)
+            => inner.CalculateAsync(request with { Cob = cob }, ct);
+
+        public Task<CloudHealthOffice.OperatingMode.AugmentResult<CloudHealthOffice.BenefitEngine.Models.BenefitResolutionResult>>
+            CalculateWithModeAsync(
+                CloudHealthOffice.BenefitEngine.Models.BenefitResolutionRequest request,
+                CloudHealthOffice.OperatingMode.IOperatingMode operatingMode,
+                string tenantId,
+                CloudHealthOffice.BenefitEngine.Models.BenefitResolutionResult? legacyResult = null,
+                CancellationToken ct = default)
+            => inner.CalculateWithModeAsync(request with { Cob = cob }, operatingMode, tenantId, legacyResult, ct);
+
+        public Task ReverseClaimAsync(
+            string memberId, string subscriberId, Guid benefitPlanId, DateOnly serviceDate,
+            string originalClaimId, CancellationToken ct = default)
+            => inner.ReverseClaimAsync(memberId, subscriberId, benefitPlanId, serviceDate, originalClaimId, ct);
     }
 }

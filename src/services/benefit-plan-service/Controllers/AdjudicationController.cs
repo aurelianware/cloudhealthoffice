@@ -602,6 +602,9 @@ public class AdjudicationController : ControllerBase
                 LineOfBusiness = request.LineOfBusiness,
                 ClaimId = request.ClaimId,
                 ClaimType = claimTypeCode,
+                // Institutional context comes from the type of bill; this
+                // API's PlaceOfService is a CMS place of service.
+                TypeOfBill = request.BillType,
                 Lines = benefitLines,
                 AllowedAmounts = pricingResults.LineResults
                     .GroupBy(p => p.LineNumber)
@@ -1298,7 +1301,10 @@ public record AdjudicationRequest
 
     /// <summary>
     /// Institutional: three-character type of bill (CLM05-1 facility type +
-    /// CLM05-3 frequency). Informational; passed through to pricing.
+    /// CLM05-3 frequency). Passed through to pricing, and to the benefit
+    /// engine as the type of bill: when no service category mapping matches,
+    /// the category is inferred from it (11x → Inpatient Hospital, ...).
+    /// <see cref="AdjudicationLineRequest.PlaceOfService"/> stays a CMS place of service.
     /// </summary>
     public string? BillType { get; init; }
 

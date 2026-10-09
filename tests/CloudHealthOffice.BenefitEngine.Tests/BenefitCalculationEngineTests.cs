@@ -261,7 +261,13 @@ public class BenefitCalculationEngineTests
         var line = result.Lines.Single();
         Assert.Equal(20m, line.MemberResponsibility);
         Assert.Equal(2980m, line.PlanPaidAmount);
-        Assert.True(line.OopMaxReduction > 0);
+        // 20% coinsurance ($600) is reduced to the $20 the member owes.
+        Assert.Equal(580m, line.OopMaxReduction);
+        Assert.Equal(20m, line.CoinsuranceAmount);
+        Assert.Equal(
+            new[] { ("CO", "45", 2000m), ("PR", "2", 20m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        AssertCasInvariants(line);
     }
 
     [Fact]
@@ -605,7 +611,7 @@ public class BenefitCalculationEngineTests
     public async Task OopAppliesFalse_OnCoinsuranceOnly_CopayCappedCoinsuranceNot()
     {
         // Deductible met; $10 OOP remaining. Copay ($30) counts and is
-        // capped to $10; coinsurance ($24) is excluded and owed in full.
+        // reduced to $10; coinsurance ($24) is excluded and owed in full.
         var plan = WithOopApplies(CreateTestPlan(individualDeductible: 500, individualOopMax: 3000),
             "98", false, CostShareType.Coinsurance);
         var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m, existingOop: 2990m);
@@ -614,9 +620,10 @@ public class BenefitCalculationEngineTests
         var result = await engine.CalculateAsync(request);
 
         var line = result.Lines.Single();
-        Assert.Equal(30m, line.CopayAmount);
+        Assert.Equal(10m, line.CopayAmount);
         Assert.Equal(24m, line.CoinsuranceAmount);
         Assert.Equal(20m, line.OopMaxReduction);
+        AssertCasInvariants(line);
         Assert.Equal(34m, line.MemberResponsibility);
         Assert.Equal(116m, line.PlanPaidAmount);
         Assert.Equal(10m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
@@ -926,7 +933,7 @@ public class BenefitCalculationEngineTests
         {
             Assert.True(l.IsDrgPriced);
             Assert.True(l.MemberResponsibility >= 0m && l.PlanPaidAmount >= 0m);
-            Assert.Equal(l.DeductibleAmount + l.CopayAmount + l.CoinsuranceAmount - l.OopMaxReduction, l.MemberResponsibility);
+            Assert.Equal(l.DeductibleAmount + l.CopayAmount + l.CoinsuranceAmount, l.MemberResponsibility);
             Assert.Equal(l.AllowedAmount - l.MemberResponsibility, l.PlanPaidAmount);
             Assert.Equal(l.BilledAmount - l.AllowedAmount, l.ContractualAdjustment);
             Assert.Equal(l.BilledAmount - l.PlanPaidAmount, l.Adjustments.Sum(a => a.Amount));
@@ -1037,9 +1044,16 @@ public class BenefitCalculationEngineTests
 
         var drg = result.DrgCostShare!;
         // Without OOP cap: $500 ded + $2300 coins = $2800
-        // OOP remaining: $500 → capped at $500
+        // OOP remaining: $500 → capped at $500: coinsurance forgiven entirely,
+        // the deductible stands.
         Assert.Equal(500m, drg.MemberResponsibility);
-        Assert.True(drg.OopMaxReduction > 0);
+        Assert.Equal(2300m, drg.OopMaxReduction);
+        Assert.Equal(500m, drg.DeductibleAmount);
+        Assert.Equal(0m, drg.CoinsuranceAmount);
+        Assert.Equal(
+            new[] { ("PR", "1", 500m) },
+            drg.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.All(result.Lines, AssertCasInvariants);
     }
 
     /// <summary>
@@ -1067,7 +1081,228 @@ public class BenefitCalculationEngineTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // COB — OA-23 SIGN AND 835 BALANCING (charge − ΣCAS = paid)
+    // OOP MAX — REDUCED PATIENT RESPONSIBILITY (no negative OA-23)
+    // The cap forgives the cost share applied last first: coinsurance,
+    // then copay, then deductible.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Deductible met, $40 OOP left. Raw cost share: $30 copay + 20% × $120
+    /// = $24 coinsurance = $54. The cap lands mid-coinsurance: PR-3 $30,
+    /// PR-2 $10, plan pays $110.
+    /// </summary>
+    [Fact]
+    public async Task OopMax_CapHitMidCoinsurance_ReducesCoinsuranceOnly()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500, individualOopMax: 3000);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m, existingOop: 2960m);
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(0m, line.DeductibleAmount);
+        Assert.Equal(30m, line.CopayAmount);
+        Assert.Equal(10m, line.CoinsuranceAmount);
+        Assert.Equal(14m, line.OopMaxReduction);
+        Assert.Equal(40m, line.MemberResponsibility);
+        Assert.Equal(110m, line.PlanPaidAmount);
+        Assert.Equal(
+            new[] { ("CO", "45", 50m), ("PR", "3", 30m), ("PR", "2", 10m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        AssertCasInvariants(line);
+        Assert.Equal(40m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(40m, line.OopAppliedAmount);
+    }
+
+    /// <summary>
+    /// Deductible met, $10 OOP left: coinsurance ($24) is forgiven entirely
+    /// and dropped; the copay is reduced from $30 to $10.
+    /// </summary>
+    [Fact]
+    public async Task OopMax_CapHitMidCopay_DropsCoinsuranceReducesCopay()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500, individualOopMax: 3000);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m, existingOop: 2990m);
+        var request = CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(10m, line.CopayAmount);
+        Assert.Equal(0m, line.CoinsuranceAmount);
+        Assert.Equal(44m, line.OopMaxReduction);
+        Assert.Equal(10m, line.MemberResponsibility);
+        Assert.Equal(140m, line.PlanPaidAmount);
+        Assert.Equal(
+            new[] { ("CO", "45", 50m), ("PR", "3", 10m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        AssertCasInvariants(line);
+    }
+
+    /// <summary>
+    /// OOP left ($300) is below the deductible still owed ($500) — e.g. OOP
+    /// already accumulated through copays that do not count toward the
+    /// deductible. Raw: $500 deductible + $30 copay + 20% × $470 = $94
+    /// coinsurance = $624. Coinsurance and copay are forgiven, the deductible
+    /// is reduced to $300, and the deductible accumulator records the $300
+    /// actually charged, not $500.
+    /// </summary>
+    [Fact]
+    public async Task OopMax_CapBelowDeductible_ReducesDeductibleAndDeductibleAccumulator()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500, individualOopMax: 3000);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 0m, existingOop: 2700m);
+        var request = CreateRequest(plan.Id, lines: ("99214", 1200m, 1000m, "11"));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(300m, line.DeductibleAmount);
+        Assert.Equal(0m, line.CopayAmount);
+        Assert.Equal(0m, line.CoinsuranceAmount);
+        Assert.Equal(324m, line.OopMaxReduction);
+        Assert.Equal(300m, line.MemberResponsibility);
+        Assert.Equal(700m, line.PlanPaidAmount);
+        Assert.Equal(
+            new[] { ("CO", "45", 200m), ("PR", "1", 300m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        AssertCasInvariants(line);
+        Assert.Equal(300m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(300m, Snapshot(result, AccumulatorType.FamilyDeductible, AccumulatorScope.Family).AmountApplied);
+        Assert.Equal(300m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// The cap reached on a later line of the same claim: line 1 consumes
+    /// OOP, line 2 is reduced. The deductible satisfied on line 1 keeps
+    /// counting in full.
+    /// </summary>
+    [Fact]
+    public async Task OopMax_CrossedOnSecondLine_EarlierLineUntouched()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500, individualOopMax: 3000);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 400m, existingOop: 2850m);
+        var request = CreateRequest(plan.Id, lines:
+        [
+            ("99213", 200m, 150m, "11"),
+            ("99213", 200m, 150m, "11"),
+        ]);
+
+        var result = await engine.CalculateAsync(request);
+
+        // Line 1: deductible $100, copay $30, 20% × $20 = $4 → $134 (OOP left $150 → $16).
+        // Line 2: copay $30 + coinsurance $24 = $54, capped at $16 → copay $16.
+        var (l1, l2) = (result.Lines[0], result.Lines[1]);
+        Assert.Equal((100m, 30m, 4m, 0m), (l1.DeductibleAmount, l1.CopayAmount, l1.CoinsuranceAmount, l1.OopMaxReduction));
+        Assert.Equal((0m, 16m, 0m, 38m), (l2.DeductibleAmount, l2.CopayAmount, l2.CoinsuranceAmount, l2.OopMaxReduction));
+        Assert.Equal(150m, result.Totals.TotalMemberResponsibility);
+        Assert.Equal(150m, result.Totals.TotalDeductible + result.Totals.TotalCopay + result.Totals.TotalCoinsurance);
+        Assert.All(result.Lines, AssertCasInvariants);
+        Assert.Equal(100m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(150m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// DRG stay crossing the cap, three lines with uneven allowed amounts.
+    /// Claim level: $500 deductible + 20% × $11,500 = $2,300 coinsurance;
+    /// $1,500 OOP left → coinsurance reduced to $1,000. Per line the reduced
+    /// amounts are split by allowed (truncated to the cent, remainder on the
+    /// last line), each line balances, and no OA-23 is emitted.
+    /// </summary>
+    [Fact]
+    public async Task Drg_StayCrossingOopMax_ReducedPrSplitAcrossLines()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 3000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48", existingOop: 1500m);
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+            lines:
+            [
+                ("99223", 12000m, 3388.23m, "21"),
+                ("", 1500m, 423.52m, "21"),
+                ("", 29000m, 8188.25m, "21"),
+            ]);
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.True(result.Success);
+        var drg = result.DrgCostShare!;
+        Assert.Equal(500m, drg.DeductibleAmount);
+        Assert.Equal(1000m, drg.CoinsuranceAmount);
+        Assert.Equal(1300m, drg.OopMaxReduction);
+        Assert.Equal(1500m, drg.MemberResponsibility);
+        Assert.Equal(10500m, drg.PlanPaidAmount);
+        Assert.DoesNotContain(drg.Adjustments, a => a.GroupCode == "OA");
+        Assert.All(drg.Adjustments, a => Assert.True(a.Amount >= 0));
+        Assert.Equal(drg.PlanPaidAmount,
+            result.Lines.Sum(l => l.BilledAmount) - drg.Adjustments.Sum(a => a.Amount));
+
+        // Truncated proportional split, remainder on the last line.
+        Assert.Equal(new[] { 141.17m, 17.64m, 341.19m }, result.Lines.Select(l => l.DeductibleAmount));
+        Assert.Equal(new[] { 282.35m, 35.29m, 682.36m }, result.Lines.Select(l => l.CoinsuranceAmount));
+        Assert.Equal(1300m, result.Lines.Sum(l => l.OopMaxReduction));
+        Assert.Equal(1300m, result.Totals.TotalOopMaxReduction);
+        Assert.Equal(1500m, result.Totals.TotalMemberResponsibility);
+        Assert.Equal(1500m, result.Totals.TotalOopApplied);
+        Assert.Equal(10500m, result.Totals.TotalPlanPaid);
+        Assert.All(result.Lines, l =>
+        {
+            AssertCasInvariants(l);
+            Assert.Equal(l.DeductibleAmount + l.CopayAmount + l.CoinsuranceAmount, l.MemberResponsibility);
+            Assert.DoesNotContain(l.Adjustments, a => a.GroupCode == "OA");
+        });
+        Assert.Equal(500m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(1500m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// DRG stay with OOP-excluded coinsurance: only the OOP-eligible
+    /// deductible is reduced ($500 → the $200 left); the $2,300 coinsurance
+    /// is owed in full and its per-line split is untouched by the cap.
+    /// </summary>
+    [Fact]
+    public async Task Drg_OopExcludedCoinsurance_OnlyEligibleComponentReduced()
+    {
+        var plan = WithOopApplies(CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 3000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate), "48", false, CostShareType.Coinsurance);
+        var engine = CreateEngine(plan, categoryCode: "48", existingOop: 2800m);
+
+        var request = CreateRequest(plan.Id,
+            claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+            lines:
+            [
+                ("99223", 9000m, 4000m, "21"),
+                ("", 20000m, 8000m, "21"),
+            ]);
+
+        var result = await engine.CalculateAsync(request);
+
+        var drg = result.DrgCostShare!;
+        Assert.Equal(200m, drg.DeductibleAmount);
+        Assert.Equal(2300m, drg.CoinsuranceAmount);
+        Assert.Equal(300m, drg.OopMaxReduction);
+        Assert.Equal(2500m, drg.MemberResponsibility);
+        Assert.Equal(2300m, result.Lines.Sum(l => l.CoinsuranceAmount));
+        Assert.Equal(200m, result.Totals.TotalOopApplied);
+        Assert.All(result.Lines, AssertCasInvariants);
+        Assert.Equal(200m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // COB — SECONDARY PAYER: PR = MEMBER LIABILITY, POSITIVE OA-23,
+    // 835 BALANCING (charge − ΣCAS = paid)
+    //
+    // Convention: the member owes min(pre-COB cost share, allowed − primary
+    // paid − our payment). PR-1/2/3 are reduced to that (coinsurance, then
+    // copay, then deductible); OA-23 = allowed − member − paid; the
+    // accumulators record the reduced PR amounts.
     // ═══════════════════════════════════════════════════════════════════
 
     private static BenefitResolutionRequest AsSecondary(
@@ -1087,40 +1322,77 @@ public class BenefitCalculationEngineTests
         Assert.Equal(l.PlanPaidAmount, l.BilledAmount - l.Adjustments.Sum(a => a.Amount));
 
     /// <summary>
-    /// Deductible met: pre-COB the plan pays $96 on $150 allowed ($30 copay,
-    /// $24 coinsurance). The primary paid $120, so complementary COB pays the
-    /// $80 balance of the $200 charge; the $16 reduction is a positive OA-23.
+    /// 835 line invariants: charge − ΣCAS = paid, no negative CAS amount,
+    /// no zero-amount PR entry, the PR entries equal the line's
+    /// deductible / copay / coinsurance, and ΣPR = member responsibility.
     /// </summary>
-    [Fact]
-    public async Task Cob_Complementary_Line_Oa23PositiveAndBalances()
+    private static void AssertCasInvariants(LineBenefitResult l)
+    {
+        AssertLineBalances(l);
+        Assert.All(l.Adjustments, a => Assert.True(a.Amount >= 0,
+            $"line {l.LineNumber} {a.GroupCode}-{a.ReasonCode} is negative ({a.Amount})"));
+        Assert.DoesNotContain(l.Adjustments, a => a.GroupCode == "PR" && a.Amount == 0);
+        decimal Pr(string carc) => l.Adjustments
+            .Where(a => a.GroupCode == "PR" && a.ReasonCode == carc).Sum(a => a.Amount);
+        Assert.Equal(l.DeductibleAmount, Pr("1"));
+        Assert.Equal(l.CoinsuranceAmount, Pr("2"));
+        Assert.Equal(l.CopayAmount, Pr("3"));
+        Assert.Equal(l.MemberResponsibility, l.Adjustments.Where(a => a.GroupCode == "PR").Sum(a => a.Amount));
+    }
+
+    private static decimal Oa23(IEnumerable<AdjustmentReason> adjustments) =>
+        adjustments.Where(a => a is { GroupCode: "OA", ReasonCode: "23" }).Sum(a => a.Amount);
+
+    /// <summary>
+    /// Deductible met: pre-COB the plan pays $96 on $150 allowed ($30 copay,
+    /// $24 coinsurance). Complementary pays min($96, $200 charge − primary).
+    /// The member owes what is left of the $150 allowed after both payers
+    /// (never more than $54), the PR entries shrink to it (coinsurance
+    /// first), and OA-23 = allowed − member − paid.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 96, 30, 24, 0)]     // no primary payment: COB is a no-op
+    [InlineData(40, 96, 14, 0, 40)]    // member owes 150 − 40 − 96 = 14 (copay)
+    [InlineData(120, 80, 0, 0, 70)]    // payment capped at 200 − 120; member owes 0
+    public async Task Cob_Complementary_Line_PrIsMemberLiability_Oa23Balances(
+        decimal primaryPaid, decimal expectedPaid, decimal expectedCopay,
+        decimal expectedCoinsurance, decimal expectedOa23)
     {
         var plan = CreateTestPlan(individualDeductible: 500);
         var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
         var request = AsSecondary(
             CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
-            complementary: true, (1, 120m));
+            complementary: true, (1, primaryPaid));
 
         var result = await engine.CalculateAsync(request);
 
         var line = result.Lines.Single();
-        Assert.Equal(80m, line.PlanPaidAmount);
-        var oa23 = Assert.Single(line.Adjustments, a => a is { GroupCode: "OA", ReasonCode: "23" });
-        Assert.Equal(16m, oa23.Amount);
-        AssertLineBalances(line);
-        Assert.Equal(80m, line.BilledAmount - line.Adjustments.Sum(a => a.Amount));
+        Assert.Equal(expectedPaid, line.PlanPaidAmount);
+        Assert.Equal(expectedCopay, line.CopayAmount);
+        Assert.Equal(expectedCoinsurance, line.CoinsuranceAmount);
+        Assert.Equal(expectedCopay + expectedCoinsurance, line.MemberResponsibility);
+        Assert.Equal(expectedOa23, Oa23(line.Adjustments));
+        AssertCasInvariants(line);
+        // Accumulators record what the member actually owes.
+        Assert.Equal(line.MemberResponsibility, line.OopAppliedAmount);
+        Assert.Equal(line.MemberResponsibility,
+            Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
     }
 
     /// <summary>
-    /// Non-duplication: max benefit = allowed − member share = $96; the
-    /// primary paid $60, so the secondary pays $36 and OA-23 is +$60.
-    /// When the primary pays at least the max benefit, the secondary pays
-    /// nothing and OA-23 absorbs the full $96.
+    /// Non-duplication: max benefit = allowed − member share = $96. The
+    /// secondary pays max benefit − primary; the member keeps the full $54
+    /// cost share unless the primary paid more than $96, then owes only
+    /// what is left of the $150 allowed. OA-23 equals the primary payment
+    /// here (it covers our savings plus any cost share the primary paid).
     /// </summary>
     [Theory]
-    [InlineData(60, 36, 60)]
-    [InlineData(120, 0, 96)]
-    public async Task Cob_NonDuplication_Line_Oa23PositiveAndBalances(
-        decimal primaryPaid, decimal expectedPaid, decimal expectedOa23)
+    [InlineData(60, 36, 30, 24, 60)]
+    [InlineData(120, 0, 30, 0, 120)]   // member owes 150 − 120 = 30
+    [InlineData(200, 0, 0, 0, 150)]    // primary paid more than allowed
+    public async Task Cob_NonDuplication_Line_PrIsMemberLiability_Oa23Balances(
+        decimal primaryPaid, decimal expectedPaid, decimal expectedCopay,
+        decimal expectedCoinsurance, decimal expectedOa23)
     {
         var plan = CreateTestPlan(individualDeductible: 500);
         var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
@@ -1132,45 +1404,182 @@ public class BenefitCalculationEngineTests
 
         var line = result.Lines.Single();
         Assert.Equal(expectedPaid, line.PlanPaidAmount);
-        Assert.Equal(expectedOa23,
-            line.Adjustments.Single(a => a is { GroupCode: "OA", ReasonCode: "23" }).Amount);
-        AssertLineBalances(line);
+        Assert.Equal(expectedCopay, line.CopayAmount);
+        Assert.Equal(expectedCoinsurance, line.CoinsuranceAmount);
+        Assert.Equal(expectedOa23, Oa23(line.Adjustments));
+        AssertCasInvariants(line);
+        Assert.Equal(line.MemberResponsibility,
+            Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
     }
 
     /// <summary>
-    /// OOP max and COB on the same line: the OOP-max OA-23 is negative (the
-    /// PR entries carry the uncapped cost share, so the plan pays more than
-    /// allowed − ΣPR) and the COB OA-23 is positive. Together they balance.
+    /// Deductible not met: the $150 allowed all goes to the deductible and
+    /// the plan pays nothing pre-COB. The primary paid $100, so the member
+    /// owes $50 — PR-1 $50, OA-23 $100 — and the deductible accumulator
+    /// records $50, not $150.
     /// </summary>
-    [Fact]
-    public async Task Cob_WithOopMaxReduction_Line_BothOa23EntriesBalance()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Cob_DeductibleReducedToMemberLiability_AccumulatorRecordsReducedDeductible(bool complementary)
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98");
+        var request = AsSecondary(
+            CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
+            complementary, (1, 100m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(0m, line.PlanPaidAmount);
+        Assert.Equal(
+            new[] { ("CO", "45", 50m), ("PR", "1", 50m), ("OA", "23", 100m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.Equal(50m, line.MemberResponsibility);
+        AssertCasInvariants(line);
+        Assert.Equal(50m, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(50m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(50m, result.Totals.TotalDeductible);
+        Assert.Equal(50m, result.Totals.TotalMemberResponsibility);
+    }
+
+    /// <summary>
+    /// OOP max and COB on the same line. Pre-COB the $600 coinsurance is
+    /// reduced to the $20 left under the OOP max and the plan would pay
+    /// $2,980. Complementary pays the $2,500 balance of the $5,000 charge;
+    /// nothing of the $3,000 allowed is left for the member, so PR-2 is
+    /// dropped, OA-23 = $500 and the OOP accumulator records $0.
+    /// Non-duplication pays $2,980 − $2,500 = $480; the member still owes
+    /// the $20, OA-23 = $2,500.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 2500, 0, 500)]
+    [InlineData(false, 480, 20, 2500)]
+    public async Task Cob_WithOopMaxReduction_Line_ReducedPrAndPositiveCobOa23(
+        bool complementary, decimal expectedPaid, decimal expectedCoinsurance, decimal expectedOa23)
     {
         var plan = CreateTestPlan(individualDeductible: 0, individualOopMax: 3000);
         var engine = CreateEngine(plan, categoryCode: "48", existingOop: 2980m);
         var request = AsSecondary(
             CreateRequest(plan.Id, lines: ("99223", 5000m, 3000m, "21")),
-            complementary: true, (1, 2500m));
+            complementary, (1, 2500m));
 
         var result = await engine.CalculateAsync(request);
 
         var line = result.Lines.Single();
-        // Pre-COB: member $20, plan $2,980; complementary caps at the $2,500 balance.
-        Assert.Equal(2500m, line.PlanPaidAmount);
-        var oa23 = line.Adjustments.Where(a => a is { GroupCode: "OA", ReasonCode: "23" })
-            .Select(a => a.Amount).OrderBy(a => a).ToList();
-        Assert.Equal([-580m, 480m], oa23);
-        AssertLineBalances(line);
+        Assert.Equal(expectedPaid, line.PlanPaidAmount);
+        Assert.Equal(expectedCoinsurance, line.CoinsuranceAmount);
+        Assert.Equal(expectedCoinsurance, line.MemberResponsibility);
+        Assert.Equal(580m, line.OopMaxReduction);
+        var expectedCas = new List<(string, string, decimal)> { ("CO", "45", 2000m) };
+        if (expectedCoinsurance > 0) expectedCas.Add(("PR", "2", expectedCoinsurance));
+        expectedCas.Add(("OA", "23", expectedOa23));
+        Assert.Equal(expectedCas, line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        AssertCasInvariants(line);
+        Assert.Equal(expectedCoinsurance, line.OopAppliedAmount);
+        Assert.Equal(expectedCoinsurance,
+            Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
     }
 
     /// <summary>
-    /// DRG claim-level path with a primary payer amount supplied: every line
-    /// and the claim-level DrgCostShare CAS balance (charge − ΣCAS = paid),
-    /// including the negative OOP-max OA-23. The DRG path does not apply COB
-    /// (ProcessDrgClaimAsync never reads request.Cob), so no COB OA-23 is
-    /// emitted there.
+    /// DRG stay as secondary payer. Pre-COB: $500 deductible + 20% × $11,500
+    /// = $2,300 coinsurance; member $2,800, plan $9,200 on $12,000 allowed.
+    /// COB is computed once for the stay against the primary's total payment
+    /// (Σ per-line amounts), then the reduced PR components and the OA-23
+    /// are split across the lines by allowed (truncated to the cent,
+    /// remainder on the last line).
     /// </summary>
-    [Fact]
-    public async Task Cob_Drg_ClaimLevelAndLines_Balance()
+    [Theory]
+    // Complementary, primary $2,000: pays $9,200; member owes 12,000 − 2,000 − 9,200 = $800.
+    [InlineData(true, 2000, 9200, 500, 300, 2000)]
+    // Non-duplication, primary $2,000: pays 9,200 − 2,000 = $7,200; member keeps $2,800.
+    [InlineData(false, 2000, 7200, 500, 2300, 2000)]
+    // Non-duplication, primary $10,000 ≥ max benefit: pays $0; member owes $2,000.
+    [InlineData(false, 10000, 0, 500, 1500, 10000)]
+    public async Task Cob_Drg_ClaimLevelCob_SplitAcrossLines_Balances(
+        bool complementary, decimal primaryTotal, decimal expectedPaid,
+        decimal expectedDeductible, decimal expectedCoinsurance, decimal expectedOa23)
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 6000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48");
+        var request = AsSecondary(
+            CreateRequest(plan.Id,
+                claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+                lines:
+                [
+                    ("99223", 12000m, 3388.23m, "21"),
+                    ("", 1500m, 423.52m, "21"),
+                    ("", 29000m, 8188.25m, "21"),
+                ]),
+            complementary, (1, primaryTotal * 0.25m), (3, primaryTotal * 0.75m));
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.True(result.Success);
+        var drg = result.DrgCostShare!;
+        var member = expectedDeductible + expectedCoinsurance;
+        Assert.Equal(expectedPaid, drg.PlanPaidAmount);
+        Assert.Equal(expectedDeductible, drg.DeductibleAmount);
+        Assert.Equal(expectedCoinsurance, drg.CoinsuranceAmount);
+        Assert.Equal(member, drg.MemberResponsibility);
+        Assert.Equal(expectedOa23, Oa23(drg.Adjustments));
+        Assert.All(drg.Adjustments, a => Assert.True(a.Amount >= 0));
+        Assert.Equal(member, drg.Adjustments.Where(a => a.GroupCode == "PR").Sum(a => a.Amount));
+        Assert.Equal(drg.PlanPaidAmount,
+            result.Lines.Sum(l => l.BilledAmount) - drg.Adjustments.Sum(a => a.Amount));
+
+        // Lines: every line balances with ΣPR = member responsibility, and
+        // the per-line amounts reconcile to the claim level.
+        Assert.All(result.Lines, AssertCasInvariants);
+        Assert.Equal(expectedPaid, result.Lines.Sum(l => l.PlanPaidAmount));
+        Assert.Equal(expectedOa23, result.Lines.Sum(l => Oa23(l.Adjustments)));
+        Assert.Equal(expectedDeductible, result.Lines.Sum(l => l.DeductibleAmount));
+        Assert.Equal(expectedCoinsurance, result.Lines.Sum(l => l.CoinsuranceAmount));
+        Assert.Equal(member, result.Totals.TotalMemberResponsibility);
+        Assert.Equal(member, result.Totals.TotalOopApplied);
+
+        Assert.All(result.Lines, l => Assert.True(l.PlanPaidAmount >= 0));
+        var oa23ByLine = result.Lines.Select(l => Oa23(l.Adjustments)).ToArray();
+        if (expectedPaid > 0)
+        {
+            // OA-23 split by allowed: truncated to the cent, remainder on the last line.
+            var weights = new[] { 3388.23m, 423.52m, 8188.25m };
+            for (var i = 0; i < 2; i++)
+                Assert.Equal(Math.Floor(expectedOa23 * weights[i] / 12000m * 100m) / 100m, oa23ByLine[i]);
+            Assert.Equal(expectedOa23 - oa23ByLine[0] - oa23ByLine[1], oa23ByLine[2]);
+        }
+        else
+        {
+            // The plan pays nothing: each line's OA-23 is capped at its
+            // allowed − member share (spilling the rounding back from the
+            // last line), so every line pays exactly zero.
+            Assert.All(result.Lines, l => Assert.Equal(0m, l.PlanPaidAmount));
+        }
+
+        // Accumulators record what the member owes after COB.
+        Assert.Equal(expectedDeductible, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(member, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// DRG stay with the OOP cap AND COB. $500 OOP left: pre-COB the
+    /// coinsurance is forgiven entirely, the member owes the $500 deductible
+    /// and the plan would pay $11,500. The primary paid $7,000 in total.
+    /// Complementary pays $11,500 (≤ $20,000 − $7,000): nothing is left for
+    /// the member, OA-23 = $500, and no accumulator moves. Non-duplication
+    /// pays $11,500 − $7,000 = $4,500; the member still owes $500, OA-23 =
+    /// $7,000. Line 2 has $0 allowed, so its OA-23 share is capped at $0 and
+    /// the whole OA-23 lands on line 1 (no line pays below zero).
+    /// </summary>
+    [Theory]
+    [InlineData(true, 11500, 0, 500)]
+    [InlineData(false, 4500, 500, 7000)]
+    public async Task Cob_Drg_WithOopMax_ClaimLevelAndLinesBalance(
+        bool complementary, decimal expectedPaid, decimal expectedMember, decimal expectedOa23)
     {
         var plan = CreateTestPlan(
             individualDeductible: 500,
@@ -1185,19 +1594,123 @@ public class BenefitCalculationEngineTests
                     ("99223", 15000m, 12000m, "21"),
                     ("", 5000m, 0m, "21"),
                 ]),
-            complementary: true, (1, 6000m), (2, 1000m));
+            complementary, (1, 6000m), (2, 1000m));
 
         var result = await engine.CalculateAsync(request);
 
         Assert.True(result.Success);
         var drg = result.DrgCostShare!;
-        Assert.True(drg.OopMaxReduction > 0);
+        Assert.Equal(2300m, drg.OopMaxReduction);
+        Assert.Equal(expectedPaid, drg.PlanPaidAmount);
+        Assert.Equal(expectedMember, drg.MemberResponsibility);
+        Assert.Equal(expectedMember, drg.DeductibleAmount);
+        Assert.Equal(0m, drg.CoinsuranceAmount);
+        Assert.Equal(expectedOa23, Oa23(drg.Adjustments));
+        Assert.All(drg.Adjustments, a => Assert.True(a.Amount >= 0));
         var totalBilled = result.Lines.Sum(l => l.BilledAmount);
         Assert.Equal(drg.PlanPaidAmount, totalBilled - drg.Adjustments.Sum(a => a.Amount));
-        Assert.All(drg.Adjustments.Where(a => a is { GroupCode: "OA", ReasonCode: "23" }),
-            a => Assert.True(a.Amount < 0)); // OOP-max only; no COB entry on this path
-        Assert.All(result.Lines, AssertLineBalances);
+
+        Assert.All(result.Lines, AssertCasInvariants);
         Assert.Equal(drg.PlanPaidAmount, result.Lines.Sum(l => l.PlanPaidAmount));
+        Assert.Equal(expectedOa23, Oa23(result.Lines[0].Adjustments));
+        Assert.Equal(0m, Oa23(result.Lines[1].Adjustments));
+        Assert.Equal(0m, result.Lines[1].PlanPaidAmount);
+
+        Assert.Equal(expectedMember, Snapshot(result, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(expectedMember, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// COB changes only the member amount: deductible met, 20% coinsurance
+    /// on $250 allowed (= billed) → member $50, plan $200 pre-COB. The
+    /// primary paid $50, so complementary still pays the full $200 (no COB
+    /// savings) while the member owes 250 − 50 − 200 = $0. PR-2 is dropped,
+    /// OA-23 = allowed − member − paid = $50, the line balances, and no OOP
+    /// is accumulated.
+    /// </summary>
+    [Fact]
+    public async Task Cob_OnlyMemberResponsibilityChanges_Line_Oa23IsPrimaryCoveredCostShare()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "48", existingDeductible: 500m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id, lines: ("99223", 250m, 250m, "21")),
+            complementary: true, (1, 50m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(200m, line.PlanPaidAmount);
+        Assert.Equal(0m, line.MemberResponsibility);
+        Assert.Equal(
+            new[] { ("OA", "23", 50m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        AssertCasInvariants(line);
+        Assert.Equal(0m, line.OopAppliedAmount);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// The same member-only change on the DRG path: deductible met, 20% of
+    /// the $12,000 stay → member $2,400, plan $9,600. The primary paid
+    /// $2,400 in total, so the plan still pays $9,600 and the member owes
+    /// $0; OA-23 = $2,400, split by allowed (truncated to the cent, remainder
+    /// on the last line), every line balances.
+    /// </summary>
+    [Fact]
+    public async Task Cob_OnlyMemberResponsibilityChanges_Drg_Oa23SplitAndBalances()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 6000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48", existingDeductible: 500m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id,
+                claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+                lines:
+                [
+                    ("99223", 4000m, 4000m, "21"),
+                    ("", 8000m, 8000m, "21"),
+                ]),
+            complementary: true, (1, 1000m), (2, 1400m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var drg = result.DrgCostShare!;
+        Assert.Equal(9600m, drg.PlanPaidAmount);
+        Assert.Equal(0m, drg.MemberResponsibility);
+        Assert.Equal(2400m, Oa23(drg.Adjustments));
+        Assert.DoesNotContain(drg.Adjustments, a => a.GroupCode == "PR");
+        Assert.Equal(drg.PlanPaidAmount,
+            result.Lines.Sum(l => l.BilledAmount) - drg.Adjustments.Sum(a => a.Amount));
+
+        Assert.All(result.Lines, AssertCasInvariants);
+        // Truncated proportional split (2400 × 4000/12000 truncates to 799.99), remainder on the last line.
+        Assert.Equal(new[] { 799.99m, 1600.01m }, result.Lines.Select(l => Oa23(l.Adjustments)));
+        Assert.Equal(new[] { 3200.01m, 6399.99m }, result.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(0m, result.Totals.TotalOopApplied);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>A primary claim (no COB) on the DRG path emits no OA-23.</summary>
+    [Fact]
+    public async Task Drg_Primary_NoCob_NoOa23()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 6000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48");
+        var request = CreateRequest(plan.Id,
+            claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+            lines: [("99223", 15000m, 12000m, "21")]);
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.Equal(9200m, result.DrgCostShare!.PlanPaidAmount);
+        Assert.DoesNotContain(result.DrgCostShare.Adjustments, a => a.GroupCode == "OA");
+        Assert.All(result.Lines, AssertCasInvariants);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1550,7 +2063,7 @@ internal class FixedCategoryResolver : IServiceCategoryResolver
     public Task<ServiceCategoryMatch?> ResolveAsync(
         string tenantId, Guid benefitPlanId, DateOnly serviceDate,
         string procedureCode, string codeType, string placeOfService,
-        IReadOnlyList<string> modifiers, string? revenueCode, CancellationToken ct)
+        IReadOnlyList<string> modifiers, string? revenueCode, ServiceCategoryClaimContext? claim, CancellationToken ct)
     {
         return Task.FromResult<ServiceCategoryMatch?>(new ServiceCategoryMatch
         {
@@ -1598,6 +2111,6 @@ internal class UnmappedCategoryResolver : IServiceCategoryResolver
     public Task<ServiceCategoryMatch?> ResolveAsync(
         string tenantId, Guid benefitPlanId, DateOnly serviceDate,
         string procedureCode, string codeType, string placeOfService,
-        IReadOnlyList<string> modifiers, string? revenueCode, CancellationToken ct)
+        IReadOnlyList<string> modifiers, string? revenueCode, ServiceCategoryClaimContext? claim, CancellationToken ct)
         => Task.FromResult<ServiceCategoryMatch?>(null);
 }

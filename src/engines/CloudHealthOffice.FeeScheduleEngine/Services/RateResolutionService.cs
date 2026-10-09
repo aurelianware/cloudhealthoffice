@@ -30,6 +30,13 @@ public class RateResolutionService : IRateResolutionService
         "10", // Telehealth (non-facility, home)
     };
 
+    private static readonly string[] AssistantSurgeonModifiers =
+    [
+        PaymentModifiers.AssistantSurgeon,
+        PaymentModifiers.MinimumAssistantSurgeon,
+        PaymentModifiers.AssistantSurgeonNoQualifiedResident,
+    ];
+
     public RateResolutionService(
         IFeeScheduleRepository feeScheduleRepo,
         IProviderContractRepository contractRepo,
@@ -41,11 +48,26 @@ public class RateResolutionService : IRateResolutionService
     }
 
     public async Task<PricingResult> ResolveAsync(PricingRequest request, CancellationToken ct = default)
-        => (await ResolveLineAsync(
+    {
+        var line = await ResolveLineAsync(
             request,
             applyMultipleProcedureReduction: true,
             multipleProcedureContext: request.TotalLineCount > 1,
-            ct)).Result;
+            ct);
+
+        // A single line is its own claim: a per-stay amount is compared with the
+        // line's billed charge, which is then the stay's total billed charge.
+        return line.LesserOfBilled ? ApplyLesserOfBilled(line.Result) : line.Result;
+    }
+
+    /// <summary>
+    /// The engine's facility / non-facility rule: every place of service is a
+    /// facility setting except office (11), home (12) and telehealth (02, 10).
+    /// It selects facility PE RVUs and <see cref="FeeScheduleLine.FacilityRate"/>.
+    /// Public so callers that display the setting (PricingApi) use the same rule.
+    /// </summary>
+    public static bool IsFacilityPlaceOfService(string? placeOfServiceCode)
+        => !string.IsNullOrEmpty(placeOfServiceCode) && !NonFacilityPosCodes.Contains(placeOfServiceCode);
 
     /// <summary>
     /// Per-line resolution output for batch pricing: the result, the matched
@@ -53,7 +75,8 @@ public class RateResolutionService : IRateResolutionService
     /// a DRG case rate or an all-inclusive per diem — that must be paid once
     /// per claim rather than on every line.
     /// </summary>
-    private readonly record struct LineResolution(PricingResult Result, FeeScheduleLine? RateLine, bool IsPerStay);
+    private readonly record struct LineResolution(
+        PricingResult Result, FeeScheduleLine? RateLine, bool IsPerStay, bool LesserOfBilled);
 
     /// <summary>
     /// Prices one line and also returns the matched rate line so batch pricing can
@@ -73,6 +96,7 @@ public class RateResolutionService : IRateResolutionService
             request.TenantId, request.ProviderNpi, request.PlanId, request.ServiceDate, ct);
 
         var networkStatus = contract?.NetworkStatus ?? NetworkStatus.Unknown;
+        var lesserOfBilled = contract?.LesserOfBilledCharges ?? false;
 
         // 2. Determine which fee schedule applies
         var feeScheduleId = ResolveScheduleId(contract, request.ProcedureCode);
@@ -144,7 +168,7 @@ public class RateResolutionService : IRateResolutionService
                 FeeScheduleId    = schedule?.Id,
                 FeeScheduleName  = schedule?.Name,
                 UnresolvedReason = unresolvedReason,
-            }, rateLine, IsPerStay: false);
+            }, rateLine, IsPerStay: false, LesserOfBilled: false);
         }
 
         // 5. Apply modifier adjustments (not applicable for DRG/PerDiem/Capitation)
@@ -169,6 +193,10 @@ public class RateResolutionService : IRateResolutionService
         if (scheduleType != FeeScheduleType.Drg && !isLineTotal)
             finalAmount *= request.Units;
 
+        // Allowed amounts are money: rounded to cents once, here, so every caller
+        // (adjudication, estimates, the Pricing API) sees the same figure.
+        finalAmount = Math.Round(finalAmount, 2);
+
         // Per-stay amounts are paid once per claim (ResolveBatchAsync): a DRG case
         // rate, or an all-inclusive per diem priced for the length of stay.
         var isPerStay = rateSource == RateSource.Drg
@@ -184,6 +212,7 @@ public class RateResolutionService : IRateResolutionService
             LineNumber      = request.LineNumber,
             ProcedureCode   = request.ProcedureCode,
             AllowedAmount   = finalAmount,
+            BaseAmount      = baseAmount,
             BilledAmount    = request.BilledAmount,
             FeeScheduleType = scheduleType,
             RateSource      = rateSource,
@@ -193,7 +222,7 @@ public class RateResolutionService : IRateResolutionService
             Adjustments     = adjustments,
             IsPerStayRate   = isPerStay,
             Warnings        = warnings,
-        }, rateLine, isPerStay);
+        }, rateLine, isPerStay, lesserOfBilled);
     }
 
     /// <summary>
@@ -213,7 +242,9 @@ public class RateResolutionService : IRateResolutionService
     ///      so those lines are left unreduced and flagged in
     ///      <see cref="PricingResult.Warnings"/>, as are lines with no indicator.
     ///   3. Applies the rank-based reduction to ranked lines 2+
-    ///   4. Pays a per-stay rate (DRG case rate, all-inclusive per diem) once
+    ///   4. Applies the contract's lesser-of-billed provision, when it has one,
+    ///      to each ordinary line after every other adjustment.
+    ///   5. Pays a per-stay rate (DRG case rate, all-inclusive per diem) once
     ///      per claim, allocated across the per-stay lines in proportion to
     ///      their billed charges — see <see cref="AllocatePerStayAmounts"/>.
     ///      Without this, an N-line inpatient claim would be paid N case rates.
@@ -295,7 +326,15 @@ public class RateResolutionService : IRateResolutionService
             });
         }
 
-        // Phase 4: Per-stay rates are paid once per claim, allocated across the lines
+        // Phase 4: Lesser-of-billed on each ordinary line, after every contract
+        // adjustment (per-stay lines are compared at the stay level in phase 5)
+        for (var i = 0; i < initialResults.Count; i++)
+        {
+            if (initialResults[i].LesserOfBilled && !initialResults[i].IsPerStay)
+                finalResults[i] = ApplyLesserOfBilled(finalResults[i]);
+        }
+
+        // Phase 5: Per-stay rates are paid once per claim, allocated across the lines
         AllocatePerStayAmounts(initialResults, finalResults);
 
         return new PricingResultSet
@@ -372,13 +411,33 @@ public class RateResolutionService : IRateResolutionService
             return;
         }
 
+        var claimRate = amounts[0];
+        var rateName = schedules[0].FeeScheduleType == FeeScheduleType.Drg ? "DRG case rate" : "per diem";
+        var billed = indexes.Select(i => BilledInCents(finalResults[i].BilledAmount)).ToList();
+        var totalBilled = billed.Sum();
+
+        // Lesser-of-billed for a stay compares the claim-level rate with the stay's
+        // total billed charges, never a line's share with that line's charge.
+        var claimAllowed = claimRate;
+        if (indexes.All(i => initialResults[i].LesserOfBilled) && totalBilled < claimRate)
+        {
+            claimAllowed = totalBilled;
+            foreach (var i in indexes)
+            {
+                finalResults[i] = finalResults[i] with
+                {
+                    AllowedAmount = claimAllowed,
+                    LesserOfBilledApplied = true,
+                    Adjustments = new List<RateAdjustment>(finalResults[i].Adjustments)
+                    {
+                        LesserOfAdjustment($"{rateName} for the stay", claimRate, totalBilled),
+                    },
+                };
+            }
+        }
+
         if (indexes.Count == 1)
             return; // single line: it already carries the whole amount
-
-        var claimAllowed = amounts[0];
-        var rateName = schedules[0].FeeScheduleType == FeeScheduleType.Drg ? "DRG case rate" : "per diem";
-        var billed = indexes.Select(i => Math.Max(finalResults[i].BilledAmount, 0m)).ToList();
-        var totalBilled = billed.Sum();
         var proportions = billed
             .Select(b => totalBilled > 0m ? b / totalBilled : 1m / indexes.Count)
             .ToList();
@@ -424,6 +483,45 @@ public class RateResolutionService : IRateResolutionService
             };
         }
     }
+
+    /// <summary>
+    /// Lesser-of-billed for one line: allowed = min(contract amount, billed charge).
+    /// Lines priced at billed charges, unresolved lines and capitation are left alone.
+    /// </summary>
+    private static PricingResult ApplyLesserOfBilled(PricingResult result)
+    {
+        if (result.RateSource is RateSource.BilledCharges or RateSource.Unresolved or RateSource.Capitation)
+            return result;
+
+        var billed = BilledInCents(result.BilledAmount);
+        if (result.AllowedAmount <= billed)
+            return result;
+
+        return result with
+        {
+            AllowedAmount = billed,
+            LesserOfBilledApplied = true,
+            Adjustments = new List<RateAdjustment>(result.Adjustments)
+            {
+                LesserOfAdjustment("contract rate", result.AllowedAmount, billed),
+            },
+        };
+    }
+
+    /// <summary>
+    /// A billed charge as used for lesser-of and per-stay allocation: never negative,
+    /// rounded to cents, so an allowed amount derived from it stays in whole cents.
+    /// </summary>
+    private static decimal BilledInCents(decimal billedAmount)
+        => Math.Round(Math.Max(billedAmount, 0m), 2);
+
+    private static RateAdjustment LesserOfAdjustment(string rateName, decimal rate, decimal billed) => new()
+    {
+        Modifier = string.Empty,
+        Description = $"Lesser of {rateName} {rate:0.00} and billed charges {billed:0.00}: billed charges apply",
+        AdjustmentFactor = rate > 0m ? Math.Round(billed / rate, 6) : 0m,
+        AdjustmentAmount = billed - rate,
+    };
 
     /// <summary>
     /// A line participates in multiple procedure ranking only when it was priced from a
@@ -692,7 +790,7 @@ public class RateResolutionService : IRateResolutionService
                 if (line.RateType == FeeScheduleRateType.PercentOfBilled)
                     return (request.BilledAmount * line.Rate, source, schedule.Type, null, true);
 
-                return (line.Rate, source, schedule.Type, null, false);
+                return (FlatLineRate(line, request.PlaceOfServiceCode), source, schedule.Type, null, false);
             }
         }
     }
@@ -727,7 +825,7 @@ public class RateResolutionService : IRateResolutionService
         if (medicaidLine.RateType == FeeScheduleRateType.FlatRate
             && !medicaidSchedule.PercentOfMedicare.HasValue)
         {
-            return (medicaidLine.Rate, null);
+            return (FlatLineRate(medicaidLine, request.PlaceOfServiceCode), null);
         }
 
         // Strategy 3: Inline RVU on the Medicaid line itself
@@ -878,6 +976,17 @@ public class RateResolutionService : IRateResolutionService
         FeeSchedule schedule, FeeScheduleLine line, string placeOfServiceCode)
         => line.RateType == FeeScheduleRateType.Rvu
             ? CalculateRvuAmount(schedule, line, placeOfServiceCode)
+            : FlatLineRate(line, placeOfServiceCode);
+
+    /// <summary>
+    /// The dollar rate of a flat-rate line: its <see cref="FeeScheduleLine.FacilityRate"/>
+    /// in a facility place of service when one is set, otherwise <see cref="FeeScheduleLine.Rate"/>.
+    /// </summary>
+    private static decimal FlatLineRate(FeeScheduleLine line, string placeOfServiceCode)
+        => line.RateType == FeeScheduleRateType.FlatRate
+           && line.FacilityRate is { } facilityRate
+           && IsFacilityPlaceOfService(placeOfServiceCode)
+            ? facilityRate
             : line.Rate;
 
     private static decimal CalculateRvuAmount(
@@ -886,7 +995,7 @@ public class RateResolutionService : IRateResolutionService
         if (!schedule.ConversionFactor.HasValue)
             return line.Rate; // fall back to stored rate if CF missing
 
-        var isFacility = !NonFacilityPosCodes.Contains(placeOfServiceCode);
+        var isFacility = IsFacilityPlaceOfService(placeOfServiceCode);
         var peRvu = (isFacility ? line.PeRvuFacility : line.PeRvu) ?? line.PeRvu ?? 0m;
 
         var total = (line.WorkRvu ?? 0m) * schedule.WorkGpci
@@ -965,21 +1074,24 @@ public class RateResolutionService : IRateResolutionService
             amount = reduced;
         }
 
-        // 80 — assistant surgeon (16%)
-        if (modifiers.Contains(PaymentModifiers.AssistantSurgeon, StringComparer.OrdinalIgnoreCase))
+        // 80 / 81 / 82 — assistant surgeon (16%). CMS pays all three assistant
+        // surgeon modifiers at 16% of the primary rate; applied once per line.
+        var assistantModifier = AssistantSurgeonModifiers.FirstOrDefault(
+            m => modifiers.Contains(m, StringComparer.OrdinalIgnoreCase));
+        if (assistantModifier is not null)
         {
             if (line?.AssistantAtSurgeryAllowed ?? true)
             {
                 var reduced = amount * 0.16m;
                 var adj = reduced - amount;
-                adjustments.Add(Adjustment(PaymentModifiers.AssistantSurgeon,
+                adjustments.Add(Adjustment(assistantModifier,
                     "Assistant surgeon (16% of primary rate)", 0.16m, adj));
                 amount = reduced;
             }
             else
             {
                 var adj = -amount;
-                adjustments.Add(Adjustment(PaymentModifiers.AssistantSurgeon,
+                adjustments.Add(Adjustment(assistantModifier,
                     "Assistant surgeon not allowed for this procedure ($0)", 0m, adj));
                 amount = 0m;
             }

@@ -460,6 +460,10 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 ? new Dictionary<int, decimal>(pricing.AllowedAmounts)
                 : new Dictionary<int, decimal>(),
             ClaimType = MapClaimType(claim.ClaimType),
+            TypeOfBill = claim.TypeOfBill,
+            // Claims-service stores CLM05-1 (facility type) as the claim's
+            // place of service on an institutional claim.
+            PlaceOfServiceIsFacilityType = claim.ClaimType == ClaimsService.Models.ClaimType.Institutional,
             LineOfBusiness = (int)claim.LineOfBusiness,
             Member = BuildMemberContext(context.ResolvedMember, claim, serviceDate),
             // DRG / all-inclusive per-diem stays: cost share once per stay.
@@ -539,7 +543,9 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         // POS falls back to the claim-level value when the line override
         // is missing — ServiceCategoryResolver uses POS for rule matching
         // and for system-level fallback inference, so dropping it would
-        // shift category resolution.
+        // shift category resolution. On an 837I the claim-level value is
+        // CLM05-1 (facility type); the resolver knows that from the
+        // request's ClaimType / TypeOfBill and does not read it as POS.
         var pos = !string.IsNullOrEmpty(line.PlaceOfServiceCode)
             ? line.PlaceOfServiceCode
             : claim.PlaceOfServiceCode;
@@ -688,14 +694,19 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// <summary>
     /// Maps one engine line onto 835-style line CAS. The engine's own
     /// <see cref="LineBenefitResult.Adjustments"/> (CO-45 contractual,
-    /// PR-1/2/3 cost share, OA-23 OOP-max / COB reductions, CO-denial) are
-    /// carried verbatim. Two engine shapes need filling in so the line
+    /// PR-1/2/3 cost share already reduced by any OOP-max cap, a positive
+    /// OA-23 COB reduction, CO-denial) are carried verbatim. Two engine shapes need filling in so the line
     /// still balances (charge − ΣCAS = paid) and carries its cost share:
     /// <list type="bullet">
     ///   <item><description>DRG / per-diem lines, whose adjustments live
-    ///     on the claim-level <see cref="DrgCostShareResult"/>: synthesized
-    ///     from the line's allocated amounts, with an OA-23 entry absorbing
-    ///     the OOP-max reduction and allocation rounding.</description></item>
+    ///     on the claim-level <see cref="DrgCostShareResult"/>: PR-1/3/2
+    ///     built straight from the line's allocated deductible / copay /
+    ///     coinsurance, which the engine has already reduced for any OOP-max
+    ///     cap (and which therefore already respect each rule's
+    ///     <c>OopApplies</c>). Only a pre-reduction (legacy) shape, whose
+    ///     components exceed the member share, gets an ordered reduction —
+    ///     see the comment there. A member share above the cost share goes to
+    ///     a positive OA-23.</description></item>
     ///   <item><description>Denied lines, which carry only the CO-denial
     ///     against the allowed amount: the billed-over-allowed contractual
     ///     reduction is added as CO-45.</description></item>
@@ -716,12 +727,35 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         if (line.IsDrgPriced && line.Adjustments.Count == 0)
         {
-            AddIfNonZero(reasons, "PR", "1", line.DeductibleAmount);
-            AddIfNonZero(reasons, "PR", "3", line.CopayAmount);
-            AddIfNonZero(reasons, "PR", "2", line.CoinsuranceAmount);
-            var costShare = line.DeductibleAmount + line.CopayAmount + line.CoinsuranceAmount;
+            // Current engine shape: the components are the reduced amounts
+            // the member owes (Σ = allowed − paid). Use them verbatim — no
+            // reduction is synthesized, so an OOP-excluded component the
+            // engine left whole stays whole.
+            var deductible = line.DeductibleAmount;
+            var copay = line.CopayAmount;
+            var coinsurance = line.CoinsuranceAmount;
             var memberPortion = line.AllowedAmount - line.PlanPaidAmount;
-            AddIfNonZero(reasons, "OA", "23", memberPortion - costShare);
+            var excess = deductible + copay + coinsurance - memberPortion;
+            if (excess > 0)
+            {
+                // Legacy shape only (results built before the engine reduced
+                // PR amounts for the OOP max: components carry the pre-cap
+                // cost share). It is recognisable solely by Σ components
+                // exceeding the member share. Forgive in the engine's order —
+                // coinsurance, then copay, then deductible — so no CAS is
+                // negative. LIMITATION: the line does not say which
+                // components had OopApplies=false, so this may reduce an
+                // OOP-excluded component the engine would have left whole.
+                coinsurance -= Take(coinsurance, ref excess);
+                copay -= Take(copay, ref excess);
+                deductible -= Take(deductible, ref excess);
+            }
+            AddIfNonZero(reasons, "PR", "1", deductible);
+            AddIfNonZero(reasons, "PR", "3", copay);
+            AddIfNonZero(reasons, "PR", "2", coinsurance);
+            var residual = memberPortion - (deductible + copay + coinsurance);
+            if (residual > 0)
+                AddIfNonZero(reasons, "OA", "23", residual);
         }
 
         if (!reasons.Any(r => r.GroupCode == "CO" && r.ReasonCode == "45"))
@@ -735,6 +769,13 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
 
         return reasons.Where(r => r.Amount != 0m).ToList();
+    }
+
+    private static decimal Take(decimal amount, ref decimal outstanding)
+    {
+        var take = Math.Min(Math.Max(amount, 0m), outstanding);
+        outstanding -= take;
+        return take;
     }
 
     private static void AddIfNonZero(

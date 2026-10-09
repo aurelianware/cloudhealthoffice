@@ -6,6 +6,7 @@ using CloudHealthOffice.PricingApi.Configuration;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Security;
 using CloudHealthOffice.PricingApi.Services;
+using CloudHealthOffice.PricingApi.Services.Engine;
 using CloudHealthOffice.Infrastructure.Configuration;
 using CloudHealthOffice.Infrastructure.Json;
 using CloudHealthOffice.Infrastructure.Observability;
@@ -52,6 +53,9 @@ try
     builder.Services.AddSingleton<IUsageRepository, MongoUsageRepository>();
 
     // ── Services ──
+    // Repricing runs on the shared rate resolution engine (ADR 016). Schedules come
+    // from this service's own store until the dual-read step wires the canonical one.
+    builder.Services.AddScoped<IPricingScheduleSource, LegacyEntryScheduleSource>();
     builder.Services.AddScoped<IRepricingService, RepricingService>();
     builder.Services.AddSingleton<IFeeScheduleLoaderService, FeeScheduleLoaderService>();
 
