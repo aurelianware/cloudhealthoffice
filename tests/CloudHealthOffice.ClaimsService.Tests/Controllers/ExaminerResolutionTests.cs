@@ -52,6 +52,8 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
                 Arg.Any<DateTime>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Claim>());
     }
 
     private HttpClient Client(string user, string role)
@@ -92,10 +94,17 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
     private static Claim Golden07CobPend() =>
         Pended("claim-g07", "COB", "cob-payer-order-mismatch", "T", Payer("P", 112m), Payer("S", 60m));
 
-    private Task<HttpResponseMessage> Resolve(HttpClient client, Claim claim, object body)
+    /// <summary>
+    /// Posts a resolution; an approval carries the fingerprint of the claim's
+    /// pends as the examiner viewed them unless the body sets its own.
+    /// </summary>
+    private Task<HttpResponseMessage> Resolve(HttpClient client, Claim claim, object body, bool withFingerprint = true)
     {
         _repo.GetByIdAsync(claim.Id).Returns(claim);
-        return client.PostAsJsonAsync($"/api/claims/work-queue/{claim.Id}/resolve", body);
+        var json = System.Text.Json.JsonSerializer.SerializeToNode(body)!.AsObject();
+        if (withFingerprint && !json.ContainsKey("pendFingerprint"))
+            json["pendFingerprint"] = claim.PendDetails?.Fingerprint;
+        return client.PostAsJsonAsync($"/api/claims/work-queue/{claim.Id}/resolve", json);
     }
 
     // ── B1 ────────────────────────────────────────────────────────────
@@ -123,14 +132,14 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
                 && a.ReviewedPends[1].Code == "NCCI"
                 && a.ExaminerId == "examiner-1"),
             Arg.Any<CancellationToken>());
-        await _repo.Received().UpdateAsync(Arg.Is<Claim>(saved =>
+        await _repo.Received().UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(saved =>
             saved.Status == ClaimStatus.Approved
             && saved.ExaminerResolutions.Count == 1
             && saved.ExaminerResolutions[0].ApproverIds.SequenceEqual(new[] { "examiner-1" })
             && saved.ExaminerResolutions[0].Reason == "not a duplicate"
             && saved.ExaminerResolutions[0].ReviewedPends.SequenceEqual(new[] { "DUPLICATE: possible duplicate", "NCCI: bundled pair NE001" })
             && saved.ExaminerResolutions[0].OverriddenPends.SequenceEqual(new[] { "DuplicateClaim: DUPLICATE: possible duplicate" })
-            && saved.ResolutionLock == null));
+            && saved.ResolutionLock == null), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A pend the examiner did not review (a new one on the re-run) refuses the approval.</summary>
@@ -148,11 +157,32 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Contains("Provider integrity check could not be reached", await response.Content.ReadAsStringAsync());
-        await _repo.DidNotReceive().UpdateAsync(Arg.Any<Claim>());
+        await _repo.DidNotReceive().UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _repo.Received(1).ReleaseResolutionLockAsync("test-tenant", claim.Id, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // ── B2 ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Round-3 verification: COB is among the stored pends but not the
+    /// routing one (a duplicate pended first). payerSequence is accepted and
+    /// the re-run is told about both pends.
+    /// </summary>
+    [Fact]
+    public async Task PayerSequence_WhenCobIsAnAdditionalPend_IsAccepted()
+    {
+        var claim = Pended("claim-dup-cob", "DUPLICATE", "possible duplicate", "S", Payer("P", 50m));
+        claim.PendDetails!.AdditionalPendReasons.Add("COB: cob-secondary-not-supported-phase-1");
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer), claim,
+            new { disposition = "Approved", reason = "secondary per EOB", payerSequence = 2 });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _readjudicator.Received(1).ReadjudicateForApprovalAsync(
+            "test-tenant", claim.Id,
+            Arg.Is<ExaminerApproval>(a => a.PayerSequence == 2 && a.ReviewedPends.Count == 2),
+            Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task PayerSequence_OnANonCobPend_Is400()
@@ -217,14 +247,15 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
 
         Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
         await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
-        await _repo.Received(1).UpdateAsync(Arg.Is<Claim>(c =>
+        await _repo.Received(1).UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(c =>
             c.Status == ClaimStatus.Pended
             && c.PendingExaminerApproval!.RequestedBy == "supervisor-1"
-            && c.PendingExaminerApproval.PayerSequence == 1));
+            && c.PendingExaminerApproval.PayerSequence == 1), Arg.Any<string>(), Arg.Any<CancellationToken>());
 
         claim.PendingExaminerApproval = new PendingExaminerApproval
         {
             RequestedBy = "supervisor-1", PayerSequence = 1, Reason = "other coverage terminated", RequestedAt = DateTime.UtcNow,
+            PendFingerprint = claim.PendDetails!.Fingerprint, ExpiresAt = DateTime.UtcNow.AddHours(72),
         };
         var same = await Resolve(Client("supervisor-1", ChoRolePermissions.ClaimsSupervisor), claim,
             new { disposition = "Approved", reason = "again", payerSequence = 1 });
@@ -241,11 +272,12 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
                 a.ExaminerId == "supervisor-1" && a.SecondApproverId == "supervisor-2"
                 && a.PayerSequence == 1 && a.PayerOrderOverrideAuthorized),
             Arg.Any<CancellationToken>());
-        await _repo.Received().UpdateAsync(Arg.Is<Claim>(c =>
+        await _repo.Received().UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(c =>
             c.Status == ClaimStatus.Approved
             && c.PendingExaminerApproval == null
             && c.ExaminerResolutions.Single().ApproverIds.SequenceEqual(new[] { "supervisor-1", "supervisor-2" })
-            && c.ExaminerResolutions.Single().PayerSequence == 1));
+            && c.ExaminerResolutions.Single().ApproverReasons.SequenceEqual(new[] { "other coverage terminated", "confirmed with the member" })
+            && c.ExaminerResolutions.Single().PayerSequence == 1), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>/resolve requires workqueue:work (it had no permission at all).</summary>
@@ -258,6 +290,113 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
+    // ── Round-3 verification ──────────────────────────────────────────
+
+    /// <summary>
+    /// M4: the approval names the pends the examiner viewed (fingerprint).
+    /// The claim was re-adjudicated since and its pends changed: 409 with the
+    /// current pends; nothing re-run.
+    /// </summary>
+    [Fact]
+    public async Task Approval_WithAStaleFingerprint_Is409_NoRerun()
+    {
+        var claim = Pended("claim-fp", "DUPLICATE", "possible duplicate");
+        var viewed = claim.PendDetails!.Fingerprint;
+        claim.PendDetails.AdditionalPendReasons.Add("MEDREVIEW: Billing: manual review required.");
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer), claim,
+            new { disposition = "Approved", reason = "ok", pendFingerprint = viewed });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("pends changed", body);
+        Assert.Contains(claim.PendDetails.Fingerprint, body);
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task Approval_WithoutAFingerprint_Is400()
+    {
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-nofp", "DUPLICATE", "possible duplicate"),
+            new { disposition = "Approved", reason = "ok" }, withFingerprint: false);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
+    /// <summary>
+    /// M5: a waiting first approval does not count once it has expired, or
+    /// once the claim's pends changed — the second call starts over (202).
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task PendingFirstApproval_ExpiredOrForOtherPends_DoesNotCount(bool expired, bool otherPends)
+    {
+        var claim = Golden07CobPend();
+        claim.PendingExaminerApproval = new PendingExaminerApproval
+        {
+            RequestedBy = "supervisor-1", PayerSequence = 1, Reason = "r1",
+            RequestedAt = DateTime.UtcNow.AddHours(-80),
+            PendFingerprint = otherPends ? "20260101T000000000Z-000000000000000000000000" : claim.PendDetails!.Fingerprint,
+            ExpiresAt = expired ? DateTime.UtcNow.AddHours(-8) : DateTime.UtcNow.AddHours(64),
+        };
+
+        var response = await Resolve(Client("supervisor-2", ChoRolePermissions.ClaimsSupervisor), claim,
+            new { disposition = "Approved", reason = "r2", payerSequence = 1 });
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+        await _repo.Received(1).UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(c =>
+                c.PendingExaminerApproval!.RequestedBy == "supervisor-2"
+                && c.PendingExaminerApproval.PendFingerprint == claim.PendDetails!.Fingerprint
+                && c.PendingExaminerApproval.ExpiresAt > DateTime.UtcNow.AddHours(71)),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// L6: the final write is fenced on the lock token. A resolver whose lock
+    /// was taken over (its re-run outlived the lock) cannot finalize: 409 and
+    /// nothing is published.
+    /// </summary>
+    [Fact]
+    public async Task LostLockAtTheFinalWrite_Is409_NothingPublished()
+    {
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((Claim?)null);
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-lost", "DUPLICATE", "possible duplicate"), new { disposition = "Approved", reason = "x" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await _versionPublisher.DidNotReceiveWithAnyArgs().PublishVersionResolvedAsync(default!, default!, default, default, default, default);
+        _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Claim>());
+    }
+
+    /// <summary>
+    /// L7: an invalid aiExaminerAgreement is rejected before anything
+    /// happens — no re-run for an approval, no accumulator reversal for a
+    /// denial (it used to be checked after both).
+    /// </summary>
+    [Theory]
+    [InlineData("Approved")]
+    [InlineData("Denied")]
+    public async Task InvalidAiAgreement_Is400_BeforeAnySideEffect(string disposition)
+    {
+        var claim = Pended("claim-ai", "NCCI", "bundled pair");
+        claim.AiExamination = new AiExamination { RecommendedDisposition = "Approve" };
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer), claim,
+            new { disposition, reason = "x", aiExaminerAgreement = "Maybe" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
+        await _repo.DidNotReceiveWithAnyArgs().TryAcquireResolutionLockAsync(default!, default!, default!, default, default, default, default);
     }
 
     // ── H4 ────────────────────────────────────────────────────────────

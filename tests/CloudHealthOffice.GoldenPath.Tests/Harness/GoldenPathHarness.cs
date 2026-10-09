@@ -88,7 +88,10 @@ internal sealed class GoldenScenario
     public IReadOnlyList<ExaminerApproval> Approvals { get; init; } = [];
 
     /// <summary>See <see cref="ReviewStages"/>.</summary>
-    public sealed record ReviewStage(string Name, string Code, string Reason, string? RerunReason = null, bool OnlyOnRerun = false);
+    /// <param name="AppendsToExisting">Adds its reason to an existing pend (as NCCI does) instead of
+    /// replacing <c>PendDetails</c> (as the duplicate, provider-integrity and benefit stages do).</param>
+    public sealed record ReviewStage(string Name, string Code, string Reason, string? RerunReason = null, bool OnlyOnRerun = false,
+        bool AppendsToExisting = false);
 
     /// <summary>Payment-run date (BPR16); fixed so the 835 is reproducible.</summary>
     public DateTime PaymentDate { get; init; } = new(2026, 5, 15, 0, 0, 0, DateTimeKind.Utc);
@@ -364,7 +367,7 @@ internal sealed class GoldenPathHarness
             if (review.OnlyOnRerun && !rerun)
                 return Task.FromResult(ClaimAdjudicationStageResult.Pass(review.Name));
             var reason = rerun && review.RerunReason is { } changed ? changed : review.Reason;
-            if (context.PendDetails is null)
+            if (context.PendDetails is null || !review.AppendsToExisting)
             {
                 context.PendDetails = new Claims.PendDetails
                 {

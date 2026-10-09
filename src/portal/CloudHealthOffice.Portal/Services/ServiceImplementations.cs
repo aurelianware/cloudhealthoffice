@@ -3500,13 +3500,14 @@ public class WorkQueueService : IWorkQueueService
         }
     }
 
-    public async Task<ClaimResolutionResult> OverrideAsync(string claimId, string overrideReason, int? payerSequence = null)
+    public async Task<ClaimResolutionResult> OverrideAsync(string claimId, string overrideReason, int? payerSequence = null,
+        string? pendFingerprint = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
             var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/Claims/work-queue/{Uri.EscapeDataString(claimId)}/override",
-                new { OverrideReason = overrideReason, PayerSequence = payerSequence });
+                new { OverrideReason = overrideReason, PayerSequence = payerSequence, PendFingerprint = pendFingerprint });
             return await ReadResolutionAsync(response);
         }
         catch (HttpRequestException ex)
@@ -3522,7 +3523,8 @@ public class WorkQueueService : IWorkQueueService
         string reason,
         string? aiExaminerAgreement,
         string examinerUserId,
-        int? payerSequence = null)
+        int? payerSequence = null,
+        string? pendFingerprint = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
         try
@@ -3536,6 +3538,7 @@ public class WorkQueueService : IWorkQueueService
                     aiExaminerAgreement,
                     examinerUserId,
                     payerSequence,
+                    pendFingerprint,
                 });
             return await ReadResolutionAsync(response);
         }

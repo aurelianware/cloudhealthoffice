@@ -442,7 +442,17 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
                 $"Examiner payer sequence {payerSequence} is outside 1..{payers} (the payers on this claim).");
         }
 
-        var coverageSequence = entries is null ? (int?)null : Classify(entries).Scenario switch
+        // Coverage-service unavailable is a transient failure: the payer order
+        // cannot be corroborated, and no override authority stands in for
+        // that — the claim stays pended and the approval is retried
+        // (round-3 verification, M4).
+        if (entries is null)
+        {
+            return BuildDataPend(context, activity, classification, CoverageServiceUnavailablePendReason,
+                $"Coverage-service unavailable; examiner payer sequence {payerSequence} cannot be corroborated. Retry the approval.");
+        }
+
+        var coverageSequence = Classify(entries).Scenario switch
         {
             CobScenario.ChoPrimaryNoSecondary or CobScenario.ChoPrimaryWithSecondary => 1,
             CobScenario.ChoSecondaryDetected => 2,
@@ -455,7 +465,7 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
         {
             return BuildDataPend(context, activity, classification, PayerOrderOverrideRequiredPendReason,
                 $"Examiner payer sequence {payerSequence} disagrees with " +
-                (coverageSequence is null ? "nothing coverage-service could confirm (unavailable)" : $"coverage-service ({coverageSequence}{(coverageSequence >= 3 ? "+" : "")})") +
+                (coverageSequence is null ? "coverage-service (no payer order)" : $"coverage-service ({coverageSequence}{(coverageSequence >= 3 ? "+" : "")})") +
                 $" / the 837 SBR01 ('{context.Claim.PayerResponsibilityCode}'); it needs claims:override-approve and a reason.");
         }
 

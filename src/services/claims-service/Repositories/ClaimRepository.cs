@@ -307,6 +307,14 @@ public interface IClaimRepository
     Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default);
 
     /// <summary>
+    /// Replaces the claim only while <paramref name="lockToken"/> still holds
+    /// its resolution lock (fencing, round-3 verification L6): a resolver
+    /// whose lock expired and was taken over cannot finalize. Returns the
+    /// written claim, or null when the lock is no longer held.
+    /// </summary>
+    Task<Claim?> UpdateHoldingResolutionLockAsync(Claim claim, string lockToken, CancellationToken ct = default);
+
+    /// <summary>
     /// Candidate prior claims for duplicate detection
     /// (<see cref="Services.Adjudication.Stages.DuplicateClaimStage"/>).
     /// Returns live versions for <paramref name="tenantId"/> +
@@ -1890,6 +1898,34 @@ public class ClaimRepository : IClaimRepository
                                              or System.Net.HttpStatusCode.NotFound)
         {
             return false;
+        }
+    }
+
+    public async Task<Claim?> UpdateHoldingResolutionLockAsync(Claim claim, string lockToken, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        claim.TenantId = tenantId;
+        ItemResponse<Claim> current;
+        try
+        {
+            current = await _container.ReadItemAsync<Claim>(claim.Id, new PartitionKey(tenantId), cancellationToken: ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+        if (current.Resource.ResolutionLock?.Token != lockToken) return null;
+        try
+        {
+            // The ETag makes the token check and the write one atomic step.
+            var written = await _container.ReplaceItemAsync(claim, claim.Id, new PartitionKey(tenantId),
+                new ItemRequestOptions { IfMatchEtag = current.ETag }, ct);
+            return written.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
         }
     }
 

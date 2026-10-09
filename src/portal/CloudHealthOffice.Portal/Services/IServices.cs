@@ -1020,6 +1020,15 @@ public class ClaimPendDetails
     public DateTime PendedAt { get; set; }
     public List<ClaimPendEditFailure> EditFailures { get; set; } = new();
     public List<ClaimPendDuplicateFinding> DuplicateFindings { get; set; } = new();
+
+    /// <summary>Further pend reasons ("{code}: {reason}") on the same claim.</summary>
+    public List<string> AdditionalPendReasons { get; set; } = new();
+
+    /// <summary>
+    /// claims-service's fingerprint of exactly these pends: sent back with an
+    /// approval, so it applies only to what the examiner viewed.
+    /// </summary>
+    public string? Fingerprint { get; set; }
 }
 
 /// <summary>
@@ -2722,7 +2731,8 @@ public interface IWorkQueueService
     /// <see cref="ClaimResolutionRefusedException"/> with the service's reason
     /// when it refuses (400 / 403 / 409).
     /// </summary>
-    Task<ClaimResolutionResult> OverrideAsync(string claimId, string overrideReason, int? payerSequence = null);
+    Task<ClaimResolutionResult> OverrideAsync(string claimId, string overrideReason, int? payerSequence = null,
+        string? pendFingerprint = null);
 
     /// <summary>
     /// Approve or deny a pended claim. <paramref name="payerSequence"/> is the
@@ -2736,7 +2746,8 @@ public interface IWorkQueueService
         string reason,
         string? aiExaminerAgreement,
         string examinerUserId,
-        int? payerSequence = null);
+        int? payerSequence = null,
+        string? pendFingerprint = null);
 }
 
 public class WorkQueueSummary
@@ -2751,6 +2762,9 @@ public class WorkQueueSummary
 public class WorkQueueItem
 {
     public string ClaimId { get; set; } = string.Empty;
+
+    /// <summary>Fingerprint of the pends shown; sent back with an approval.</summary>
+    public string? PendFingerprint { get; set; }
     public string MemberName { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;

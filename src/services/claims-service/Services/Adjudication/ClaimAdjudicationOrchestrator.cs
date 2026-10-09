@@ -171,9 +171,10 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// claim (possible duplicate, provider integrity, network, NCCI edits,
     /// scrubbing). On an approval re-run their Pend becomes Pass — but only
     /// when the examiner reviewed that pend (PR #1278 round 3, B1): its code
-    /// is in the claim's persisted pend (<see cref="ExaminerApproval.ReviewedPend"/>),
-    /// and for <see cref="ExactReasonPendCodes"/> its reason is exactly the
-    /// one reviewed. Anything else — a pend the examiner never saw — keeps
+    /// and exact reason are in the claim's persisted pend
+    /// (<see cref="ExaminerApproval.ReviewedPend"/>), and it is not a
+    /// transient failure (<see cref="IsTransientFailure"/>, retried instead).
+    /// Anything else — a pend the examiner never saw — keeps
     /// the claim pended and the approval is refused for re-review. Not in the
     /// set: pricing and benefit calculation (a pend there means the amounts
     /// could not be computed; benefit calculation applies the same reviewed
@@ -191,22 +192,32 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         Stages.ScrubbingStage.StageName,
     };
 
+    // Every override needs the exact reason the examiner reviewed, not just
+    // the code (round-3 verification, M4 — NETWORK, SCRUB, NCCI and MUE as
+    // well as MEDREVIEW, DUPLICATE, RETROELIG, SUBRO, SPENDDOWN): a different
+    // edit, credentialing finding or duplicate is a new finding.
+
     /// <summary>
-    /// Pend codes whose reason is the finding itself: the examiner's approval
-    /// overrides one only when this exact reason was reviewed. A provider
-    /// integrity check that was reachable when reviewed but is unreachable
-    /// (or newly unverified) now, a duplicate of a different claim, a new
-    /// retro plan change, subrogation / TPL indicator or spend-down is a new
-    /// finding, not the one approved.
+    /// Pend reasons that mean a check could not run (a service was
+    /// unreachable or threw), not a finding an examiner can rule on. They are
+    /// never overridden by an approval: the re-run retries the check, and the
+    /// approval passes only once it succeeds (round-3 verification, M4).
     /// </summary>
-    internal static readonly HashSet<string> ExactReasonPendCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        Stages.ProviderIntegrityStage.MedicalReviewPendCode,
-        Stages.DuplicateClaimStage.DuplicatePendCode,
-        Stages.BenefitCalculationStage.RetroactivePlanChangePendCode,
-        Stages.BenefitCalculationStage.SubrogationReviewPendCode,
-        Stages.BenefitCalculationStage.MedicaidSpendDownPendCode,
-    };
+    private static readonly string[] TransientFailureMarkers =
+    [
+        Stages.ProviderIntegrityStage.UnreachableReason,
+        Stages.DuplicateClaimStage.LookupFailedReason,
+        Stages.NetworkCredentialingStage.MembershipUnavailableReason,
+        Stages.NetworkCredentialingStage.CredentialingUnavailableReason,
+        "NCCI engine threw",
+        Stages.CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason,
+        "Coverage-service unavailable",
+    ];
+
+    /// <summary>See <see cref="TransientFailureMarkers"/>.</summary>
+    internal static bool IsTransientFailure(string? reason) =>
+        reason is not null
+        && TransientFailureMarkers.Any(m => reason.Contains(m, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Pend codes for stages that pend without recording one on
@@ -318,6 +329,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
             var pendBefore = context.PendDetails;
             var codeBefore = pendBefore?.PendCode;
+            var reasonBefore = pendBefore?.PendReason;
             var additionalBefore = pendBefore?.AdditionalPendReasons.Count ?? 0;
 
             ClaimAdjudicationStageResult result;
@@ -340,7 +352,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
 
             if (result.Outcome == ClaimAdjudicationOutcome.Pend)
             {
-                var (pendCode, pendReason) = IdentifyPend(context, stage.Name, result, pendBefore, codeBefore, additionalBefore);
+                var (pendCode, pendReason) = IdentifyPend(context, stage.Name, result, pendBefore, codeBefore, reasonBefore, additionalBefore);
 
                 // Examiner approval re-run: a pend the examiner reviewed
                 // passes (recorded for the audit) so the claim prices in
@@ -348,7 +360,8 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                 // a Pend and the approval is refused.
                 if (context.ExaminerApproval is { } approval
                     && ExaminerOverridableStages.Contains(stage.Name)
-                    && approval.Reviewed(pendCode, pendReason, ExactReasonPendCodes.Contains(pendCode)))
+                    && !IsTransientFailure(pendReason)
+                    && approval.Reviewed(pendCode, pendReason, exactReason: true))
                 {
                     context.ExaminerOverrides.Add($"{stage.Name}: {pendCode}: {pendReason}");
                     result = new ClaimAdjudicationStageResult
@@ -387,11 +400,36 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
     /// </summary>
     private static (string Code, string? Reason) IdentifyPend(
         ClaimAdjudicationContext context, string stageName, ClaimAdjudicationStageResult result,
-        PendDetails? pendBefore, string? codeBefore, int additionalBefore)
+        PendDetails? pendBefore, string? codeBefore, string? reasonBefore, int additionalBefore)
     {
         var pend = context.PendDetails;
         if (pend is not null && (!ReferenceEquals(pend, pendBefore) || !string.Equals(pend.PendCode, codeBefore, StringComparison.Ordinal)))
-            return (pend.PendCode, pend.PendReason);
+        {
+            var identified = (pend.PendCode, pend.PendReason);
+            if (pendBefore is not null && !string.IsNullOrWhiteSpace(codeBefore))
+            {
+                // The stage replaced an earlier pend (round-3 verification,
+                // blocker 1): keep every pend. The earlier one stays the
+                // claim's pend — it routes the work queue — and this one is
+                // added to it, so the persisted pend (what the examiner
+                // reviews and approves) is the full set, not only the last.
+                if (ReferenceEquals(pend, pendBefore))
+                {
+                    // Same object, code overwritten in place: restore it.
+                    pend = new PendDetails
+                    {
+                        PendCode = pend.PendCode,
+                        PendReason = pend.PendReason,
+                        PendedAt = pend.PendedAt,
+                    };
+                    pendBefore.PendCode = codeBefore!;
+                    pendBefore.PendReason = reasonBefore;
+                }
+                MergeInto(pendBefore, pend);
+                context.PendDetails = pendBefore;
+            }
+            return identified;
+        }
         if (pend is not null && pend.AdditionalPendReasons.Count > additionalBefore)
         {
             var (code, reason) = ExaminerApproval.SplitEntry(pend.AdditionalPendReasons[^1]);
@@ -417,6 +455,32 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             pend.AdditionalPendReasons.Add(entry.Length > 500 ? entry[..500] : entry);
         }
         return (stageCode, stageReason);
+    }
+
+    /// <summary>
+    /// Adds <paramref name="later"/> (a pend a later stage recorded as a new
+    /// <see cref="PendDetails"/>) to <paramref name="earlier"/>: its
+    /// "{code}: {reason}" and its own additional reasons, and its NCCI /
+    /// duplicate evidence. Nothing is added twice.
+    /// </summary>
+    internal static void MergeInto(PendDetails earlier, PendDetails later)
+    {
+        void Add(string entry)
+        {
+            if (entry.Length > 500) entry = entry[..500];
+            var present = ExaminerApproval.ReviewedFrom(earlier)
+                .Any(r => string.Equals($"{r.Code}: {r.Reason}", entry, StringComparison.Ordinal));
+            if (!present) earlier.AdditionalPendReasons.Add(entry);
+        }
+
+        if (!string.IsNullOrWhiteSpace(later.PendCode))
+            Add($"{later.PendCode}: {later.PendReason}");
+        foreach (var entry in later.AdditionalPendReasons)
+            Add(entry);
+        foreach (var failure in later.EditFailures)
+            earlier.EditFailures.Add(failure);
+        foreach (var finding in later.DuplicateFindings)
+            earlier.DuplicateFindings.Add(finding);
     }
 
     private async Task EmitAdjudicatedEventAsync(

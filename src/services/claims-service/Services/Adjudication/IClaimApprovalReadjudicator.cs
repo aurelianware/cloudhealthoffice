@@ -90,7 +90,20 @@ public sealed record ExaminerApproval
     public bool Reviewed(string code, string? reason, bool exactReason) =>
         ReviewedPends.Any(r =>
             string.Equals(r.Code, code, StringComparison.OrdinalIgnoreCase)
-            && (!exactReason || string.Equals(Normalize(r.Reason), Normalize(reason), StringComparison.Ordinal)));
+            && (!exactReason || SameReason(r.Reason, reason)));
+
+    /// <summary>
+    /// Equal reasons — or a stored reason cut at the 500-character limit
+    /// (an additional "{code}: {reason}" entry loses the code's length) that
+    /// the candidate begins with.
+    /// </summary>
+    private static bool SameReason(string? stored, string? candidate)
+    {
+        var s = Normalize(stored);
+        var c = Normalize(candidate);
+        return string.Equals(s, c, StringComparison.Ordinal)
+               || (s.Length >= 470 && c.StartsWith(s, StringComparison.Ordinal));
+    }
 
     /// <summary>Pend reasons are stored truncated to 500 characters.</summary>
     private static string Normalize(string? reason)

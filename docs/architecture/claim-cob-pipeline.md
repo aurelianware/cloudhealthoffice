@@ -426,12 +426,25 @@ ever recorded**. Approval now re-adjudicates it:
    pend code and reason plus every `AdditionalPendReasons` entry) — what the
    examiner saw. A review-stage pend on the re-run (`DuplicateClaim`,
    `ProviderIntegrity`, `NetworkCredentialing`, `NcciEdits`, `Scrubbing`)
-   becomes Pass only when its code was reviewed; for findings — provider
-   integrity (`MEDREVIEW`: unreachable / not verified), a duplicate, a retro
-   plan change (`RETROELIG`), subrogation / TPL (`SUBRO`), spend-down
-   (`SPENDDOWN`) — only when that **exact reason** was reviewed. A new pend
-   (provider integrity unreachable now, a duplicate of a different claim, …)
+   becomes Pass only when its code **and exact reason** were reviewed — for
+   every code (`NETWORK`, `SCRUB`, `NCCI`, `MUE` as well as `MEDREVIEW`,
+   `DUPLICATE`, `RETROELIG`, `SUBRO`, `SPENDDOWN`; round-3 verification M4).
+   A new pend (a duplicate of a different claim, a different NCCI edit, …)
    keeps the claim pended and the approval returns **409** for re-review.
+   **Transient failures are never overridden**, reviewed or not: "Provider
+   integrity check could not be reached", "Duplicate-claim check could not
+   be completed", membership / credentialing verification unavailable, "NCCI
+   engine threw", coverage-service unavailable. They are not findings; the
+   re-run retries the check, and the approval passes once it succeeds.
+   **A claim that pends more than once keeps every pend** (round-3
+   verification, blocker 1). The stages replace `PendDetails`; the
+   orchestrator now merges: the earlier pend stays the claim's pend (it
+   routes the work queue, so the COB reason stays first), and each later one
+   is added to `AdditionalPendReasons` (with its NCCI / duplicate evidence).
+   Benefit calculation's COB guard adds its reason to an existing pend
+   instead of dropping it. So DUPLICATE then MEDREVIEW, or COB then
+   RETROELIG, are both stored and one approval covers both — before, only the
+   last was stored and every approval re-pended on the first.
    Stages that pended without a code (network → `NETWORK`, scrubbing →
    `SCRUB`) now record one, so it is persisted and nameable. Pends that mean
    the claim *cannot be priced* (benefit calculation, pricing) are never
@@ -441,41 +454,61 @@ ever recorded**. Approval now re-adjudicates it:
    unmatched payer data) is never paid as primary by a plain approval: the
    request must carry `payerSequence`, the order the examiner confirmed.
    It is checked, never clamped:
-   - only for a COB pend, only in 1..N (N = the claim's 2320 payers + this
+   - only when COB is among the stored pends (the routing pend or an
+     additional one), only in 1..N (N = the claim's 2320 payers + this
      plan) — otherwise **400**;
    - disagreeing with the 837's SBR01 needs `claims:override-approve`
-     (**403**) and a reason (**400**); disagreeing with coverage-service —
-     or coverage-service unavailable to corroborate it — needs the same, or
-     the re-run refuses it (`cob-payer-order-override-required`, 409);
+     (**403**) and a reason (**400**); disagreeing with coverage-service
+     needs the same, or the re-run refuses it
+     (`cob-payer-order-override-required`, 409). Coverage-service
+     unavailable cannot be overridden: it pends for retry
+     (`cob-coverage-service-unavailable`);
    - **1 (primary) when a prior payer paid more than $0** needs a second,
      different approver: the first approval is stored on the claim
-     (`PendingExaminerApproval`) and answered **202**; the same approver
-     again gets 409; a second supervisor's approval with the same sequence
-     re-runs the claim (`cob-primary-over-prior-payment` if it ever reaches
+     (`PendingExaminerApproval`, with the fingerprint of the pends it
+     reviewed and an expiry — `Claims:SecondApprovalTtlHours`, default 72)
+     and answered **202**; the same approver again gets 409; a second
+     supervisor's approval with the same sequence, for the same pends, before
+     the expiry re-runs the claim — otherwise the waiting approval is ignored
+     and this one starts over (`cob-primary-over-prior-payment` if it ever reaches
      the stage without one). The reviewer's case — golden 07 approved as
      primary paid $152 on top of $172 already paid against $250 allowed — is
      refused for a single approver.
    Sequence 1 prices the claim as primary (`CobOutcome.ConfirmedByExaminer`);
    2+ applies COB from the 837's 2320/2430 data and still pends if that data
    is incomplete. Without `payerSequence` the API returns 409 with the reason.
-4. Only when the re-run passes is the claim set to Approved and finalized —
+4. **What the examiner saw (round-3 verification, M4).** An approval must
+   send `pendFingerprint` — the fingerprint of the pends the examiner
+   viewed (`pendDetails.fingerprint` on the claim, `pendFingerprint` on the
+   work-queue item: the pend time plus a hash of every "code: reason"). If
+   the stored pends differ (the claim was re-adjudicated since), **409** with
+   the current pends. Every input (`disposition`, `aiExaminerAgreement`,
+   `payerSequence`, the fingerprint, permissions) is validated before
+   anything happens — no re-run, no reversal, no write (L7).
+5. Only when the re-run passes is the claim set to Approved and finalized —
    with the payment and accumulators from that Production pass. Any other
    outcome returns 409 with every unresolved reason; the claim stays pended.
    Once the decision is made, the resolved and finalized events are
    published with `CancellationToken.None` (a disconnecting caller cannot
-   leave an approved claim unpublished).
-5. **Audit.** Every resolution appends an `ExaminerResolutionRecord` to
-   `Claim.ExaminerResolutions` — disposition, approver(s), reason, payer
-   sequence, the reviewed pends, the pends overridden, requested / resolved
-   timestamps — and the ClaimVersionResolved event carries it
+   leave an approved claim unpublished). The final write is **fenced on the
+   resolution-lock token** (`UpdateHoldingResolutionLockAsync`: Mongo filter
+   on the token, Cosmos read-check-replace with the ETag); the lock lasts 10
+   minutes. A resolver whose lock expired and was taken over gets 409 and
+   publishes nothing (L6).
+6. **Audit.** Every resolution appends an `ExaminerResolutionRecord` to
+   `Claim.ExaminerResolutions` — disposition, approver(s) and each
+   approver's reason, payer sequence, the fingerprint and list of the
+   reviewed pends, the pends overridden, requested / resolved timestamps —
+   and the ClaimVersionResolved event carries it
    (`payload.examinerResolution`).
-6. **Denial.** An examiner denial reverses the claim's engine accumulators
+7. **Denial.** An examiner denial reverses the claim's engine accumulators
    (`IBenefitCalculationEngine.ReverseClaimAsync`, idempotent): a claim
    pended *after* benefit calculation (NCCI at 400, AI at 600) priced in
    Production and wrote them. accumulator-service skips a ClaimFinalized
    event whose status is Denied (and reverses one that had applied).
-7. **Portal.** The work queue's override and the claim page's approve send
-   `payerSequence` (a payer-order dialog for COB pends) and show the
+8. **Portal.** The work queue's override and the claim page's approve send
+   `pendFingerprint` and `payerSequence` (a payer-order dialog for COB
+   pends) and show the
    service's 400 / 403 / 409 reason — not "service unavailable"; a 202 shows
    "waiting for a second approver".
 
@@ -735,6 +768,24 @@ on secondary/tertiary claims; past accumulators are not rewritten.
   `ReversedBeforeApply` tombstone on C1's marker (both Mongo and Cosmos,
   through `IProcessedClaimStore`), so C1's apply is skipped when it arrives;
   terminal → nothing to reverse.
+- **The original applies between the reversal's two reads** (round-3
+  verification, blocker 2): the reversal finds no `ClaimApplied` row, then
+  the original's apply completes, then the reversal reads its marker —
+  Applied. That used to finish the reversal as "nothing to reverse" (600
+  instead of 300); now an Applied marker sends it back to re-read the row
+  and reverse it. Only orphan, denied or tombstone outcomes mean nothing to
+  reverse.
+- **A stale Pending original** (its apply crashed) no longer blocks a
+  replacement forever (M3): the store's lease decides — a Pending marker
+  younger than the lease is a live apply (InProgress, retried); an older one
+  is taken over and tombstoned, so the crashed apply's redelivery is skipped.
+- **Two replacements of the same original** (follow-up): C2 replaced C1, then
+  C3 also names C1. C1 is reversed only once, so both used to count. C3 is
+  not applied (`ApplyOutcome.Skipped`, marker `SecondReplacementSkipped`)
+  and an `OrphanAccumulatorClaimEvent` reports it for review — a
+  replacement must name the latest version (C2). Tombstones now record the
+  replacement that made them, so this holds when C2 overtook C1 too. A
+  replacement after the original's own void still counts.
 - **Denied claims** are not applied (`ApplyOutcome.Skipped`, marker
   `DeniedNotApplied`); a claim that had applied and is later finalized as
   Denied is reversed.

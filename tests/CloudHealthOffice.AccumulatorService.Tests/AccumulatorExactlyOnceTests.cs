@@ -306,6 +306,107 @@ public class AccumulatorExactlyOnceTests
         Assert.Single(w.Repo.Events, e => e.EventType == "ClaimReversed" && e.SourceClaimId == "C1");
     }
 
+    // ── round-3 verification ──────────────────────────────────────────
+
+    /// <summary>
+    /// Blocker 2: the replacement's reversal reads C1's ClaimApplied row
+    /// (none yet); C1's apply then completes; the reversal reads C1's marker
+    /// (Applied). It used to mark the reversal NothingToReverse for good —
+    /// C1 and C2 both counted (600). Now it re-reads the row and reverses it.
+    /// </summary>
+    [Fact]
+    public async Task OriginalAppliesBetweenTheReversalsTwoReads_IsReversed()
+    {
+        var w = Build();
+        var sut = w.Service();
+        w.Processed.HookClaimId = "C1";
+        w.Processed.BeforeNextGet = async () =>
+            Assert.Equal(ApplyOutcome.Applied, (await w.Service().ApplyClaimFinalizedAsync(Claim("C1", 300m))).Outcome);
+
+        var c2 = await sut.ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+
+        Assert.Equal(ApplyOutcome.Applied, c2.Outcome);
+        Assert.Equal(300m, (await w.Snapshot()).IndividualDeductibleUsed);
+        Assert.Single(w.Repo.Events, e => e.EventType == "ClaimReversed" && e.SourceClaimId == "C1");
+        // C1's own void later changes nothing.
+        await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m, status: "Reversed"));
+        Assert.Equal(300m, (await w.Snapshot()).IndividualDeductibleUsed);
+    }
+
+    /// <summary>
+    /// M3: C1's apply crashed and left a Pending marker older than the lease.
+    /// The replacement no longer waits on it forever: it takes the stale
+    /// lease over and leaves a tombstone, so C1's redelivered apply is skipped.
+    /// </summary>
+    [Fact]
+    public async Task StalePendingOriginal_IsTakenOverAndTombstoned()
+    {
+        var w = Build();
+        var sut = w.Service();
+        await w.Processed.TryBeginAsync(Tenant, "C1"); // crashed apply
+        w.Processed.Now += w.Processed.Lease + TimeSpan.FromSeconds(1);
+
+        var c2 = await sut.ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+        var c1 = await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m));
+
+        Assert.Equal(ApplyOutcome.Applied, c2.Outcome);
+        Assert.Equal(global::AccumulatorService.Services.AccumulatorService.ReversedBeforeApplyOutcome, c1.Reason);
+        Assert.Equal(300m, (await w.Snapshot()).IndividualDeductibleUsed);
+    }
+
+    /// <summary>A Pending marker within the lease is still a live apply: the replacement waits.</summary>
+    [Fact]
+    public async Task FreshPendingOriginal_StillWaits()
+    {
+        var w = Build();
+        await w.Processed.TryBeginAsync(Tenant, "C1");
+
+        var c2 = await w.Service().ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+
+        Assert.Equal(ApplyOutcome.InProgress, c2.Outcome);
+        Assert.Empty(w.Repo.Events);
+    }
+
+    /// <summary>
+    /// Follow-up: two replacements naming the same original. C2 replaced C1;
+    /// C3 also names C1 — C1 is reversed only once, so both used to count.
+    /// C3 is not applied and is reported (orphan signal) for review.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SecondReplacementOfTheSameOriginal_IsNotApplied(bool originalAppliedFirst)
+    {
+        var w = Build();
+        var sut = w.Service();
+        if (originalAppliedFirst) await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m));
+
+        await sut.ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+        var c3 = await sut.ApplyClaimFinalizedAsync(Claim("C3", 300m, frequency: "7", original: "C1"));
+        var c2Again = await sut.ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+
+        Assert.Equal(ApplyOutcome.Skipped, c3.Outcome);
+        Assert.Equal(global::AccumulatorService.Services.AccumulatorService.SecondReplacementOutcome, c3.Reason);
+        Assert.Equal(ApplyOutcome.Duplicate, c2Again.Outcome);
+        Assert.Equal(300m, (await w.Snapshot()).IndividualDeductibleUsed);
+        Assert.Contains(w.Pub.Orphans, o => o.ClaimId == "C3");
+    }
+
+    /// <summary>A replacement after the original's own void still counts (it replaces a voided claim).</summary>
+    [Fact]
+    public async Task ReplacementAfterTheOriginalsOwnVoid_Counts()
+    {
+        var w = Build();
+        var sut = w.Service();
+        await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m));
+        await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m, status: "Reversed"));
+
+        var c2 = await sut.ApplyClaimFinalizedAsync(Claim("C2", 200m, frequency: "7", original: "C1"));
+
+        Assert.Equal(ApplyOutcome.Applied, c2.Outcome);
+        Assert.Equal(200m, (await w.Snapshot()).IndividualDeductibleUsed);
+    }
+
     // ── round 3, H4: denied claims ────────────────────────────────────
 
     /// <summary>

@@ -1423,6 +1423,7 @@ public class ClaimsController : ControllerBase
                 QueueReason = MapPendReason(pendCode),
                 QueueReasonCode = pendCode ?? "REVIEW",
                 PendReasons = PendReasonsOf(c),
+                PendFingerprint = PendDetails.ComputeFingerprint(c.PendDetails),
                 DaysInQueue = (int)(DateTime.UtcNow - c.LastUpdatedDate).TotalDays,
                 Priority = (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 14 ? "High" :
                            (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 7 ? "Medium" : "Low",
@@ -1485,13 +1486,28 @@ public class ClaimsController : ControllerBase
                 Disposition = "Approved",
                 Reason = request.OverrideReason,
                 PayerSequence = request.PayerSequence,
+                PendFingerprint = request.PendFingerprint,
             });
 
         return result;
     }
 
-    /// <summary>How long one examiner resolution may hold a claim (re-adjudication included).</summary>
-    internal static readonly TimeSpan ResolutionLockDuration = TimeSpan.FromMinutes(2);
+    /// <summary>
+    /// How long one examiner resolution may hold a claim, re-adjudication
+    /// included. Generous, because the final write is fenced on the lock
+    /// token: a resolver whose lock expired and was taken over cannot
+    /// finalize (round-3 verification, L6).
+    /// </summary>
+    internal static readonly TimeSpan ResolutionLockDuration = TimeSpan.FromMinutes(10);
+
+    /// <summary>Default lifetime of a first approval waiting for a second approver.</summary>
+    internal static readonly TimeSpan DefaultSecondApprovalTtl = TimeSpan.FromHours(72);
+
+    private TimeSpan SecondApprovalTtl =>
+        double.TryParse(_configuration["Claims:SecondApprovalTtlHours"], System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var hours) && hours > 0
+            ? TimeSpan.FromHours(hours)
+            : DefaultSecondApprovalTtl;
 
     /// <summary>
     /// Resolve a pended claim through an explicit human-examiner action.
@@ -1499,27 +1515,33 @@ public class ClaimsController : ControllerBase
     /// Pended review gate. It persists the final version state, records any
     /// AI-advisory feedback in the same claim write, and emits finalization.
     /// <para>
-    /// PR #1278 round 3:
+    /// PR #1278 round 3 and its verification:
     /// <list type="bullet">
+    ///   <item><description>Every input is validated before anything
+    ///     happens (re-run, reversal, write).</description></item>
+    ///   <item><description>An approval must carry <c>pendFingerprint</c>,
+    ///     the fingerprint of the pends the examiner viewed
+    ///     (<see cref="PendDetails.Fingerprint"/>); if the stored pends
+    ///     changed since, 409.</description></item>
     ///   <item><description>Approval re-adjudicates the claim in Production,
-    ///     overriding only the pends persisted on the claim (what the
-    ///     examiner reviewed); any new pend refuses the approval (409).</description></item>
-    ///   <item><description><c>payerSequence</c> is accepted only for a COB
-    ///     pend and only within 1..N (400 otherwise). A value that disagrees
-    ///     with SBR01 needs <c>claims:override-approve</c> (403) and a reason
-    ///     (400); one that disagrees with coverage-service is refused by the
-    ///     re-run (409) without them. Sequence 1 over a prior payment needs a
-    ///     second, different approver: the first call is recorded and
-    ///     answered 202, the second approver's call completes it.</description></item>
+    ///     overriding only the stored pends (every one of them — a claim
+    ///     that pended twice keeps both) with their exact reasons; a new pend
+    ///     or a transient failure refuses it (409).</description></item>
+    ///   <item><description><c>payerSequence</c> is accepted only when COB is
+    ///     among the stored pends and only within 1..N (400 otherwise). A
+    ///     value that disagrees with SBR01 needs <c>claims:override-approve</c>
+    ///     (403) and a reason (400); one that disagrees with coverage-service
+    ///     is refused by the re-run (409) without them. Sequence 1 over a
+    ///     prior payment needs a second, different approver: the first call
+    ///     is recorded (with the reviewed fingerprint and an expiry) and
+    ///     answered 202; the second approver's call completes it.</description></item>
     ///   <item><description>Every resolution is recorded on the claim
-    ///     (<see cref="Claim.ExaminerResolutions"/>) and on the
-    ///     ClaimVersionResolved event.</description></item>
+    ///     (<see cref="Claim.ExaminerResolutions"/>, both approvers' reasons)
+    ///     and on the ClaimVersionResolved event.</description></item>
     ///   <item><description>A denial reverses the engine accumulators the
-    ///     claim wrote (a claim pended after benefit calculation priced in
-    ///     Production).</description></item>
+    ///     claim wrote.</description></item>
     ///   <item><description>A resolution holds a conditional lock on the
-    ///     Pended claim, so concurrent approvals cannot both re-run and
-    ///     publish (409).</description></item>
+    ///     Pended claim, and its final write is fenced on the lock token.</description></item>
     /// </list></para>
     /// </summary>
     [HttpPost("work-queue/{claimId}/resolve")]
@@ -1534,10 +1556,17 @@ public class ClaimsController : ControllerBase
         string claimId,
         [FromBody] ResolvePendedClaimRequest request)
     {
+        // ── validate every input before any side effect (L7) ─────────────
         if (!Enum.TryParse<ClaimStatus>(request.Disposition, ignoreCase: true, out var disposition)
             || disposition is not (ClaimStatus.Approved or ClaimStatus.Denied))
         {
             return BadRequest("disposition must be Approved or Denied");
+        }
+
+        var validAgreements = new[] { "Accepted", "Modified", "Overridden" };
+        if (!string.IsNullOrWhiteSpace(request.AiExaminerAgreement) && !validAgreements.Contains(request.AiExaminerAgreement))
+        {
+            return BadRequest($"aiExaminerAgreement must be one of: {string.Join(", ", validAgreements)}");
         }
 
         var claim = await _claimRepository.GetByIdAsync(claimId);
@@ -1547,12 +1576,25 @@ public class ClaimsController : ControllerBase
             return Conflict($"Claim {claimId} is {claim.Status}, not Pended");
         }
 
+        if (disposition == ClaimStatus.Approved && claim.PendDetails is not null
+            && string.IsNullOrWhiteSpace(request.PendFingerprint))
+        {
+            return BadRequest("pendFingerprint is required to approve: the fingerprint of the pends you reviewed " +
+                              "(pendDetails.fingerprint / the work-queue item's pendFingerprint).");
+        }
+
         // The examiner is the authenticated caller; a body-supplied
         // ExaminerUserId is ignored.
         var examinerUserId = ResolveActorId();
         var tenantId = GetTenantId();
         var hasReason = !string.IsNullOrWhiteSpace(request.Reason);
         var canOverride = _actor.HasPermission(ClaimsPermissions.OverrideApprove);
+
+        if (!string.IsNullOrWhiteSpace(request.PendFingerprint)
+            && !string.Equals(request.PendFingerprint, PendDetails.ComputeFingerprint(claim.PendDetails), StringComparison.Ordinal))
+        {
+            return PendsChanged(claim);
+        }
 
         // payerSequence: checked, never clamped.
         if (request.PayerSequence is int sequence)
@@ -1609,39 +1651,56 @@ public class ClaimsController : ControllerBase
             claim = await _claimRepository.GetByIdAsync(claimId) ?? claim;
             if (claim.Status != ClaimStatus.Pended)
                 return Conflict($"Claim {claimId} is {claim.Status}, not Pended");
-
             var reviewedPend = claim.PendDetails;
+            var fingerprint = PendDetails.ComputeFingerprint(reviewedPend);
+            if (!string.IsNullOrWhiteSpace(request.PendFingerprint)
+                && !string.Equals(request.PendFingerprint, fingerprint, StringComparison.Ordinal))
+            {
+                return PendsChanged(claim);
+            }
+
             var approverIds = new List<string> { examinerUserId };
+            var approverReasons = new List<string?> { request.Reason };
             var firstRequestedAt = requestedAt;
             string? secondApprover = null;
             if (needsSecondApprover)
             {
+                // A waiting first approval counts only for the same payer
+                // order, the same pends, and until it expires (M5).
                 var pending = claim.PendingExaminerApproval;
-                if (pending is null || pending.PayerSequence != request.PayerSequence)
+                var pendingValid = pending is not null
+                                   && pending.PayerSequence == request.PayerSequence
+                                   && string.Equals(pending.PendFingerprint, fingerprint, StringComparison.Ordinal)
+                                   && pending.ExpiresAt > requestedAt;
+                if (!pendingValid)
                 {
-                    // First approval: recorded, waiting for a second approver.
                     claim.PendingExaminerApproval = new PendingExaminerApproval
                     {
                         RequestedBy = examinerUserId,
                         PayerSequence = request.PayerSequence,
                         Reason = request.Reason,
                         RequestedAt = requestedAt,
+                        PendFingerprint = fingerprint,
+                        ExpiresAt = requestedAt + SecondApprovalTtl,
                     };
                     claim.ResolutionLock = null;
                     claim.LastUpdatedBy = examinerUserId;
                     claim.LastUpdatedDate = requestedAt;
-                    await _claimRepository.UpdateAsync(claim);
+                    if (await _claimRepository.UpdateHoldingResolutionLockAsync(claim, lockToken, CancellationToken.None) is null)
+                        return LostLock(claimId);
                     return Accepted(new
                     {
                         status = "awaiting-second-approval",
                         claimId,
                         payerSequence = request.PayerSequence,
                         requestedBy = examinerUserId,
+                        expiresAt = claim.PendingExaminerApproval.ExpiresAt,
                         message = $"The 837 shows prior payers paid {PriorPaidAmount(claim):F2}; pricing this claim as primary " +
-                                  "needs a second, different approver to approve it with the same payerSequence.",
+                                  "needs a second, different approver to approve it with the same payerSequence " +
+                                  $"before {claim.PendingExaminerApproval.ExpiresAt:u}.",
                     });
                 }
-                if (string.Equals(pending.RequestedBy, examinerUserId, StringComparison.Ordinal))
+                if (string.Equals(pending!.RequestedBy, examinerUserId, StringComparison.Ordinal))
                 {
                     return Conflict(new
                     {
@@ -1650,6 +1709,7 @@ public class ClaimsController : ControllerBase
                     });
                 }
                 approverIds = [pending.RequestedBy, examinerUserId];
+                approverReasons = [pending.Reason, request.Reason];
                 secondApprover = examinerUserId;
                 firstRequestedAt = pending.RequestedAt;
             }
@@ -1692,7 +1752,8 @@ public class ClaimsController : ControllerBase
                             ? "This claim is pended for coordination of benefits: approving it requires the payer order " +
                               "you confirmed (payerSequence: 1 = primary, 2 = secondary, 3+ = tertiary or later)."
                             : $"Re-adjudication for approval did not pass ({rerun.Outcome}); the claim was not approved. " +
-                              "A pend not on the claim when it was reviewed needs a new review.",
+                              "A pend not on the claim when it was reviewed needs a new review; a check that could " +
+                              "not run (a service unavailable) is retried — try the approval again later.",
                         outcome = rerun.Outcome.ToString(),
                         reasons = rerun.UnresolvedReasons ?? (rerun.Reason is null ? [] : [rerun.Reason]),
                     });
@@ -1725,6 +1786,8 @@ public class ClaimsController : ControllerBase
                 Disposition = disposition.ToString(),
                 ApproverIds = approverIds,
                 Reason = request.Reason,
+                ApproverReasons = approverReasons,
+                PendFingerprint = fingerprint,
                 PayerSequence = request.PayerSequence,
                 ReviewedPends = ExaminerApproval.ReviewedFrom(reviewedPend)
                     .Select(p => $"{p.Code}: {p.Reason}").ToList(),
@@ -1741,18 +1804,15 @@ public class ClaimsController : ControllerBase
 
             if (claim.AiExamination is not null && !string.IsNullOrWhiteSpace(request.AiExaminerAgreement))
             {
-                var validAgreements = new[] { "Accepted", "Modified", "Overridden" };
-                if (!validAgreements.Contains(request.AiExaminerAgreement))
-                {
-                    return BadRequest($"aiExaminerAgreement must be one of: {string.Join(", ", validAgreements)}");
-                }
-
                 claim.AiExamination.ExaminerAgreement = request.AiExaminerAgreement;
                 claim.AiExamination.ExaminerActedAt = actedAt;
                 claim.AiExamination.ExaminerUserId = examinerUserId;
             }
 
-            var updated = await _claimRepository.UpdateAsync(claim);
+            // Fenced on the lock token (L6): a resolver whose lock was taken
+            // over cannot finalize, and nothing is published.
+            var updated = await _claimRepository.UpdateHoldingResolutionLockAsync(claim, lockToken, CancellationToken.None);
+            if (updated is null) return LostLock(claimId);
 
             var correlationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier;
             await _versionEventPublisher.PublishVersionResolvedAsync(
@@ -1797,6 +1857,20 @@ public class ClaimsController : ControllerBase
             await _claimRepository.ReleaseResolutionLockAsync(tenantId, claimId, lockToken, CancellationToken.None);
         }
     }
+
+    private ConflictObjectResult PendsChanged(Claim claim) => Conflict(new
+    {
+        error = "The claim's pends changed since you reviewed them (it was re-adjudicated). Review the current pends " +
+                "and approve again.",
+        pendFingerprint = PendDetails.ComputeFingerprint(claim.PendDetails),
+        pendReasons = PendReasonsOf(claim),
+    });
+
+    private ConflictObjectResult LostLock(string claimId) => Conflict(new
+    {
+        error = $"The resolution of claim {claimId} took too long and another examiner's resolution took over; " +
+                "nothing was finalized. Reload the claim.",
+    });
 
     /// <summary>The claim is pended for COB: its pend code, or a COB reason added after it.</summary>
     private static bool IsCobPend(PendDetails? pend) =>
@@ -1897,6 +1971,12 @@ public class WorkQueueItem
 
     /// <summary>Every pend reason, the routing one (<see cref="QueueReasonCode"/>) first.</summary>
     public List<string> PendReasons { get; set; } = new();
+
+    /// <summary>
+    /// Fingerprint of the pends shown (<see cref="PendDetails.Fingerprint"/>):
+    /// sent back with an approval so it applies to exactly what was reviewed.
+    /// </summary>
+    public string PendFingerprint { get; set; } = string.Empty;
     public int DaysInQueue { get; set; }
     public string Priority { get; set; } = "Low";
     public string AssignedTo { get; set; } = string.Empty;
@@ -1936,6 +2016,9 @@ public class OverrideClaimRequest
 
     /// <summary>See <see cref="ResolvePendedClaimRequest.PayerSequence"/>.</summary>
     public int? PayerSequence { get; set; }
+
+    /// <summary>See <see cref="ResolvePendedClaimRequest.PendFingerprint"/>.</summary>
+    public string? PendFingerprint { get; set; }
 }
 
 public class ResolvePendedClaimRequest
@@ -1958,6 +2041,14 @@ public class ResolvePendedClaimRequest
     /// second, different approver.
     /// </summary>
     public int? PayerSequence { get; set; }
+
+    /// <summary>
+    /// The fingerprint of the pends the examiner viewed
+    /// (<c>pendDetails.fingerprint</c>, or the work-queue item's
+    /// <c>pendFingerprint</c>). Required to approve; a mismatch with the
+    /// stored pends (the claim was re-adjudicated since) is 409.
+    /// </summary>
+    public string? PendFingerprint { get; set; }
 }
 
 public class ClaimAuditTimelineEntry

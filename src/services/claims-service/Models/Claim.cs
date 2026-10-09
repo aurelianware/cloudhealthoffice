@@ -1300,6 +1300,34 @@ public class PendDetails
     /// to the examiner.
     /// </summary>
     public List<string> AdditionalPendReasons { get; set; } = new();
+
+    /// <summary>
+    /// Identifies exactly this set of pends: when the claim was pended plus a
+    /// hash of every "{code}: {reason}". The examiner's client sends back the
+    /// fingerprint of the pends they viewed; an approval whose fingerprint no
+    /// longer matches the stored pends (a re-adjudication changed them) is
+    /// refused with 409 (PR #1278 round-3 verification, M4). Derived; not
+    /// stored in Mongo.
+    /// </summary>
+    [BsonIgnore]
+    [JsonPropertyName("fingerprint")]
+    public string Fingerprint => ComputeFingerprint(this);
+
+    /// <summary>See <see cref="Fingerprint"/>; empty for no pend.</summary>
+    public static string ComputeFingerprint(PendDetails? pend)
+    {
+        if (pend is null) return string.Empty;
+        var entries = new List<string> { $"{pend.PendCode}: {pend.PendReason}" };
+        entries.AddRange(pend.AdditionalPendReasons ?? []);
+        var pendedAt = pend.PendedAt.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(pend.PendedAt, DateTimeKind.Utc)
+            : pend.PendedAt.ToUniversalTime();
+        // Millisecond precision: what every store keeps.
+        pendedAt = new DateTime(pendedAt.Ticks - pendedAt.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
+        var hash = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(string.Join('\n', entries)));
+        return $"{pendedAt:yyyyMMdd'T'HHmmssfff'Z'}-{Convert.ToHexString(hash, 0, 12).ToLowerInvariant()}";
+    }
 }
 
 /// <summary>One examiner resolution of a pended claim (see <see cref="Claim.ExaminerResolutions"/>).</summary>
@@ -1312,7 +1340,14 @@ public class ExaminerResolutionRecord
     /// <summary>Every approver, in order (two for a second-approver sign-off).</summary>
     public List<string> ApproverIds { get; set; } = new();
 
+    /// <summary>The last approver's reason.</summary>
     public string? Reason { get; set; }
+
+    /// <summary>Each approver's reason, aligned with <see cref="ApproverIds"/>.</summary>
+    public List<string?> ApproverReasons { get; set; } = new();
+
+    /// <summary>The fingerprint of the pends the approver(s) reviewed (<see cref="PendDetails.Fingerprint"/>).</summary>
+    public string? PendFingerprint { get; set; }
 
     /// <summary>The payer order the examiner confirmed for a COB pend.</summary>
     public int? PayerSequence { get; set; }
@@ -1338,6 +1373,15 @@ public class PendingExaminerApproval
     public int? PayerSequence { get; set; }
     public string? Reason { get; set; }
     public DateTime RequestedAt { get; set; }
+
+    /// <summary>
+    /// The pends the first approver reviewed (<see cref="PendDetails.Fingerprint"/>).
+    /// A second approval counts only while the claim's pends still match.
+    /// </summary>
+    public string? PendFingerprint { get; set; }
+
+    /// <summary>After this the first approval no longer counts (configurable TTL, default 72 h).</summary>
+    public DateTime ExpiresAt { get; set; }
 }
 
 /// <summary>See <see cref="Claim.ResolutionLock"/>.</summary>

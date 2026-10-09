@@ -420,7 +420,7 @@ public class GoldenPathTests
             reviewStages:
             [
                 new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW", "Billing: manual review required."),
-                new GoldenScenario.ReviewStage("NcciEdits", "NCCI", "1 NCCI/MUE edit failure."),
+                new GoldenScenario.ReviewStage("NcciEdits", "NCCI", "1 NCCI/MUE edit failure.", AppendsToExisting: true),
             ],
             approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }]);
 
@@ -428,6 +428,53 @@ public class GoldenPathTests
         Assert.Equal(new[] { ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
         AssertClaim(r, charge: 180m, allowed: 100m, paid: 32m, member: 68m);
         Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+    }
+
+    /// <summary>
+    /// Round-3 verification, blocker 1 (scenario A): a possible duplicate,
+    /// then provider integrity's manual review — each stage replaces
+    /// PendDetails. Only the last used to be stored, so the examiner's
+    /// approval never covered the duplicate and every re-run pended again
+    /// (Pend, Pend, Pend…). Both pends are now stored (the first routes the
+    /// queue, the second is an additional reason); one approval overrides
+    /// both and the claim pays, writing its accumulators.
+    /// </summary>
+    [Fact]
+    public async Task TwoPends_DuplicateThenMedicalReview_OneApprovalCoversBoth()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("DuplicateClaim", "DUPLICATE", "Line 1 duplicates CLM-1 line 1."),
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW", "Billing: manual review required."),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }]);
+
+        Assert.Equal("DUPLICATE", r.PendCode);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        AssertClaim(r, charge: 180m, allowed: 100m, paid: 32m, member: 68m);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+    }
+
+    /// <summary>
+    /// A provider-integrity check that could not be reached is a transient
+    /// failure: even reviewed exactly, the approval does not override it —
+    /// the re-run retries the check (round-3 verification, M4).
+    /// </summary>
+    [Fact]
+    public async Task Approval_TransientFailure_IsNotOverridden_EvenWhenReviewed()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW",
+                    "Billing: Provider integrity check could not be reached."),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Empty(r.AccumulatorUpdates);
     }
 
     // ── Round 3, B2: payerSequence ────────────────────────────────────

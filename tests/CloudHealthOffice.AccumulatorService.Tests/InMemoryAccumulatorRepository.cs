@@ -188,10 +188,23 @@ public class InMemoryProcessedClaimStore : IProcessedClaimStore
         return Task.CompletedTask;
     }
 
-    public Task<ProcessedClaim?> GetAsync(string tenantId, string claimId, CancellationToken ct = default)
+    /// <summary>
+    /// Runs once, before the next read of <see cref="HookClaimId"/>'s marker
+    /// (to interleave another worker between two reads of the service).
+    /// </summary>
+    public Func<Task>? BeforeNextGet { get; set; }
+
+    public string? HookClaimId { get; set; }
+
+    public async Task<ProcessedClaim?> GetAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
+        if (BeforeNextGet is { } hook && claimId == HookClaimId)
+        {
+            BeforeNextGet = null;
+            await hook();
+        }
         var key = $"{tenantId}:{claimId}";
-        return Task.FromResult(_map.TryGetValue(key, out var p) ? p : null);
+        return _map.TryGetValue(key, out var p) ? p : null;
     }
 }
 

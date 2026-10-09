@@ -94,6 +94,18 @@ public class AccumulatorService : IAccumulatorService
         {
             var reversed = await ReverseClaimAsync(evt.TenantId, evt.OriginalClaimId!, evt.ClaimId, ct);
             if (evt.ClaimFrequencyCode == "8" || reversed.Outcome == ApplyOutcome.InProgress) return reversed;
+
+            // A second replacement of an original another replacement already
+            // replaced: both would count (the original is reversed only once).
+            // The chain must name the latest version; this one is not applied
+            // and is reported for review.
+            if (evt.ClaimFrequencyCode == "7"
+                && await ReplacedByAsync(evt.TenantId, evt.OriginalClaimId!, ct) is { } replacer
+                && !string.Equals(replacer, evt.ClaimId, StringComparison.Ordinal)
+                && !string.Equals(replacer, evt.OriginalClaimId, StringComparison.Ordinal))
+            {
+                return await SkipSecondReplacementAsync(evt, replacer, ct);
+            }
         }
 
         // A void (claims-service maps Voided → "Reversed"): back out what
@@ -440,6 +452,50 @@ public class AccumulatorService : IAccumulatorService
         string.Equals(finalStatus, "Reversed", StringComparison.OrdinalIgnoreCase)
         || string.Equals(finalStatus, "Voided", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Marker outcome of a second replacement of an already-replaced original: not applied.</summary>
+    public const string SecondReplacementOutcome = "SecondReplacementSkipped";
+
+    /// <summary>
+    /// The claim that replaced <paramref name="originalClaimId"/>: the
+    /// ClaimReversed row's source, or the replacement named on a
+    /// reversed-before-apply tombstone; null when it was not replaced.
+    /// </summary>
+    private async Task<string?> ReplacedByAsync(string tenantId, string originalClaimId, CancellationToken ct)
+    {
+        var row = await _repo.GetClaimReversedEventAsync(tenantId, originalClaimId, ct);
+        if (row is not null) return row.SourceReference;
+        var marker = await _processed.GetAsync(tenantId, originalClaimId + ":reversal", ct);
+        return marker is { Outcome: ReversedBeforeApplyOutcome } && !string.IsNullOrEmpty(marker.ResultingEventId)
+            ? marker.ResultingEventId
+            : null;
+    }
+
+    private async Task<ApplyResult> SkipSecondReplacementAsync(ClaimFinalizedEvent evt, string replacer, CancellationToken ct)
+    {
+        switch (await _processed.TryBeginAsync(evt.TenantId, evt.ClaimId, ct))
+        {
+            case BeginClaimOutcome.InProgress:
+                return new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress");
+            case BeginClaimOutcome.AlreadyApplied:
+                return new ApplyResult(ApplyOutcome.Duplicate, null, null, "DuplicateClaim");
+        }
+
+        _logger.LogWarning(
+            "Claim {ClaimId} replaces {OriginalClaimId}, which {Replacer} already replaced; not applied",
+            SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.OriginalClaimId), SanitizeForLog(replacer));
+        await _publisher.PublishOrphanAsync(new OrphanAccumulatorClaimEvent
+        {
+            TenantId = evt.TenantId,
+            MemberId = evt.MemberId,
+            ClaimId = evt.ClaimId,
+            ClaimNumber = evt.ClaimNumber,
+            ServiceDate = evt.ServiceDate,
+            Reason = $"Replaces {evt.OriginalClaimId}, already replaced by {replacer}; a replacement must name the latest version.",
+        }, ct);
+        await _processed.CompleteAsync(evt.TenantId, evt.ClaimId, replacer, SecondReplacementOutcome, ct);
+        return new ApplyResult(ApplyOutcome.Skipped, null, null, SecondReplacementOutcome);
+    }
+
     private static bool IsDenied(string? finalStatus) =>
         string.Equals(finalStatus, "Denied", StringComparison.OrdinalIgnoreCase);
 
@@ -494,6 +550,7 @@ public class AccumulatorService : IAccumulatorService
         if (begin == BeginClaimOutcome.InProgress)
             return new ApplyResult(ApplyOutcome.InProgress, null, null, "ReversalInProgress");
 
+        var appliedWithoutRow = false;
         for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
         {
             var applied = await _repo.GetClaimAppliedEventAsync(tenantId, claimId, ct);
@@ -509,28 +566,47 @@ public class AccumulatorService : IAccumulatorService
                 // reverse" let the original apply afterwards and count on top
                 // of the replacement (deductible 600 instead of 300).
                 var original = await _processed.GetAsync(tenantId, claimId, ct);
-                if (original is { Outcome: "Pending" })
+
+                // Round-3 verification, blocker 2: the original's apply can
+                // complete between the row read above (none) and this marker
+                // read (Applied). That is not "nothing to reverse": re-read
+                // its row and reverse it. (Twice in a row with no row is an
+                // inconsistency: logged, nothing reversed — not a retry loop.)
+                if (original is { Outcome: "Applied" })
                 {
-                    // The original's apply is in flight: retry once it lands.
-                    await _processed.ReleaseAsync(tenantId, key, ct);
-                    return new ApplyResult(ApplyOutcome.InProgress, null, null, "OriginalApplyInProgress");
+                    if (!appliedWithoutRow)
+                    {
+                        appliedWithoutRow = true;
+                        continue;
+                    }
+                    _logger.LogWarning(
+                        "Reversal for claim {ClaimId} tenant {TenantId}: marked Applied but no ClaimApplied row; nothing reversed",
+                        SanitizeForLog(claimId), SanitizeForLog(tenantId));
                 }
 
-                if (original is null)
+                if (original is null or { Outcome: "Pending" })
                 {
-                    // Never seen: leave a tombstone so its apply is skipped.
+                    // Never seen, or its apply is in flight: the store's lease
+                    // decides (round-3 verification, M3). A Pending marker
+                    // younger than the lease is a live apply — retry once it
+                    // lands; an older one is a crashed apply, taken over like
+                    // a never-seen claim — leave a tombstone so its apply
+                    // (when redelivered) is skipped.
                     switch (await _processed.TryBeginAsync(tenantId, claimId, ct))
                     {
                         case BeginClaimOutcome.Proceed:
-                            await _processed.CompleteAsync(tenantId, claimId, string.Empty, ReversedBeforeApplyOutcome, ct);
-                            await _processed.CompleteAsync(tenantId, key, string.Empty, ReversedBeforeApplyOutcome, ct);
+                            // The tombstone names the replacement that made it
+                            // (ResultingEventId), so a second replacement of the
+                            // same original is recognised.
+                            await _processed.CompleteAsync(tenantId, claimId, sourceReference, ReversedBeforeApplyOutcome, ct);
+                            await _processed.CompleteAsync(tenantId, key, sourceReference, ReversedBeforeApplyOutcome, ct);
                             _logger.LogInformation(
                                 "Reversal for claim {ClaimId} tenant {TenantId} arrived before its apply; " +
                                 "the apply will be skipped",
                                 SanitizeForLog(claimId), SanitizeForLog(tenantId));
                             return new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome);
                         case BeginClaimOutcome.InProgress:
-                            // The apply started meanwhile.
+                            // The original's apply is in flight.
                             await _processed.ReleaseAsync(tenantId, key, ct);
                             return new ApplyResult(ApplyOutcome.InProgress, null, null, "OriginalApplyInProgress");
                         default:

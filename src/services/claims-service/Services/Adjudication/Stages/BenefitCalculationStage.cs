@@ -223,12 +223,24 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             const string cobReason =
                 "This plan pays after another payer (837 SBR01 or coverage records), but coordination of " +
                 "benefits was not cleared for the claim; benefit calculation deferred.";
-            context.PendDetails ??= new PendDetails
+            // Recorded even when the claim is already pended for something
+            // else (round-3 verification): the persisted pend must hold
+            // every reason, or an approval can never name this one. Not
+            // again when a COB pend is already there (the COB stage's).
+            if (context.PendDetails is null)
             {
-                PendCode = CoordinationOfBenefitsStage.CobPendCode,
-                PendReason = cobReason,
-                PendedAt = DateTime.UtcNow,
-            };
+                context.PendDetails = new PendDetails
+                {
+                    PendCode = CoordinationOfBenefitsStage.CobPendCode,
+                    PendReason = cobReason,
+                    PendedAt = DateTime.UtcNow,
+                };
+            }
+            else if (!ExaminerApproval.ReviewedFrom(context.PendDetails).Any(p =>
+                         string.Equals(p.Code, CoordinationOfBenefitsStage.CobPendCode, StringComparison.OrdinalIgnoreCase)))
+            {
+                context.PendDetails.AdditionalPendReasons.Add($"{CoordinationOfBenefitsStage.CobPendCode}: {cobReason}");
+            }
             return ClaimAdjudicationStageResult.Pend(StageName, cobReason);
         }
 

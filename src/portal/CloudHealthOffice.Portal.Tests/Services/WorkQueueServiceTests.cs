@@ -230,6 +230,38 @@ public class WorkQueueServiceTests
         body.Should().Contain("\"payerSequence\":3");
     }
 
+    /// <summary>
+    /// Round-3 verification (M4): the approval carries the fingerprint of
+    /// the pends the examiner viewed — from the work-queue item or the
+    /// claim's pend details — so the service can refuse it if they changed.
+    /// </summary>
+    [Fact]
+    public async Task ResolvePendedClaimAsync_SendsThePendFingerprint()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, "{}");
+        var sut = CreateService(new HttpClient(handler));
+
+        await sut.ResolvePendedClaimAsync("CLM-1", "Approved", "ok", null, "examiner-1",
+            pendFingerprint: "20260419T000000000Z-abc123");
+
+        var body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+        body.Should().Contain("\"pendFingerprint\":\"20260419T000000000Z-abc123\"");
+    }
+
+    [Fact]
+    public void PendDetailsAndWorkQueueItems_ReadTheServicesFingerprint()
+    {
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        var pend = System.Text.Json.JsonSerializer.Deserialize<ClaimPendDetails>(
+            "{\"pendCode\":\"DUPLICATE\",\"additionalPendReasons\":[\"MEDREVIEW: x\"],\"fingerprint\":\"fp-1\"}", options)!;
+        var item = System.Text.Json.JsonSerializer.Deserialize<WorkQueueItem>(
+            "{\"claimId\":\"C\",\"pendFingerprint\":\"fp-2\"}", options)!;
+
+        pend.Fingerprint.Should().Be("fp-1");
+        pend.AdditionalPendReasons.Should().Equal("MEDREVIEW: x");
+        item.PendFingerprint.Should().Be("fp-2");
+    }
+
     [Fact]
     public async Task OverrideAsync_SendsThePayerSequence()
     {

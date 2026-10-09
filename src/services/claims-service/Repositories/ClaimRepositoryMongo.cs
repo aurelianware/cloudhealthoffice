@@ -921,6 +921,20 @@ public class ClaimRepositoryMongo : IClaimRepository
         return result.ModifiedCount == 1;
     }
 
+    public async Task<Claim?> UpdateHoldingResolutionLockAsync(Claim claim, string lockToken, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        if (claim.TenantId != tenantId)
+            throw new InvalidOperationException("Cross-tenant updates are not allowed.");
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.Id, claim.Id),
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.ResolutionLock!.Token, lockToken));
+        var result = await _collection.ReplaceOneAsync(filter, claim, cancellationToken: ct);
+        return result.MatchedCount == 1 ? claim : null;
+    }
+
     public async Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default)
     {
         var b = Builders<Claim>.Filter;

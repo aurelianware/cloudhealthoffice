@@ -1351,7 +1351,9 @@
             reason,
             agreement,
             examinerUserId,
-            payerSequence);
+            payerSequence,
+            // The pends this page showed: the approval applies to exactly those.
+            _claim.PendDetails?.Fingerprint);
     }
 
     private static string NormalizeDisposition(string disposition) => disposition switch

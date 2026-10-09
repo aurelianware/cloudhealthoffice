@@ -199,17 +199,25 @@ public partial class CoordinationOfBenefitsStageTests
         Assert.True(authorized.CobResult.ApplyCob);
     }
 
-    /// <summary>Coverage-service unavailable: nothing corroborates the examiner's order.</summary>
-    [Fact]
-    public async Task Examiner_CoverageUnavailable_NeedsOverrideAuthority()
+    /// <summary>
+    /// Coverage-service unavailable: nothing corroborates the examiner's
+    /// order, and no override authority stands in for it — a transient
+    /// failure, retried (round-3 verification, M4).
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Examiner_CoverageUnavailable_PendsForRetry_EvenWithOverrideAuthority(bool authorized)
     {
         _coverageClient.GetCobEntriesAsync(TenantId, MemberId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<CobEntry>?)null);
-        var ctx = Approving(ClaimAs("S", Payer("P", 80m, "A")), new ExaminerApproval { PayerSequence = 2 });
+        var ctx = Approving(ClaimAs("S", Payer("P", 80m, "A")),
+            new ExaminerApproval { PayerSequence = 2, PayerOrderOverrideAuthorized = authorized, Reason = "x" });
 
-        await NewStage().ExecuteAsync(ctx, CancellationToken.None);
+        var result = await NewStage().ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(CoordinationOfBenefitsStage.PayerOrderOverrideRequiredPendReason, ctx.CobResult!.PendReason);
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal(CoordinationOfBenefitsStage.CoverageServiceUnavailablePendReason, ctx.CobResult!.PendReason);
     }
 
     /// <summary>Agreeing with coverage-service and SBR01 needs no override authority.</summary>

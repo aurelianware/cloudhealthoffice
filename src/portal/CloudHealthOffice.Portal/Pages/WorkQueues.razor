@@ -356,7 +356,8 @@
                 reason,
                 agreement,
                 user?.UserId ?? user?.Email ?? "portal-examiner",
-                payerSequence);
+                payerSequence,
+                item?.PendFingerprint);
             if (result.AwaitingSecondApproval)
             {
                 Snackbar.Add(result.Message ?? $"Claim {claimId} is waiting for a second approver.", Severity.Info);

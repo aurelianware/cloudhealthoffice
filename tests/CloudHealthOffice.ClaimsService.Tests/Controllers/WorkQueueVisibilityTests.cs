@@ -181,6 +181,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
             new
             {
                 disposition = "Approved",
+                pendFingerprint = claim.PendDetails!.Fingerprint,
                 reason = "Documentation supports modifier 59",
                 aiExaminerAgreement = "Overridden",
                 // Ignored: the examiner is the token subject ("examiner-1").
@@ -188,11 +189,11 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
             });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        await _repo.Received(1).UpdateAsync(Arg.Is<Claim>(saved =>
+        await _repo.Received(1).UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(saved =>
             saved.Status == ClaimStatus.Approved
             && saved.VersionState == ClaimVersionState.Adjudicated
             && saved.AiExamination!.ExaminerAgreement == "Overridden"
-            && saved.AiExamination.ExaminerUserId == "examiner-1"));
+            && saved.AiExamination.ExaminerUserId == "examiner-1"), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _versionPublisher.Received(1).PublishVersionResolvedAsync(
             Arg.Is<Claim>(saved => saved.Id == claim.Id),
             "Approved",
@@ -289,7 +290,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
 
         var response = await _client.PostAsJsonAsync(
             $"/api/claims/work-queue/{claim.Id}/resolve",
-            new { disposition = "Approved", reason = "ok" });
+            new { disposition = "Approved", reason = "ok", pendFingerprint = claim.PendDetails!.Fingerprint });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -299,7 +300,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
             "test-tenant", claim.Id,
             Arg.Is<ExaminerApproval>(a => a.PayerSequence == null && a.ExaminerId == "examiner-1"),
             Arg.Any<CancellationToken>());
-        await _repo.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
     }
 
     /// <summary>The examiner's confirmed payer order reaches the re-adjudication; a passing re-run approves.</summary>
@@ -315,14 +316,14 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
 
         var response = await _client.PostAsJsonAsync(
             $"/api/claims/work-queue/{claim.Id}/resolve",
-            new { disposition = "Approved", reason = "secondary confirmed", payerSequence = 2 });
+            new { disposition = "Approved", reason = "secondary confirmed", payerSequence = 2, pendFingerprint = claim.PendDetails!.Fingerprint });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         await _readjudicator.Received(1).ReadjudicateForApprovalAsync(
             "test-tenant", claim.Id,
             Arg.Is<ExaminerApproval>(a => a.PayerSequence == 2),
             Arg.Any<CancellationToken>());
-        await _repo.Received(1).UpdateAsync(Arg.Is<Claim>(saved => saved.Status == ClaimStatus.Approved));
+        await _repo.Received(1).UpdateHoldingResolutionLockAsync(Arg.Is<Claim>(saved => saved.Status == ClaimStatus.Approved), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A denial does not re-adjudicate.</summary>
@@ -353,7 +354,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
             new { disposition = "Denied", reason = "Documentation not received" });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        await _repo.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
     }
 
     private sealed class WorkQueueSummaryDto

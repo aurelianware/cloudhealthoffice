@@ -106,6 +106,61 @@ public partial class BenefitCalculationStageTests
         await _engine.DidNotReceive().CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Round-3 verification: the COB guard's pend used to be dropped
+    /// (<c>??=</c>) when the claim was already pended for something else, so
+    /// it was never stored and no approval could name it. It is now added.
+    /// </summary>
+    [Fact]
+    public async Task CobGuard_OnAnAlreadyPendedClaim_AddsItsReason()
+    {
+        var ctx = CobContext("S", new CobOutcome { Scenario = CobScenario.ChoSecondaryDetected, ApplyCob = false });
+        ctx.PendDetails = new PendDetails { PendCode = "DUPLICATE", PendReason = "possible duplicate" };
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal("DUPLICATE", ctx.PendDetails.PendCode);
+        Assert.Single(ctx.PendDetails.AdditionalPendReasons, r => r.StartsWith("COB: "));
+    }
+
+    /// <summary>
+    /// Scenario B (round-3 verification): stored pends COB (routing) and
+    /// RETROELIG (added). The examiner reviewed both and confirmed the payer
+    /// order: the approval re-run prices past the reviewed retro plan change.
+    /// </summary>
+    [Fact]
+    public async Task CobThenRetroPlanChange_ApprovalReviewingBoth_Prices()
+    {
+        var first = CobContext("P", new CobOutcome { Scenario = CobScenario.ChoPrimaryNoSecondary });
+        first.ResolvedMember = new ResolvedMember
+        {
+            MemberId = "MEM-1", IsSubscriber = true, PlanChangeEffectiveDate = first.Claim.ServiceDateFrom.AddDays(-14),
+        };
+        await _sut.ExecuteAsync(first, CancellationToken.None);
+        var retroReason = first.PendDetails!.PendReason;
+        _engine.CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new BenefitResolutionResult { Success = true });
+
+        var rerun = CobContext("P", new CobOutcome { ConfirmedByExaminer = true, PayerSequence = 1 });
+        rerun.ResolvedMember = first.ResolvedMember;
+        rerun.ExaminerApproval = new ExaminerApproval
+        {
+            PayerSequence = 1,
+            ReviewedPend = new PendDetails
+            {
+                PendCode = "COB", PendReason = "cob-payer-order-mismatch",
+                AdditionalPendReasons = [$"RETROELIG: {retroReason}"],
+            },
+        };
+
+        var result = await _sut.ExecuteAsync(rerun, CancellationToken.None);
+
+        Assert.NotEqual(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        await _engine.Received(1).CalculateAsync(Arg.Any<BenefitResolutionRequest>(), Arg.Any<CancellationToken>());
+        Assert.Single(rerun.ExaminerOverrides, o => o.Contains("RETROELIG"));
+    }
+
     /// <summary>An examiner confirmed this plan is primary: priced as primary despite SBR01 S.</summary>
     [Fact]
     public async Task ExaminerConfirmedPrimary_PricesAsPrimary()
