@@ -1000,6 +1000,15 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
 
         var memberResp = Math.Max(0, billed - primaryPay - secondaryPay);
 
+        // OA-23 (impact of prior payer adjudication) carries the COB
+        // reduction as a POSITIVE amount: it reduces this plan's payment, so
+        // for 835 balancing (charge − ΣCAS = paid) it must add to ΣCAS. The
+        // pre-COB adjustments already balance to preCob.PlanPaidAmount, and
+        // secondaryPay = preCob.PlanPaidAmount − cobReduction.
+        //
+        // Contrast the OOP-max OA-23 in ApplyCostSharingInternal, which is
+        // correctly NEGATIVE: there the PR-1/2/3 entries carry the uncapped
+        // cost share and the plan pays MORE than allowed − ΣPR.
         var adjustments = new List<AdjustmentReason>(preCob.Adjustments);
         if (cobReduction > 0)
         {
@@ -1007,7 +1016,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             {
                 GroupCode = "OA",
                 ReasonCode = "23",
-                Amount = -cobReduction
+                Amount = cobReduction
             });
         }
 

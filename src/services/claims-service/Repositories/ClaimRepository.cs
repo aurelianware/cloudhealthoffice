@@ -703,14 +703,12 @@ public class ClaimRepository : IClaimRepository
 
         if (status.HasValue)
         {
-            conditions.Add("c.status = @status");
-            parameters["@status"] = status.Value.ToString();
+            conditions.Add(EnumInClause("c.status", "status", parameters, status.Value));
         }
 
         if (lineOfBusiness.HasValue)
         {
-            conditions.Add("c.lineOfBusiness = @lineOfBusiness");
-            parameters["@lineOfBusiness"] = lineOfBusiness.Value.ToString();
+            conditions.Add(EnumInClause("c.lineOfBusiness", "lineOfBusiness", parameters, lineOfBusiness.Value));
         }
 
         var totalCount = await CountClaimsAsync(conditions, parameters, tenantId);
@@ -801,8 +799,7 @@ public class ClaimRepository : IClaimRepository
         }
         if (status.HasValue)
         {
-            conditions.Add("c.status = @status");
-            parameters["@status"] = status.Value.ToString();
+            conditions.Add(EnumInClause("c.status", "status", parameters, status.Value));
         }
 
         var totalCount = await CountClaimsAsync(conditions, parameters, tenantId);
@@ -896,8 +893,7 @@ public class ClaimRepository : IClaimRepository
         }
         if (status.HasValue)
         {
-            conditions.Add("c.status = @status");
-            parameters["@status"] = status.Value.ToString();
+            conditions.Add(EnumInClause("c.status", "status", parameters, status.Value));
         }
         if (!string.IsNullOrEmpty(providerNPI))
         {
@@ -906,8 +902,7 @@ public class ClaimRepository : IClaimRepository
         }
         if (claimType.HasValue)
         {
-            conditions.Add("c.claimType = @claimType");
-            parameters["@claimType"] = claimType.Value.ToString();
+            conditions.Add(EnumInClause("c.claimType", "claimType", parameters, claimType.Value));
         }
         if (amountMin.HasValue)
         {
@@ -958,17 +953,18 @@ public class ClaimRepository : IClaimRepository
     {
         var tenantId = GetTenantId();
 
+        var lobParams = new Dictionary<string, object>();
         var lobCondition = lineOfBusiness.HasValue
-            ? "AND c.lineOfBusiness = @lineOfBusiness"
+            ? "AND " + EnumInClause("c.lineOfBusiness", "lineOfBusiness", lobParams, lineOfBusiness.Value)
             : "";
 
         var queryText = $@"
             SELECT
                 COUNT(1) as TotalClaims,
-                SUM(CASE WHEN c.status = 'Approved' THEN 1 ELSE 0 END) as ApprovedClaims,
-                SUM(CASE WHEN c.status = 'Denied' THEN 1 ELSE 0 END) as DeniedClaims,
-                SUM(CASE WHEN c.status = 'Pended' THEN 1 ELSE 0 END) as PendedClaims,
-                SUM(CASE WHEN c.status = 'Paid' THEN 1 ELSE 0 END) as PaidClaims,
+                SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Approved)} THEN 1 ELSE 0 END) as ApprovedClaims,
+                SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Denied)} THEN 1 ELSE 0 END) as DeniedClaims,
+                SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Pended)} THEN 1 ELSE 0 END) as PendedClaims,
+                SUM(CASE WHEN {EnumInLiteral("c.status", ClaimStatus.Paid)} THEN 1 ELSE 0 END) as PaidClaims,
                 SUM(c.totalChargeAmount) as TotalChargeAmount,
                 SUM(c.adjudicationResult.allowedAmount ?? 0) as TotalAllowedAmount,
                 SUM(c.adjudicationResult.payerPayment ?? 0) as TotalPaidAmount
@@ -983,10 +979,7 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@from", from)
             .WithParameter("@to", to);
 
-        if (lineOfBusiness.HasValue)
-        {
-            queryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
-        }
+        foreach (var (name, value) in lobParams) queryDef = queryDef.WithParameter(name, value);
 
         var iterator = _container.GetItemQueryIterator<dynamic>(
             queryDef,
@@ -1034,10 +1027,7 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@from", from)
             .WithParameter("@to", to);
 
-        if (lineOfBusiness.HasValue)
-        {
-            processingQueryDef.WithParameter("@lineOfBusiness", lineOfBusiness.Value.ToString());
-        }
+        foreach (var (name, value) in lobParams) processingQueryDef = processingQueryDef.WithParameter(name, value);
 
         var processingIterator = _container.GetItemQueryIterator<dynamic>(
             processingQueryDef,
@@ -1166,21 +1156,28 @@ public class ClaimRepository : IClaimRepository
         // head. The versionState predicate uses (NOT IS_DEFINED OR ...)
         // because Cosmos SQL evaluates undefined-vs-anything as undefined
         // (≠ true), which would silently drop legacy rows.
-        var query = new QueryDefinition(@"
+        //
+        // The Cosmos serializer persists enums camelCase ("draft"), so the
+        // Draft exclusion binds the persisted spelling (plus PascalCase for
+        // rows from older writers) — comparing against "Draft" alone let a
+        // draft row through as the head.
+        var draftParams = new Dictionary<string, object>();
+        var draftClause = EnumInClause("c.versionState", "draft", draftParams, ClaimVersionState.Draft);
+        var query = new QueryDefinition($@"
             SELECT TOP 1 *
             FROM c
             WHERE c.tenantId = @tenantId
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
-              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR c.versionState != @draft)
+              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR NOT ({draftClause}))
               AND (NOT IS_DEFINED(c.publishedAt) OR c.publishedAt = null OR c.publishedAt <= @asOf)
               AND (NOT IS_DEFINED(c.supersededAt) OR c.supersededAt = null OR c.supersededAt > @asOf)
             ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@claimVersionId", claimVersionId)
-            .WithParameter("@draft", ClaimVersionState.Draft.ToString())
             .WithParameter("@asOf", asOf);
+        foreach (var (name, value) in draftParams) query = query.WithParameter(name, value);
 
         var iterator = _container.GetItemQueryIterator<Claim>(
             query,
@@ -1267,23 +1264,24 @@ public class ClaimRepository : IClaimRepository
         // the row id first. We accept any version that isn't Draft or
         // Voided — adjudication runs against Submitted / Adjudicated rows
         // (re-adjudication is allowed).
-        var query = new QueryDefinition(@"
+        // versionState literals bind the persisted camelCase spelling (plus
+        // PascalCase for older rows); "Submitted"/"Adjudicated" alone never
+        // matched a versioned row, so only legacy rows could be patched.
+        var stateParams = new Dictionary<string, object>();
+        var stateClause = EnumInClause("c.versionState", "adjudicatableState", stateParams,
+            ClaimVersionState.Submitted, ClaimVersionState.Adjudicated, ClaimVersionState.Unknown);
+        var query = new QueryDefinition($@"
             SELECT TOP 1 c.id
             FROM c
             WHERE c.tenantId = @tenantId
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
-              AND (NOT IS_DEFINED(c.versionState)
-                   OR c.versionState = @submitted
-                   OR c.versionState = @adjudicated
-                   OR c.versionState = @unknown)
+              AND (NOT IS_DEFINED(c.versionState) OR {stateClause})
             ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimVersionId", claimVersionId)
-            .WithParameter("@submitted", ClaimVersionState.Submitted.ToString())
-            .WithParameter("@adjudicated", ClaimVersionState.Adjudicated.ToString())
-            .WithParameter("@unknown", ClaimVersionState.Unknown.ToString());
+            .WithParameter("@claimVersionId", claimVersionId);
+        foreach (var (name, value) in stateParams) query = query.WithParameter(name, value);
 
         string? rowId = null;
         var iterator = _container.GetItemQueryIterator<HeadIdResult>(
@@ -1440,18 +1438,20 @@ public class ClaimRepository : IClaimRepository
         ClaimStatus status,
         CancellationToken ct = default)
     {
-        var query = new QueryDefinition(@"
+        var draftParams = new Dictionary<string, object>();
+        var draftClause = EnumInClause("c.versionState", "draft", draftParams, ClaimVersionState.Draft);
+        var query = new QueryDefinition($@"
             SELECT TOP 1 c.id, c.status
             FROM c
             WHERE c.tenantId = @tenantId
               AND (c.claimVersionId = @claimVersionId
                    OR (NOT IS_DEFINED(c.claimVersionId) AND c.id = @claimVersionId)
                    OR (c.claimVersionId = '' AND c.id = @claimVersionId))
-              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR c.versionState != @draft)
+              AND (NOT IS_DEFINED(c.versionState) OR c.versionState = null OR NOT ({draftClause}))
             ORDER BY c.versionNumber DESC")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@claimVersionId", claimVersionId)
-            .WithParameter("@draft", ClaimVersionState.Draft.ToString());
+            .WithParameter("@claimVersionId", claimVersionId);
+        foreach (var (name, value) in draftParams) query = query.WithParameter(name, value);
 
         HeadIdResult? head = null;
         var iterator = _container.GetItemQueryIterator<HeadIdResult>(
@@ -1629,13 +1629,51 @@ public class ClaimRepository : IClaimRepository
     private static string BuildStatusNotInFilterPredicate(IReadOnlyList<ClaimStatus> blockedStatuses) =>
         $"FROM c WHERE NOT (c.status IN ({string.Join(",", blockedStatuses.Select(s => $"'{CosmosStatusLiteral(s)}'"))}))";
 
-    private static string CosmosStatusLiteral(ClaimStatus status) =>
-        JsonNamingPolicy.CamelCase.ConvertName(status.ToString());
+    private static string CosmosStatusLiteral(ClaimStatus status) => CosmosEnumLiteral(status);
+
+    /// <summary>
+    /// The spelling <c>CosmosSystemTextJsonSerializer</c> persists for an
+    /// enum value: its options-level <c>JsonStringEnumConverter(CamelCase)</c>
+    /// takes precedence over the PascalCase type-level converter on
+    /// <see cref="ClaimVersionState"/> / <see cref="ClaimStatus"/>, so
+    /// <c>Draft</c> is stored as <c>"draft"</c>. <c>value.ToString()</c> is
+    /// therefore the wrong literal for a Cosmos query.
+    /// </summary>
+    internal static string CosmosEnumLiteral<TEnum>(TEnum value) where TEnum : struct, Enum =>
+        JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
+
+    /// <summary>
+    /// Builds <c>{field} IN (@{prefix}0, …)</c> matching each value in both
+    /// spellings (see <see cref="DuplicateExclusionLiterals"/>) and records
+    /// the bound literals in <paramref name="parameters"/>.
+    /// </summary>
+    internal static string EnumInClause<TEnum>(
+        string field, string paramPrefix, IDictionary<string, object> parameters, params TEnum[] values)
+        where TEnum : struct, Enum
+    {
+        var literals = DuplicateExclusionLiterals(values.Select(v => v.ToString()));
+        var names = new List<string>(literals.Count);
+        for (var i = 0; i < literals.Count; i++)
+        {
+            var name = $"@{paramPrefix}{i}";
+            parameters[name] = literals[i];
+            names.Add(name);
+        }
+        return $"{field} IN ({string.Join(", ", names)})";
+    }
+
+    /// <summary>
+    /// Inline-literal form of <see cref="EnumInClause{TEnum}"/> for
+    /// expressions that can't take parameters (aggregate CASE arms). Enum
+    /// names are identifiers, so inlining them is injection-safe.
+    /// </summary>
+    internal static string EnumInLiteral<TEnum>(string field, params TEnum[] values) where TEnum : struct, Enum =>
+        $"{field} IN ({string.Join(", ", DuplicateExclusionLiterals(values.Select(v => v.ToString())).Select(l => $"'{l}'"))})";
 
     /// <summary>
     /// Both spellings of each enum name — the serializer's camelCase form
-    /// (see <see cref="CosmosStatusLiteral"/>) and PascalCase — for
-    /// exclusion filters that must never let a dead row through.
+    /// (see <see cref="CosmosEnumLiteral{TEnum}"/>) and PascalCase — so
+    /// filters match serializer-written rows and rows from older writers.
     /// </summary>
     internal static IReadOnlyList<string> DuplicateExclusionLiterals(IEnumerable<string> enumNames) =>
         enumNames
@@ -1667,9 +1705,15 @@ public class ClaimRepository : IClaimRepository
         // map to the same operational notion. Either clause matching keeps a
         // row in the result set, so legacy unhydrated rows continue to count
         // and new versioned rows count once they reach Adjudicated/Paid.
-        // Note: the legacy ClaimStatus filter compares the integer-serialized
-        // enum against string literals; that is a pre-existing oddity tracked
-        // outside 5.1's scope. The versionState clause is the forward path.
+        // Both enums are persisted camelCase by the Cosmos serializer, so each
+        // clause binds the camelCase spelling (plus PascalCase for rows from
+        // older writers); the former 'Approved' / "Adjudicated" literals
+        // matched no serializer-written row.
+        var enumParams = new Dictionary<string, object>();
+        var statusClause = EnumInClause("c.status", "countedStatus", enumParams,
+            ClaimStatus.Approved, ClaimStatus.PartiallyPaid, ClaimStatus.Paid);
+        var versionStateClause = EnumInClause("c.versionState", "countedVersionState", enumParams,
+            ClaimVersionState.Adjudicated, ClaimVersionState.Paid);
         var queryText = $@"
             SELECT c.adjudicationResult.deductibleAmount,
                    c.adjudicationResult.coinsuranceAmount,
@@ -1686,8 +1730,8 @@ public class ClaimRepository : IClaimRepository
               AND c.serviceDateFrom >= @yearStart
               AND c.serviceDateFrom <= @yearEnd
               AND (
-                    c.status = 'Approved' OR c.status = 'PartiallyPaid' OR c.status = 'Paid'
-                    OR c.versionState = @adjudicated OR c.versionState = @paid
+                    {statusClause}
+                    OR {versionStateClause}
                   )
               AND IS_DEFINED(c.adjudicationResult)";
 
@@ -1696,9 +1740,8 @@ public class ClaimRepository : IClaimRepository
             .WithParameter("@ownerId",       ownerId)
             .WithParameter("@benefitPlanId", benefitPlanId)
             .WithParameter("@yearStart",     yearStart)
-            .WithParameter("@yearEnd",       yearEnd)
-            .WithParameter("@adjudicated",   ClaimVersionState.Adjudicated.ToString())
-            .WithParameter("@paid",          ClaimVersionState.Paid.ToString());
+            .WithParameter("@yearEnd",       yearEnd);
+        foreach (var (name, value) in enumParams) queryDef = queryDef.WithParameter(name, value);
 
         var iterator = _container.GetItemQueryIterator<dynamic>(
             queryDef,
@@ -1873,8 +1916,7 @@ public class ClaimRepository : IClaimRepository
         // rows survive the filter and can fill the TOP cap ahead of a live
         // duplicate. The Cosmos serializer writes enums camelCase
         // (CosmosStatusLiteral); PascalCase is also excluded so rows written
-        // by older serializers (and the PascalCase literals other queries
-        // here still compare against) can never leak through.
+        // by older serializers can never leak through.
         var deadStatuses = DuplicateExclusionLiterals(
             new[] { ClaimStatus.Denied, ClaimStatus.Voided }.Select(s => s.ToString()));
         var deadVersionStates = DuplicateExclusionLiterals(
@@ -1927,7 +1969,8 @@ public class ClaimRepository : IClaimRepository
         return items.Take(MaxDuplicateCandidates).Select(Hydrate).ToList();
     }
 
-    private sealed class HeadIdResult
+    // internal (not private) so query-text contract tests can stub its iterator.
+    internal sealed class HeadIdResult
     {
         public string Id { get; set; } = string.Empty;
         public ClaimStatus Status { get; set; }

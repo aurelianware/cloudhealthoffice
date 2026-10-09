@@ -1067,6 +1067,140 @@ public class BenefitCalculationEngineTests
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // COB — OA-23 SIGN AND 835 BALANCING (charge − ΣCAS = paid)
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static BenefitResolutionRequest AsSecondary(
+        BenefitResolutionRequest request, bool complementary, params (int line, decimal paid)[] primary)
+        => request with
+        {
+            Cob = new CobInfo
+            {
+                PayerSequence = 2,
+                UseComplementaryModel = complementary,
+                PrimaryPayerId = "PRIMARY-1",
+                PrimaryPayerPaymentByLine = primary.ToDictionary(p => p.line, p => p.paid),
+            }
+        };
+
+    private static void AssertLineBalances(LineBenefitResult l) =>
+        Assert.Equal(l.PlanPaidAmount, l.BilledAmount - l.Adjustments.Sum(a => a.Amount));
+
+    /// <summary>
+    /// Deductible met: pre-COB the plan pays $96 on $150 allowed ($30 copay,
+    /// $24 coinsurance). The primary paid $120, so complementary COB pays the
+    /// $80 balance of the $200 charge; the $16 reduction is a positive OA-23.
+    /// </summary>
+    [Fact]
+    public async Task Cob_Complementary_Line_Oa23PositiveAndBalances()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
+            complementary: true, (1, 120m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(80m, line.PlanPaidAmount);
+        var oa23 = Assert.Single(line.Adjustments, a => a is { GroupCode: "OA", ReasonCode: "23" });
+        Assert.Equal(16m, oa23.Amount);
+        AssertLineBalances(line);
+        Assert.Equal(80m, line.BilledAmount - line.Adjustments.Sum(a => a.Amount));
+    }
+
+    /// <summary>
+    /// Non-duplication: max benefit = allowed − member share = $96; the
+    /// primary paid $60, so the secondary pays $36 and OA-23 is +$60.
+    /// When the primary pays at least the max benefit, the secondary pays
+    /// nothing and OA-23 absorbs the full $96.
+    /// </summary>
+    [Theory]
+    [InlineData(60, 36, 60)]
+    [InlineData(120, 0, 96)]
+    public async Task Cob_NonDuplication_Line_Oa23PositiveAndBalances(
+        decimal primaryPaid, decimal expectedPaid, decimal expectedOa23)
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "98", existingDeductible: 500m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id, lines: ("99213", 200m, 150m, "11")),
+            complementary: false, (1, primaryPaid));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(expectedPaid, line.PlanPaidAmount);
+        Assert.Equal(expectedOa23,
+            line.Adjustments.Single(a => a is { GroupCode: "OA", ReasonCode: "23" }).Amount);
+        AssertLineBalances(line);
+    }
+
+    /// <summary>
+    /// OOP max and COB on the same line: the OOP-max OA-23 is negative (the
+    /// PR entries carry the uncapped cost share, so the plan pays more than
+    /// allowed − ΣPR) and the COB OA-23 is positive. Together they balance.
+    /// </summary>
+    [Fact]
+    public async Task Cob_WithOopMaxReduction_Line_BothOa23EntriesBalance()
+    {
+        var plan = CreateTestPlan(individualDeductible: 0, individualOopMax: 3000);
+        var engine = CreateEngine(plan, categoryCode: "48", existingOop: 2980m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id, lines: ("99223", 5000m, 3000m, "21")),
+            complementary: true, (1, 2500m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        // Pre-COB: member $20, plan $2,980; complementary caps at the $2,500 balance.
+        Assert.Equal(2500m, line.PlanPaidAmount);
+        var oa23 = line.Adjustments.Where(a => a is { GroupCode: "OA", ReasonCode: "23" })
+            .Select(a => a.Amount).OrderBy(a => a).ToList();
+        Assert.Equal([-580m, 480m], oa23);
+        AssertLineBalances(line);
+    }
+
+    /// <summary>
+    /// DRG claim-level path with a primary payer amount supplied: every line
+    /// and the claim-level DrgCostShare CAS balance (charge − ΣCAS = paid),
+    /// including the negative OOP-max OA-23. The DRG path does not apply COB
+    /// (ProcessDrgClaimAsync never reads request.Cob), so no COB OA-23 is
+    /// emitted there.
+    /// </summary>
+    [Fact]
+    public async Task Cob_Drg_ClaimLevelAndLines_Balance()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 3000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48", existingOop: 2500m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id,
+                claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+                lines:
+                [
+                    ("99223", 15000m, 12000m, "21"),
+                    ("", 5000m, 0m, "21"),
+                ]),
+            complementary: true, (1, 6000m), (2, 1000m));
+
+        var result = await engine.CalculateAsync(request);
+
+        Assert.True(result.Success);
+        var drg = result.DrgCostShare!;
+        Assert.True(drg.OopMaxReduction > 0);
+        var totalBilled = result.Lines.Sum(l => l.BilledAmount);
+        Assert.Equal(drg.PlanPaidAmount, totalBilled - drg.Adjustments.Sum(a => a.Amount));
+        Assert.All(drg.Adjustments.Where(a => a is { GroupCode: "OA", ReasonCode: "23" }),
+            a => Assert.True(a.Amount < 0)); // OOP-max only; no COB entry on this path
+        Assert.All(result.Lines, AssertLineBalances);
+        Assert.Equal(drg.PlanPaidAmount, result.Lines.Sum(l => l.PlanPaidAmount));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // FEATURE 6: BENEFIT RULE PREDICATE GATING (BP 5.10)
     // ═══════════════════════════════════════════════════════════════════
 
