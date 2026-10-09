@@ -143,16 +143,17 @@ public sealed class InMemoryAppealRepository : IAppealRepository, IAppealEventRe
                 throw new InvalidAppealTransitionException(actual, appeal.Status);
             }
 
-            // Mirror the Cosmos / Mongo repos: extension fields are owned by
-            // TryExtendDeadlineAsync, so the persisted values win over a
-            // stale snapshot.
-            appeal.TargetResponseDate = current.TargetResponseDate;
-            appeal.DeadlineExtension = current.DeadlineExtension is null ? null : CloneExtension(current.DeadlineExtension);
-            appeal.Notes = current.Notes.Select(CloneNote).ToList();
-            _appeals[key] = Clone(appeal);
+            // Mirror the Cosmos / Mongo repos: apply only the
+            // transition-owned fields to the stored row; everything else
+            // stays as persisted, whatever the caller's snapshot holds.
+            appeal.UpdatedAt = DateTime.UtcNow;
+            var updated = Clone(current);
+            AppealStatusTransitionFields.CopyTo(appeal, updated);
+            updated.Decision = updated.Decision is null ? null : CloneDecision(updated.Decision);
+            _appeals[key] = updated;
             AppendEventInternal(auditEvent);
+            return Task.FromResult(Clone(updated));
         }
-        return Task.FromResult(Clone(appeal));
     }
 
     public Task<Appeal?> TryTransitionToOverdueAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)

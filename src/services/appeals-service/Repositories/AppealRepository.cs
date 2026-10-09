@@ -230,7 +230,13 @@ public sealed class AppealRepository : IAppealRepository
         }
         var expectedFromStatus = auditEvent.FromStatus.Value;
 
-        try
+        // The replacement is the fresh read with only the transition-owned
+        // fields applied, pinned to that read's ETag; the caller's snapshot
+        // contributes nothing else, so a concurrent attachment, note,
+        // reviewer assignment, extension or overdue observation survives.
+        // A 412 means some other write landed after the read: re-read and
+        // rebuild (re-checking the status) rather than fail the transition.
+        for (var attempt = 0; attempt < TransitionAttempts; attempt++)
         {
             var fresh = await _appeals.ReadItemAsync<Appeal>(
                 appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
@@ -240,29 +246,35 @@ public sealed class AppealRepository : IAppealRepository
                 throw new InvalidAppealTransitionException(fresh.Resource.Status, appeal.Status);
             }
 
-            // Extension fields are owned by TryExtendDeadlineAsync — carry the
-            // persisted values so a snapshot read before a concurrent
-            // extension cannot erase it (the ETag pins them to this read).
-            appeal.TargetResponseDate = fresh.Resource.TargetResponseDate;
-            appeal.DeadlineExtension = fresh.Resource.DeadlineExtension;
-            // Notes are append-only through AppendNoteAsync / the extension
-            // write; a transition never edits them, so the persisted list
-            // wins (keeps an extension's justification note).
-            appeal.Notes = fresh.Resource.Notes ?? new List<AppealNote>();
-
             appeal.UpdatedAt = DateTime.UtcNow;
-            var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
-            var response = await _appeals.ReplaceItemAsync(
-                appeal, appeal.Id, new PartitionKey(appeal.TenantId), options, ct);
+            var mutated = fresh.Resource;
+            AppealStatusTransitionFields.CopyTo(appeal, mutated);
+
+            ItemResponse<Appeal> response;
+            try
+            {
+                var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
+                response = await _appeals.ReplaceItemAsync(
+                    mutated, mutated.Id, new PartitionKey(mutated.TenantId), options, ct);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                continue;
+            }
 
             await _events.AppendAsync(auditEvent, ct);
             return response.Resource;
         }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
-        {
-            throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
-        }
+
+        throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
     }
+
+    /// <summary>
+    /// Read-rebuild-replace attempts for a status transition. Each 412 is a
+    /// concurrent write to the same appeal; a handful of retries absorbs a
+    /// burst (e.g. several 275 attachments) before reporting a conflict.
+    /// </summary>
+    private const int TransitionAttempts = 5;
 
     public async Task<Appeal?> TryTransitionToOverdueAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
     {

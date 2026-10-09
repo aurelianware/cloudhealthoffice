@@ -141,6 +141,189 @@ public static class Era835ClaimPaymentBuilder
     }
 
     /// <summary>
+    /// The reversal (CLP02 = 22) of a recorded claim payment: the original
+    /// 2100/2110 loops with CLP03, CLP04, CLP05, SVC02, SVC03 and every CAS
+    /// amount negated, so each line still balances (SVC02 - sum(line CAS) =
+    /// SVC03) and the claim does too (CLP03 - sum(CAS) = CLP04), in the
+    /// negative. Remark codes (MOA/MIA, LQ*HE) and identifiers are repeated.
+    ///
+    /// The adjustments are the recorded ones when the original was remitted
+    /// with them (its lines carry CAS, or, remitted at claim level, its header
+    /// does). An original recorded without that detail (paid before line CAS
+    /// existed) gets the adjustments <see cref="Build"/> derives for it from
+    /// <paramref name="predecessor"/>, with the recorded charge and paid
+    /// amounts: the same fallbacks a payment gets (single-line claim: the
+    /// claim-level adjustments; otherwise the line's NCCI edit CARC, else
+    /// CO-45, or CO with the denial CARC on a denial).
+    /// </summary>
+    public static ClaimPayment BuildReversal(
+        ClaimPayment original, ClaimDto predecessor, ICarcRarcMappingService mapper)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(predecessor);
+        ArgumentNullException.ThrowIfNull(mapper);
+
+        var source = RecordedWithAdjustments(original) ? original : WithDerivedAdjustments(original, predecessor, mapper);
+        return Negated(source);
+    }
+
+    /// <summary>
+    /// True when the recorded claim payment carries its adjustments: a line
+    /// with CAS, or, remitted at claim level, a header CAS.
+    /// </summary>
+    public static bool RecordedWithAdjustments(ClaimPayment cp) =>
+        cp.ServiceLines.Count > 0
+            ? cp.ServiceLines.Any(l => l.Adjustments.Count > 0)
+            : cp.ClaimAdjustments.Count > 0;
+
+    /// <summary>
+    /// <paramref name="original"/> with the adjustments <see cref="Build"/>
+    /// derives from the predecessor claim, priced at what was actually
+    /// recorded: the recorded lines (charge, paid, codes, dates), the recorded
+    /// CLP03/CLP04/CLP05, the line adjustments claims-service holds for those
+    /// lines (none on older claims, so the fallbacks apply).
+    /// </summary>
+    private static ClaimPayment WithDerivedAdjustments(
+        ClaimPayment original, ClaimDto predecessor, ICarcRarcMappingService mapper)
+    {
+        var denied = original.ClaimStatusCode == "4";
+        var predLines = (predecessor.ServiceLines ?? new List<ClaimServiceLineDto>())
+            .GroupBy(l => l.LineNumber)
+            .ToDictionary(g => g.Key, g => g.First());
+        var adjudication = predecessor.AdjudicationResult;
+
+        var priced = new ClaimDto
+        {
+            Id = original.ClaimId,
+            ClaimNumber = original.PatientControlNumber,
+            MemberId = original.MemberId ?? predecessor.MemberId,
+            BillingProviderNPI = predecessor.BillingProviderNPI,
+            PayerClaimControlNumber = original.PayerClaimControlNumber,
+            RenderingProviderNPI = original.RenderingProviderNPI,
+            TotalChargeAmount = original.ChargeAmount,
+            ClaimType = original.IsInstitutional ? ClaimFormType.Institutional : predecessor.ClaimType,
+            PendDetails = predecessor.PendDetails,
+            AdjudicationResult = new ClaimAdjudicationDto
+            {
+                PayerPayment = original.PaymentAmount,
+                PatientResponsibility = original.PatientResponsibilityAmount,
+                DenialReasonCode = adjudication?.DenialReasonCode,
+                DenialReason = adjudication?.DenialReason,
+                AdjustmentReasons = adjudication?.AdjustmentReasons,
+                RemarkCodes = adjudication?.RemarkCodes,
+            },
+            ServiceLines = original.ServiceLines.Count == 0
+                ? null
+                : original.ServiceLines
+                    .Select(sl => new ClaimServiceLineDto
+                    {
+                        LineNumber = sl.LineNumber,
+                        ProcedureCode = sl.ProcedureCode,
+                        ChargeAmount = sl.ChargeAmount,
+                        PaidAmount = sl.PaymentAmount,
+                        RevenueCode = sl.RevenueCode,
+                        Units = sl.Units,
+                        ServiceDateFrom = sl.ServiceDateFrom,
+                        ServiceDateTo = sl.ServiceDateTo,
+                        AdjudicationResult = new ClaimLineAdjudicationDto
+                        {
+                            PaidAmount = sl.PaymentAmount,
+                            AdjustmentReasons = predLines.TryGetValue(sl.LineNumber, out var pl)
+                                ? pl.AdjudicationResult?.AdjustmentReasons
+                                : null,
+                        },
+                    })
+                    .ToList(),
+        };
+
+        var derived = Build(priced, denied, mapper);
+        var result = Copy(original);
+        result.ClaimAdjustments = derived.ClaimAdjustments;
+        if (result.RemarkCodes.Count == 0)
+            result.RemarkCodes = derived.RemarkCodes;
+        for (var i = 0; i < result.ServiceLines.Count; i++)
+        {
+            result.ServiceLines[i].Adjustments = derived.ServiceLines[i].Adjustments;
+            result.ServiceLines[i].RemarkCodes = result.ServiceLines[i].RemarkCodes
+                .Concat(derived.ServiceLines[i].RemarkCodes)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+        return result;
+    }
+
+    /// <summary>The CLP02 = 22 copy of <paramref name="cp"/>, every amount negated.</summary>
+    private static ClaimPayment Negated(ClaimPayment cp)
+    {
+        var r = Copy(cp);
+        r.ClaimStatusCode = "22";
+        r.ChargeAmount = Neg(cp.ChargeAmount);
+        r.PaymentAmount = Neg(cp.PaymentAmount);
+        r.PatientResponsibilityAmount = Neg(cp.PatientResponsibilityAmount);
+        foreach (var a in r.ClaimAdjustments)
+            a.Amount = Neg(a.Amount);
+        foreach (var line in r.ServiceLines)
+        {
+            line.ChargeAmount = Neg(line.ChargeAmount);
+            line.PaymentAmount = Neg(line.PaymentAmount);
+            foreach (var a in line.Adjustments)
+                a.Amount = Neg(a.Amount);
+        }
+        return r;
+    }
+
+    /// <summary>Negated, never "-0.00".</summary>
+    private static decimal Neg(decimal amount) => amount == 0m ? 0m : -amount;
+
+    /// <summary>A deep copy of the 835 data of <paramref name="cp"/> (not its finalize state).</summary>
+    private static ClaimPayment Copy(ClaimPayment cp) => new()
+    {
+        ClaimId = cp.ClaimId,
+        PatientControlNumber = cp.PatientControlNumber,
+        ClaimStatusCode = cp.ClaimStatusCode,
+        ChargeAmount = cp.ChargeAmount,
+        PaymentAmount = cp.PaymentAmount,
+        PatientResponsibilityAmount = cp.PatientResponsibilityAmount,
+        PayerClaimControlNumber = cp.PayerClaimControlNumber,
+        MemberId = cp.MemberId,
+        IsInstitutional = cp.IsInstitutional,
+        ClaimReceivedDate = cp.ClaimReceivedDate,
+        RenderingProviderNPI = cp.RenderingProviderNPI,
+        RemarkCodes = cp.RemarkCodes.ToList(),
+        ClaimAdjustments = cp.ClaimAdjustments
+            .Select(a => new ClaimAdjustment
+            {
+                GroupCode = a.GroupCode, ReasonCode = a.ReasonCode, Amount = a.Amount, ReasonDescription = a.ReasonDescription,
+            })
+            .ToList(),
+        ServiceLines = cp.ServiceLines
+            .Select(sl => new ServiceLinePayment
+            {
+                LineNumber = sl.LineNumber,
+                ProcedureCode = sl.ProcedureCode,
+                ChargeAmount = sl.ChargeAmount,
+                PaymentAmount = sl.PaymentAmount,
+                RevenueCode = sl.RevenueCode,
+                Units = sl.Units,
+                ServiceDateFrom = sl.ServiceDateFrom,
+                ServiceDateTo = sl.ServiceDateTo,
+                RemarkCodes = sl.RemarkCodes.ToList(),
+                Adjustments = sl.Adjustments
+                    .Select(a => new ServiceLineAdjustment
+                    {
+                        GroupCode = a.GroupCode,
+                        ReasonCode = a.ReasonCode,
+                        Amount = a.Amount,
+                        Quantity = a.Quantity,
+                        RemarkCode = a.RemarkCode,
+                        ReasonDescription = a.ReasonDescription,
+                    })
+                    .ToList(),
+            })
+            .ToList(),
+    };
+
+    /// <summary>
     /// A line's CAS: its adjudication adjustments, plus NCCI edit CARCs it does
     /// not already carry; with no adjudication adjustments, one CO
     /// (<paramref name="fallbackCarc"/>) for whatever SVC02 - SVC03 the edits
