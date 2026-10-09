@@ -1078,21 +1078,45 @@ public class BenefitCalculationStageTests
     {
         var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
 
-        // Allocated DRG share: raw cost share 60 capped to member 50 by the
-        // OOP max (allocation rounding lands in the same OA-23 entry).
+        // Allocated DRG share, already reduced by the engine: member 50 =
+        // deductible 40 + coinsurance 10.
         BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
         {
             LineNumber = 1, IsCovered = true, IsDrgPriced = true,
             BilledAmount = 100m, AllowedAmount = 90m, ContractualAdjustment = 10m,
-            DeductibleAmount = 40m, CoinsuranceAmount = 20m, OopMaxReduction = 10m,
+            DeductibleAmount = 40m, CoinsuranceAmount = 10m, OopMaxReduction = 10m,
             MemberResponsibility = 50m, PlanPaidAmount = 40m,
         }));
 
         var cas = Assert.Single(ctx.LineAdjudicationResults).AdjustmentReasons;
         Assert.Equal(
-            new[] { ("CO", "45", 10m), ("PR", "1", 40m), ("PR", "2", 20m), ("OA", "23", -10m) },
+            new[] { ("CO", "45", 10m), ("PR", "1", 40m), ("PR", "2", 10m) },
             cas.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
         Assert.Equal(40m, 100m - cas.Sum(r => r.Amount));
+    }
+
+    [Fact]
+    public void ApplyToContext_DrgLineWithoutAdjustments_UncappedAmounts_ReducesPrNoNegativeOa23()
+    {
+        var ctx = ContextFor(BuildClaim(Guid.NewGuid().ToString()));
+
+        // Legacy shape: raw cost share 60 (deductible 40, copay 5,
+        // coinsurance 15) but member owes 30 after the OOP max. The 30
+        // excess comes off coinsurance, then copay, then deductible.
+        BenefitCalculationStage.ApplyToContext(ctx, SingleLineResult(new LineBenefitResult
+        {
+            LineNumber = 1, IsCovered = true, IsDrgPriced = true,
+            BilledAmount = 100m, AllowedAmount = 90m, ContractualAdjustment = 10m,
+            DeductibleAmount = 40m, CopayAmount = 5m, CoinsuranceAmount = 15m, OopMaxReduction = 30m,
+            MemberResponsibility = 30m, PlanPaidAmount = 60m,
+        }));
+
+        var cas = Assert.Single(ctx.LineAdjudicationResults).AdjustmentReasons;
+        Assert.Equal(
+            new[] { ("CO", "45", 10m), ("PR", "1", 30m) },
+            cas.Select(r => (r.GroupCode, r.ReasonCode, r.Amount)));
+        Assert.All(cas, r => Assert.True(r.Amount >= 0m));
+        Assert.Equal(60m, 100m - cas.Sum(r => r.Amount));
     }
 
     [Fact]

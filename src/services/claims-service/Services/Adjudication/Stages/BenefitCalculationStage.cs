@@ -688,14 +688,17 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// <summary>
     /// Maps one engine line onto 835-style line CAS. The engine's own
     /// <see cref="LineBenefitResult.Adjustments"/> (CO-45 contractual,
-    /// PR-1/2/3 cost share, OA-23 OOP-max / COB reductions, CO-denial) are
-    /// carried verbatim. Two engine shapes need filling in so the line
+    /// PR-1/2/3 cost share already reduced by any OOP-max cap, a positive
+    /// OA-23 COB reduction, CO-denial) are carried verbatim. Two engine shapes need filling in so the line
     /// still balances (charge − ΣCAS = paid) and carries its cost share:
     /// <list type="bullet">
     ///   <item><description>DRG / per-diem lines, whose adjustments live
     ///     on the claim-level <see cref="DrgCostShareResult"/>: synthesized
-    ///     from the line's allocated amounts, with an OA-23 entry absorbing
-    ///     the OOP-max reduction and allocation rounding.</description></item>
+    ///     from the line's allocated amounts. When the line's member share
+    ///     is below its cost share (an OOP-max cap the amounts don't yet
+    ///     reflect) the PR amounts are reduced — coinsurance, then copay,
+    ///     then deductible — so no CAS amount is negative; a member share
+    ///     above the cost share goes to a positive OA-23.</description></item>
     ///   <item><description>Denied lines, which carry only the CO-denial
     ///     against the allowed amount: the billed-over-allowed contractual
     ///     reduction is added as CO-45.</description></item>
@@ -716,12 +719,23 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
 
         if (line.IsDrgPriced && line.Adjustments.Count == 0)
         {
-            AddIfNonZero(reasons, "PR", "1", line.DeductibleAmount);
-            AddIfNonZero(reasons, "PR", "3", line.CopayAmount);
-            AddIfNonZero(reasons, "PR", "2", line.CoinsuranceAmount);
-            var costShare = line.DeductibleAmount + line.CopayAmount + line.CoinsuranceAmount;
+            var deductible = line.DeductibleAmount;
+            var copay = line.CopayAmount;
+            var coinsurance = line.CoinsuranceAmount;
             var memberPortion = line.AllowedAmount - line.PlanPaidAmount;
-            AddIfNonZero(reasons, "OA", "23", memberPortion - costShare);
+            var excess = deductible + copay + coinsurance - memberPortion;
+            if (excess > 0)
+            {
+                coinsurance -= Take(coinsurance, ref excess);
+                copay -= Take(copay, ref excess);
+                deductible -= Take(deductible, ref excess);
+            }
+            AddIfNonZero(reasons, "PR", "1", deductible);
+            AddIfNonZero(reasons, "PR", "3", copay);
+            AddIfNonZero(reasons, "PR", "2", coinsurance);
+            var residual = memberPortion - (deductible + copay + coinsurance);
+            if (residual > 0)
+                AddIfNonZero(reasons, "OA", "23", residual);
         }
 
         if (!reasons.Any(r => r.GroupCode == "CO" && r.ReasonCode == "45"))
@@ -735,6 +749,13 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
         }
 
         return reasons.Where(r => r.Amount != 0m).ToList();
+    }
+
+    private static decimal Take(decimal amount, ref decimal outstanding)
+    {
+        var take = Math.Min(Math.Max(amount, 0m), outstanding);
+        outstanding -= take;
+        return take;
     }
 
     private static void AddIfNonZero(
