@@ -176,7 +176,12 @@ public record CobLineResult
     /// </summary>
     public decimal CobReduction { get; init; }
 
-    /// <summary>True if COB logic changed any amounts; false if COB was a no-op.</summary>
+    /// <summary>
+    /// True if COB logic changed any amount — the plan payment
+    /// (<see cref="CobReduction"/> ≠ 0) or the member responsibility (e.g.
+    /// the primary covered the cost share while this plan still pays its
+    /// full benefit); false if COB was a no-op.
+    /// </summary>
     public bool CobApplied { get; init; }
 }
 

@@ -79,6 +79,7 @@ public class CobCalculationService : ICobCalculationService
             MemberResponsibility = memberResp,
             CobReduction        = cobReduction,
             CobApplied          = cobReduction != 0
+                                  || memberResp != i.SecondaryMemberResponsibilityBeforeCob
         };
     }
 
@@ -116,6 +117,7 @@ public class CobCalculationService : ICobCalculationService
             MemberResponsibility = memberResp,
             CobReduction         = cobReduction,
             CobApplied           = cobReduction != 0
+                                   || memberResp != i.SecondaryMemberResponsibilityBeforeCob
         };
     }
 

@@ -1620,6 +1620,79 @@ public class BenefitCalculationEngineTests
         Assert.Equal(expectedMember, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
     }
 
+    /// <summary>
+    /// COB changes only the member amount: deductible met, 20% coinsurance
+    /// on $250 allowed (= billed) → member $50, plan $200 pre-COB. The
+    /// primary paid $50, so complementary still pays the full $200 (no COB
+    /// savings) while the member owes 250 − 50 − 200 = $0. PR-2 is dropped,
+    /// OA-23 = allowed − member − paid = $50, the line balances, and no OOP
+    /// is accumulated.
+    /// </summary>
+    [Fact]
+    public async Task Cob_OnlyMemberResponsibilityChanges_Line_Oa23IsPrimaryCoveredCostShare()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500);
+        var engine = CreateEngine(plan, categoryCode: "48", existingDeductible: 500m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id, lines: ("99223", 250m, 250m, "21")),
+            complementary: true, (1, 50m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var line = result.Lines.Single();
+        Assert.Equal(200m, line.PlanPaidAmount);
+        Assert.Equal(0m, line.MemberResponsibility);
+        Assert.Equal(
+            new[] { ("OA", "23", 50m) },
+            line.Adjustments.Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        AssertCasInvariants(line);
+        Assert.Equal(0m, line.OopAppliedAmount);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
+    /// <summary>
+    /// The same member-only change on the DRG path: deductible met, 20% of
+    /// the $12,000 stay → member $2,400, plan $9,600. The primary paid
+    /// $2,400 in total, so the plan still pays $9,600 and the member owes
+    /// $0; OA-23 = $2,400, split by allowed (truncated to the cent, remainder
+    /// on the last line), every line balances.
+    /// </summary>
+    [Fact]
+    public async Task Cob_OnlyMemberResponsibilityChanges_Drg_Oa23SplitAndBalances()
+    {
+        var plan = CreateTestPlan(
+            individualDeductible: 500,
+            individualOopMax: 6000,
+            inpatientMethod: InpatientPricingMethod.DrgCaseRate);
+        var engine = CreateEngine(plan, categoryCode: "48", existingDeductible: 500m);
+        var request = AsSecondary(
+            CreateRequest(plan.Id,
+                claimType: "837I", drgCode: "470", drgAllowedAmount: 12000m,
+                lines:
+                [
+                    ("99223", 4000m, 4000m, "21"),
+                    ("", 8000m, 8000m, "21"),
+                ]),
+            complementary: true, (1, 1000m), (2, 1400m));
+
+        var result = await engine.CalculateAsync(request);
+
+        var drg = result.DrgCostShare!;
+        Assert.Equal(9600m, drg.PlanPaidAmount);
+        Assert.Equal(0m, drg.MemberResponsibility);
+        Assert.Equal(2400m, Oa23(drg.Adjustments));
+        Assert.DoesNotContain(drg.Adjustments, a => a.GroupCode == "PR");
+        Assert.Equal(drg.PlanPaidAmount,
+            result.Lines.Sum(l => l.BilledAmount) - drg.Adjustments.Sum(a => a.Amount));
+
+        Assert.All(result.Lines, AssertCasInvariants);
+        // Truncated proportional split (2400 × 4000/12000 truncates to 799.99), remainder on the last line.
+        Assert.Equal(new[] { 799.99m, 1600.01m }, result.Lines.Select(l => Oa23(l.Adjustments)));
+        Assert.Equal(new[] { 3200.01m, 6399.99m }, result.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(0m, result.Totals.TotalOopApplied);
+        Assert.Equal(0m, Snapshot(result, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+    }
+
     /// <summary>A primary claim (no COB) on the DRG path emits no OA-23.</summary>
     [Fact]
     public async Task Drg_Primary_NoCob_NoOa23()
