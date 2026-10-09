@@ -29,6 +29,13 @@ public interface IClaimsService
     Task<AdjudicationTransparencyData?> GetAdjudicationDataAsync(string claimId);
 
     /// <summary>
+    /// Prior claims the duplicate-claim stage matched this claim against
+    /// (claims-service <c>GET /claims/{id}/duplicate-matches</c>). Empty when
+    /// the claim has no duplicate findings or no longer exists.
+    /// </summary>
+    Task<List<ClaimDuplicateMatch>> GetDuplicateMatchesAsync(string claimId);
+
+    /// <summary>
     /// Search the claims-service v1 endpoint for a member; returns FHIR
     /// ExplanationOfBenefit resources wrapped with pagination metadata. Used
     /// by the portal Member Details dialog Claims tab; the dialog only shows
@@ -1012,6 +1019,52 @@ public class ClaimPendDetails
     public string PendReason { get; set; } = string.Empty;
     public DateTime PendedAt { get; set; }
     public List<ClaimPendEditFailure> EditFailures { get; set; } = new();
+    public List<ClaimPendDuplicateFinding> DuplicateFindings { get; set; } = new();
+}
+
+/// <summary>
+/// Portal projection of claims-service's <c>DuplicateFindingSnapshot</c>:
+/// one line the duplicate-claim stage flagged and the prior line it matched.
+/// </summary>
+public class ClaimPendDuplicateFinding
+{
+    public string DuplicateType { get; set; } = string.Empty;
+    public string RuleId { get; set; } = string.Empty;
+    public string? Message { get; set; }
+    public int LineNumber { get; set; }
+    public string? MatchedClaimId { get; set; }
+    public string? MatchedClaimNumber { get; set; }
+    public int? MatchedLineNumber { get; set; }
+}
+
+/// <summary>
+/// One prior claim a DUPLICATE-pended claim matched, from claims-service
+/// <c>GET /claims/{id}/duplicate-matches</c>. Shown in the claim-detail
+/// "Possible duplicates" panel.
+/// </summary>
+public class ClaimDuplicateMatch
+{
+    public string MatchedClaimId { get; set; } = string.Empty;
+    public string? MatchedClaimNumber { get; set; }
+    /// <summary>"Exact" or "Suspect".</summary>
+    public string MatchType { get; set; } = string.Empty;
+    public bool MatchedClaimFound { get; set; }
+    public DateTime? ServiceDateFrom { get; set; }
+    public DateTime? ServiceDateTo { get; set; }
+    public decimal? BilledAmount { get; set; }
+    public string? Status { get; set; }
+    public List<string> MatchedFields { get; set; } = new();
+    public List<ClaimDuplicateLineMatch> Lines { get; set; } = new();
+}
+
+public class ClaimDuplicateLineMatch
+{
+    public int LineNumber { get; set; }
+    public int? MatchedLineNumber { get; set; }
+    public string MatchType { get; set; } = string.Empty;
+    public string RuleId { get; set; } = string.Empty;
+    public List<string> MatchedFields { get; set; } = new();
+    public string? Message { get; set; }
 }
 
 public class ClaimPendEditFailure
@@ -2700,6 +2753,8 @@ public class WorkQueueItem
     public string? AiRationale { get; set; }
     public List<string> AiPolicyCitations { get; set; } = new();
     public string? AiExaminerAgreement { get; set; }
+    /// <summary>Claim numbers a DUPLICATE-pended claim matched; empty otherwise.</summary>
+    public List<string> DuplicateMatchedClaimNumbers { get; set; } = new();
 }
 
 // ---------------------------------------------------------------------------

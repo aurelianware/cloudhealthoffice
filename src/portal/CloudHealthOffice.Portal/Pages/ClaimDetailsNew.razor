@@ -131,6 +131,8 @@
             </MudPaper>
         }
 
+        <PossibleDuplicatesPanel Matches="_duplicateMatches" />
+
         @if (HasExaminerDispositionRecord)
         {
             <MudPaper Class="pa-5 mb-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-success);">
@@ -970,14 +972,71 @@
         ? "Back to Claims"
         : "Back to Adjudication Run";
 
-    protected override async Task OnInitializedAsync()
+    private List<ClaimDuplicateMatch> _duplicateMatches = new();
+    private string? _loadedClaimId;
+
+    // Loads on parameter set (not just init) so following a "Possible
+    // duplicates" link from /claims/{a} to /claims/{b} reloads the page
+    // instead of keeping claim a's data under claim b's URL.
+    protected override async Task OnParametersSetAsync()
     {
+        if (string.Equals(_loadedClaimId, ClaimId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var claimId = ClaimId;
+        _loadedClaimId = claimId;
+        ResetClaimScopedState();
         BuildBreadcrumbs();
 
         await LoadClaimDetails();
+        if (!IsCurrentClaim(claimId))
+        {
+            return; // superseded by a newer ClaimId while loading
+        }
+
         BuildBreadcrumbs();
         // Load adjudication data in background (fire-and-forget, non-blocking)
-        _ = LoadAdjudicationDataAsync();
+        _ = LoadAdjudicationDataAsync(claimId);
+        _ = LoadDuplicateMatchesAsync(claimId);
+    }
+
+    // Everything that belongs to one claim. Cleared when ClaimId changes so
+    // nothing from the previous claim (notably a draft note, which AddNoteAsync
+    // would otherwise post to the new claim) carries over.
+    // _exportingEob is left alone: an in-flight export clears it itself.
+    private void ResetClaimScopedState()
+    {
+        _claim = null;
+        _adjudicationData = null;
+        _loadingAdjudication = false;
+        _duplicateMatches = new();
+        _noteInput = string.Empty;
+        _serviceError = null;
+    }
+
+    private bool IsCurrentClaim(string claimId) =>
+        string.Equals(_loadedClaimId, claimId, StringComparison.Ordinal);
+
+    private async Task LoadDuplicateMatchesAsync(string claimId)
+    {
+        // Only DUPLICATE-pended claims carry findings; skip the call otherwise.
+        if (_claim?.PendDetails?.DuplicateFindings is not { Count: > 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var matches = await ClaimsService.GetDuplicateMatchesAsync(_claim.ClaimId is { Length: > 0 } id ? id : claimId);
+            if (IsCurrentClaim(claimId))
+            {
+                _duplicateMatches = matches;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { /* duplicate matches are supplementary to the claim detail */ }
     }
 
     private void BuildBreadcrumbs()
@@ -1003,18 +1062,26 @@
         _breadcrumbItems.Add(new BreadcrumbItem(currentClaimLabel, href: null, disabled: true));
     }
 
-    private async Task LoadAdjudicationDataAsync()
+    // Scoped to the claim that started it: if ClaimId changes while the
+    // request is in flight, the late result and loading flag are dropped so
+    // they can't overwrite the newer claim's state.
+    private async Task LoadAdjudicationDataAsync(string claimId)
     {
         _loadingAdjudication = true;
+        AdjudicationTransparencyData? data = null;
         try
         {
-            _adjudicationData = await ClaimsService.GetAdjudicationDataAsync(ClaimId);
+            data = await ClaimsService.GetAdjudicationDataAsync(claimId);
         }
         catch { /* adjudication detail is optional */ }
         finally
         {
-            _loadingAdjudication = false;
-            await InvokeAsync(StateHasChanged);
+            if (IsCurrentClaim(claimId))
+            {
+                _adjudicationData = data;
+                _loadingAdjudication = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
@@ -1029,27 +1096,38 @@
 
     private async Task LoadClaimDetails()
     {
+        var claimId = ClaimId;
         _loading = true;
         StateHasChanged();
 
+        ClaimDetails? claim = null;
+        string? serviceError = null;
         try
         {
-            _claim = await ClaimsService.GetClaimByIdAsync(ClaimId);
+            claim = await ClaimsService.GetClaimByIdAsync(claimId);
         }
         catch (ServiceUnavailableException ex)
         {
-            _serviceError = ex.Message;
-            _claim = null;
+            serviceError = ex.Message;
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading claim: {ex.Message}", Severity.Error);
-            _claim = null;
+            if (IsCurrentClaim(claimId))
+            {
+                Snackbar.Add($"Error loading claim: {ex.Message}", Severity.Error);
+            }
         }
         finally
         {
-            _loading = false;
-            StateHasChanged();
+            // A newer ClaimId may have started its own load meanwhile; only
+            // the load for the claim now on screen commits its result.
+            if (IsCurrentClaim(claimId))
+            {
+                _claim = claim;
+                if (serviceError is not null) _serviceError = serviceError;
+                _loading = false;
+                StateHasChanged();
+            }
         }
     }
 

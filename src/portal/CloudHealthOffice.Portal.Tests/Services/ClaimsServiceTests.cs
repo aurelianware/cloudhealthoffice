@@ -155,6 +155,91 @@ public class ClaimsServiceTests
         result.Should().BeNull();
     }
 
+    // ── GetDuplicateMatchesAsync ──
+
+    [Fact]
+    public async Task GetDuplicateMatchesAsync_WhenApiFails_ThrowsServiceUnavailableException()
+    {
+        var sut = CreateService();
+        var ex = await Assert.ThrowsAsync<ServiceUnavailableException>(
+            () => sut.GetDuplicateMatchesAsync("claim-1"));
+        ex.ServiceName.Should().Be("Claims Service");
+    }
+
+    [Fact]
+    public async Task GetDuplicateMatchesAsync_WhenApiReturns404_ReturnsEmpty()
+    {
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.NotFound)));
+
+        var result = await sut.GetDuplicateMatchesAsync("claim-gone");
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetDuplicateMatchesAsync_WhenApiReturns200_CallsEndpointAndDeserializes()
+    {
+        const string json = """
+            [{
+              "matchedClaimId": "prior-1",
+              "matchedClaimNumber": "CLM-PRIOR-1",
+              "matchType": "Exact",
+              "matchedClaimFound": true,
+              "serviceDateFrom": "2026-05-01T00:00:00Z",
+              "serviceDateTo": "2026-05-01T00:00:00Z",
+              "billedAmount": 125.50,
+              "status": "Paid",
+              "matchedFields": ["Member", "Service dates", "Procedure code"],
+              "lines": [{ "lineNumber": 1, "matchedLineNumber": 2, "matchType": "Exact", "ruleId": "DUP001",
+                          "matchedFields": ["Member"], "message": "Line 1 vs claim CLM-PRIOR-1" }]
+            }]
+            """;
+        var handler = new FakeHandler(HttpStatusCode.OK, json);
+        var sut = CreateService(new HttpClient(handler));
+
+        var result = await sut.GetDuplicateMatchesAsync("claim/1");
+
+        handler.CapturedUrls.Should().ContainSingle()
+            .Which.Should().Be("http://localhost:5000/claims/claim%2F1/duplicate-matches");
+        var match = result.Should().ContainSingle().Subject;
+        match.MatchedClaimId.Should().Be("prior-1");
+        match.MatchedClaimNumber.Should().Be("CLM-PRIOR-1");
+        match.MatchType.Should().Be("Exact");
+        match.BilledAmount.Should().Be(125.50m);
+        match.Status.Should().Be("Paid");
+        match.ServiceDateFrom.Should().NotBeNull();
+        match.MatchedFields.Should().Equal("Member", "Service dates", "Procedure code");
+        match.Lines.Should().ContainSingle().Which.MatchedLineNumber.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetClaimByIdAsync_DeserializesPendDuplicateFindings()
+    {
+        const string json = """
+            {
+              "id": "claim-dup",
+              "claimNumber": "CLM-DUP",
+              "status": "Pended",
+              "pendDetails": {
+                "pendCode": "DUPLICATE",
+                "pendReason": "Suspect duplicate",
+                "duplicateFindings": [{
+                  "duplicateType": "Suspect", "ruleId": "DUP002", "lineNumber": 1,
+                  "matchedClaimId": "prior-1", "matchedClaimNumber": "CLM-PRIOR-1", "matchedLineNumber": 3
+                }]
+              }
+            }
+            """;
+        var sut = CreateService(new HttpClient(new FakeHandler(HttpStatusCode.OK, json)));
+
+        var claim = await sut.GetClaimByIdAsync("claim-dup");
+
+        var finding = claim!.PendDetails!.DuplicateFindings.Should().ContainSingle().Subject;
+        finding.DuplicateType.Should().Be("Suspect");
+        finding.MatchedClaimId.Should().Be("prior-1");
+        finding.MatchedLineNumber.Should().Be(3);
+    }
+
     // ════════════════════════════════════════════════════════════════
     // Happy-path and edge-case tests
     // ════════════════════════════════════════════════════════════════
