@@ -190,7 +190,26 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
         await _service.DidNotReceiveWithAnyArgs().SubmitAsync(default!, default!, default, default, default);
         await _transactions.Received(1).CreateAsync(Arg.Is<ClaimImportTransaction>(t =>
             t.ClaimNumber == "CLM-RAW837-0009" && t.Status == "Rejected"
-            && t.Errors.Any(e => e.Contains("SNIP 3"))));
+            && t.Errors.Any(e => e.Contains("SNIP 3"))
+            && t.TransactionSetControlNumber == "0001"
+            && t.AcknowledgmentCode == "R"
+            && t.Acknowledgment999ControlNumber != null
+            && result.Acknowledgment999!.Contains("*" + t.Acknowledgment999ControlNumber + "*0*")));
+    }
+
+    [Fact]
+    public async Task ImportRaw837_FileCutOffBeforeSe_IsRejectedNotA500()
+    {
+        var truncated = SingleClaimSample[..SingleClaimSample.IndexOf("SE*", StringComparison.Ordinal)];
+
+        var response = await _client.PostAsync("/api/v1/claims/import/raw837", BuildFileContent(truncated));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<Raw837ImportResult>();
+        Assert.Equal("R", result!.AcknowledgmentCode);
+        Assert.Contains(result.SnipIssues, i => i.RuleId == "L1-SE-MISSING");
+        Assert.All(result.Results, r => Assert.False(r.Success));
+        await _service.DidNotReceiveWithAnyArgs().SubmitAsync(default!, default!, default, default, default);
     }
 
     [Fact]

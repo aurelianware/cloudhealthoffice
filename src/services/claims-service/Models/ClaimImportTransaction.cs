@@ -32,4 +32,17 @@ public class ClaimImportTransaction
     public string Status { get; set; } = "Accepted";
 
     public List<string> Errors { get; set; } = [];
+
+    /// <summary>ST02 of the 837 transaction set the claim came from (null when SNIP validation is disabled).</summary>
+    public string? TransactionSetControlNumber { get; set; }
+
+    /// <summary>SNIP outcome of that transaction set, as in 999 IK501: A, E or R.</summary>
+    public string? AcknowledgmentCode { get; set; }
+
+    /// <summary>
+    /// ISA13 of the 999 returned for the upload, linking the record to the
+    /// acknowledgment. The 999 text itself is per file and is returned in
+    /// the import response, not stored on each claim record.
+    /// </summary>
+    public string? Acknowledgment999ControlNumber { get; set; }
 }

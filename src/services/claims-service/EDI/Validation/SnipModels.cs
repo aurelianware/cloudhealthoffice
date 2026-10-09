@@ -109,9 +109,24 @@ public sealed class SnipTransactionSetOutcome
 
     public List<SnipIssue> Issues { get; } = [];
 
+    /// <summary>
+    /// Set when the enclosing functional group or interchange is rejected
+    /// (group error codes, ISA/IEA errors): the set is rejected whatever its
+    /// own findings, so IK5, AK9 and <see cref="Accepted"/> always agree.
+    /// </summary>
+    public bool RejectedByEnvelope { get; set; }
+
+    /// <summary>Findings not listed because a finding cap was reached.</summary>
+    public int SuppressedFindings { get; set; }
+
+    /// <summary>True when a finding dropped by a cap was an error: the set is still rejected.</summary>
+    public bool SuppressedError { get; set; }
+
     /// <summary>999 IK5 acknowledgment code: A accepted, E accepted with errors, R rejected.</summary>
     public string AcknowledgmentCode =>
-        Issues.Any(i => i.Severity == SnipSeverity.Error) ? "R" : Issues.Count > 0 ? "E" : "A";
+        RejectedByEnvelope || SuppressedError || Issues.Any(i => i.Severity == SnipSeverity.Error) ? "R"
+        : Issues.Count > 0 || SuppressedFindings > 0 ? "E"
+        : "A";
 
     public bool Accepted => AcknowledgmentCode != "R";
 
@@ -128,26 +143,60 @@ public sealed class SnipFunctionalGroupOutcome
     public string? ApplicationSenderCode { get; init; }
     public string? ApplicationReceiverCode { get; init; }
 
+    /// <summary>The interchange the group arrived in.</summary>
+    public required SnipInterchangeOutcome Interchange { get; init; }
+
     /// <summary>GE01 as sent, when parseable.</summary>
     public int? DeclaredTransactionSetCount { get; set; }
 
     public List<SnipTransactionSetOutcome> TransactionSets { get; } = [];
 
-    /// <summary>999 AK905–AK909 functional group syntax error codes.</summary>
+    /// <summary>
+    /// 999 AK905–AK909 functional group error codes at a rejecting Level 1
+    /// setting. Any code rejects the whole group.
+    /// </summary>
     public List<string> GroupErrorCodes { get; } = [];
 
-    /// <summary>999 AK901: A, E, P (partially accepted) or R.</summary>
+    /// <summary>Group error codes found while Level 1 is set to Warn: reported in AK9, the group is not rejected.</summary>
+    public List<string> GroupWarningCodes { get; } = [];
+
+    /// <summary>True when the group's own codes or its interchange reject it.</summary>
+    public bool Rejected => GroupErrorCodes.Count > 0 || Interchange.Rejected;
+
+    /// <summary>999 AK901: A, E, P (partially accepted) or R. Always consistent with the sets' <see cref="SnipTransactionSetOutcome.Accepted"/>.</summary>
     public string AcknowledgmentCode
     {
         get
         {
-            if (GroupErrorCodes.Count > 0 || TransactionSets.Count == 0) return "R";
+            if (Rejected || TransactionSets.Count == 0) return "R";
             var accepted = TransactionSets.Count(t => t.Accepted);
             if (accepted == 0) return "R";
             if (accepted < TransactionSets.Count) return "P";
-            return TransactionSets.Any(t => t.AcknowledgmentCode == "E") ? "E" : "A";
+            return TransactionSets.Any(t => t.AcknowledgmentCode == "E") || GroupWarningCodes.Count > 0 ? "E" : "A";
         }
     }
+}
+
+/// <summary>One inbound ISA/IEA interchange; its 999 goes back to its own sender.</summary>
+public sealed class SnipInterchangeOutcome
+{
+    public string? SenderQualifier { get; init; }
+    public string? SenderId { get; init; }
+    public string? ReceiverQualifier { get; init; }
+    public string? ReceiverId { get; init; }
+    public string? ControlNumber { get; init; }
+
+    /// <summary>ISA15 as sent (P or T); echoed in the 999.</summary>
+    public string? UsageIndicator { get; init; }
+
+    /// <summary>
+    /// True when an ISA/IEA-level error at a rejecting Level 1 setting was
+    /// found. Every group and transaction set in it is then rejected
+    /// (AK9 R, IK5 R). A TA1 is not produced.
+    /// </summary>
+    public bool Rejected { get; set; }
+
+    public List<SnipFunctionalGroupOutcome> FunctionalGroups { get; } = [];
 }
 
 /// <summary>Result of SNIP-validating one 837 file.</summary>
@@ -156,17 +205,16 @@ public sealed class SnipValidationResult
     /// <summary>The tokenized file, or null when it could not be tokenized at all.</summary>
     public X12Document? Document { get; init; }
 
-    /// <summary>ISA06 / ISA08 / ISA13 of the (first) inbound interchange, for the 999 envelope.</summary>
-    public string? InterchangeSenderQualifier { get; set; }
-    public string? InterchangeSenderId { get; set; }
-    public string? InterchangeReceiverQualifier { get; set; }
-    public string? InterchangeReceiverId { get; set; }
-    public string? InterchangeControlNumber { get; set; }
+    public List<SnipInterchangeOutcome> Interchanges { get; } = [];
 
-    public List<SnipFunctionalGroupOutcome> FunctionalGroups { get; } = [];
+    public IEnumerable<SnipFunctionalGroupOutcome> FunctionalGroups =>
+        Interchanges.SelectMany(i => i.FunctionalGroups);
 
     /// <summary>Issues outside any transaction set (ISA/IEA, GS/GE, unreadable file).</summary>
     public List<SnipIssue> EnvelopeIssues { get; } = [];
+
+    /// <summary>True when the per-file finding cap was reached and later findings were dropped.</summary>
+    public bool FindingsTruncated { get; set; }
 
     public IEnumerable<SnipTransactionSetOutcome> TransactionSets =>
         FunctionalGroups.SelectMany(g => g.TransactionSets);
@@ -175,14 +223,12 @@ public sealed class SnipValidationResult
         EnvelopeIssues.Concat(TransactionSets.SelectMany(t => t.Issues));
 
     /// <summary>
-    /// Transaction sets whose claims may be submitted: none when an
-    /// envelope-level issue rejects the file; otherwise the accepted sets of
-    /// groups without group-level errors.
+    /// Transaction sets whose claims may be submitted. Exactly the sets the
+    /// 999 acknowledges with IK5 A or E (envelope rejections are folded into
+    /// each set's <see cref="SnipTransactionSetOutcome.RejectedByEnvelope"/>).
     /// </summary>
     public IEnumerable<SnipTransactionSetOutcome> AcceptedTransactionSets =>
-        Document is null || EnvelopeIssues.Any(i => i.Severity == SnipSeverity.Error)
-            ? []
-            : FunctionalGroups.Where(g => g.GroupErrorCodes.Count == 0).SelectMany(g => g.TransactionSets).Where(t => t.Accepted);
+        Document is null ? [] : TransactionSets.Where(t => t.Accepted);
 
     /// <summary>
     /// Overall code: R when the file is unreadable or every group is
@@ -193,15 +239,16 @@ public sealed class SnipValidationResult
     {
         get
         {
-            if (Document is null || FunctionalGroups.Count == 0) return "R";
-            if (EnvelopeIssues.Any(i => i.Severity == SnipSeverity.Error)) return "R";
-            var codes = FunctionalGroups.Select(g => g.AcknowledgmentCode).ToList();
+            var groups = FunctionalGroups.ToList();
+            if (Document is null || groups.Count == 0) return "R";
+            var codes = groups.Select(g => g.AcknowledgmentCode).ToList();
             if (codes.All(c => c == "R")) return "R";
             if (codes.Any(c => c is "R" or "P")) return "P";
             return codes.Any(c => c == "E") || EnvelopeIssues.Count > 0 ? "E" : "A";
         }
     }
 }
+
 
 /// <summary>
 /// Configuration (section <c>ClaimsImport:Snip</c>). Defaults: levels 1–4
@@ -221,6 +268,15 @@ public sealed class Snip837ValidationOptions
     public SnipAction Level3 { get; set; } = SnipAction.Reject;
     public SnipAction Level4 { get; set; } = SnipAction.Reject;
     public SnipAction Level5 { get; set; } = SnipAction.Warn;
+
+    /// <summary>
+    /// Findings kept per transaction set; once reached, collection stops for
+    /// that set and one "too many findings" finding is added.
+    /// </summary>
+    public int MaxFindingsPerTransactionSet { get; set; } = 1000;
+
+    /// <summary>Findings kept for the whole file (envelope plus all transaction sets).</summary>
+    public int MaxFindingsPerFile { get; set; } = 1000;
 
     public SnipAction ActionFor(SnipLevel level) => level switch
     {

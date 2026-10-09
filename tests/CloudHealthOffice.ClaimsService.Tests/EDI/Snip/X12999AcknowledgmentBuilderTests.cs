@@ -28,7 +28,7 @@ public class X12999AcknowledgmentBuilderTests
     {
         var (_, segs) = Build(Professional());
 
-        Assert.Equal("ISA*00*          *00*          *ZZ*CHO            *ZZ*SUB001         *260115*1305*^*00501*000000042*0*P*:", Seg(segs, "ISA"));
+        Assert.Equal("ISA*00*          *00*          *ZZ*CHO            *ZZ*SUB001         *260115*1305*^*00501*000000042*0*T*:", Seg(segs, "ISA"));
         Assert.Equal("GS*FA*CHO*SUB001*20260115*1305*42*X*005010X231A1", Seg(segs, "GS"));
         Assert.Equal("ST*999*0001*005010X231A1", Seg(segs, "ST"));
         Assert.Equal("AK1*HC*101*005010X222A1", Seg(segs, "AK1"));

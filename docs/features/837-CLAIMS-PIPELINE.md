@@ -105,6 +105,23 @@ reference, its checks are format checks only.
 `POST /api/v1/claims/import/raw837/validate` runs the same validation and returns the
 findings and the 999 without submitting anything.
 
+Rules and limits:
+
+- **Envelope rejections reach the 999.**
+  - An ISA/IEA error at a rejecting Level 1 rejects every set in that interchange (IK5 R, AK9 R).
+  - A GS/GE error (GS01/04/06/08, GE count or control, a missing GE) rejects its group, with AK905 codes.
+  - With Level 1 set to `Warn`, these group codes are listed in AK9 under `E` and nothing is rejected. With `Off`, they are not emitted.
+  - The 999 always acknowledges exactly the transaction sets that the import submits.
+- **One 999 interchange per inbound interchange.** Each is addressed to that interchange's sender and echoes its ISA15 (`T`/`P`). AK101 echoes GS01.
+- **Inpatient vs outpatient** (837I) comes from the full CLM05-1 facility type and classification code:
+  - Inpatient: 11, 12, 18, 21, 22, 28, 41, 65, 66, 86.
+  - Outpatient: 13, 14, 23, 43, 71–77, 79, 83, 85.
+  - Codes in neither table, such as home health and hospice, only produce warnings for the DTP*435, CL1 and line DTP*472 rules.
+- **Finding caps.** Findings are capped per transaction set and per file (`MaxFindingsPerTransactionSet` and `MaxFindingsPerFile`, default 1,000 each), with a single "too many findings" entry when a cap is hit. Findings dropped by a cap still count toward acceptance. The 999 lists at most 1,000 IK3 loops per set.
+- **Never throws.** A file cut off mid-transaction-set is rejected with L1 findings. An unexpected failure becomes an `L1-VALIDATION-FAILED` finding.
+- **Echoed values.** Segment ids are echoed only as valid 2–3 character ids; anything else is replaced with `???`.
+- **Import record.** Each `ClaimImportTransaction` records its transaction set's ST02 and IK5 code and the 999's ISA13. The 999 text itself is returned in the response and is not stored.
+
 ## Why `BenefitPlanId` starts blank
 
 `X12837ClaimMapper` deliberately does not try to resolve `BenefitPlanId`/`CoverageId` from

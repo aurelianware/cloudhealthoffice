@@ -49,7 +49,10 @@ public static partial class SnipCodeSets
         "81", "99",
     };
 
-    /// <summary>ICD-10-CM as sent in X12: letter (not U), digit, then 1–5 alphanumerics, no decimal point.</summary>
+    /// <summary>
+    /// ICD-10-CM as sent in X12: letter, digit, then 1–5 alphanumerics, no
+    /// decimal point. Chapter U is included (U07.1 COVID-19, U09.9 etc.).
+    /// </summary>
     public static bool IsIcd10CmFormat(string code) => Icd10CmRegex().IsMatch(code);
 
     /// <summary>ICD-10-PCS: exactly 7 characters, digits and letters other than I and O.</summary>
@@ -92,7 +95,7 @@ public static partial class SnipCodeSets
         return sum % 10 == 0;
     }
 
-    [GeneratedRegex(@"^[A-TV-Z][0-9][0-9A-Z]{1,5}$")]
+    [GeneratedRegex(@"^[A-Z][0-9][0-9A-Z]{1,5}$")]
     private static partial Regex Icd10CmRegex();
 
     [GeneratedRegex(@"^[0-9A-HJ-NP-Z]{7}$")]

@@ -160,18 +160,21 @@ public class ClaimsV1Controller : ControllerBase
         // rejected imports) but never submitted.
         Snip.SnipValidationResult? snip = null;
         string? acknowledgment = null;
-        List<(CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim Claim, List<string>? SnipErrors)> parsedClaims;
+        string? acknowledgmentControl = null;
+        List<ParsedClaim> parsedClaims;
         try
         {
             if (_snipOptions.Enabled)
             {
                 snip = _snipValidator.Validate(ediContent);
+                var control = Random.Shared.NextInt64(1, 1_000_000_000);
                 acknowledgment = Snip.X12999AcknowledgmentBuilder.Build(snip, new Snip.X12999AcknowledgmentBuilder.Options
                 {
-                    ControlNumber = Random.Shared.NextInt64(1, 1_000_000_000),
+                    ControlNumber = control,
                 });
+                acknowledgmentControl = acknowledgment is null ? null : control.ToString("D9", System.Globalization.CultureInfo.InvariantCulture);
 
-                if (snip.Document is null)
+                if (snip.Document is null || !snip.FunctionalGroups.Any())
                 {
                     _logger.LogWarning("Uploaded 837 file {FileName} is not readable X12", SanitizeForLog(file.FileName));
                     return BadRequest(SnipFailure(file.FileName, "Could not parse 837 file: the file is not a readable X12 interchange.", snip, acknowledgment));
@@ -182,7 +185,7 @@ public class ClaimsV1Controller : ControllerBase
             else
             {
                 parsedClaims = ClaimsService.EDI.Inbound.X12837Parser.Parse(ediContent)
-                    .Select(c => (c, (List<string>?)null))
+                    .Select(c => new ParsedClaim(c, null, null))
                     .ToList();
             }
         }
@@ -219,7 +222,7 @@ public class ClaimsV1Controller : ControllerBase
             },
             async (index, cancellationToken) =>
         {
-            var (parsed, snipErrors) = parsedClaims[index];
+            var (parsed, snipErrors, snipSet) = parsedClaims[index];
             var adapterClaim = ClaimsService.EDI.Inbound.X12837ClaimMapper.Map(parsed, tenantId);
             ClaimSubmissionResult? result = null;
             if (snipErrors is null)
@@ -258,7 +261,10 @@ public class ClaimsV1Controller : ControllerBase
                     MemberId = adapterClaim.MemberId,
                     FileName = file.FileName,
                     Status = success ? "Accepted" : "Rejected",
-                    Errors = errors
+                    Errors = errors,
+                    TransactionSetControlNumber = snipSet?.ControlNumber,
+                    AcknowledgmentCode = snipSet?.AcknowledgmentCode,
+                    Acknowledgment999ControlNumber = acknowledgmentControl,
                 });
             }
             catch (Exception ex)
@@ -328,8 +334,7 @@ public class ClaimsV1Controller : ControllerBase
     /// SNIP outcome of the set it came from. Claims in a rejected set carry
     /// that set's error messages (the claim's own first, then set-level ones).
     /// </summary>
-    private static List<(CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim Claim, List<string>? SnipErrors)> ClaimsBySnipOutcome(
-        Snip.SnipValidationResult snip)
+    private static List<ParsedClaim> ClaimsBySnipOutcome(Snip.SnipValidationResult snip)
     {
         var doc = snip.Document!;
         var accepted = snip.AcceptedTransactionSets.ToHashSet();
@@ -337,7 +342,7 @@ public class ClaimsV1Controller : ControllerBase
             .Where(i => i.Severity == Snip.SnipSeverity.Error)
             .Select(i => $"SNIP {(int)i.Level} {i.RuleId}: {i.Message}")
             .ToList();
-        var claims = new List<(CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim, List<string>?)>();
+        var claims = new List<ParsedClaim>();
 
         foreach (var ts in snip.TransactionSets)
         {
@@ -362,7 +367,7 @@ public class ClaimsV1Controller : ControllerBase
             {
                 if (accepted.Contains(ts))
                 {
-                    claims.Add((claim, null));
+                    claims.Add(new ParsedClaim(claim, null, ts));
                     continue;
                 }
 
@@ -376,12 +381,18 @@ public class ClaimsV1Controller : ControllerBase
                     .ToList();
                 if (errors.Count == 0)
                     errors.Add("SNIP: the transaction set containing this claim was rejected.");
-                claims.Add((claim, errors));
+                claims.Add(new ParsedClaim(claim, errors, ts));
             }
         }
 
         return claims;
     }
+
+    /// <summary>A parsed claim, the SNIP errors that keep it from being submitted (null = submit), and its transaction set.</summary>
+    private sealed record ParsedClaim(
+        CloudHealthOffice.ClaimsScrubEngine.Models.X12837Claim Claim,
+        List<string>? SnipErrors,
+        Snip.SnipTransactionSetOutcome? Set);
 
     private static Raw837ImportResult SnipFailure(
         string fileName, string error, Snip.SnipValidationResult snip, string? acknowledgment) => new()

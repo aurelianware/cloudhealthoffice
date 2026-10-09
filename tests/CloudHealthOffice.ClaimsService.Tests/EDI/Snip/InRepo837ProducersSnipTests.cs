@@ -28,9 +28,11 @@ public class InRepo837ProducersSnipTests
             .Replace("${PROVIDER_NPI}", "1234567893");
         edi = Regex.Replace(edi, @"\$\{[A-Z_]+\}", "SMOKE001");
 
+        // Fully clean: no errors and no warnings (e.g. no decimal-point ICD
+        // codes, no claim-level DTP*472).
         var result = new X12837SnipValidator().Validate(edi);
-        var errors = result.AllIssues.Where(i => i.Severity == SnipSeverity.Error).Select(i => $"{i.RuleId}: {i.Message}");
-        Assert.Empty(errors);
+        Assert.Empty(result.AllIssues.Select(i => $"{i.RuleId}: {i.Message}"));
+        Assert.Equal("A", result.AcknowledgmentCode);
     }
 
     private static string RepoRoot()

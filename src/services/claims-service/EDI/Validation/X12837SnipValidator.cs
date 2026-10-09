@@ -93,7 +93,6 @@ public sealed class X12837SnipValidator : ISnip837Validator
         _options = options ?? new Snip837ValidationOptions();
         _codeSets = codeSets;
     }
-
     public SnipValidationResult Validate(string ediContent)
     {
         X12Document doc;
@@ -103,44 +102,87 @@ public sealed class X12837SnipValidator : ISnip837Validator
         }
         catch (X12FormatException ex)
         {
-            var unreadable = new SnipValidationResult();
-            unreadable.EnvelopeIssues.Add(new SnipIssue
-            {
-                Level = SnipLevel.Syntax,
-                RuleId = "L1-ISA-UNREADABLE",
-                Message = $"The file is not a readable X12 interchange: {ex.Message}",
-                SegmentId = "ISA",
-            });
-            return unreadable;
+            return Unreadable($"The file is not a readable X12 interchange: {ex.Message}", "L1-ISA-UNREADABLE");
         }
 
-        var result = new SnipValidationResult { Document = doc };
-        new EnvelopeWalker(this, doc, result).Run();
-        return result;
+        try
+        {
+            var result = new SnipValidationResult { Document = doc };
+            new EnvelopeWalker(this, doc, result, new FindingBudget(_options.MaxFindingsPerFile)).Run();
+            return result;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Validation must never throw: an unexpected failure is itself a
+            // syntax finding that rejects the file (no transaction set is
+            // accepted, no 999 is built).
+            var failed = new SnipValidationResult { Document = doc };
+            failed.EnvelopeIssues.Add(new SnipIssue
+            {
+                Level = SnipLevel.Syntax,
+                RuleId = "L1-VALIDATION-FAILED",
+                Message = $"The file could not be validated ({ex.GetType().Name}); it is rejected.",
+            });
+            return failed;
+        }
+    }
+
+    private static SnipValidationResult Unreadable(string message, string rule)
+    {
+        var unreadable = new SnipValidationResult();
+        unreadable.EnvelopeIssues.Add(new SnipIssue
+        {
+            Level = SnipLevel.Syntax,
+            RuleId = rule,
+            Message = message,
+            SegmentId = "ISA",
+        });
+        return unreadable;
+    }
+
+    /// <summary>Segment ids echoed into findings or the 999: at most 3 characters, or a placeholder when not a valid id.</summary>
+    internal static string SafeSegmentId(string? id) =>
+        id is { Length: >= 2 and <= 3 } && char.IsAsciiLetterUpper(id[0]) && id.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c))
+            ? id
+            : "???";
+
+    /// <summary>Envelope values echoed into messages: short alphanumeric tokens only.</summary>
+    private static string SafeValue(string? value) =>
+        value is null ? string.Empty
+        : value.Length <= 20 && value.All(c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '.' or '-' or '_') ? value
+        : "(not shown)";
+
+    /// <summary>Per-file finding budget shared by the envelope and every transaction set.</summary>
+    private sealed class FindingBudget(int perFile)
+    {
+        public int Used { get; set; }
+        public bool Exhausted => Used >= Math.Max(perFile, 0);
+        public bool FileCapReported { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // Envelope: ISA/IEA, GS/GE, ST/SE
     // ═══════════════════════════════════════════════════════════════════
 
-    private sealed class EnvelopeWalker(X12837SnipValidator owner, X12Document doc, SnipValidationResult result)
+    private sealed class EnvelopeWalker(X12837SnipValidator owner, X12Document doc, SnipValidationResult result, FindingBudget budget)
     {
         private readonly IReadOnlyList<X12Segment> _segs = doc.Segments;
+        private SnipInterchangeOutcome? _interchange;
 
         public void Run()
         {
-            int isaIndex = -1;
+            var inInterchange = false;
             string? isaControl = null;
             var groupsInInterchange = 0;
             SnipFunctionalGroupOutcome? group = null;
             var tsInGroup = 0;
             var stControlNumbers = new HashSet<string>(StringComparer.Ordinal);
+            var groupControlNumbers = new HashSet<string>(StringComparer.Ordinal);
 
             void CloseGroupWithoutTrailer()
             {
                 if (group is null) return;
-                group.GroupErrorCodes.Add("3"); // functional group trailer missing
-                Envelope(SnipLevel.Syntax, "L1-GE-MISSING", $"Functional group {group.ControlNumber} has no GE trailer.", "GE");
+                GroupError(group, "3", "L1-GE-MISSING", $"Functional group {SafeValue(group.ControlNumber)} has no GE trailer.", "GE");
                 group = null;
             }
 
@@ -150,97 +192,93 @@ public sealed class X12837SnipValidator : ISnip837Validator
                 switch (seg.Id)
                 {
                     case "ISA":
-                        if (isaIndex >= 0)
+                        if (inInterchange)
                         {
                             CloseGroupWithoutTrailer();
-                            Envelope(SnipLevel.Syntax, "L1-IEA-MISSING", $"Interchange {isaControl} has no IEA trailer.", "IEA");
+                            InterchangeError("L1-IEA-MISSING", $"Interchange {SafeValue(isaControl)} has no IEA trailer.", "IEA");
                         }
-                        isaIndex = i;
+                        inInterchange = true;
                         isaControl = seg.Element(12);
                         groupsInInterchange = 0;
-                        ValidateIsa(seg);
-                        if (result.InterchangeControlNumber is null)
+                        groupControlNumbers.Clear();
+                        _interchange = new SnipInterchangeOutcome
                         {
-                            result.InterchangeSenderQualifier = seg.Element(4)?.Trim();
-                            result.InterchangeSenderId = seg.Element(5)?.Trim();
-                            result.InterchangeReceiverQualifier = seg.Element(6)?.Trim();
-                            result.InterchangeReceiverId = seg.Element(7)?.Trim();
-                            result.InterchangeControlNumber = isaControl;
-                        }
+                            SenderQualifier = seg.Element(4)?.Trim(),
+                            SenderId = seg.Element(5)?.Trim(),
+                            ReceiverQualifier = seg.Element(6)?.Trim(),
+                            ReceiverId = seg.Element(7)?.Trim(),
+                            ControlNumber = isaControl,
+                            UsageIndicator = seg.Element(14) is "P" or "T" ? seg.Element(14) : null,
+                        };
+                        result.Interchanges.Add(_interchange);
+                        ValidateIsa(seg);
                         break;
 
                     case "IEA":
                         CloseGroupWithoutTrailer();
+                        if (!inInterchange)
+                        {
+                            InterchangeError("L1-IEA-UNMATCHED", "IEA segment has no matching ISA.", "IEA");
+                            break;
+                        }
                         if (seg.Element(1) != isaControl)
-                            Envelope(SnipLevel.Syntax, "L1-IEA-CONTROL", $"IEA02 '{seg.Element(1)}' does not match ISA13 '{isaControl}'.", "IEA");
+                            InterchangeError("L1-IEA-CONTROL", $"IEA02 '{SafeValue(seg.Element(1))}' does not match ISA13 '{SafeValue(isaControl)}'.", "IEA");
                         if (!int.TryParse(seg.Element(0), NumberStyles.None, CultureInfo.InvariantCulture, out var declaredGroups) || declaredGroups != groupsInInterchange)
-                            Envelope(SnipLevel.Syntax, "L1-IEA-COUNT", $"IEA01 '{seg.Element(0)}' does not match the {groupsInInterchange} functional group(s) in the interchange.", "IEA");
-                        isaIndex = -1;
+                            InterchangeError("L1-IEA-COUNT", $"IEA01 '{SafeValue(seg.Element(0))}' does not match the {groupsInInterchange} functional group(s) in the interchange.", "IEA");
+                        inInterchange = false;
                         break;
 
                     case "GS":
-                        if (isaIndex < 0)
-                            Envelope(SnipLevel.Syntax, "L1-GS-OUTSIDE-ISA", "GS segment appears outside an ISA/IEA interchange.", "GS");
                         CloseGroupWithoutTrailer();
+                        if (!inInterchange)
+                            InterchangeError("L1-GS-OUTSIDE-ISA", "GS segment appears outside an ISA/IEA interchange.", "GS");
                         groupsInInterchange++;
                         tsInGroup = 0;
                         stControlNumbers.Clear();
                         group = new SnipFunctionalGroupOutcome
                         {
+                            Interchange = CurrentInterchange(),
                             FunctionalIdentifier = seg.Element(0),
                             ApplicationSenderCode = seg.Element(1),
                             ApplicationReceiverCode = seg.Element(2),
                             ControlNumber = seg.Element(5),
                             VersionCode = seg.Element(7),
                         };
-                        result.FunctionalGroups.Add(group);
+                        group.Interchange.FunctionalGroups.Add(group);
                         if (seg.Element(0) != "HC")
-                        {
-                            group.GroupErrorCodes.Add("1"); // functional group not supported
-                            Envelope(SnipLevel.Syntax, "L1-GS01", $"GS01 must be HC for an 837, found '{seg.Element(0)}'.", "GS");
-                        }
+                            GroupError(group, "1", "L1-GS01", $"GS01 must be HC for an 837, found '{SafeValue(seg.Element(0))}'.", "GS");
                         if (seg.Element(7) is not { } gs08 || (gs08 != Professional && !Institutional.Contains(gs08)))
-                        {
-                            group.GroupErrorCodes.Add("2"); // functional group version not supported
-                            Envelope(SnipLevel.Syntax, "L1-GS08", $"GS08 '{seg.Element(7)}' is not a supported 837 version (005010X222A1, 005010X223A2).", "GS");
-                        }
+                            GroupError(group, "2", "L1-GS08", $"GS08 '{SafeValue(seg.Element(7))}' is not a supported 837 version (005010X222A1, 005010X223A2).", "GS");
                         if (seg.Element(5) is not { } gs06 || !gs06.All(char.IsAsciiDigit) || gs06.Length > 9)
-                        {
-                            group.GroupErrorCodes.Add("6"); // group control number violates syntax
-                            Envelope(SnipLevel.Syntax, "L1-GS06", "GS06 group control number must be 1-9 digits.", "GS");
-                        }
+                            GroupError(group, "6", "L1-GS06", "GS06 group control number must be 1-9 digits.", "GS");
+                        else if (!groupControlNumbers.Add(gs06))
+                            GroupError(group, "19", "L1-GS06-DUPLICATE", $"GS06 '{gs06}' is used by another functional group in this interchange.", "GS");
+                        // X12 716 has no date-specific AK905 code; 1 (group not supported) is the closest.
                         if (!IsDate(seg.Element(3), "yyyyMMdd"))
-                            Envelope(SnipLevel.Syntax, "L1-GS04", "GS04 is not a valid CCYYMMDD date.", "GS");
+                            GroupError(group, "1", "L1-GS04", "GS04 is not a valid CCYYMMDD date.", "GS");
                         break;
 
                     case "GE":
                         if (group is null)
                         {
-                            Envelope(SnipLevel.Syntax, "L1-GE-UNMATCHED", "GE segment has no matching GS.", "GE");
+                            InterchangeError("L1-GE-UNMATCHED", "GE segment has no matching GS.", "GE");
                             break;
                         }
                         if (seg.Element(1) != group.ControlNumber)
-                        {
-                            group.GroupErrorCodes.Add("4");
-                            Envelope(SnipLevel.Syntax, "L1-GE-CONTROL", $"GE02 '{seg.Element(1)}' does not match GS06 '{group.ControlNumber}'.", "GE");
-                        }
+                            GroupError(group, "4", "L1-GE-CONTROL", $"GE02 '{SafeValue(seg.Element(1))}' does not match GS06 '{SafeValue(group.ControlNumber)}'.", "GE");
                         if (int.TryParse(seg.Element(0), NumberStyles.None, CultureInfo.InvariantCulture, out var declaredSets))
                             group.DeclaredTransactionSetCount = declaredSets;
                         if (group.DeclaredTransactionSetCount != tsInGroup)
-                        {
-                            group.GroupErrorCodes.Add("5");
-                            Envelope(SnipLevel.Syntax, "L1-GE-COUNT", $"GE01 '{seg.Element(0)}' does not match the {tsInGroup} transaction set(s) in the group.", "GE");
-                        }
+                            GroupError(group, "5", "L1-GE-COUNT", $"GE01 '{SafeValue(seg.Element(0))}' does not match the {tsInGroup} transaction set(s) in the group.", "GE");
                         group = null;
                         break;
 
                     case "ST":
                         if (group is null)
                         {
-                            Envelope(SnipLevel.Syntax, "L1-ST-OUTSIDE-GS", "ST segment appears outside a GS/GE functional group.", "ST");
-                            group = new SnipFunctionalGroupOutcome();
-                            group.GroupErrorCodes.Add("3");
-                            result.FunctionalGroups.Add(group);
+                            group = new SnipFunctionalGroupOutcome { Interchange = CurrentInterchange() };
+                            group.Interchange.FunctionalGroups.Add(group);
+                            GroupError(group, "3", "L1-ST-OUTSIDE-GS", "ST segment appears outside a GS/GE functional group.", "ST");
                         }
                         tsInGroup++;
                         var end = FindTransactionSetEnd(i);
@@ -248,26 +286,52 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         {
                             ControlNumber = seg.Element(1) ?? string.Empty,
                             ImplementationReference = seg.Element(2),
-                            InterchangeSegmentIndex = Math.Max(isaIndex, 0),
+                            InterchangeSegmentIndex = FindInterchangeIndex(i),
                             StartSegmentIndex = i,
                             EndSegmentIndex = end,
                         };
                         group.TransactionSets.Add(outcome);
                         if (!stControlNumbers.Add(outcome.ControlNumber))
                             outcome.TransactionSetErrorCodes.Add("23");
-                        new TransactionSetValidator(owner, doc, outcome, group, _segs, i, end).Run();
-                        i = _segs[end].Id == "SE" ? end : end - 1;
+                        new TransactionSetValidator(owner, doc, outcome, group, _segs, i, end, budget, result).Run();
+                        // A truncated file can end without SE/GE/IEA: end is then past the last segment.
+                        i = end < _segs.Count && _segs[end].Id == "SE" ? end : end - 1;
                         break;
 
                     default:
-                        Envelope(SnipLevel.Syntax, "L1-SEGMENT-OUTSIDE-ST", $"Segment {seg.Id} appears outside a transaction set.", seg.Id);
+                        InterchangeError("L1-SEGMENT-OUTSIDE-ST", $"Segment {SafeSegmentId(seg.Id)} appears outside a transaction set.", SafeSegmentId(seg.Id));
                         break;
                 }
             }
 
             CloseGroupWithoutTrailer();
-            if (isaIndex >= 0)
-                Envelope(SnipLevel.Syntax, "L1-IEA-MISSING", $"Interchange {isaControl} has no IEA trailer.", "IEA");
+            if (inInterchange)
+                InterchangeError("L1-IEA-MISSING", $"Interchange {SafeValue(isaControl)} has no IEA trailer.", "IEA");
+
+            // Fold group- and interchange-level rejections into each set, so
+            // IK5, AK9 and AcceptedTransactionSets can never disagree.
+            foreach (var g in result.FunctionalGroups)
+            {
+                foreach (var ts in g.TransactionSets)
+                    ts.RejectedByEnvelope = g.Rejected;
+            }
+        }
+
+        private SnipInterchangeOutcome CurrentInterchange()
+        {
+            if (_interchange is not null) return _interchange;
+            // Segments before any ISA cannot occur (the tokenizer requires
+            // ISA first), so this is only a safety net.
+            _interchange = new SnipInterchangeOutcome();
+            result.Interchanges.Add(_interchange);
+            return _interchange;
+        }
+
+        private int FindInterchangeIndex(int from)
+        {
+            for (var j = from; j >= 0; j--)
+                if (_segs[j].Id == "ISA") return j;
+            return 0;
         }
 
         /// <summary>Index of the SE closing the ST at <paramref name="st"/>, or of the segment that ends it early.</summary>
@@ -289,38 +353,82 @@ public sealed class X12837SnipValidator : ISnip837Validator
             int[] widths = [2, 10, 2, 10, 2, 15, 2, 15, 6, 4, 1, 5, 9, 1, 1, 1];
             if (isa.Elements.Count != 16)
             {
-                Envelope(SnipLevel.Syntax, "L1-ISA-ELEMENTS", $"ISA must have 16 elements, found {isa.Elements.Count}.", "ISA");
+                InterchangeError("L1-ISA-ELEMENTS", $"ISA must have 16 elements, found {isa.Elements.Count}.", "ISA");
                 return;
             }
             for (var e = 0; e < widths.Length; e++)
             {
                 if (isa.Elements[e].Length != widths[e])
-                    Envelope(SnipLevel.Syntax, "L1-ISA-WIDTH", $"ISA{e + 1:00} must be exactly {widths[e]} characters.", "ISA");
+                    InterchangeError("L1-ISA-WIDTH", $"ISA{e + 1:00} must be exactly {widths[e]} characters.", "ISA");
             }
             if (!isa.Elements[12].All(char.IsAsciiDigit))
-                Envelope(SnipLevel.Syntax, "L1-ISA13", "ISA13 interchange control number must be 9 digits.", "ISA");
+                InterchangeError("L1-ISA13", "ISA13 interchange control number must be 9 digits.", "ISA");
             if (isa.Elements[11] != "00501")
-                Envelope(SnipLevel.Syntax, "L1-ISA12", $"ISA12 must be 00501 for a 5010 837, found '{isa.Elements[11]}'.", "ISA");
+                InterchangeError("L1-ISA12", $"ISA12 must be 00501 for a 5010 837, found '{SafeValue(isa.Elements[11])}'.", "ISA");
             if (!IsDate(isa.Elements[8], "yyMMdd"))
-                Envelope(SnipLevel.Syntax, "L1-ISA09", "ISA09 is not a valid YYMMDD date.", "ISA");
+                InterchangeError("L1-ISA09", "ISA09 is not a valid YYMMDD date.", "ISA");
             if (isa.Elements[14] is not ("P" or "T"))
-                Envelope(SnipLevel.Syntax, "L1-ISA15", "ISA15 usage indicator must be P or T.", "ISA");
+                InterchangeError("L1-ISA15", "ISA15 usage indicator must be P or T.", "ISA");
         }
 
-        private void Envelope(SnipLevel level, string rule, string message, string segmentId)
+        /// <summary>An ISA/IEA-level error: at a rejecting Level 1, every set in the interchange is rejected.</summary>
+        private void InterchangeError(string rule, string message, string segmentId)
         {
-            var action = owner._options.ActionFor(level);
-            if (action == SnipAction.Off) return;
-            result.EnvelopeIssues.Add(new SnipIssue
+            if (Envelope(rule, message, segmentId) == SnipAction.Reject)
+                CurrentInterchange().Rejected = true;
+        }
+
+        /// <summary>
+        /// A GS/GE-level error with its AK905 code. Reject → the code rejects
+        /// the group; Warn → reported in AK9 without rejecting; Off → nothing.
+        /// </summary>
+        private void GroupError(SnipFunctionalGroupOutcome group, string code, string rule, string message, string segmentId)
+        {
+            switch (Envelope(rule, message, segmentId))
             {
-                Level = level,
-                Severity = action == SnipAction.Reject ? SnipSeverity.Error : SnipSeverity.Warning,
-                RuleId = rule,
-                Message = message,
-                SegmentId = segmentId,
-            });
+                case SnipAction.Reject: group.GroupErrorCodes.Add(code); break;
+                case SnipAction.Warn: group.GroupWarningCodes.Add(code); break;
+            }
+        }
+
+        private SnipAction Envelope(string rule, string message, string segmentId)
+        {
+            var action = owner._options.ActionFor(SnipLevel.Syntax);
+            if (action == SnipAction.Off) return action;
+
+            if (budget.Exhausted)
+            {
+                result.FindingsTruncated = true;
+                if (!budget.FileCapReported)
+                {
+                    budget.FileCapReported = true;
+                    result.EnvelopeIssues.Add(TooManyFindings("file"));
+                }
+            }
+            else
+            {
+                budget.Used++;
+                result.EnvelopeIssues.Add(new SnipIssue
+                {
+                    Level = SnipLevel.Syntax,
+                    Severity = action == SnipAction.Reject ? SnipSeverity.Error : SnipSeverity.Warning,
+                    RuleId = rule,
+                    Message = message,
+                    SegmentId = segmentId,
+                });
+            }
+            return action;
         }
     }
+
+    private static SnipIssue TooManyFindings(string scope) => new()
+    {
+        Level = SnipLevel.Syntax,
+        Severity = SnipSeverity.Warning,
+        RuleId = "L1-TOO-MANY-FINDINGS",
+        Message = $"Too many errors: the {scope} finding limit was reached and further findings are not listed. " +
+                  "Acceptance still accounts for every check.",
+    };
 
     // ═══════════════════════════════════════════════════════════════════
     // One transaction set
@@ -350,7 +458,12 @@ public sealed class X12837SnipValidator : ISnip837Validator
         public required Seg Clm { get; init; }
         public required HlNode Hl { get; init; }
         public string? ClaimId => Clm.E(1);
+
+        /// <summary>Every segment after CLM up to the first LX (2300 plus 2310/2320/2330).</summary>
         public List<Seg> Segs { get; } = [];
+
+        /// <summary>Only the 2300 loop's own segments (so e.g. a 2330B REF*F8 cannot satisfy a 2300 rule).</summary>
+        public IEnumerable<Seg> Own => Segs.Where(s => s.Loop == "2300");
         public List<LineNode> Lines { get; } = [];
     }
 
@@ -376,10 +489,16 @@ public sealed class X12837SnipValidator : ISnip837Validator
         private readonly List<HlNode> _hls = [];
         private bool _institutional;
         private string? _bhtDate;
+        private readonly FindingBudget _budget;
+        private readonly SnipValidationResult _result;
+        private bool _setCapReported;
+        private int _suppressed;
+        private bool _suppressedError;
 
         public TransactionSetValidator(
             X12837SnipValidator owner, X12Document doc, SnipTransactionSetOutcome outcome,
-            SnipFunctionalGroupOutcome group, IReadOnlyList<X12Segment> segs, int start, int end)
+            SnipFunctionalGroupOutcome group, IReadOnlyList<X12Segment> segs, int start, int end,
+            FindingBudget budget, SnipValidationResult result)
         {
             _owner = owner;
             _componentSeparator = doc.ComponentSeparator;
@@ -388,6 +507,8 @@ public sealed class X12837SnipValidator : ISnip837Validator
             _start = start;
             _end = end;
             _groupVersion = group.VersionCode;
+            _budget = budget;
+            _result = result;
         }
 
         public void Run()
@@ -400,6 +521,10 @@ public sealed class X12837SnipValidator : ISnip837Validator
             if (_owner._options.ActionFor(SnipLevel.Balancing) != SnipAction.Off) CheckBalancing();
             if (_owner._options.ActionFor(SnipLevel.Situational) != SnipAction.Off) CheckSituational();
             if (_owner._options.ActionFor(SnipLevel.ExternalCodeSets) != SnipAction.Off) CheckCodeSets();
+
+            // Findings dropped by a cap still decide acceptance.
+            if (_suppressedError) _outcome.SuppressedError = true;
+            _outcome.SuppressedFindings = _suppressed;
         }
 
         // ── Tree + loop ids ──────────────────────────────────────────────
@@ -588,7 +713,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
 
             if (!Known837Segments.Contains(seg.Id))
             {
-                Report(SnipLevel.Syntax, "L1-SEGMENT-ID", $"Segment id '{Truncate(seg.Id)}' is not used in an 837.", seg, segCode: "1");
+                Report(SnipLevel.Syntax, "L1-SEGMENT-ID", $"Segment id '{SafeSegmentId(seg.Id)}' is not used in an 837.", seg, segCode: "1");
                 return;
             }
 
@@ -832,13 +957,24 @@ public sealed class X12837SnipValidator : ISnip837Validator
             if (clm.E(9) is not ("I" or "Y"))
                 Report(L2, "L2-CLM09", "CLM09 release of information code must be I or Y.", clm, 9, elemCode: clm.E(9) is null ? "1" : "7", dataRef: "1363", claimId: id);
 
-            var hiSegs = claim.Segs.Where(s => s.Id == "HI").ToList();
-            var principal = hiSegs.FirstOrDefault() is { } firstHi ? Components(firstHi.E(1)) : [];
-            if (principal.Length < 2 || principal[0] is not ("ABK" or "BK"))
+            // 837P has no 2300 DTP*472: the service date belongs on each 2400 line.
+            if (!_institutional && claim.Own.FirstOrDefault(s => s.Id == "DTP" && s.E(1) == "472") is { } claimDtp472)
+                Report(L2, "L2-2300-DTP472", "837P loop 2300 does not use DTP*472; send the service date on each 2400 line.",
+                    claimDtp472, segCode: "I4", claimId: id);
+
+            // The principal diagnosis (ABK, or BK for ICD-9) is HI01 of one of
+            // the 2300 HI segments — not necessarily the first HI on an 837I.
+            var hiSegs = claim.Own.Where(s => s.Id == "HI").ToList();
+            var hasPrincipal = hiSegs.Any(h => Components(h.E(1)) is [ "ABK" or "BK", { Length: > 0 }, ..]);
+            if (hiSegs.Count == 0)
             {
-                Report(L2, "L2-HI-PRINCIPAL", "The first HI segment must carry the principal diagnosis (ABK).",
-                    hiSegs.FirstOrDefault() ?? clm, hiSegs.Count > 0 ? 1 : null, segmentId: "HI", loop: "2300",
-                    segCode: hiSegs.Count > 0 ? "8" : "3", elemCode: hiSegs.Count > 0 ? "7" : null, claimId: id);
+                Report(L2, "L2-HI-PRINCIPAL", "The claim needs an HI segment carrying the principal diagnosis (ABK).",
+                    null, segmentId: "HI", loop: "2300", position: PositionAfter(claim.Own, Before2300Hi), segCode: "3", claimId: id);
+            }
+            else if (!hasPrincipal)
+            {
+                Report(L2, "L2-HI-PRINCIPAL", "No 2300 HI segment carries the principal diagnosis (HI01 qualifier ABK).",
+                    hiSegs[0], 1, 1, elemCode: "7", dataRef: "1270", badValue: Components(hiSegs[0].E(1)).FirstOrDefault(), claimId: id);
             }
 
             if (!_institutional)
@@ -847,7 +983,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
                 if (dxCount > 12)
                     Report(L2, "L2-HI-MAX", $"An 837P claim carries at most 12 diagnosis codes; found {dxCount}.", hiSegs[0], segCode: "5", claimId: id);
             }
-            else if (!claim.Segs.Any(s => s.Id == "DTP" && s.E(1) == "434"))
+            else if (!claim.Own.Any(s => s.Id == "DTP" && s.E(1) == "434"))
             {
                 Report(L2, "L2-DTP434", "837I statement dates (DTP*434) are required.", clm, segmentId: "DTP", loop: "2300", position: clm.Pos + 1, segCode: "3", claimId: id);
             }
@@ -928,6 +1064,24 @@ public sealed class X12837SnipValidator : ISnip837Validator
             }
         }
 
+        // ── Missing-segment positions ────────────────────────────────────
+        // For a missing segment, IK302 is the position where it should have
+        // appeared: right after the last present segment that the IG orders
+        // before it in the same loop.
+
+        private static readonly string[] Before2300Ref = ["CLM", "DTP", "CL1", "PWK", "CN1", "AMT"];
+        private static readonly string[] Before2300Hi = ["CLM", "DTP", "CL1", "PWK", "CN1", "AMT", "REF", "K3", "NTE", "CR1", "CR2", "CRC"];
+
+        private static int? PositionAfter(IEnumerable<Seg> loopSegments, params string[] precedingIds)
+        {
+            Seg? last = null;
+            foreach (var s in loopSegments)
+            {
+                if (precedingIds.Contains(s.Id) && (last is null || s.Pos > last.Pos)) last = s;
+            }
+            return last is null ? null : last.Pos + 1;
+        }
+
         // ── Level 4: situational ─────────────────────────────────────────
 
         private void CheckSituational()
@@ -955,7 +1109,8 @@ public sealed class X12837SnipValidator : ISnip837Validator
                         Report(L4, "L4-2000C-SELF", "SBR02 is 18 (subscriber is the patient), so no patient loop (2000C) may follow.", sbr, 2, elemCode: "10", dataRef: "1069");
                     if (!hl.Segs.Any(s => s.Id == "DMG" && s.Loop == "2010BA"))
                         Report(L4, "L4-2010BA-DMG", "Subscriber demographics (2010BA DMG) are required when the subscriber is the patient.",
-                            hl.Segs.FirstOrDefault(s => s.Id == "NM1" && s.E(1) == "IL") ?? hl.Hl, segmentId: "DMG", loop: "2010BA", segCode: "I6");
+                            null, segmentId: "DMG", loop: "2010BA", segCode: "I6",
+                            position: PositionAfter(hl.Segs.Where(s => s.Loop == "2010BA"), "NM1", "N3", "N4") ?? hl.Hl.Pos + 1);
                 }
 
                 foreach (var claim in hl.Claims) CheckClaimSituational(claim);
@@ -970,41 +1125,51 @@ public sealed class X12837SnipValidator : ISnip837Validator
             var clm05 = Components(clm.E(5));
 
             if (clm05.Length >= 3 && clm05[2] is "7" or "8"
-                && !claim.Segs.Any(s => s.Id == "REF" && s.E(1) == "F8"))
+                && !claim.Own.Any(s => s.Id == "REF" && s.E(1) == "F8"))
             {
-                Report(L4, "L4-REF-F8", "A replacement or void (CLM05-3 = 7 or 8) requires the payer claim control number (REF*F8).",
-                    clm, segmentId: "REF", loop: "2300", segCode: "I6", claimId: id);
+                Report(L4, "L4-REF-F8", "A replacement or void (CLM05-3 = 7 or 8) requires the payer claim control number (REF*F8) in loop 2300.",
+                    null, segmentId: "REF", loop: "2300", segCode: "I6", claimId: id,
+                    position: PositionAfter(claim.Own, Before2300Ref) ?? clm.Pos + 1);
             }
 
-            var statement = claim.Segs.FirstOrDefault(s => s.Id == "DTP" && s.E(1) == "434");
+            var statement = claim.Own.FirstOrDefault(s => s.Id == "DTP" && s.E(1) == "434");
             var (statementFrom, statementTo) = Period(statement);
 
-            if (_institutional && clm05.Length >= 1 && clm05[0].Length == 2)
+            // Inpatient/outpatient from the full facility + classification
+            // code (CLM05-1). Codes not in either table are uncertain: the
+            // rules that depend on the distinction then only warn.
+            var setting = _institutional && clm05.Length >= 1 ? ClassifyTypeOfBill(clm05[0]) : BillSetting.Unknown;
+            if (_institutional && setting != BillSetting.Outpatient)
             {
-                var inpatient = clm05[0][1] == '1';
-                if (inpatient)
-                {
-                    if (!claim.Segs.Any(s => s.Id == "DTP" && s.E(1) == "435"))
-                        Report(L4, "L4-DTP435", "An inpatient claim (type of bill x1x) requires the admission date (DTP*435).", clm, segmentId: "DTP", loop: "2300", segCode: "I6", claimId: id);
-                    if (!claim.Segs.Any(s => s.Id == "CL1"))
-                        Report(L4, "L4-CL1", "An inpatient claim (type of bill x1x) requires institutional claim codes (CL1).", clm, segmentId: "CL1", loop: "2300", segCode: "I6", claimId: id);
-                }
+                var uncertain = setting == BillSetting.Unknown;
+                var label = uncertain ? $"type of bill {SafeValue(clm05.ElementAtOrDefault(0))}x may be inpatient" : "an inpatient claim";
+                if (!claim.Own.Any(s => s.Id == "DTP" && s.E(1) == "435"))
+                    Report(L4, "L4-DTP435", $"Admission date (DTP*435) is required: {label}.",
+                        null, segmentId: "DTP", loop: "2300", segCode: "I6", claimId: id, warnOnly: uncertain,
+                        position: PositionAfter(claim.Own, "CLM", "DTP") ?? clm.Pos + 1);
+                if (!claim.Own.Any(s => s.Id == "CL1"))
+                    Report(L4, "L4-CL1", $"Institutional claim codes (CL1) are required: {label}.",
+                        null, segmentId: "CL1", loop: "2300", segCode: "I6", claimId: id, warnOnly: uncertain,
+                        position: PositionAfter(claim.Own, "CLM", "DTP") ?? clm.Pos + 1);
             }
 
             var dxCount = DiagnosisCodes(claim).Count;
             var bhtDate = ParseDate(_bhtDate);
             var multiDayStatement = statementFrom is not null && statementTo is not null && statementTo > statementFrom;
-            var outpatient = _institutional && clm05.Length >= 1 && clm05[0].Length == 2 && clm05[0][1] != '1';
 
             foreach (var line in claim.Lines)
             {
                 var dtp472 = line.Segs.FirstOrDefault(s => s.Id == "DTP" && s.E(1) == "472");
                 if (dtp472 is null)
                 {
+                    var expectedAt = PositionAfter(line.Segs.Prepend(line.Lx), "LX", "SV1", "SV2", "SV5", "PWK", "CR1", "CR3", "CRC") ?? line.Lx.Pos + 1;
                     if (!_institutional)
-                        Report(L4, "L4-DTP472", $"837P service line {line.Lx.E(1)} requires the service date (DTP*472).", line.Lx, segmentId: "DTP", loop: "2400", segCode: "I6", claimId: id);
-                    else if (outpatient && multiDayStatement)
-                        Report(L4, "L4-DTP472", $"Outpatient service line {line.Lx.E(1)} requires a service date (DTP*472) because the statement covers more than one day.", line.Lx, segmentId: "DTP", loop: "2400", segCode: "I6", claimId: id);
+                        Report(L4, "L4-DTP472", $"837P service line {SafeValue(line.Lx.E(1))} requires the service date (DTP*472).",
+                            null, segmentId: "DTP", loop: "2400", segCode: "I6", claimId: id, position: expectedAt);
+                    else if (setting != BillSetting.Inpatient && multiDayStatement)
+                        Report(L4, "L4-DTP472", $"Outpatient service line {SafeValue(line.Lx.E(1))} requires a service date (DTP*472) because the statement covers more than one day.",
+                            null, segmentId: "DTP", loop: "2400", segCode: "I6", claimId: id, position: expectedAt,
+                            warnOnly: setting == BillSetting.Unknown);
                 }
                 else
                 {
@@ -1054,7 +1219,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
                     }
                 }
 
-                foreach (var hi in claim.Segs.Where(s => s.Id == "HI"))
+                foreach (var hi in claim.Own.Where(s => s.Id == "HI"))
                 {
                     for (var e = 1; e <= hi.S.Elements.Count; e++)
                     {
@@ -1144,7 +1309,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
         private List<string> DiagnosisCodes(ClaimNode claim)
         {
             var codes = new List<string>();
-            foreach (var hi in claim.Segs.Where(s => s.Id == "HI"))
+            foreach (var hi in claim.Own.Where(s => s.Id == "HI"))
             {
                 for (var e = 1; e <= hi.S.Elements.Count; e++)
                 {
@@ -1164,7 +1329,7 @@ public sealed class X12837SnipValidator : ISnip837Validator
                 .Where(d => d is not null)
                 .ToList();
             if (lineDates.Count > 0) return lineDates.Min();
-            var statement = Period(claim.Segs.FirstOrDefault(s => s.Id == "DTP" && s.E(1) == "434")).From;
+            var statement = Period(claim.Own.FirstOrDefault(s => s.Id == "DTP" && s.E(1) == "434")).From;
             return statement ?? ParseDate(_bhtDate);
         }
 
@@ -1185,21 +1350,48 @@ public sealed class X12837SnipValidator : ISnip837Validator
             int? element = null, int? component = null,
             string? segmentId = null, string? loop = null, int? position = null,
             string segCode = "8", string? elemCode = null, string? dataRef = null,
-            string? badValue = null, string? claimId = null)
+            string? badValue = null, string? claimId = null, bool warnOnly = false)
         {
             var action = _owner._options.ActionFor(level);
             if (action == SnipAction.Off) return;
+            // warnOnly: a rule whose applicability is uncertain (e.g. an
+            // unclassified type of bill) may report but never reject.
+            if (warnOnly && action == SnipAction.Reject) action = SnipAction.Warn;
+            var severity = action == SnipAction.Reject ? SnipSeverity.Error : SnipSeverity.Warning;
 
+            var perSet = _owner._options.MaxFindingsPerTransactionSet;
+            if (_outcome.Issues.Count >= Math.Max(perSet, 0) || _budget.Exhausted)
+            {
+                _suppressed++;
+                _suppressedError |= severity == SnipSeverity.Error;
+                if (_budget.Exhausted)
+                {
+                    _result.FindingsTruncated = true;
+                    if (!_budget.FileCapReported)
+                    {
+                        _budget.FileCapReported = true;
+                        _result.EnvelopeIssues.Add(TooManyFindings("file"));
+                    }
+                }
+                else if (!_setCapReported)
+                {
+                    _setCapReported = true;
+                    _outcome.Issues.Add(TooManyFindings("transaction set") with { TransactionSetControlNumber = _outcome.ControlNumber });
+                }
+                return;
+            }
+
+            _budget.Used++;
             _outcome.Issues.Add(new SnipIssue
             {
                 Level = level,
-                Severity = action == SnipAction.Reject ? SnipSeverity.Error : SnipSeverity.Warning,
+                Severity = severity,
                 RuleId = rule,
                 Message = message,
                 TransactionSetControlNumber = _outcome.ControlNumber,
                 ClaimId = claimId,
                 Loop = loop ?? seg?.Loop,
-                SegmentId = segmentId ?? seg?.Id,
+                SegmentId = SafeSegmentId(segmentId ?? seg?.Id),
                 SegmentPosition = position ?? seg?.Pos,
                 ElementPosition = segmentId is null || segmentId == seg?.Id ? element : null,
                 ComponentPosition = segmentId is null || segmentId == seg?.Id ? component : null,
@@ -1210,6 +1402,32 @@ public sealed class X12837SnipValidator : ISnip837Validator
             });
         }
     }
+
+    // ── Type of bill ─────────────────────────────────────────────────────
+
+    internal enum BillSetting { Inpatient, Outpatient, Unknown }
+
+    // NUBC type of bill, first two digits (facility type + bill
+    // classification), as carried in CLM05-1. Inpatient includes hospital
+    // inpatient (11, 12), swing beds (18, 28), SNF inpatient (21, 22),
+    // religious nonmedical inpatient (41), ICF (65, 66) and residential (86).
+    private static readonly HashSet<string> InpatientBillTypes = ["11", "12", "18", "21", "22", "28", "41", "65", "66", "86"];
+
+    // Outpatient: hospital outpatient / other (13, 14), SNF outpatient (23),
+    // religious nonmedical outpatient (43), clinics 71–77 and 79 (RHC, ESRD,
+    // FQHC, ORF, CORF, CMHC), ASC (83) and CAH (85).
+    private static readonly HashSet<string> OutpatientBillTypes = ["13", "14", "23", "43", "71", "72", "73", "74", "75", "76", "77", "79", "83", "85"];
+
+    /// <summary>
+    /// Classifies CLM05-1. Anything not in the two tables (home health,
+    /// hospice, unusual codes) is <see cref="BillSetting.Unknown"/>, and the
+    /// rules that depend on the distinction only warn for it.
+    /// </summary>
+    internal static BillSetting ClassifyTypeOfBill(string? facilityCode) =>
+        facilityCode is null ? BillSetting.Unknown
+        : InpatientBillTypes.Contains(facilityCode) ? BillSetting.Inpatient
+        : OutpatientBillTypes.Contains(facilityCode) ? BillSetting.Outpatient
+        : BillSetting.Unknown;
 
     // ── Shared helpers ───────────────────────────────────────────────────
 
@@ -1242,5 +1460,4 @@ public sealed class X12837SnipValidator : ISnip837Validator
                || normalized.StartsWith("LOCKBOX", StringComparison.Ordinal);
     }
 
-    private static string Truncate(string value) => value.Length <= 3 ? value : value[..3];
 }
