@@ -75,7 +75,7 @@ public class ServiceCategoryResolverEffectiveDateTests
         // Mapping was filtered out → resolver falls through to POS-11
         // inference, which yields service-type 98 with MatchedBy=SystemDefault.
         Assert.NotNull(match);
-        Assert.Equal("98", match!.ServiceTypeCode);
+        Assert.Equal(ServiceCategoryNames.OfficeVisit, match!.ServiceTypeCode);
         Assert.Equal("SystemDefault", match.MatchedBy);
     }
 

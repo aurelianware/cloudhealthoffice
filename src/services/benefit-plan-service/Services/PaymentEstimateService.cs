@@ -136,6 +136,7 @@ public class PaymentEstimateService : IPaymentEstimateService
             NetworkTier = request.NetworkTier,
             LineOfBusiness = lobCode,
             ClaimType = claimTypeCode,
+            TypeOfBill = request.BillType,
             ClaimId = request.RequestId ?? $"estimate-{Guid.NewGuid():N}",
             Lines = benefitLines,
             AllowedAmounts = pricedByLine.ToDictionary(kv => kv.Key, kv => kv.Value.AllowedAmount),

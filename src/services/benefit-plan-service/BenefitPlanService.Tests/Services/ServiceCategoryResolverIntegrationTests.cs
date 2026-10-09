@@ -89,7 +89,7 @@ public sealed class ServiceCategoryResolverIntegrationTests
 
         match.Should().NotBeNull();
         match!.MatchedBy.Should().Be("SystemDefault");
-        match.ServiceTypeCode.Should().Be("98", "POS 11 (office) maps to X12 service type 98");
+        match.ServiceTypeCode.Should().Be("Office Visit", "POS 11 (office) maps to X12 service type 98, emitted as the plan-facing name");
     }
 
     [Fact]

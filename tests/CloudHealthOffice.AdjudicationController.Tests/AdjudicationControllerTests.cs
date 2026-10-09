@@ -547,6 +547,50 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
             default!, default!, default, default!, default!, default!, default);
     }
 
+    /// <summary>
+    /// The synchronous API's PlaceOfService is a CMS place of service. With
+    /// no service category mapping, the stay (BillType 111, POS 21) must be
+    /// categorized from the type of bill as Inpatient Hospital — POS 21 must
+    /// not be read as facility type 21 (skilled nursing). The plan is keyed
+    /// by X12 "48" and matches through the category-name alias.
+    /// </summary>
+    [Fact]
+    public async Task Adjudicate_InstitutionalBillType111Pos21_NoMapping_ResolvesInpatientHospitalFromTob()
+    {
+        var realResolver = new ServiceCategoryResolver(
+            new EmptyCategoryRepository(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ServiceCategoryResolver>.Instance);
+        WireRealEngines(caseRate: 12000m, categoryResolver: realResolver);
+
+        using var client = CreateClientWithTenant();
+        var response = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", MakeDrgStayRequest());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<AdjudicationResponse>(Json);
+        Assert.True(result!.Success);
+        Assert.Equal(9000m, result.Totals.PlanPayment);
+
+        var sent = _factory.BenefitEngine.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IBenefitCalculationEngine.CalculateWithModeAsync))
+            .Select(c => (BenefitResolutionRequest)c.GetArguments()[0]!)
+            .Last();
+        Assert.Equal("111", sent.TypeOfBill);
+        Assert.False(sent.PlaceOfServiceIsFacilityType);
+
+        var match = await realResolver.ResolveAsync(TenantId, PlanId, sent.ServiceDate, "", "CPT", "21",
+            Array.Empty<string>(), "0120",
+            new ServiceCategoryClaimContext(sent.ClaimType, sent.TypeOfBill, sent.PlaceOfServiceIsFacilityType));
+        Assert.Equal(ServiceCategoryNames.InpatientHospital, match!.ServiceTypeCode);
+        Assert.Equal("TOB-fallback:11", match.MatchedRule);
+    }
+
+    private sealed class EmptyCategoryRepository : IServiceCategoryMappingRepository
+    {
+        public Task<IReadOnlyList<ServiceCategoryMapping>> GetMappingsAsync(
+            string tenantId, Guid? benefitPlanId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ServiceCategoryMapping>>(Array.Empty<ServiceCategoryMapping>());
+    }
+
     private AdjudicationRequest MakeDrgStayRequest()
     {
         var baseRequest = MakeAdjudicationRequest(lineCount: 3);
@@ -570,7 +614,8 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
     /// and an inpatient benefit with a $500 deductible, $250 copay and 20%
     /// coinsurance. Returns the accumulator service so writes can be counted.
     /// </summary>
-    private CloudHealthOffice.BenefitEngine.Services.IAccumulatorService WireRealEngines(decimal caseRate)
+    private CloudHealthOffice.BenefitEngine.Services.IAccumulatorService WireRealEngines(
+        decimal caseRate, IServiceCategoryResolver? categoryResolver = null)
     {
         SetupNewPipelineDefaults();
         SetupScrubPass();
@@ -621,13 +666,17 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
         };
         var planProvider = Substitute.For<IBenefitPlanProvider>();
         planProvider.GetPlanAsync(PlanId, Arg.Any<CancellationToken>()).Returns(plan);
-        var resolver = Substitute.For<IServiceCategoryResolver>();
-        resolver.ResolveAsync(default!, default, default, default!, default!, default!, default!, default, default)
-            .ReturnsForAnyArgs(new ServiceCategoryMatch
-            {
-                ServiceTypeCode = "48", ServiceTypeDescription = "Hospital - Inpatient",
-                MatchedBy = "Test", MatchedRule = "Fixed:48",
-            });
+        var resolver = categoryResolver;
+        if (resolver is null)
+        {
+            resolver = Substitute.For<IServiceCategoryResolver>();
+            resolver.ResolveAsync(default!, default, default, default!, default!, default!, default!, default, default, default)
+                .ReturnsForAnyArgs(new ServiceCategoryMatch
+                {
+                    ServiceTypeCode = "48", ServiceTypeDescription = "Hospital - Inpatient",
+                    MatchedBy = "Test", MatchedRule = "Fixed:48",
+                });
+        }
         var accumulators = Substitute.For<CloudHealthOffice.BenefitEngine.Services.IAccumulatorService>();
         accumulators.GetAccumulatorsAsync(default!, default!, default, default!, default)
             .ReturnsForAnyArgs(new List<AccumulatorSnapshot>
