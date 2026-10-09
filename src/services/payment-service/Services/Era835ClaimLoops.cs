@@ -134,14 +134,21 @@ public static class Era835ClaimLoops
     public static string Svc(ServiceLinePayment sl)
     {
         var hasProcedure = !string.IsNullOrWhiteSpace(sl.ProcedureCode);
-        var hasRevenue = !string.IsNullOrWhiteSpace(sl.RevenueCode);
-        var svc01 = hasProcedure || !hasRevenue
+        var revenue = NormalizeRevenueCode(sl.RevenueCode);
+        var svc01 = hasProcedure || revenue is null
             ? string.Join(":", new[] { "HC", sl.ProcedureCode }
                 .Concat(sl.Modifiers.Where(m => !string.IsNullOrWhiteSpace(m)).Take(4).Select(Esc)))
-            : $"NU:{Esc(sl.RevenueCode)}";
-        var svc04 = hasProcedure && hasRevenue ? Esc(sl.RevenueCode) : string.Empty;
+            : $"NU:{revenue}";
+        var svc04 = hasProcedure && revenue is not null ? revenue : string.Empty;
         return $"SVC*{svc01}*{sl.ChargeAmount:F2}*{sl.PaymentAmount:F2}*{svc04}*{sl.Units:G}";
     }
+
+    /// <summary>
+    /// NUBC revenue codes are four characters; claims-service accepts the
+    /// three-character form ("120"), which is the same code ("0120").
+    /// </summary>
+    private static string? NormalizeRevenueCode(string? revenueCode)
+        => string.IsNullOrWhiteSpace(revenueCode) ? null : Esc(revenueCode.Trim()).PadLeft(4, '0');
 
     /// <summary>
     /// One CAS segment. Each adjustment is a reason/amount/quantity triplet

@@ -208,6 +208,10 @@ public class Era835ClaimLoopsTests
     [InlineData("11042", null, new[] { "51" }, "SVC*HC:11042:51*100.00*80.00**1")]
     [InlineData("27447", "0360", new[] { "RT" }, "SVC*HC:27447:RT*100.00*80.00*0360*1")]
     [InlineData("", "0120", new string[0], "SVC*NU:0120*100.00*80.00**1")]
+    // Three-character revenue codes are padded to the four-character NUBC form.
+    [InlineData("", "120", new string[0], "SVC*NU:0120*100.00*80.00**1")]
+    [InlineData("27447", "360", new string[0], "SVC*HC:27447*100.00*80.00*0360*1")]
+    [InlineData("27447", " 0360 ", new string[0], "SVC*HC:27447*100.00*80.00*0360*1")]
     public void Svc_ReportsProcedureModifiersAndRevenueCode(string code, string? revenue, string[] modifiers, string expected)
     {
         var line = new ServiceLinePayment
