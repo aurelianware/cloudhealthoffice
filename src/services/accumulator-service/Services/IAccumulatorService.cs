@@ -20,7 +20,10 @@ public enum ApplyOutcome
     /// was written. Not terminal — the consumer leaves the offset uncommitted
     /// and the message is retried.
     /// </summary>
-    InProgress
+    InProgress,
+
+    /// <summary>Not applied by design (a denied claim): terminal, nothing written.</summary>
+    Skipped
 }
 
 public record ApplyResult(ApplyOutcome Outcome, AccumulatorSnapshot? Snapshot, string? EventId, string? Reason);

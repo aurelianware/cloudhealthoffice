@@ -51,6 +51,22 @@ public static class PriorPayerAllocator
     /// each list ordered by payer sequence. Payers with a sequence at or
     /// after <paramref name="ourSequence"/> (not yet adjudicated) are ignored.
     /// </summary>
+    /// <remarks>
+    /// <para><b>Per-line view: claim-level amounts follow the balance the
+    /// earlier payers left (PR #1278 round 3).</b> A later payer's 2320
+    /// claim-level paid amount and PR are prorated across its claim-level
+    /// lines by each line's balance after the payers before it — what the
+    /// previous payer left the member owing on the line (its 2430 PR, or its
+    /// own prorated PR share), else the line's charge less what the earlier
+    /// payers paid when no PR is known — and by charge only for the first
+    /// payer, or when no line has a balance. The payer's PR is what the
+    /// member still owed on the lines it adjudicated; spreading it by charge
+    /// instead put most of it on lines where the earlier payers had already
+    /// covered most of the allowed amount, where this plan could not pay it,
+    /// and left it unpaid (golden 07 under MemberPaidOnly: $8.63). The
+    /// claim-level calculation (<see cref="AllocateDetailed"/>) bounds by the
+    /// payer's whole claim-level PR and is unaffected.</para>
+    /// </remarks>
     public static IReadOnlyDictionary<int, IReadOnlyList<PriorPayerAmount>> AllocateToLines(
         IReadOnlyList<ClaimLineCharge> lines,
         IEnumerable<PriorPayerAdjudication> priorPayers,
@@ -62,12 +78,25 @@ public static class PriorPayerAllocator
             .Select(g => new ClaimLineCharge(g.Key, g.Sum(l => l.Charge)))
             .ToList();
         var result = lines.ToDictionary(l => l.LineNumber, _ => (IReadOnlyList<PriorPayerAmount>)new List<PriorPayerAmount>());
+        // The member's balance on each line after the payers so far; null
+        // until a payer has adjudicated anything.
+        Dictionary<int, decimal>? balance = null;
+        var paidSoFar = lines.ToDictionary(l => l.LineNumber, _ => 0m);
         foreach (var payer in priorPayers
                      .Where(p => p.Sequence > 0 && p.Sequence < ourSequence)
                      .OrderBy(p => p.Sequence))
         {
-            foreach (var (lineNumber, amount) in AllocatePayer(lines, payer))
+            var amounts = AllocatePayer(lines, payer, balance).ToList();
+            foreach (var (lineNumber, amount) in amounts)
                 ((List<PriorPayerAmount>)result[lineNumber]).Add(amount);
+
+            foreach (var (lineNumber, amount) in amounts)
+                paidSoFar[lineNumber] += amount.PaidAmount;
+            var charges = lines.ToDictionary(l => l.LineNumber, l => l.Charge);
+            balance = amounts.ToDictionary(
+                a => a.LineNumber,
+                a => a.Amount.PatientResponsibility
+                     ?? Math.Max(0m, charges[a.LineNumber] - paidSoFar[a.LineNumber]));
         }
         return result;
     }
@@ -176,7 +205,8 @@ public static class PriorPayerAllocator
     }
 
     private static PayerAllocation AllocatePayerDetailed(
-        IReadOnlyList<ClaimLineCharge> lines, PriorPayerAdjudication payer)
+        IReadOnlyList<ClaimLineCharge> lines, PriorPayerAdjudication payer,
+        IReadOnlyDictionary<int, decimal>? claimLevelWeights = null)
     {
         var lineNumbers = lines.Select(l => l.LineNumber).ToHashSet();
         var reported = payer.Lines
@@ -199,7 +229,7 @@ public static class PriorPayerAllocator
         var paid = lines.ToDictionary(l => l.LineNumber, l => reported.TryGetValue(l.LineNumber, out var r) ? r.Paid : 0m);
         if (residual > 0)
         {
-            var shares = Prorate(residual, claimLevelTargets.Select(l => l.Charge).ToList());
+            var shares = Prorate(residual, WeightsFor(claimLevelTargets, claimLevelWeights));
             for (var i = 0; i < claimLevelTargets.Count; i++)
                 paid[claimLevelTargets[i].LineNumber] += shares[i];
         }
@@ -229,21 +259,38 @@ public static class PriorPayerAllocator
         };
     }
 
-    private static IEnumerable<(int LineNumber, PriorPayerAmount Amount)> AllocatePayer(
-        IReadOnlyList<ClaimLineCharge> lines, PriorPayerAdjudication payer)
+    /// <summary>
+    /// Proration weights for claim-level amounts: the earlier payers'
+    /// balance per line when one is known and positive somewhere, else charge.
+    /// </summary>
+    private static List<decimal> WeightsFor(
+        IReadOnlyList<ClaimLineCharge> targets, IReadOnlyDictionary<int, decimal>? balance)
     {
-        var detailed = AllocatePayerDetailed(lines, payer);
+        if (balance is not null
+            && targets.All(t => balance.ContainsKey(t.LineNumber))
+            && targets.Sum(t => Math.Max(0m, balance[t.LineNumber])) > 0m)
+        {
+            return targets.Select(t => balance[t.LineNumber]).ToList();
+        }
+        return targets.Select(t => t.Charge).ToList();
+    }
 
-        // Per-line view: the claim-level PR prorated by charge across the
-        // claim-level lines.
+    private static IEnumerable<(int LineNumber, PriorPayerAmount Amount)> AllocatePayer(
+        IReadOnlyList<ClaimLineCharge> lines, PriorPayerAdjudication payer,
+        IReadOnlyDictionary<int, decimal>? balance)
+    {
+        var detailed = AllocatePayerDetailed(lines, payer, balance);
+
+        // Per-line view: the claim-level PR prorated across the claim-level
+        // lines by the earlier payers' balance (charge for the first payer).
         var pr = lines.ToDictionary(l => l.LineNumber, l => detailed.Lines[l.LineNumber].ReportedPr ?? 0m);
         if (detailed.ClaimPrPool > 0)
         {
-            var targets = detailed.ClaimLevelLines;
-            var charges = lines.ToDictionary(l => l.LineNumber, l => l.Charge);
-            var shares = Prorate(detailed.ClaimPrPool, targets.Select(n => charges[n]).ToList());
+            var byNumber = lines.ToDictionary(l => l.LineNumber);
+            var targets = detailed.ClaimLevelLines.Select(n => byNumber[n]).ToList();
+            var shares = Prorate(detailed.ClaimPrPool, WeightsFor(targets, balance));
             for (var i = 0; i < targets.Count; i++)
-                pr[targets[i]] += shares[i];
+                pr[targets[i].LineNumber] += shares[i];
         }
 
         foreach (var line in lines)

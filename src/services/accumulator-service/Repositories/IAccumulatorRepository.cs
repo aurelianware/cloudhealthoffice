@@ -91,6 +91,13 @@ public interface IProcessedClaimStore
 
     Task CompleteAsync(string tenantId, string claimId, string resultingEventId, string outcome, CancellationToken ct = default);
 
+    /// <summary>
+    /// Deletes a still-Pending marker this caller took and is not going to
+    /// complete (it found it must wait), so a retry can take it at once
+    /// instead of waiting out the lease. A terminal marker is left alone.
+    /// </summary>
+    Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default);
+
     Task<ProcessedClaim?> GetAsync(string tenantId, string claimId, CancellationToken ct = default);
 }
 

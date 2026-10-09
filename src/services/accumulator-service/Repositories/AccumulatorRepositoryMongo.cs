@@ -12,46 +12,7 @@ public class AccumulatorRepositoryMongo : IAccumulatorRepository
     {
         _snapshots = database.GetCollection<AccumulatorSnapshot>("AccumulatorSnapshots");
         _events = database.GetCollection<AccumulatorEvent>("AccumulatorEvents");
-        EnsureIndexes();
-    }
-
-    private void EnsureIndexes()
-    {
-        var snapKeys = Builders<AccumulatorSnapshot>.IndexKeys;
-        _snapshots.Indexes.CreateMany(new[]
-        {
-            new CreateIndexModel<AccumulatorSnapshot>(
-                snapKeys.Ascending(s => s.TenantId).Ascending(s => s.MemberId).Descending(s => s.PlanYearStart)),
-            new CreateIndexModel<AccumulatorSnapshot>(
-                snapKeys.Ascending(s => s.TenantId).Ascending(s => s.Id),
-                new CreateIndexOptions { Unique = true })
-        });
-
-        var evtKeys = Builders<AccumulatorEvent>.IndexKeys;
-        _events.Indexes.CreateMany(new[]
-        {
-            // Wire-level de-dup. (tenantId, eventId) must be globally unique.
-            new CreateIndexModel<AccumulatorEvent>(
-                evtKeys.Ascending(e => e.TenantId).Ascending(e => e.EventId),
-                new CreateIndexOptions { Unique = true }),
-            // Per-aggregate ordering. (tenantId, aggregateId, version) must be unique.
-            new CreateIndexModel<AccumulatorEvent>(
-                evtKeys.Ascending(e => e.TenantId).Ascending(e => e.AggregateId).Ascending(e => e.Version),
-                new CreateIndexOptions { Unique = true }),
-            new CreateIndexModel<AccumulatorEvent>(
-                evtKeys.Ascending(e => e.TenantId).Ascending(e => e.MemberId).Descending(e => e.OccurredAt)),
-            // At most one reversal per claim (PR #1278 re-review N5): a void
-            // and a replacement racing on the same original cannot both write
-            // a ClaimReversed row.
-            new CreateIndexModel<AccumulatorEvent>(
-                evtKeys.Ascending(e => e.TenantId).Ascending(e => e.SourceClaimId),
-                new CreateIndexOptions<AccumulatorEvent>
-                {
-                    Name = "ux_tenant_sourceClaimId_claimReversed",
-                    Unique = true,
-                    PartialFilterExpression = Builders<AccumulatorEvent>.Filter.Eq(e => e.EventType, "ClaimReversed"),
-                })
-        });
+        // Indexes: AccumulatorMongoIndexInitializer, once at startup.
     }
 
     public async Task<AccumulatorSnapshot?> GetSnapshotAsync(string tenantId, string memberId, DateTime planYearStart, CancellationToken ct = default)
@@ -191,11 +152,17 @@ public class ProcessedClaimStoreMongo : IProcessedClaimStore
     {
         _lease = lease;
         _clock = clock;
-        _col = database.GetCollection<ProcessedClaim>("AccumulatorProcessedClaims");
-        var keys = Builders<ProcessedClaim>.IndexKeys;
-        _col.Indexes.CreateOne(new CreateIndexModel<ProcessedClaim>(
-            keys.Ascending(p => p.TenantId).Ascending(p => p.ClaimId),
-            new CreateIndexOptions { Unique = true }));
+        _col = database.GetCollection<ProcessedClaim>(AccumulatorMongoIndexes.ProcessedClaimsCollection);
+        // The unique (tenantId, claimId) index: AccumulatorMongoIndexInitializer.
+    }
+
+    public async Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var filter = Builders<ProcessedClaim>.Filter.And(
+            Builders<ProcessedClaim>.Filter.Eq(p => p.TenantId, tenantId),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.Id, ProcessedClaim.BuildId(tenantId, claimId)),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.Outcome, "Pending"));
+        await _col.DeleteOneAsync(filter, ct);
     }
 
     public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default)

@@ -278,6 +278,24 @@ public class ProcessedClaimStoreCosmos : IProcessedClaimStore
         }
     }
 
+    public async Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var id = ProcessedClaim.BuildId(tenantId, claimId);
+        var pk = new PartitionKey(tenantId);
+        try
+        {
+            var existing = await _col.ReadItemAsync<ProcessedClaim>(id, pk, cancellationToken: ct);
+            if (!string.Equals(existing.Resource.Outcome, "Pending", StringComparison.Ordinal)) return;
+            await _col.DeleteItemAsync<ProcessedClaim>(id, pk,
+                new ItemRequestOptions { IfMatchEtag = existing.ETag }, ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.NotFound
+                                             or System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // Gone, or completed meanwhile: nothing to release.
+        }
+    }
+
     public async Task CompleteAsync(string tenantId, string claimId, string resultingEventId, string outcome, CancellationToken ct = default)
     {
         var id = ProcessedClaim.BuildId(tenantId, claimId);

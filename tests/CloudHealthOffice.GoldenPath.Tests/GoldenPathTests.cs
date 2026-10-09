@@ -255,19 +255,25 @@ public class GoldenPathTests
     }
 
     // 07 again with the plan set to MemberPaidOnly. That setting prices COB
-    // line by line, in line order (re-review: so splitting the claim cannot
-    // change the result), and credits the deductible only with what the
-    // member pays. The 835 therefore differs from golden 07 on this
-    // multi-line claim:
-    //   secondary's $60 prorated by charge (truncated, remainder last):
-    //   L1 41.37, L2 18.63; its PR $58: L1 40.00, L2 18.00.
+    // line by line, in line order (so splitting the claim cannot change the
+    // result), and credits the deductible only with what the member pays.
+    // Round 3: the secondary's claim-level amounts are spread by the balance
+    // the primary left on each line (its 2430 PR: L1 $100, L2 $18), not by
+    // charge — so its PR lands where the member still owed it, and the
+    // payment equals the NAIC claim-level total ($58.00; it was $49.37,
+    // leaving $8.63 neither paid nor billable).
+    //   secondary's $60 by 100:18 (truncated, remainder last): L1 50.84,
+    //   L2 9.16; its PR $58: L1 49.15, L2 8.85.
     //   L1 allowed 150, alone: deductible 60 + 20% of 90 → plan 72. Pay
-    //     min(72, 150 − 40 − 41.37, PR 40) = 40.00; member 0; nothing credited.
+    //     min(72, 150 − 40 − 50.84 = 59.16, PR 49.15) = 49.15; member 0;
+    //     OA-23 = 150 − 49.15 = 100.85; 400 − 250 − 100.85 = 49.15.
     //   L2 allowed 100, the $60 deductible still open (L1 credited $0) →
-    //     plan alone 32. Pay min(32, 100 − 72 − 18.63) = 9.37; member 0.
-    // Paid 49.37 (NAIC claim level: 58.00); deductible and OOP get $0.
+    //     plan alone 32. Pay min(32, 100 − 72 − 9.16 = 18.84, PR 8.85) = 8.85;
+    //     OA-23 = 91.15; 180 − 80 − 91.15 = 8.85.
+    // Paid 58.00 like NAIC (whose claim-level split is 51.03 / 6.97); the
+    // settings now differ only in the deductible credit: $0 here, $60 NAIC.
     [Fact]
-    public async Task TertiaryCob_MemberPaidOnlyPlan_LineByLine835_DeductibleNotCredited()
+    public async Task TertiaryCob_MemberPaidOnlyPlan_PaysTheNaicTotal_DeductibleNotCredited()
     {
         var plan = GoldenInputs.PlanDocument.Replace(
             "\"familyAccumulatorModel\": \"Embedded\",",
@@ -277,8 +283,8 @@ public class GoldenPathTests
         var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m), plan,
             otherCoverage: TertiaryCoverage, goldenName: "07-tertiary-cob-member-paid-only");
 
-        AssertClaim(r, charge: 580m, allowed: 250m, paid: 49.37m, member: 0m);
-        Assert.Equal(new[] { 40.00m, 9.37m },
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 58.00m, member: 0m);
+        Assert.Equal(new[] { 49.15m, 8.85m },
             r.FinalizedClaim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount));
         Assert.Null(r.FinalizedEvent.DeductibleCredited);
         Assert.All(r.FinalizedEvent.LineItems, l => Assert.Null(l.DeductibleCredited));

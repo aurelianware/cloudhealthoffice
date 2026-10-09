@@ -90,7 +90,9 @@ public class AccumulatorReversalTests
         Assert.Equal(ApplyOutcome.Duplicate, again.Outcome);
 
         var never = await sut.ApplyClaimFinalizedAsync(Claim("C-NEVER", 50m, status: "Reversed"));
-        Assert.Equal("NothingToReverse", never.Reason);
+        // Round 3 (B3): never seen — a tombstone, so a late apply is skipped.
+        Assert.Equal("ReversedBeforeApply", never.Reason);
+        Assert.Equal(ApplyOutcome.Duplicate, (await sut.ApplyClaimFinalizedAsync(Claim("C-NEVER", 50m))).Outcome);
         Assert.Equal(0m, (await Snapshot(repo)).IndividualDeductibleUsed);
     }
 

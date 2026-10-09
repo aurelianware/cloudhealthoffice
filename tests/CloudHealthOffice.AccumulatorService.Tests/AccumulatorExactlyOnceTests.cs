@@ -248,6 +248,98 @@ public class AccumulatorExactlyOnceTests
         Assert.True(w.Repo.Events.Single().DeltasClamped);
     }
 
+    // ── round 3, B3: a replacement overtaking its original ────────────
+
+    /// <summary>
+    /// The reviewer's order: Kafka is keyed on the claim id, so replacement
+    /// C2 (frequency 7 of C1) is applied before C1's own apply arrives, and
+    /// C1's void comes last. C2's reversal of C1 found nothing and used to
+    /// complete as "nothing to reverse"; C1 then applied on top of C2 —
+    /// deductible 600 instead of 300. Now it leaves a tombstone and C1's
+    /// apply is skipped.
+    /// </summary>
+    [Fact]
+    public async Task ReplacementBeforeOriginal_OriginalApplyIsSkipped_CountsOnce()
+    {
+        var w = Build();
+        var sut = w.Service();
+
+        var c2 = await sut.ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+        var c1 = await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m));
+        var c1Void = await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m, status: "Reversed"));
+
+        Assert.Equal(ApplyOutcome.Applied, c2.Outcome);
+        Assert.Equal(ApplyOutcome.Duplicate, c1.Outcome);
+        Assert.Equal(global::AccumulatorService.Services.AccumulatorService.ReversedBeforeApplyOutcome, c1.Reason);
+        Assert.Equal(ApplyOutcome.Duplicate, c1Void.Outcome);
+        var snap = await w.Snapshot();
+        Assert.Equal(300m, snap.IndividualDeductibleUsed);
+        Assert.Equal(300m, snap.IndividualOopUsed);
+        Assert.DoesNotContain(w.Repo.Events, e => e.SourceClaimId == "C1");
+    }
+
+    /// <summary>
+    /// The original's apply is in flight when the replacement arrives: the
+    /// replacement waits (InProgress, nothing written, its reversal marker
+    /// released), then reverses the original once it has applied.
+    /// </summary>
+    [Fact]
+    public async Task ReplacementWhileOriginalApplyInFlight_Waits_ThenReplaces()
+    {
+        var w = Build();
+        var sut = w.Service();
+        await w.Processed.TryBeginAsync(Tenant, "C1"); // C1's apply, mid-flight
+
+        var waiting = await sut.ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+
+        Assert.Equal(ApplyOutcome.InProgress, waiting.Outcome);
+        Assert.Empty(w.Repo.Events);
+        Assert.Null(await w.Processed.GetAsync(Tenant, "C1:reversal"));
+
+        // C1's apply completes (lease taken over by its redelivery).
+        w.Processed.Now += w.Processed.Lease + TimeSpan.FromSeconds(1);
+        await sut.ApplyClaimFinalizedAsync(Claim("C1", 300m));
+        var retried = await sut.ApplyClaimFinalizedAsync(Claim("C2", 300m, frequency: "7", original: "C1"));
+
+        Assert.Equal(ApplyOutcome.Applied, retried.Outcome);
+        Assert.Equal(300m, (await w.Snapshot()).IndividualDeductibleUsed);
+        Assert.Single(w.Repo.Events, e => e.EventType == "ClaimReversed" && e.SourceClaimId == "C1");
+    }
+
+    // ── round 3, H4: denied claims ────────────────────────────────────
+
+    /// <summary>
+    /// A claim pended after benefit calculation carries priced amounts; an
+    /// examiner's denial finalizes it as Denied. Nothing is applied.
+    /// </summary>
+    [Fact]
+    public async Task DeniedClaim_IsNotApplied()
+    {
+        var w = Build();
+
+        var result = await w.Service().ApplyClaimFinalizedAsync(Claim("C1", 120m, status: "Denied"));
+
+        Assert.Equal(ApplyOutcome.Skipped, result.Outcome);
+        Assert.Empty(w.Repo.Events);
+        Assert.Equal(0m, (await w.Snapshot()).IndividualDeductibleUsed);
+        Assert.Equal(global::AccumulatorService.Services.AccumulatorService.DeniedOutcome,
+            (await w.Processed.GetAsync(Tenant, "C1"))!.Outcome);
+    }
+
+    /// <summary>A claim applied and later finalized as Denied is backed out.</summary>
+    [Fact]
+    public async Task AppliedThenDenied_IsReversed()
+    {
+        var w = Build();
+        var sut = w.Service();
+        await sut.ApplyClaimFinalizedAsync(Claim("C1", 120m));
+
+        var result = await sut.ApplyClaimFinalizedAsync(Claim("C1", 120m, status: "Denied"));
+
+        Assert.Equal(ApplyOutcome.Applied, result.Outcome);
+        Assert.Equal(0m, (await w.Snapshot()).IndividualDeductibleUsed);
+    }
+
     // ── (c) frequency-8 void ──────────────────────────────────────────
 
     /// <summary>

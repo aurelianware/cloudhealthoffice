@@ -168,6 +168,14 @@ public class InMemoryProcessedClaimStore : IProcessedClaimStore
         return Task.FromResult(BeginClaimOutcome.Proceed);
     }
 
+    public Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var key = $"{tenantId}:{claimId}";
+        if (_map.TryGetValue(key, out var p) && string.Equals(p.Outcome, "Pending", StringComparison.Ordinal))
+            _map.Remove(key);
+        return Task.CompletedTask;
+    }
+
     public Task CompleteAsync(string tenantId, string claimId, string resultingEventId, string outcome, CancellationToken ct = default)
     {
         var key = $"{tenantId}:{claimId}";

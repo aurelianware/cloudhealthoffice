@@ -201,6 +201,59 @@ public class TertiaryCobTests
         Assert.Null(byLine[2][0].PatientResponsibility);
     }
 
+    /// <summary>
+    /// PR #1278 round 3 (golden 07): a later payer's claim-level amounts are
+    /// spread by the balance the earlier payer left on each line (its 2430
+    /// PR), not by charge. The primary left $100 on L1 and $18 on L2; the
+    /// secondary's $60 paid / $58 PR follow 100:18 — so its PR sits where the
+    /// member still owed it (L1 49.15, L2 8.85) instead of 40.00 / 18.00 by
+    /// charge, where L2's $18 exceeded what was left of its allowed.
+    /// </summary>
+    [Fact]
+    public void Allocator_LaterPayerClaimLevelAmounts_FollowTheEarlierPayersBalance()
+    {
+        PriorPayerAllocator.ClaimLineCharge[] lines = [new(1, 400m), new(2, 180m)];
+        var primary = new PriorPayerAdjudication
+        {
+            Sequence = 1,
+            ClaimPaidAmount = 112m,
+            Lines =
+            [
+                new() { LineNumber = 1, PaidAmount = 40m, Adjustments = [Adj("CO", "45", 260m), Adj("PR", "1", 100m)] },
+                new() { LineNumber = 2, PaidAmount = 72m, Adjustments = [Adj("CO", "45", 90m), Adj("PR", "2", 18m)] },
+            ],
+        };
+        var secondary = new PriorPayerAdjudication
+        {
+            Sequence = 2,
+            ClaimPaidAmount = 60m,
+            ClaimAdjustments = [Adj("OA", "23", 462m), Adj("PR", "1", 50m), Adj("PR", "2", 8m)],
+        };
+
+        var byLine = PriorPayerAllocator.AllocateToLines(lines, [primary, secondary], ourSequence: 3);
+
+        Assert.Equal(new[] { 50.84m, 9.16m }, new[] { byLine[1][1].PaidAmount, byLine[2][1].PaidAmount });
+        Assert.Equal(new decimal?[] { 49.15m, 8.85m },
+            new[] { byLine[1][1].PatientResponsibility, byLine[2][1].PatientResponsibility });
+        // The first payer has no earlier balance: still by charge / 2430.
+        Assert.Equal(new[] { 40m, 72m }, new[] { byLine[1][0].PaidAmount, byLine[2][0].PaidAmount });
+    }
+
+    [Fact]
+    public void Allocator_FirstPayerClaimLevelAmounts_StillByCharge()
+    {
+        var payer = new PriorPayerAdjudication
+        {
+            Sequence = 1, ClaimPaidAmount = 30m, ClaimAdjustments = [Adj("PR", "1", 30m)],
+        };
+
+        var byLine = PriorPayerAllocator.AllocateToLines(TwoLines, [payer], ourSequence: 2);
+
+        Assert.Equal(new[] { 20m, 10m }, new[] { byLine[1][0].PaidAmount, byLine[2][0].PaidAmount });
+        Assert.Equal(new decimal?[] { 20m, 10m },
+            new[] { byLine[1][0].PatientResponsibility, byLine[2][0].PatientResponsibility });
+    }
+
     [Fact]
     public void Allocator_IgnoresPayersAtOrAfterOurSequence_AndOrdersBySequence()
     {

@@ -103,6 +103,13 @@ public class AccumulatorService : IAccumulatorService
         if (IsReversal(evt.FinalStatus))
             return await ReverseClaimAsync(evt.TenantId, evt.ClaimId, evt.ClaimId, ct);
 
+        // A denied claim contributes nothing (round 3, H4): a claim pended
+        // after benefit calculation and then denied by an examiner can still
+        // carry the amounts priced before the denial. If it had applied,
+        // back that out.
+        if (IsDenied(evt.FinalStatus))
+            return await SkipDeniedAsync(evt, ct);
+
         // Two-phase idempotency — (tenantId, claimId) is the dedupe key even across
         // regenerated EventIds (re-finalization must not double-count). A Pending
         // marker from a crashed prior attempt (older than the lease) does NOT
@@ -110,10 +117,14 @@ public class AccumulatorService : IAccumulatorService
         var begin = await _processed.TryBeginAsync(evt.TenantId, evt.ClaimId, ct);
         if (begin == BeginClaimOutcome.AlreadyApplied)
         {
+            // Also a claim reversed before its apply arrived (tombstone,
+            // round 3 B3): a replacement already backed it out.
+            var marker = await _processed.GetAsync(evt.TenantId, evt.ClaimId, ct);
+            var reason = marker?.Outcome == ReversedBeforeApplyOutcome ? ReversedBeforeApplyOutcome : "DuplicateClaim";
             _logger.LogInformation(
-                "ClaimFinalizedEvent for claim {ClaimId} tenant {TenantId} already applied; skipping",
-                SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId));
-            return new ApplyResult(ApplyOutcome.Duplicate, null, null, "DuplicateClaim");
+                "ClaimFinalizedEvent for claim {ClaimId} tenant {TenantId} not applied: {Reason}",
+                SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId), reason);
+            return new ApplyResult(ApplyOutcome.Duplicate, null, null, reason);
         }
         if (begin == BeginClaimOutcome.InProgress)
             return new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress");
@@ -429,6 +440,38 @@ public class AccumulatorService : IAccumulatorService
         string.Equals(finalStatus, "Reversed", StringComparison.OrdinalIgnoreCase)
         || string.Equals(finalStatus, "Voided", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsDenied(string? finalStatus) =>
+        string.Equals(finalStatus, "Denied", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Marker outcome of a claim whose reversal arrived before its apply
+    /// (a replacement keyed on another claim id, on another Kafka partition,
+    /// overtook the original): the apply that follows is skipped.
+    /// </summary>
+    public const string ReversedBeforeApplyOutcome = "ReversedBeforeApply";
+
+    /// <summary>Marker outcome of a denied claim: nothing applied.</summary>
+    public const string DeniedOutcome = "DeniedNotApplied";
+
+    private async Task<ApplyResult> SkipDeniedAsync(ClaimFinalizedEvent evt, CancellationToken ct)
+    {
+        var begin = await _processed.TryBeginAsync(evt.TenantId, evt.ClaimId, ct);
+        switch (begin)
+        {
+            case BeginClaimOutcome.InProgress:
+                return new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress");
+            case BeginClaimOutcome.Proceed:
+                await _processed.CompleteAsync(evt.TenantId, evt.ClaimId, string.Empty, DeniedOutcome, ct);
+                return new ApplyResult(ApplyOutcome.Skipped, null, null, DeniedOutcome);
+        }
+
+        // Already processed: if it applied, the denial backs that out.
+        var marker = await _processed.GetAsync(evt.TenantId, evt.ClaimId, ct);
+        if (marker?.Outcome == "Applied")
+            return await ReverseClaimAsync(evt.TenantId, evt.ClaimId, evt.ClaimId, ct);
+        return new ApplyResult(ApplyOutcome.Duplicate, null, null, marker?.Outcome ?? DeniedOutcome);
+    }
+
     /// <summary>
     /// Backs out the deltas <paramref name="claimId"/> applied (its
     /// <c>ClaimApplied</c> audit row — the amounts actually applied after
@@ -457,10 +500,58 @@ public class AccumulatorService : IAccumulatorService
             var snapshot = applied is null
                 ? null
                 : await _repo.GetSnapshotAsync(tenantId, applied.MemberId, applied.PlanYearStart, ct);
-            if (applied is null || snapshot is null)
+            if (applied is null)
             {
+                // Round 3 (B3): nothing applied *yet* is not nothing to
+                // reverse. Kafka is keyed on the claim id, so a replacement
+                // (another key, another partition) can overtake its
+                // original's apply. Completing this reversal as "nothing to
+                // reverse" let the original apply afterwards and count on top
+                // of the replacement (deductible 600 instead of 300).
+                var original = await _processed.GetAsync(tenantId, claimId, ct);
+                if (original is { Outcome: "Pending" })
+                {
+                    // The original's apply is in flight: retry once it lands.
+                    await _processed.ReleaseAsync(tenantId, key, ct);
+                    return new ApplyResult(ApplyOutcome.InProgress, null, null, "OriginalApplyInProgress");
+                }
+
+                if (original is null)
+                {
+                    // Never seen: leave a tombstone so its apply is skipped.
+                    switch (await _processed.TryBeginAsync(tenantId, claimId, ct))
+                    {
+                        case BeginClaimOutcome.Proceed:
+                            await _processed.CompleteAsync(tenantId, claimId, string.Empty, ReversedBeforeApplyOutcome, ct);
+                            await _processed.CompleteAsync(tenantId, key, string.Empty, ReversedBeforeApplyOutcome, ct);
+                            _logger.LogInformation(
+                                "Reversal for claim {ClaimId} tenant {TenantId} arrived before its apply; " +
+                                "the apply will be skipped",
+                                SanitizeForLog(claimId), SanitizeForLog(tenantId));
+                            return new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome);
+                        case BeginClaimOutcome.InProgress:
+                            // The apply started meanwhile.
+                            await _processed.ReleaseAsync(tenantId, key, ct);
+                            return new ApplyResult(ApplyOutcome.InProgress, null, null, "OriginalApplyInProgress");
+                        default:
+                            // It completed meanwhile: re-read its row.
+                            continue;
+                    }
+                }
+
+                // Terminal without a row (orphan, denied, already tombstoned):
+                // it never counted and never will.
                 _logger.LogInformation(
-                    "Reversal for claim {ClaimId} tenant {TenantId}: nothing applied; nothing to reverse",
+                    "Reversal for claim {ClaimId} tenant {TenantId}: nothing applied ({Outcome}); nothing to reverse",
+                    SanitizeForLog(claimId), SanitizeForLog(tenantId), original.Outcome);
+                await _processed.CompleteAsync(tenantId, key, string.Empty, "NothingToReverse", ct);
+                return new ApplyResult(ApplyOutcome.Duplicate, null, null, "NothingToReverse");
+            }
+
+            if (snapshot is null)
+            {
+                _logger.LogWarning(
+                    "Reversal for claim {ClaimId} tenant {TenantId}: its snapshot is gone; nothing to reverse",
                     SanitizeForLog(claimId), SanitizeForLog(tenantId));
                 await _processed.CompleteAsync(tenantId, key, string.Empty, "NothingToReverse", ct);
                 return new ApplyResult(ApplyOutcome.Duplicate, null, null, "NothingToReverse");
