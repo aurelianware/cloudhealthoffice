@@ -1,4 +1,5 @@
 using CloudHealthOffice.NcciEngine.Data;
+using CloudHealthOffice.NcciEngine.Import;
 using CloudHealthOffice.NcciEngine.Models;
 using CloudHealthOffice.NcciEngine.Persistence;
 using CloudHealthOffice.NcciEngine.Services;
@@ -41,6 +42,7 @@ public static class NcciEngineServiceCollectionExtensions
     {
         services.AddSingleton<NcciLookupCache>();
         services.AddScoped<INcciEditService, NcciEditService>();
+        services.AddScoped<INcciQuarterlyLoader, NcciQuarterlyLoader>();
         return new NcciEngineBuilder(services);
     }
 
@@ -66,6 +68,17 @@ public static class NcciEngineServiceCollectionExtensions
 
         // Record the version
         var repo = scope.ServiceProvider.GetRequiredService<INcciRepository>();
+        var existing = await repo.GetCurrentVersionAsync(tenantId);
+        if (existing?.PtpSettings.Count > 0 || existing?.MueSettings.Count > 0)
+        {
+            // CMS tables are loaded; the seed must not replace their version
+            // record (and its "CMS table supersedes seed" settings).
+            logger.LogInformation(
+                "NCCI seed for tenant {TenantId}: CMS tables already loaded ({Quarter}); version left unchanged",
+                tenantId, existing.Quarter);
+            return;
+        }
+
         await repo.SaveVersionAsync(new NcciTableVersion
         {
             TenantId       = tenantId,
@@ -74,6 +87,7 @@ public static class NcciEngineServiceCollectionExtensions
             NcciPairCount  = pairsWritten,
             MueEntryCount  = mueWritten,
             EffectiveDate  = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            LoadStamp      = Guid.NewGuid().ToString("N"),
         });
 
         logger.LogInformation(
@@ -102,6 +116,11 @@ public class NcciEngineBuilder
     public NcciEngineBuilder UseCosmosRepository()
     {
         _services.AddScoped<INcciRepository, NcciRepositoryCosmos>();
+        _services.AddSingleton<IHostedService>(sp =>
+            new NcciCosmosContainerInitializer(
+                sp,
+                sp.GetRequiredService<IConfiguration>(),
+                sp.GetRequiredService<ILogger<NcciCosmosContainerInitializer>>()));
         return this;
     }
 

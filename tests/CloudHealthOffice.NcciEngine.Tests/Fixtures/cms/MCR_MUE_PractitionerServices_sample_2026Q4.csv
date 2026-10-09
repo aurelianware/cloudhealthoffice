@@ -1,0 +1,9 @@
+"CPT codes, descriptions and other data only are copyright 2025 American Medical Association. All Rights Reserved. SYNTHETIC TEST FIXTURE - not CMS data."
+HCPCS/CPT Code,Practitioner Services MUE Values,MUE Adjudication Indicator,MUE Rationale
+36415,2,2 Date of Service Edit: Policy,CMS Policy
+97110,6,2 Date of Service Edit: Policy,Clinical: Data
+70553,1,3 Date of Service Edit: Clinical,Anatomic Consideration
+J1100,30,1 Line Edit,Prescribing Information
+"85025",1,"3 Date of Service Edit: Clinical","Code Descriptor / CPT Instruction"
+99213,x,2 Date of Service Edit: Policy,Malformed: MUE value is not a number
+99214,1,7 Unknown,Malformed: bad adjudication indicator
