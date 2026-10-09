@@ -123,8 +123,14 @@ amount. Each invoice payment records the batch, the item line, the trace number 
   are not added again.
 - **Invoices** are saved with optimistic concurrency: a version in Mongo, the ETag in Cosmos. A
   save of a stale copy fails, and cash application re-reads the invoice and recomputes the
-  exact/partial/overpayment split from the fresh balance. Other writers of invoices (billing runs,
-  EFT drafts) now get a conflict error instead of silently overwriting a concurrent change.
+  exact/partial/overpayment split from the fresh balance.
+- **Other invoice writers re-read and re-apply on a conflict** (`InvoiceWrites.UpdateWithRetryAsync`,
+  up to 5 attempts):
+  - manual payments, voids and mark-sent: a conflict that persists returns **409** to the caller;
+  - EFT settlement and ACH returns: settling an already Settled draft records its payment if it is
+    missing, so a settle that failed after saving the draft can be retried;
+  - delinquency runs: a conflicting invoice is re-evaluated and skipped if a payment took it out of
+    overdue. A failing invoice is reported in `invoiceFailures` (HTTP 207) and the run continues.
 - **Sponsor accounts** use the same optimistic concurrency, with retry.
 
 ## Exceptions queue
