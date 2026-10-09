@@ -181,7 +181,7 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
             _logger.LogError(
                 "No service category mapping found for institutional {CodeType} {ProcedureCode} REV {RevenueCode} TOB {TypeOfBill}",
                 SanitizeForLog(codeType), SanitizeForLog(procedureCode), SanitizeForLog(revenueCode),
-                claim.NormalizedTypeOfBill ?? "(none)");
+                SanitizeForLog(claim.NormalizedTypeOfBill ?? "(none)"));
             return null;
         }
 
