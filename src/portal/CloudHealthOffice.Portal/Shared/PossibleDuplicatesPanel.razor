@@ -1,0 +1,99 @@
+@* Prior claims the duplicate-claim stage matched this claim against
+   (pend code DUPLICATE). One row per matched claim, linking to its detail
+   page. Renders nothing when there are no matches. *@
+@if (Matches is { Count: > 0 })
+{
+    <MudPaper Class="pa-5 mb-4" Elevation="2" data-testid="possible-duplicates"
+              Style="border-left: 4px solid var(--mud-palette-error);">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Error" />
+            <div>
+                <MudText Typo="Typo.h6">Possible duplicates</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    This claim matched @Matches.Count prior @(Matches.Count == 1 ? "claim" : "claims").
+                    Compare before resolving.
+                </MudText>
+            </div>
+        </MudStack>
+
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
+            <thead>
+                <tr>
+                    <th>Claim</th>
+                    <th>Service dates</th>
+                    <th style="text-align: right;">Billed</th>
+                    <th>Status</th>
+                    <th>Match</th>
+                    <th>Matched fields</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var match in Matches)
+                {
+                    <tr data-testid="@($"duplicate-row-{match.MatchedClaimId}")">
+                        <td>
+                            <MudLink Href="@($"/claims/{Uri.EscapeDataString(match.MatchedClaimId)}")"
+                                     Typo="Typo.body2" Style="font-family: monospace;"
+                                     data-testid="duplicate-link">
+                                @(string.IsNullOrWhiteSpace(match.MatchedClaimNumber) ? match.MatchedClaimId : match.MatchedClaimNumber)
+                            </MudLink>
+                            @if (match.Lines.Count > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                                    @LineSummary(match)
+                                </MudText>
+                            }
+                        </td>
+                        <td>@ServiceDates(match)</td>
+                        <td style="text-align: right;">@(match.BilledAmount?.ToString("C") ?? "—")</td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(match.Status))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@match.Status</MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Not available</MudText>
+                            }
+                        </td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                     Color="@(IsExact(match.MatchType) ? Color.Error : Color.Warning)"
+                                     data-testid="duplicate-match-type">
+                                @match.MatchType
+                            </MudChip>
+                        </td>
+                        <td>
+                            @foreach (var field in match.MatchedFields)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@field</MudChip>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<ClaimDuplicateMatch>? Matches { get; set; }
+
+    private static bool IsExact(string? matchType) =>
+        string.Equals(matchType, "Exact", StringComparison.OrdinalIgnoreCase);
+
+    private static string ServiceDates(ClaimDuplicateMatch match)
+    {
+        if (match.ServiceDateFrom is not { } from) return "—";
+        var to = match.ServiceDateTo ?? from;
+        return to.Date == from.Date
+            ? from.ToString("MM/dd/yyyy")
+            : $"{from:MM/dd/yyyy} – {to:MM/dd/yyyy}";
+    }
+
+    private static string LineSummary(ClaimDuplicateMatch match) =>
+        string.Join(", ", match.Lines.Select(l => l.MatchedLineNumber is { } other
+            ? $"Line {l.LineNumber} ↔ {other}"
+            : $"Line {l.LineNumber}"));
+}
