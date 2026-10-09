@@ -45,7 +45,7 @@
     "ajv-formats": "^2.1.1",
     "chalk": "^5.3.0",
     "commander": "^11.0.0",
-    "handlebars": "^4.7.9",
+    "handlebars": "^4.7.10",
     "inquirer": "^9.2.0",
     "marked": "^11.2.0",
     "openai": "^6.49.0",

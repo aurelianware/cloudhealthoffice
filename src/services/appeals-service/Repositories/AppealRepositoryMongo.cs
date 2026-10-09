@@ -1,5 +1,6 @@
 using AppealsService.Models;
 using MongoDB.Driver;
+using MongoDB.Driver.Linq;
 
 namespace AppealsService.Repositories;
 
@@ -140,44 +141,23 @@ public sealed class AppealRepositoryMongo : IAppealRepository
         }
         var expectedFromStatus = auditEvent.FromStatus.Value;
 
-        // Extension fields are owned by TryExtendDeadlineAsync. Carry the
-        // persisted values onto the replacement, and pin "no extension yet"
-        // in the filter when there was none, so a snapshot read before a
-        // concurrent extension can never erase it. One retry covers an
-        // extension that lands between the read and the replace.
-        for (var attempt = 0; attempt < 2; attempt++)
-        {
-            var idFilter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
-                         & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
-                         & Builders<Appeal>.Filter.Eq(a => a.Status, expectedFromStatus);
+        // Targeted update, not a replace: only the transition-owned fields
+        // are written, so a snapshot read before a concurrent attachment,
+        // acknowledgment, note, reviewer assignment, extension or overdue
+        // observation cannot overwrite it. The status filter refuses a
+        // concurrent transition.
+        var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
+                   & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id)
+                   & Builders<Appeal>.Filter.Eq(a => a.Status, expectedFromStatus);
 
-            var persisted = await _appeals.Find(idFilter).FirstOrDefaultAsync(ct)
-                ?? throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
+        appeal.UpdatedAt = DateTime.UtcNow;
+        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
+        var updated = await _appeals.FindOneAndUpdateAsync(
+                filter, AppealStatusTransitionFields.ToMongoUpdate(appeal), options, ct)
+            ?? throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
 
-            appeal.TargetResponseDate = persisted.TargetResponseDate;
-            appeal.DeadlineExtension = persisted.DeadlineExtension;
-            // Notes are append-only (AppendNoteAsync / the extension write);
-            // carry the persisted list and pin its length so a note pushed
-            // between the read and the replace forces a retry, not a loss.
-            appeal.Notes = persisted.Notes ?? new List<AppealNote>();
-
-            var notesUnchanged = appeal.Notes.Count == 0
-                // Legacy documents may hold null or lack the field ($size never matches those).
-                ? Builders<Appeal>.Filter.Size(a => a.Notes, 0) | Builders<Appeal>.Filter.Eq(a => a.Notes, null)
-                : Builders<Appeal>.Filter.Size(a => a.Notes, appeal.Notes.Count);
-            var filter = idFilter & notesUnchanged;
-            if (persisted.DeadlineExtension is null)
-                filter &= Builders<Appeal>.Filter.Eq(a => a.DeadlineExtension, null);
-
-            appeal.UpdatedAt = DateTime.UtcNow;
-            var replaceResult = await _appeals.ReplaceOneAsync(filter, appeal, cancellationToken: ct);
-            if (replaceResult.MatchedCount == 0) continue;
-
-            await _events.AppendAsync(auditEvent, ct);
-            return appeal;
-        }
-
-        throw new InvalidAppealTransitionException(expectedFromStatus, appeal.Status);
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
     }
 
     public async Task<Appeal?> TryTransitionToOverdueAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
@@ -294,15 +274,18 @@ public sealed class AppealRepositoryMongo : IAppealRepository
                          a => a.Attachments,
                          att => att.AttachmentId == attachmentId);
 
+        // Typed positional paths: the Appeal class map keeps .NET (Pascal)
+        // element names, so string paths like "attachments.$.status" never
+        // matched the stored array and the acknowledgment was not persisted.
         var newStatus = acknowledgmentReceived ? AttachmentStatus.Acknowledged : AttachmentStatus.Sent;
         var update = Builders<Appeal>.Update
-            .Set("attachments.$.acknowledgmentReceived", acknowledgmentReceived)
-            .Set("attachments.$.status", newStatus)
+            .Set(a => a.Attachments.FirstMatchingElement().AcknowledgmentReceived, acknowledgmentReceived)
+            .Set(a => a.Attachments.FirstMatchingElement().Status, newStatus)
             .Set(a => a.UpdatedAt, DateTime.UtcNow);
 
         if (acknowledgmentReceived)
         {
-            update = update.Set("attachments.$.sentDate", DateTime.UtcNow);
+            update = update.Set(a => a.Attachments.FirstMatchingElement().SentDate, DateTime.UtcNow);
         }
 
         var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
