@@ -411,26 +411,73 @@ A pended claim is priced read-only (no accumulator write), so finalizing it
 by flipping Pended → Approved used to pay it with **no deductible or OOP
 ever recorded**. Approval now re-adjudicates it:
 
-1. `POST /api/claims/work-queue/{id}/resolve` with `disposition: "Approved"`
-   (or `/override`) calls `IClaimApprovalReadjudicator.ReadjudicateForApprovalAsync`
-   (the orchestrator), which re-runs the whole pipeline **in Production**
-   with the examiner's approval on the context.
-2. Pends from the review stages the examiner rules on — `DuplicateClaim`,
-   `ProviderIntegrity`, `NetworkCredentialing`, `NcciEdits`, `AiExamination`,
-   `Scrubbing` — become Pass (with a note naming the examiner). Pends that
-   mean the claim *cannot be priced* (benefit calculation, pricing) are never
-   overridden.
-3. **COB pends need the payer order.** A COB pend (`cob-payer-order-mismatch`,
-   missing prior-payer data, duplicate / unmatched payer data) is never paid
-   as primary by a plain approval: the request must carry `payerSequence`,
-   the order the examiner confirmed (1 = this plan is primary, 2 = secondary,
-   3+ = tertiary or later). Sequence 1 prices the claim as primary
-   (`CobOutcome.ConfirmedByExaminer`); 2+ applies COB from the 837's
-   2320/2430 data, and still pends if that data is incomplete. Without
-   `payerSequence` the API returns **409** with the reason and writes nothing.
+1. `POST /api/claims/work-queue/{id}/resolve` (permission `workqueue:work`)
+   with `disposition: "Approved"` (or `/override`, `claims:override-approve`)
+   takes a conditional **resolution lock** on the Pended claim (a concurrent
+   resolution gets 409), then calls
+   `IClaimApprovalReadjudicator.ReadjudicateForApprovalAsync` (the
+   orchestrator), which re-runs the whole pipeline **in Production** with
+   the examiner's approval on the context. The re-run's Adjudicated message
+   has its own MessageId (`adjudicated:{ClaimVersionId}:approval:{id}`) so
+   Service Bus duplicate detection does not drop it; the advisory AI
+   examination does not run.
+2. **Only the reviewed pends are overridden (round 3, B1).** The approval
+   carries the claim's persisted pend (`ExaminerApproval.ReviewedPend`: the
+   pend code and reason plus every `AdditionalPendReasons` entry) — what the
+   examiner saw. A review-stage pend on the re-run (`DuplicateClaim`,
+   `ProviderIntegrity`, `NetworkCredentialing`, `NcciEdits`, `Scrubbing`)
+   becomes Pass only when its code was reviewed; for findings — provider
+   integrity (`MEDREVIEW`: unreachable / not verified), a duplicate, a retro
+   plan change (`RETROELIG`), subrogation / TPL (`SUBRO`), spend-down
+   (`SPENDDOWN`) — only when that **exact reason** was reviewed. A new pend
+   (provider integrity unreachable now, a duplicate of a different claim, …)
+   keeps the claim pended and the approval returns **409** for re-review.
+   Stages that pended without a code (network → `NETWORK`, scrubbing →
+   `SCRUB`) now record one, so it is persisted and nameable. Pends that mean
+   the claim *cannot be priced* (benefit calculation, pricing) are never
+   overridden. What the re-run overrode is recorded for the audit.
+3. **COB pends need the payer order (round 3, B2).** A COB pend
+   (`cob-payer-order-mismatch`, missing prior-payer data, duplicate /
+   unmatched payer data) is never paid as primary by a plain approval: the
+   request must carry `payerSequence`, the order the examiner confirmed.
+   It is checked, never clamped:
+   - only for a COB pend, only in 1..N (N = the claim's 2320 payers + this
+     plan) — otherwise **400**;
+   - disagreeing with the 837's SBR01 needs `claims:override-approve`
+     (**403**) and a reason (**400**); disagreeing with coverage-service —
+     or coverage-service unavailable to corroborate it — needs the same, or
+     the re-run refuses it (`cob-payer-order-override-required`, 409);
+   - **1 (primary) when a prior payer paid more than $0** needs a second,
+     different approver: the first approval is stored on the claim
+     (`PendingExaminerApproval`) and answered **202**; the same approver
+     again gets 409; a second supervisor's approval with the same sequence
+     re-runs the claim (`cob-primary-over-prior-payment` if it ever reaches
+     the stage without one). The reviewer's case — golden 07 approved as
+     primary paid $152 on top of $172 already paid against $250 allowed — is
+     refused for a single approver.
+   Sequence 1 prices the claim as primary (`CobOutcome.ConfirmedByExaminer`);
+   2+ applies COB from the 837's 2320/2430 data and still pends if that data
+   is incomplete. Without `payerSequence` the API returns 409 with the reason.
 4. Only when the re-run passes is the claim set to Approved and finalized —
    with the payment and accumulators from that Production pass. Any other
    outcome returns 409 with every unresolved reason; the claim stays pended.
+   Once the decision is made, the resolved and finalized events are
+   published with `CancellationToken.None` (a disconnecting caller cannot
+   leave an approved claim unpublished).
+5. **Audit.** Every resolution appends an `ExaminerResolutionRecord` to
+   `Claim.ExaminerResolutions` — disposition, approver(s), reason, payer
+   sequence, the reviewed pends, the pends overridden, requested / resolved
+   timestamps — and the ClaimVersionResolved event carries it
+   (`payload.examinerResolution`).
+6. **Denial.** An examiner denial reverses the claim's engine accumulators
+   (`IBenefitCalculationEngine.ReverseClaimAsync`, idempotent): a claim
+   pended *after* benefit calculation (NCCI at 400, AI at 600) priced in
+   Production and wrote them. accumulator-service skips a ClaimFinalized
+   event whose status is Denied (and reverses one that had applied).
+7. **Portal.** The work queue's override and the claim page's approve send
+   `payerSequence` (a payer-order dialog for COB pends) and show the
+   service's 400 / 403 / 409 reason — not "service unavailable"; a 202 shows
+   "waiting for a second approver".
 
 **Every pend reason is kept (re-review N3).** The NCCI stage (Order 400) used
 to overwrite an earlier pend's details (e.g. the COB stage's at 275), so the
@@ -512,11 +559,13 @@ and §3.A (an amount the provider may not charge is not an allowable expense).
    paid**; PR-1/2/3 are reduced to the member's share (coinsurance, copay,
    then deductible); charge − ΣCAS = paid; no negative CAS.
 
-Line-by-line capping (the previous approach, and still what
-`MemberPaidOnly` does — see below) loses money whenever claim-level
-prior-payer amounts are prorated in proportions different from this plan's
-line amounts: golden 07 pays $49.37 instead of $58.00 and leaves $8.63
-neither paid nor billable to the member (review M1). The claim-level allowable-
+Line-by-line capping with the 2320 amounts prorated *by charge* (the
+previous approach) lost money whenever those proportions differed from where
+the member still owed: golden 07 paid $49.37 instead of $58.00 and left
+$8.63 neither paid nor billable to the member (review M1). The per-line view
+(`MemberPaidOnly`) now prorates a later payer's claim-level amounts by the
+balance the earlier payers left on each line (round 3, below) and pays the
+same $58.00. The claim-level allowable-
 expense rule is the one MDL-120 states; prorating the 2320 amounts "by the
 previous payer's line PR" was considered and rejected: the 2320 amounts are
 claim-level precisely when the payer gives no line split, so any line split
@@ -540,7 +589,7 @@ first payer:
 | Value | Deductible accumulator | 835 |
 |---|---|---|
 | `NaicFullCredit` (default) | the deductible our own adjudication applied as the only plan (already limited to the remaining deductible and by the OOP cap), including deductible a prior payer paid | claim priced as the only plan, then claim-level COB |
-| `MemberPaidOnly` | only the PR-1 the member owes after COB — self-funded ERISA plans with non-duplication / carve-out provisions | **line by line**: each line priced and COB'd before the next, so the next line sees only the deductible the member paid. Same 835 as `NaicFullCredit` for a single-line claim; can differ on a multi-line one |
+| `MemberPaidOnly` | only the PR-1 the member owes after COB — self-funded ERISA plans with non-duplication / carve-out provisions | **line by line**: each line priced and COB'd before the next, so the next line sees only the deductible the member paid. Same payment as `NaicFullCredit` on golden 07 ($58.00); the per-line split can differ |
 | `NoDeductible` | nothing: the deductible is not applied | no PR-1 (the deductible is skipped as a later payer) — Medicaid-secondary plans. Rejected on an HDHP (IRC §223(c)(2)). |
 
 Source: MDL-120 §7, "the secondary plan shall credit to its plan deductible
@@ -561,11 +610,19 @@ health care coverage."
   against what is left, and so on, in line order. That is the only way the
   result does not depend on claim splitting — a provider sending the same
   services as one two-line claim or two one-line claims gets the same
-  payment and the member the same deductible. The cost: each line is
-  bounded by its own share of the prior payers' amounts, so a multi-line
-  claim with claim-level (2320-only) prior-payer data can pay less than
-  `NaicFullCredit` (golden `07-tertiary-cob-member-paid-only`: $49.37 vs
-  $58.00).
+  payment and the member the same deductible. Each line is bounded by its
+  own share of the prior payers' amounts; a later payer's 2320-only
+  (claim-level) paid amount and PR are spread **by the balance the earlier
+  payers left on each line** — the previous payer's line PR (what it left the
+  member owing), else charge less what was paid; by charge only for the first
+  payer (round 3). NAIC §7 pays the lesser of the normal benefit and the
+  remaining balance, and `MemberPaidOnly` is a deductible-credit rule only:
+  it must not pay less. Golden `07-tertiary-cob-member-paid-only` now pays
+  **$58.00** like golden 07 — L1 $49.15 (= the secondary's PR share,
+  58 × 100 / 118), L2 $8.85; spreading by charge put $18 of the secondary's
+  PR on L2, where only $9.37 of the allowed was left, and paid $49.37. The
+  two settings now differ only in the deductible credit ($0 vs $60); the
+  per-line split differs (NAIC's claim-level allocation is 51.03 / 6.97).
 - Example (the reviewer's): two lines allowed $500 each, $500 deductible
   left, primary paid L1 $500 (PR 0) and L2 $0 with PR-1 $500.
   `NaicFullCredit`: as the only plan, L1 takes the whole $500 deductible, so
@@ -668,21 +725,51 @@ on secondary/tertiary claims; past accumulators are not rewritten.
 - **Frequency 8 first.** A frequency-8 void naming its original reverses the
   original even when it arrives with FinalStatus `Reversed` (it used to be
   treated as a reversal of itself, reversing nothing).
+- **A replacement can overtake its original (round 3, B3).** Kafka is keyed
+  on the claim id, so a replacement C2 (another key, another partition) can
+  arrive before its original C1's apply. Its reversal of C1 found nothing and
+  completed as "nothing to reverse"; C1 then applied on top of C2 (deductible
+  600 instead of 300). Now a reversal that finds nothing applied checks C1's
+  processed-claim marker: **Pending** (C1's apply in flight) → `InProgress`,
+  its own reversal marker released, retried later; **none** → a
+  `ReversedBeforeApply` tombstone on C1's marker (both Mongo and Cosmos,
+  through `IProcessedClaimStore`), so C1's apply is skipped when it arrives;
+  terminal → nothing to reverse.
+- **Denied claims** are not applied (`ApplyOutcome.Skipped`, marker
+  `DeniedNotApplied`); a claim that had applied and is later finalized as
+  Denied is reversed.
+- **Indexes at startup (round 3, M7).** The Mongo indexes are created once by
+  `AccumulatorMongoIndexInitializer` (a hosted service), not in the scoped
+  repositories' constructors. Before creating the unique reversal index it
+  re-tags any existing duplicate `ClaimReversed` rows
+  (`ClaimReversedDuplicate`, logged for an operator adjustment), so a
+  database already holding a double reversal cannot make startup — and the
+  consumer — fail in a loop.
 
 ## Limitations
 
 - **COB model.** Always standard (complementary) from the 837 path; there is
   no plan-level COB-method setting (non-duplication is engine-supported but
   only reachable through the API's `useComplementaryModel`).
-- **Accumulators for claims pended after benefit calculation.** A claim the
-  COB stage (or any earlier stage) pends is priced read-only, and approval
-  re-adjudicates it in Production. A claim a *later* stage pends (NCCI at
-  400) still writes accumulators at 300 — a pre-existing ordering issue
-  outside COB; its approval re-run reverses and rewrites them (idempotent
-  per claim), so they are not doubled.
-- **`MemberPaidOnly` and claim-level prior-payer data.** Line-by-line pricing
-  bounds each line by its prorated share of 2320-only amounts; see the
-  golden 07 comparison above.
+- **Accumulators for claims pended after benefit calculation (H4).** A claim
+  the COB stage (or any earlier stage) pends is priced read-only, and
+  approval re-adjudicates it in Production. A claim a *later* stage pends
+  (NCCI at 400, AI at 600) still writes engine accumulators at 300 (a
+  pre-existing ordering). Its approval re-run reverses and rewrites them
+  (idempotent per claim), an examiner denial now reverses them, and
+  accumulator-service ignores Denied events — so a pend that ends in a
+  denial leaves nothing behind. **Not done: deferring every accumulator
+  write until the claim finalizes** (pricing Prospective whenever *any*
+  stage pends, at any order, then committing). The engine is reached over
+  HTTP and has no "commit prepared updates" operation, so the only way to
+  commit after NCCI / AI is to price the claim a second time in Production
+  after the pipeline passes. That doubles the engine calls for every clean
+  claim, and the second pricing can differ from the persisted first one
+  when a concurrent claim moved the balances. The clean fix is an engine
+  endpoint that commits the updates of a prior Prospective pricing (or
+  NCCI / AI before benefit calculation) — a follow-up outside this PR.
+  Between the pend and the examiner's decision the member's accumulators
+  include the pended claim's cost share.
 - **Legacy-row replay** uses the current limits; a limit changed since the
   row was written, or used amounts loaded into a snapshot outside the event
   log, can make it inexact (never more than the row recorded).
