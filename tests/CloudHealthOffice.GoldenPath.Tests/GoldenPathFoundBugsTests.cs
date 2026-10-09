@@ -46,12 +46,10 @@ public class GoldenPathFoundBugsTests
         Assert.Equal("SYNTHETIC FAMILY CLINIC", payee[2]);
     }
 
-    // OOP max: the engine reports the full coinsurance as PR-2 and the cap as a
-    // negative OA-23 (CAS*PR*2*30.00 + CAS*OA*23*-10.00). The member owes 20, so
-    // the 835 should say PR-2 20.00 with no OA adjustment; a negative OA-23
-    // ("prior payer adjudication") is not what happened. BenefitEngine OA-23
-    // code is owned by other work, so this is not changed here.
-    [Fact(Skip = "bug: OOP-max reduction is remitted as a negative OA-23 instead of reducing the PR amount (BenefitEngine OA-23 code, out of scope here)")]
+    // OOP max (fixed in #1262): the cap reduces the PR amount itself, so the
+    // 835 says PR-2 20.00 with no OA-23 — previously CAS*PR*2*30.00 plus a
+    // negative CAS*OA*23*-10.00. Kept as a regression guard.
+    [Fact]
     public async Task OopMaxReduction_IsNotRemittedAsNegativeAdjustment()
     {
         var r = await _harness.RunAsync(
