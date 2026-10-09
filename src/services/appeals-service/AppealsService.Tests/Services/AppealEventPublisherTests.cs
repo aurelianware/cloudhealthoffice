@@ -306,12 +306,27 @@ public class AppealEventPublisherTests
     [InlineData(Confluent.Kafka.ErrorCode.Local_MsgTimedOut, true)]
     [InlineData(Confluent.Kafka.ErrorCode.Local_AllBrokersDown, true)]
     [InlineData(Confluent.Kafka.ErrorCode.Local_Transport, true)]
+    // Broker-wide conditions hit every event alike: pause, never dead-letter.
+    [InlineData(Confluent.Kafka.ErrorCode.UnknownTopicOrPart, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.Local_UnknownTopic, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.TopicAuthorizationFailed, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.ClusterAuthorizationFailed, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.SaslAuthenticationFailed, true)]
+    [InlineData(Confluent.Kafka.ErrorCode.Local_Authentication, true)]
+    // About one message only: retried, then dead-lettered.
     [InlineData(Confluent.Kafka.ErrorCode.MsgSizeTooLarge, false)]
     [InlineData(Confluent.Kafka.ErrorCode.InvalidMsg, false)]
-    [InlineData(Confluent.Kafka.ErrorCode.TopicAuthorizationFailed, false)]
     public void IsTransient_Separates_Outages_From_Rejected_Messages(Confluent.Kafka.ErrorCode code, bool transient)
     {
         AppealEventPublisher.IsTransientError(new Confluent.Kafka.KafkaException(code)).Should().Be(transient);
         AppealEventPublisher.IsTransientError(new InvalidOperationException("boom")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Fatal_Producer_Errors_Are_Transient()
+    {
+        var fatal = new Confluent.Kafka.KafkaException(
+            new Confluent.Kafka.Error(Confluent.Kafka.ErrorCode.InvalidMsg, "fenced", isFatal: true));
+        AppealEventPublisher.IsTransientError(fatal).Should().BeTrue("the producer is rebuilt and the event retried, not dead-lettered");
     }
 }

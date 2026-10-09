@@ -24,6 +24,13 @@ data:
   AppealEncryption__AcceptedKeyVersions__0: "v1"
   Kafka__ClientId: "appeals-service"
   AppealMigration__BatchSize: "100"
+  # No broker is configured for this manifest yet (kafka-secret's
+  # bootstrapServers is empty), so appeal events are marked Skipped instead
+  # of piling up in every appeal document's outbox. Audit rows are still
+  # written. Set this to "false" BEFORE populating bootstrapServers if the
+  # backlog written while Kafka was off must be delivered; leave "false"
+  # once a broker is configured. See docs/architecture/appeals-event-outbox.md.
+  AppealOutbox__SkipWhenKafkaDisabled: "true"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -113,10 +120,16 @@ spec:
               name: appeals-service-config
               key: AppealEncryption__AcceptedKeyVersions__0
         # Kafka — empty BootstrapServers disables publishing (service boots;
-        # appeal events stay pending in each appeal's outbox and are
-        # delivered once the broker is configured — see
-        # docs/architecture/appeals-event-outbox.md). Populate the secret
-        # when the broker is ready for appeal.status-changed.v1.
+        # with AppealOutbox__SkipWhenKafkaDisabled=true events are marked
+        # Skipped, otherwise they stay pending until the broker is
+        # configured — see docs/architecture/appeals-event-outbox.md).
+        # Populate the secret when the broker is ready for
+        # appeal.status-changed.v1.
+        - name: AppealOutbox__SkipWhenKafkaDisabled
+          valueFrom:
+            configMapKeyRef:
+              name: appeals-service-config
+              key: AppealOutbox__SkipWhenKafkaDisabled
         - name: Kafka__BootstrapServers
           valueFrom:
             secretKeyRef:

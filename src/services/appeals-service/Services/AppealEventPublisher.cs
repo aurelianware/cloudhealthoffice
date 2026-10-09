@@ -17,7 +17,9 @@ namespace AppealsService.Services;
 ///   header.
 /// - Partition key = <c>appealId</c> (per-appeal ordering preserved).
 /// - Headers: <c>tenant-id</c>, <c>event-type</c>, <c>event-version</c>,
-///   <c>event-id</c> (idempotency key for consumer de-duplication).
+///   <c>event-id</c> (de-duplication key) and <c>event-sequence</c>
+///   (per-appeal order; also in the payload as <c>sequence</c>).
+/// - A fatal producer error (<c>Error.IsFatal</c>) rebuilds the producer.
 ///
 /// Only <c>AppealOutboxDispatcher</c> calls <see cref="ProduceAsync"/>, and
 /// a failure is thrown, never swallowed: the dispatcher keeps the event in
@@ -42,7 +44,9 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
 
     private readonly ILogger<AppealEventPublisher> _logger;
     private readonly IConfiguration _configuration;
-    private IProducer<string, string>? _producer;
+    private readonly object _producerSync = new();
+    private ProducerConfig? _producerConfig;
+    private volatile IProducer<string, string>? _producer;
     private volatile bool _available;
     private readonly TaskCompletionSource<AppealEventPublisherState> _started =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -93,6 +97,7 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
             producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
         }
 
+        _producerConfig = producerConfig;
         try
         {
             _producer = new ProducerBuilder<string, string>(producerConfig).Build();
@@ -135,36 +140,84 @@ public sealed class AppealEventPublisher : IAppealEventTransport, IHostedService
         if (!_available || producer == null)
             throw new AppealEventTransportUnavailableException("Kafka producer is not available.");
 
+        var headers = new Headers
+        {
+            { "tenant-id", Encoding.UTF8.GetBytes(outbox.TenantId) },
+            { "event-type", Encoding.UTF8.GetBytes(outbox.EventType) },
+            { "event-version", Encoding.UTF8.GetBytes(EventVersion) },
+            { "event-id", Encoding.UTF8.GetBytes(outbox.EventId) }
+        };
+        if (outbox.Sequence is { } sequence)
+            headers.Add("event-sequence", Encoding.UTF8.GetBytes(sequence.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
         var message = new Message<string, string>
         {
             Key = outbox.AppealId,
-            Value = outbox.PayloadJson,
-            Headers = new Headers
-            {
-                { "tenant-id", Encoding.UTF8.GetBytes(outbox.TenantId) },
-                { "event-type", Encoding.UTF8.GetBytes(outbox.EventType) },
-                { "event-version", Encoding.UTF8.GetBytes(EventVersion) },
-                { "event-id", Encoding.UTF8.GetBytes(outbox.EventId) }
-            }
+            Value = AppealOutbox.WirePayload(outbox),
+            Headers = headers
         };
 
-        // Throws ProduceException on a broker NACK or timeout; the
-        // dispatcher records the failure and retries.
-        await producer.ProduceAsync(StatusChangedTopic, message, ct);
+        try
+        {
+            // Throws ProduceException on a broker NACK or timeout; the
+            // dispatcher records the failure and retries.
+            await producer.ProduceAsync(StatusChangedTopic, message, ct);
+        }
+        catch (KafkaException ex) when (ex.Error.IsFatal)
+        {
+            // A fatal error leaves the idempotent producer unusable until it
+            // is recreated; rebuild so the next attempt can succeed.
+            RebuildProducer(producer, ex.Error);
+            throw;
+        }
+    }
+
+    private void RebuildProducer(IProducer<string, string> failed, Error error)
+    {
+        lock (_producerSync)
+        {
+            if (!ReferenceEquals(_producer, failed) || _producerConfig is null) return;
+            _logger.LogError("Kafka producer hit a fatal error ({Code}: {Reason}); rebuilding it.",
+                error.Code, LogSanitizer.SafeForLog(error.Reason));
+            try
+            {
+                _producer = new ProducerBuilder<string, string>(_producerConfig).Build();
+                _available = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Rebuilding the Kafka producer failed; events stay pending until it succeeds.");
+                _producer = null;
+                _available = false;
+            }
+            try { failed.Dispose(); } catch (Exception) { /* already broken */ }
+        }
     }
 
     /// <inheritdoc />
     public bool IsTransient(Exception error) => IsTransientError(error);
 
     /// <summary>
-    /// Broker / network conditions — a Kafka outage — are transient; errors
-    /// about the message itself (too large, invalid, not authorized) are not.
+    /// Transient = the whole broker / cluster / credentials, which affects
+    /// every event alike: an outage, a missing topic, a revoked ACL, failed
+    /// SASL authentication, or a fatal producer error (the producer is
+    /// rebuilt). These pause the relay and never dead-letter. Only errors
+    /// about one message (too large, invalid record) are not transient.
     /// </summary>
     internal static bool IsTransientError(Exception error) => error switch
     {
         AppealEventTransportUnavailableException => true,
         OperationCanceledException => true,
+        KafkaException k when k.Error.IsFatal => true,
         KafkaException k => k.Error.Code is ErrorCode.Local_MsgTimedOut
+            or ErrorCode.UnknownTopicOrPart
+            or ErrorCode.Local_UnknownTopic
+            or ErrorCode.Local_UnknownPartition
+            or ErrorCode.TopicAuthorizationFailed
+            or ErrorCode.ClusterAuthorizationFailed
+            or ErrorCode.SaslAuthenticationFailed
+            or ErrorCode.Local_Authentication
+            or ErrorCode.Local_Fatal
             or ErrorCode.Local_Transport
             or ErrorCode.Local_AllBrokersDown
             or ErrorCode.Local_TimedOut

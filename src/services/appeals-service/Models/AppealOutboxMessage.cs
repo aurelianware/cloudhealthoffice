@@ -11,17 +11,34 @@ namespace AppealsService.Models;
 /// them sent.
 /// </summary>
 /// <remarks>
-/// <see cref="PayloadJson"/> is the complete, already-serialized wire
-/// payload built by the field-whitelisted <c>AppealEventPublisher</c>
-/// builders. It carries no encrypted-at-rest value.
+/// <see cref="PayloadJson"/> is the wire payload built by the
+/// field-whitelisted <c>AppealEventPublisher</c> builders; it carries no
+/// encrypted-at-rest value. The dispatcher adds <see cref="Sequence"/> to it
+/// at publish time.
 /// </remarks>
 [BsonIgnoreExtraElements]
 public class AppealOutboxMessage
 {
     /// <summary>
-    /// Idempotency key. Equals the payload's <c>eventId</c>, the audit row's
-    /// <see cref="AppealEvent.EventId"/> and the Kafka <c>event-id</c> header,
-    /// so consumers de-duplicate a redelivery on it.
+    /// Server-generated identity of this outbox row. Every dispatcher update
+    /// matches on it (plus <c>Status == Pending</c> and the lease owner), so
+    /// two rows can never be confused even if they share an
+    /// <see cref="IdempotencyKey"/>.
+    /// </summary>
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>
+    /// The audit row's <see cref="AppealEvent.EventId"/> — the client's
+    /// idempotency key when it supplied one. A write whose key is already in
+    /// the outbox is a replay and appends nothing.
+    /// </summary>
+    public string IdempotencyKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Wire event id (payload <c>eventId</c> and <c>event-id</c> header):
+    /// a UUIDv5 of <c>tenant:appeal:idempotencyKey</c>, so a client key
+    /// reused across appeals or tenants never collides on the topic.
+    /// Consumers de-duplicate on it.
     /// </summary>
     public string EventId { get; set; } = string.Empty;
 
@@ -32,8 +49,16 @@ public class AppealOutboxMessage
 
     public string AppealId { get; set; } = string.Empty;
 
-    /// <summary>Serialized wire payload (camelCase JSON).</summary>
+    /// <summary>Serialized wire payload (camelCase JSON) without <c>sequence</c>.</summary>
     public string PayloadJson { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Per-appeal publish sequence (1, 2, ...) in write order, assigned by
+    /// the lease holder just before the first publish attempt and kept for
+    /// every redelivery and replay. Sent as payload <c>sequence</c> and the
+    /// <c>event-sequence</c> header; consumers apply last-write-wins by it.
+    /// </summary>
+    public long? Sequence { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -45,13 +70,16 @@ public class AppealOutboxMessage
     /// <summary>Earliest time the dispatcher may retry; <c>null</c> = now.</summary>
     public DateTime? NextAttemptAt { get; set; }
 
-    /// <summary>Last failure, sanitized; never payload content.</summary>
+    /// <summary>Last failure (or dead-letter reason), sanitized; never payload content.</summary>
     public string? LastError { get; set; }
 
     public DateTime? LastAttemptAt { get; set; }
 
     /// <summary>When the entry left <see cref="AppealOutboxStatus.Pending"/> (sent, skipped or dead-lettered).</summary>
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>Dead-lettered entries are pruned after this time (<c>AppealOutbox:DeadLetterRetention</c>).</summary>
+    public DateTime? ExpiresAt { get; set; }
 }
 
 public enum AppealOutboxStatus
@@ -63,8 +91,9 @@ public enum AppealOutboxStatus
     Sent = 2,
 
     /// <summary>
-    /// Failed <c>AppealOutbox:MaxAttempts</c> times with a non-transient
-    /// error. No longer retried; replay with the outbox replay endpoint.
+    /// Not delivered and no longer retried: rejected <c>AppealOutbox:MaxAttempts</c>
+    /// times, or expired / over the per-appeal cap. Replay with the outbox
+    /// replay endpoints; pruned after <c>AppealOutbox:DeadLetterRetention</c>.
     /// </summary>
     DeadLettered = 3,
 

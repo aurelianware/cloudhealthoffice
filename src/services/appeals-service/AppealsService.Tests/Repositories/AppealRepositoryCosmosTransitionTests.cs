@@ -4,6 +4,8 @@ using AppealsService.Models;
 using AppealsService.Repositories;
 using Microsoft.Azure.Cosmos;
 
+using AppealsService.Tests.Fakes;
+
 namespace AppealsService.Tests.Repositories;
 
 /// <summary>
@@ -94,11 +96,11 @@ public class AppealRepositoryCosmosTransitionTests
         return a;
     }
 
-    private static AppealEvent StatusEvent(AppealStatus from, AppealStatus to) => new()
+    private static AppealEvent StatusEvent(AppealStatus from, AppealStatus to) => new AppealEvent
     {
         TenantId = "t1", AppealId = "a1", EventId = Guid.NewGuid().ToString(),
         EventType = AppealEventType.AppealStatusChanged, FromStatus = from, ToStatus = to, ActorId = "u"
-    };
+    }.Queued(Snapshot());
 
     private static Appeal StaleBeginReview()
     {

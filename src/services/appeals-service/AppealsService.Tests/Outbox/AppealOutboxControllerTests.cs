@@ -101,19 +101,64 @@ public sealed class AppealOutboxControllerTests : IClassFixture<AppealsWebApplic
     }
 
     [Fact]
-    public async Task Client_Supplied_EventId_Is_The_Kafka_Event_Id()
+    public async Task Client_Supplied_EventId_Maps_To_A_Namespaced_Wire_Event_Id()
+    {
+        _factory.Reset();
+        var client = NewClient();
+        var first = await CreateAsync(client);
+        var second = await CreateAsync(client);
+        var eventId = Guid.NewGuid().ToString();
+
+        foreach (var appeal in new[] { first, second })
+            (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/submit",
+                new IdempotencyEnvelope { EventId = eventId }, JsonOptions)).EnsureSuccessStatusCode();
+
+        var wireFirst = AppealOutbox.WireEventId(Tenant, first.Id, eventId);
+        var wireSecond = AppealOutbox.WireEventId(Tenant, second.Id, eventId);
+        wireFirst.Should().NotBe(wireSecond, "the same client key on two appeals must not collide on the topic");
+        wireFirst.Should().Be(AppealOutbox.WireEventId(Tenant, first.Id, eventId), "deterministic");
+        Guid.Parse(wireFirst).ToString()[14].Should().Be('5', "a version-5 UUID");
+
+        _factory.Publisher.Produced.Should().ContainSingle(m => m.EventId == wireFirst)
+            .Which.PayloadJson.Should().Contain($"\"eventId\":\"{wireFirst}\"");
+        _factory.Publisher.Produced.Should().ContainSingle(m => m.EventId == wireSecond);
+        _factory.Repo.SnapshotEvents().Count(e => e.EventId == eventId).Should().Be(2, "audit rows keep the client key");
+    }
+
+    [Fact]
+    public async Task Retried_Note_Attachment_And_Ack_With_The_Same_EventId_Are_Replays()
     {
         _factory.Reset();
         var client = NewClient();
         var appeal = await CreateAsync(client);
-        var eventId = Guid.NewGuid().ToString();
+        var noteKey = Guid.NewGuid().ToString();
+        var attachKey = Guid.NewGuid().ToString();
+        var ackKey = Guid.NewGuid().ToString();
 
-        (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/submit",
-            new IdempotencyEnvelope { EventId = eventId }, JsonOptions)).EnsureSuccessStatusCode();
+        for (var i = 0; i < 2; i++)
+        {
+            (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/notes",
+                new AddNoteRequest { NoteText = "note", EventId = noteKey }, JsonOptions)).EnsureSuccessStatusCode();
+            (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/attachments",
+                new AddAttachmentRequest { AttachmentTypeCode = "OZ", FileName = "a.pdf", EventId = attachKey }, JsonOptions))
+                .EnsureSuccessStatusCode();
+        }
+        var attachmentId = _factory.Repo.PeekStored(Tenant, appeal.Id)!.Attachments.Single().AttachmentId;
+        for (var i = 0; i < 2; i++)
+            (await client.PostAsJsonAsync($"/api/appeals/{appeal.Id}/attachments/{attachmentId}/acknowledge",
+                new AcknowledgeAttachmentRequest { AcknowledgmentReceived = true, EventId = ackKey }, JsonOptions))
+                .EnsureSuccessStatusCode();
 
-        _factory.Publisher.Produced.Should().ContainSingle(m => m.EventId == eventId)
-            .Which.PayloadJson.Should().Contain($"\"eventId\":\"{eventId}\"");
-        _factory.Repo.SnapshotEvents().Should().ContainSingle(e => e.EventId == eventId);
+        var stored = _factory.Repo.PeekStored(Tenant, appeal.Id)!;
+        stored.Notes.Should().ContainSingle();
+        stored.Attachments.Should().ContainSingle();
+        stored.Outbox!.Select(m => m.IdempotencyKey).Should().OnlyHaveUniqueItems();
+
+        for (var i = 0; i < 5; i++) await RelayAsync();
+        _factory.Publisher.NotesAdded.Should().ContainSingle();
+        _factory.Publisher.AttachmentsAdded.Should().ContainSingle();
+        _factory.Publisher.AttachmentsAcknowledged.Should().ContainSingle();
+        _factory.Publisher.Produced.Should().HaveCount(4, "created + note + attachment + ack, each once");
     }
 
     [Fact]
@@ -122,10 +167,7 @@ public sealed class AppealOutboxControllerTests : IClassFixture<AppealsWebApplic
         _factory.Reset();
         var admin = NewClient();
         var appeal = await CreateAsync(admin);
-        var entry = _factory.Repo.OutboxOf(Tenant, appeal.Id).Single();
-        entry.Status = AppealOutboxStatus.DeadLettered;
-        entry.Attempts = 10;
-        await _factory.Repo.UpdateMessageAsync(Tenant, appeal.Id, entry);
+        var entry = DeadLetterAll(appeal.Id).Single();
         while (_factory.Publisher.Produced.TryDequeue(out _)) { }
 
         var reviewer = NewClient(ChoRolePermissions.UMCoordinator); // appeals:read + appeals:write
@@ -141,5 +183,46 @@ public sealed class AppealOutboxControllerTests : IClassFixture<AppealsWebApplic
 
         (await admin.PostAsync($"/api/appeals/{Guid.NewGuid()}/outbox/replay", null))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Bulk_Replay_Is_Tenant_Wide_For_Admins_And_Platform_Wide_For_Platform_Admins()
+    {
+        _factory.Reset();
+        var admin = NewClient();
+        var first = await CreateAsync(admin);
+        var second = await CreateAsync(admin);
+        DeadLetterAll(first.Id);
+        DeadLetterAll(second.Id);
+
+        (await NewClient(ChoRolePermissions.UMCoordinator).PostAsync("/api/appeals/outbox/replay", null))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await admin.PostAsync("/api/appeals/outbox/replay-all-tenants", null))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden, "a tenant admin's *:* never reaches platform:*");
+
+        var tenantWide = await admin.PostAsync("/api/appeals/outbox/replay", null);
+        tenantWide.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await tenantWide.Content.ReadFromJsonAsync<OutboxReplayResponse>(JsonOptions))!.Requeued.Should().Be(2);
+
+        DeadLetterAll(first.Id);
+        var platform = await NewClient(ChoRolePermissions.PlatformAdmin).PostAsync("/api/appeals/outbox/replay-all-tenants", null);
+        platform.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await platform.Content.ReadFromJsonAsync<OutboxReplayResponse>(JsonOptions))!.Requeued.Should().Be(1);
+    }
+
+    /// <summary>Marks every outbox entry of the appeal dead-lettered (stand-in for exhausted retries).</summary>
+    private List<AppealOutboxMessage> DeadLetterAll(string appealId)
+    {
+        _factory.Repo.EditOutbox(Tenant, appealId, a =>
+        {
+            foreach (var m in a.Outbox!)
+            {
+                m.Status = AppealOutboxStatus.DeadLettered;
+                m.Attempts = 10;
+                m.CompletedAt = DateTime.UtcNow;
+                m.ExpiresAt = DateTime.UtcNow.AddDays(30);
+            }
+        });
+        return _factory.Repo.OutboxOf(Tenant, appealId).ToList();
     }
 }

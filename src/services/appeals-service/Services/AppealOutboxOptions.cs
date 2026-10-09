@@ -48,6 +48,39 @@ public sealed class AppealOutboxOptions
     /// </summary>
     public bool SkipWhenKafkaDisabled { get; set; }
 
+    /// <summary>
+    /// Wait for the inline publish before the request returns. Off in
+    /// production — the inline publish is fire-and-forget, so a Kafka
+    /// timeout never adds to request latency. Tests turn it on for
+    /// deterministic assertions.
+    /// </summary>
+    public bool AwaitInlineDispatch { get; set; }
+
+    /// <summary>A pending entry older than this is dead-lettered as expired (error log + metric).</summary>
+    public TimeSpan MaxPendingAge { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>Pending entries kept per appeal; older ones beyond it are dead-lettered as overflow.</summary>
+    public int MaxPendingPerAppeal { get; set; } = 100;
+
+    /// <summary>Sent / skipped entries kept per appeal (newest), on top of <see cref="SentRetention"/>.</summary>
+    public int MaxCompletedPerAppeal { get; set; } = 25;
+
+    /// <summary>Dead-lettered entries are pruned after this (warning log + metric); replay before then.</summary>
+    public TimeSpan DeadLetterRetention { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>Dead-lettered entries kept per appeal (newest); older ones are pruned.</summary>
+    public int MaxDeadLetteredPerAppeal { get; set; } = 50;
+
+    /// <summary>
+    /// How often the relay does housekeeping only (expiry, caps, pruning)
+    /// while it cannot publish: Kafka disabled with events retained, or the
+    /// producer failed to start.
+    /// </summary>
+    public TimeSpan MaintenanceInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>How often the backlog gauges (pending count, oldest pending age) are refreshed.</summary>
+    public TimeSpan StatsInterval { get; set; } = TimeSpan.FromMinutes(1);
+
     /// <summary>Exponential backoff for the given number of failures (1-based).</summary>
     public TimeSpan BackoffFor(int failures)
     {

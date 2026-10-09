@@ -73,7 +73,7 @@ public class Attachment275ConsumerTests
             FromStatus = null,
             ToStatus = status,
             ActorId = "seed"
-        };
+        }.Queued(appeal);
         return await repository.CreateAsync(appeal, genesis);
     }
 

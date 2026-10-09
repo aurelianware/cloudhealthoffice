@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AppealsService.Controllers;
 using AppealsService.Models;
+using AppealsService.Services;
 using AppealsService.Tests.Fakes;
 
 namespace AppealsService.Tests.Integration;
@@ -567,14 +568,14 @@ public class AppealDeadlineExtensionTests : IClassFixture<AppealsWebApplicationF
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
         var extended = _factory.Publisher.DeadlineExtendedPayloads.Should().ContainSingle().Subject;
-        extended.EventId.Should().Be(request.EventId);
+        extended.EventId.Should().Be(AppealOutbox.WireEventId("tenant-ext", appeal.Id, request.EventId!));
         extended.CurrentStatus.Should().Be(nameof(AppealStatus.Submitted));
 
         var note = _factory.Publisher.NoteAddedPayloads.Should().ContainSingle().Subject;
-        note.EventId.Should().Be($"{request.EventId}:justification-note");
+        note.EventId.Should().Be(AppealOutbox.WireEventId("tenant-ext", appeal.Id, $"{request.EventId}:justification-note"));
 
         _factory.Repo.OutboxOf("tenant-ext", appeal.Id)
-            .Count(m => m.EventId == request.EventId).Should().Be(1);
+            .Count(m => m.IdempotencyKey == request.EventId).Should().Be(1);
     }
 
     [Fact]

@@ -9,17 +9,19 @@ namespace AppealsService.HostedServices;
 public interface IAppealOutboxDispatcher
 {
     /// <summary>
-    /// Best-effort, low-latency publish of an appeal's outbox right after a
-    /// change. Never throws: whatever is not published here stays pending
-    /// for the background sweep. No-op when
-    /// <see cref="AppealOutboxOptions.DispatchInline"/> is off.
+    /// Low-latency nudge right after a change: starts publishing the appeal's
+    /// outbox in the background and returns immediately (a Kafka timeout
+    /// never adds to request latency). Never throws: whatever is not
+    /// published here stays pending for the sweep. No-op when
+    /// <see cref="AppealOutboxOptions.DispatchInline"/> is off or the relay
+    /// is paused by a Kafka outage.
     /// </summary>
     Task NotifyChangedAsync(string tenantId, string appealId, CancellationToken ct = default);
 
-    /// <summary>Publish one appeal's due pending entries, in order. Returns how many were published.</summary>
+    /// <summary>Process one appeal: publish its due pending entries in order, then housekeeping. Returns how many were published.</summary>
     Task<int> DispatchAppealAsync(string tenantId, string appealId, CancellationToken ct = default);
 
-    /// <summary>One sweep over appeals with pending entries. Returns how many entries were published.</summary>
+    /// <summary>One sweep over appeals with due work. Returns how many entries were published.</summary>
     Task<int> DispatchPendingAsync(CancellationToken ct = default);
 }
 
@@ -27,34 +29,44 @@ public interface IAppealOutboxDispatcher
 /// Publishes pending <see cref="AppealOutboxMessage"/>s to Kafka and marks
 /// them sent. Delivery is at-least-once: an event is marked sent only after
 /// the broker acknowledged it, so a crash between the produce and the mark
-/// republishes it with the same <c>eventId</c> (consumers de-duplicate on
-/// it, also carried as the <c>event-id</c> header).
+/// republishes it with the same <c>eventId</c> and <c>sequence</c>.
 ///
-/// Per-appeal order: entries are published in outbox (write) order, and an
+/// Per-appeal order: entries are published in outbox (write) order; an
 /// entry is attempted only after every earlier pending entry of the same
-/// appeal was acknowledged. A failed entry blocks the ones after it until
-/// it is sent or dead-lettered. Because any dispatcher publishes in order
-/// and only advances after an ack, the first delivery of each event keeps
-/// write order even if two dispatchers overlap after a lease lapse.
+/// appeal was acknowledged or dead-lettered. Each entry gets the appeal's
+/// next <see cref="AppealOutboxMessage.Sequence"/> right before its first
+/// attempt, so sequences follow write order and consumers can apply
+/// last-write-wins by sequence.
+///
+/// Lease: every entry renews the per-appeal lease first, and every outcome
+/// write is conditioned on still holding it, on the entry's server id and
+/// on the entry still being pending. When renewal fails (the lease lapsed
+/// and another dispatcher took over) the loop stops, so a stale holder
+/// cannot overwrite the new holder's results.
 ///
 /// Failures:
 /// <list type="bullet">
-///   <item>Transient (Kafka unreachable, timeouts — see
-///     <see cref="IAppealEventTransport.IsTransient"/>): the entry stays
-///     pending and does not use up an attempt; the whole dispatcher pauses
-///     with exponential backoff, so an outage never dead-letters events.</item>
-///   <item>Non-transient (the message itself is rejected): the entry's
-///     <see cref="AppealOutboxMessage.Attempts"/> grows and it retries with
-///     exponential backoff; after <see cref="AppealOutboxOptions.MaxAttempts"/>
-///     it becomes <see cref="AppealOutboxStatus.DeadLettered"/> (error log +
-///     <c>cho.appeals.outbox.outcomes.total{cho.outcome=dead_lettered}</c>),
-///     and later entries of the appeal proceed.</item>
+///   <item>Transient (see <see cref="IAppealEventTransport.IsTransient"/>:
+///     outage, missing topic, revoked ACL, SASL failure, fatal producer):
+///     the entry stays pending without using an attempt and the relay
+///     pauses with exponential backoff; it never dead-letters.</item>
+///   <item>Non-transient (the message itself is rejected): attempts grow
+///     with exponential backoff; after <see cref="AppealOutboxOptions.MaxAttempts"/>
+///     the entry is dead-lettered (error log +
+///     <c>cho.appeals.outbox.outcomes.total{cho.outcome=dead_lettered}</c>)
+///     and later entries proceed.</item>
 /// </list>
 ///
-/// Kafka disabled by configuration: entries stay pending (default) or are
-/// marked <see cref="AppealOutboxStatus.Skipped"/> when
-/// <see cref="AppealOutboxOptions.SkipWhenKafkaDisabled"/> is set. Kafka
-/// configured but the producer failed to build: entries stay pending.
+/// Housekeeping (every visit, and every <see cref="AppealOutboxOptions.MaintenanceInterval"/>
+/// while publishing is impossible): pending entries older than
+/// <see cref="AppealOutboxOptions.MaxPendingAge"/> or beyond
+/// <see cref="AppealOutboxOptions.MaxPendingPerAppeal"/> are dead-lettered
+/// (<c>expired</c> / <c>overflow</c>); sent / skipped entries are pruned after
+/// <see cref="AppealOutboxOptions.SentRetention"/> or beyond
+/// <see cref="AppealOutboxOptions.MaxCompletedPerAppeal"/>; dead letters
+/// after <see cref="AppealOutboxOptions.DeadLetterRetention"/> or beyond
+/// <see cref="AppealOutboxOptions.MaxDeadLetteredPerAppeal"/>. That bounds
+/// every appeal document's outbox.
 /// </summary>
 public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDispatcher
 {
@@ -67,12 +79,13 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
     private readonly ILogger<AppealOutboxDispatcher> _logger;
     private readonly TimeProvider _time;
     private readonly SemaphoreSlim[] _locks = Enumerable.Range(0, LockStripes).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+    private readonly CancellationTokenSource _shutdown = new();
     private readonly object _pauseSync = new();
     private DateTime _pausedUntil = DateTime.MinValue;
     private int _consecutiveTransientFailures;
 
     /// <summary>Lease owner id for this process.</summary>
-    internal string InstanceId { get; } = $"{Environment.MachineName}:{Guid.NewGuid():N}";
+    internal string InstanceId { get; init; } = $"{Environment.MachineName}:{Guid.NewGuid():N}";
 
     public AppealOutboxDispatcher(
         IServiceScopeFactory scopes,
@@ -105,11 +118,26 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
 
     private DateTime Now => _time.GetUtcNow().UtcDateTime;
 
+    private enum Mode { Publish, Skip, Retain }
+
+    private static Mode ModeFor(AppealEventPublisherState state, AppealOutboxOptions options) => state switch
+    {
+        AppealEventPublisherState.Available => Mode.Publish,
+        AppealEventPublisherState.Disabled when options.SkipWhenKafkaDisabled => Mode.Skip,
+        _ => Mode.Retain
+    };
+
     private async Task<T> WithStoreAsync<T>(Func<IAppealOutboxStore, Task<T>> work)
     {
         if (_store is not null) return await work(_store);
         using var scope = _scopes!.CreateScope();
         return await work(scope.ServiceProvider.GetRequiredService<IAppealOutboxStore>());
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _shutdown.Cancel();
+        await base.StopAsync(cancellationToken);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -131,23 +159,30 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             return;
         }
 
+        var mode = ModeFor(state, _options);
         switch (state)
         {
-            case AppealEventPublisherState.Disabled when !_options.SkipWhenKafkaDisabled:
+            case AppealEventPublisherState.Disabled when mode == Mode.Retain:
                 _logger.LogWarning(
                     "Kafka publishing is disabled by configuration: appeal events stay pending in the outbox " +
-                    "and are published once Kafka is configured.");
-                return;
+                    "(dead-lettered after {MaxAge}) and are published once Kafka is configured.", _options.MaxPendingAge);
+                break;
             case AppealEventPublisherState.Unavailable:
                 _logger.LogError(
                     "Kafka producer failed to start: appeal events stay pending in the outbox until a restart succeeds.");
-                return;
+                break;
         }
 
+        var nextStats = DateTime.MinValue;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
+                if (Now >= nextStats)
+                {
+                    await RefreshStatsAsync(stoppingToken);
+                    nextStats = Now + _options.StatsInterval;
+                }
                 await DispatchPendingAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -159,7 +194,8 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
                 _logger.LogError(ex, "Appeal outbox sweep failed; retrying after the poll interval.");
             }
 
-            var delay = _options.PollInterval;
+            var delay = mode == Mode.Retain ? _options.MaintenanceInterval : _options.PollInterval;
+            if (mode == Mode.Retain && _options.StatsInterval < delay) delay = _options.StatsInterval;
             var pause = PausedFor();
             if (pause > delay) delay = pause;
             try
@@ -173,9 +209,31 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         }
     }
 
+    /// <summary>Refresh the backlog gauges.</summary>
+    internal async Task RefreshStatsAsync(CancellationToken ct = default)
+    {
+        var stats = await WithStoreAsync(s => s.GetStatsAsync(ct));
+        var age = stats.OldestPendingCreatedAt is { } oldest ? Math.Max(0, (Now - oldest).TotalSeconds) : 0;
+        ChoMetrics.SetAppealOutboxBacklog(stats.Pending, age);
+    }
+
     public async Task NotifyChangedAsync(string tenantId, string appealId, CancellationToken ct = default)
     {
         if (!_options.DispatchInline) return;
+        if (PausedFor() > TimeSpan.Zero) return; // Kafka outage: the sweep resumes after the pause
+
+        if (_options.AwaitInlineDispatch)
+        {
+            await DispatchInlineAsync(tenantId, appealId, ct);
+            return;
+        }
+
+        // Fire-and-forget on the relay's own lifetime, not the request's.
+        _ = Task.Run(() => DispatchInlineAsync(tenantId, appealId, _shutdown.Token), CancellationToken.None);
+    }
+
+    private async Task DispatchInlineAsync(string tenantId, string appealId, CancellationToken ct)
+    {
         try
         {
             await DispatchAppealAsync(tenantId, appealId, ct);
@@ -191,13 +249,16 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
 
     public async Task<int> DispatchPendingAsync(CancellationToken ct = default)
     {
-        if (PausedFor() > TimeSpan.Zero) return 0;
-        var keys = await WithStoreAsync(s => s.FindPendingAsync(Now, _options.BatchSize, ct));
+        var mode = await CurrentModeAsync();
+        if (mode is null) return 0;
+        if (mode == Mode.Publish && PausedFor() > TimeSpan.Zero) return 0;
+
+        var keys = await WithStoreAsync(s => s.FindDueAsync(Now, _options.BatchSize, ct));
         var published = 0;
         foreach (var key in keys)
         {
             ct.ThrowIfCancellationRequested();
-            if (PausedFor() > TimeSpan.Zero) break;
+            if (mode == Mode.Publish && PausedFor() > TimeSpan.Zero) break;
             try
             {
                 published += await DispatchAppealAsync(key.TenantId, key.AppealId, ct);
@@ -215,19 +276,24 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         return published;
     }
 
-    public async Task<int> DispatchAppealAsync(string tenantId, string appealId, CancellationToken ct = default)
+    private async Task<Mode?> CurrentModeAsync()
     {
         var started = _transport.Started;
-        if (!started.IsCompleted) return 0;
-        var state = await started;
-        if (state == AppealEventPublisherState.Unavailable) return 0;
-        if (state == AppealEventPublisherState.Disabled && !_options.SkipWhenKafkaDisabled) return 0;
+        if (!started.IsCompleted) return null;
+        return ModeFor(await started, _options);
+    }
+
+    public async Task<int> DispatchAppealAsync(string tenantId, string appealId, CancellationToken ct = default)
+    {
+        if (await CurrentModeAsync() is not { } mode) return 0;
+        // Paused by an outage: do not even take the lease.
+        if (mode == Mode.Publish && PausedFor() > TimeSpan.Zero) return 0;
 
         var gate = _locks[(int)((uint)StringComparer.Ordinal.GetHashCode($"{tenantId}:{appealId}") % LockStripes)];
         await gate.WaitAsync(ct);
         try
         {
-            return await WithStoreAsync(store => DispatchLeasedAsync(store, state, tenantId, appealId, ct));
+            return await WithStoreAsync(store => DispatchLeasedAsync(store, mode, tenantId, appealId, ct));
         }
         finally
         {
@@ -236,25 +302,30 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
     }
 
     private async Task<int> DispatchLeasedAsync(
-        IAppealOutboxStore store, AppealEventPublisherState state, string tenantId, string appealId, CancellationToken ct)
+        IAppealOutboxStore store, Mode mode, string tenantId, string appealId, CancellationToken ct)
     {
         var now = Now;
-        var entries = await store.TryLeaseAsync(tenantId, appealId, InstanceId, now, now + _options.LeaseDuration, ct);
-        if (entries is null) return 0;
+        var lease = await store.TryLeaseAsync(tenantId, appealId, InstanceId, now, now + _options.LeaseDuration, ct);
+        if (lease is null) return 0;
 
+        var entries = lease.Entries;
+        var sequence = lease.LastSequence;
         var published = 0;
         try
         {
+            if (!await ExpireAsync(store, tenantId, appealId, entries)) return 0;
+            if (mode == Mode.Retain) return 0; // housekeeping only
+
             foreach (var entry in entries)
             {
                 if (entry.Status != AppealOutboxStatus.Pending) continue;
                 now = Now;
 
-                if (state == AppealEventPublisherState.Disabled)
+                if (mode == Mode.Skip)
                 {
                     entry.Status = AppealOutboxStatus.Skipped;
                     entry.CompletedAt = now;
-                    await store.UpdateMessageAsync(tenantId, appealId, entry, CancellationToken.None);
+                    if (!await SaveAsync(store, tenantId, appealId, entry)) break;
                     Record("skipped", entry);
                     continue;
                 }
@@ -262,6 +333,25 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
                 // Order: a later entry never overtakes one still waiting.
                 if (entry.NextAttemptAt is { } due && due > now) break;
                 if (PausedFor() > TimeSpan.Zero) break;
+
+                // Renew the lease (and take this entry's sequence on its
+                // first attempt); losing it means another dispatcher owns
+                // the appeal now — stop.
+                var assign = entry.Sequence is null
+                    ? new AppealOutboxSequenceAssignment(entry.Id, sequence + 1)
+                    : null;
+                if (!await store.RenewLeaseAsync(tenantId, appealId, InstanceId, now + _options.LeaseDuration, assign,
+                        CancellationToken.None))
+                {
+                    _logger.LogWarning("Outbox lease on appeal {AppealId} was lost; stopping this run.",
+                        LogSanitizer.SafeForLog(appealId));
+                    break;
+                }
+                if (assign is not null)
+                {
+                    entry.Sequence = assign.Sequence;
+                    sequence = assign.Sequence;
+                }
 
                 try
                 {
@@ -283,17 +373,17 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
                 entry.LastAttemptAt = entry.CompletedAt;
                 entry.NextAttemptAt = null;
                 entry.LastError = null;
-                // Not cancellable: the broker has the event; record that.
-                await store.UpdateMessageAsync(tenantId, appealId, entry, CancellationToken.None);
-                Record("published", entry);
                 published++;
+                Record("published", entry);
+                // Not cancellable: the broker has the event; record that.
+                if (!await SaveAsync(store, tenantId, appealId, entry)) break;
             }
         }
         finally
         {
             try
             {
-                await store.ReleaseLeaseAsync(tenantId, appealId, InstanceId, Now - _options.SentRetention, CancellationToken.None);
+                await store.ReleaseLeaseAsync(tenantId, appealId, InstanceId, PruneIds(entries, Now), CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -302,6 +392,73 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
             }
         }
         return published;
+    }
+
+    /// <summary>Conditional outcome write; false (lease lost / entry no longer pending) stops the run.</summary>
+    private async Task<bool> SaveAsync(IAppealOutboxStore store, string tenantId, string appealId, AppealOutboxMessage entry)
+    {
+        if (await store.UpdateMessageAsync(tenantId, appealId, InstanceId, entry, CancellationToken.None)) return true;
+        _logger.LogWarning(
+            "Outbox entry {EventId} of appeal {AppealId} was not updated: the lease moved or the entry is no longer pending. Stopping this run.",
+            LogSanitizer.SafeForLog(entry.EventId), LogSanitizer.SafeForLog(appealId));
+        return false;
+    }
+
+    /// <summary>Dead-letter pending entries that are too old or beyond the per-appeal cap. False = lease lost.</summary>
+    private async Task<bool> ExpireAsync(
+        IAppealOutboxStore store, string tenantId, string appealId, IReadOnlyList<AppealOutboxMessage> entries)
+    {
+        var now = Now;
+        var pending = entries.Where(m => m.Status == AppealOutboxStatus.Pending).ToList();
+        var overflow = pending.Take(Math.Max(0, pending.Count - _options.MaxPendingPerAppeal)).ToHashSet();
+        foreach (var entry in pending)
+        {
+            string? reason = null;
+            if (now - entry.CreatedAt > _options.MaxPendingAge) reason = "expired";
+            else if (overflow.Contains(entry)) reason = "overflow";
+            if (reason is null) continue;
+
+            entry.Status = AppealOutboxStatus.DeadLettered;
+            entry.CompletedAt = now;
+            entry.ExpiresAt = now + _options.DeadLetterRetention;
+            entry.NextAttemptAt = null;
+            entry.LastError = reason == "expired"
+                ? $"Expired: pending longer than AppealOutbox:MaxPendingAge ({_options.MaxPendingAge})."
+                : $"Overflow: more than AppealOutbox:MaxPendingPerAppeal ({_options.MaxPendingPerAppeal}) pending events.";
+            if (!await SaveAsync(store, tenantId, appealId, entry)) return false;
+            Record(reason, entry);
+            _logger.LogError(
+                "Appeal outbox event dead-lettered ({Reason}): {EventType} {EventId} appeal {AppealId} tenant {TenantId}. " +
+                "Replay with POST /api/appeals/{{id}}/outbox/replay before {Expires}.",
+                reason, LogSanitizer.SafeForLog(entry.EventType), LogSanitizer.SafeForLog(entry.EventId),
+                LogSanitizer.SafeForLog(appealId), LogSanitizer.SafeForLog(tenantId), entry.ExpiresAt);
+        }
+        return true;
+    }
+
+    /// <summary>Completed entries past retention or beyond the per-appeal caps (oldest first).</summary>
+    private List<string> PruneIds(IReadOnlyList<AppealOutboxMessage> entries, DateTime now)
+    {
+        var prune = new List<string>();
+
+        var completed = entries.Where(m => m.Status is AppealOutboxStatus.Sent or AppealOutboxStatus.Skipped).ToList();
+        var keepCompleted = completed.Skip(Math.Max(0, completed.Count - _options.MaxCompletedPerAppeal)).ToHashSet();
+        prune.AddRange(completed
+            .Where(m => !keepCompleted.Contains(m) || m.CompletedAt < now - _options.SentRetention)
+            .Select(m => m.Id));
+
+        var dead = entries.Where(m => m.Status == AppealOutboxStatus.DeadLettered).ToList();
+        var keepDead = dead.Skip(Math.Max(0, dead.Count - _options.MaxDeadLetteredPerAppeal)).ToHashSet();
+        foreach (var m in dead.Where(m => !keepDead.Contains(m) || (m.ExpiresAt is { } e && e <= now)))
+        {
+            prune.Add(m.Id);
+            Record("dead_letter_pruned", m);
+            _logger.LogWarning(
+                "Pruning dead-lettered appeal event {EventType} {EventId} of appeal {AppealId} (retention or cap reached); " +
+                "it is no longer replayable from the outbox. The audit trail keeps the change.",
+                LogSanitizer.SafeForLog(m.EventType), LogSanitizer.SafeForLog(m.EventId), LogSanitizer.SafeForLog(m.AppealId));
+        }
+        return prune;
     }
 
     /// <summary>Returns true when the next entry of the appeal may proceed (this one was dead-lettered).</summary>
@@ -315,7 +472,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         if (_transport.IsTransient(ex))
         {
             var pause = Pause();
-            await store.UpdateMessageAsync(tenantId, appealId, entry, CancellationToken.None);
+            await SaveAsync(store, tenantId, appealId, entry);
             Record("failed", entry, transient: true);
             _logger.LogWarning(
                 "Kafka unavailable publishing {EventType} {EventId} for appeal {AppealId}; kept pending, relay paused for {Pause}. {Error}",
@@ -329,8 +486,9 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         {
             entry.Status = AppealOutboxStatus.DeadLettered;
             entry.CompletedAt = now;
+            entry.ExpiresAt = now + _options.DeadLetterRetention;
             entry.NextAttemptAt = null;
-            await store.UpdateMessageAsync(tenantId, appealId, entry, CancellationToken.None);
+            if (!await SaveAsync(store, tenantId, appealId, entry)) return false;
             Record("dead_lettered", entry);
             _logger.LogError(
                 "Appeal outbox event dead-lettered after {Attempts} attempts: {EventType} {EventId} appeal {AppealId} tenant {TenantId}. " +
@@ -341,7 +499,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         }
 
         entry.NextAttemptAt = now + _options.BackoffFor(entry.Attempts);
-        await store.UpdateMessageAsync(tenantId, appealId, entry, CancellationToken.None);
+        await SaveAsync(store, tenantId, appealId, entry);
         Record("failed", entry);
         _logger.LogWarning(
             "Publishing {EventType} {EventId} for appeal {AppealId} failed (attempt {Attempts}/{Max}); retry at {Next}. {Error}",
@@ -350,7 +508,7 @@ public sealed class AppealOutboxDispatcher : BackgroundService, IAppealOutboxDis
         return false;
     }
 
-    private TimeSpan PausedFor()
+    internal TimeSpan PausedFor()
     {
         lock (_pauseSync)
         {

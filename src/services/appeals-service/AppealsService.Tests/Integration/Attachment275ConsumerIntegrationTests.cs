@@ -129,7 +129,7 @@ public class Attachment275ConsumerIntegrationTests
             FromStatus = null,
             ToStatus = AppealStatus.Submitted,
             ActorId = "seed"
-        };
+        }.Queued(appeal);
         return await repository.CreateAsync(appeal, genesis);
     }
 
@@ -212,7 +212,7 @@ public class Attachment275ConsumerIntegrationTests
             FromStatus = AppealStatus.Submitted,
             ToStatus = AppealStatus.Closed,
             ActorId = "seed"
-        };
+        }.Queued(seeded);
         seeded.Status = AppealStatus.Closed;
         await repository.TransitionStatusAsync(seeded, transition);
 

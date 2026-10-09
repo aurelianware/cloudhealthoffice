@@ -164,7 +164,7 @@ public class AppealDtoDriftTests
         // events and the relay lease) is persistence-only: API responses
         // never carry it, so the DTO does not mirror it.
         if (prop.DeclaringType?.FullName == "AppealsService.Models.Appeal"
-            && prop.Name is "Outbox" or "OutboxLeaseOwner" or "OutboxLeaseUntil")
+            && prop.Name is "Outbox" or "OutboxLeaseOwner" or "OutboxLeaseUntil" or "OutboxSequence")
             return true;
 
         return false;

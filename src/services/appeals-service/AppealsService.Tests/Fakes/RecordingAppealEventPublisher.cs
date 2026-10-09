@@ -69,7 +69,10 @@ public sealed class RecordingAppealEventPublisher : IAppealEventTransport
     /// <summary>A dispatcher that publishes inline through this transport (background loop off).</summary>
     public AppealOutboxDispatcher DispatcherFor(IAppealOutboxStore store, AppealOutboxOptions? options = null,
         TimeProvider? time = null) =>
-        new(store, this, options ?? new AppealOutboxOptions { Enabled = false, InitialBackoff = TimeSpan.Zero },
+        new(store, this, options ?? new AppealOutboxOptions
+            {
+                Enabled = false, InitialBackoff = TimeSpan.Zero, AwaitInlineDispatch = true
+            },
             NullLogger<AppealOutboxDispatcher>.Instance, time);
 
     /// <summary>
@@ -114,13 +117,17 @@ public sealed class RecordingAppealEventPublisher : IAppealEventTransport
         return Task.CompletedTask;
     }
 
+    /// <summary>The produced copy carries the wire payload (with <c>sequence</c>) as <c>PayloadJson</c>.</summary>
     private static AppealOutboxMessage Copy(AppealOutboxMessage m) => new()
     {
+        Id = m.Id,
+        IdempotencyKey = m.IdempotencyKey,
+        Sequence = m.Sequence,
         EventId = m.EventId,
         EventType = m.EventType,
         TenantId = m.TenantId,
         AppealId = m.AppealId,
-        PayloadJson = m.PayloadJson,
+        PayloadJson = AppealOutbox.WirePayload(m),
         CreatedAt = m.CreatedAt,
         Status = m.Status,
         Attempts = m.Attempts

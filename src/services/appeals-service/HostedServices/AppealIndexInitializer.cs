@@ -87,6 +87,19 @@ public sealed class AppealIndexInitializer : IHostedService
                 }),
             cancellationToken: cancellationToken);
 
+        // Dead-letter retention sweep and bulk replay. A different key
+        // pattern from ix_outbox_pending: older servers refuse two indexes
+        // on one key pattern even with different partial filters.
+        await appeals.Indexes.CreateOneAsync(
+            new CreateIndexModel<Appeal>(
+                Builders<Appeal>.IndexKeys.Ascending("Outbox.Status").Ascending("Outbox.ExpiresAt"),
+                new CreateIndexOptions<Appeal>
+                {
+                    Name = "ix_outbox_dead_lettered",
+                    PartialFilterExpression = new BsonDocument("Outbox.Status", nameof(AppealOutboxStatus.DeadLettered))
+                }),
+            cancellationToken: cancellationToken);
+
         var events = _db.GetCollection<AppealEvent>(AppealEventRepositoryMongo.AppealEventsCollectionName);
 
         await events.Indexes.CreateOneAsync(

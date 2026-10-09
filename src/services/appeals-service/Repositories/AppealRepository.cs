@@ -350,6 +350,7 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
                 // write persists; a replay writes nothing.
                 (persisted.Outbox ??= new()).AddRange(
                     AppealsService.Services.AppealOutbox.MessagesOf(buildAuditEvents(appeal)));
+                AppealOutboxIndex.Refresh(persisted);
 
                 var options = new ItemRequestOptions { IfMatchEtag = fresh.ETag };
                 var response = await _appeals.ReplaceItemAsync(
@@ -387,6 +388,11 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
                 var fresh = await _appeals.ReadItemAsync<Appeal>(
                     appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
                 var mutated = fresh.Resource;
+                if (IsReplay(mutated, auditEvent))
+                {
+                    await _events.AppendAsync(auditEvent, ct);
+                    return mutated;
+                }
                 mutated.Notes.Add(note);
                 mutated.UpdatedAt = DateTime.UtcNow;
                 AddOutbox(mutated, auditEvent);
@@ -415,6 +421,11 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
                 var fresh = await _appeals.ReadItemAsync<Appeal>(
                     appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
                 var mutated = fresh.Resource;
+                if (IsReplay(mutated, auditEvent))
+                {
+                    await _events.AppendAsync(auditEvent, ct);
+                    return mutated;
+                }
                 mutated.Attachments.Add(attachment);
                 if (!string.IsNullOrEmpty(attachment.ControlNumber))
                     mutated.AttachmentControlNumbers.Add(attachment.ControlNumber);
@@ -447,6 +458,11 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
                 var fresh = await _appeals.ReadItemAsync<Appeal>(
                     appealId, new PartitionKey(tenantId), cancellationToken: ct);
                 var mutated = fresh.Resource;
+                if (IsReplay(mutated, auditEvent))
+                {
+                    await _events.AppendAsync(auditEvent, ct);
+                    return mutated;
+                }
                 var attachment = mutated.Attachments.FirstOrDefault(a => a.AttachmentId == attachmentId)
                     ?? throw new InvalidOperationException(
                         $"Attachment {attachmentId} not found on appeal {appealId} for tenant {tenantId}.");
@@ -481,6 +497,11 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
                 var fresh = await _appeals.ReadItemAsync<Appeal>(
                     appeal.Id, new PartitionKey(appeal.TenantId), cancellationToken: ct);
                 var mutated = fresh.Resource;
+                if (IsReplay(mutated, auditEvent))
+                {
+                    await _events.AppendAsync(auditEvent, ct);
+                    return mutated;
+                }
                 mutated.AssignedReviewerId = appeal.AssignedReviewerId;
                 mutated.UpdatedAt = DateTime.UtcNow;
                 AddOutbox(mutated, auditEvent);
@@ -567,9 +588,18 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
         return null;
     }
 
+    /// <summary>Adds the event's outbox entry (required) and refreshes the sweep fields, inside the same replace as the change.</summary>
     private static void AddOutbox(Appeal target, AppealEvent auditEvent)
     {
-        if (auditEvent.OutboxMessage is { } outbox) (target.Outbox ??= new()).Add(outbox);
+        (target.Outbox ??= new()).Add(AppealsService.Services.AppealOutbox.Require(auditEvent));
+        AppealOutboxIndex.Refresh(target);
+    }
+
+    /// <summary>The idempotency key is already in the outbox: this call is a replay and appends nothing.</summary>
+    private static bool IsReplay(Appeal persisted, AppealEvent auditEvent)
+    {
+        var key = AppealsService.Services.AppealOutbox.Require(auditEvent).IdempotencyKey;
+        return persisted.Outbox?.Any(m => m.IdempotencyKey == key) == true;
     }
 
     // ── IAppealOutboxStore ──────────────────────────────────────────────
@@ -577,19 +607,28 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
     /// <summary>ETag-pinned read-modify-replace attempts for outbox bookkeeping.</summary>
     private const int OutboxAttempts = 5;
 
-    public async Task<IReadOnlyList<AppealOutboxKey>> FindPendingAsync(DateTime now, int limit, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AppealOutboxKey>> FindDueAsync(DateTime now, int limit, CancellationToken ct = default)
     {
-        // Cross-partition: the dispatcher serves every tenant. Due-time and
-        // lease checks happen under the lease (ISO strings with variable
-        // precision do not compare reliably in SQL).
+        // Top-level numeric fields maintained in every write
+        // (AppealOutboxIndex): the query filters and orders on scalars, so
+        // appeals whose only entries are backing off are not returned and
+        // cannot starve due ones.
+        var nowMs = AppealOutboxIndex.ToEpochMs(now);
         var query = new QueryDefinition(
-            "SELECT c.tenantId, c.id FROM c WHERE EXISTS(SELECT VALUE o FROM o IN c.outbox WHERE o.status = @pending) " +
-            "OFFSET 0 LIMIT @limit")
-            .WithParameter("@pending", CosmosEnumValue(AppealOutboxStatus.Pending))
+            "SELECT c.tenantId, c.id FROM c " +
+            "WHERE IS_NUMBER(c.outboxNextDueAt) AND c.outboxNextDueAt <= @now " +
+            "AND (NOT IS_NUMBER(c.outboxLeaseUntilMs) OR c.outboxLeaseUntilMs < @now) " +
+            "ORDER BY c.outboxNextDueAt OFFSET 0 LIMIT @limit")
+            .WithParameter("@now", nowMs)
             .WithParameter("@limit", limit);
+        return await QueryKeysAsync(query, partition: null, ct);
+    }
 
+    private async Task<List<AppealOutboxKey>> QueryKeysAsync(QueryDefinition query, string? partition, CancellationToken ct)
+    {
         var results = new List<AppealOutboxKey>();
-        using var iterator = _appeals.GetItemQueryIterator<OutboxKeyRow>(query);
+        var options = partition is null ? null : new QueryRequestOptions { PartitionKey = new PartitionKey(partition) };
+        using var iterator = _appeals.GetItemQueryIterator<OutboxKeyRow>(query, requestOptions: options);
         while (iterator.HasMoreResults)
         {
             foreach (var row in await iterator.ReadNextAsync(ct))
@@ -598,7 +637,8 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
         return results;
     }
 
-    private sealed class OutboxKeyRow
+    /// <summary>Projection row for outbox sweep queries (public so tests can mock the iterator).</summary>
+    public sealed class OutboxKeyRow
     {
         public string TenantId { get; set; } = string.Empty;
         [System.Text.Json.Serialization.JsonPropertyName("id")]
@@ -607,8 +647,9 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
 
     /// <summary>
     /// Read, apply <paramref name="mutate"/> (false = nothing to write),
-    /// replace pinned to the read's ETag; a 412 re-reads and retries.
-    /// Returns the persisted appeal, or null when not found / not written.
+    /// refresh the sweep fields, replace pinned to the read's ETag; a 412
+    /// re-reads and retries. Returns the persisted appeal, or null when not
+    /// found / not written.
     /// </summary>
     private async Task<Appeal?> MutateOutboxAsync(
         string tenantId, string appealId, Func<Appeal, bool> mutate, CancellationToken ct)
@@ -627,6 +668,7 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
 
             var appeal = fresh.Resource;
             if (!mutate(appeal)) return null;
+            AppealOutboxIndex.Refresh(appeal);
             try
             {
                 var response = await _appeals.ReplaceItemAsync(
@@ -642,21 +684,63 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
         throw new InvalidOperationException($"Outbox update for appeal {appealId} kept conflicting.");
     }
 
-    public async Task<IReadOnlyList<AppealOutboxMessage>?> TryLeaseAsync(
+    public async Task<AppealOutboxLease?> TryLeaseAsync(
         string tenantId, string appealId, string owner, DateTime now, DateTime leaseUntil, CancellationToken ct = default)
     {
         var leased = await MutateOutboxAsync(tenantId, appealId, a =>
         {
             if (a.OutboxLeaseUntil is { } until && until >= now && a.OutboxLeaseOwner != owner) return false;
+            if (!AppealOutboxIndex.HasDueWork(a.Outbox, now)) return false; // nothing due: no write
             a.OutboxLeaseOwner = owner;
             a.OutboxLeaseUntil = leaseUntil;
             return true;
         }, ct);
-        return leased is null ? null : leased.Outbox ?? new List<AppealOutboxMessage>();
+        return leased is null
+            ? null
+            : new AppealOutboxLease(leased.Outbox ?? new List<AppealOutboxMessage>(), leased.OutboxSequence ?? 0);
+    }
+
+    public async Task<bool> RenewLeaseAsync(
+        string tenantId, string appealId, string owner, DateTime leaseUntil,
+        AppealOutboxSequenceAssignment? assign, CancellationToken ct = default) =>
+        await MutateOutboxAsync(tenantId, appealId, a =>
+        {
+            if (a.OutboxLeaseOwner != owner) return false;
+            if (assign is not null)
+            {
+                var entry = a.Outbox?.FirstOrDefault(m => m.Id == assign.EntryId);
+                if (entry is null || entry.Sequence is not null || (a.OutboxSequence ?? 0) != assign.Sequence - 1) return false;
+                entry.Sequence = assign.Sequence;
+                a.OutboxSequence = assign.Sequence;
+            }
+            a.OutboxLeaseUntil = leaseUntil;
+            return true;
+        }, ct) is not null;
+
+    public async Task<bool> UpdateMessageAsync(
+        string tenantId, string appealId, string owner, AppealOutboxMessage message, CancellationToken ct = default) =>
+        await MutateOutboxAsync(tenantId, appealId, a =>
+        {
+            if (a.OutboxLeaseOwner != owner) return false;
+            var entry = a.Outbox?.FirstOrDefault(m => m.Id == message.Id && m.Status == AppealOutboxStatus.Pending);
+            if (entry is null) return false;
+            CopyOutcome(message, entry);
+            return true;
+        }, ct) is not null;
+
+    internal static void CopyOutcome(AppealOutboxMessage from, AppealOutboxMessage to)
+    {
+        to.Status = from.Status;
+        to.Attempts = from.Attempts;
+        to.NextAttemptAt = from.NextAttemptAt;
+        to.LastError = from.LastError;
+        to.LastAttemptAt = from.LastAttemptAt;
+        to.CompletedAt = from.CompletedAt;
+        to.ExpiresAt = from.ExpiresAt;
     }
 
     public Task ReleaseLeaseAsync(
-        string tenantId, string appealId, string owner, DateTime pruneCompletedBefore, CancellationToken ct = default) =>
+        string tenantId, string appealId, string owner, IReadOnlyCollection<string> pruneIds, CancellationToken ct = default) =>
         MutateOutboxAsync(tenantId, appealId, a =>
         {
             var changed = false;
@@ -666,45 +750,64 @@ public sealed class AppealRepository : IAppealRepository, IAppealOutboxStore
                 a.OutboxLeaseUntil = null;
                 changed = true;
             }
-            var pruned = a.Outbox?.RemoveAll(m => m.Status is AppealOutboxStatus.Sent or AppealOutboxStatus.Skipped
-                                                  && m.CompletedAt < pruneCompletedBefore) ?? 0;
+            var pruned = a.Outbox?.RemoveAll(m => pruneIds.Contains(m.Id) && m.Status != AppealOutboxStatus.Pending) ?? 0;
             return changed || pruned > 0;
         }, ct);
 
-    public Task UpdateMessageAsync(
-        string tenantId, string appealId, AppealOutboxMessage message, CancellationToken ct = default) =>
-        MutateOutboxAsync(tenantId, appealId, a =>
+    internal static int Requeue(Appeal a, string? eventId)
+    {
+        var count = 0;
+        foreach (var m in a.Outbox?.Where(m => m.Status == AppealOutboxStatus.DeadLettered
+                                               && (eventId is null || m.EventId == eventId || m.IdempotencyKey == eventId))
+                          ?? Enumerable.Empty<AppealOutboxMessage>())
         {
-            var entry = a.Outbox?.FirstOrDefault(m => m.EventId == message.EventId);
-            if (entry is null) return false;
-            entry.Status = message.Status;
-            entry.Attempts = message.Attempts;
-            entry.NextAttemptAt = message.NextAttemptAt;
-            entry.LastError = message.LastError;
-            entry.LastAttemptAt = message.LastAttemptAt;
-            entry.CompletedAt = message.CompletedAt;
-            return true;
-        }, ct);
+            m.Status = AppealOutboxStatus.Pending;
+            m.Attempts = 0;
+            m.NextAttemptAt = null;
+            m.CompletedAt = null;
+            m.ExpiresAt = null;
+            count++;
+        }
+        return count;
+    }
 
     public async Task<int> RequeueDeadLetteredAsync(
         string tenantId, string appealId, string? eventId, CancellationToken ct = default)
     {
         var requeued = 0;
-        await MutateOutboxAsync(tenantId, appealId, a =>
-        {
-            requeued = 0;
-            foreach (var m in a.Outbox?.Where(m => m.Status == AppealOutboxStatus.DeadLettered
-                                                   && (eventId is null || m.EventId == eventId))
-                              ?? Enumerable.Empty<AppealOutboxMessage>())
-            {
-                m.Status = AppealOutboxStatus.Pending;
-                m.Attempts = 0;
-                m.NextAttemptAt = null;
-                m.CompletedAt = null;
-                requeued++;
-            }
-            return requeued > 0;
-        }, ct);
+        await MutateOutboxAsync(tenantId, appealId, a => (requeued = Requeue(a, eventId)) > 0, ct);
         return requeued;
+    }
+
+    public async Task<int> RequeueAllDeadLetteredAsync(string? tenantId, CancellationToken ct = default)
+    {
+        var text = "SELECT c.tenantId, c.id FROM c WHERE c.outboxDeadLetteredCount > 0";
+        var query = new QueryDefinition(tenantId is null ? text : text + " AND c.tenantId = @tenantId");
+        if (tenantId is not null) query = query.WithParameter("@tenantId", tenantId);
+        var total = 0;
+        foreach (var key in await QueryKeysAsync(query, tenantId, ct))
+            total += await RequeueDeadLetteredAsync(key.TenantId, key.AppealId, eventId: null, ct);
+        return total;
+    }
+
+    public async Task<AppealOutboxStats> GetStatsAsync(CancellationToken ct = default)
+    {
+        var pending = await ScalarAsync(
+            "SELECT VALUE SUM(c.outboxPendingCount) FROM c WHERE IS_NUMBER(c.outboxPendingCount)", ct);
+        var oldest = await ScalarAsync(
+            "SELECT VALUE MIN(c.outboxOldestPendingAt) FROM c WHERE IS_NUMBER(c.outboxOldestPendingAt)", ct);
+        return new AppealOutboxStats(
+            (long)(pending ?? 0),
+            oldest is { } ms ? DateTimeOffset.FromUnixTimeMilliseconds((long)ms).UtcDateTime : null);
+    }
+
+    private async Task<double?> ScalarAsync(string sql, CancellationToken ct)
+    {
+        double? value = null;
+        using var iterator = _appeals.GetItemQueryIterator<double?>(new QueryDefinition(sql));
+        while (iterator.HasMoreResults)
+            foreach (var v in await iterator.ReadNextAsync(ct))
+                if (v is not null) value = v;
+        return value;
     }
 }

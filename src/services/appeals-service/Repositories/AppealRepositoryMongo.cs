@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using AppealsService.Models;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
@@ -48,7 +49,7 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
     {
         if (string.IsNullOrEmpty(appeal.Id)) appeal.Id = Guid.NewGuid().ToString();
         if (appeal.CreatedAt == default) appeal.CreatedAt = DateTime.UtcNow;
-        if (genesisEvent.OutboxMessage is { } outbox) (appeal.Outbox ??= new()).Add(outbox);
+        (appeal.Outbox ??= new()).Add(AppealsService.Services.AppealOutbox.Require(genesisEvent));
         await _appeals.InsertOneAsync(appeal, cancellationToken: ct);
         await _events.AppendAsync(genesisEvent, ct);
         return appeal;
@@ -242,18 +243,12 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
         var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
                    & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id);
 
-        var update = WithOutbox(Builders<Appeal>.Update
+        var update = Builders<Appeal>.Update
             .Push(a => a.Notes, note)
-            .Set(a => a.UpdatedAt, DateTime.UtcNow), auditEvent);
+            .Set(a => a.UpdatedAt, DateTime.UtcNow);
 
-        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
-
-        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct)
-            ?? throw new InvalidOperationException(
-                $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
-
-        await _events.AppendAsync(auditEvent, ct);
-        return updated;
+        return await ApplyOnceAsync(filter, update, auditEvent,
+            $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.", ct);
     }
 
     public async Task<Appeal> AppendAttachmentAsync(Appeal appeal, AppealAttachment attachment, AppealEvent auditEvent, CancellationToken ct = default)
@@ -270,14 +265,8 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
             updateBuilder = updateBuilder.Push(a => a.AttachmentControlNumbers, attachment.ControlNumber);
         }
 
-        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
-
-        var updated = await _appeals.FindOneAndUpdateAsync(filter, WithOutbox(updateBuilder, auditEvent), options, ct)
-            ?? throw new InvalidOperationException(
-                $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
-
-        await _events.AppendAsync(auditEvent, ct);
-        return updated;
+        return await ApplyOnceAsync(filter, updateBuilder, auditEvent,
+            $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.", ct);
     }
 
     public async Task<Appeal> AcknowledgeAttachmentAsync(
@@ -304,15 +293,8 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
             // The audit row's time, so the event's sentDate matches what is stored.
             update = update.Set(a => a.Attachments.FirstMatchingElement().SentDate, auditEvent.OccurredAt);
         }
-        update = WithOutbox(update, auditEvent);
-
-        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
-        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct)
-            ?? throw new InvalidOperationException(
-                $"Appeal {appealId} with attachment {attachmentId} not found for tenant {tenantId}.");
-
-        await _events.AppendAsync(auditEvent, ct);
-        return updated;
+        return await ApplyOnceAsync(filter, update, auditEvent,
+            $"Appeal {appealId} with attachment {attachmentId} not found for tenant {tenantId}.", ct);
     }
 
     public async Task<Appeal> AssignReviewerAsync(Appeal appeal, AppealEvent auditEvent, CancellationToken ct = default)
@@ -320,17 +302,12 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
         var filter = Builders<Appeal>.Filter.Eq(a => a.TenantId, appeal.TenantId)
                    & Builders<Appeal>.Filter.Eq(a => a.Id, appeal.Id);
 
-        var update = WithOutbox(Builders<Appeal>.Update
+        var update = Builders<Appeal>.Update
             .Set(a => a.AssignedReviewerId, appeal.AssignedReviewerId)
-            .Set(a => a.UpdatedAt, DateTime.UtcNow), auditEvent);
+            .Set(a => a.UpdatedAt, DateTime.UtcNow);
 
-        var options = new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After };
-        var updated = await _appeals.FindOneAndUpdateAsync(filter, update, options, ct)
-            ?? throw new InvalidOperationException(
-                $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.");
-
-        await _events.AppendAsync(auditEvent, ct);
-        return updated;
+        return await ApplyOnceAsync(filter, update, auditEvent,
+            $"Appeal {appeal.Id} not found for tenant {appeal.TenantId}.", ct);
     }
 
     public async Task<AppealNoteLookup?> GetNoteByIdAsync(string tenantId, string noteId, CancellationToken ct = default)
@@ -388,101 +365,236 @@ public sealed class AppealRepositoryMongo : IAppealRepository, IAppealOutboxStor
         };
     }
 
-    /// <summary>Adds the event's outbox entry (if any) to the same update as the change.</summary>
+    /// <summary>Adds the event's outbox entry to the same update as the change; a change without one is refused.</summary>
     internal static UpdateDefinition<Appeal> WithOutbox(UpdateDefinition<Appeal> update, AppealEvent auditEvent) =>
-        auditEvent.OutboxMessage is { } outbox ? update.Push(a => a.Outbox, outbox) : update;
+        update.Push(a => a.Outbox, AppealsService.Services.AppealOutbox.Require(auditEvent));
+
+    /// <summary>
+    /// Idempotent append-style change: the update (with its outbox entry) is
+    /// applied only while the appeal's outbox does not already hold the
+    /// event's idempotency key (<c>Outbox.IdempotencyKey $ne key</c> in the
+    /// same filter). A retry with the same key is a replay: nothing is
+    /// appended and the persisted appeal is returned. The audit append is
+    /// idempotent on EventId either way.
+    /// </summary>
+    private async Task<Appeal> ApplyOnceAsync(
+        FilterDefinition<Appeal> filter, UpdateDefinition<Appeal> update, AppealEvent auditEvent,
+        string notFound, CancellationToken ct)
+    {
+        var key = AppealsService.Services.AppealOutbox.Require(auditEvent).IdempotencyKey;
+        var keyPath = $"{nameof(Appeal.Outbox)}.{nameof(AppealOutboxMessage.IdempotencyKey)}";
+        var guarded = filter & Builders<Appeal>.Filter.Ne(keyPath, key);
+        var updated = await _appeals.FindOneAndUpdateAsync(guarded, WithOutbox(update, auditEvent),
+            new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After }, ct);
+        if (updated is null)
+        {
+            updated = await _appeals.Find(ById(auditEvent.TenantId, auditEvent.AppealId)
+                                          & Builders<Appeal>.Filter.Eq(keyPath, key))
+                          .FirstOrDefaultAsync(ct)
+                      ?? throw new InvalidOperationException(notFound);
+        }
+
+        await _events.AppendAsync(auditEvent, ct);
+        return updated;
+    }
 
     // ── IAppealOutboxStore ──────────────────────────────────────────────
+    // Element paths are the class-map (PascalCase) names; enum values are
+    // stored as strings (Program.cs convention), so raw paths compare to
+    // the enum names.
+
+    private const string StatusPath = "Outbox.Status";
 
     private static FilterDefinition<Appeal> ById(string tenantId, string appealId) =>
         Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId)
         & Builders<Appeal>.Filter.Eq(a => a.Id, appealId);
 
-    public async Task<IReadOnlyList<AppealOutboxKey>> FindPendingAsync(DateTime now, int limit, CancellationToken ct = default)
+    private static FilterDefinition<Appeal> LeaseFree(DateTime now) =>
+        Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseUntil, null)
+        | Builders<Appeal>.Filter.Lt(a => a.OutboxLeaseUntil, now);
+
+    private static FilterDefinition<Appeal> PendingDue(DateTime now) =>
+        // Top-level equality first: it is what lets the planner use the
+        // partial index ix_outbox_pending (an $elemMatch alone does not).
+        Builders<Appeal>.Filter.Eq(StatusPath, nameof(AppealOutboxStatus.Pending))
+        & Builders<Appeal>.Filter.ElemMatch(a => a.Outbox,
+            m => m.Status == AppealOutboxStatus.Pending && (m.NextAttemptAt == null || m.NextAttemptAt <= now));
+
+    private static FilterDefinition<Appeal> DeadLetterExpired(DateTime now) =>
+        Builders<Appeal>.Filter.Eq(StatusPath, nameof(AppealOutboxStatus.DeadLettered))
+        & Builders<Appeal>.Filter.ElemMatch(a => a.Outbox,
+            m => m.Status == AppealOutboxStatus.DeadLettered && m.ExpiresAt != null && m.ExpiresAt <= now);
+
+    /// <summary>The sweep's pending-entry filter (exposed for the query-plan test).</summary>
+    internal static FilterDefinition<Appeal> DueFilter(DateTime now) => PendingDue(now) & LeaseFree(now);
+
+    public async Task<IReadOnlyList<AppealOutboxKey>> FindDueAsync(DateTime now, int limit, CancellationToken ct = default)
     {
-        var filter = Builders<Appeal>.Filter.ElemMatch(a => a.Outbox,
-                         m => m.Status == AppealOutboxStatus.Pending
-                              && (m.NextAttemptAt == null || m.NextAttemptAt <= now))
-                   & (Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseUntil, null)
-                      | Builders<Appeal>.Filter.Lt(a => a.OutboxLeaseUntil, now));
-        var rows = await _appeals.Find(filter)
-            .Project(a => new { a.TenantId, a.Id })
-            .Limit(limit)
-            .ToListAsync(ct);
-        return rows.Select(r => new AppealOutboxKey(r.TenantId, r.Id)).ToList();
+        var keys = new List<AppealOutboxKey>();
+        foreach (var filter in new[] { DueFilter(now), DeadLetterExpired(now) & LeaseFree(now) })
+        {
+            if (keys.Count >= limit) break;
+            var rows = await _appeals.Find(filter)
+                .Project(a => new { a.TenantId, a.Id })
+                .Limit(limit - keys.Count)
+                .ToListAsync(ct);
+            keys.AddRange(rows.Select(r => new AppealOutboxKey(r.TenantId, r.Id)).Where(k => !keys.Contains(k)));
+        }
+        return keys;
     }
 
-    public async Task<IReadOnlyList<AppealOutboxMessage>?> TryLeaseAsync(
+    public async Task<AppealOutboxLease?> TryLeaseAsync(
         string tenantId, string appealId, string owner, DateTime now, DateTime leaseUntil, CancellationToken ct = default)
     {
         var filter = ById(tenantId, appealId)
-                   & (Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseUntil, null)
-                      | Builders<Appeal>.Filter.Lt(a => a.OutboxLeaseUntil, now)
-                      | Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseOwner, owner));
+                   & (LeaseFree(now) | Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseOwner, owner))
+                   & (PendingDue(now) | DeadLetterExpired(now));
         var update = Builders<Appeal>.Update
             .Set(a => a.OutboxLeaseOwner, owner)
             .Set(a => a.OutboxLeaseUntil, leaseUntil);
         var leased = await _appeals.FindOneAndUpdateAsync(filter, update,
             new FindOneAndUpdateOptions<Appeal> { ReturnDocument = ReturnDocument.After }, ct);
-        return leased is null ? null : leased.Outbox ?? new List<AppealOutboxMessage>();
+        return leased is null
+            ? null
+            : new AppealOutboxLease(leased.Outbox ?? new List<AppealOutboxMessage>(), leased.OutboxSequence ?? 0);
     }
 
-    public async Task ReleaseLeaseAsync(
-        string tenantId, string appealId, string owner, DateTime pruneCompletedBefore, CancellationToken ct = default)
+    public async Task<bool> RenewLeaseAsync(
+        string tenantId, string appealId, string owner, DateTime leaseUntil,
+        AppealOutboxSequenceAssignment? assign, CancellationToken ct = default)
     {
-        await _appeals.UpdateOneAsync(
-            ById(tenantId, appealId) & Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseOwner, owner),
-            Builders<Appeal>.Update.Unset(a => a.OutboxLeaseOwner).Unset(a => a.OutboxLeaseUntil),
-            cancellationToken: ct);
-
-        // Sent / skipped entries are kept for a while for diagnosis, then
-        // pruned so the array stays small. Dead-lettered ones stay.
-        await _appeals.UpdateOneAsync(
-            ById(tenantId, appealId),
-            Builders<Appeal>.Update.PullFilter(a => a.Outbox,
-                m => (m.Status == AppealOutboxStatus.Sent || m.Status == AppealOutboxStatus.Skipped)
-                     && m.CompletedAt < pruneCompletedBefore),
-            cancellationToken: ct);
+        var filter = ById(tenantId, appealId) & Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseOwner, owner);
+        var update = Builders<Appeal>.Update.Set(a => a.OutboxLeaseUntil, leaseUntil);
+        if (assign is not null)
+        {
+            filter &= assign.Sequence == 1
+                ? Builders<Appeal>.Filter.Eq(a => a.OutboxSequence, null)
+                : Builders<Appeal>.Filter.Eq(a => a.OutboxSequence, assign.Sequence - 1);
+            filter &= Builders<Appeal>.Filter.ElemMatch(a => a.Outbox,
+                m => m.Id == assign.EntryId && m.Sequence == null);
+            update = update
+                .Set(a => a.OutboxSequence, assign.Sequence)
+                .Set(a => a.Outbox!.FirstMatchingElement().Sequence, assign.Sequence);
+        }
+        var result = await _appeals.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount > 0;
     }
 
-    public async Task UpdateMessageAsync(
-        string tenantId, string appealId, AppealOutboxMessage message, CancellationToken ct = default)
+    public async Task<bool> UpdateMessageAsync(
+        string tenantId, string appealId, string owner, AppealOutboxMessage message, CancellationToken ct = default)
     {
-        // Positional update on the entry with this EventId: only outbox
-        // fields are written, never anything an appeal change owns.
+        // Positional update on THIS row (server id) while it is still
+        // pending and our lease is live: never another row with the same
+        // event id, never a result a newer lease holder already wrote.
         var filter = ById(tenantId, appealId)
-                   & Builders<Appeal>.Filter.ElemMatch(a => a.Outbox, m => m.EventId == message.EventId);
+                   & Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseOwner, owner)
+                   & Builders<Appeal>.Filter.ElemMatch(a => a.Outbox,
+                         m => m.Id == message.Id && m.Status == AppealOutboxStatus.Pending);
         var update = Builders<Appeal>.Update
             .Set(a => a.Outbox!.FirstMatchingElement().Status, message.Status)
             .Set(a => a.Outbox!.FirstMatchingElement().Attempts, message.Attempts)
             .Set(a => a.Outbox!.FirstMatchingElement().NextAttemptAt, message.NextAttemptAt)
             .Set(a => a.Outbox!.FirstMatchingElement().LastError, message.LastError)
             .Set(a => a.Outbox!.FirstMatchingElement().LastAttemptAt, message.LastAttemptAt)
-            .Set(a => a.Outbox!.FirstMatchingElement().CompletedAt, message.CompletedAt);
-        await _appeals.UpdateOneAsync(filter, update, cancellationToken: ct);
+            .Set(a => a.Outbox!.FirstMatchingElement().CompletedAt, message.CompletedAt)
+            .Set(a => a.Outbox!.FirstMatchingElement().ExpiresAt, message.ExpiresAt);
+        var result = await _appeals.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount > 0;
     }
+
+    public async Task ReleaseLeaseAsync(
+        string tenantId, string appealId, string owner, IReadOnlyCollection<string> pruneIds, CancellationToken ct = default)
+    {
+        await _appeals.UpdateOneAsync(
+            ById(tenantId, appealId) & Builders<Appeal>.Filter.Eq(a => a.OutboxLeaseOwner, owner),
+            Builders<Appeal>.Update.Unset(a => a.OutboxLeaseOwner).Unset(a => a.OutboxLeaseUntil),
+            cancellationToken: ct);
+
+        if (pruneIds.Count == 0) return;
+        var ids = pruneIds.ToList();
+        await _appeals.UpdateOneAsync(
+            ById(tenantId, appealId),
+            Builders<Appeal>.Update.PullFilter(a => a.Outbox,
+                m => ids.Contains(m.Id) && m.Status != AppealOutboxStatus.Pending),
+            cancellationToken: ct);
+    }
+
+    private static readonly BsonDocument RequeueSet = new("$set", new BsonDocument
+    {
+        { "Outbox.$[e].Status", nameof(AppealOutboxStatus.Pending) },
+        { "Outbox.$[e].Attempts", 0 },
+        { "Outbox.$[e].NextAttemptAt", BsonNull.Value },
+        { "Outbox.$[e].CompletedAt", BsonNull.Value },
+        { "Outbox.$[e].ExpiresAt", BsonNull.Value }
+    });
+
+    private static BsonDocument DeadLetterElement(string? eventId)
+    {
+        var element = new BsonDocument("e.Status", nameof(AppealOutboxStatus.DeadLettered));
+        if (eventId is not null)
+            element.Add("$or", new BsonArray
+            {
+                new BsonDocument("e.EventId", eventId),
+                new BsonDocument("e.IdempotencyKey", eventId)
+            });
+        return element;
+    }
+
+    private static int CountDeadLetters(IEnumerable<Appeal> appeals, string? eventId) =>
+        appeals.Sum(a => a.Outbox?.Count(m => m.Status == AppealOutboxStatus.DeadLettered
+                                              && (eventId is null || m.EventId == eventId || m.IdempotencyKey == eventId)) ?? 0);
 
     public async Task<int> RequeueDeadLetteredAsync(
         string tenantId, string appealId, string? eventId, CancellationToken ct = default)
     {
-        var appeal = await _appeals.Find(ById(tenantId, appealId)).FirstOrDefaultAsync(ct);
-        if (appeal?.Outbox is null) return 0;
+        var filter = ById(tenantId, appealId)
+                   & Builders<Appeal>.Filter.Eq(StatusPath, nameof(AppealOutboxStatus.DeadLettered));
+        var appeals = await _appeals.Find(filter).ToListAsync(ct);
+        var count = CountDeadLetters(appeals, eventId);
+        if (count == 0) return 0;
+        await _appeals.UpdateOneAsync(filter, new BsonDocumentUpdateDefinition<Appeal>(RequeueSet),
+            new UpdateOptions
+            {
+                ArrayFilters = new[] { new BsonDocumentArrayFilterDefinition<BsonDocument>(DeadLetterElement(eventId)) }
+            }, ct);
+        return count;
+    }
 
-        var requeued = 0;
-        foreach (var entry in appeal.Outbox.Where(m => m.Status == AppealOutboxStatus.DeadLettered
-                                                       && (eventId is null || m.EventId == eventId)))
+    public async Task<int> RequeueAllDeadLetteredAsync(string? tenantId, CancellationToken ct = default)
+    {
+        var filter = Builders<Appeal>.Filter.Eq(StatusPath, nameof(AppealOutboxStatus.DeadLettered));
+        if (tenantId is not null) filter &= Builders<Appeal>.Filter.Eq(a => a.TenantId, tenantId);
+        var appeals = await _appeals.Find(filter).Project<Appeal>(Builders<Appeal>.Projection.Include(a => a.Outbox))
+            .ToListAsync(ct);
+        var count = CountDeadLetters(appeals, null);
+        if (count == 0) return 0;
+        await _appeals.UpdateManyAsync(filter, new BsonDocumentUpdateDefinition<Appeal>(RequeueSet),
+            new UpdateOptions
+            {
+                ArrayFilters = new[] { new BsonDocumentArrayFilterDefinition<BsonDocument>(DeadLetterElement(null)) }
+            }, ct);
+        return count;
+    }
+
+    public async Task<AppealOutboxStats> GetStatsAsync(CancellationToken ct = default)
+    {
+        var pending = new BsonDocument(StatusPath, nameof(AppealOutboxStatus.Pending));
+        var pipeline = new[]
         {
-            var filter = ById(tenantId, appealId)
-                       & Builders<Appeal>.Filter.ElemMatch(a => a.Outbox,
-                             m => m.EventId == entry.EventId && m.Status == AppealOutboxStatus.DeadLettered);
-            var update = Builders<Appeal>.Update
-                .Set(a => a.Outbox!.FirstMatchingElement().Status, AppealOutboxStatus.Pending)
-                .Set(a => a.Outbox!.FirstMatchingElement().Attempts, 0)
-                .Set(a => a.Outbox!.FirstMatchingElement().NextAttemptAt, (DateTime?)null)
-                .Set(a => a.Outbox!.FirstMatchingElement().CompletedAt, (DateTime?)null);
-            var result = await _appeals.UpdateOneAsync(filter, update, cancellationToken: ct);
-            requeued += (int)result.ModifiedCount;
-        }
-        return requeued;
+            new BsonDocument("$match", pending),
+            new BsonDocument("$unwind", "$Outbox"),
+            new BsonDocument("$match", pending),
+            new BsonDocument("$group", new BsonDocument
+            {
+                { "_id", BsonNull.Value },
+                { "count", new BsonDocument("$sum", 1) },
+                { "oldest", new BsonDocument("$min", "$Outbox.CreatedAt") }
+            })
+        };
+        var raw = _appeals.Database.GetCollection<BsonDocument>(AppealsCollectionName);
+        var row = await (await raw.AggregateAsync<BsonDocument>(pipeline, cancellationToken: ct)).FirstOrDefaultAsync(ct);
+        return row is null
+            ? new AppealOutboxStats(0, null)
+            : new AppealOutboxStats(row["count"].ToInt64(), row["oldest"].IsBsonNull ? null : row["oldest"].ToUniversalTime());
     }
 }

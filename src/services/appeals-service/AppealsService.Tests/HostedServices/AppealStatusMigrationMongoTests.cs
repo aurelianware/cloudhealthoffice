@@ -81,7 +81,7 @@ public sealed class AppealStatusMigrationMongoTests : IAsyncLifetime
             EventType = AppealEventType.AppealCreated,
             ToStatus = status,
             ActorId = "user1"
-        });
+        }.Queued(appeal));
         return appeal;
     }
 
@@ -258,7 +258,8 @@ public sealed class AppealStatusMigrationMongoTests : IAsyncLifetime
 
         var audit = (await _events.ListByAppealAsync("t1", appeal.Id))
             .Single(e => e.EventType == AppealEventType.AppealStatusMigrated);
-        pending[0].EventId.Should().Be(audit.EventId, "the audit row and the Kafka event share the idempotency key");
+        pending[0].IdempotencyKey.Should().Be(audit.EventId, "the audit row and the Kafka event share the idempotency key");
+        pending[0].EventId.Should().Be(AppealOutbox.WireEventId("t1", appeal.Id, audit.EventId));
 
         await RelayAsync();
         var call = _publisher.Migrated.Should().ContainSingle().Subject;
@@ -278,10 +279,11 @@ public sealed class AppealStatusMigrationMongoTests : IAsyncLifetime
         failed.Attempts.Should().Be(0, "an unavailable producer is never called");
         (await _repo.GetByIdAsync("t1", appeal.Id))!.Status.Should().Be(AppealStatus.Closed);
         (await _repo.GetByIdAsync("t1", appeal.Id))!.Outbox!
-            .Should().ContainSingle(m => m.Status == AppealOutboxStatus.Pending);
+            .Should().ContainSingle(m => m.Status == AppealOutboxStatus.Pending
+                                         && m.EventType == AppealEventPublisher.AppealStatusMigratedType);
 
-        // The next start, with a working producer, publishes it.
-        (await RelayAsync()).Should().Be(1);
+        // The next start, with a working producer, publishes it (and the genesis event).
+        (await RelayAsync()).Should().Be(2);
         _publisher.Migrated.Should().ContainSingle(c => c.AppealId == appeal.Id);
     }
 
@@ -314,7 +316,7 @@ public sealed class AppealStatusMigrationMongoTests : IAsyncLifetime
         disabled.Attempts.Should().Be(0);
         (await _repo.GetByIdAsync("t1", appeal.Id))!.Outbox!
             .Should().OnlyContain(m => m.Status == AppealOutboxStatus.Skipped && m.CompletedAt != null);
-        (await _repo.FindPendingAsync(DateTime.UtcNow, 10)).Should().BeEmpty();
+        (await _repo.FindDueAsync(DateTime.UtcNow, 10)).Should().BeEmpty();
     }
 
     [Fact]
