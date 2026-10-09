@@ -13,20 +13,21 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// Calls coverage-service's <c>/member/{id}/cob</c> endpoint to determine
 /// whether CHO is the primary, secondary, or tertiary payer for the
 /// claim's member, and produces a structured <see cref="CobOutcome"/> on
-/// the context. Runs at <see cref="Order"/> = 500 — between
-/// <see cref="NcciEditsStage"/> (400) and AI examination (600) — so any
-/// post-edit allowed-amount adjustment from 5.7 is finalized before COB
-/// reasoning kicks in.
+/// the context. Runs at <see cref="Order"/> = 275 — after pricing, before
+/// <see cref="BenefitCalculationStage"/> (300) — so the payer order is
+/// settled before the benefit engine prices the claim and writes
+/// accumulators.
 ///
 /// <para>
-/// <b>Phase 1 detection-only posture (Decision 3).</b> The stage detects
-/// CHO-secondary scenarios and produces a structured Pend with the stable
-/// reason <c>cob-secondary-not-supported-phase-1</c> — Phase 1 ships
-/// CHO-primary adjudication only. Phase 2 priorEob work will exercise
-/// <see cref="ICobCalculationService"/> (registered but unused in 5.8) for
-/// CHO-secondary calculation, lift the pend, and extend
-/// <see cref="ClaimsService.Models.AdjudicationResult"/> with
-/// CHO-secondary persistence fields.
+/// <b>Payer order (PR #1278).</b> Coverage-service and the 837 (2000B
+/// SBR01, 2320/2430) are compared — see <see cref="ResolveLaterPayer"/> and
+/// the decision table in docs/architecture/claim-cob-pipeline.md. When they
+/// agree that CHO pays after another payer and the 837 carries complete
+/// prior-payer data, the stage passes with <see cref="CobOutcome.ApplyCob"/>
+/// and the benefit engine applies claim-level COB. Disagreement, duplicate
+/// payer sequences and unplaceable 2430 loops pend in every mode; missing
+/// prior-payer data keeps the Phase-1 mode-driven pend
+/// (<c>cob-secondary-not-supported-phase-1</c>, a stable legacy code).
 /// </para>
 ///
 /// <list type="bullet">
@@ -116,6 +117,20 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
     /// Distinguishes ops-triage signal from the structural Phase 2 hook.</summary>
     public const string CoverageServiceUnavailablePendReason = "cob-coverage-service-unavailable";
 
+    /// <summary>Coverage-service and the 837 (2000B SBR01) disagree on this
+    /// plan's payer order — e.g. coverage says primary and the 837 says
+    /// secondary, or the reverse. Pends in every mode: never paid.</summary>
+    public const string PayerOrderMismatchPendReason = "cob-payer-order-mismatch";
+
+    /// <summary>Two 2320 loops claim the same payer sequence (or our own):
+    /// the payer order is ambiguous. Pends in every mode.</summary>
+    public const string DuplicatePayerSequencePendReason = "cob-duplicate-payer-sequence";
+
+    /// <summary>A 2430 SVD01 names none of the claim's other payers (2330B
+    /// NM109, REF*2U, REF*FY): its payment cannot be placed in the payer
+    /// order. Pends in every mode rather than undercount prior payments.</summary>
+    public const string UnmatchedLineAdjudicationPendReason = "cob-unmatched-line-adjudication";
+
     /// <summary>
     /// <see cref="PendDetails.PendCode"/> value for COB pends. Already a
     /// documented, recognized value (see <see cref="PendDetails.PendCode"/>'s
@@ -151,7 +166,15 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
     }
 
     public string Name => StageName;
-    public int Order => 500;
+    /// <summary>
+    /// 275 — after pricing (250), before benefit calculation (300). The payer
+    /// order must be settled before the benefit engine prices the claim and
+    /// writes accumulators: a claim this stage pends is priced read-only
+    /// (no accumulator write), and only a claim this stage clears for COB is
+    /// priced as a later payer. See the decision table in
+    /// docs/architecture/claim-cob-pipeline.md.
+    /// </summary>
+    public int Order => 275;
     public bool IsRequired => true;
 
     public async Task<ClaimAdjudicationStageResult> ExecuteAsync(
@@ -203,11 +226,18 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             entries = null;
         }
 
+        // This plan's payer sequence as the 837 states it (2000B SBR01);
+        // null when absent or "U" (unknown).
+        var claimSequence = PayerResponsibility.ToSequence(context.Claim.PayerResponsibilityCode);
+        activity?.SetTag("cob.claim_sequence", claimSequence);
+
         if (entries is null)
         {
             // Decision 7 — Pend regardless of mode. Coverage data
-            // unavailable is not a denial signal.
-            return BuildDegradedOutcome(context, activity);
+            // unavailable is not a denial signal. A claim the 837 sends us
+            // as a later payer pends in every mode: the payer order cannot be
+            // confirmed, so it is neither paid as primary nor as secondary.
+            return BuildDegradedOutcome(context, activity, forcePend: claimSequence >= 2);
         }
 
         activity?.SetTag("cob.coverage_service", "success");
@@ -216,19 +246,145 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
         var classification = Classify(entries);
         activity?.SetTag("cob.outcome", ScenarioTag(classification.Scenario));
 
-        return classification.Scenario switch
+        switch (classification.Scenario)
         {
-            CobScenario.ChoPrimaryNoSecondary => BuildPrimaryOutcome(
-                context, activity, classification),
-            CobScenario.ChoPrimaryWithSecondary => BuildPrimaryOutcome(
-                context, activity, classification),
-            CobScenario.ChoSecondaryDetected or CobScenario.ChoTertiaryDetected =>
-                BuildSecondaryOutcome(context, activity, classification, entries),
-            // CobScenario.None can't be reached from Classify (only the
-            // degraded path produces None) — defensive default mirrors
-            // the degraded path so a future enum addition fails safe.
-            _ => BuildDegradedOutcome(context, activity),
+            case CobScenario.ChoPrimaryNoSecondary:
+            case CobScenario.ChoPrimaryWithSecondary:
+                // Coverage says primary; the 837 must not say otherwise.
+                return claimSequence >= 2
+                    ? BuildDataPend(context, activity, classification, PayerOrderMismatchPendReason,
+                        $"Coverage records show Cloud Health Office as the primary payer, but the 837 (SBR01 " +
+                        $"'{context.Claim.PayerResponsibilityCode}') submits it as payer {claimSequence}.")
+                    : BuildPrimaryOutcome(context, activity, classification);
+
+            case CobScenario.ChoSecondaryDetected:
+            case CobScenario.ChoTertiaryDetected:
+                return ResolveLaterPayer(context, activity, classification, entries, claimSequence);
+
+            default:
+                // CobScenario.None can't be reached from Classify (only the
+                // degraded path produces None) — defensive default mirrors
+                // the degraded path so a future enum addition fails safe.
+                return BuildDegradedOutcome(context, activity);
+        }
+    }
+
+    /// <summary>
+    /// Coverage-service says this plan pays after another payer. Decision
+    /// table (see docs/architecture/claim-cob-pipeline.md):
+    /// <list type="bullet">
+    ///   <item><description>The 837 gives no payer sequence (SBR01 absent /
+    ///     U) → the Phase-1 posture: mode-driven pend (no prior-payer
+    ///     data).</description></item>
+    ///   <item><description>The 837 says primary, or a different later
+    ///     position (coverage secondary vs 837 tertiary-or-later, or the
+    ///     reverse) → pend in every mode, payer-order mismatch.</description></item>
+    ///   <item><description>Duplicate 2320 sequences, or 2430 loops matching
+    ///     no other payer → pend in every mode.</description></item>
+    ///   <item><description>Agreed, but the 837 lacks a 2320 loop with a paid
+    ///     amount (AMT*D or 2430 SVD) for every earlier sequence → mode-driven
+    ///     pend.</description></item>
+    ///   <item><description>Agreed with complete 2320 data → Pass with
+    ///     <see cref="CobOutcome.ApplyCob"/>: BenefitCalculationStage prices
+    ///     the claim as payer <see cref="CobOutcome.PayerSequence"/> and the
+    ///     claim finalizes.</description></item>
+    /// </list>
+    /// </summary>
+    private ClaimAdjudicationStageResult ResolveLaterPayer(
+        ClaimAdjudicationContext context,
+        Activity? activity,
+        ScenarioClassification classification,
+        IReadOnlyList<CobEntry> entries,
+        int? claimSequence)
+    {
+        if (claimSequence is null)
+            return BuildSecondaryOutcome(context, activity, classification, entries);
+
+        var coverageIsSecondary = classification.Scenario == CobScenario.ChoSecondaryDetected;
+        if (claimSequence == 1 || coverageIsSecondary != (claimSequence == 2))
+        {
+            return BuildDataPend(context, activity, classification, PayerOrderMismatchPendReason,
+                $"Coverage records show Cloud Health Office as the " +
+                $"{(coverageIsSecondary ? "secondary" : "tertiary-or-later")} payer, but the 837 (SBR01 " +
+                $"'{context.Claim.PayerResponsibilityCode}') submits it as payer {claimSequence}.");
+        }
+
+        var claim = context.Claim;
+        var sequenced = (claim.OtherPayers ?? [])
+            .Select(p => PayerResponsibility.ToSequence(p.PayerResponsibilityCode))
+            .Where(s => s is not null)
+            .Select(s => s!.Value)
+            .ToList();
+        var duplicate = sequenced.GroupBy(s => s).FirstOrDefault(g => g.Count() > 1)?.Key
+                        ?? (sequenced.Contains(claimSequence.Value) ? claimSequence : null);
+        if (duplicate is not null)
+        {
+            return BuildDataPend(context, activity, classification, DuplicatePayerSequencePendReason,
+                $"The 837 lists payer sequence {duplicate} more than once (2320 SBR01 / 2000B SBR01); " +
+                "the payer order is ambiguous.");
+        }
+
+        if (claim.UnmatchedOtherPayerLines is { Count: > 0 } unmatched)
+        {
+            return BuildDataPend(context, activity, classification, UnmatchedLineAdjudicationPendReason,
+                $"{unmatched.Count} 2430 line adjudication(s) (SVD01 " +
+                $"{string.Join(", ", unmatched.Select(u => u.PayerId ?? "?").Distinct())}) match no other payer's " +
+                "2330B NM109, REF*2U or REF*FY; prior payments cannot be placed in the payer order.");
+        }
+
+        var complete = Enumerable.Range(1, claimSequence.Value - 1).All(seq =>
+            (claim.OtherPayers ?? []).Any(p =>
+                PayerResponsibility.ToSequence(p.PayerResponsibilityCode) == seq
+                && (p.PaidAmount is not null || p.LineAdjudications.Count > 0)));
+        if (!complete)
+            return BuildSecondaryOutcome(context, activity, classification, entries);
+
+        activity?.SetTag("cob.apply", true);
+        context.CobResult = new CobOutcome
+        {
+            Scenario = classification.Scenario,
+            PrimaryPayerName = classification.PrimaryPayerName,
+            PrimaryPayerId = classification.PrimaryPayerId,
+            IsMedicarePrimary = classification.IsMedicarePrimary,
+            PendReason = null,
+            AppliedRule = ResolveAppliedRule(context, entries),
+            ApplyCob = true,
+            PayerSequence = claimSequence,
         };
+        return ClaimAdjudicationStageResult.Pass(StageName);
+    }
+
+    /// <summary>
+    /// A COB data / payer-order problem the stage cannot resolve: pend in
+    /// every enforcement mode (never pay, never deny), with the reason on
+    /// <see cref="ClaimAdjudicationContext.PendDetails"/> (pend code COB).
+    /// </summary>
+    private ClaimAdjudicationStageResult BuildDataPend(
+        ClaimAdjudicationContext context,
+        Activity? activity,
+        ScenarioClassification classification,
+        string reasonCode,
+        string message)
+    {
+        activity?.SetTag("cob.outcome_mode", "pend");
+        activity?.SetTag("cob.pend_reason", reasonCode);
+        context.CobResult = new CobOutcome
+        {
+            Scenario = classification.Scenario,
+            PrimaryPayerName = classification.PrimaryPayerName,
+            PrimaryPayerId = classification.PrimaryPayerId,
+            IsMedicarePrimary = classification.IsMedicarePrimary,
+            PendReason = reasonCode,
+            PayerSequence = PayerResponsibility.ToSequence(context.Claim.PayerResponsibilityCode),
+        };
+        context.PendDetails = new PendDetails
+        {
+            PendCode = CobPendCode,
+            PendReason = TruncatePendReason($"{message} Reason code: {reasonCode}."),
+            PendedAt = DateTime.UtcNow,
+            EditFailures = new List<NcciEditFailureSnapshot>(),
+        };
+        return ClaimAdjudicationStageResult.Pend(StageName, message);
     }
 
     /// <summary>
@@ -328,8 +484,9 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             PendCode = CobPendCode,
             PendReason = TruncatePendReason(
                 $"Cloud Health Office is the secondary payer ({classification.Scenario}); primary payer " +
-                $"{classification.PrimaryPayerName ?? "unknown"}; secondary claim calculation " +
-                $"deferred to Phase 2. Reason code: {SecondaryNotSupportedPendReason}."),
+                $"{classification.PrimaryPayerName ?? "unknown"}; the 837 carries no complete prior-payer " +
+                $"data (2000B SBR01 and a 2320 loop with AMT*D or 2430 SVD for every earlier payer), so the " +
+                $"secondary calculation cannot run. Reason code: {SecondaryNotSupportedPendReason}."),
             PendedAt = DateTime.UtcNow,
             EditFailures = new List<NcciEditFailureSnapshot>(),
         };
@@ -449,7 +606,7 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
     }
 
     private ClaimAdjudicationStageResult BuildDegradedOutcome(
-        ClaimAdjudicationContext context, Activity? activity)
+        ClaimAdjudicationContext context, Activity? activity, bool forcePend = false)
     {
         // Decision 7 — coverage-service unavailable always pends, never
         // denies; "unable to determine coverage state" is not a denial.
@@ -474,7 +631,7 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             EditFailures = new List<NcciEditFailureSnapshot>(),
         };
 
-        if (_options.CobMode == CobEnforcementMode.SoftValidation)
+        if (_options.CobMode == CobEnforcementMode.SoftValidation && !forcePend)
         {
             activity?.SetTag("cob.outcome_mode", "softvalidation");
             return ClaimAdjudicationStageResult.Pass(StageName);

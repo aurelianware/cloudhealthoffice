@@ -21,7 +21,7 @@ namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication.Stages;
 /// Uses the REAL <see cref="PayerOrderService"/> so the engine surface
 /// behaviour is exercised end-to-end (it's pure-calculation, no I/O).
 /// </summary>
-public class CoordinationOfBenefitsStageTests
+public partial class CoordinationOfBenefitsStageTests
 {
     private const string TenantId = "tenant-1";
     private const string ClaimVersionId = "ver-cob-1";
@@ -47,7 +47,7 @@ public class CoordinationOfBenefitsStageTests
     {
         var stage = NewStage();
         Assert.Equal("CoordinationOfBenefits", stage.Name);
-        Assert.Equal(500, stage.Order);
+        Assert.Equal(275, stage.Order);
         // Decision 2 — disabling COB would let CHO-secondary claims
         // process as CHO-primary (wrong on the wire). Tenants set
         // CobMode=SoftValidation instead.

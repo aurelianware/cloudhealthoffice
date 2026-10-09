@@ -31,6 +31,13 @@ public interface IAccumulatorRepository
     /// Returns null when no prior adjustment exists.
     /// </summary>
     Task<AccumulatorEvent?> GetManualAdjustmentAsync(string tenantId, string adjustmentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The <c>ClaimApplied</c> event a finalized claim produced (the deltas it
+    /// actually applied), or null when the claim never applied. Used to
+    /// reverse a voided or replaced claim.
+    /// </summary>
+    Task<AccumulatorEvent?> GetClaimAppliedEventAsync(string tenantId, string claimId, CancellationToken ct = default);
 }
 
 /// <summary>

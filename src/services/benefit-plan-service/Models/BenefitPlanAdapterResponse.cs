@@ -60,6 +60,9 @@ public class AdapterBenefitPlan
     public LineOfBusiness LineOfBusiness { get; set; } = LineOfBusiness.Commercial;
     public FamilyAccumulatorModel FamilyAccumulatorModel { get; set; } = FamilyAccumulatorModel.Embedded;
 
+    /// <summary>See <see cref="BenefitPlan.CobDeductibleCredit"/>; carried through GET / PUT so an edit never resets it.</summary>
+    public CobDeductibleCredit CobDeductibleCredit { get; set; } = CobDeductibleCredit.NaicFullCredit;
+
     public List<AdapterBenefit> Benefits { get; set; } = new();
     public List<AdapterNetworkTier> NetworkTiers { get; set; } = new();
     public AdapterCostSharing CostSharing { get; set; } = new();
@@ -95,6 +98,7 @@ public class AdapterBenefitPlan
         MetalLevel = src.MetalLevel,
         LineOfBusiness = src.LineOfBusiness,
         FamilyAccumulatorModel = src.FamilyAccumulatorModel,
+        CobDeductibleCredit = src.CobDeductibleCredit,
         Benefits = src.Benefits.Select(AdapterBenefit.From).ToList(),
         NetworkTiers = src.NetworkTiers.Select(AdapterNetworkTier.From).ToList(),
         CostSharing = AdapterCostSharing.From(src.CostSharing),
@@ -128,6 +132,7 @@ public class AdapterBenefitPlan
         MetalLevel = MetalLevel,
         LineOfBusiness = LineOfBusiness,
         FamilyAccumulatorModel = FamilyAccumulatorModel,
+        CobDeductibleCredit = CobDeductibleCredit,
         Benefits = Benefits.Select(b => b.ToBenefit()).ToList(),
         NetworkTiers = NetworkTiers.Select(n => n.ToNetworkTier()).ToList(),
         CostSharing = CostSharing.ToCostSharing(),

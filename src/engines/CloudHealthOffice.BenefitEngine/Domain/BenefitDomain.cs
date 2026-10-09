@@ -148,9 +148,16 @@ public enum FamilyAccumulatorModel
 
 /// <summary>
 /// How a plan credits its deductible when it pays secondary, tertiary or
-/// later (coordination of benefits). Only the deductible accumulators are
-/// affected; the 835 (PR-1 = what the member owes after COB) is the same
-/// under <see cref="NaicFullCredit"/> and <see cref="MemberPaidOnly"/>.
+/// later (coordination of benefits).
+/// <para><b>What changes on the 835.</b> As a later payer the plan prices
+/// the whole claim first as if it were the only plan — the deductible it
+/// applies on one line counts as met for the claim's later lines — and then
+/// applies COB to the claim as a whole (NAIC MDL-120 §7). So on a multi-line
+/// secondary or tertiary claim the later lines carry less (or no) PR-1, and
+/// the plan may pay more on them, than they would line by line. That is the
+/// same under <see cref="NaicFullCredit"/> and <see cref="MemberPaidOnly"/>:
+/// between those two only the deductible accumulators (what later claims see)
+/// differ. <see cref="NoDeductible"/> changes the 835: no deductible at all.</para>
 /// The OOP accumulators always record only what the member owes after COB:
 /// NAIC MDL-120 §7 requires deductible credit only, and amounts other plans
 /// paid are not the member's out-of-pocket spending.
@@ -164,9 +171,8 @@ public enum CobDeductibleCredit
     /// other health care coverage." The deductible accumulators get the
     /// deductible this plan's own adjudication applied before COB (already
     /// limited to the remaining deductible and by the OOP cap), including
-    /// deductible a prior payer paid. The credit counts as met for this
-    /// claim's later lines as well as for later claims (so a later line's
-    /// PR-1 drops), and never takes the accumulator past its limit.
+    /// deductible a prior payer paid. Never past the limit (also clamped by
+    /// the store at write time).
     /// </summary>
     NaicFullCredit = 0,
 

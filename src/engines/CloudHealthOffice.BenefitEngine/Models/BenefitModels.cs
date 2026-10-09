@@ -210,6 +210,13 @@ public record BenefitResolutionResult
     /// cost-sharing breakdown (since cost-sharing is per-admission, not per-line).
     /// </summary>
     public DrgCostShareResult? DrgCostShare { get; init; }
+
+    /// <summary>
+    /// The payer sequence this plan adjudicated the claim in when
+    /// coordination of benefits was applied (2 secondary, 3 tertiary, …);
+    /// null when it adjudicated as the first payer. Drives the 835 CLP02.
+    /// </summary>
+    public int? CobPayerSequence { get; init; }
 }
 
 /// <summary>

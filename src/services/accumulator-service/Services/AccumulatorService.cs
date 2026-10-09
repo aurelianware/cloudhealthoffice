@@ -74,6 +74,24 @@ public class AccumulatorService : IAccumulatorService
 
     public async Task<ApplyResult> ApplyClaimFinalizedAsync(ClaimFinalizedEvent evt, CancellationToken ct = default)
     {
+        // A void (claims-service maps Voided → "Reversed"): back out what
+        // the claim applied. Keyed separately from the apply, so the claim's
+        // own (tenantId, claimId) marker — already "Applied" — does not
+        // swallow it.
+        if (IsReversal(evt.FinalStatus))
+            return await ReverseClaimAsync(evt.TenantId, evt.ClaimId, evt.ClaimId, ct);
+
+        // A replacement (CLM05-3 = 7) or void (8) of an earlier claim: reverse
+        // the original's deltas first, so the replacement does not count on
+        // top of it. Idempotent with the original's own void event.
+        if (evt.ClaimFrequencyCode is "7" or "8"
+            && !string.IsNullOrWhiteSpace(evt.OriginalClaimId)
+            && !string.Equals(evt.OriginalClaimId, evt.ClaimId, StringComparison.Ordinal))
+        {
+            var reversed = await ReverseClaimAsync(evt.TenantId, evt.OriginalClaimId!, evt.ClaimId, ct);
+            if (evt.ClaimFrequencyCode == "8") return reversed;
+        }
+
         // Two-phase idempotency — (tenantId, claimId) is the dedupe key even across
         // regenerated EventIds (re-finalization must not double-count). A Pending
         // marker from a crashed prior attempt does NOT block retry: TryBeginAsync
@@ -112,14 +130,22 @@ public class AccumulatorService : IAccumulatorService
             return new ApplyResult(ApplyOutcome.Orphan, null, null, "OrphanServiceDate");
         }
 
-        var (deductibleDelta, oopDelta, serviceDeltas) = ComputeDeltas(evt);
-        var familyDeductibleDelta = evt.IsFamilyAggregate ? deductibleDelta : 0m;
-        var familyOopDelta = evt.IsFamilyAggregate ? oopDelta : 0m;
+        var (requestedDeductible, requestedOop, serviceDeltas) = ComputeDeltas(evt);
+        var requestedFamilyDeductible = evt.IsFamilyAggregate ? requestedDeductible : 0m;
+        var requestedFamilyOop = evt.IsFamilyAggregate ? requestedOop : 0m;
 
-        snapshot.IndividualDeductibleUsed = Clamp(snapshot.IndividualDeductibleUsed + deductibleDelta, snapshot.IndividualDeductibleLimit);
-        snapshot.IndividualOopUsed = Clamp(snapshot.IndividualOopUsed + oopDelta, snapshot.IndividualOopLimit);
-        snapshot.FamilyDeductibleUsed = Clamp(snapshot.FamilyDeductibleUsed + familyDeductibleDelta, snapshot.FamilyDeductibleLimit);
-        snapshot.FamilyOopUsed = Clamp(snapshot.FamilyOopUsed + familyOopDelta, snapshot.FamilyOopLimit);
+        // The audit row records what was actually applied after clamping at
+        // the limits, so a later reversal backs out exactly that.
+        var before = (snapshot.IndividualDeductibleUsed, snapshot.IndividualOopUsed,
+            snapshot.FamilyDeductibleUsed, snapshot.FamilyOopUsed);
+        snapshot.IndividualDeductibleUsed = Clamp(snapshot.IndividualDeductibleUsed + requestedDeductible, snapshot.IndividualDeductibleLimit);
+        snapshot.IndividualOopUsed = Clamp(snapshot.IndividualOopUsed + requestedOop, snapshot.IndividualOopLimit);
+        snapshot.FamilyDeductibleUsed = Clamp(snapshot.FamilyDeductibleUsed + requestedFamilyDeductible, snapshot.FamilyDeductibleLimit);
+        snapshot.FamilyOopUsed = Clamp(snapshot.FamilyOopUsed + requestedFamilyOop, snapshot.FamilyOopLimit);
+        var deductibleDelta = snapshot.IndividualDeductibleUsed - before.IndividualDeductibleUsed;
+        var oopDelta = snapshot.IndividualOopUsed - before.IndividualOopUsed;
+        var familyDeductibleDelta = snapshot.FamilyDeductibleUsed - before.FamilyDeductibleUsed;
+        var familyOopDelta = snapshot.FamilyOopUsed - before.FamilyOopUsed;
         ApplyServiceDeltas(snapshot, serviceDeltas);
         snapshot.Version += 1;
 
@@ -280,6 +306,100 @@ public class AccumulatorService : IAccumulatorService
         }, ct);
 
         return new AccumulatorAdjustmentResponse { AdjustmentId = adjustmentId, Snapshot = snapshot };
+    }
+
+    // ── reversal ────────────────────────────────────────────────────────
+
+    private static bool IsReversal(string? finalStatus) =>
+        string.Equals(finalStatus, "Reversed", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(finalStatus, "Voided", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Backs out the deltas <paramref name="claimId"/> applied (its
+    /// <c>ClaimApplied</c> audit row — the amounts actually applied after
+    /// clamping), records a <c>ClaimReversed</c> row and publishes the
+    /// negative adjustment. Idempotent on <c>{claimId}:reversal</c>: a void
+    /// event and a replacement naming the same original reverse it once.
+    /// A claim that never applied reverses nothing.
+    /// </summary>
+    private async Task<ApplyResult> ReverseClaimAsync(
+        string tenantId, string claimId, string sourceReference, CancellationToken ct)
+    {
+        var key = claimId + ":reversal";
+        var begin = await _processed.TryBeginAsync(tenantId, key, ct);
+        if (begin == BeginClaimOutcome.AlreadyApplied)
+            return new ApplyResult(ApplyOutcome.Duplicate, null, null, "DuplicateReversal");
+
+        var applied = await _repo.GetClaimAppliedEventAsync(tenantId, claimId, ct);
+        var snapshot = applied is null
+            ? null
+            : await _repo.GetSnapshotAsync(tenantId, applied.MemberId, applied.PlanYearStart, ct);
+        if (applied is null || snapshot is null)
+        {
+            _logger.LogInformation(
+                "Reversal for claim {ClaimId} tenant {TenantId}: nothing applied; nothing to reverse",
+                SanitizeForLog(claimId), SanitizeForLog(tenantId));
+            await _processed.CompleteAsync(tenantId, key, string.Empty, "NothingToReverse", ct);
+            return new ApplyResult(ApplyOutcome.Duplicate, null, null, "NothingToReverse");
+        }
+
+        var before = (snapshot.IndividualDeductibleUsed, snapshot.IndividualOopUsed,
+            snapshot.FamilyDeductibleUsed, snapshot.FamilyOopUsed);
+        snapshot.IndividualDeductibleUsed = Math.Max(0m, snapshot.IndividualDeductibleUsed - applied.DeductibleDelta);
+        snapshot.IndividualOopUsed = Math.Max(0m, snapshot.IndividualOopUsed - applied.OopDelta);
+        snapshot.FamilyDeductibleUsed = Math.Max(0m, snapshot.FamilyDeductibleUsed - applied.FamilyDeductibleDelta);
+        snapshot.FamilyOopUsed = Math.Max(0m, snapshot.FamilyOopUsed - applied.FamilyOopDelta);
+        var serviceDeltas = applied.ServiceDeltas
+            .Select(d => new ServiceAccumulatorDelta { BenefitCategory = d.BenefitCategory, UsedDelta = -d.UsedDelta, Unit = d.Unit })
+            .ToList();
+        ApplyServiceDeltas(snapshot, serviceDeltas);
+        snapshot.Version += 1;
+
+        var reversal = new AccumulatorEvent
+        {
+            TenantId = tenantId,
+            EventId = Guid.NewGuid().ToString(),
+            AggregateId = snapshot.Id,
+            Version = snapshot.Version,
+            MemberId = applied.MemberId,
+            PlanYearStart = snapshot.PlanYearStart,
+            PlanYearEnd = snapshot.PlanYearEnd,
+            EventType = "ClaimReversed",
+            SourceReference = sourceReference,
+            SourceClaimId = claimId,
+            ActorId = "system",
+            DeductibleDelta = snapshot.IndividualDeductibleUsed - before.IndividualDeductibleUsed,
+            OopDelta = snapshot.IndividualOopUsed - before.IndividualOopUsed,
+            FamilyDeductibleDelta = snapshot.FamilyDeductibleUsed - before.FamilyDeductibleUsed,
+            FamilyOopDelta = snapshot.FamilyOopUsed - before.FamilyOopUsed,
+            ServiceDeltas = serviceDeltas.Select(d => new ServiceAccumulatorDeltaRow
+            {
+                BenefitCategory = d.BenefitCategory, UsedDelta = d.UsedDelta, Unit = d.Unit
+            }).ToList(),
+            OccurredAt = DateTime.UtcNow
+        };
+
+        await _repo.AppendEventAsync(reversal, ct);
+        await _repo.UpsertSnapshotAsync(snapshot, ct);
+        await _processed.CompleteAsync(tenantId, key, reversal.Id, "Reversed", ct);
+
+        await _publisher.PublishAdjustedAsync(new AccumulatorAdjustedEvent
+        {
+            TenantId = tenantId,
+            MemberId = applied.MemberId,
+            PlanYearStart = snapshot.PlanYearStart,
+            PlanYearEnd = snapshot.PlanYearEnd,
+            AdjustmentSource = "ClaimReversed",
+            SourceReference = sourceReference,
+            ActorId = "system",
+            DeductibleDelta = reversal.DeductibleDelta,
+            OopDelta = reversal.OopDelta,
+            FamilyDeductibleDelta = reversal.FamilyDeductibleDelta,
+            FamilyOopDelta = reversal.FamilyOopDelta,
+            ServiceDeltas = serviceDeltas
+        }, ct);
+
+        return new ApplyResult(ApplyOutcome.Applied, snapshot, reversal.Id, "Reversed");
     }
 
     // ── helpers ─────────────────────────────────────────────────────────

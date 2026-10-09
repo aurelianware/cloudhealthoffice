@@ -49,6 +49,20 @@ public interface IAccumulatorService
     Task ResetForPlanYearAsync(
         Guid benefitPlanId, string planYear,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// The still-active (not reversed) accumulator updates
+    /// <paramref name="claimId"/> already applied, if any. The engine takes
+    /// them out of the starting balances when the same claim is adjudicated
+    /// again, and reverses them before writing the new ones. Stores that do
+    /// not journal per claim return none (the default).
+    /// </summary>
+    Task<IReadOnlyList<AccumulatorUpdate>> GetClaimUpdatesAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<AccumulatorUpdate>>([]);
 }
 
 // ═══════════════════════════════════════════════════════════════════

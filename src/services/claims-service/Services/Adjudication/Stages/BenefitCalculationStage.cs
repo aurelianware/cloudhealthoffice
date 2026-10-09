@@ -205,6 +205,23 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pend(StageName, pricingReason);
         }
 
+        // The 837 sends this plan as a later payer but the COB stage (which
+        // runs before this one) did not settle the payer order — e.g. it is
+        // disabled. Never price a later-payer claim as primary.
+        if (PayerResponsibility.ToSequence(claim.PayerResponsibilityCode) >= 2 && context.CobResult is null)
+        {
+            const string cobReason =
+                "The 837 submits this plan as a later payer (SBR01), but coordination of benefits was not " +
+                "determined for the claim; benefit calculation deferred.";
+            context.PendDetails ??= new PendDetails
+            {
+                PendCode = CoordinationOfBenefitsStage.CobPendCode,
+                PendReason = cobReason,
+                PendedAt = DateTime.UtcNow,
+            };
+            return ClaimAdjudicationStageResult.Pend(StageName, cobReason);
+        }
+
         var subscriberId = await ResolveSubscriberIdAsync(context, ct).ConfigureAwait(false);
         var request = BuildRequest(context, planGuid.Value, subscriberId);
 
@@ -473,7 +490,16 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             DrgAllowedAmount = perStay?.ClaimAllowed,
             LengthOfStay = perStay?.LengthOfStay,
             InpatientPricingMethod = perStay?.Method,
-            Cob = BuildCob(claim),
+            // COB only when the COB stage cleared it: coverage-service and the
+            // 837 agree on the payer order and the 837 carries complete
+            // prior-payer data.
+            Cob = context.CobResult is { ApplyCob: true } ? BuildCob(claim) : null,
+            // A claim an earlier stage already pended (COB, duplicate, …) is
+            // priced read-only: no accumulator is written for a claim that
+            // will not finalize now. It is priced again when it is released.
+            ExecutionMode = context.StageResults.Any(r => r.Outcome == ClaimAdjudicationOutcome.Pend)
+                ? AdjudicationExecutionMode.Prospective
+                : AdjudicationExecutionMode.Production,
         };
     }
 
@@ -694,6 +720,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             PatientResponsibility = totals.TotalMemberResponsibility,
             OopAppliedAmount = totals.TotalOopApplied,
             DeductibleCreditedAmount = totals.TotalDeductibleCredited,
+            CobPayerSequence = result.CobPayerSequence,
             PayerPayment = totals.TotalPlanPaid,
             DenialReasonCode = result.Success ? null : result.DenialReasonCode,
             DenialReason = result.Success ? null : result.DenialReasonDescription,

@@ -472,6 +472,58 @@ public class AccumulatorWorkingSet
         _pendingUpdates.Clear();
     }
 
+    private static readonly HashSet<AccumulatorType> CostShareTypes =
+    [
+        AccumulatorType.IndividualDeductible,
+        AccumulatorType.FamilyDeductible,
+        AccumulatorType.IndividualOutOfPocketMax,
+        AccumulatorType.FamilyOutOfPocketMax,
+        AccumulatorType.AcaIndividualCap,
+    ];
+
+    /// <summary>
+    /// Undoes this claim's pending deductible, OOP-max and ACA-cap updates
+    /// (visit, day and dollar counts are kept). Coordination of benefits
+    /// prices the claim first as if this plan were the only plan — those
+    /// cost-share updates carry the deductible and OOP max from line to line
+    /// as a primary payer would — and then writes the updates it actually
+    /// owes after the claim-level COB calculation.
+    /// </summary>
+    public void RollbackCostShareUpdates()
+    {
+        foreach (var update in _pendingUpdates.Where(u => CostShareTypes.Contains(u.Type)).ToList())
+        {
+            if (_entries.TryGetValue(MakeKey(update.Type, update.Scope, update.NetworkTier), out var entry))
+                entry.CurrentAccumulated -= update.Amount;
+            _pendingUpdates.Remove(update);
+        }
+    }
+
+    /// <summary>
+    /// Takes a claim's own earlier, still-active accumulator updates out of
+    /// the starting balances, so re-adjudicating the same claim prices it
+    /// against the accumulators as they were without it — the same result
+    /// as the first pass, instead of a claim that has already met its own
+    /// deductible.
+    /// </summary>
+    public void ExcludePriorUpdates(IEnumerable<AccumulatorUpdate> updates)
+    {
+        foreach (var update in updates)
+        {
+            var key = update.Type switch
+            {
+                AccumulatorType.VisitCount => $"VisitCount:{update.Source.Split(':').LastOrDefault()}",
+                AccumulatorType.DayCount => $"DayCount:{update.Source.Split(':').LastOrDefault()}",
+                AccumulatorType.DollarLimit => $"DollarLimit:{update.Source.Split(':').LastOrDefault()}",
+                _ => MakeKey(update.Type, update.Scope, update.NetworkTier)
+            };
+            if (!_entries.TryGetValue(key, out var entry)) continue;
+            var amount = Math.Min(update.Amount, entry.CurrentAccumulated);
+            entry.OriginalAccumulated -= amount;
+            entry.CurrentAccumulated -= amount;
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // SNAPSHOT / PERSISTENCE
     // ═══════════════════════════════════════════════════════════════════
@@ -536,7 +588,11 @@ public class AccumulatorWorkingSet
             Scope = entry.Scope,
             NetworkTier = entry.NetworkTier,
             Amount = amount,
-            Source = source
+            Source = source,
+            ClampAtLimit = entry.Type is AccumulatorType.IndividualDeductible or AccumulatorType.FamilyDeductible
+                           && entry.LimitAmount > 0
+                ? entry.LimitAmount
+                : null,
         });
     }
 
@@ -566,7 +622,7 @@ public class AccumulatorWorkingSet
         public AccumulatorScope Scope { get; init; }
         public NetworkTier NetworkTier { get; init; }
         public decimal LimitAmount { get; set; }
-        public decimal OriginalAccumulated { get; init; }
+        public decimal OriginalAccumulated { get; set; }
         public decimal CurrentAccumulated { get; set; }
     }
 }
@@ -578,4 +634,13 @@ public record AccumulatorUpdate
     public NetworkTier NetworkTier { get; init; }
     public decimal Amount { get; init; }
     public string Source { get; init; } = default!;
+
+    /// <summary>
+    /// For a deductible update: the plan's deductible limit. The store adds
+    /// at most what is left under it at write time, so two claims
+    /// adjudicated concurrently against the same starting balance cannot
+    /// together credit past the limit (the store reloads and re-clamps on an
+    /// optimistic-concurrency conflict). Null = no clamp.
+    /// </summary>
+    public decimal? ClampAtLimit { get; init; }
 }

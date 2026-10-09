@@ -169,6 +169,28 @@ public sealed class PlanLimitValidator : IPlanLimitValidator
                 cap: 0);
         }
 
+        // An HDHP must apply its deductible before paying non-preventive
+        // benefits (IRC §223(c)(2), the HSA-eligibility condition);
+        // NoDeductible skips it whenever the plan pays after another payer.
+        if (plan.PlanType == PlanType.HDHP && plan.CobDeductibleCredit == CobDeductibleCredit.NoDeductible)
+        {
+            ChoMetrics.PlanLimitValidationFailures.Add(
+                1,
+                new KeyValuePair<string, object?>("cho.caller", caller.ToString()),
+                new KeyValuePair<string, object?>("cho.tenant_id", plan.TenantId ?? string.Empty),
+                new KeyValuePair<string, object?>("cho.reason", "HdhpNoDeductibleCob"));
+
+            throw new PlanLimitValidationException(
+                plan.PlanId,
+                plan.VersionId,
+                planYear,
+                field: "cobDeductibleCredit",
+                message: "cobDeductibleCredit NoDeductible is not allowed on an HDHP plan: an HDHP must apply its " +
+                         "deductible (IRC §223(c)(2)). Use NaicFullCredit (default) or MemberPaidOnly.",
+                supplied: (int)plan.CobDeductibleCredit,
+                cap: 0);
+        }
+
         WarnOnAmbiguousAggregateLimits(plan, cs, caller);
 
         _logger.LogDebug(

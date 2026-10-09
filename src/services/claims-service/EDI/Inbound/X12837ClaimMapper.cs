@@ -85,7 +85,8 @@ public static class X12837ClaimMapper
             PayerResponsibilityCode = string.IsNullOrWhiteSpace(source.PayerResponsibilityCode)
                 ? null
                 : source.PayerResponsibilityCode.Trim(),
-            OtherPayers = MapOtherPayers(source),
+            OtherPayers = MapOtherPayers(source, out var unmatchedOtherPayerLines),
+            UnmatchedOtherPayerLines = unmatchedOtherPayerLines,
 
             Status = ClaimStatus.Submitted,
             SubmittedDate = DateTime.UtcNow,
@@ -97,40 +98,47 @@ public static class X12837ClaimMapper
 
     /// <summary>
     /// 2320/2330B other payers with their 2430 line adjudication. A 2430
-    /// SVD01 names its payer by the 2330B NM109 identifier; an SVD whose
-    /// identifier matches no 2330B payer is attributed to the only other
-    /// payer when there is exactly one, and otherwise dropped (it cannot be
-    /// placed in the payer order).
+    /// SVD01 names its payer by an identifier from 2330B: NM109, or REF*2U /
+    /// REF*FY. An SVD whose identifier matches none of them is attributed to
+    /// the only other payer when there is exactly one; with several it cannot
+    /// be placed in the payer order, so it is kept in
+    /// <paramref name="unmatched"/> (the COB stage pends the claim) — never
+    /// dropped, which would undercount what the earlier payers paid.
     /// </summary>
-    private static List<ClaimOtherPayer> MapOtherPayers(EngineModels.X12837Claim source)
+    private static List<ClaimOtherPayer> MapOtherPayers(
+        EngineModels.X12837Claim source, out List<ClaimOtherPayerLine> unmatched)
     {
+        unmatched = [];
         var payers = (source.OtherPayers ?? [])
             .Select(p => new ClaimOtherPayer
             {
                 PayerResponsibilityCode = p.PayerResponsibilityCode.Trim(),
                 PayerName = p.PayerName,
                 PayerId = p.PayerId,
+                AdditionalPayerIds = p.AdditionalPayerIds.ToList(),
                 PaidAmount = p.PaidAmount,
                 ClaimAdjustments = p.ClaimAdjustments.Select(MapAdjustment).ToList(),
             })
             .ToList();
-        if (payers.Count == 0)
-            return payers;
 
         foreach (var line in source.ServiceLines)
         {
             foreach (var svd in line.OtherPayerAdjudications ?? [])
             {
-                var payer = payers.FirstOrDefault(p =>
-                                !string.IsNullOrEmpty(p.PayerId)
-                                && string.Equals(p.PayerId, svd.PayerId?.Trim(), StringComparison.OrdinalIgnoreCase))
-                            ?? (payers.Count == 1 ? payers[0] : null);
-                payer?.LineAdjudications.Add(new ClaimOtherPayerLine
+                var svdPayerId = svd.PayerId?.Trim();
+                var adjudication = new ClaimOtherPayerLine
                 {
                     LineNumber = line.LineNumber,
+                    PayerId = svdPayerId,
                     PaidAmount = svd.PaidAmount,
                     Adjustments = svd.Adjustments.Select(MapAdjustment).ToList(),
-                });
+                };
+                var payer = payers.FirstOrDefault(p => p.IsIdentifiedBy(svdPayerId))
+                            ?? (payers.Count == 1 ? payers[0] : null);
+                if (payer is null)
+                    unmatched.Add(adjudication);
+                else
+                    payer.LineAdjudications.Add(adjudication);
             }
         }
         return payers;

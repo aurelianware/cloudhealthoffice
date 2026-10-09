@@ -122,6 +122,9 @@ public class AdapterClaim
     /// <summary>837 2320/2330B/2430 other payers; see <see cref="Claim.OtherPayers"/>.</summary>
     public List<ClaimOtherPayer> OtherPayers { get; set; } = new();
 
+    /// <summary>See <see cref="Claim.UnmatchedOtherPayerLines"/>.</summary>
+    public List<ClaimOtherPayerLine> UnmatchedOtherPayerLines { get; set; } = new();
+
     /// <summary>Derived three-character type of bill; see <see cref="Claim.TypeOfBill"/>.</summary>
     public string? TypeOfBill =>
         InstitutionalClaimDetails.ComposeTypeOfBill(Institutional?.FacilityTypeCode, ClaimFrequencyCode);
@@ -192,6 +195,7 @@ public class AdapterClaim
         Institutional = src.Institutional,
         PayerResponsibilityCode = src.PayerResponsibilityCode,
         OtherPayers = src.OtherPayers?.ToList() ?? new(),
+        UnmatchedOtherPayerLines = src.UnmatchedOtherPayerLines?.ToList() ?? new(),
         Status = src.Status,
         SubmittedDate = src.SubmittedDate,
         ReceivedDate = src.ReceivedDate,
@@ -256,6 +260,7 @@ public class AdapterClaim
         Institutional = Institutional,
         PayerResponsibilityCode = PayerResponsibilityCode,
         OtherPayers = OtherPayers?.ToList() ?? new(),
+        UnmatchedOtherPayerLines = UnmatchedOtherPayerLines?.ToList() ?? new(),
         Status = Status,
         SubmittedDate = SubmittedDate,
         ReceivedDate = ReceivedDate,
@@ -394,6 +399,7 @@ public class AdapterAdjudicationResult
     public decimal PatientResponsibility { get; set; }
     public decimal? OopAppliedAmount { get; set; }
     public decimal? DeductibleCreditedAmount { get; set; }
+    public int? CobPayerSequence { get; set; }
     public decimal PayerPayment { get; set; }
     public string? DenialReasonCode { get; set; }
     public string? DenialReason { get; set; }
@@ -412,6 +418,7 @@ public class AdapterAdjudicationResult
         PatientResponsibility = src.PatientResponsibility,
         OopAppliedAmount = src.OopAppliedAmount,
         DeductibleCreditedAmount = src.DeductibleCreditedAmount,
+        CobPayerSequence = src.CobPayerSequence,
         PayerPayment = src.PayerPayment,
         DenialReasonCode = src.DenialReasonCode,
         DenialReason = src.DenialReason,
@@ -431,6 +438,7 @@ public class AdapterAdjudicationResult
         PatientResponsibility = PatientResponsibility,
         OopAppliedAmount = OopAppliedAmount,
         DeductibleCreditedAmount = DeductibleCreditedAmount,
+        CobPayerSequence = CobPayerSequence,
         PayerPayment = PayerPayment,
         DenialReasonCode = DenialReasonCode,
         DenialReason = DenialReason,

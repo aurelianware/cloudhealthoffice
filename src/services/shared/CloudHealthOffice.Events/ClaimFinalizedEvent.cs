@@ -37,6 +37,19 @@ public class ClaimFinalizedEvent
     public string FinalStatus { get; set; } = "Paid";
 
     /// <summary>
+    /// 837 CLM05-3 claim frequency: 1 original, 7 replacement, 8 void.
+    /// Null on events from producers that predate the field.
+    /// </summary>
+    public string? ClaimFrequencyCode { get; set; }
+
+    /// <summary>
+    /// For a replacement (7) or void (8): the claim id it supersedes. The
+    /// accumulator consumer reverses that claim's applied deltas before
+    /// applying this one, so a replacement never counts twice.
+    /// </summary>
+    public string? OriginalClaimId { get; set; }
+
+    /// <summary>
     /// Primary benefit category for the whole claim (e.g. "PrimaryCare", "Lab", "ER").
     /// Line-level categories live on <see cref="LineItems"/>; this is a convenience
     /// rollup for single-category claims.

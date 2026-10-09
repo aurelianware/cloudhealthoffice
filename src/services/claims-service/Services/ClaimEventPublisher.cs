@@ -267,6 +267,10 @@ public class ClaimEventPublisher : IClaimEventPublisher, IHostedService, IAsyncD
             ServiceDate = serviceDate,
             AdjudicationTimestamp = claim.AdjudicatedDate ?? DateTimeOffset.UtcNow,
             FinalStatus = status,
+            ClaimFrequencyCode = string.IsNullOrWhiteSpace(claim.ClaimFrequencyCode) ? null : claim.ClaimFrequencyCode,
+            // The adjustment workflow (5.12) links a replacement version to the
+            // version it amends.
+            OriginalClaimId = string.IsNullOrWhiteSpace(claim.PredecessorVersionId) ? null : claim.PredecessorVersionId,
             BenefitCategory = claim.PlaceOfServiceCode ?? string.Empty,
             IsFamilyAggregate = false,
             DeductibleApplied = adj?.DeductibleAmount ?? 0m,

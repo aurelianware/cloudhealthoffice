@@ -108,6 +108,86 @@ public sealed class CobDeductibleCreditPlanSettingTests
         Provider().MapToConfig(Plan(credit)).CobDeductibleCredit.Should().Be(expected);
     }
 
+    // ── M3: GET → PUT round trip keeps the setting ─────────────────────
+
+    [Theory]
+    [InlineData(ModelCobDeductibleCredit.MemberPaidOnly)]
+    [InlineData(ModelCobDeductibleCredit.NoDeductible)]
+    public void GetThenPut_RoundTrip_KeepsTheSetting(ModelCobDeductibleCredit credit)
+    {
+        // GET: the adapter projection the controller returns, as JSON.
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var getBody = JsonSerializer.Serialize(
+            BenefitPlanService.Models.AdapterBenefitPlan.From(Plan(credit)).ToBenefitPlan(), options);
+
+        // PUT: the client sends the document back unchanged.
+        var putPlan = JsonSerializer.Deserialize<BenefitPlan>(getBody, options)!;
+
+        putPlan.CobDeductibleCredit.Should().Be(credit);
+        BenefitPlanService.Models.AdapterBenefitPlan.From(putPlan).CobDeductibleCredit.Should().Be(credit);
+    }
+
+    // ── HDHP: the deductible cannot be skipped ─────────────────────────
+
+    [Fact]
+    public void Validation_RejectsNoDeductible_OnAnHdhp()
+    {
+        var plan = Plan(ModelCobDeductibleCredit.NoDeductible);
+        plan.PlanType = PlanType.HDHP;
+
+        var act = () => Validator().Validate(plan, PlanLimitWriteCaller.CreatePlan);
+
+        act.Should().Throw<PlanLimitValidationException>()
+            .Which.Field.Should().Be("cobDeductibleCredit");
+    }
+
+    [Theory]
+    [InlineData(ModelCobDeductibleCredit.NaicFullCredit)]
+    [InlineData(ModelCobDeductibleCredit.MemberPaidOnly)]
+    public void Validation_AcceptsTheOtherSettings_OnAnHdhp(ModelCobDeductibleCredit credit)
+    {
+        var plan = Plan(credit);
+        plan.PlanType = PlanType.HDHP;
+
+        var act = () => Validator().Validate(plan, PlanLimitWriteCaller.CreatePlan);
+
+        act.Should().NotThrow();
+    }
+
+    // ── API: a later payer needs the prior payers ──────────────────────
+
+    private static CloudHealthOffice.CobEngine.Domain.PriorPayerAdjudication Prior(int sequence) =>
+        new() { Sequence = sequence, ClaimPaidAmount = 10m };
+
+    [Fact]
+    public void CobRequest_PrimaryNeedsNothing() =>
+        BenefitPlanService.Controllers.CobRequestValidation.Validate(1, [], 0).Should().BeNull();
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CobRequest_LaterPayerWithoutPriorPayers_IsRejected(int sequence) =>
+        BenefitPlanService.Controllers.CobRequestValidation.Validate(sequence, [], 0)
+            .Should().Contain("requires cob.priorPayers");
+
+    [Fact]
+    public void CobRequest_TertiaryWithOnlyLaterPayers_IsRejected() =>
+        BenefitPlanService.Controllers.CobRequestValidation.Validate(3, [Prior(3), Prior(4)], 0)
+            .Should().NotBeNull();
+
+    [Fact]
+    public void CobRequest_DuplicateSequences_AreRejected() =>
+        BenefitPlanService.Controllers.CobRequestValidation.Validate(3, [Prior(1), Prior(1)], 0)
+            .Should().Contain("more than once");
+
+    [Fact]
+    public void CobRequest_LegacySecondaryPrimaryPaymentByLine_StillAccepted() =>
+        BenefitPlanService.Controllers.CobRequestValidation.Validate(2, [], legacyPrimaryLineCount: 2).Should().BeNull();
+
+    [Fact]
+    public void CobRequest_TertiaryWithBothPriorPayers_IsValid() =>
+        BenefitPlanService.Controllers.CobRequestValidation.Validate(3, [Prior(1), Prior(2)], 0).Should().BeNull();
+
     private sealed class StubTenantContext(string tenantId) : IBenefitEngineTenantContext
     {
         public string TenantId { get; } = tenantId;

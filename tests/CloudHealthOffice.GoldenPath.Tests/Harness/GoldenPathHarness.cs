@@ -51,6 +51,14 @@ internal sealed class GoldenScenario
     public required IReadOnlyList<ServiceCategoryMapping> CategoryMappings { get; init; }
     public Action<InMemoryAccumulatorService>? PriorAccumulators { get; init; }
 
+    /// <summary>
+    /// The member's other coverage as coverage-service reports it (each
+    /// entry's CoverageSequence: "P" = sequenced before this plan, "S" / "T"
+    /// = after). Empty = this plan is the only coverage. The real
+    /// CoordinationOfBenefitsStage checks it against the 837's SBR01.
+    /// </summary>
+    public IReadOnlyList<string> OtherCoverage { get; init; } = [];
+
     /// <summary>Payment-run date (BPR16); fixed so the 835 is reproducible.</summary>
     public DateTime PaymentDate { get; init; } = new(2026, 5, 15, 0, 0, 0, DateTimeKind.Utc);
 }
@@ -150,8 +158,19 @@ internal sealed class GoldenPathHarness
             planResolver.GetPlanAsync(tenant, planGuid.ToString(), Arg.Any<CancellationToken>())
                 .Returns(new ResolvedBenefitPlan { Id = planGuid.ToString(), PlanGuid = planGuid });
 
+            var coverageClient = Substitute.For<ICoverageClient>();
+            coverageClient.GetCobEntriesAsync(tenant, Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                .Returns(scenario.OtherCoverage
+                    .Select((seq, i) => new CobEntry { PayerName = $"OTHER{i + 1}", PayerId = $"OTHER{i + 1}", CoverageSequence = seq })
+                    .ToList());
+
             var stages = new IClaimAdjudicationStage[]
             {
+                new CoordinationOfBenefitsStage(
+                    coverageClient,
+                    new CloudHealthOffice.CobEngine.Services.PayerOrderService(),
+                    Options.Create(new TenantEnforcementPolicyOptions()),
+                    NullLogger<CoordinationOfBenefitsStage>.Instance),
                 new PricingStage(
                     new HttpFeeSchedulePricingClient(http, NullLogger<HttpFeeSchedulePricingClient>.Instance),
                     NullLogger<PricingStage>.Instance),

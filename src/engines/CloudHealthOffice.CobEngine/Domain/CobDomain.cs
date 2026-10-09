@@ -315,6 +315,91 @@ public record CobLineResult
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// COB CALCULATION — claim level (NAIC MDL-120 §7 "for that claim")
+// ═══════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// One COB unit of a claim as this plan adjudicated it before COB, had it
+/// been the only plan: a service line (per-line pricing), or the whole stay
+/// (DRG / per-diem pricing, one unit).
+/// </summary>
+public record CobClaimUnit
+{
+    /// <summary>The claim line number (any number for a single stay unit).</summary>
+    public int LineNumber { get; init; }
+
+    /// <summary>Billed charge: the weight claim-level prior payments are prorated by.</summary>
+    public decimal BilledAmount { get; init; }
+
+    /// <summary>This plan's allowed amount (the allowable expense, NAIC §3.A).</summary>
+    public decimal AllowedAmount { get; init; }
+
+    /// <summary>
+    /// This plan's member cost share for the unit before COB (deductible +
+    /// copay + coinsurance, after the OOP cap). Normal benefit = allowed −
+    /// this.
+    /// </summary>
+    public decimal CostShareBeforeCob { get; init; }
+
+    /// <summary>The benefit this plan would have paid as the only plan.</summary>
+    public decimal NormalBenefit => Math.Max(0, AllowedAmount - Math.Max(0, CostShareBeforeCob));
+}
+
+/// <summary>Input to <see cref="Services.ICobCalculationService.CalculateClaim"/>.</summary>
+public record CobClaimInput
+{
+    /// <summary>This plan's units, in line order.</summary>
+    public IReadOnlyList<CobClaimUnit> Units { get; init; } = [];
+
+    /// <summary>
+    /// Every line on the claim with its charge, for allocating the prior
+    /// payers' claim-level amounts (lines this plan denied included, so they
+    /// keep their share). Empty = the units.
+    /// </summary>
+    public IReadOnlyList<Services.PriorPayerAllocator.ClaimLineCharge> ClaimLineCharges { get; init; } = [];
+
+    /// <summary>
+    /// The other payers on the claim (837 2320/2330B/2430). Only payers
+    /// sequenced before <see cref="OurSequence"/> are used.
+    /// </summary>
+    public IReadOnlyList<PriorPayerAdjudication> PriorPayers { get; init; } = [];
+
+    /// <summary>This plan's payer sequence (2 secondary, 3 tertiary, …).</summary>
+    public int OurSequence { get; init; } = 2;
+
+    public CobModel Model { get; init; } = CobModel.Complementary;
+
+    /// <summary>
+    /// When true the units are one DRG / per-diem stay: every prior payer's
+    /// amounts are its claim totals (= AMT*D), not line allocations.
+    /// </summary>
+    public bool SingleStay { get; init; }
+}
+
+/// <summary>Result of the claim-level COB calculation.</summary>
+public record CobClaimResult
+{
+    /// <summary>One entry per unit: this plan's payment and the member's
+    /// share after COB (<see cref="CobLineResult.SecondaryPlanPayment"/>,
+    /// <see cref="CobLineResult.MemberResponsibility"/>).</summary>
+    public IReadOnlyList<CobLineResult> Units { get; init; } = [];
+
+    /// <summary>What every prior payer paid on the claim, together.</summary>
+    public decimal TotalPriorPaid { get; init; }
+
+    /// <summary>
+    /// The allowable expense left for this plan and the member after the
+    /// prior payers: Σ per bounding-payer group of min(allowed − prior paid,
+    /// that payer's patient responsibility) — see
+    /// <see cref="Services.CobCalculationService.CalculateClaim"/>.
+    /// </summary>
+    public decimal Balance { get; init; }
+
+    public decimal PlanPayment { get; init; }
+    public decimal MemberResponsibility { get; init; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // PAYER ORDER DETERMINATION — input / output
 // ═══════════════════════════════════════════════════════════════════
 

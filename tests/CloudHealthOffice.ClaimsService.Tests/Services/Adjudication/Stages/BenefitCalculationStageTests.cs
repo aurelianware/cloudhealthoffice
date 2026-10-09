@@ -13,7 +13,7 @@ using Xunit;
 
 namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication.Stages;
 
-public class BenefitCalculationStageTests
+public partial class BenefitCalculationStageTests
 {
     private readonly IBenefitCalculationEngine _engine = Substitute.For<IBenefitCalculationEngine>();
     private readonly IMemberResolver _memberResolver = Substitute.For<IMemberResolver>();

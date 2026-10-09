@@ -317,6 +317,23 @@ public static class X12837Parser
                     break;
                 }
 
+                case "REF" when InOtherPayerLoop() && lastNm1Context == "2330:PR":
+                {
+                    // 2330B REF*2U (payer identification number) / REF*FY
+                    // (claim office number): other identifiers a 2430 SVD01
+                    // may name the payer by.
+                    var qualifier = seg.Element(0);
+                    var value = seg.Element(1)?.Trim();
+                    if (qualifier is "2U" or "FY" && !string.IsNullOrEmpty(value))
+                    {
+                        otherPayers[^1] = otherPayers[^1] with
+                        {
+                            AdditionalPayerIds = [.. otherPayers[^1].AdditionalPayerIds, value]
+                        };
+                    }
+                    break;
+                }
+
                 case "AMT" when InOtherPayerLoop() && seg.Element(0) == "D":
                     // 2320 AMT*D — payer paid amount.
                     if (decimal.TryParse(seg.Element(1), NumberStyles.Number, CultureInfo.InvariantCulture, out var payerPaid))

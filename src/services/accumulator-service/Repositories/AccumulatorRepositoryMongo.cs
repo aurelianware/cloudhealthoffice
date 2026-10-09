@@ -105,6 +105,15 @@ public class AccumulatorRepositoryMongo : IAccumulatorRepository
             Builders<AccumulatorEvent>.Filter.Eq(e => e.SourceReference, adjustmentId));
         return await _events.Find(filter).FirstOrDefaultAsync(ct);
     }
+
+    public async Task<AccumulatorEvent?> GetClaimAppliedEventAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var filter = Builders<AccumulatorEvent>.Filter.And(
+            Builders<AccumulatorEvent>.Filter.Eq(e => e.TenantId, tenantId),
+            Builders<AccumulatorEvent>.Filter.Eq(e => e.EventType, "ClaimApplied"),
+            Builders<AccumulatorEvent>.Filter.Eq(e => e.SourceClaimId, claimId));
+        return await _events.Find(filter).SortByDescending(e => e.OccurredAt).FirstOrDefaultAsync(ct);
+    }
 }
 
 public class ProcessedClaimStoreMongo : IProcessedClaimStore

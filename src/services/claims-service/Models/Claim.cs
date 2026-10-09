@@ -222,6 +222,14 @@ public class Claim
     public List<ClaimOtherPayer> OtherPayers { get; set; } = new();
 
     /// <summary>
+    /// 837 2430 loops whose SVD01 matches none of the claim's other payers
+    /// (2330B NM109, REF*2U, REF*FY) while there are several: they cannot be
+    /// placed in the payer order, so the COB stage pends the claim instead of
+    /// undercounting what the earlier payers paid.
+    /// </summary>
+    public List<ClaimOtherPayerLine> UnmatchedOtherPayerLines { get; set; } = new();
+
+    /// <summary>
     /// Three-character type of bill (UB-04 FL4 without the leading zero):
     /// the two-digit facility type code (837I CLM05-1) followed by the
     /// claim frequency code (CLM05-3, <see cref="ClaimFrequencyCode"/>).
@@ -862,6 +870,14 @@ public class AdjudicationResult
     public decimal? DeductibleCreditedAmount { get; set; }
 
     /// <summary>
+    /// The payer sequence this plan adjudicated the claim in when COB was
+    /// applied (2 secondary, 3 tertiary, 4–11); null when it paid as the first
+    /// payer. The 835 CLP02 (processed as primary / secondary / tertiary)
+    /// follows this — what was actually applied — not the 837 SBR01 alone.
+    /// </summary>
+    public int? CobPayerSequence { get; set; }
+
+    /// <summary>
     /// Payer payment amount (what payer will pay provider)
     /// 835: CLP04 - patient responsibility
     /// </summary>
@@ -973,6 +989,15 @@ public class ClaimOtherPayer
     [StringLength(80)]
     public string? PayerId { get; set; }
 
+    /// <summary>2330B REF*2U / REF*FY — other identifiers 2430 SVD01 may name this payer by.</summary>
+    public List<string> AdditionalPayerIds { get; set; } = new();
+
+    /// <summary>True when <paramref name="id"/> (a 2430 SVD01) names this payer.</summary>
+    public bool IsIdentifiedBy(string? id) =>
+        !string.IsNullOrWhiteSpace(id)
+        && ((PayerId is not null && string.Equals(PayerId.Trim(), id.Trim(), StringComparison.OrdinalIgnoreCase))
+            || AdditionalPayerIds.Any(a => string.Equals(a?.Trim(), id.Trim(), StringComparison.OrdinalIgnoreCase)));
+
     /// <summary>2320 AMT*D — what the payer paid on the claim. Null when not reported.</summary>
     public decimal? PaidAmount { get; set; }
 
@@ -988,6 +1013,10 @@ public class ClaimOtherPayerLine
 {
     /// <summary>The claim line (LX) the 2430 loop belongs to.</summary>
     public int LineNumber { get; set; }
+
+    /// <summary>SVD01 — the identifier the 2430 names its payer by.</summary>
+    [StringLength(80)]
+    public string? PayerId { get; set; }
 
     /// <summary>SVD02 — what the payer paid for the line.</summary>
     public decimal PaidAmount { get; set; }

@@ -180,6 +180,71 @@ public class X12837CobTests
         Assert.Equal(new[] { 1 }, cob.PriorPayers.Select(p => p.Sequence));
     }
 
+    // ── M5: SVD01 matched by 2330B REF*2U / REF*FY; unmatched kept, not dropped ──
+
+    [Theory]
+    [InlineData("2U")]
+    [InlineData("FY")]
+    public void Map_SvdNamingThePayerByRef_IsAttributedToThatPayer(string qualifier)
+    {
+        var edi = Tertiary837
+            .Replace("NM1*PR*2*SYNTHETIC SECONDARY INSURANCE*****PI*OTHERPAYER2~",
+                     $"NM1*PR*2*SYNTHETIC SECONDARY INSURANCE*****PI*OTHERPAYER2~\n        REF*{qualifier}*SECREF~")
+            .Replace("SVD*OTHERPAYER1*72.00", "SVD*SECREF*72.00");
+
+        var parsed = Assert.Single(X12837Parser.Parse(edi));
+        Assert.Equal(new[] { "SECREF" }, parsed.OtherPayers![1].AdditionalPayerIds);
+
+        var adapter = X12837ClaimMapper.Map(parsed, "tenant-1");
+        Assert.Equal(new[] { 1 }, adapter.OtherPayers[0].LineAdjudications.Select(l => l.LineNumber));
+        Assert.Equal(new[] { 2 }, adapter.OtherPayers[1].LineAdjudications.Select(l => l.LineNumber));
+        Assert.Empty(adapter.UnmatchedOtherPayerLines);
+    }
+
+    [Fact]
+    public void Map_SvdMatchingNoPayer_WithSeveralPayers_IsKeptAsUnmatched()
+    {
+        var edi = Tertiary837.Replace("SVD*OTHERPAYER1*72.00", "SVD*NOBODY*72.00");
+
+        var adapter = X12837ClaimMapper.Map(Assert.Single(X12837Parser.Parse(edi)), "tenant-1");
+
+        var unmatched = Assert.Single(adapter.UnmatchedOtherPayerLines);
+        Assert.Equal(("NOBODY", 2, 72m), (unmatched.PayerId, unmatched.LineNumber, unmatched.PaidAmount));
+        Assert.Single(adapter.OtherPayers[0].LineAdjudications);
+        // Survives the persisted-claim round trip, so the COB stage can pend on it.
+        Assert.Single(AdapterClaim.From(adapter.ToClaim()).UnmatchedOtherPayerLines);
+    }
+
+    // ── SNIP L3: TR3 COB balancing — warnings, never rejects ──
+
+    private static List<string> CobBalanceFindings(string edi) =>
+        new global::ClaimsService.EDI.Validation.X12837SnipValidator().Validate(edi).AllIssues
+            .Where(i => i.RuleId.StartsWith("L3-COB", StringComparison.Ordinal))
+            .Select(i => $"{i.RuleId}:{i.Severity}")
+            .ToList();
+
+    [Fact]
+    public void Snip_BalancedCob_NoFindings() => Assert.Empty(CobBalanceFindings(Tertiary837));
+
+    [Fact]
+    public void Snip_2320NotBalancingToClm02_Warns()
+    {
+        var findings = CobBalanceFindings(Tertiary837.Replace("AMT*D*112.00~", "AMT*D*100.00~"));
+
+        Assert.Equal(new[] { "L3-COB-2320-BALANCE:Warning" }, findings);
+    }
+
+    [Fact]
+    public void Snip_SvdNotBalancingToLineCharge_Warns_AndTheFileIsNotRejected()
+    {
+        var edi = Tertiary837.Replace("SVD*OTHERPAYER1*40.00", "SVD*OTHERPAYER1*30.00");
+
+        var result = new global::ClaimsService.EDI.Validation.X12837SnipValidator().Validate(edi);
+
+        Assert.Contains("L3-COB-SVD-BALANCE:Warning", CobBalanceFindings(edi));
+        Assert.NotEqual("R", result.AcknowledgmentCode);
+    }
+
     [Fact]
     public void FinalizedEvent_CarriesDeductibleCredited_OnlyWhenItDiffersFromPr1()
     {

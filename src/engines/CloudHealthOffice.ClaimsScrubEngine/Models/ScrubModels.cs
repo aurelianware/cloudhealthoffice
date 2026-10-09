@@ -83,6 +83,9 @@ public record OtherPayer
     /// <summary>2330B NM109 — matched by 2430 SVD01.</summary>
     public string? PayerId { get; init; }
 
+    /// <summary>2330B REF*2U / REF*FY — other identifiers 2430 SVD01 may use for this payer.</summary>
+    public List<string> AdditionalPayerIds { get; init; } = [];
+
     /// <summary>2320 AMT*D — payer paid amount.</summary>
     public decimal? PaidAmount { get; init; }
 

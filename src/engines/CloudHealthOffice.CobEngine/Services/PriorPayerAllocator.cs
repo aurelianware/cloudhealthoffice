@@ -97,7 +97,82 @@ public static class PriorPayerAllocator
             .ToList();
     }
 
-    private static IEnumerable<(int LineNumber, PriorPayerAmount Amount)> AllocatePayer(
+    /// <summary>One payer's amounts for one line (see <see cref="AllocateDetailed"/>).</summary>
+    /// <param name="Paid">2430 SVD02, plus its share of the 2320 residual.</param>
+    /// <param name="ReportedPr">The PR-group CAS of the payer's 2430 loops for
+    /// the line; null when the payer did not report the line in 2430.</param>
+    public sealed record PayerLineAllocation(decimal Paid, decimal? ReportedPr)
+    {
+        public bool Reported => ReportedPr is not null;
+    }
+
+    /// <summary>
+    /// One prior payer's adjudication as the claim-level calculation needs
+    /// it: per-line paid amounts (2430 SVD02 for reported lines, the 2320
+    /// claim residual prorated by charge across the others), line-level PR
+    /// from 2430 exactly as reported, and the 2320 claim-level PR CAS kept
+    /// as one amount (<see cref="ClaimPrPool"/>) — not prorated, because the
+    /// claim-level calculation bounds by it at claim level.
+    /// </summary>
+    public sealed record PayerAllocation
+    {
+        public int Sequence { get; init; }
+        public IReadOnlyDictionary<int, PayerLineAllocation> Lines { get; init; } = new Dictionary<int, PayerLineAllocation>();
+
+        /// <summary>2320 PR-group CAS (claim level).</summary>
+        public decimal ClaimPrPool { get; init; }
+
+        /// <summary>The payer reported any CAS (claim or line level): its patient
+        /// responsibility is known (0 when it reported no PR group).</summary>
+        public bool PrKnown { get; init; }
+
+        /// <summary>The lines the claim-level amounts belong to: those the payer
+        /// did not report in 2430, or every line when it reported them all.</summary>
+        public IReadOnlyList<int> ClaimLevelLines { get; init; } = [];
+
+        /// <summary>
+        /// The payer adjudicated the claim-level part: it paid something at
+        /// claim level (2320 AMT*D above its 2430 total) or left the member
+        /// a claim-level PR. A payer that paid $0 at claim level with only
+        /// CO/OA adjustments (e.g. CO-27, CO-22, CO-109, CO-96, CO-204) did
+        /// not cover the service.
+        /// </summary>
+        public bool ClaimLevelAdjudicated { get; init; }
+
+        /// <summary>
+        /// Whether this payer adjudicated (covered) <paramref name="lineNumber"/>:
+        /// for a line it reported in 2430, it paid more than $0 or left a PR;
+        /// otherwise <see cref="ClaimLevelAdjudicated"/>. A denial (paid $0, no
+        /// PR — only CO/OA adjustments) is not an adjudication, so its PR of $0
+        /// must not bound what later payers pay.
+        /// </summary>
+        public bool AdjudicatedLine(int lineNumber) =>
+            Lines.TryGetValue(lineNumber, out var l) && l.Reported
+                ? l.Paid > 0 || l.ReportedPr > 0
+                : ClaimLevelAdjudicated;
+    }
+
+    /// <summary>
+    /// Every prior payer (sequence before <paramref name="ourSequence"/>),
+    /// ordered by sequence, allocated for the claim-level calculation.
+    /// </summary>
+    public static IReadOnlyList<PayerAllocation> AllocateDetailed(
+        IReadOnlyList<ClaimLineCharge> lines,
+        IEnumerable<PriorPayerAdjudication> priorPayers,
+        int ourSequence)
+    {
+        lines = lines
+            .GroupBy(l => l.LineNumber)
+            .Select(g => new ClaimLineCharge(g.Key, g.Sum(l => l.Charge)))
+            .ToList();
+        return priorPayers
+            .Where(p => p.Sequence > 0 && p.Sequence < ourSequence)
+            .OrderBy(p => p.Sequence)
+            .Select(p => AllocatePayerDetailed(lines, p))
+            .ToList();
+    }
+
+    private static PayerAllocation AllocatePayerDetailed(
         IReadOnlyList<ClaimLineCharge> lines, PriorPayerAdjudication payer)
     {
         var lineNumbers = lines.Select(l => l.LineNumber).ToHashSet();
@@ -115,8 +190,6 @@ public static class PriorPayerAllocator
         var claimPaid = payer.ClaimPaidAmount ?? lineTotal;
         var residual = claimPaid - lineTotal;
 
-        // Lines that take claim-level amounts: those the payer did not report
-        // in 2430, or every line when it reported them all.
         var unreported = lines.Where(l => !reported.ContainsKey(l.LineNumber)).ToList();
         var claimLevelTargets = unreported.Count > 0 ? unreported : lines.ToList();
 
@@ -135,12 +208,40 @@ public static class PriorPayerAllocator
                 paid[withPayment[i].LineNumber] -= Math.Min(cuts[i], paid[withPayment[i].LineNumber]);
         }
 
-        var pr = lines.ToDictionary(l => l.LineNumber, l => reported.TryGetValue(l.LineNumber, out var r) ? r.Pr : 0m);
-        if (claimPr > 0)
+        return new PayerAllocation
         {
-            var shares = Prorate(claimPr, claimLevelTargets.Select(l => l.Charge).ToList());
-            for (var i = 0; i < claimLevelTargets.Count; i++)
-                pr[claimLevelTargets[i].LineNumber] += shares[i];
+            Sequence = payer.Sequence,
+            Lines = lines.ToDictionary(
+                l => l.LineNumber,
+                l => new PayerLineAllocation(
+                    paid[l.LineNumber],
+                    reported.TryGetValue(l.LineNumber, out var r) ? r.Pr : null)),
+            ClaimPrPool = claimPr,
+            PrKnown = prKnown,
+            ClaimLevelLines = claimLevelTargets.Select(l => l.LineNumber).ToList(),
+            // Unreported lines carry only the claim-level amounts; with every
+            // line reported the claim level is a pure adjustment of the 2430
+            // amounts, so "covered" follows the lines.
+            ClaimLevelAdjudicated = residual > 0 || claimPr > 0
+                || (unreported.Count == 0 && reported.Values.Any(r => r.Paid > 0 || r.Pr > 0)),
+        };
+    }
+
+    private static IEnumerable<(int LineNumber, PriorPayerAmount Amount)> AllocatePayer(
+        IReadOnlyList<ClaimLineCharge> lines, PriorPayerAdjudication payer)
+    {
+        var detailed = AllocatePayerDetailed(lines, payer);
+
+        // Per-line view: the claim-level PR prorated by charge across the
+        // claim-level lines.
+        var pr = lines.ToDictionary(l => l.LineNumber, l => detailed.Lines[l.LineNumber].ReportedPr ?? 0m);
+        if (detailed.ClaimPrPool > 0)
+        {
+            var targets = detailed.ClaimLevelLines;
+            var charges = lines.ToDictionary(l => l.LineNumber, l => l.Charge);
+            var shares = Prorate(detailed.ClaimPrPool, targets.Select(n => charges[n]).ToList());
+            for (var i = 0; i < targets.Count; i++)
+                pr[targets[i]] += shares[i];
         }
 
         foreach (var line in lines)
@@ -148,8 +249,8 @@ public static class PriorPayerAllocator
             yield return (line.LineNumber, new PriorPayerAmount
             {
                 Sequence = payer.Sequence,
-                PaidAmount = paid[line.LineNumber],
-                PatientResponsibility = prKnown ? pr[line.LineNumber] : null,
+                PaidAmount = detailed.Lines[line.LineNumber].Paid,
+                PatientResponsibility = detailed.PrKnown ? pr[line.LineNumber] : null,
             });
         }
     }
@@ -159,8 +260,9 @@ public static class PriorPayerAllocator
 
     /// <summary>
     /// Splits <paramref name="amount"/> by <paramref name="weights"/>, each
-    /// share truncated to the cent, the remainder on the last entry (equal
-    /// shares when every weight is zero).
+    /// share truncated to the cent, the remainder on the last entry with a
+    /// positive weight (equal shares, remainder on the last entry, when every
+    /// weight is zero).
     /// </summary>
     internal static List<decimal> Prorate(decimal amount, IReadOnlyList<decimal> weights)
     {
@@ -168,14 +270,15 @@ public static class PriorPayerAllocator
         if (weights.Count == 0) return shares;
 
         var total = weights.Sum(w => Math.Max(0, w));
+        // The remainder goes to the last entry with a positive weight, never
+        // to a $0-charge line (equal shares → the last entry).
+        var remainderIndex = weights.Count - 1;
+        if (total > 0)
+            while (weights[remainderIndex] <= 0) remainderIndex--;
         decimal allocated = 0;
         for (var i = 0; i < weights.Count; i++)
         {
-            if (i == weights.Count - 1)
-            {
-                shares.Add(amount - allocated);
-                break;
-            }
+            if (i == remainderIndex) { shares.Add(0); continue; }
             // Multiply before dividing so an exact share stays exact
             // (58 × 400 / 580 = 40.00, not 39.99).
             var share = total > 0
@@ -184,6 +287,7 @@ public static class PriorPayerAllocator
             shares.Add(share);
             allocated += share;
         }
+        shares[remainderIndex] = amount - allocated;
         return shares;
     }
 }

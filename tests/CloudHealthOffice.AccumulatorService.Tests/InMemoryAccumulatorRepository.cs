@@ -76,6 +76,10 @@ public class InMemoryAccumulatorRepository : IAccumulatorRepository
             e.SourceReference == adjustmentId);
         return Task.FromResult(evt);
     }
+
+    public Task<AccumulatorEvent?> GetClaimAppliedEventAsync(string tenantId, string claimId, CancellationToken ct = default) =>
+        Task.FromResult(Events.LastOrDefault(e =>
+            e.TenantId == tenantId && e.EventType == "ClaimApplied" && e.SourceClaimId == claimId));
 }
 
 public class InMemoryProcessedClaimStore : IProcessedClaimStore

@@ -123,11 +123,16 @@ public class BenefitPlan
     /// How this plan credits its deductible when it pays secondary, tertiary
     /// or later (coordination of benefits). Defaults to
     /// <see cref="CobDeductibleCredit.NaicFullCredit"/>; plan documents
-    /// written before the field existed hydrate with the default. Affects
-    /// only the deductible accumulators, never the 835, except
-    /// <see cref="CobDeductibleCredit.NoDeductible"/>, which does not apply
-    /// the deductible at all when the plan is not the first payer. See
-    /// docs/architecture/claim-cob-pipeline.md.
+    /// written before the field existed hydrate with the default.
+    /// <para>For plan administrators: as a later payer the plan prices a
+    /// claim as if it were the only plan and applies COB to the whole claim,
+    /// so on a multi-line claim the deductible met on one line is met for the
+    /// next — the 835 shows less member deductible (PR-1) on later lines than
+    /// line-by-line COB would. NaicFullCredit and MemberPaidOnly produce the
+    /// same 835 and differ only in what the deductible accumulator records
+    /// for later claims (what the plan applied vs what the member owes).
+    /// NoDeductible skips the deductible as a later payer (not allowed on an
+    /// HDHP). See docs/architecture/claim-cob-pipeline.md.</para>
     /// </summary>
     [JsonPropertyName("cobDeductibleCredit")]
     public CobDeductibleCredit CobDeductibleCredit { get; set; } = CobDeductibleCredit.NaicFullCredit;

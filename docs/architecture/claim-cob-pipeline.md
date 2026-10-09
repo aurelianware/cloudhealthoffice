@@ -1,13 +1,19 @@
 # Coordination of Benefits Pipeline (Capability 5.8)
 
-> **Status — Phase 1, May 2026.** Replaces `CoordinationOfBenefitsStubStage`
+> **Status — updated October 2026 (PR #1278).** The COB stage now runs at
+> Order **275**, before benefit calculation, and settles the payer order
+> from coverage-service *and* the 837 (decision table below). When they
+> agree and the 837 carries complete prior-payer data (2320 / 2430), the
+> Phase-1 "secondary deferred" pend is lifted: the benefit engine applies
+> claim-level COB for secondary, tertiary and later payers and the claim
+> finalizes. See "COB calculation" and "Deductible credit" below. The
+> Phase-1 sections that follow are kept as the history of the decisions.
+>
+> *Original status — Phase 1, May 2026.* Replaced `CoordinationOfBenefitsStubStage`
 > at Order=500 with a real `CloudHealthOffice.CobEngine`-backed
-> implementation. Phase 1 ships **CHO-primary adjudication only** plus a
-> structured Phase 2 hook stub that detects CHO-secondary scenarios via
-> coverage-service's `/member/{id}/cob` endpoint and emits a Pend with the
-> stable reason `cob-secondary-not-supported-phase-1`. The detection-only
-> posture produces explicit Phase 2 sizing telemetry rather than letting
-> CHO-secondary claims fall into generic Pend reasons.
+> implementation, shipping CHO-primary adjudication only plus a detection
+> hook that pended CHO-secondary scenarios with the stable reason
+> `cob-secondary-not-supported-phase-1`.
 >
 > See [`claim-adjudication-pipeline.md`](./claim-adjudication-pipeline.md)
 > for the orchestrator + stage-interface foundation, and
@@ -33,12 +39,17 @@ wiring + enforcement-mode policy + a Phase 2 hook stub.
 ```
 ... 100 Scrubbing               (5.4)
     200 NetworkCredentialing    (5.6)
-    300 BenefitCalculation      (5.5)
+    250 Pricing
+    275 CoordinationOfBenefits  ◄ this doc (was 500 in Phase 1)
+    300 BenefitCalculation      (5.5) — applies COB when the stage cleared it
     400 NcciEdits               (5.7)
-    500 CoordinationOfBenefits  ◄ 5.8 — this doc
     600 AiExamination           (stub; 5.9 — may consume CobResult on context)
     999 Persistence             (5.5)
 ```
+
+*Phase 1 placement (history):* COB ran at 500, after NCCI, detection-only.
+It moved before benefit calculation in PR #1278 so the payer order is
+settled before the engine prices the claim and writes accumulators.
 
 5 of 6 pipeline stages are now real after 5.8 ships. COB runs after NCCI
 edits because edit failures may reduce allowed amounts in Phase 2 work
@@ -353,9 +364,38 @@ work, scheduled for the post-Phase-1 roadmap window, covers:
 
 ## COB calculation: secondary, tertiary and later payers
 
-The detection stage above reads coverage-service. The *calculation* runs
-inside the benefit engine (`BenefitCalculationStage`, Order 300) from the
+The COB stage (Order 275) settles the payer order; the *calculation* runs
+inside the benefit engine (`BenefitCalculationStage`, Order 300), from the
 payer data on the 837 itself, on both the per-line and DRG / per-diem paths.
+
+### Payer order: the decision table (`CoordinationOfBenefitsStage`)
+
+The stage runs **before** benefit calculation, so a claim it pends is
+priced read-only (`ExecutionMode = Prospective`: no accumulator write) and
+only a claim it clears is priced as a later payer. It compares
+coverage-service (`/member/{id}/cob`) with the 837 (2000B `SBR01`, 2320,
+2430):
+
+| Coverage-service | 837 SBR01 | 837 prior-payer data | Outcome | Reason code |
+|---|---|---|---|---|
+| unavailable | P / U / absent | — | pend (`PendForSecondary`, `Deny`); pass (`SoftValidation`) | `cob-coverage-service-unavailable` |
+| unavailable | S / T / A–H | — | **pend in every mode** | `cob-coverage-service-unavailable` |
+| primary (no other coverage, or only later ones) | P / U / absent | — | pass, no COB | — |
+| primary | S / T / A–H | — | **pend in every mode** (never paid) | `cob-payer-order-mismatch` |
+| secondary (one "P") | U / absent | — | mode-driven pend (the Phase-1 posture) | `cob-secondary-not-supported-phase-1` |
+| secondary or tertiary | P, or a different later position (secondary ↔ tertiary-or-later) | — | **pend in every mode** | `cob-payer-order-mismatch` |
+| agree | — | two 2320 loops (or a 2320 and 2000B) with the same sequence | **pend in every mode** | `cob-duplicate-payer-sequence` |
+| agree | — | a 2430 SVD01 that names no other payer (2330B NM109, REF*2U, REF*FY) while there are several | **pend in every mode** | `cob-unmatched-line-adjudication` |
+| agree | — | no 2320 with AMT*D or 2430 SVD for some earlier sequence | mode-driven pend | `cob-secondary-not-supported-phase-1` |
+| agree | — | complete | **pass; COB applied** (`CobOutcome.ApplyCob`, `PayerSequence`) — the claim finalizes | — |
+
+"Agree" means coverage secondary ↔ SBR01 S, coverage tertiary (two "P", or
+"P" + "S") ↔ SBR01 T or A–H. The reason code
+`cob-secondary-not-supported-phase-1` keeps its legacy name for
+work-queue / telemetry continuity; it now means "no usable prior-payer data
+on the 837". If the COB stage did not run at all (disabled) and the 837
+says later payer, `BenefitCalculationStage` pends (pend code COB) rather
+than price the claim as primary.
 
 ### Where the data comes from
 
@@ -363,102 +403,175 @@ payer data on the 837 itself, on both the per-line and DRG / per-diem paths.
 |---|---|---|
 | 2000B `SBR01` (P/S/T/A–H/U) | `Claim.PayerResponsibilityCode` | `CobInfo.PayerSequence` (1, 2, 3, 4–11) |
 | 2320 `SBR01` | `ClaimOtherPayer.PayerResponsibilityCode` | `PriorPayerAdjudication.Sequence` |
-| 2330B `NM1*PR` NM103 / NM109 | `PayerName` / `PayerId` | same |
+| 2330B `NM1*PR` NM103 / NM109, `REF*2U` / `REF*FY` | `PayerName` / `PayerId` / `AdditionalPayerIds` | same |
 | 2320 `AMT*D` (payer paid amount) | `ClaimOtherPayer.PaidAmount` | `ClaimPaidAmount` |
 | 2320 `CAS` (claim-level adjustments) | `ClaimAdjustments` | `ClaimAdjustments` |
-| 2430 `SVD02` / `CAS` (line adjudication; SVD01 = 2330B NM109) | `LineAdjudications` | `Lines` |
+| 2430 `SVD02` / `CAS` (SVD01 = 2330B NM109 / REF*2U / REF*FY) | `LineAdjudications` (or `Claim.UnmatchedOtherPayerLines`) | `Lines` |
 
-`X12837Parser` reads these loops (and keeps 2330A–I `NM1`/`N3`/`N4`/`DMG`
-from overwriting the claim's own subscriber and billing provider);
-`X12837ClaimMapper` attaches each 2430 to its payer by SVD01.
-`BenefitCalculationStage.BuildCob` sends the engine every other payer whose
-sequence is below ours. No COB when we are primary, our sequence is unknown
-(`U` / absent), or no earlier payer is on the claim. The model is standard
+`X12837Parser` reads these loops (2330A–I `NM1`/`N3`/`N4`/`REF`/`DMG` never
+overwrite the claim's own subscriber, billing or pay-to provider);
+`X12837ClaimMapper` attaches each 2430 to its payer by SVD01 against NM109,
+REF*2U and REF*FY. An SVD matching none is attributed to the only other
+payer when there is exactly one; with several it is kept in
+`UnmatchedOtherPayerLines` and the COB stage pends — never dropped, which
+would undercount what the earlier payers paid. The model is standard
 (complementary); the claim does not carry a plan COB method.
 
-### Line vs claim level (`PriorPayerAllocator`)
+**SNIP level 3 (warnings only).** `X12837SnipValidator` checks TR3 COB
+balancing and warns — never rejects — when it does not hold:
+`L3-COB-2320-BALANCE` (per 2320 payer: CLM02 = AMT*D + Σ its 2320 CAS +
+Σ its 2430 CAS) and `L3-COB-SVD-BALANCE` (per 2430: line charge = SVD02 +
+Σ its CAS).
 
-Per prior payer: a line it reported in 2430 takes its SVD02 and 2430 PR CAS.
-The rest of its 2320 AMT*D (claim paid − Σ SVD02) is prorated by charge
-across the lines it did not report (all lines when it reported every line);
-a shortfall (TR3: AMT*D = Σ 2430 SVD02 − Σ 2320 CAS) comes off the 2430 line
-payments in proportion. 2320 PR CAS is prorated by charge the same way.
-Shares are truncated to the cent, remainder on the last line. A DRG stay
-uses each payer's sums (= AMT*D). X12 leaves SVD vs AMT*D to the payer
-("Payers should indicate what prior payer payment amount impacted their
-payment for the specific line", RFI #2806); 2430 is the line-specific one.
-
-### The calculation (`CobCalculationService`)
+### The calculation: claim level (`CobCalculationService.CalculateClaim`)
 
 Sources: NAIC Coordination of Benefits Model Regulation (MDL-120, 2013):
-§7 (the secondary "shall calculate the benefits it would have paid ... in
-the absence of other health care coverage and apply that calculated amount
-to any allowable expense under its plan that is unpaid by the primary plan",
-total benefits of all plans ≤ 100% of the allowable expense) and §6.A(4)
-("Each secondary plan shall take into consideration the benefits of the
-primary plan or plans and the benefits of any other plan ... [that] has its
-benefits determined before those of that secondary plan").
+§7 (the secondary "shall calculate the benefits it would have paid **on the
+claim** in the absence of other health care coverage and apply that
+calculated amount to any allowable expense under its plan that is unpaid by
+the primary plan … total benefits paid … by all plans **for the claim** do
+not exceed 100 percent of the total allowable expense **for that claim**"),
+§6.A(4) (each secondary takes into account every plan determined before it)
+and §3.A (an amount the provider may not charge is not an allowable expense).
 
-Per unit (line or stay):
+1. **Priced as the only plan.** Every line is adjudicated as if this plan
+   were primary — deductible, copay, coinsurance and OOP cap carried from
+   line to line — giving each line's allowed, cost share and normal benefit
+   (allowed − cost share). Those first-pass deductible / OOP updates are
+   then rolled back (`AccumulatorWorkingSet.RollbackCostShareUpdates`).
+2. **Prior payers per line.** A line a payer reported in 2430 takes its
+   SVD02 and 2430 PR CAS; the rest of its 2320 AMT*D is prorated by charge
+   across its unreported lines (all lines when it reported every line; a TR3
+   shortfall — AMT*D below Σ SVD02 — comes off the 2430 payments pro rata).
+   Remainders go to the last line with a positive charge. Its 2320 PR CAS is
+   kept as one claim-level amount, not prorated.
+3. **Bounding payer.** For each line, the bounding payer is the last payer
+   that *adjudicated* it: paid more than $0, or left a PR. A payer that paid
+   $0 with only CO/OA adjustments (CO-27, CO-22, CO-109, CO-96, CO-204, …)
+   did not cover the service — its "PR = 0" is not what the member owes, so
+   it bounds nothing (review B1).
+4. **Claim balance.** Per bounding payer, balance = min(Σ room, that payer's
+   PR on its lines — 2430 PR plus its whole 2320 PR when the group holds all
+   its claim-level lines); lines with no adjudicating payer, or one that
+   reported no CAS, have balance = room. Room = max(0, allowed − prior paid).
+5. **Claim totals.** standard: paid = min(Σ normal, balance);
+   non-duplication: paid = min(max(0, Σ normal − Σ prior paid), balance);
+   member = min(Σ cost share, balance − paid).
+6. **Lines.** Each group's balance is split across its lines by room. Our
+   payment fills lines by normal benefit up to min(normal, line balance),
+   then any line up to its balance; the member's share fills lines up to
+   min(cost share, line balance − paid), then (only if needed) up to
+   min(cost share, allowed − paid). So per line paid ≤ allowed − prior paid,
+   paid + member ≤ allowed, and **one positive OA-23 = allowed − member −
+   paid**; PR-1/2/3 are reduced to the member's share (coinsurance, copay,
+   then deductible); charge − ΣCAS = paid; no negative CAS.
 
-```
-priorPaid = Σ every prior payer's paid amount
-balance   = min(allowed − priorPaid, last prior payer's PR when reported), ≥ 0
-standard  : paid = min(normal benefit, balance)
-non-dup   : paid = min(max(0, normal benefit − priorPaid), balance)
-member    = min(pre-COB cost share, balance − paid)
-OA-23     = allowed − member − paid      (one positive amount: all prior payers' impact)
-```
+Line-by-line capping (the previous approach) lost money whenever claim-level
+prior-payer amounts were prorated in proportions different from this plan's
+line amounts: golden 07 paid $49.37 instead of $58.00 and left $8.63 neither
+paid nor billable to the member (review M1). The claim-level allowable-
+expense rule is the one MDL-120 states; prorating the 2320 amounts "by the
+previous payer's line PR" was considered and rejected: the 2320 amounts are
+claim-level precisely when the payer gives no line split, so any line split
+is an assumption, while the claim-level totals are what the payer reported.
 
-The PR-1/2/3 amounts are reduced to `member` (coinsurance, copay, then
-deductible); charge − ΣCAS = paid on every line and claim; no negative CAS.
-CLP02 is 2 (processed as secondary) or 3 (tertiary; also payers 4–11, which
-835 has no code for).
+A DRG / per-diem stay is one unit: every prior payer's claim totals against
+the stay's allowed (`CobClaimInput.SingleStay`), then the stay's PR, credit
+and OA-23 are allocated to lines by allowed.
+
+**CLP02** (835) follows what was applied: `AdjudicationResult.CobPayerSequence`
+(set only when COB ran) → 2 secondary, 3 tertiary (also 4–11, which the 835
+has no code for), else 1 — not SBR01 alone.
 
 ## Deductible credit on secondary and later plans
 
 Per-plan setting `cobDeductibleCredit` on the benefit plan document
-(`BenefitPlan.CobDeductibleCredit` → engine `BenefitPlanConfig.CobDeductibleCredit`).
-Applies only when the plan is not the first payer:
+(`BenefitPlan.CobDeductibleCredit` → engine `BenefitPlanConfig.CobDeductibleCredit`;
+carried through the GET/PUT adapter). Applies only when the plan is not the
+first payer:
 
 | Value | Deductible accumulator | 835 |
 |---|---|---|
-| `NaicFullCredit` (default) | the deductible our own adjudication applied before COB (already limited to the remaining deductible and by the OOP cap), including deductible a prior payer paid | the unit itself: PR-1 = what the member owes; later lines of the same claim treat the credited deductible as met, so their PR-1 is lower than under `MemberPaidOnly` |
-| `MemberPaidOnly` | only the PR-1 the member owes after COB (behavior before this setting) — self-funded ERISA plans with non-duplication / carve-out provisions | as before this setting |
-| `NoDeductible` | nothing: the deductible is not applied | no PR-1 (the deductible is skipped as a later payer) — Medicaid-secondary plans |
+| `NaicFullCredit` (default) | the deductible our own adjudication applied as the only plan (already limited to the remaining deductible and by the OOP cap), including deductible a prior payer paid | claim priced as the only plan, then claim-level COB |
+| `MemberPaidOnly` | only the PR-1 the member owes after COB — self-funded ERISA plans with non-duplication / carve-out provisions | **same as `NaicFullCredit`** |
+| `NoDeductible` | nothing: the deductible is not applied | no PR-1 (the deductible is skipped as a later payer) — Medicaid-secondary plans. Rejected on an HDHP (IRC §223(c)(2)). |
 
 Source: MDL-120 §7, "the secondary plan shall credit to its plan deductible
 any amounts it would have credited to its deductible in the absence of other
 health care coverage."
 
-**Within the claim.** Under `NaicFullCredit` the plan prices the claim as
-it would have with no other coverage (MDL-120 §7), so the deductible
-credited on an earlier line counts as met for the claim's later lines
-(`AccumulatorWorkingSet.ApplyDeductibleWithCredit` writes the credit to the
-working accumulators the later lines read). Their pre-COB deductible, and so
-the member's share and PR-1, drop; each line still balances (charge − ΣCAS =
-paid, one positive OA-23, no negative CAS) and CLP04 = Σ SVC03. **This
-changes the 835 of multi-line secondary and tertiary claims under the
-default setting** compared with `MemberPaidOnly`, where later lines still
-meet the deductible the member did not pay. The total credited never passes
-the deductible limit. A DRG stay is one unit, so the setting does not change
-its 835.
+**What changes on the 835, plainly.** Compared with line-by-line COB, a
+multi-line secondary or tertiary claim's 835 changes under every setting:
+because the claim is priced as the only plan first, the deductible met on
+one line is met for the claim's later lines (their PR-1 drops), and the
+payment is limited at claim level (the plan may pay more on some lines).
+`NaicFullCredit` and `MemberPaidOnly` give the same 835; they differ only in
+what the deductible accumulator records for the claims that follow.
 
 **OOP maximum.** MDL-120 requires deductible credit only; it says nothing
 about the out-of-pocket maximum, and what other plans paid is not the
 member's out-of-pocket spending. The OOP accumulators therefore always get
 the member's share after COB, under every setting.
 
-The engine writes the credited deductible to its working accumulators
-(`LineBenefitResult.DeductibleCreditedAmount`, DRG lines allocated by
-allowed); claims-service stores it (`DeductibleCreditedAmount`) and
-publishes it as `ClaimFinalizedEvent.DeductibleCredited` (only when it
+**Flow.** The engine writes the credited deductible to its working
+accumulators (`LineBenefitResult.DeductibleCreditedAmount`, DRG lines
+allocated by allowed); claims-service stores it (`DeductibleCreditedAmount`)
+and publishes it as `ClaimFinalizedEvent.DeductibleCredited` (only when it
 differs from PR-1); accumulator-service's `ComputeDeltas` credits it to the
 deductible and keeps PR-1 for the service rollup.
+
+**Concurrency.** Each deductible update carries the plan limit
+(`AccumulatorUpdate.ClampAtLimit`); the engine store
+(`ChoAccumulatorService`) adds at most what is left under it **at write
+time**, inside its optimistic-concurrency retry (a conflict reloads and
+re-clamps), so two claims priced against the same starting balance cannot
+together credit past the limit.
 
 **Default change.** Plans without the field (every plan before this change)
 are NAIC full credit. Accumulators for claims adjudicated from now on differ
 on secondary/tertiary claims; past accumulators are not rewritten.
+
+## Re-adjudication, voids and replacements
+
+- **Re-adjudicating the same claim** (same claim id): the engine reads the
+  claim's own still-active accumulator updates
+  (`IAccumulatorService.GetClaimUpdatesAsync`) and takes them out of the
+  starting balances, so the second pass prices exactly like the first (it
+  does not meet its own deductible); in Production it reverses them before
+  writing the new updates (the store's apply is idempotent per claim).
+- **Void** (`ClaimFinalizationService.VoidAsync`, including the reversal
+  run voiding the version a replacement superseded): claims-service calls
+  `IBenefitCalculationEngine.ReverseClaimAsync` (Decision 16 — the engine
+  store is what the next claim is priced against), and the Kafka
+  `claim.finalized` event with FinalStatus `Reversed` makes
+  accumulator-service back out the claim's recorded `ClaimApplied` deltas
+  (`ClaimReversed` row, keyed `{claimId}:reversal` — once).
+- **Replacement / void claims** (CLM05-3 = 7 / 8) linked to their original
+  (`PredecessorVersionId` → `ClaimFinalizedEvent.OriginalClaimId`):
+  accumulator-service reverses the original's deltas before applying the
+  replacement's (frequency 8: reverse only) — idempotent with the original's
+  own void event, so nothing counts twice.
+- `ClaimApplied` rows now record the deltas actually applied after clamping
+  at the limits, so a reversal backs out exactly that.
+
+## Limitations
+
+- **COB model.** Always standard (complementary) from the 837 path; there is
+  no plan-level COB-method setting (non-duplication is engine-supported but
+  only reachable through the API's `useComplementaryModel`).
+- **Accumulators for claims pended after benefit calculation.** A claim the
+  COB stage (or any earlier stage) pends is priced read-only. A claim a
+  *later* stage pends (NCCI at 400) still writes accumulators at 300 — a
+  pre-existing ordering issue outside COB.
+- **Store clamp.** Only `ChoAccumulatorService` (Mongo / Cosmos) clamps at
+  write time; the Redis accumulator service does not.
+- 2320/2430 `AMT*EAF` (remaining patient liability) is not read; patient
+  responsibility comes from PR CAS.
+- The 2000B SBR03 group number is still lost when SBR precedes NM1*IL
+  (pre-existing).
+- Within a claim the per-line attribution of the claim-level payment is a
+  documented allocation rule (by normal benefit within each line's
+  balance); the claim totals are exact.
 
 ## Cross-references
 

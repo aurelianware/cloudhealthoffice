@@ -111,6 +111,24 @@ public class AccumulatorRepositoryCosmos : IAccumulatorRepository
         }
         return null;
     }
+
+    public async Task<AccumulatorEvent?> GetClaimAppliedEventAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition(
+                @"SELECT TOP 1 * FROM c WHERE c.tenantId = @tenantId
+                  AND c.eventType = 'ClaimApplied' AND c.sourceClaimId = @claimId
+                  ORDER BY c.occurredAt DESC")
+            .WithParameter("@tenantId", tenantId)
+            .WithParameter("@claimId", claimId);
+        using var iter = _events.GetItemQueryIterator<AccumulatorEvent>(query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(tenantId) });
+        if (iter.HasMoreResults)
+        {
+            var page = await iter.ReadNextAsync(ct);
+            return page.FirstOrDefault();
+        }
+        return null;
+    }
 }
 
 public class ProcessedClaimStoreCosmos : IProcessedClaimStore
