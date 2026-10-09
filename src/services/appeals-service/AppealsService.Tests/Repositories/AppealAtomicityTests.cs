@@ -30,7 +30,7 @@ public class AppealAtomicityTests
         CreatedAt = DateTime.UtcNow
     };
 
-    private static AppealEvent StatusChangeEvent(Appeal a, AppealStatus from, AppealStatus to) => new()
+    private static AppealEvent StatusChangeEvent(Appeal a, AppealStatus from, AppealStatus to) => new AppealEvent()
     {
         TenantId = a.TenantId,
         AppealId = a.Id,
@@ -39,7 +39,7 @@ public class AppealAtomicityTests
         FromStatus = from,
         ToStatus = to,
         ActorId = "user1"
-    };
+    }.Queued(a);
 
     [Fact]
     public async Task TransitionStatusAsync_ConcurrentRace_OneWinsOneThrows()
@@ -51,7 +51,7 @@ public class AppealAtomicityTests
             TenantId = appeal.TenantId, AppealId = appeal.Id,
             EventId = Guid.NewGuid().ToString(), EventType = AppealEventType.AppealCreated,
             FromStatus = null, ToStatus = AppealStatus.Draft, ActorId = "user1"
-        };
+        }.Queued(appeal);
         await repo.CreateAsync(appeal, genesis);
 
         // Two writers concurrently try to transition Draft -> Submitted.
@@ -89,7 +89,7 @@ public class AppealAtomicityTests
             TenantId = appeal.TenantId, AppealId = appeal.Id,
             EventId = Guid.NewGuid().ToString(), EventType = AppealEventType.AppealCreated,
             FromStatus = null, ToStatus = AppealStatus.Submitted, ActorId = "user1"
-        };
+        }.Queued(appeal);
         await repo.CreateAsync(appeal, genesis);
 
         // Ten concurrent readers all observe overdue at once.
@@ -100,7 +100,7 @@ public class AppealAtomicityTests
             EventType = AppealEventType.AppealOverdueObserved,
             ActorId = "reader-" + i,
             OccurredAt = DateTime.UtcNow
-        }).ToList();
+        }.Queued(appeal)).ToList();
 
         var snapshot = await repo.GetByIdAsync(appeal.TenantId, appeal.Id);
         var tasks = events.Select(e => repo.TryTransitionToOverdueAsync(snapshot!, e)).ToArray();
@@ -132,7 +132,7 @@ public class AppealAtomicityTests
             TenantId = appeal.TenantId, AppealId = appeal.Id,
             EventId = Guid.NewGuid().ToString(), EventType = AppealEventType.AppealCreated,
             FromStatus = null, ToStatus = AppealStatus.Draft, ActorId = "user1"
-        };
+        }.Queued(appeal);
         await repo.CreateAsync(appeal, genesis);
 
         var note = new AppealNote { CreatedBy = "u", NoteText = "enc::note", IsInternal = true };
@@ -142,7 +142,7 @@ public class AppealAtomicityTests
             EventId = Guid.NewGuid().ToString(),
             EventType = AppealEventType.AppealNoteAdded,
             ActorId = "u"
-        };
+        }.Queued(appeal);
 
         // The genesis event succeeded already. Fail the NEXT audit append
         // (the note append) and assert the entity still saw the note.
@@ -176,7 +176,7 @@ public class AppealAtomicityTests
             TenantId = appeal.TenantId, AppealId = appeal.Id,
             EventId = Guid.NewGuid().ToString(), EventType = AppealEventType.AppealCreated,
             FromStatus = null, ToStatus = AppealStatus.Draft, ActorId = "user1"
-        };
+        }.Queued(appeal);
         await repo.CreateAsync(appeal, genesis);
 
         (await repo.GetByIdAsync("tenant-b", appeal.Id)).Should().BeNull();
@@ -193,7 +193,7 @@ public class AppealAtomicityTests
             TenantId = a1.TenantId, AppealId = a1.Id,
             EventId = Guid.NewGuid().ToString(), EventType = AppealEventType.AppealCreated,
             FromStatus = null, ToStatus = AppealStatus.Draft, ActorId = "user1"
-        };
+        }.Queued(a1);
         await repo.CreateAsync(a1, genesis);
 
         var results = await repo.SearchAsync("tenant-b", new AppealSearchParams());
@@ -212,7 +212,7 @@ public class AppealAtomicityTests
             EventId = eventId,
             EventType = AppealEventType.AppealCreated,
             FromStatus = null, ToStatus = AppealStatus.Draft, ActorId = "u"
-        };
+        }.Queued(appeal);
         await repo.CreateAsync(appeal, genesis);
 
         // Same EventId replay → no duplicate row.
@@ -222,7 +222,7 @@ public class AppealAtomicityTests
             EventId = eventId,
             EventType = AppealEventType.AppealCreated,
             FromStatus = null, ToStatus = AppealStatus.Draft, ActorId = "u"
-        });
+        }.Queued(appeal));
 
         var history = await repo.ListByAppealAsync(appeal.TenantId, appeal.Id);
         history.Count(e => e.EventId == eventId).Should().Be(1);
@@ -246,7 +246,7 @@ public class AppealAtomicityTests
         {
             TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = Guid.NewGuid().ToString(),
             EventType = AppealEventType.AppealCreated, ToStatus = AppealStatus.Submitted, ActorId = "user1"
-        });
+        }.Queued(appeal));
 
         // 1. begin-review reads its snapshot BEFORE the extension.
         var staleSnapshot = (await repo.GetByIdAsync(appeal.TenantId, appeal.Id))!;
@@ -289,7 +289,7 @@ public class AppealAtomicityTests
         {
             TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = Guid.NewGuid().ToString(),
             EventType = AppealEventType.AppealCreated, ToStatus = AppealStatus.Submitted, ActorId = "user1"
-        });
+        }.Queued(appeal));
 
         var request = WithExtension(await repo.GetByIdAsync(appeal.TenantId, appeal.Id), target, "ext-1");
         var note = new AppealNote { NoteId = "note-1", NoteText = "enc::why", CreatedBy = "user1" };
@@ -297,9 +297,9 @@ public class AppealAtomicityTests
         var auditEvents = new[]
         {
             new AppealEvent { TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = "ext-1",
-                EventType = AppealEventType.AppealDeadlineExtended, ActorId = "user1" },
+                EventType = AppealEventType.AppealDeadlineExtended, ActorId = "user1" }.Queued(appeal),
             new AppealEvent { TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = "ext-1:justification-note",
-                EventType = AppealEventType.AppealNoteAdded, ActorId = "user1" }
+                EventType = AppealEventType.AppealNoteAdded, ActorId = "user1" }.Queued(appeal)
         };
 
         repo.FailAuditAppendOnce();
@@ -349,7 +349,7 @@ public class AppealAtomicityTests
         {
             TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = Guid.NewGuid().ToString(),
             EventType = AppealEventType.AppealCreated, ToStatus = AppealStatus.Submitted, ActorId = "user1"
-        });
+        }.Queued(appeal));
 
         // begin-review reads its snapshot (no notes) BEFORE the extension.
         var staleSnapshot = (await repo.GetByIdAsync(appeal.TenantId, appeal.Id))!;
@@ -386,7 +386,7 @@ public class AppealAtomicityTests
         {
             TenantId = appeal.TenantId, AppealId = appeal.Id, EventId = Guid.NewGuid().ToString(),
             EventType = AppealEventType.AppealCreated, ToStatus = AppealStatus.Submitted, ActorId = "user1"
-        });
+        }.Queued(appeal));
 
         // Two overlapping requests with the same EventId, both pre-read
         // before either commits; each proposes its own note id and actor.
@@ -407,11 +407,11 @@ public class AppealAtomicityTests
             return
             [
                 new AppealEvent { TenantId = persisted.TenantId, AppealId = persisted.Id, EventId = ext.EventId!,
-                    EventType = AppealEventType.AppealDeadlineExtended, ActorId = ext.ExtendedBy },
+                    EventType = AppealEventType.AppealDeadlineExtended, ActorId = ext.ExtendedBy }.Queued(persisted),
                 new AppealEvent { TenantId = persisted.TenantId, AppealId = persisted.Id,
                     EventId = $"{ext.EventId}:justification-note", EventType = AppealEventType.AppealNoteAdded,
                     ActorId = ext.ExtendedBy,
-                    Payload = new System.Text.Json.Nodes.JsonObject { ["noteId"] = ext.JustificationNoteId } }
+                    Payload = new System.Text.Json.Nodes.JsonObject { ["noteId"] = ext.JustificationNoteId } }.Queued(persisted)
             ];
         }
 
