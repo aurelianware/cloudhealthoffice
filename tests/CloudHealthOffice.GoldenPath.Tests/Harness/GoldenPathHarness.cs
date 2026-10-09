@@ -369,7 +369,7 @@ internal sealed class GoldenPathHarness
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Payer:Name"] = "CHO GOLDEN HEALTH PLAN",
+                ["Payer:Name"] = "CLOUD HEALTH OFFICE GOLDEN HEALTH PLAN",
                 ["Payer:Id"] = "CHOGOLD01",
                 ["Era:OriginatingCompanyId"] = "1999999999",
                 ["TradingPartners:Environment"] = "Production",
