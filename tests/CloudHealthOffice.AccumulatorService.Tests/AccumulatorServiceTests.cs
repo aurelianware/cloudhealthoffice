@@ -221,10 +221,12 @@ public class AccumulatorServiceTests
         var sut = BuildSut(out var repo, out var processed, out _);
         SeedSnapshot(repo, 2026);
 
-        // Pre-seed a Pending marker as if a crash occurred.
+        // Pre-seed a Pending marker as if a crash occurred — older than the
+        // lease (a younger one is an attempt still in flight; see below).
         await processed.TryBeginAsync("t1", "CLM-CRASH");
         var marker = await processed.GetAsync("t1", "CLM-CRASH");
         Assert.Equal("Pending", marker!.Outcome);
+        processed.Now += processed.Lease + TimeSpan.FromSeconds(1);
 
         var evt = MakeClaim("CLM-CRASH", new DateTime(2026, 6, 1), deductible: 120m);
         var result = await sut.ApplyClaimFinalizedAsync(evt);

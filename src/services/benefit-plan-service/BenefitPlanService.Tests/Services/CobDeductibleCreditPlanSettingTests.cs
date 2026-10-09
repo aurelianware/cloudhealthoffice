@@ -184,6 +184,14 @@ public sealed class CobDeductibleCreditPlanSettingTests
     public void CobRequest_LegacySecondaryPrimaryPaymentByLine_StillAccepted() =>
         BenefitPlanService.Controllers.CobRequestValidation.Validate(2, [], legacyPrimaryLineCount: 2).Should().BeNull();
 
+    [Theory]
+    [InlineData(3, new[] { 1 }, "2")]
+    [InlineData(3, new[] { 2 }, "1")]
+    [InlineData(4, new[] { 1, 3 }, "2")]
+    public void CobRequest_MissingAnEarlierSequence_IsRejected(int sequence, int[] present, string missing) =>
+        BenefitPlanService.Controllers.CobRequestValidation.Validate(sequence, present.Select(Prior).ToList(), 0)
+            .Should().Contain($"missing sequence {missing}");
+
     [Fact]
     public void CobRequest_TertiaryWithBothPriorPayers_IsValid() =>
         BenefitPlanService.Controllers.CobRequestValidation.Validate(3, [Prior(1), Prior(2)], 0).Should().BeNull();

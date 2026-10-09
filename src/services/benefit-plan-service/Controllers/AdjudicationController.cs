@@ -1370,6 +1370,13 @@ public static class CobRequestValidation
         var duplicate = earlier.GroupBy(p => p.Sequence).FirstOrDefault(g => g.Count() > 1);
         if (duplicate is not null)
             return $"cob.priorPayers lists payer sequence {duplicate.Key} more than once.";
+        // Every earlier payer, not just some: a tertiary claim with only the
+        // primary's adjudication would be priced as if the secondary paid
+        // nothing (PR #1278 re-review).
+        var missing = Enumerable.Range(1, payerSequence - 1).Where(s => earlier.All(p => p.Sequence != s)).ToList();
+        if (missing.Count > 0)
+            return $"cob.payerSequence {payerSequence} requires the adjudication of every earlier payer " +
+                   $"(1..{payerSequence - 1}); cob.priorPayers is missing sequence {string.Join(", ", missing)}.";
         return null;
     }
 }
