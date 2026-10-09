@@ -195,6 +195,53 @@ public class Era835ReversalTests
         Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(reversal));
     }
 
+    /// <summary>
+    /// A claim whose lines need SVC01 detail: a modifier (11042-51), and an
+    /// institutional line billed with a three-character revenue code plus HCPCS.
+    /// </summary>
+    private static ClaimDto ClaimWithModifiersAndRevenueCode()
+    {
+        var claim = MultiLinePaidClaim();
+        claim.ServiceLines![0].ProcedureCode = "11042";
+        claim.ServiceLines[0].Modifiers = new List<string> { "51" };
+        claim.ServiceLines[1].ProcedureCode = "27447";
+        claim.ServiceLines[1].Modifiers = new List<string> { "RT" };
+        claim.ServiceLines[1].RevenueCode = "360";
+        return claim;
+    }
+
+    /// <summary>SVC01 and SVC04 of each 2110 loop: the billed-service identity.</summary>
+    private static List<(string Svc01, string Svc04)> ServiceIdentities(ClaimPayment cp)
+    {
+        var segments = 0;
+        return Era835ClaimLoops.BuildClaimLoop(cp, ref segments)
+            .Split('~', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Split('*'))
+            .Where(e => e[0] == "SVC")
+            .Select(e => (e[1], e[4]))
+            .ToList();
+    }
+
+    [Theory]
+    [InlineData(false)] // original recorded with line CAS
+    [InlineData(true)]  // legacy original, adjustments re-derived
+    public void Reversal_Svc01AndSvc04_IdentifyTheSameServiceAsTheOriginal(bool legacy)
+    {
+        var claim = ClaimWithModifiersAndRevenueCode();
+        var original = Recorded(claim);
+        if (legacy)
+            original = LegacyRecorded(original);
+        Assert.Equal(!legacy, Era835ClaimPaymentBuilder.RecordedWithAdjustments(original));
+
+        var reversal = Era835ClaimPaymentBuilder.BuildReversal(original, claim, Mapper);
+
+        var expected = new[] { ("HC:11042:51", ""), ("HC:27447:RT", "0360") };
+        Assert.Equal(expected, ServiceIdentities(original));
+        Assert.Equal(expected, ServiceIdentities(reversal));
+        Assert.Equal(ServiceIdentities(original), ServiceIdentities(reversal));
+        Assert.Empty(Era835FinancialSegments.AdjustmentBalanceProblems(reversal));
+    }
+
     [Fact]
     public void LegacyMultiLine_WithoutLineDetail_FallsBackToCo45_OrTheNcciCarc()
     {
