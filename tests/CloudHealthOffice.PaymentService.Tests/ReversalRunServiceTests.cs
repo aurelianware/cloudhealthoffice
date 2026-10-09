@@ -612,6 +612,44 @@ public class ReversalRunServiceTests
     }
 
     [Fact]
+    public async Task ExecuteReversalRunAsync_PayeeIsTheBillingProviderName_InstitutionalClpKeepsCodes()
+    {
+        // An institutional claim whose payment was recorded before CLP08/09/11
+        // were carried: the reversal takes them from the predecessor claim.
+        var pred = Era835ReversalTests.MultiLinePaidClaim();
+        pred.ClaimType = ClaimFormType.Institutional;
+        pred.ClaimFrequencyCode = "1";
+        pred.Institutional = new InstitutionalClaimDto { FacilityTypeCode = "13" };
+        var recorded = Era835ReversalTests.Recorded(pred);
+        recorded.FacilityTypeCode = recorded.ClaimFrequencyCode = recorded.DrgCode = null;
+        SeedOriginalPayment(recorded);
+        // claims-service sends the name as billingProviderName.
+        Assert.Contains("\"billingProviderName\":\"Acme\"", JsonSerializer.Serialize(pred, Json));
+
+        var (executed, envelopes, payments) = await ExecuteWithRealGeneratorAsync(pred);
+
+        Assert.Equal(ReversalRunStatus.Completed, executed.Status);
+        Assert.Equal("Acme", Assert.Single(payments).PayeeName);
+        var edi = Assert.Single(envelopes).EdiContent;
+        Assert.Contains("N1*PE*Acme*XX*1234567890~", edi);
+        Assert.Contains("CLP*CLM-1*22*-300.00*-170.00*-50.00*HM*ICN-1*13*1~", edi);
+        EdiBalance.AssertEveryLoopBalances(edi);
+    }
+
+    [Fact]
+    public async Task ExecuteReversalRunAsync_PredecessorWithoutBillingProviderName_PayeeIsTheNpi()
+    {
+        var pred = Era835ReversalTests.MultiLinePaidClaim();
+        pred.ProviderName = null;
+        SeedOriginalPayment(Era835ReversalTests.Recorded(pred));
+
+        var (_, envelopes, payments) = await ExecuteWithRealGeneratorAsync(pred);
+
+        Assert.Equal("1234567890", Assert.Single(payments).PayeeName);
+        Assert.Contains("N1*PE*1234567890*XX*1234567890~", Assert.Single(envelopes).EdiContent);
+    }
+
+    [Fact]
     public async Task ExecuteReversalRunAsync_LegacyMultiLinePaymentWithoutLineDetail_FallsBackToCo45_Reversed()
     {
         var pred = Era835ReversalTests.MultiLinePaidClaim();

@@ -956,7 +956,7 @@ public class PaymentRunService : IPaymentRunService
             PaymentDate = paymentRun.PaymentDate,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
             PayerId = _configuration["Payer:Id"] ?? "CHO",
-            PayeeName = firstClaim.ProviderName ?? providerKey,
+            PayeeName = firstClaim.PayeeNameOr(providerKey),
             PayeeNPI = providerNpi,
             TradingPartnerId = tradingPartnerId,
             // Issued, not yet finalized in claims-service. Becomes Posted once
@@ -1090,7 +1090,7 @@ public class PaymentRunService : IPaymentRunService
                     PaymentDate = paymentRun.PaymentDate,
                     PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
                     PayerId = _configuration["Payer:Id"] ?? "CHO",
-                    PayeeName = first.Claim.ProviderName ?? first.Npi,
+                    PayeeName = first.Claim.PayeeNameOr(first.Npi),
                     PayeeNPI = first.Npi,
                     TradingPartnerId = group.Key,
                     RunId = paymentRun.Id,
@@ -1257,8 +1257,52 @@ public class ClaimDto
     public string BillingProviderNPI { get; set; } = string.Empty;
     public string? PayToProviderNPI { get; set; }
     public string? RenderingProviderNPI { get; set; }
+
+    /// <summary>
+    /// The billing provider's name (claims-service <c>Claim.BillingProviderName</c>,
+    /// sent as <c>billingProviderName</c>). Null when the 837 carried none;
+    /// see <see cref="PayeeNameOr"/>.
+    /// </summary>
+    [JsonPropertyName("billingProviderName")]
     public string? ProviderName { get; set; }
+
+    /// <summary>
+    /// True when the claim names a pay-to provider NPI different from the
+    /// billing provider NPI: the payee (N104) is then the pay-to provider.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasDistinctPayToProvider =>
+        !string.IsNullOrWhiteSpace(PayToProviderNPI)
+        && !string.Equals(PayToProviderNPI.Trim(), BillingProviderNPI?.Trim(), StringComparison.Ordinal);
+
+    /// <summary>
+    /// The N1*PE (1000B) payee name. The billing provider's name only when the
+    /// payee is the billing provider: with a distinct pay-to NPI the billing
+    /// name would label a different organization than N104, so the pay-to NPI
+    /// is the name (claims-service sends no pay-to name). Otherwise
+    /// <see cref="ProviderName"/>, or <paramref name="fallback"/> when it is
+    /// blank. Not length-limited here: N102 is cut to 60 characters when the
+    /// 835 is written (<see cref="Era835Names.N102"/>).
+    /// </summary>
+    public string PayeeNameOr(string fallback) =>
+        HasDistinctPayToProvider ? PayToProviderNPI!.Trim()
+        : string.IsNullOrWhiteSpace(ProviderName) ? fallback
+        : ProviderName.Trim();
+
     public string? PayerClaimControlNumber { get; set; }
+
+    /// <summary>
+    /// claims-service <c>Claim.ClaimFrequencyCode</c> (837 CLM05-3: 1 original,
+    /// 7 replacement, 8 void). 835 CLP09 for an institutional claim.
+    /// </summary>
+    public string? ClaimFrequencyCode { get; set; }
+
+    /// <summary>
+    /// claims-service <c>Claim.Institutional</c> (837I header detail); null on
+    /// professional and dental claims. Supplies CLP08 (facility type code) and
+    /// CLP11 (DRG).
+    /// </summary>
+    public InstitutionalClaimDto? Institutional { get; set; }
     /// <summary>CLP03: the claim's total billed charge. Never the amount paid.</summary>
     public decimal TotalChargeAmount { get; set; }
 
@@ -1295,6 +1339,19 @@ public class ClaimDto
     /// </summary>
     [JsonPropertyName("claimLines")]
     public List<ClaimServiceLineDto>? ServiceLines { get; set; }
+}
+
+/// <summary>
+/// Mirrors <c>ClaimsService.Models.InstitutionalClaimDetails</c> for the fields
+/// the 835 CLP segment reports.
+/// </summary>
+public class InstitutionalClaimDto
+{
+    /// <summary>Facility type code, the first two digits of the type of bill (837I CLM05-1): CLP08.</summary>
+    public string? FacilityTypeCode { get; set; }
+
+    /// <summary>The DRG billed on the claim (837I HI*DR): CLP11.</summary>
+    public string? DrgCode { get; set; }
 }
 
 /// <summary>Mirrors claims-service's <c>ClaimType</c> value for value.</summary>

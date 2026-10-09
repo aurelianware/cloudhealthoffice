@@ -725,7 +725,7 @@ public class ReversalRunService : IReversalRunService
             PaymentDate = run.ExecutionStartedAt ?? DateTime.UtcNow,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
             PayerId = _configuration["Payer:Id"] ?? "CHO",
-            PayeeName = pred.ProviderName ?? providerNpi ?? "Provider",
+            PayeeName = pred.PayeeNameOr(string.IsNullOrWhiteSpace(providerNpi) ? "Provider" : providerNpi),
             PayeeNPI = providerNpi,
             TradingPartnerId = tradingPartnerId,
             // Recouped, not yet voided in claims-service; Posted once voided.

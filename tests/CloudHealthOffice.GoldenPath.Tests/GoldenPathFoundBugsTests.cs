@@ -4,9 +4,8 @@ using CloudHealthOffice.Testing.Mongo;
 namespace CloudHealthOffice.GoldenPath.Tests;
 
 /// <summary>
-/// Defects the golden path exposed that are too large to fix here, or sit
-/// in code other work owns. Each test states the correct behaviour and
-/// fails today; remove the Skip when the fix lands.
+/// Defects the golden path exposed. Each test states the correct behaviour;
+/// a skipped one still fails today (remove the Skip when its fix lands).
 /// </summary>
 [Collection(MongoRunnerFixture.CollectionName)]
 public class GoldenPathFoundBugsTests
@@ -15,13 +14,11 @@ public class GoldenPathFoundBugsTests
 
     public GoldenPathFoundBugsTests(MongoRunnerFixture mongo) => _harness = new GoldenPathHarness(mongo);
 
-    // 005010X221A1 2100 CLP for an institutional claim: CLP08 facility type
-    // code and CLP09 claim frequency code are required, and CLP11 carries the
-    // DRG when the claim was paid by DRG. payment-service's ClaimDto /
-    // ClaimPayment carry none of them (claims-service has them on
-    // Claim.Institutional / ClaimFrequencyCode), so the DRG remittance in
-    // Golden/05-inpatient-drg.835 ends at CLP07.
-    [Fact(Skip = "bug: 837I 835 omits CLP08 facility code, CLP09 frequency code and CLP11 DRG (payment-service ClaimDto/ClaimPayment lack the fields)")]
+    // Fixed: 005010X221A1 2100 CLP for an institutional claim: CLP08 facility
+    // type code and CLP09 claim frequency code are required, and CLP11 carries
+    // the DRG. They travel from claims-service's Claim.Institutional /
+    // ClaimFrequencyCode through ClaimDto and ClaimPayment.
+    [Fact]
     public async Task InstitutionalClp_CarriesFacilityFrequencyAndDrg()
     {
         var r = await _harness.RunAsync(GoldenInputs.Scenario(), GoldenInputs.Edi837("05-inpatient-drg"));
@@ -33,10 +30,9 @@ public class GoldenPathFoundBugsTests
         Assert.Equal("470", clp[11]);
     }
 
-    // N1*PE (1000B payee) name is the NPI: payment-service fills PayeeName from
-    // ClaimDto.ProviderName, which claims-service never sends (it sends
-    // billingProviderName).
-    [Fact(Skip = "bug: 835 N1*PE payee name is the NPI; ClaimDto.ProviderName is never populated from claims-service's billingProviderName")]
+    // Fixed: N1*PE (1000B payee) name was the NPI: ClaimDto.ProviderName is
+    // now read from claims-service's billingProviderName.
+    [Fact]
     public async Task PayeeName_IsTheBillingProviderName()
     {
         var r = await _harness.RunAsync(
@@ -46,12 +42,10 @@ public class GoldenPathFoundBugsTests
         Assert.Equal("SYNTHETIC FAMILY CLINIC", payee[2]);
     }
 
-    // OOP max: the engine reports the full coinsurance as PR-2 and the cap as a
-    // negative OA-23 (CAS*PR*2*30.00 + CAS*OA*23*-10.00). The member owes 20, so
-    // the 835 should say PR-2 20.00 with no OA adjustment; a negative OA-23
-    // ("prior payer adjudication") is not what happened. BenefitEngine OA-23
-    // code is owned by other work, so this is not changed here.
-    [Fact(Skip = "bug: OOP-max reduction is remitted as a negative OA-23 instead of reducing the PR amount (BenefitEngine OA-23 code, out of scope here)")]
+    // OOP max (fixed in #1262): the cap reduces the PR amount itself, so the
+    // 835 says PR-2 20.00 with no OA-23 — previously CAS*PR*2*30.00 plus a
+    // negative CAS*OA*23*-10.00. Kept as a regression guard.
+    [Fact]
     public async Task OopMaxReduction_IsNotRemittedAsNegativeAdjustment()
     {
         var r = await _harness.RunAsync(
