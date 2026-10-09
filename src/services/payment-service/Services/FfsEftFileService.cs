@@ -1,0 +1,347 @@
+using System.Globalization;
+using PaymentService.Models;
+using PaymentService.Repositories;
+
+namespace PaymentService.Services;
+
+/// <summary>
+/// The NACHA CCD+ credit file of an executed fee-for-service payment run.
+///
+/// <list type="bullet">
+/// <item>One credit per payee (payee TIN + approved account) per 835 trace
+/// number, aggregating that payee's payments in the run; the amount is net of
+/// any receivable offsets (PLB FB/WO), i.e. the 835's BPR02 share.</item>
+/// <item>The account is read only from provider-service's active approved
+/// account (dual control). A payee without one is paid by check and listed;
+/// an unknown answer stops generation with nothing recorded.</item>
+/// <item>The addenda carries <c>TRN*1*{TRN02}*{TRN03}\</c>, the TRN of the
+/// payment's 835 (TRN02 = the payment's check/trace number, TRN03 =
+/// Era:OriginatingCompanyId, also the batch company id).</item>
+/// <item>Idempotent: the file depends only on the run (its execution time is
+/// the file creation time, its payment date the effective entry date) and the
+/// approved accounts. The first generation pins the file's SHA-256 on the run;
+/// a later generation must produce the same bytes, or it is refused
+/// (an approved account changed since, or a payee lost its EFT account).</item>
+/// </list>
+///
+/// Transmission to the bank is not done here: the shared
+/// CloudHealthOffice.NachaTransmission dispatcher (as capitation-service uses)
+/// is the next step and takes <see cref="FfsEftFileOutcome.File"/> as is.
+/// </summary>
+public interface IFfsEftFileService
+{
+    Task<FfsEftFileOutcome> GenerateAsync(string paymentRunId, string actorUserId, CancellationToken cancellationToken = default);
+}
+
+public sealed class FfsEftFileOutcome
+{
+    public required PaymentRun Run { get; init; }
+
+    /// <summary>The file; null when no payee is paid by EFT. Holds full numbers: never returned to a caller.</summary>
+    public FfsNachaBuiltFile? File { get; init; }
+
+    /// <summary>True when the run already had a file and this generation reproduced it.</summary>
+    public bool Reproduced { get; init; }
+}
+
+public sealed class FfsEftFileService : IFfsEftFileService
+{
+    private readonly IPaymentRunRepository _runs;
+    private readonly IPaymentRepository _payments;
+    private readonly IProviderPayeeAccountSource _accounts;
+    private readonly IConfiguration _configuration;
+    private readonly TimeProvider _time;
+    private readonly ILogger<FfsEftFileService> _logger;
+
+    public FfsEftFileService(
+        IPaymentRunRepository runs,
+        IPaymentRepository payments,
+        IProviderPayeeAccountSource accounts,
+        IConfiguration configuration,
+        ILogger<FfsEftFileService> logger,
+        TimeProvider? time = null)
+    {
+        _runs = runs;
+        _payments = payments;
+        _accounts = accounts;
+        _configuration = configuration;
+        _logger = logger;
+        _time = time ?? TimeProvider.System;
+    }
+
+    public async Task<FfsEftFileOutcome> GenerateAsync(string paymentRunId, string actorUserId, CancellationToken cancellationToken = default)
+    {
+        var run = await _runs.GetByIdAsync(paymentRunId)
+                  ?? throw new KeyNotFoundException($"Payment run {paymentRunId} not found");
+        if (run.Status != PaymentRunStatus.Completed)
+            throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} is {run.Status}; only a completed run has an EFT file");
+        if (!string.Equals(run.PaymentMethod, "ACH", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Payment run {run.PaymentRunNumber} pays by {run.PaymentMethod}; only an ACH run has an EFT file");
+        if (!_accounts.IsConfigured)
+            throw new InvalidOperationException(UnconfiguredProviderPayeeAccountSource.Reason);
+
+        // provider-service is called with payment-service's own token, for the
+        // run's tenant, under the user who asked for the file.
+        using var grant = RunExecutionGrant.Open(run.TenantId, run.Id, actorUserId);
+
+        var payments = new List<Payment>();
+        foreach (var id in run.PaymentIds)
+        {
+            var payment = await _payments.GetByIdAsync(id);
+            if (payment != null && !payment.IsReversal)
+                payments.Add(payment);
+        }
+
+        var plan = await PlanAsync(run, payments, cancellationToken);
+        var header = BuildHeader(run);
+        var built = plan.Entries.Count == 0
+            ? null
+            : FfsNachaCreditFileBuilder.Build(header, plan.Entries.Select(e => e.Entry).ToList());
+
+        var now = _time.GetUtcNow().UtcDateTime;
+        var sha = built?.Sha256 ?? string.Empty;
+
+        if (run.EftFile != null)
+        {
+            if (!string.Equals(run.EftFile.Sha256, sha, StringComparison.Ordinal))
+            {
+                _logger.LogWarning(
+                    "EFT file for payment run {RunNumber} no longer reproduces: pinned {Pinned}, now {Now}",
+                    run.PaymentRunNumber, run.EftFile.Sha256, sha);
+                throw new RunConflictException(
+                    $"The EFT file of payment run {run.PaymentRunNumber} would differ from the one generated at {run.EftFile.FirstGeneratedAt:O} " +
+                    "(a payee's approved bank account or EFT enrollment changed since). Nothing was regenerated; " +
+                    "the pinned file stands and the change needs a person.");
+            }
+
+            run.EftFile.GenerationCount++;
+            run.EftFile.LastVerifiedAt = now;
+            run.EftFile.LastVerifiedBy = actorUserId;
+            await _runs.UpdateAsync(run);
+            return new FfsEftFileOutcome { Run = run, File = built, Reproduced = true };
+        }
+
+        var file = new PaymentRunEftFile
+        {
+            FileReference = $"FFS-{run.PaymentRunNumber}",
+            FileName = $"ACH-FFS-{run.PaymentRunNumber}.ach",
+            Sha256 = sha,
+            ByteSize = built?.ByteSize ?? 0,
+            EntryCount = built?.EntryCount ?? 0,
+            AddendaCount = built?.AddendaCount ?? 0,
+            BatchCount = built?.BatchCount ?? 0,
+            BlockCount = built?.BlockCount ?? 0,
+            EntryHash = built?.EntryHash ?? string.Empty,
+            TotalCreditAmount = built?.TotalCreditAmount ?? 0m,
+            TotalDebitAmount = 0m,
+            FileCreatedAt = header.FileCreatedAt,
+            EffectiveEntryDate = header.EffectiveEntryDate,
+            FirstGeneratedAt = now,
+            FirstGeneratedBy = actorUserId,
+            LastVerifiedAt = now,
+            LastVerifiedBy = actorUserId,
+            GenerationCount = 1,
+            CheckFallbacks = plan.CheckFallbacks,
+            ZeroAmountPaymentIds = plan.ZeroAmountPaymentIds,
+        };
+        for (var i = 0; i < plan.Entries.Count; i++)
+        {
+            var p = plan.Entries[i];
+            file.Entries.Add(new PaymentRunEftEntry
+            {
+                AchTraceNumber = built!.AchTraceNumbers[i],
+                ReassociationTrace = p.Entry.ReassociationTrace,
+                Amount = p.Entry.Amount,
+                PayeeNpis = p.PayeeNpis,
+                ReceiverName = p.Entry.ReceiverName,
+                TaxIdLast4 = Last4(p.TaxIdDigits),
+                RoutingNumberLast4 = Last4(p.Entry.RoutingNumber),
+                AccountNumberLast4 = Last4(p.Entry.AccountNumber),
+                TransactionCode = p.Entry.IsSavings ? "32" : "22",
+                PaymentIds = p.PaymentIds,
+                ClaimCount = p.ClaimCount,
+            });
+        }
+
+        // Fallbacks found now (the account was gone since execution) join the run's list.
+        foreach (var fallback in plan.CheckFallbacks.Where(f => f.DecidedAt == "EftFile"))
+        {
+            if (run.CheckFallbacks.All(f => f.PaymentId != fallback.PaymentId))
+                run.CheckFallbacks.Add(fallback);
+            run.Warnings.Add(
+                $"EFT file: payment {fallback.CheckNumber} to NPI {fallback.PayeeNpi} is not in the file and must be paid by check: {fallback.Reason}. " +
+                "Its 835 already went out as ACH; tell the provider.");
+        }
+        foreach (var split in plan.Entries.GroupBy(e => e.Entry.ReassociationTrace, StringComparer.Ordinal).Where(g => g.Count() > 1))
+        {
+            run.Warnings.Add(
+                $"EFT file: 835 trace {split.Key} is paid as {split.Count()} credits (its payees have different TINs or accounts); " +
+                "each credit carries the trace, but no single credit equals that 835's BPR02");
+        }
+
+        run.EftFile = file;
+        await _runs.UpdateAsync(run);
+
+        _logger.LogInformation(
+            "AUDIT EFT file {FileReference} for payment run {RunNumber} generated by {User}: {Entries} credits, {Total:F2}, {Checks} check fallbacks, sha256 {Sha}",
+            file.FileReference, run.PaymentRunNumber, actorUserId.Replace("\r", "").Replace("\n", ""),
+            file.EntryCount, file.TotalCreditAmount, file.CheckFallbacks.Count, file.Sha256);
+        return new FfsEftFileOutcome { Run = run, File = built, Reproduced = false };
+    }
+
+    private sealed class PlannedEntry
+    {
+        public required FfsNachaCreditEntry Entry { get; init; }
+        public required string TaxIdDigits { get; init; }
+        public List<string> PayeeNpis { get; init; } = new();
+        public List<string> PaymentIds { get; init; } = new();
+        public int ClaimCount { get; init; }
+    }
+
+    private sealed class Plan
+    {
+        public List<PlannedEntry> Entries { get; } = new();
+        public List<CheckFallbackPayment> CheckFallbacks { get; } = new();
+        public List<string> ZeroAmountPaymentIds { get; } = new();
+    }
+
+    private async Task<Plan> PlanAsync(PaymentRun run, List<Payment> payments, CancellationToken cancellationToken)
+    {
+        var plan = new Plan();
+        var lookups = new Dictionary<string, PayeeAccountLookup>(StringComparer.Ordinal);
+        var eft = new List<(Payment Payment, PayeeEftAccount Account)>();
+
+        foreach (var payment in payments.OrderBy(p => p.CheckNumber, StringComparer.Ordinal).ThenBy(p => p.Id, StringComparer.Ordinal))
+        {
+            if (payment.TotalPaymentAmount <= 0m)
+            {
+                plan.ZeroAmountPaymentIds.Add(payment.Id);
+                continue;
+            }
+
+            var recorded = run.CheckFallbacks.FirstOrDefault(f => f.PaymentId == payment.Id);
+            if (!string.Equals(payment.PaymentMethod, "ACH", StringComparison.OrdinalIgnoreCase))
+            {
+                plan.CheckFallbacks.Add(recorded ?? new CheckFallbackPayment
+                {
+                    PaymentId = payment.Id,
+                    PayeeNpi = payment.PayeeNPI,
+                    PayeeName = payment.PayeeName,
+                    CheckNumber = payment.CheckNumber,
+                    Amount = payment.TotalPaymentAmount,
+                    Reason = $"the payment was issued as {payment.PaymentMethod}",
+                    DecidedAt = "Execution",
+                });
+                continue;
+            }
+
+            var npi = payment.PayeeNPI ?? string.Empty;
+            if (!lookups.TryGetValue(npi, out var lookup))
+            {
+                lookup = await _accounts.GetAsync(run.TenantId, npi, cancellationToken);
+                lookups[npi] = lookup;
+            }
+
+            switch (lookup.Status)
+            {
+                case PayeeAccountLookupStatus.Eft:
+                    eft.Add((payment, lookup.Account!));
+                    break;
+                case PayeeAccountLookupStatus.NoEftAccount:
+                    plan.CheckFallbacks.Add(new CheckFallbackPayment
+                    {
+                        PaymentId = payment.Id,
+                        PayeeNpi = payment.PayeeNPI,
+                        PayeeName = payment.PayeeName,
+                        CheckNumber = payment.CheckNumber,
+                        Amount = payment.TotalPaymentAmount,
+                        Reason = lookup.Reason ?? "no approved EFT account",
+                        DecidedAt = "EftFile",
+                        NeedsAttention = true,
+                    });
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Cannot tell whether payee NPI {npi} has an approved EFT account ({lookup.Reason}); no EFT file was generated");
+            }
+        }
+
+        // One credit per payee (TIN + account) per 835 trace number.
+        var groups = eft
+            .GroupBy(x => (Tin: x.Account.TaxIdDigits, x.Account.RoutingNumber, x.Account.AccountNumber, x.Account.IsSavings, Trace: x.Payment.CheckNumber))
+            .OrderBy(g => g.Key.Trace, StringComparer.Ordinal)
+            .ThenBy(g => g.Key.Tin, StringComparer.Ordinal)
+            .ThenBy(g => g.Key.RoutingNumber, StringComparer.Ordinal)
+            .ThenBy(g => g.Key.AccountNumber, StringComparer.Ordinal)
+            .ThenBy(g => g.Key.IsSavings);
+
+        foreach (var group in groups)
+        {
+            var members = group.ToList();
+            var npis = members.Select(m => m.Payment.PayeeNPI ?? string.Empty).Distinct(StringComparer.Ordinal)
+                .OrderBy(n => n, StringComparer.Ordinal).ToList();
+            var name = members.Select(m => m.Account.AccountHolderName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n))
+                       ?? members.Select(m => m.Payment.PayeeName).OrderBy(n => n, StringComparer.Ordinal).First();
+            plan.Entries.Add(new PlannedEntry
+            {
+                Entry = new FfsNachaCreditEntry
+                {
+                    RoutingNumber = group.Key.RoutingNumber,
+                    AccountNumber = group.Key.AccountNumber,
+                    IsSavings = group.Key.IsSavings,
+                    Amount = members.Sum(m => m.Payment.TotalPaymentAmount),
+                    IdentificationNumber = npis.FirstOrDefault() ?? string.Empty,
+                    ReceiverName = name,
+                    ReassociationTrace = group.Key.Trace,
+                },
+                TaxIdDigits = group.Key.Tin,
+                PayeeNpis = npis,
+                PaymentIds = members.Select(m => m.Payment.Id).ToList(),
+                ClaimCount = members.Sum(m => m.Payment.ClaimPayments.Count),
+            });
+        }
+
+        return plan;
+    }
+
+    /// <summary>
+    /// File and batch values from configuration (<c>Nacha:*</c>) and the run.
+    /// The batch company id is the 835 TRN03 (<c>Era:OriginatingCompanyId</c>);
+    /// a different <c>Nacha:CompanyId</c> is refused, since the provider
+    /// reassociates on it.
+    /// </summary>
+    private FfsNachaFileHeader BuildHeader(PaymentRun run)
+    {
+        var companyId = _configuration["Era:OriginatingCompanyId"] ?? string.Empty;
+        var configuredCompanyId = _configuration["Nacha:CompanyId"];
+        if (!string.IsNullOrEmpty(configuredCompanyId) && !string.Equals(configuredCompanyId, companyId, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Nacha:CompanyId must equal Era:OriginatingCompanyId (the 835 TRN03); otherwise providers cannot reassociate the EFT with the 835");
+
+        var destination = _configuration["Nacha:ImmediateDestination"] ?? string.Empty;
+        var created = run.ExecutionCompletedAt ?? run.ExecutionStartedAt ?? run.CreatedAt;
+        created = new DateTime(created.Year, created.Month, created.Day, created.Hour, created.Minute, 0, DateTimeKind.Utc);
+
+        return new FfsNachaFileHeader
+        {
+            ImmediateDestination = destination,
+            ImmediateOrigin = _configuration["Nacha:ImmediateOrigin"] ?? companyId,
+            ImmediateDestinationName = _configuration["Nacha:ImmediateDestinationName"] ?? string.Empty,
+            ImmediateOriginName = _configuration["Nacha:ImmediateOriginName"] ?? _configuration["Payer:Name"] ?? string.Empty,
+            CompanyName = _configuration["Nacha:CompanyName"] ?? _configuration["Payer:Name"] ?? string.Empty,
+            CompanyId = companyId,
+            OriginatingDfi = _configuration["Nacha:OriginatingDfi"] ?? (destination.Length >= 8 ? destination[..8] : string.Empty),
+            CompanyDiscretionaryData = _configuration["Nacha:CompanyDiscretionaryData"],
+            ReferenceCode = Last(run.PaymentRunNumber, 8),
+            FileIdModifier = _configuration["Nacha:FileIdModifier"] ?? "A",
+            FileCreatedAt = created,
+            EffectiveEntryDate = run.PaymentDate.Date,
+        };
+    }
+
+    private static string? Last4(string? value)
+        => string.IsNullOrEmpty(value) ? null : value.Length <= 4 ? value : value[^4..];
+
+    private static string Last(string value, int length)
+        => value.Length <= length ? value : value[^length..];
+}

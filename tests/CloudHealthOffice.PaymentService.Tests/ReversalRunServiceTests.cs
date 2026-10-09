@@ -461,6 +461,46 @@ public class ReversalRunServiceTests
     }
 
     [Fact]
+    public async Task ExecuteReversalRunAsync_NegativeNet_OpensAProviderReceivableInTheLedger()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<ReversalRun>()).Returns(call => call.Arg<ReversalRun>());
+        SetupAdjustmentList(new[] { BuildAdjustmentDto(id: "adj-1", predecessorId: "pred-1") });
+        SetupClaimResponse("pred-1", BuildClaim("pred-1", approvedAmount: 650m));
+        SeedOriginalPayment("pred-1", paid: 650m);
+        _tpClient.GetByBillingProviderNpiAsync("test-tenant", "1234567890", "Production")
+            .Returns(new TradingPartnerSummary { TradingPartnerId = "TP-A", X12Config = new X12ConfigDto() });
+        var envelopes = new List<EraEnvelopeRecord>();
+        _envelopeRepo.CreateAsync(Arg.Do<EraEnvelopeRecord>(envelopes.Add)).Returns(call =>
+        {
+            var rec = call.Arg<EraEnvelopeRecord>();
+            rec.Id = "env-1";
+            return rec;
+        });
+        var store = new InMemoryProviderReceivableRepository();
+        var ledger = new ProviderReceivableLedger(store, _configuration, NullLogger<ProviderReceivableLedger>.Instance);
+
+        var service = new ReversalRunService(
+            _paymentRepo, _runRepo, new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
+            _envelopeRepo, _tpClient, _httpFactory, NullLogger<ReversalRunService>.Instance, _configuration,
+            _actor, _actor.SeparationOfDuties(), _reservations, _mapper, ledger);
+
+        var executed = await service.ExecuteReversalRunAsync(run.Id);
+
+        var plb = Assert.Single(envelopes).EdiContent.Split('~').Select(s => s.Split('*')).Single(s => s[0] == "PLB");
+        var onRun = Assert.Single(executed.OutstandingReceivables);
+        var record = Assert.Single(store.All);
+        Assert.Equal(record.Id, onRun.ReceivableId);
+        Assert.Equal(("1234567890", "TP-A", 650m, 650m, ReceivableStatus.Open), (record.ProviderNpi, record.TradingPartnerId, record.OriginalAmount, record.OutstandingAmount, record.Status));
+        Assert.Equal(("rr-1", "env-1", plb[3].Split(':')[1], "FB"), (record.OriginRunId, record.OriginEraEnvelopeId, record.OriginTraceNumber, record.RecoveryAdjustmentCode));
+        Assert.Equal(plb[1], record.ProviderNpi); // PLB01: the provider that owes it
+        var originated = Assert.Single(record.Entries);
+        Assert.Equal((ReceivableEntryType.Originated, 650m, "approver-1"), (originated.Type, originated.Amount, originated.By));
+        Assert.Contains(executed.Warnings, w => w.Contains(record.Id) && w.Contains("later payment runs recover it"));
+    }
+
+    [Fact]
     public async Task ExecuteReversalRunAsync_NoRecordedPayment_NotReversed_Reported_NotReserved()
     {
         var run = PendingRun();

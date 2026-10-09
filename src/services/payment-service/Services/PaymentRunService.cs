@@ -37,6 +37,8 @@ public class PaymentRunService : IPaymentRunService
     private readonly ICurrentActor _actor;
     private readonly IRunSeparationOfDuties _separationOfDuties;
     private readonly IClaimReservationRepository _reservations;
+    private readonly IProviderReceivableLedger? _receivables;
+    private readonly IProviderPayeeAccountSource _payeeAccounts;
 
     public PaymentRunService(
         IPaymentRepository paymentRepository,
@@ -50,9 +52,13 @@ public class PaymentRunService : IPaymentRunService
         IConfiguration configuration,
         ICurrentActor actor,
         IRunSeparationOfDuties separationOfDuties,
-        IClaimReservationRepository reservations)
+        IClaimReservationRepository reservations,
+        IProviderReceivableLedger? receivables = null,
+        IProviderPayeeAccountSource? payeeAccounts = null)
     {
         _reservations = reservations;
+        _receivables = receivables;
+        _payeeAccounts = payeeAccounts ?? new UnconfiguredProviderPayeeAccountSource();
         _paymentRepository = paymentRepository;
         _paymentRunRepository = paymentRunRepository;
         _batchEraGenerator = batchEraGenerator;
@@ -189,6 +195,14 @@ public class PaymentRunService : IPaymentRunService
                 ? new Dictionary<string, List<ClaimDto>>()
                 : GroupClaimsByProvider(claims, paymentRun.Criteria);
 
+            // Step 3b: How each payee is paid. An ACH run pays a payee by EFT
+            //          only into its approved account in provider-service (dual
+            //          control); a payee with none is paid by check, and its
+            //          payment (and 835 BPR04) say CHK. Decided before anything
+            //          is issued: an unknown answer fails the run here, with
+            //          every reservation released.
+            var disbursement = await ResolveDisbursementMethodsAsync(claimGroups, paymentRun);
+
             // Step 4: Allocate one check number per trading partner. Multiple
             //         provider groups under the same partner share that check
             //         so the batched envelope's TRN matches every CLP loop's
@@ -230,13 +244,47 @@ public class PaymentRunService : IPaymentRunService
 
                 // From the insert attempt on, the reservation stays.
                 reservedNotAttempted.ExceptWith(group.Value.Select(c => c.Id));
+                var (method, checkReason) = disbursement.TryGetValue(group.Key, out var decided)
+                    ? decided
+                    : (paymentRun.PaymentMethod, (string?)null);
                 var payment = await GeneratePaymentForClaimsAsync(
                     group.Value,
                     paymentRun,
                     group.Key,
                     tradingPartnerId,
                     checkNumber,
-                    approver);
+                    approver,
+                    method);
+
+                if (checkReason != null)
+                {
+                    paymentRun.CheckFallbacks.Add(new CheckFallbackPayment
+                    {
+                        PaymentId = payment.Id,
+                        PayeeNpi = payment.PayeeNPI,
+                        PayeeName = payment.PayeeName,
+                        CheckNumber = payment.CheckNumber,
+                        Amount = payment.TotalPaymentAmount,
+                        Reason = checkReason,
+                        DecidedAt = "Execution",
+                    });
+                    paymentRun.Warnings.Add(
+                        $"Payment {payment.CheckNumber} to NPI {payment.PayeeNPI} is paid by check, not EFT: {checkReason}");
+                }
+
+                foreach (var offset in payment.ReceivableOffsets)
+                {
+                    paymentRun.ReceivableRecoveries.Add(new PaymentRunReceivableRecovery
+                    {
+                        ReceivableId = offset.ReceivableId,
+                        PaymentId = payment.Id,
+                        PayeeNpi = payment.PayeeNPI,
+                        Amount = offset.Amount,
+                        AdjustmentCode = offset.AdjustmentCode,
+                        Reference = offset.Reference,
+                    });
+                    paymentRun.ReceivableRecoveredAmount += offset.Amount;
+                }
 
                 issuedPayments.Add(payment);
                 paymentRun.PaymentIds.Add(payment.Id);
@@ -253,6 +301,8 @@ public class PaymentRunService : IPaymentRunService
                         $"Payment {payment.CheckNumber} skipped from batched 835 — no trading partner resolved");
                 }
             }
+
+            WarnOnMixedMethodsPerPartner(issuedPayments, paymentRun);
 
             paymentRun.TotalClaims = claims.Count;
             paymentRun.CheckNumberStart = checkNumberStart.ToString().PadLeft(10, '0');
@@ -892,7 +942,8 @@ public class PaymentRunService : IPaymentRunService
         string providerKey,
         string? tradingPartnerId,
         string checkNumber,
-        string approver)
+        string approver,
+        string? paymentMethod = null)
     {
         var firstClaim = claims.First();
         var providerNpi = firstClaim.PayToProviderNPI ?? firstClaim.BillingProviderNPI;
@@ -900,7 +951,7 @@ public class PaymentRunService : IPaymentRunService
         var payment = new Payment
         {
             CheckNumber = checkNumber,
-            PaymentMethod = paymentRun.PaymentMethod,
+            PaymentMethod = paymentMethod ?? paymentRun.PaymentMethod,
             TotalPaymentAmount = claims.Sum(PlanPaidAmountOf),
             PaymentDate = paymentRun.PaymentDate,
             PayerName = _configuration["Payer:Name"] ?? "Cloud Health Office",
@@ -919,8 +970,86 @@ public class PaymentRunService : IPaymentRunService
             ClaimPayments = claims.Select(claim => BuildClaimPayment(claim, denied: false)).ToList()
         };
 
-        var created = await _paymentRepository.CreateAsync(payment);
-        return created;
+        // What the payee owes from earlier reversals is withheld here (PLB
+        // FB/WO), before the payment exists: the ledger is written first, so a
+        // concurrent run cannot take the same dollars; if the insert fails the
+        // recovery is reversed in the ledger.
+        if (_receivables != null)
+            await _receivables.ApplyRecoveriesAsync(paymentRun.TenantId, payment, paymentRun.Id, paymentRun.PaymentRunNumber, approver);
+
+        try
+        {
+            return await _paymentRepository.CreateAsync(payment);
+        }
+        catch (Exception ex) when (_receivables != null && payment.ReceivableOffsets.Count > 0)
+        {
+            _logger.LogError(ex, "Payment {PaymentId} could not be inserted; reversing its receivable recoveries", payment.Id);
+            await _receivables.ReverseRecoveriesAsync(paymentRun.TenantId, payment, approver,
+                $"payment {payment.Id} of run {paymentRun.PaymentRunNumber} was not issued ({ex.GetType().Name})");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The payment method of each provider group of an ACH run: ACH when its
+    /// payee has an approved EFT account in provider-service, CHK (with the
+    /// reason) when it definitively has none. Groups of a check run, and every
+    /// group when no account source is configured, keep the run's method (no
+    /// entry). An unknown answer throws: nothing has been issued yet.
+    /// </summary>
+    private async Task<Dictionary<string, (string Method, string? CheckReason)>> ResolveDisbursementMethodsAsync(
+        Dictionary<string, List<ClaimDto>> claimGroups, PaymentRun paymentRun)
+    {
+        var result = new Dictionary<string, (string, string?)>(StringComparer.Ordinal);
+        if (claimGroups.Count == 0 || !_payeeAccounts.IsConfigured
+            || !string.Equals(paymentRun.PaymentMethod, "ACH", StringComparison.OrdinalIgnoreCase))
+            return result;
+
+        var byNpi = new Dictionary<string, PayeeAccountLookup>(StringComparer.Ordinal);
+        foreach (var group in claimGroups)
+        {
+            var first = group.Value.First();
+            var npi = first.PayToProviderNPI ?? first.BillingProviderNPI;
+            if (string.IsNullOrEmpty(npi))
+            {
+                result[group.Key] = ("CHK", "no payee NPI to find an approved EFT account for");
+                continue;
+            }
+
+            if (!byNpi.TryGetValue(npi, out var lookup))
+            {
+                lookup = await _payeeAccounts.GetAsync(paymentRun.TenantId, npi);
+                byNpi[npi] = lookup;
+            }
+
+            result[group.Key] = lookup.Status switch
+            {
+                PayeeAccountLookupStatus.Eft => ("ACH", null),
+                PayeeAccountLookupStatus.NoEftAccount => ("CHK", lookup.Reason ?? "no approved EFT account"),
+                _ => throw new InvalidOperationException(
+                    $"Cannot tell whether payee NPI {npi} has an approved EFT account ({lookup.Reason}); nothing was paid"),
+            };
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// One 835 per trading partner carries one BPR04: when a partner's payees
+    /// are paid partly by EFT and partly by check, the 835 states the first
+    /// payment's method. Listed so someone can tell the provider.
+    /// </summary>
+    private static void WarnOnMixedMethodsPerPartner(List<Payment> issuedPayments, PaymentRun paymentRun)
+    {
+        foreach (var partner in issuedPayments
+                     .Where(p => !string.IsNullOrEmpty(p.TradingPartnerId))
+                     .GroupBy(p => p.TradingPartnerId!, StringComparer.Ordinal))
+        {
+            var methods = partner.Select(p => p.PaymentMethod).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (methods.Count > 1)
+                paymentRun.Warnings.Add(
+                    $"Trading partner {partner.Key}: payees are paid by {string.Join(" and ", methods)} under one 835 " +
+                    $"(trace {partner.First().CheckNumber}); its BPR04 states {partner.First().PaymentMethod}");
+        }
     }
 
     /// <summary>

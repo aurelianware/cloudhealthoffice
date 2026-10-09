@@ -67,6 +67,7 @@ public sealed class PaymentPipelineFactory : WebApplicationFactory<Program>
             services.AddSingleton(TradingPartners);
             services.AddSingleton<IClaimReservationRepository>(Reservations);
             services.AddSingleton<IReservationAuditLog>(new InMemoryReservationAuditLog());
+            services.AddSingleton<IProviderReceivableRepository>(new InMemoryProviderReceivableRepository());
             Runs.TryStartAsync(default!, default!, default).ReturnsForAnyArgs(true);
             ReversalRuns.TryStartAsync(default!, default!, default).ReturnsForAnyArgs(true);
             services.AddHttpClient(ClaimsServiceClient.HttpClientName)

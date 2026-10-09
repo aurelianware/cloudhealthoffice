@@ -55,6 +55,7 @@ public class ReversalRunService : IReversalRunService
     private readonly IRunSeparationOfDuties _separationOfDuties;
     private readonly IClaimReservationRepository _reservations;
     private readonly ICarcRarcMappingService _carcRarcMapper;
+    private readonly IProviderReceivableLedger? _receivables;
 
     public ReversalRunService(
         IPaymentRepository paymentRepository,
@@ -68,10 +69,12 @@ public class ReversalRunService : IReversalRunService
         ICurrentActor actor,
         IRunSeparationOfDuties separationOfDuties,
         IClaimReservationRepository reservations,
-        ICarcRarcMappingService carcRarcMapper)
+        ICarcRarcMappingService carcRarcMapper,
+        IProviderReceivableLedger? receivables = null)
     {
         _reservations = reservations;
         _carcRarcMapper = carcRarcMapper;
+        _receivables = receivables;
         _paymentRepository = paymentRepository;
         _reversalRunRepository = reversalRunRepository;
         _batchEraGenerator = batchEraGenerator;
@@ -390,21 +393,40 @@ public class ReversalRunService : IReversalRunService
                 run.EraEnvelopeIds.Add(record.Id);
 
                 // A recoupment nets the 835 below zero: BPR02 = 0 and the
-                // balance is carried forward (PLB FB). No receivable ledger
-                // exists yet, so the amount owed is recorded on the run.
+                // balance is carried forward (PLB FB). The amount owed opens a
+                // provider receivable in the ledger, keyed by this 835, which
+                // later payment runs recover from the provider's payments.
                 if (env.ForwardBalanceAmount < 0m)
                 {
                     var owed = -env.ForwardBalanceAmount;
-                    run.OutstandingReceivables.Add(new ProviderReceivable
+                    // The envelope's PLB01 and TRN02 come from its first payment.
+                    var firstPayment = eraInputs.First(i => i.TradingPartnerId == env.TradingPartnerId).Payment;
+                    var receivable = new ProviderReceivable
                     {
                         TradingPartnerId = env.TradingPartnerId,
                         EraEnvelopeId = record.Id,
-                        Reference = eraInputs.First(i => i.TradingPartnerId == env.TradingPartnerId).Payment.CheckNumber,
+                        Reference = firstPayment.CheckNumber,
                         Amount = owed,
-                    });
+                        ProviderNpi = firstPayment.PayeeNPI,
+                    };
+                    if (_receivables != null && !string.IsNullOrEmpty(firstPayment.PayeeNPI))
+                    {
+                        var ledger = await _receivables.RecordForwardBalanceAsync(
+                            run.TenantId, firstPayment.PayeeNPI, env.TradingPartnerId, run,
+                            record.Id, firstPayment.CheckNumber, owed, approver);
+                        receivable.ReceivableId = ledger.Id;
+                        run.Warnings.Add(
+                            $"Trading partner {env.TradingPartnerId}: reversal 835 nets to -{owed:F2}; BPR02 = 0.00 and {owed:F2} is carried forward (PLB FB) " +
+                            $"as provider receivable {ledger.Id} for NPI {firstPayment.PayeeNPI}; later payment runs recover it");
+                    }
+                    else
+                    {
+                        run.Warnings.Add(
+                            $"Trading partner {env.TradingPartnerId}: reversal 835 nets to -{owed:F2}; BPR02 = 0.00 and {owed:F2} is carried forward (PLB FB) as owed by the provider; " +
+                            "no receivable ledger is configured (or the 835 names no payee NPI), so nothing recovers it automatically");
+                    }
+                    run.OutstandingReceivables.Add(receivable);
                     run.OutstandingReceivableAmount += owed;
-                    run.Warnings.Add(
-                        $"Trading partner {env.TradingPartnerId}: reversal 835 nets to -{owed:F2}; BPR02 = 0.00 and {owed:F2} is carried forward (PLB FB) as owed by the provider; no receivable ledger recovers it yet");
                 }
                 foreach (var claimId in env.ClaimIds)
                 {

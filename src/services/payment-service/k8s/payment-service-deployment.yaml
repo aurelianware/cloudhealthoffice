@@ -74,6 +74,9 @@ spec:
           value: "http://trading-partner-service.cloudhealthoffice"
         - name: ClaimsService__BaseUrl
           value: "http://claims-service.cloudhealthoffice"
+        # Approved payee bank accounts for FFS EFT (service-only payee read).
+        - name: ProviderService__BaseUrl
+          value: "http://provider-service.cloudhealthoffice"
         resources:
           requests:
             cpu: 100m
