@@ -431,7 +431,7 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
 
     // ── Helper factories ──
 
-    private static FeeScheduleEntry Rbrvs(string schedId, string code, string desc,
+    internal static FeeScheduleEntry Rbrvs(string schedId, string code, string desc,
         decimal workRvu, decimal peNonFac, decimal peFac, decimal mpRvu, decimal convFactor,
         int? multProc)
     {
@@ -456,7 +456,7 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
         };
     }
 
-    private static FeeScheduleEntry Opps(string schedId, string code, string desc,
+    internal static FeeScheduleEntry Opps(string schedId, string code, string desc,
         string apc, string statusIndicator, decimal paymentRate)
     {
         return new FeeScheduleEntry
@@ -472,7 +472,7 @@ public class FeeScheduleLoaderService : IFeeScheduleLoaderService
         };
     }
 
-    private static FeeScheduleEntry Drg(string schedId, string drgCode, string desc,
+    internal static FeeScheduleEntry Drg(string schedId, string drgCode, string desc,
         decimal weight, decimal baseRate)
     {
         return new FeeScheduleEntry
