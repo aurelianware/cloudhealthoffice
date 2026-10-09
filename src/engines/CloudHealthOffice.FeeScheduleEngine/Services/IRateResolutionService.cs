@@ -10,8 +10,9 @@ namespace CloudHealthOffice.FeeScheduleEngine.Services;
 ///   2. Identify the applicable fee schedule (contract line override → contract default → plan default).
 ///   3. Fetch the rate line (exact modifier match → base rate fallback → UCR).
 ///   4. Calculate the base allowed amount (flat rate, RVU, percent-of-billed, per-diem, DRG, capitation).
-///   5. Apply payment modifier adjustments (26/TC, 50, 51, 52, 53, 62, 80, AS, 22).
-///   6. Return PricingResult with full adjustment audit trail.
+///   5. Apply payment modifier adjustments (26/TC, 50, 51, 52, 53, 62, 80/81/82, AS, 22).
+///   6. Apply the contract's lesser-of-billed provision when it has one (default off).
+///   7. Return PricingResult with full adjustment audit trail.
 /// </summary>
 public interface IRateResolutionService
 {

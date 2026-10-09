@@ -238,6 +238,12 @@ public static class PaymentModifiers
     /// <summary>Assistant surgeon — receives 16% of primary surgeon's rate.</summary>
     public const string AssistantSurgeon = "80";
 
+    /// <summary>Minimum assistant surgeon — paid at the assistant surgeon rate (16%).</summary>
+    public const string MinimumAssistantSurgeon = "81";
+
+    /// <summary>Assistant surgeon when no qualified resident is available — paid at the assistant surgeon rate (16%).</summary>
+    public const string AssistantSurgeonNoQualifiedResident = "82";
+
     /// <summary>
     /// Assistant-at-surgery (PA, NP, CRNA) — 85% of assistant surgeon rate.
     /// </summary>

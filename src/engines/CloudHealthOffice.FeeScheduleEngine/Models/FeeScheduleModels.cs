@@ -152,6 +152,15 @@ public class FeeScheduleLine
     /// </summary>
     public decimal Rate { get; set; }
 
+    /// <summary>
+    /// Optional facility price for a <see cref="FeeScheduleRateType.FlatRate"/> line
+    /// (the CMS MPFS "facility price" column). When set, it replaces <see cref="Rate"/>
+    /// for claim lines rendered in a facility place of service (see
+    /// <c>RateResolutionService.IsFacilityPlaceOfService</c>); <see cref="Rate"/> is then
+    /// the non-facility price. Null = one price for every place of service.
+    /// </summary>
+    public decimal? FacilityRate { get; set; }
+
     // ── MPFS RVU components (RateType == Rvu only) ──────────────
 
     /// <summary>Work RVU (physician effort, skill, time).</summary>
@@ -251,6 +260,15 @@ public class ProviderContract
     /// E.g. a provider may have a separate schedule for mental health or DME.
     /// </summary>
     public List<ProviderContractLine> ContractLines { get; set; } = new();
+
+    /// <summary>
+    /// Lesser-of-billed provision. When true, each line's allowed amount is the
+    /// lesser of the contract rate (after modifier and multiple procedure
+    /// adjustments) and the provider's billed charge; a per-stay rate (DRG case
+    /// rate, all-inclusive per diem) is compared once with the stay's total billed
+    /// charges. Default false: the contract rate is paid even when it exceeds billed.
+    /// </summary>
+    public bool LesserOfBilledCharges { get; set; }
 
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
     public DateTime LastUpdatedDate { get; set; } = DateTime.UtcNow;
@@ -355,8 +373,22 @@ public record PricingResult
     public int LineNumber { get; init; }
     public string ProcedureCode { get; init; } = string.Empty;
 
-    /// <summary>Final allowed amount after all adjustments. Zero for capitation.</summary>
+    /// <summary>Final allowed amount after all adjustments, rounded to cents. Zero for capitation.</summary>
     public decimal AllowedAmount { get; init; }
+
+    /// <summary>
+    /// Base amount the rate line produced before modifier adjustments, units,
+    /// multiple procedure reduction, per-stay allocation and lesser-of: per unit
+    /// for unit-priced lines; the line total for billed-charge based amounts and
+    /// per diem × length of stay. For audit and display.
+    /// </summary>
+    public decimal BaseAmount { get; init; }
+
+    /// <summary>
+    /// True when the contract's lesser-of-billed provision lowered the allowed
+    /// amount to the billed charge (see <see cref="ProviderContract.LesserOfBilledCharges"/>).
+    /// </summary>
+    public bool LesserOfBilledApplied { get; init; }
 
     public decimal BilledAmount { get; init; }
 

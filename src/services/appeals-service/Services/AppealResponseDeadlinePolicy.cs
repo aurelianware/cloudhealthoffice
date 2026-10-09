@@ -12,7 +12,7 @@ namespace AppealsService.Services;
 ///     the conservative clock applied when the caller supplies no
 ///     <see cref="Appeal.TargetResponseDate"/>.
 ///   - <b>Enforceable maximum</b> (<see cref="EnforceableMaximumWindow(LineOfBusiness, AppealType, AppealLevel, bool)"/> /
-///     <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool)"/>):
+///     <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool, IHolidayCalendar?)"/>):
 ///     a genuine federal ceiling. A caller-supplied date later than this is
 ///     rejected. <c>null</c> means no federal ceiling exists and caller
 ///     dates are not rejected.
@@ -50,9 +50,11 @@ namespace AppealsService.Services;
 ///     external review                                                29 CFR 2590.715-2719(d))
 ///   Medicaid State Fair Hearing         90d / 72h        90d / 3 working days  (42 CFR 431.244(f))
 ///     (expedited: 72h is the default; the enforceable instant is receipt
-///     + 3 working days, skipping Saturdays and Sundays — see
-///     <see cref="AddWorkingDays"/>; holidays are NOT modeled, so on a
-///     holiday week the enforced ceiling is earlier than the true one)
+///     + 3 working days, skipping Saturdays, Sundays and holidays — see
+///     <see cref="AddWorkingDays"/>. Holidays come from an
+///     <see cref="IHolidayCalendar"/>: U.S. federal holidays by default,
+///     plus per-tenant / per-state additions from configuration via
+///     <see cref="IAppealHolidayCalendarProvider"/>)
 ///
 /// Extensions (one per appeal, see <see cref="GetExtensionRule"/>):
 ///   Medicare Advantage appeals                 up to 14 days, standard AND expedited (42 CFR 422.590(f))
@@ -112,13 +114,17 @@ public static class AppealResponseDeadlinePolicy
 
     /// <summary>
     /// Widest calendar span <see cref="StateFairHearingExpeditedWorkingDays"/>
-    /// can cover (a Friday receipt runs to Wednesday). Only the window-based
+    /// can cover under the U.S. federal holiday calendar: a receipt the day
+    /// before a holiday that touches a weekend runs six days (Friday before
+    /// a Monday holiday → Thursday; Wednesday before Thanksgiving → the
+    /// following Tuesday). Tenant-added holidays can widen it further, so
+    /// this is informational only. Only the window-based
     /// <see cref="EnforceableMaximumWindow(LineOfBusiness, AppealType, AppealLevel, bool)"/>
     /// reports this upper bound; the instant-based
-    /// <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool)"/>
+    /// <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool, IHolidayCalendar?)"/>
     /// applies exact working-day arithmetic from the receipt.
     /// </summary>
-    public static readonly TimeSpan StateFairHearingExpeditedCeiling = TimeSpan.FromDays(5);
+    public static readonly TimeSpan StateFairHearingExpeditedCeiling = TimeSpan.FromDays(6);
 
     public static readonly TimeSpan MaxExtension = TimeSpan.FromDays(14);
 
@@ -181,7 +187,7 @@ public static class AppealResponseDeadlinePolicy
     /// Federal ceiling on the time from receipt to decision, or <c>null</c>
     /// when no federal ceiling applies (commercial / Marketplace grievances).
     /// For an expedited State Fair Hearing (a working-day clock) this is the
-    /// widest possible span; use <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool)"/>
+    /// widest possible span; use <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool, IHolidayCalendar?)"/>
     /// for the exact instant.
     /// </summary>
     public static TimeSpan? EnforceableMaximumWindow(
@@ -244,18 +250,22 @@ public static class AppealResponseDeadlinePolicy
     /// first-level appeal, or <c>null</c> when none applies.
     /// </summary>
     public static DateTime? ComputeEnforceableMaximum(
-        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, bool isUrgent) =>
-        ComputeEnforceableMaximum(receivedAt, lineOfBusiness, appealType, AppealLevel.FirstLevel, isUrgent);
+        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, bool isUrgent,
+        IHolidayCalendar? holidays = null) =>
+        ComputeEnforceableMaximum(receivedAt, lineOfBusiness, appealType, AppealLevel.FirstLevel, isUrgent, holidays);
 
     /// <summary>
     /// Latest permissible response instant under federal rules, or <c>null</c>
-    /// when none applies.
+    /// when none applies. <paramref name="holidays"/> governs working-day
+    /// clocks (expedited State Fair Hearing); <c>null</c> means U.S. federal
+    /// holidays only.
     /// </summary>
     public static DateTime? ComputeEnforceableMaximum(
-        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent)
+        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent,
+        IHolidayCalendar? holidays = null)
     {
         if (IsExpeditedStateFairHearing(lineOfBusiness, appealType, appealLevel, isUrgent))
-            return AddWorkingDays(receivedAt, StateFairHearingExpeditedWorkingDays);
+            return AddWorkingDays(receivedAt, StateFairHearingExpeditedWorkingDays, holidays);
 
         return EnforceableMaximumWindow(lineOfBusiness, appealType, appealLevel, isUrgent) is { } window
             ? receivedAt + window
@@ -270,22 +280,30 @@ public static class AppealResponseDeadlinePolicy
 
     /// <summary>
     /// <paramref name="start"/> moved forward by <paramref name="workingDays"/>
-    /// Monday–Friday days, keeping the time of day (Friday 10:00 + 3 →
-    /// Wednesday 10:00; Saturday 10:00 + 3 → Wednesday 10:00). Weekday is
-    /// taken from the instant as given (UTC for stored deadlines). Public
-    /// holidays are not modeled.
+    /// working days, keeping the time of day (Friday 10:00 + 3 → Wednesday
+    /// 10:00; Saturday 10:00 + 3 → Wednesday 10:00, one day later for each
+    /// holiday crossed). A working day is a Monday–Friday that
+    /// <paramref name="holidays"/> does not mark as a holiday; <c>null</c>
+    /// means <see cref="UsFederalHolidayCalendar"/>. The date is taken from
+    /// the instant as given (UTC for stored deadlines).
     /// </summary>
-    public static DateTime AddWorkingDays(DateTime start, int workingDays)
+    public static DateTime AddWorkingDays(DateTime start, int workingDays, IHolidayCalendar? holidays = null)
     {
+        holidays ??= UsFederalHolidayCalendar.Instance;
         var result = start;
         var remaining = workingDays;
         while (remaining > 0)
         {
             result = result.AddDays(1);
-            if (result.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) remaining--;
+            if (IsWorkingDay(DateOnly.FromDateTime(result), holidays)) remaining--;
         }
         return result;
     }
+
+    /// <summary>A Monday–Friday that is not a holiday in <paramref name="holidays"/> (default: U.S. federal).</summary>
+    public static bool IsWorkingDay(DateOnly date, IHolidayCalendar? holidays = null) =>
+        date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)
+        && !(holidays ?? UsFederalHolidayCalendar.Instance).IsHoliday(date);
 
     // ── Extension ───────────────────────────────────────────────────────
 
@@ -336,11 +354,13 @@ public static class AppealResponseDeadlinePolicy
     /// Latest instant an extended deadline may reach: the enforceable
     /// federal maximum from receipt plus the permitted extension (just the
     /// enforceable maximum when no extension is permitted). <c>null</c>
-    /// when no federal ceiling applies.
+    /// when no federal ceiling applies. <paramref name="holidays"/> as in
+    /// <see cref="ComputeEnforceableMaximum(DateTime, LineOfBusiness, AppealType, AppealLevel, bool, IHolidayCalendar?)"/>.
     /// </summary>
     public static DateTime? ComputeMaxExtendedTargetResponseDate(
-        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent) =>
-        ComputeEnforceableMaximum(receivedAt, lineOfBusiness, appealType, appealLevel, isUrgent) is { } max
+        DateTime receivedAt, LineOfBusiness lineOfBusiness, AppealType appealType, AppealLevel appealLevel, bool isUrgent,
+        IHolidayCalendar? holidays = null) =>
+        ComputeEnforceableMaximum(receivedAt, lineOfBusiness, appealType, appealLevel, isUrgent, holidays) is { } max
             ? max + GetExtensionRule(lineOfBusiness, appealType, appealLevel, isUrgent).MaxExtension
             : null;
 }

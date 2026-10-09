@@ -17,5 +17,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CloudHealthOffice.OperatingMode\CloudHealthOffice.OperatingMode.csproj" />
+    <!-- Secondary-payer COB math (complementary / non-duplication) for both
+         the per-line and the DRG / per-diem claim-level paths. -->
+    <ProjectReference Include="..\CloudHealthOffice.CobEngine\CloudHealthOffice.CobEngine.csproj" />
   </ItemGroup>
 </Project>
