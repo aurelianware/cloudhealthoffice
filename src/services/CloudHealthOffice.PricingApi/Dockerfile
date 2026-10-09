@@ -10,11 +10,16 @@ COPY src/Directory.Build.props src/
 # Copy csproj and restore (preserves layer caching)
 COPY src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj src/services/CloudHealthOffice.PricingApi/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+# Repricing runs on the shared rate resolution engine (ADR 016) + its ReferenceData dependency.
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/CloudHealthOffice.FeeScheduleEngine.csproj src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.ReferenceData/CloudHealthOffice.ReferenceData.csproj src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet restore src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj
 
 # Copy source code and build
 COPY src/services/CloudHealthOffice.PricingApi/ src/services/CloudHealthOffice.PricingApi/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/engines/CloudHealthOffice.FeeScheduleEngine/ src/engines/CloudHealthOffice.FeeScheduleEngine/
+COPY src/engines/CloudHealthOffice.ReferenceData/ src/engines/CloudHealthOffice.ReferenceData/
 RUN dotnet build src/services/CloudHealthOffice.PricingApi/CloudHealthOffice.PricingApi.csproj -c Release --no-restore
 
 # Publish stage

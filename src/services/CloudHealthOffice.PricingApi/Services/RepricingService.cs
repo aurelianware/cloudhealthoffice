@@ -1,5 +1,11 @@
+using System.Globalization;
+using CloudHealthOffice.FeeScheduleEngine.Services;
 using CloudHealthOffice.PricingApi.Data;
 using CloudHealthOffice.PricingApi.Models;
+using CloudHealthOffice.PricingApi.Services.Engine;
+using Microsoft.Extensions.Logging.Abstractions;
+using EngineDomain = CloudHealthOffice.FeeScheduleEngine.Domain;
+using EngineModels = CloudHealthOffice.FeeScheduleEngine.Models;
 
 namespace CloudHealthOffice.PricingApi.Services;
 
@@ -9,15 +15,47 @@ public interface IRepricingService
     Task<CodeLookupResponse?> LookupCodeAsync(CodeLookupRequest request);
 }
 
+/// <summary>
+/// Reprices a claim against a named fee schedule.
+///
+/// <para>
+/// Pricing is delegated to <see cref="RateResolutionService"/> — the engine claims
+/// adjudication prices with (benefit-plan-service <c>resolve-rates</c>,
+/// claims-service <c>PricingStage</c>) — so the Pricing API and adjudication return
+/// the same allowed amount for the same claim and contract (ADR 016). This class only
+/// translates: the request into the engine's <see cref="EngineModels.PricingRequest"/>
+/// lines, the schedule into the engine's model (<see cref="IPricingScheduleSource"/>),
+/// and the engine's results back into the public response, which is unchanged.
+/// </para>
+///
+/// <para>
+/// One presentation rule differs from adjudication: a line the schedule has no rate
+/// for is reported <see cref="PricingStatus.NotFound"/> at $0, where adjudication's
+/// engine result falls back to billed charges (and then pends the claim).
+/// </para>
+/// </summary>
 public class RepricingService : IRepricingService
 {
     private readonly IFeeScheduleRepository _feeScheduleRepo;
+    private readonly IPricingScheduleSource _scheduleSource;
     private readonly ILogger<RepricingService> _logger;
+    private readonly ILoggerFactory _loggerFactory;
 
     public RepricingService(IFeeScheduleRepository feeScheduleRepo, ILogger<RepricingService> logger)
+        : this(feeScheduleRepo, new LegacyEntryScheduleSource(feeScheduleRepo), logger, NullLoggerFactory.Instance)
+    {
+    }
+
+    public RepricingService(
+        IFeeScheduleRepository feeScheduleRepo,
+        IPricingScheduleSource scheduleSource,
+        ILogger<RepricingService> logger,
+        ILoggerFactory loggerFactory)
     {
         _feeScheduleRepo = feeScheduleRepo;
+        _scheduleSource = scheduleSource;
         _logger = logger;
+        _loggerFactory = loggerFactory;
     }
 
     public async Task<RepricingResponse> RepriceClaimAsync(RepricingRequest request)
@@ -25,55 +63,32 @@ public class RepricingService : IRepricingService
         var requestId = Guid.NewGuid().ToString("N")[..12];
         var warnings = new List<string>();
 
-        // Validate fee schedule exists
-        var scheduleInfo = await _feeScheduleRepo.GetScheduleInfoAsync(request.FeeScheduleId);
-        if (scheduleInfo is null)
-            throw new InvalidOperationException($"Fee schedule '{request.FeeScheduleId}' not found.");
+        var query = new PricingScheduleQuery(
+            request.ClaimType,
+            request.Locality,
+            request.Lines.Select(l => l.ProcedureCode).ToList(),
+            request.DrgCode);
 
-        var pricedLines = new List<PricedLine>();
+        var loaded = await _scheduleSource.LoadAsync(request.FeeScheduleId, query)
+            ?? throw new InvalidOperationException($"Fee schedule '{request.FeeScheduleId}' not found.");
 
-        if (request.ClaimType == ClaimType.Inpatient)
+        List<PricedLine> pricedLines;
+        if (loaded.Schedule.Type == EngineDomain.FeeScheduleType.Drg && string.IsNullOrEmpty(request.DrgCode))
         {
-            // DRG-based pricing — price at the claim level, not per-line
-            pricedLines = await PriceInpatientClaimAsync(request, warnings);
+            // Cloud Health Office has no MS-DRG grouper: an inpatient claim without a DRG cannot be priced.
+            warnings.Add("No DRG code provided. Inpatient pricing requires a valid MS-DRG. Provide DrgCode or ensure diagnoses support DRG grouping.");
+            pricedLines = request.Lines.Select(l => NotPriced(l, "DRG code required for inpatient pricing")).ToList();
         }
         else
         {
-            // Line-level pricing (Professional / Outpatient)
-            var procedureCodes = request.Lines.Select(l => l.ProcedureCode).Distinct();
-            var entries = await _feeScheduleRepo.LookupCodesAsync(
-                request.FeeScheduleId, procedureCodes, request.Locality);
-
-            var entryMap = entries.ToDictionary(
-                e => e.ProcedureCode,
-                e => e,
-                StringComparer.OrdinalIgnoreCase);
-
-            // Rank only lines eligible for the standard multiple surgery reduction
-            // (MPFS indicator 2, or OPPS status indicator T) by base rate.
-            var multiProcRanks = Enumerable.Range(0, request.Lines.Count)
-                .Where(i => entryMap.TryGetValue(request.Lines[i].ProcedureCode, out var e) && IsMultipleSurgeryEligible(e))
-                .OrderByDescending(i => GetBaseRate(entryMap, request.Lines[i], request))
-                .ThenBy(i => request.Lines[i].LineNumber)
-                .Select((index, rank) => (index, rank))
-                .ToDictionary(x => x.index, x => x.rank);
-
-            for (var i = 0; i < request.Lines.Count; i++)
-            {
-                int? rank = multiProcRanks.TryGetValue(i, out var r) ? r : null;
-                var pricedLine = await PriceLineAsync(request.Lines[i], entryMap, request, rank, warnings);
-                pricedLines.Add(pricedLine);
-            }
-
-            // Re-sort by original line number
-            pricedLines = pricedLines.OrderBy(l => l.LineNumber).ToList();
+            pricedLines = await PriceWithEngineAsync(request, loaded, warnings);
         }
 
         return new RepricingResponse
         {
             RequestId = requestId,
             FeeScheduleId = request.FeeScheduleId,
-            FeeScheduleVersion = scheduleInfo.Version,
+            FeeScheduleVersion = loaded.Version,
             ClaimType = request.ClaimType,
             DrgCode = request.DrgCode,
             TotalAllowed = pricedLines.Sum(l => l.AllowedAmount),
@@ -118,256 +133,185 @@ public class RepricingService : IRepricingService
     }
 
     // ─────────────────────────────────────────────────────────
-    //  Private pricing methods
+    //  Engine translation
     // ─────────────────────────────────────────────────────────
 
-    private async Task<List<PricedLine>> PriceInpatientClaimAsync(
-        RepricingRequest request, List<string> warnings)
+    /// <summary>
+    /// The engine request for each claim line, in claim order. Lines are numbered
+    /// by position (the public request may repeat or omit line numbers); the
+    /// engine's multiple procedure tie-break and per-stay allocation order then
+    /// follow the order the caller sent.
+    /// </summary>
+    internal static List<EngineModels.PricingRequest> BuildEngineRequests(RepricingRequest request)
     {
-        var drgCode = request.DrgCode;
-        if (string.IsNullOrEmpty(drgCode))
-        {
-            warnings.Add("No DRG code provided. Inpatient pricing requires a valid MS-DRG. Provide DrgCode or ensure diagnoses support DRG grouping.");
-            return request.Lines.Select(l => new PricedLine
-            {
-                LineNumber = l.LineNumber,
-                ProcedureCode = l.ProcedureCode,
-                Modifiers = l.Modifiers,
-                Units = l.Units,
-                AllowedAmount = 0,
-                BilledAmount = l.BilledAmount,
-                Breakdown = new PricingBreakdown(),
-                Status = PricingStatus.NotFound,
-                StatusReason = "DRG code required for inpatient pricing"
-            }).ToList();
-        }
+        var placeOfService = string.IsNullOrWhiteSpace(request.PlaceOfService)
+            ? "11"
+            : request.PlaceOfService.Trim();
+        var today = DateTime.UtcNow.Date;
 
-        var drgEntry = await _feeScheduleRepo.LookupDrgAsync(request.FeeScheduleId, drgCode);
-        if (drgEntry is null)
+        return request.Lines.Select((line, index) => new EngineModels.PricingRequest
         {
-            warnings.Add($"DRG {drgCode} not found in fee schedule {request.FeeScheduleId}.");
-            return request.Lines.Select(l => new PricedLine
-            {
-                LineNumber = l.LineNumber,
-                ProcedureCode = l.ProcedureCode,
-                Modifiers = l.Modifiers,
-                Units = l.Units,
-                AllowedAmount = 0,
-                BilledAmount = l.BilledAmount,
-                Breakdown = new PricingBreakdown(),
-                Status = PricingStatus.NotFound,
-                StatusReason = $"DRG {drgCode} not found"
-            }).ToList();
-        }
-
-        var drgPayment = (drgEntry.DrgWeight ?? 0) * (drgEntry.DrgBaseRate ?? 0);
-
-        // For DRG, the payment is at the claim level — assign to line 1
-        return request.Lines.Select((l, idx) => new PricedLine
-        {
-            LineNumber = l.LineNumber,
-            ProcedureCode = l.ProcedureCode,
-            Modifiers = l.Modifiers,
-            Units = l.Units,
-            AllowedAmount = idx == 0 ? drgPayment : 0, // Full DRG payment on first line
-            BilledAmount = l.BilledAmount,
-            Breakdown = new PricingBreakdown
-            {
-                BaseRate = drgEntry.DrgBaseRate ?? 0,
-                DrgRelativeWeight = drgEntry.DrgWeight,
-                HospitalBaseRate = drgEntry.DrgBaseRate
-            },
-            Status = PricingStatus.Priced,
-            StatusReason = idx == 0 ? null : "Bundled under DRG payment"
+            TenantId = RepricingScheduleStore.TenantId,
+            ProcedureCode = line.ProcedureCode ?? string.Empty,
+            Modifiers = line.Modifiers ?? [],
+            ProviderNpi = RepricingScheduleStore.ProviderNpi,
+            PlanId = RepricingScheduleStore.PlanId,
+            PlaceOfServiceCode = placeOfService,
+            ServiceDate = line.ServiceDate?.ToDateTime(TimeOnly.MinValue) ?? today,
+            BilledAmount = line.BilledAmount ?? 0m,
+            Units = line.Units,
+            LineNumber = index + 1,
+            TotalLineCount = request.Lines.Count,
+            DrgCode = string.IsNullOrWhiteSpace(request.DrgCode) ? null : request.DrgCode.Trim(),
+            RevenueCode = line.RevenueCode,
         }).ToList();
     }
 
-    private Task<PricedLine> PriceLineAsync(
-        ClaimLineRequest line,
-        Dictionary<string, FeeScheduleEntry> entryMap,
-        RepricingRequest request,
-        int? multiProcRank,
-        List<string> warnings)
+    private async Task<List<PricedLine>> PriceWithEngineAsync(
+        RepricingRequest request, LoadedPricingSchedule loaded, List<string> warnings)
     {
-        if (!entryMap.TryGetValue(line.ProcedureCode, out var entry))
+        var store = new RepricingScheduleStore(_scheduleSource, loaded.Schedule);
+        var engine = new RateResolutionService(store, store, _loggerFactory.CreateLogger<RateResolutionService>());
+
+        var engineRequests = BuildEngineRequests(request);
+        var resultSet = await engine.ResolveBatchAsync(engineRequests);
+        var results = resultSet.LineResults.ToDictionary(r => r.LineNumber);
+
+        var isFacility = RateResolutionService.IsFacilityPlaceOfService(engineRequests.FirstOrDefault()?.PlaceOfServiceCode);
+        var perStayLines = resultSet.LineResults.Count(r => r.IsPerStayRate);
+        var drgNotFoundReported = false;
+        var priced = new List<PricedLine>(request.Lines.Count);
+
+        for (var i = 0; i < request.Lines.Count; i++)
         {
-            warnings.Add($"Line {line.LineNumber}: Code {line.ProcedureCode} not found in {request.FeeScheduleId}.");
-            return Task.FromResult(new PricedLine
+            var line = request.Lines[i];
+            if (!results.TryGetValue(i + 1, out var result))
+            {
+                priced.Add(NotPriced(line, "No pricing result"));
+                continue;
+            }
+
+            if (result.RateSource == EngineDomain.RateSource.BilledCharges)
+            {
+                // No rate line in the named schedule.
+                if (loaded.Schedule.Type == EngineDomain.FeeScheduleType.Drg)
+                {
+                    if (!drgNotFoundReported)
+                        warnings.Add($"DRG {request.DrgCode} not found in fee schedule {request.FeeScheduleId}.");
+                    drgNotFoundReported = true;
+                    priced.Add(NotPriced(line, $"DRG {request.DrgCode} not found"));
+                }
+                else if (loaded.UnpricedReasons?.GetValueOrDefault(line.ProcedureCode ?? string.Empty) is { } unpricedReason)
+                {
+                    warnings.Add($"Line {line.LineNumber}: {unpricedReason}.");
+                    priced.Add(NotPriced(line, unpricedReason));
+                }
+                else
+                {
+                    warnings.Add($"Line {line.LineNumber}: Code {line.ProcedureCode} not found in {request.FeeScheduleId}.");
+                    priced.Add(NotPriced(line, $"Code {line.ProcedureCode} not found in fee schedule"));
+                }
+                continue;
+            }
+
+            if (result.RateSource == EngineDomain.RateSource.Unresolved)
+            {
+                var reason = result.UnresolvedReason ?? "Rate could not be determined";
+                warnings.Add($"Line {line.LineNumber}: {reason}");
+                priced.Add(NotPriced(line, reason));
+                continue;
+            }
+
+            var multiProc = result.Adjustments.FirstOrDefault(a => a.Modifier == EngineDomain.PaymentModifiers.MultipleProcedures);
+            if (multiProc is not null)
+                warnings.Add($"Line {line.LineNumber}: Multiple procedure reduction applied ({multiProc.AdjustmentFactor:P0}).");
+            foreach (var warning in result.Warnings)
+                warnings.Add($"Line {line.LineNumber}: {warning}");
+            if (line.Modifiers?.Any(m => string.Equals(m, "66", StringComparison.OrdinalIgnoreCase)) == true)
+                warnings.Add($"Line {line.LineNumber}: Modifier 66 (team surgery) is priced by report; no adjustment applied.");
+
+            priced.Add(new PricedLine
             {
                 LineNumber = line.LineNumber,
                 ProcedureCode = line.ProcedureCode,
                 Modifiers = line.Modifiers,
                 Units = line.Units,
-                AllowedAmount = 0,
+                AllowedAmount = result.AllowedAmount,
                 BilledAmount = line.BilledAmount,
-                Breakdown = new PricingBreakdown(),
-                Status = PricingStatus.NotFound,
-                StatusReason = $"Code {line.ProcedureCode} not found in fee schedule"
+                Breakdown = Breakdown(result, loaded, line, isFacility, multiProc),
+                Status = PricingStatus.Priced,
+                StatusReason = result.IsPerStayRate && perStayLines > 1
+                    ? (result.FeeScheduleType == EngineDomain.FeeScheduleType.Drg
+                        ? "Share of the DRG case rate, allocated by billed charges"
+                        : "Share of the per diem, allocated by billed charges")
+                    : null,
             });
         }
 
-        // Determine facility vs non-facility
-        var isFacility = IsFacilityPos(request.PlaceOfService);
-        var baseRate = isFacility
-            ? (entry.FacilityRate ?? entry.ApcPaymentRate ?? 0)
-            : (entry.NonFacilityRate ?? entry.ApcPaymentRate ?? 0);
-
-        // Apply modifier adjustments
-        var modifierFactor = CalculateModifierFactor(line.Modifiers, warnings, line.LineNumber);
-
-        // Apply multiple procedure reduction (standard CMS rules) — only to ranked lines
-        var multiProcFactor = multiProcRank is { } rank ? CalculateMultiProcFactor(rank, line.Modifiers) : 1.0m;
-        if (multiProcFactor < 1.0m)
-        {
-            warnings.Add($"Line {line.LineNumber}: Multiple procedure reduction applied ({multiProcFactor:P0}).");
-        }
-        else if (request.Lines.Count > 1 && MultipleProcedureIndicatorWarning(entry) is { } indicatorWarning)
-        {
-            warnings.Add($"Line {line.LineNumber}: {indicatorWarning}");
-        }
-
-        var allowedAmount = Math.Round(baseRate * line.Units * modifierFactor * multiProcFactor, 2);
-
-        return Task.FromResult(new PricedLine
-        {
-            LineNumber = line.LineNumber,
-            ProcedureCode = line.ProcedureCode,
-            Modifiers = line.Modifiers,
-            Units = line.Units,
-            AllowedAmount = allowedAmount,
-            BilledAmount = line.BilledAmount,
-            Breakdown = new PricingBreakdown
-            {
-                BaseRate = baseRate,
-                FacilityIndicator = isFacility ? "Facility" : "Non-Facility",
-                WorkRvu = entry.WorkRvu,
-                PracticeExpenseRvu = isFacility ? entry.PracticeExpenseRvuFacility : entry.PracticeExpenseRvu,
-                MalpracticeRvu = entry.MalpracticeRvu,
-                ConversionFactor = entry.ConversionFactor,
-                MultiProcReduction = multiProcFactor < 1.0m ? multiProcFactor : null,
-                ModifierAdjustment = modifierFactor != 1.0m ? $"Factor: {modifierFactor}" : null,
-                ApcCode = entry.ApcCode
-            },
-            Status = PricingStatus.Priced
-        });
+        return priced;
     }
 
-    /// <summary>
-    /// Standard CMS modifier payment adjustments.
-    /// </summary>
-    private static decimal CalculateModifierFactor(List<string>? modifiers, List<string> warnings, int lineNumber)
+    private static PricingBreakdown Breakdown(
+        EngineModels.PricingResult result,
+        LoadedPricingSchedule loaded,
+        ClaimLineRequest line,
+        bool isFacility,
+        EngineModels.RateAdjustment? multiProc)
     {
-        if (modifiers is null or { Count: 0 })
-            return 1.0m;
+        var schedule = loaded.Schedule;
 
-        var factor = 1.0m;
-
-        foreach (var mod in modifiers.Select(m => m.ToUpperInvariant()))
+        if (result.FeeScheduleType == EngineDomain.FeeScheduleType.Drg)
         {
-            factor *= mod switch
+            var drgLine = schedule.Lines.FirstOrDefault(l => string.Equals(l.ProcedureCode, result.ProcedureCode, StringComparison.OrdinalIgnoreCase))
+                ?? schedule.Lines.FirstOrDefault();
+            var weighted = drgLine?.DrgWeight is > 0m;
+            return new PricingBreakdown
             {
-                "50" => 1.5m,      // Bilateral — 150%
-                "52" => 0.5m,      // Reduced services — 50% (plan-specific, default)
-                "26" => 1.0m,      // Professional component — handled by PC/TC split in fee schedule
-                "TC" => 1.0m,      // Technical component — same
-                "80" => 0.16m,     // Assistant surgeon — 16%
-                "81" => 0.10m,     // Minimum assistant surgeon — 10%
-                "82" => 0.16m,     // Assistant surgeon (no qualified resident)
-                "62" => 0.625m,    // Co-surgeon — 62.5% each
-                "66" => 0.25m,     // Team surgery — varies, default 25%
-                "51" => 1.0m,      // Multiple procedures — handled by multi-proc logic
-                "59" => 1.0m,      // Distinct procedural service — bypasses bundling
-                "25" => 1.0m,      // Significant, separately identifiable E/M
-                "76" => 1.0m,      // Repeat procedure by same physician
-                "77" => 1.0m,      // Repeat procedure by different physician
-                "78" => 1.0m,      // Unplanned return to OR — related procedure
-                "79" => 1.0m,      // Unrelated procedure during postop
-                _ => 1.0m
+                // The hospital base rate for a weighted DRG (the case rate is base × weight);
+                // the flat case rate otherwise.
+                BaseRate = weighted ? schedule.DrgBaseRate ?? drgLine!.Rate : result.BaseAmount,
+                DrgRelativeWeight = drgLine?.DrgWeight,
+                HospitalBaseRate = weighted ? schedule.DrgBaseRate ?? drgLine!.Rate : null,
             };
         }
 
-        return factor;
-    }
+        var rateLine = schedule.Lines.FirstOrDefault(l => string.Equals(l.ProcedureCode, line.ProcedureCode, StringComparison.OrdinalIgnoreCase));
+        loaded.Details.TryGetValue(line.ProcedureCode ?? string.Empty, out var detail);
 
-    /// <summary>
-    /// A line takes part in the standard multiple surgery ranking only when its MPFS
-    /// multiple procedure indicator is 2, or — for OPPS entries, which carry no MPFS
-    /// indicator — its status indicator is T (multiple procedure discount applies).
-    /// E&amp;M (0), not-applicable (9), unsupported (3–7) and unknown indicators are
-    /// not reduced.
-    /// </summary>
-    private static bool IsMultipleSurgeryEligible(FeeScheduleEntry entry)
-        => entry.MultipleProcedureIndicator == 2
-           || (entry.MultipleProcedureIndicator is null
-               && string.Equals(entry.StatusIndicator, "T", StringComparison.OrdinalIgnoreCase));
+        // Modifier adjustments chain from the base amount; their sum gives the effective factor.
+        var modifierTotal = result.Adjustments
+            .Where(a => !string.IsNullOrEmpty(a.Modifier) && a.Modifier != EngineDomain.PaymentModifiers.MultipleProcedures)
+            .Sum(a => a.AdjustmentAmount);
+        decimal? modifierFactor = result.BaseAmount != 0m && modifierTotal != 0m
+            ? Math.Round((result.BaseAmount + modifierTotal) / result.BaseAmount, 4)
+            : null;
 
-    /// <summary>
-    /// Warning text for a multi-line claim when the entry's multiple procedure treatment
-    /// is not handled: no indicator loaded (priced with no reduction so E&amp;M is never
-    /// cut, but the missing data is surfaced) or an indicator for a CMS rule not yet
-    /// implemented (3–7 and other unrecognised values). Null when nothing to report.
-    /// </summary>
-    private static string? MultipleProcedureIndicatorWarning(FeeScheduleEntry entry)
-    {
-        return entry.MultipleProcedureIndicator switch
+        return new PricingBreakdown
         {
-            0 or 2 or 9 => null,
-            null when !string.IsNullOrEmpty(entry.StatusIndicator) => null, // OPPS — uses status indicator
-            null when entry.DrgWeight is not null => null,
-            null => $"No CMS multiple procedure indicator for {entry.ProcedureCode}; multiple procedure reduction not applied.",
-            var indicator => $"Multiple procedure indicator {indicator} for {entry.ProcedureCode} is not yet supported; multiple procedure reduction not applied.",
+            BaseRate = result.BaseAmount,
+            FacilityIndicator = isFacility ? "Facility" : "Non-Facility",
+            WorkRvu = rateLine?.WorkRvu,
+            PracticeExpenseRvu = isFacility ? rateLine?.PeRvuFacility : rateLine?.PeRvu,
+            MalpracticeRvu = rateLine?.MpRvu,
+            ConversionFactor = detail?.ConversionFactor ?? schedule.ConversionFactor,
+            MultiProcReduction = multiProc?.AdjustmentFactor,
+            ModifierAdjustment = modifierFactor is { } f && f != 1m
+                ? $"Factor: {f.ToString("0.####", CultureInfo.InvariantCulture)}"
+                : null,
+            ApcCode = detail?.ApcCode,
         };
     }
 
-    /// <summary>
-    /// Standard CMS Multiple Procedure Payment Reduction (MPPR).
-    /// Applied only to lines eligible for the standard multiple surgery rule.
-    /// Simplified: rank 0 = 100%, rank 1+ = 50% (6th+ are "by report" under CMS).
-    /// </summary>
-    private static decimal CalculateMultiProcFactor(int rank, List<string>? modifiers)
+    private static PricedLine NotPriced(ClaimLineRequest line, string reason) => new()
     {
-        // Modifier 59 or XE/XS/XP/XU bypass bundling but not MPPR
-        // Modifier 51 explicitly flags multiple procedures
-        if (rank == 0) return 1.0m;
-
-        // Check if modifier 51 is present or if there are multiple surgical procedures
-        return 0.5m;
-    }
-
-    private static bool IsFacilityPos(string? placeOfService)
-    {
-        // CMS facility POS codes
-        return placeOfService switch
-        {
-            "21" => true,  // Inpatient Hospital
-            "22" => true,  // On-Campus Outpatient Hospital
-            "23" => true,  // Emergency Room
-            "24" => true,  // Ambulatory Surgical Center
-            "26" => true,  // Military Treatment Facility
-            "31" => true,  // Skilled Nursing Facility
-            "34" => true,  // Hospice
-            "41" => true,  // Ambulance (Land)
-            "42" => true,  // Ambulance (Air/Water)
-            "51" => true,  // Inpatient Psychiatric
-            "52" => true,  // Psychiatric Facility (Partial Hosp)
-            "53" => true,  // Community Mental Health Center
-            "56" => true,  // Psychiatric Residential Treatment
-            "61" => true,  // Comprehensive Inpatient Rehab
-            "71" => true,  // State/Local Public Health Clinic
-            _ => false      // Office (11), Home (12), etc. = Non-Facility
-        };
-    }
-
-    private static decimal GetBaseRate(
-        Dictionary<string, FeeScheduleEntry> entryMap,
-        ClaimLineRequest line,
-        RepricingRequest request)
-    {
-        if (!entryMap.TryGetValue(line.ProcedureCode, out var entry))
-            return 0;
-
-        return IsFacilityPos(request.PlaceOfService)
-            ? (entry.FacilityRate ?? entry.ApcPaymentRate ?? 0)
-            : (entry.NonFacilityRate ?? entry.ApcPaymentRate ?? 0);
-    }
+        LineNumber = line.LineNumber,
+        ProcedureCode = line.ProcedureCode,
+        Modifiers = line.Modifiers,
+        Units = line.Units,
+        AllowedAmount = 0,
+        BilledAmount = line.BilledAmount,
+        Breakdown = new PricingBreakdown(),
+        Status = PricingStatus.NotFound,
+        StatusReason = reason
+    };
 }
