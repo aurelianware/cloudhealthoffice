@@ -83,8 +83,21 @@ public sealed class PersistenceStage : IClaimAdjudicationStage
                     pendDetails: context.PendDetails,
                     isPend: isPend,
                     resolvedStatus: resolvedStatus,
-                    resolvedBenefitPlanId: context.Claim.BenefitPlanId)
+                    resolvedBenefitPlanId: context.Claim.BenefitPlanId,
+                    requiredResolutionLockToken: context.ExaminerApproval?.ResolutionLockToken)
                 .ConfigureAwait(false);
+
+            if (!written && context.ExaminerApproval?.ResolutionLockToken is not null)
+            {
+                context.ResolutionLockLost = true;
+                _logger.LogWarning(
+                    "Approval re-run for claim {ClaimVersionId} did not persist: the examiner resolution lock " +
+                    "is no longer held (another resolution took over)",
+                    SanitizeForLog(context.ClaimVersionId));
+                return ClaimAdjudicationStageResult.Reject(
+                    StageName,
+                    "Adjudication projection write refused — the examiner resolution lock is no longer held.");
+            }
 
             if (!written)
             {

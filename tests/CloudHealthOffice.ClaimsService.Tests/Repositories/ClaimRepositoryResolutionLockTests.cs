@@ -79,4 +79,64 @@ public class ClaimRepositoryResolutionLockTests : IAsyncLifetime
         stored.Status.Should().Be(ClaimStatus.Approved);
         stored.ResolutionLock.Should().BeNull();
     }
+
+    private Task<bool> RerunWrites(decimal paid, string lockToken) =>
+        _repo.UpdateAdjudicationProjectionAsync(
+            Tenant, "C1", new AdjudicationResult { PayerPayment = paid, AllowedAmount = paid }, [],
+            resolvedStatus: ClaimStatus.Approved, requiredResolutionLockToken: lockToken);
+
+    /// <summary>
+    /// Follow-up 1: examiner-1's approval re-run outlives its lock;
+    /// examiner-2 takes over, re-runs (paid 58) and finalizes. examiner-1's
+    /// re-run then persists its own result (paid 112): it used to overwrite
+    /// examiner-2's finalized claim (the projection's state filter accepts
+    /// Adjudicated, which is how Approved maps). Now it is refused.
+    /// </summary>
+    [Fact]
+    public async Task ApprovalRerunWrite_AfterTheLockWasTakenOverAndFinalized_IsRefused()
+    {
+        await _repo.TryAcquireResolutionLockAsync(Tenant, "C1", "t1", "examiner-1", Now, TimeSpan.FromMinutes(10));
+        await _repo.TryAcquireResolutionLockAsync(Tenant, "C1", "t2", "examiner-2", Now.AddMinutes(11), TimeSpan.FromMinutes(10));
+        (await RerunWrites(58m, "t2")).Should().BeTrue();
+        var claim = (await _repo.GetByIdAsync("C1"))!;
+        claim.Status = ClaimStatus.Approved;
+        claim.VersionState = ClaimRepository.MapStatusToVersionState(ClaimStatus.Approved);
+        claim.ResolutionLock = null;
+        (await _repo.UpdateHoldingResolutionLockAsync(claim, "t2")).Should().NotBeNull();
+
+        (await RerunWrites(112m, "t1")).Should().BeFalse();
+
+        var stored = (await _repo.GetByIdAsync("C1"))!;
+        stored.Status.Should().Be(ClaimStatus.Approved);
+        stored.AdjudicationResult!.PayerPayment.Should().Be(58m);
+    }
+
+    /// <summary>
+    /// Follow-up 1, the other interleaving: examiner-1's stale re-run lands
+    /// between examiner-2's re-run and examiner-2's re-read. It used to be
+    /// the result examiner-2 finalized and published; now it writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task StaleApprovalRerunWrite_BetweenTheNewResolversRerunAndReread_IsRefused()
+    {
+        await _repo.TryAcquireResolutionLockAsync(Tenant, "C1", "t1", "examiner-1", Now, TimeSpan.FromMinutes(10));
+        await _repo.TryAcquireResolutionLockAsync(Tenant, "C1", "t2", "examiner-2", Now.AddMinutes(11), TimeSpan.FromMinutes(10));
+        (await RerunWrites(58m, "t2")).Should().BeTrue();
+
+        (await RerunWrites(112m, "t1")).Should().BeFalse();
+
+        (await _repo.GetByIdAsync("C1"))!.AdjudicationResult!.PayerPayment.Should().Be(58m);
+    }
+
+    [Fact]
+    public async Task HoldsResolutionLock_OnlyForTheLiveTokenOnAPendedClaim()
+    {
+        await _repo.TryAcquireResolutionLockAsync(Tenant, "C1", "t1", "examiner-1", Now, TimeSpan.FromMinutes(10));
+        (await _repo.HoldsResolutionLockAsync(Tenant, "C1", "t1", Now.AddMinutes(1))).Should().BeTrue();
+        (await _repo.HoldsResolutionLockAsync(Tenant, "C1", "t1", Now.AddMinutes(11))).Should().BeFalse();
+
+        await _repo.TryAcquireResolutionLockAsync(Tenant, "C1", "t2", "examiner-2", Now.AddMinutes(11), TimeSpan.FromMinutes(10));
+        (await _repo.HoldsResolutionLockAsync(Tenant, "C1", "t1", Now.AddMinutes(12))).Should().BeFalse();
+        (await _repo.HoldsResolutionLockAsync(Tenant, "C1", "t2", Now.AddMinutes(12))).Should().BeTrue();
+    }
 }

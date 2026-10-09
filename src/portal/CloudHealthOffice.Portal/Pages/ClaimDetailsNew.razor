@@ -1259,10 +1259,11 @@
     {
         if (_claim == null) return;
         
-        // A COB pend needs the payer order the examiner confirmed.
+        // A COB pend — the routing pend or an additional one — needs the
+        // payer order the examiner confirmed.
         int? payerSequence = null;
         var reason = "Claim approved by claims examiner";
-        if (string.Equals(_claim.PendDetails?.PendCode, "COB", StringComparison.OrdinalIgnoreCase))
+        if (CobPend.On(_claim.PendDetails))
         {
             var dialog = await DialogService.ShowAsync<CobPayerOrderDialog>("Confirm payer order");
             var choice = await dialog.Result;

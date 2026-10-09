@@ -514,7 +514,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         PendDetails? pendDetails = null,
         bool isPend = false,
         ClaimStatus? resolvedStatus = null,
-        string? resolvedBenefitPlanId = null)
+        string? resolvedBenefitPlanId = null,
+        string? requiredResolutionLockToken = null)
     {
         var b = Builders<Claim>.Filter;
 
@@ -580,6 +581,14 @@ public class ClaimRepositoryMongo : IClaimRepository
         }
 
         var rowFilter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, head.Id));
+        if (requiredResolutionLockToken is not null)
+        {
+            // Follow-up 1: an examiner-approval re-run writes only while its
+            // resolution lock is still held — evaluated by the update itself,
+            // so a re-run that outlived its lock cannot overwrite the claim
+            // another examiner took over (or finalized).
+            rowFilter = b.And(rowFilter, b.Eq(c => c.ResolutionLock!.Token, requiredResolutionLockToken));
+        }
         var result = await _collection.UpdateOneAsync(rowFilter, update, cancellationToken: ct);
         if (result.MatchedCount == 0)
         {
@@ -606,6 +615,8 @@ public class ClaimRepositoryMongo : IClaimRepository
                 b.Eq(c => c.TenantId, tenantId),
                 b.Eq(c => c.Id, head.Id),
                 b.Not(b.In(c => c.Status, ClaimRepository.FinalDispositions)));
+            if (requiredResolutionLockToken is not null)
+                pendFilter = b.And(pendFilter, b.Eq(c => c.ResolutionLock!.Token, requiredResolutionLockToken));
             var pendUpdate = Builders<Claim>.Update.Set(c => c.Status, ClaimStatus.Pended);
             await _collection.UpdateOneAsync(pendFilter, pendUpdate, cancellationToken: ct);
             return true;
@@ -620,7 +631,8 @@ public class ClaimRepositoryMongo : IClaimRepository
                     ClaimRepository.MapStatusToVersionState(resolvedStatus.Value),
                     ct,
                     adjudicationResult,
-                    head.Status)
+                    head.Status,
+                    requiredResolutionLockToken)
                 .ConfigureAwait(false);
         }
 
@@ -709,13 +721,20 @@ public class ClaimRepositoryMongo : IClaimRepository
         ClaimVersionState desiredVersionState,
         CancellationToken ct,
         AdjudicationResult? incomingAdjudication = null,
-        ClaimStatus? preWriteStatus = null)
+        ClaimStatus? preWriteStatus = null,
+        string? requiredResolutionLockToken = null)
     {
         var b = Builders<Claim>.Filter;
+        // Follow-up 1 (PR #1279 review): an approval re-run's status write is
+        // fenced on the same resolution lock as its projection write.
+        var lockFence = requiredResolutionLockToken is null
+            ? b.Empty
+            : b.Eq(c => c.ResolutionLock!.Token, requiredResolutionLockToken);
         var statusFilter = b.And(
             b.Eq(c => c.TenantId, tenantId),
             b.Eq(c => c.Id, rowId),
-            b.Not(b.In(c => c.Status, ClaimRepository.SynchronousWritebackBlockedStatuses)));
+            b.Not(b.In(c => c.Status, ClaimRepository.SynchronousWritebackBlockedStatuses)),
+            lockFence);
         var statusUpdate = Builders<Claim>.Update
             .Set(c => c.Status, desiredStatus)
             .Set(c => c.VersionState, desiredVersionState);
@@ -762,7 +781,8 @@ public class ClaimRepositoryMongo : IClaimRepository
             var repairFilter = b.And(
                 b.Eq(c => c.TenantId, tenantId),
                 b.Eq(c => c.Id, rowId),
-                repairEvidenceFilter);
+                repairEvidenceFilter,
+                lockFence);
 
             var repairResult = await _collection.UpdateOneAsync(repairFilter, statusUpdate, cancellationToken: ct);
             if (repairResult.MatchedCount > 0)
@@ -933,6 +953,19 @@ public class ClaimRepositoryMongo : IClaimRepository
             b.Eq(c => c.ResolutionLock!.Token, lockToken));
         var result = await _collection.ReplaceOneAsync(filter, claim, cancellationToken: ct);
         return result.MatchedCount == 1 ? claim : null;
+    }
+
+    public async Task<bool> HoldsResolutionLockAsync(
+        string tenantId, string claimId, string token, DateTime now, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, tenantId),
+            b.Eq(c => c.Id, claimId),
+            b.Eq(c => c.Status, ClaimStatus.Pended),
+            b.Eq(c => c.ResolutionLock!.Token, token),
+            b.Gt(c => c.ResolutionLock!.ExpiresAt, now));
+        return await _collection.CountDocumentsAsync(filter, new CountOptions { Limit = 1 }, ct) > 0;
     }
 
     public async Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default)

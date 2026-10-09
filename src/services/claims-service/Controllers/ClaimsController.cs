@@ -1737,12 +1737,22 @@ public class ClaimsController : ControllerBase
                         SecondApproverId = secondApprover,
                         Reason = request.Reason,
                         CorrelationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier,
+                        // The re-run's write is fenced on this lock (follow-up 1).
+                        ResolutionLockToken = lockToken,
                         PayerSequence = request.PayerSequence,
                         PayerOrderOverrideAuthorized = canOverride && hasReason,
                         ReviewedPend = reviewedPend,
                     },
                     HttpContext.RequestAborted);
 
+                if (rerun.ResolutionLockLost
+                    || (rerun.Outcome != ClaimAdjudicationOutcome.Pass
+                        && !await HoldsResolutionLockAsync(claimId, lockToken)))
+                {
+                    // The re-run outlived the lock and its write was refused:
+                    // another examiner's resolution owns the claim now.
+                    return LostLock(claimId);
+                }
                 if (rerun.Outcome != ClaimAdjudicationOutcome.Pass)
                 {
                     var needsPayerOrder = IsCobPend(reviewedPend) && request.PayerSequence is null;
@@ -1760,7 +1770,9 @@ public class ClaimsController : ControllerBase
                 }
                 overridden = rerun.OverriddenPends;
 
-                // The re-run persisted the new adjudication result; finalize that.
+                // The re-run persisted the new adjudication result (fenced on
+                // this lock, so it is this resolver's); finalize that. The
+                // final write below is fenced on the lock too.
                 claim = await _claimRepository.GetByIdAsync(claimId) ?? claim;
             }
             else
@@ -1768,6 +1780,10 @@ public class ClaimsController : ControllerBase
                 // A claim pended after benefit calculation (NCCI, AI) priced
                 // in Production and wrote engine accumulators; a denial backs
                 // them out (H4). Idempotent: nothing to reverse is a no-op.
+                // Only while this resolver still holds the lock (follow-up
+                // 1): a resolver that lost it must not reverse accumulators
+                // under a claim another examiner is approving.
+                if (!await HoldsResolutionLockAsync(claimId, lockToken)) return LostLock(claimId);
                 await ReverseEngineAccumulatorsAsync(claim, HttpContext.RequestAborted);
             }
 
@@ -1865,6 +1881,13 @@ public class ClaimsController : ControllerBase
         pendFingerprint = PendDetails.ComputeFingerprint(claim.PendDetails),
         pendReasons = PendReasonsOf(claim),
     });
+
+    /// <summary>
+    /// The claim still holds this resolution lock, unexpired, and is still
+    /// Pended (read now, immediately before a side effect).
+    /// </summary>
+    private Task<bool> HoldsResolutionLockAsync(string claimId, string lockToken) =>
+        _claimRepository.HoldsResolutionLockAsync(GetTenantId(), claimId, lockToken, DateTime.UtcNow, CancellationToken.None);
 
     private ConflictObjectResult LostLock(string claimId) => Conflict(new
     {

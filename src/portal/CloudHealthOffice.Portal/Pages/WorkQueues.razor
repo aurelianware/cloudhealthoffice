@@ -336,10 +336,11 @@
                 : "Overridden";
         var user = await UserContextService.GetCurrentUserAsync();
 
-        // A COB pend needs the payer order the examiner confirmed.
+        // A COB pend — the routing pend or an additional one — needs the
+        // payer order the examiner confirmed.
         int? payerSequence = null;
         var reason = "Examiner override — reviewed and approved";
-        if (string.Equals(item?.QueueReasonCode, "COB", StringComparison.OrdinalIgnoreCase))
+        if (CobPend.On(item))
         {
             var dialog = await DialogService.ShowAsync<CobPayerOrderDialog>("Confirm payer order");
             var choice = await dialog.Result;

@@ -480,9 +480,21 @@ ever recorded**. Approval now re-adjudicates it:
 4. **What the examiner saw (round-3 verification, M4).** An approval must
    send `pendFingerprint` — the fingerprint of the pends the examiner
    viewed (`pendDetails.fingerprint` on the claim, `pendFingerprint` on the
-   work-queue item: the pend time plus a hash of every "code: reason"). If
-   the stored pends differ (the claim was re-adjudicated since), **409** with
-   the current pends. Every input (`disposition`, `aiExaminerAgreement`,
+   work-queue item). If the stored pends differ (the claim was
+   re-adjudicated since), **409** with the current pends. The fingerprint
+   (`v2-…`, PR #1278 follow-up 5) hashes the **sorted** (ordinal) set of
+   every "code: reason" plus the sorted NCCI/MUE edit failures and duplicate
+   matches behind them. It no longer includes the pend time: every re-run
+   sets a new `PendedAt`, so a failed (transient) approval that re-pended the
+   same pends used to invalidate the examiner's fingerprint and any waiting
+   first approval. Dropping the time does not reopen the "pends changed
+   between page load and click" hole: anything the examiner was shown that
+   changes — a pend, a reason, a finding — changes the hash; a re-run that
+   produces exactly the same pends and findings leaves the review exactly as
+   accurate, and the re-run overrides only pends matching what was reviewed.
+   (Fingerprints in the old format, including a waiting first approval's,
+   stop matching once at deploy: reload and approve again.)
+   Every input (`disposition`, `aiExaminerAgreement`,
    `payerSequence`, the fingerprint, permissions) is validated before
    anything happens — no re-run, no reversal, no write (L7).
 5. Only when the re-run passes is the claim set to Approved and finalized —
@@ -495,6 +507,25 @@ ever recorded**. Approval now re-adjudicates it:
    on the token, Cosmos read-check-replace with the ETag); the lock lasts 10
    minutes. A resolver whose lock expired and was taken over gets 409 and
    publishes nothing (L6).
+   **The re-run's own write is fenced too (PR #1278 follow-up 1).** The
+   approval carries the lock token (`ExaminerApproval.ResolutionLockToken`);
+   `PersistenceStage` passes it to `UpdateAdjudicationProjectionAsync`
+   (`requiredResolutionLockToken`), whose write lands only while
+   `ResolutionLock.Token` still equals it (Mongo: the update filter; Cosmos:
+   a patch `FilterPredicate`, evaluated at commit). Before, the projection
+   accepted any Submitted / Adjudicated row, so resolver A's re-run that
+   outlived its lock could overwrite resolver B's finalized claim (paid 112
+   over B's 58), or land between B's re-run and B's re-read and have B
+   finalize and publish A's amounts. The follow-up status write
+   (`isPend` / guarded status patch) carries the same fence. A refused
+   write marks the run `ResolutionLockLost`: the orchestrator then **emits
+   nothing** — no audit `ClaimVersionAdjudicated` event, no Service Bus
+   message, no adjustment callback (a Reject callback would move an
+   in-flight adjustment AwaitingReadjudication → Failed, and the new
+   holder's Pass would then be a no-op, leaving the predecessor unreversed)
+   — and the resolver returns the lost-lock 409. A denial checks the lock is still held (`HoldsResolutionLockAsync`:
+   Pended, this token, unexpired) immediately before reversing the engine
+   accumulators, and aborts with the same 409 if not.
 6. **Audit.** Every resolution appends an `ExaminerResolutionRecord` to
    `Claim.ExaminerResolutions` — disposition, approver(s) and each
    approver's reason, payer sequence, the fingerprint and list of the
@@ -507,8 +538,10 @@ ever recorded**. Approval now re-adjudicates it:
    Production and wrote them. accumulator-service skips a ClaimFinalized
    event whose status is Denied (and reverses one that had applied).
 8. **Portal.** The work queue's override and the claim page's approve send
-   `pendFingerprint` and `payerSequence` (a payer-order dialog for COB
-   pends) and show the
+   `pendFingerprint` and `payerSequence` (a payer-order dialog whenever any
+   pend is COB — the routing pend code, or an entry of the work-queue item's
+   `pendReasons` / `PendDetails.AdditionalPendReasons`, PR #1278 follow-up 4;
+   `CobPend`) and show the
    service's 400 / 403 / 409 reason — not "service unavailable"; a 202 shows
    "waiting for a second approver".
 
@@ -786,6 +819,32 @@ on secondary/tertiary claims; past accumulators are not rewritten.
   replacement must name the latest version (C2). Tombstones now record the
   replacement that made them, so this holds when C2 overtook C1 too. A
   replacement after the original's own void still counts.
+- **A void is not a replacement (PR #1278 follow-up 3).** `ClaimReversed`
+  rows and reversal tombstones record `ReversalKind` (`Replacement`, `Void`
+  — a frequency-8 void or the claim's own void — or `Denial`). Only a
+  replacement makes a later replacement of the same original a "second
+  replacement". Before, a void V1's row named V1 and a later replacement C2
+  of the same original was skipped (deductible 0, reported as an orphan).
+  When the original was voided rather than replaced, the first replacement
+  to claim the `{original}:replacement` marker is the replacement of record;
+  a further one is still skipped. Rows written before the kind was recorded
+  keep the earlier rule (another claim as source = a replacement).
+- **A stalled apply cannot count after a takeover (PR #1278 follow-up 2).**
+  The stale-Pending takeover above assumed the earlier apply had crashed; it
+  may only have stalled. Before, C1's apply could stall past the lease before
+  its append, C2 take C1's marker over, tombstone it and apply 200, and C1
+  then resume, append 100 and overwrite the tombstone (deductible 300). Now:
+  every `Proceed` gets a fresh **lease token** on the marker
+  (`BeginLeaseAsync`), and completions are conditional on the marker still
+  being Pending under that token (`CompleteLeaseAsync`; Mongo update filter,
+  Cosmos ETag replace). Taking over a stale Pending marker also appends a
+  zero-delta `ClaimTombstoned` row at the next version of the snapshot the
+  claim applies to, so an append the stalled apply computed earlier
+  conflicts. The apply loop re-checks, after every snapshot read, that it
+  still holds its lease and that no `{id}:reversal` has completed, and stops
+  if not. If the stalled apply's row lands first, the tombstone row
+  conflicts, the reversal finds the row and reverses it — counted once
+  either way.
 - **Denied claims** are not applied (`ApplyOutcome.Skipped`, marker
   `DeniedNotApplied`); a claim that had applied and is later finalized as
   Denied is reversed.
@@ -826,6 +885,22 @@ on secondary/tertiary claims; past accumulators are not rewritten.
   log, can make it inexact (never more than the row recorded).
 - **Cosmos reversal uniqueness** relies on the versioned write and lease (no
   unique key policy is created from code); Mongo also has the unique index.
+- **Tombstone fence snapshot.** The zero-delta `ClaimTombstoned` row is
+  appended on the snapshot the *reversing* claim resolves to (its member and
+  service date), not necessarily the original's. A replacement that changes
+  the member or plan year therefore does not force a stalled original's
+  append to conflict: that append (computed before the takeover) can still
+  land on the original's snapshot. The lease check on later passes and the
+  conditional completion still apply. Not fixed here.
+- **Lock fence scope — accumulators are not fenced.** The approval re-run's
+  projection and status writes are fenced on the resolution lock, but its
+  `BenefitCalculationStage` (Order 300) engine accumulator writes are not:
+  they happen in Production before Persistence and know nothing of the lock.
+  If A's re-run outlives its lock after benefit calculation, and the new
+  holder B then *denies* the claim, A's accumulator writes can remain
+  applied (B's denial reversal runs before or concurrently with them; the
+  engine's writes are idempotent per claim id, not per resolver). Not fixed
+  here.
 - **Store clamp.** Only `ChoAccumulatorService` (Mongo / Cosmos) clamps at
   write time; the Redis accumulator service does not.
 - 2320/2430 `AMT*EAF` (remaining patient liability) is not read; patient

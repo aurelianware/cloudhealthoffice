@@ -176,8 +176,17 @@ public interface IClaimRepository
     /// an already Pended or final claim.
     /// </para>
     ///
+    /// <para>
+    /// <paramref name="requiredResolutionLockToken"/> (PR #1278 follow-up 1)
+    /// — set by an examiner-approval re-run: the write lands only while the
+    /// row still holds that examiner resolution lock
+    /// (<c>ResolutionLock.Token</c>), checked by the write itself. A re-run
+    /// that outlived its lock (another examiner took over and may have
+    /// finalized the claim) writes nothing and this returns false.
+    /// </para>
+    ///
     /// Returns true on success, false when no head row was found for the
-    /// chain.
+    /// chain (or the resolution lock is no longer held).
     /// </summary>
     Task<bool> UpdateAdjudicationProjectionAsync(
         string tenantId,
@@ -188,7 +197,8 @@ public interface IClaimRepository
         PendDetails? pendDetails = null,
         bool isPend = false,
         ClaimStatus? resolvedStatus = null,
-        string? resolvedBenefitPlanId = null);
+        string? resolvedBenefitPlanId = null,
+        string? requiredResolutionLockToken = null);
 
     /// <summary>
     /// Fast claim-level adjudication projection for direct local workflow
@@ -305,6 +315,15 @@ public interface IClaimRepository
 
     /// <summary>Clears the resolution lock if <paramref name="token"/> still holds it.</summary>
     Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default);
+
+    /// <summary>
+    /// True while the claim is still Pended and <paramref name="token"/>
+    /// holds its resolution lock, unexpired at <paramref name="now"/>. Read
+    /// immediately before a side effect that is not itself fenced on the lock
+    /// (a denial's accumulator reversal, PR #1278 follow-up 1).
+    /// </summary>
+    Task<bool> HoldsResolutionLockAsync(
+        string tenantId, string claimId, string token, DateTime now, CancellationToken ct = default);
 
     /// <summary>
     /// Replaces the claim only while <paramref name="lockToken"/> still holds
@@ -1279,7 +1298,8 @@ public class ClaimRepository : IClaimRepository
         PendDetails? pendDetails = null,
         bool isPend = false,
         ClaimStatus? resolvedStatus = null,
-        string? resolvedBenefitPlanId = null)
+        string? resolvedBenefitPlanId = null,
+        string? requiredResolutionLockToken = null)
     {
         // Resolve the head (non-terminal-but-adjudicatable) row by chain key.
         // PatchItemAsync is keyed on the per-row document Id, so we look up
@@ -1383,17 +1403,34 @@ public class ClaimRepository : IClaimRepository
             ops.Add(PatchOperation.Set("/benefitPlanId", resolvedBenefitPlanId));
         }
 
+        // Follow-up 1: an examiner-approval re-run writes only while its
+        // resolution lock is still held, evaluated by Cosmos at commit time.
+        PatchItemRequestOptions? fence = null;
+        if (requiredResolutionLockToken is not null)
+        {
+            fence = new PatchItemRequestOptions
+            {
+                FilterPredicate = $"FROM c WHERE c.resolutionLock.token = '{ResolutionLockTokenLiteral(requiredResolutionLockToken)}'",
+            };
+        }
+
         try
         {
             await _container.PatchItemAsync<Claim>(
                 rowId,
                 new PartitionKey(tenantId),
                 ops,
-                cancellationToken: ct);
+                fence,
+                ct);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             // Row deleted between lookup and patch.
+            return false;
+        }
+        catch (CosmosException ex) when (fence is not null && ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+        {
+            // The resolution lock was taken over: nothing written.
             return false;
         }
 
@@ -1422,7 +1459,10 @@ public class ClaimRepository : IClaimRepository
                     rowId,
                     new PartitionKey(tenantId),
                     new List<PatchOperation> { PatchOperation.Set("/status", ClaimStatus.Pended) },
-                    new PatchItemRequestOptions { FilterPredicate = FinalDispositionFilterPredicate },
+                    new PatchItemRequestOptions
+                    {
+                        FilterPredicate = WithResolutionLockFence(FinalDispositionFilterPredicate, requiredResolutionLockToken),
+                    },
                     ct);
             }
             catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
@@ -1446,7 +1486,8 @@ public class ClaimRepository : IClaimRepository
                     MapStatusToVersionState(resolvedStatus.Value),
                     ct,
                     adjudicationResult,
-                    head.Status)
+                    head.Status,
+                    requiredResolutionLockToken)
                 .ConfigureAwait(false);
         }
 
@@ -1549,14 +1590,18 @@ public class ClaimRepository : IClaimRepository
         ClaimVersionState desiredVersionState,
         CancellationToken ct,
         AdjudicationResult? incomingAdjudication = null,
-        ClaimStatus? preWriteStatus = null)
+        ClaimStatus? preWriteStatus = null,
+        string? requiredResolutionLockToken = null)
     {
         var statusOps = new List<PatchOperation>
         {
             PatchOperation.Set("/status", desiredStatus),
             PatchOperation.Set("/versionState", desiredVersionState),
         };
-        var options = new PatchItemRequestOptions { FilterPredicate = SynchronousWritebackBlockedFilterPredicate };
+        var options = new PatchItemRequestOptions
+        {
+            FilterPredicate = WithResolutionLockFence(SynchronousWritebackBlockedFilterPredicate, requiredResolutionLockToken),
+        };
 
         try
         {
@@ -1587,7 +1632,10 @@ public class ClaimRepository : IClaimRepository
                 var repairFilter = desiredStatus == ClaimStatus.Denied
                     ? ContradictoryApprovedRepairFilterPredicate
                     : ContradictoryDeniedRepairFilterPredicate;
-                var repairOptions = new PatchItemRequestOptions { FilterPredicate = repairFilter };
+                var repairOptions = new PatchItemRequestOptions
+                {
+                    FilterPredicate = WithResolutionLockFence(repairFilter, requiredResolutionLockToken),
+                };
                 try
                 {
                     await _container.PatchItemAsync<Claim>(rowId, new PartitionKey(tenantId), statusOps, repairOptions, ct);
@@ -1647,6 +1695,19 @@ public class ClaimRepository : IClaimRepository
     /// <summary>Cosmos patch FilterPredicate for <see cref="IsFinalDisposition"/> — built from <see cref="FinalDispositions"/>; Pended is deliberately absent (re-pending is allowed).</summary>
     private static readonly string FinalDispositionFilterPredicate =
         BuildStatusNotInFilterPredicate(FinalDispositions);
+
+    /// <summary>
+    /// <paramref name="predicate"/> ("FROM c WHERE …"), additionally requiring
+    /// the resolution lock <paramref name="lockToken"/> when one is given
+    /// (an approval re-run's writes, PR #1278 follow-up 1).
+    /// </summary>
+    internal static string WithResolutionLockFence(string predicate, string? lockToken)
+    {
+        if (lockToken is null) return predicate;
+        const string prefix = "FROM c WHERE ";
+        var condition = predicate.StartsWith(prefix, StringComparison.Ordinal) ? predicate[prefix.Length..] : predicate;
+        return $"{prefix}({condition}) AND c.resolutionLock.token = '{ResolutionLockTokenLiteral(lockToken)}'";
+    }
 
     private static string BuildStatusNotInFilterPredicate(IReadOnlyList<ClaimStatus> blockedStatuses) =>
         $"FROM c WHERE NOT (c.status IN ({string.Join(",", blockedStatuses.Select(s => $"'{CosmosStatusLiteral(s)}'"))}))";
@@ -1862,6 +1923,32 @@ public class ClaimRepository : IClaimRepository
                 ops,
                 cancellationToken: ct);
             return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// A resolution lock token for a Cosmos FilterPredicate (which takes no
+    /// parameters). Tokens are server-generated GUIDs; anything else is refused.
+    /// </summary>
+    internal static string ResolutionLockTokenLiteral(string token) =>
+        token.Length is > 0 and <= 64 && token.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')
+            ? token
+            : throw new ArgumentException("Invalid resolution lock token.", nameof(token));
+
+    public async Task<bool> HoldsResolutionLockAsync(
+        string tenantId, string claimId, string token, DateTime now, CancellationToken ct = default)
+    {
+        try
+        {
+            var current = (await _container.ReadItemAsync<Claim>(claimId, new PartitionKey(tenantId), cancellationToken: ct)).Resource;
+            return current.Status == ClaimStatus.Pended
+                   && current.ResolutionLock is { } held
+                   && string.Equals(held.Token, token, StringComparison.Ordinal)
+                   && held.ExpiresAt > now;
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {

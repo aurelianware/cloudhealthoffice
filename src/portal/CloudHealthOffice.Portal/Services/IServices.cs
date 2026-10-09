@@ -2771,6 +2771,12 @@ public class WorkQueueItem
     public DateTime ServiceDate { get; set; }
     public string QueueReason { get; set; } = string.Empty;
     public string QueueReasonCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Every pend on the claim ("{code}: {reason}"), the routing one first —
+    /// a COB pend can be an additional one (see <see cref="CobPend"/>).
+    /// </summary>
+    public List<string> PendReasons { get; set; } = new();
     public int DaysInQueue { get; set; }
     public string Priority { get; set; } = "Low";
     public string AssignedTo { get; set; } = string.Empty;

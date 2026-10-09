@@ -580,11 +580,67 @@ public class ClaimAdjudicationOrchestratorTests
             .ResolveBenefitPlanIdAsync(default!, default!, default, default, default);
     }
 
+    /// <summary>
+    /// PR #1279 review B1: examiner A's approval re-run outlives its lock and
+    /// examiner B takes over. A's fenced write is refused; that run used to
+    /// emit a Reject (audit, Service Bus, adjustment callback), moving an
+    /// in-flight adjustment AwaitingReadjudication → Failed, so B's Pass
+    /// callback was an idempotent no-op and the predecessor was never
+    /// reversed. A lost-lock run now emits nothing; B's finalize moves the
+    /// adjustment to PendingReversal.
+    /// </summary>
+    [Fact]
+    public async Task ApprovalRerun_LostLock_EmitsNothing_AndTheNewHoldersPassMovesTheAdjustment()
+    {
+        SetupAdapterReturningClaim();
+        var claims = Substitute.For<global::ClaimsService.Repositories.IClaimRepository>();
+        claims.UpdateAdjudicationProjectionAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<AdjudicationResult>(),
+                Arg.Any<IReadOnlyList<LineAdjudicationResult>>(), Arg.Any<CancellationToken>(),
+                Arg.Any<PendDetails?>(), Arg.Any<bool>(), Arg.Any<ClaimStatus?>(), Arg.Any<string?>(),
+                Arg.Any<string?>())
+            .Returns(ci => ci.ArgAt<string?>(9) == "lock-b"); // B holds the lock now
+        var adjustment = new ClaimAdjustment
+        {
+            Id = "adj-1", TenantId = "tenant-1", ClaimVersionId = "chain-1", PredecessorClaimId = "pred-1",
+            PredecessorVersionId = "pred-1", NewClaimId = "ver-1", AdjustmentReason = "correction",
+            IdempotencyKey = "idem-1", RequestHash = "hash", CreatedBy = "actor",
+            Status = ClaimAdjustmentStatus.AwaitingReadjudication,
+        };
+        var adjustments = Substitute.For<global::ClaimsService.Repositories.IClaimAdjustmentRepository>();
+        adjustments.GetByNewClaimIdAsync("tenant-1", "ver-1", Arg.Any<CancellationToken>()).Returns(adjustment);
+        var adjustmentService = new ClaimAdjustmentService(
+            claims, adjustments, Substitute.For<IClaimSubmissionService>(), _eventPublisher, _messageBus,
+            NullLogger<ClaimAdjustmentService>.Instance);
+        var orch = BuildOrchestrator(
+            [new PersistenceStage(claims, NullLogger<PersistenceStage>.Instance)],
+            adjustmentService: adjustmentService);
+
+        var a = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ExaminerId = "examiner-a", ResolutionLockToken = "lock-a" }, CancellationToken.None);
+
+        Assert.True(a.ResolutionLockLost);
+        Assert.NotEqual(ClaimAdjudicationOutcome.Pass, a.Outcome);
+        await _eventPublisher.DidNotReceiveWithAnyArgs().PublishVersionAdjudicatedAsync(default!, default!, default, default);
+        await _messageBus.DidNotReceiveWithAnyArgs().SendAsync<ClaimVersionAdjudicatedMessage>(default!, default!, default, default);
+        Assert.Equal(ClaimAdjustmentStatus.AwaitingReadjudication, adjustment.Status);
+        await adjustments.DidNotReceiveWithAnyArgs().UpdateAsync(default!, default);
+
+        var b = await orch.ReadjudicateForApprovalAsync("tenant-1", "ver-1",
+            new ExaminerApproval { ExaminerId = "examiner-b", ResolutionLockToken = "lock-b" }, CancellationToken.None);
+
+        Assert.False(b.ResolutionLockLost);
+        Assert.Equal(ClaimAdjudicationOutcome.Pass, b.Outcome);
+        Assert.Equal(ClaimAdjustmentStatus.PendingReversal, adjustment.Status);
+        await _eventPublisher.ReceivedWithAnyArgs(1).PublishVersionAdjudicatedAsync(default!, default!, default, default);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private ClaimAdjudicationOrchestrator BuildOrchestrator(
         IEnumerable<IClaimAdjudicationStage> stages,
-        AdjudicationPipelineOptions? options = null)
+        AdjudicationPipelineOptions? options = null,
+        IClaimAdjustmentService? adjustmentService = null)
     {
         return new ClaimAdjudicationOrchestrator(
             _factory,
@@ -595,7 +651,7 @@ public class ClaimAdjudicationOrchestratorTests
             _eventPublisher,
             _messageBus,
             new AdjudicationTenantContext(),
-            Substitute.For<IClaimAdjustmentService>(),
+            adjustmentService ?? Substitute.For<IClaimAdjustmentService>(),
             Options.Create(options ?? new AdjudicationPipelineOptions()),
             NullLogger<ClaimAdjudicationOrchestrator>.Instance);
     }

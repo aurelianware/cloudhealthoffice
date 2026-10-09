@@ -54,6 +54,9 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
         _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
         _repo.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Claim>());
+        _repo.HoldsResolutionLockAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(true);
     }
 
     private HttpClient Client(string user, string role)
@@ -431,6 +434,73 @@ public class ExaminerResolutionTests : IClassFixture<ClaimsApiFactory>
         await _versionPublisher.Received(1).PublishVersionResolvedAsync(
             Arg.Any<Claim>(), "Approved", "x", "examiner-1", Arg.Any<string>(),
             Arg.Is<CancellationToken>(t => !t.CanBeCanceled));
+    }
+
+    // ── PR #1278 follow-up 1 ─────────────────────────────────────────
+
+    /// <summary>The re-run carries the lock token this resolver acquired, so its write is fenced on it.</summary>
+    [Fact]
+    public async Task Approval_RerunCarriesTheAcquiredLockToken()
+    {
+        string? acquired = null;
+        _repo.TryAcquireResolutionLockAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Do<string>(t => acquired = t), Arg.Any<string?>(),
+                Arg.Any<DateTime>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-token", "DUPLICATE", "possible duplicate"), new { disposition = "Approved", reason = "x" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(acquired);
+        await _readjudicator.Received(1).ReadjudicateForApprovalAsync(
+            "test-tenant", "claim-token", Arg.Is<ExaminerApproval>(a => a.ResolutionLockToken == acquired),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The re-run outlived the lock: its fenced write was refused and the
+    /// re-run did not pass. That is a lost lock (409, nothing finalized or
+    /// published), not "re-adjudication did not pass, try again".
+    /// </summary>
+    [Fact]
+    public async Task Approval_RerunOutlivedTheLock_Is409LostLock_NothingFinalized()
+    {
+        _readjudicator.ReadjudicateForApprovalAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>())
+            .Returns(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Reject,
+                "Persistence: Adjudication projection write refused — the examiner resolution lock is no longer held."));
+        _repo.HoldsResolutionLockAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-outlived", "DUPLICATE", "possible duplicate"), new { disposition = "Approved", reason = "x" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("another examiner", await response.Content.ReadAsStringAsync());
+        await _repo.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
+        await _versionPublisher.DidNotReceiveWithAnyArgs().PublishVersionResolvedAsync(default!, default!, default, default, default, default);
+    }
+
+    /// <summary>
+    /// A denial whose lock was taken over (the request stalled past it) must
+    /// not reverse the engine accumulators under a claim another examiner is
+    /// now approving: checked immediately before the reversal; 409.
+    /// </summary>
+    [Fact]
+    public async Task Deny_AfterLosingTheLock_DoesNotReverseAccumulators()
+    {
+        _repo.HoldsResolutionLockAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await Resolve(Client("examiner-1", ChoRolePermissions.ClaimsExaminer),
+            Pended("claim-deny-lost", "NCCI", "bundled pair"), new { disposition = "Denied", reason = "bundled" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        await _engine.DidNotReceiveWithAnyArgs().ReverseClaimAsync(default!, default!, default, default, default!, default);
+        await _repo.DidNotReceiveWithAnyArgs().UpdateHoldingResolutionLockAsync(default!, default!, default);
     }
 
     [Fact]
