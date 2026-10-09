@@ -25,6 +25,12 @@ public static class BenefitCategoryMap
     public const string MentalHealth     = "MentalHealth";
     public const string Maternity        = "Maternity";
     public const string Preventive       = "Preventive";
+    public const string Laboratory       = "Laboratory";
+    public const string Imaging          = "Imaging";
+    public const string Therapy          = "Therapy";
+    public const string HomeHealth       = "HomeHealth";
+    public const string Hospice          = "Hospice";
+    public const string SkilledNursing   = "SkilledNursing";
     public const string Other            = "Other";
 
     private static readonly Dictionary<string, string> _map =
@@ -98,6 +104,35 @@ public static class BenefitCategoryMap
             ["wellness"]                    = Preventive,
             ["screening"]                   = Preventive,
             ["immunization"]                = Preventive,
+
+            // Laboratory (system-defaults category; POS 81 fallback)
+            ["laboratory"]                  = Laboratory,
+            ["lab"]                         = Laboratory,
+            ["diagnostic lab"]              = Laboratory,
+
+            // Imaging (system-defaults category)
+            ["imaging"]                     = Imaging,
+            ["radiology"]                   = Imaging,
+            ["diagnostic imaging"]          = Imaging,
+
+            // Rehabilitative therapy (system-defaults category)
+            ["physical therapy"]            = Therapy,
+            ["pt"]                          = Therapy,
+            ["occupational therapy"]        = Therapy,
+            ["speech therapy"]              = Therapy,
+            ["rehabilitation"]              = Therapy,
+
+            // Home health (system-defaults category; 32x-34x bills)
+            ["home health"]                 = HomeHealth,
+            ["home health care"]            = HomeHealth,
+
+            // Hospice (system-defaults v3 category; POS 34, 81x/82x bills)
+            ["hospice"]                     = Hospice,
+
+            // Skilled nursing (system-defaults category; POS 31, 21x/22x bills)
+            ["skilled nursing"]             = SkilledNursing,
+            ["skilled nursing facility"]    = SkilledNursing,
+            ["snf"]                         = SkilledNursing,
         };
 
     /// <summary>

@@ -91,6 +91,20 @@ public class BenefitViewServiceTests
         Assert.Equal((BenefitCategoryMap.Hospital, true), BenefitCategoryMap.Resolve("Outpatient Surgery"));
     }
 
+    [Theory]
+    [InlineData("Laboratory", BenefitCategoryMap.Laboratory)]
+    [InlineData("Imaging", BenefitCategoryMap.Imaging)]
+    [InlineData("Physical Therapy", BenefitCategoryMap.Therapy)]
+    [InlineData("Home Health", BenefitCategoryMap.HomeHealth)]
+    [InlineData("Hospice", BenefitCategoryMap.Hospice)]
+    [InlineData("Skilled Nursing", BenefitCategoryMap.SkilledNursing)]
+    public void System_default_categories_have_their_own_member_view_group(string serviceCategory, string expected)
+    {
+        // Every system-defaults bundle category the engine's fallbacks emit
+        // gets a member-view group instead of falling through to Other.
+        Assert.Equal((expected, true), BenefitCategoryMap.Resolve(serviceCategory));
+    }
+
     [Fact]
     public async Task Unknown_service_category_falls_through_to_Other()
     {

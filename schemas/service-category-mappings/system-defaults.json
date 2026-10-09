@@ -46,6 +46,7 @@
     {
       "serviceTypeCode": "Outpatient Hospital",
       "serviceTypeDescription": "Hospital outpatient facility services (clinic, treatment and observation room)",
+      "since": 2,
       "rules": [
         { "priority": 10, "codeType": "HCPCS", "codePattern": "G0463", "codeRangeEnd": "G0463" },
         { "priority": 20, "codeType": "REV", "codePattern": "0510", "codeRangeEnd": "0519" },
@@ -157,9 +158,9 @@
     {
       "serviceTypeCode": "Hospice",
       "serviceTypeDescription": "Hospice care (routine, continuous and inpatient respite / general inpatient)",
+      "since": 3,
       "rules": [
-        { "priority": 10, "codeType": "HCPCS", "codePattern": "Q5001", "codeRangeEnd": "Q5010" },
-        { "priority": 20, "codeType": "REV", "codePattern": "0650", "codeRangeEnd": "0659" }
+        { "priority": 10, "codeType": "REV", "codePattern": "0650", "codeRangeEnd": "0659" }
       ]
     },
     {

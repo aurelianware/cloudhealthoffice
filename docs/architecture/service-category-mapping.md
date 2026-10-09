@@ -72,7 +72,8 @@ ships:
 **Document shape**: mapping documents are keyed by their per-row `Id`
 (GUID) rather than the logical tuple `(tenantId, benefitPlanId?, serviceTypeCode)`.
 The tuple is **not** a hard uniqueness constraint — multiple rows can
-exist for the same tuple after a seeder version-bump re-apply (see
+exist for the same tuple (operator rows, and duplicates left by
+re-applies before the seeder applied only the delta; see
 [Seed re-application](#seed-re-application) below). The resolver iterates
 mappings in **newest-first order** (`createdAt DESC`), so first-match-wins
 naturally prefers the most recent row when duplicates exist. Tenant-default
@@ -150,22 +151,30 @@ and skips reruns at the same version.
 
 ### Seed re-application
 
-To re-apply with bundle changes, bump `version` and trigger the seed
-admin endpoint for affected tenants. Re-application **inserts new
-mapping rows alongside existing seeded rows**; it does **not** replace
-or upsert prior rows — that is a deliberate choice so operator-
-authored overrides aren't silently overwritten on a version bump.
+To ship bundle changes, bump `version`, mark what is new with `since`
+(see the bundle README), and trigger the seed admin endpoint for
+affected tenants. A version bump applies **only the delta**:
 
-Because this leaves multiple rows for the same `serviceTypeCode` after a
-re-apply, the storage backends sort `GetMappingsAsync` results by the
-mapping's `CreatedAt` field **descending**. The resolver iterates the
-result list with first-match-wins semantics, so a freshly seeded row
-naturally wins against an older row for the same procedure code. The
-ordering is deterministic across pods and across Cosmos vs Mongo.
+1. Rules introduced after the tenant's recorded version (`since` on the
+   mapping or the rule; absent means 1). Rules from versions the tenant
+   already applied are never written again, so a default the tenant
+   deleted stays deleted and no category is duplicated.
+2. Of those, only rules whose codes no existing tenant-default row
+   already covers (same code type, overlapping code / range / wildcard,
+   whether that row is active or not). A new default fills gaps; it never
+   changes how a code the tenant already maps resolves.
 
-Operators clean up superseded seed rows manually via the `DELETE`
-admin endpoint when the duplicate-row debris becomes operationally
-inconvenient.
+Each mapping with rules left is written as one new row; re-running at
+the recorded version is a no-op. The first seed of a tenant (no
+`SystemDefaultsApplied` record) still writes the whole bundle.
+
+This matters because the storage backends sort `GetMappingsAsync` results
+by the mapping's `CreatedAt` field **descending** and the resolver takes
+the first match: before the delta rule, re-inserting the whole bundle on
+a bump put fresh default rows ahead of the tenant's own mappings,
+restored deleted defaults and duplicated every category. Tenants that
+already carry duplicate rows from earlier re-applies can clean them up
+via the `DELETE` admin endpoint.
 
 See [`schemas/service-category-mappings/README.md`](../../schemas/service-category-mappings/README.md)
 for bundle authoring conventions.

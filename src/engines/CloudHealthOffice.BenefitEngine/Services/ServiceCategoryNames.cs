@@ -14,8 +14,9 @@ namespace CloudHealthOffice.BenefitEngine.Services;
 /// inference and institutional type-of-bill / revenue-code inference — work
 /// out an X12 code and translate it here, so they always produce a name a
 /// plan can match. Every name below is a category in that bundle except
-/// <see cref="Dental"/>, which no fallback emits any more but stays so
-/// plans keyed by <c>"35"</c> keep their alias.
+/// <see cref="Dental"/>. Dental and <see cref="PhysicalTherapy"/> are not
+/// emitted by any fallback (POS 81 used to emit Dental), but stay so
+/// plans keyed by <c>"35"</c> / <c>"PT"</c> keep their alias.
 /// </para>
 ///
 /// <para>
@@ -73,9 +74,6 @@ public static class ServiceCategoryNames
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(e => e.X12).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Every X12 code that has a category name here.</summary>
-    public static IReadOnlyCollection<string> KnownX12Codes => NameByX12.Keys.ToArray();
-
     /// <summary>The category name for an X12 service type code, or null when it is not one the fallbacks emit.</summary>
     public static string? NameFor(string x12Code) =>
         NameByX12.TryGetValue(x12Code, out var name) ? name : null;
@@ -86,4 +84,63 @@ public static class ServiceCategoryNames
     /// <summary>Every X12 service type code for a category name, primary first; empty when the name has none here.</summary>
     public static IReadOnlyList<string> X12CodesFor(string? name) =>
         name is not null && X12ByName.TryGetValue(name.Trim(), out var codes) ? codes : [];
+
+    /// <summary>
+    /// Rollout fallback: the category a plan's cost share is taken from when
+    /// the plan has no category for the resolved name (nor for any of its X12
+    /// codes). Single step, never chained, and consulted by
+    /// <see cref="BenefitPlanConfig.GetCategories(string, string?)"/> only when
+    /// nothing else matches, so a plan that authors the specific category
+    /// always gets it.
+    ///
+    /// <para>
+    /// The corrected professional place-of-service fallback emits categories
+    /// older plans were never authored with (POS 20 Urgent Care, 24 Outpatient
+    /// Surgery, 34 Hospice, 81 Laboratory). Without this table those lines
+    /// would deny with CARC 96 where they used to pay; each entry names the
+    /// nearest benefit those plans already carry:
+    /// <list type="bullet">
+    ///   <item>Urgent Care → Office Visit: an urgent care centre bills E&amp;M
+    ///     visit codes for walk-in, non-emergency care, the office-visit
+    ///     benefit, not the hospital or ER one.</item>
+    ///   <item>Outpatient Surgery → Outpatient Hospital: ASC surgery is the
+    ///     facility-based outpatient benefit (the old POS 24 mapping, X12 50).</item>
+    ///   <item>Laboratory → Outpatient Hospital: independent lab work is an
+    ///     outpatient diagnostic service, which plans without a lab line cover
+    ///     under the outpatient benefit (the old POS 81 mapping was Dental,
+    ///     which was wrong).</item>
+    ///   <item>Hospice → Home Health: hospice is mostly delivered at home and
+    ///     the old POS 34 mapping paid it as Home Health.</item>
+    /// </list>
+    /// Deliberately absent:
+    /// <list type="bullet">
+    ///   <item>Physical Therapy → Outpatient Hospital: no fallback emits
+    ///     Physical Therapy any more (POS 62 is unmapped), so no line that used
+    ///     to pay is lost; and therapy benefits carry visit limits the
+    ///     outpatient hospital benefit does not, so the fallback would pay
+    ///     past the plan's therapy limit.</item>
+    ///   <item>Skilled Nursing → Inpatient Hospital: SNF is a separately
+    ///     limited benefit (day limits, custodial exclusions). Paying it at
+    ///     inpatient hospital cost share with no day limit is a benefit the
+    ///     plan never offered; institutional SNF bills (21x/22x) already
+    ///     resolved to Skilled Nursing before this change, and POS 31 used to
+    ///     resolve to Emergency Room, which was wrong.</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> RolloutFallbackByName =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [UrgentCare] = OfficeVisit,
+            [OutpatientSurgery] = OutpatientHospital,
+            [Laboratory] = OutpatientHospital,
+            [Hospice] = HomeHealth,
+        };
+
+    /// <summary>Every (category, fallback category) pair in the rollout fallback chain.</summary>
+    public static IReadOnlyDictionary<string, string> RolloutFallbacks => RolloutFallbackByName;
+
+    /// <summary>The rollout fallback category for a name (see <see cref="RolloutFallbacks"/>), or null.</summary>
+    public static string? RolloutFallbackFor(string? name) =>
+        name is not null && RolloutFallbackByName.TryGetValue(name.Trim(), out var fallback) ? fallback : null;
 }

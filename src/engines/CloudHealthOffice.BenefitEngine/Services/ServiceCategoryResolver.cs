@@ -108,6 +108,17 @@ public record ServiceCategoryMatch
     public string ServiceTypeDescription { get; init; } = default!;
     public string MatchedBy { get; init; } = default!; // "PlanOverride", "TenantDefault", "SystemDefault"
     public string MatchedRule { get; init; } = default!; // For audit: which rule matched
+
+    /// <summary>
+    /// The X12 5010 service type code a system-level fallback worked out
+    /// before translating it to <see cref="ServiceTypeCode"/> (e.g. "AI" for
+    /// POS 55, which is named Behavioral Health). Null for plan / tenant
+    /// mappings. Plan matching tries it right after the exact name, ahead of
+    /// the name's other X12 codes, so a plan with separate A4 / MH / AI
+    /// categories takes the specific one (see
+    /// <see cref="BenefitPlanConfig.LookupCategories"/>).
+    /// </summary>
+    public string? X12Code { get; init; }
 }
 
 /// <summary>
@@ -437,6 +448,7 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
             ServiceTypeDescription = $"{name} (X12 service type {x12Code})",
             MatchedBy = "SystemDefault",
             MatchedRule = rule,
+            X12Code = x12Code,
         };
     }
 
@@ -468,6 +480,16 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
     ///     benefit; the procedure code does (tenant / bundle mappings).</item>
     ///   <item>33 Custodial Care Facility: room, board and personal care with
     ///     no medical component; no medical category fits.</item>
+    ///   <item>32 Nursing Facility: mostly custodial / long-term care, not a
+    ///     skilled (Medicare Part A) stay, so Skilled Nursing would apply the
+    ///     SNF benefit to non-skilled care; the professional services billed
+    ///     there (nursing facility E&amp;M, therapy, labs) are better decided
+    ///     by their procedure code than by a single setting guess, so 32 is
+    ///     left unmapped like 33 rather than mapped to Office Visit.</item>
+    ///   <item>62 Comprehensive Outpatient Rehabilitation Facility: a CORF
+    ///     bills physical / occupational / speech therapy but also respiratory
+    ///     therapy, social work and psychological services, so the setting
+    ///     does not determine the benefit; the procedure code does.</item>
     ///   <item>54 Intermediate Care Facility / Individuals with Intellectual
     ///     Disabilities: long-term care (X12 54), not psychiatric and not
     ///     skilled nursing; no plan category for it.</item>
@@ -487,7 +509,6 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
             ["23"] = "86", // Emergency Room - Hospital → Emergency Services
             ["24"] = "13", // Ambulatory Surgical Center → Ambulatory Service Center Facility
             ["31"] = "AG", // Skilled Nursing Facility → Skilled Nursing Care
-            ["32"] = "AG", // Nursing Facility (skilled nursing / rehab above custodial) → Skilled Nursing Care
             ["34"] = "45", // Hospice → Hospice
             ["49"] = "98", // Independent Clinic → Professional Visit - Office
             ["50"] = "98", // Federally Qualified Health Center → Professional Visit - Office
@@ -499,7 +520,6 @@ public class ServiceCategoryResolver : IServiceCategoryResolver
             ["57"] = "AI", // Non-residential Substance Abuse Treatment Facility → Substance Abuse
             ["58"] = "AI", // Non-residential Opioid Treatment Facility → Substance Abuse
             ["61"] = "48", // Comprehensive Inpatient Rehabilitation Facility → Hospital - Inpatient
-            ["62"] = "PT", // Comprehensive Outpatient Rehabilitation Facility → Physical Therapy
             ["71"] = "98", // Public Health Clinic → Professional Visit - Office
             ["72"] = "98", // Rural Health Clinic → Professional Visit - Office
             ["81"] = "5",  // Independent Laboratory → Diagnostic Lab

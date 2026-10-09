@@ -62,8 +62,13 @@ public class ServiceCategoryResolverPlaceOfServiceTests
         => AssertResolvesTo("31", ServiceCategoryNames.SkilledNursing);
 
     [Fact]
-    public Task Pos32_NursingFacility_IsSkilledNursing_NotEmergencyRoom()
-        => AssertResolvesTo("32", ServiceCategoryNames.SkilledNursing);
+    public async Task Pos32_NursingFacility_IsUnmapped_NotSkilledNursing()
+    {
+        // A POS 32 nursing facility is mostly custodial / long-term care, not
+        // a skilled stay; like 33, the procedure code decides (CARC 204 when
+        // nothing maps it) rather than applying the SNF benefit.
+        Assert.Null(await Resolve("32"));
+    }
 
     [Fact]
     public Task Pos34_Hospice_IsHospice_NotHomeHealth()
@@ -91,8 +96,12 @@ public class ServiceCategoryResolverPlaceOfServiceTests
     }
 
     [Fact]
-    public Task Pos62_ComprehensiveOutpatientRehab_IsPhysicalTherapy_NotInpatient()
-        => AssertResolvesTo("62", ServiceCategoryNames.PhysicalTherapy);
+    public async Task Pos62_ComprehensiveOutpatientRehab_IsUnmapped_NotPhysicalTherapy()
+    {
+        // A CORF also bills respiratory therapy, social work and psych
+        // services; the procedure code decides, not the setting.
+        Assert.Null(await Resolve("62"));
+    }
 
     [Fact]
     public Task Pos71_PublicHealthClinic_IsOfficeVisit_NotPsychiatric()
@@ -138,7 +147,7 @@ public class ServiceCategoryResolverPlaceOfServiceTests
         ["26"] = null, // Military treatment facility
         ["27"] = null, // Outreach site / street
         ["31"] = ServiceCategoryNames.SkilledNursing,
-        ["32"] = ServiceCategoryNames.SkilledNursing,
+        ["32"] = null, // Nursing facility: mostly custodial; the procedure decides
         ["33"] = null, // Custodial care facility: no medical component
         ["34"] = ServiceCategoryNames.Hospice,
         ["41"] = null, // Ambulance - land: ambulance HCPCS decides
@@ -155,7 +164,7 @@ public class ServiceCategoryResolverPlaceOfServiceTests
         ["58"] = ServiceCategoryNames.BehavioralHealth,
         ["60"] = null, // Mass immunization center
         ["61"] = ServiceCategoryNames.InpatientHospital,
-        ["62"] = ServiceCategoryNames.PhysicalTherapy,
+        ["62"] = null, // CORF: therapy, respiratory, social work, psych; the procedure decides
         ["65"] = null, // ESRD treatment facility
         ["66"] = null, // PACE center
         ["71"] = ServiceCategoryNames.OfficeVisit,
