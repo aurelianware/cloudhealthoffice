@@ -52,6 +52,9 @@ public sealed class ProviderIntegrityStage : IClaimAdjudicationStage
     public const string StageName = "ProviderIntegrity";
     public const string MedicalReviewPendCode = "MEDREVIEW";
 
+    /// <summary>The check could not be reached: a transient failure, never overridden by an approval — the re-run retries it.</summary>
+    public const string UnreachableReason = "Provider integrity check could not be reached.";
+
     private readonly IProviderIntegrityClient _client;
     private readonly ILogger<ProviderIntegrityStage> _logger;
 
@@ -107,7 +110,7 @@ public sealed class ProviderIntegrityStage : IClaimAdjudicationStage
                 _logger.LogWarning(
                     "Provider integrity check unreachable for claim {ClaimVersionId}, {Role} NPI {Npi}",
                     SanitizeForLog(context.ClaimVersionId), role, SanitizeForLog(npi));
-                return PendForReview(context, role, "Provider integrity check could not be reached.");
+                return PendForReview(context, role, UnreachableReason);
             }
 
             if (result.IsExcluded)

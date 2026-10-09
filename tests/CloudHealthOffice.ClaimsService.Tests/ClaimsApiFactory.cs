@@ -5,6 +5,7 @@ using ClaimsService.HostedServices;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using ClaimsService.Services.Adjudication;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.NcciEngine.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -17,7 +18,27 @@ namespace CloudHealthOffice.ClaimsService.Tests;
 
 public class ClaimsApiFactory : WebApplicationFactory<Program>
 {
-    public IClaimRepository ClaimRepository { get; } = Substitute.For<IClaimRepository>();
+    public IClaimRepository ClaimRepository { get; } = CreateClaimRepository();
+
+    /// <summary>The benefit engine (substitute): a denial of a pended claim reverses its accumulators here.</summary>
+    public IBenefitCalculationEngine BenefitEngine { get; } = Substitute.For<IBenefitCalculationEngine>();
+
+    /// <summary>
+    /// The examiner-resolution lock (round 3, L10) is free by default; tests
+    /// of a concurrent resolution reconfigure it.
+    /// </summary>
+    private static IClaimRepository CreateClaimRepository()
+    {
+        var repository = Substitute.For<IClaimRepository>();
+        repository.TryAcquireResolutionLockAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<DateTime>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        // The fenced final write (round-3 verification, L6): the lock holds.
+        repository.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Claim>());
+        return repository;
+    }
     public IMassAdjudicationRunRepository MassAdjudicationRunRepository { get; } = Substitute.For<IMassAdjudicationRunRepository>();
     public IClaimAcknowledgmentService AcknowledgmentService { get; } = Substitute.For<IClaimAcknowledgmentService>();
     public IAiExaminationAuditRepository AuditRepository { get; } = Substitute.For<IAiExaminationAuditRepository>();
@@ -29,6 +50,22 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
     public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
     public IClaimImportTransactionRepository ImportTransactionRepository { get; } = Substitute.For<IClaimImportTransactionRepository>();
+
+    /// <summary>
+    /// Examiner-approval re-adjudication (the real one is the orchestrator's
+    /// pipeline). Passes by default; tests that exercise a refused approval
+    /// reconfigure it.
+    /// </summary>
+    public IClaimApprovalReadjudicator ApprovalReadjudicator { get; } = CreatePassingReadjudicator();
+
+    private static IClaimApprovalReadjudicator CreatePassingReadjudicator()
+    {
+        var readjudicator = Substitute.For<IClaimApprovalReadjudicator>();
+        readjudicator.ReadjudicateForApprovalAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>())
+            .Returns(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Pass, null));
+        return readjudicator;
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -127,7 +164,11 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
             {
                 services.Remove(descriptor);
             }
-            services.AddSingleton(Substitute.For<IBenefitCalculationEngine>());
+            services.AddSingleton(BenefitEngine);
+
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IClaimApprovalReadjudicator)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton(ApprovalReadjudicator);
 
             services.AddSingleton(ClaimRepository);
             services.AddSingleton(MassAdjudicationRunRepository);

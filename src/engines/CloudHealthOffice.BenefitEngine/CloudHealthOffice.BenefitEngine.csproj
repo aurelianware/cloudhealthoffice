@@ -24,4 +24,9 @@
          schedule engine's facility / non-facility setting. Dependency-free. -->
     <ProjectReference Include="..\CloudHealthOffice.ReferenceData\CloudHealthOffice.ReferenceData.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- ChoAccumulatorService (internal) — re-adjudication and write-time
+         deductible clamp tests. -->
+    <InternalsVisibleTo Include="CloudHealthOffice.BenefitEngine.Tests" />
+  </ItemGroup>
 </Project>

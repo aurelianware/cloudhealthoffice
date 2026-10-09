@@ -146,6 +146,59 @@ public enum FamilyAccumulatorModel
     Aggregate
 }
 
+/// <summary>
+/// How a plan credits its deductible when it pays secondary, tertiary or
+/// later (coordination of benefits).
+/// <para><b>What changes on the 835.</b> Under <see cref="NaicFullCredit"/>
+/// (and <see cref="NoDeductible"/>) the plan, as a later payer, prices the
+/// whole claim first as if it were the only plan — the deductible it applies
+/// on one line counts as met for the claim's later lines — and then applies
+/// COB to the claim as a whole (NAIC MDL-120 §7). So on a multi-line
+/// secondary or tertiary claim the later lines carry less (or no) PR-1, and
+/// the plan may pay more on them, than they would line by line.
+/// <see cref="MemberPaidOnly"/> instead prices COB line by line, in line
+/// order: each line's COB runs before the next line is priced, so the next
+/// line sees only the deductible the member actually paid — and the result
+/// does not depend on how the provider split the services across claims
+/// (one two-line claim pays the same as two one-line claims). The two
+/// settings give the same 835 for a single-line claim and can differ on a
+/// multi-line one. <see cref="NoDeductible"/> applies no deductible at all.</para>
+/// The OOP accumulators always record only what the member owes after COB:
+/// NAIC MDL-120 §7 requires deductible credit only, and amounts other plans
+/// paid are not the member's out-of-pocket spending.
+/// </summary>
+public enum CobDeductibleCredit
+{
+    /// <summary>
+    /// Default. NAIC Coordination of Benefits Model Regulation (MDL-120,
+    /// 2013) §7: "the secondary plan shall credit to its plan deductible any
+    /// amounts it would have credited to its deductible in the absence of
+    /// other health care coverage." The deductible accumulators get the
+    /// deductible this plan's own adjudication applied before COB (already
+    /// limited to the remaining deductible and by the OOP cap), including
+    /// deductible a prior payer paid. Never past the limit (also clamped by
+    /// the store at write time).
+    /// </summary>
+    NaicFullCredit = 0,
+
+    /// <summary>
+    /// Credit only the deductible the member still owes after COB (PR-1).
+    /// For self-funded ERISA plans (not subject to state COB regulation)
+    /// with non-duplication or carve-out provisions. Priced line by line
+    /// (see the type's remarks): a multi-line claim's 835 can differ from
+    /// <see cref="NaicFullCredit"/>'s.
+    /// </summary>
+    MemberPaidOnly = 1,
+
+    /// <summary>
+    /// The deductible is neither applied nor credited when this plan is not
+    /// the first payer — e.g. a Medicaid plan paying secondary, which carries
+    /// no member deductible. As primary the plan applies its deductible as
+    /// configured.
+    /// </summary>
+    NoDeductible = 2,
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SERVICE CATEGORY MAPPING
 // ═══════════════════════════════════════════════════════════════════

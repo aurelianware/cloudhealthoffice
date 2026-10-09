@@ -37,6 +37,19 @@ public class ClaimFinalizedEvent
     public string FinalStatus { get; set; } = "Paid";
 
     /// <summary>
+    /// 837 CLM05-3 claim frequency: 1 original, 7 replacement, 8 void.
+    /// Null on events from producers that predate the field.
+    /// </summary>
+    public string? ClaimFrequencyCode { get; set; }
+
+    /// <summary>
+    /// For a replacement (7) or void (8): the claim id it supersedes. The
+    /// accumulator consumer reverses that claim's applied deltas before
+    /// applying this one, so a replacement never counts twice.
+    /// </summary>
+    public string? OriginalClaimId { get; set; }
+
+    /// <summary>
     /// Primary benefit category for the whole claim (e.g. "PrimaryCare", "Lab", "ER").
     /// Line-level categories live on <see cref="LineItems"/>; this is a convenience
     /// rollup for single-category claims.
@@ -57,6 +70,15 @@ public class ClaimFinalizedEvent
     public decimal MemberResponsibility { get; set; }
 
     /// <summary>
+    /// Deductible to credit to the deductible accumulator when it differs
+    /// from <see cref="DeductibleApplied"/> (the deductible the member owes):
+    /// set when the plan paid secondary or later and credits, per NAIC
+    /// MDL-120 §7, the deductible it would have applied with no other
+    /// coverage. Null = credit <see cref="DeductibleApplied"/>.
+    /// </summary>
+    public decimal? DeductibleCredited { get; set; }
+
+    /// <summary>
     /// Per-line applied amounts. Populated when a single claim spans multiple
     /// benefit categories (e.g. PCP visit + lab draw). Most claims have one line.
     /// </summary>
@@ -74,4 +96,8 @@ public class ClaimFinalizedLineItem
     public decimal OopApplied { get; set; }
     public decimal PlanPaid { get; set; }
     public decimal MemberResponsibility { get; set; }
+
+    /// <summary>Line-level <see cref="ClaimFinalizedEvent.DeductibleCredited"/>;
+    /// null = credit <see cref="DeductibleApplied"/>.</summary>
+    public decimal? DeductibleCredited { get; set; }
 }

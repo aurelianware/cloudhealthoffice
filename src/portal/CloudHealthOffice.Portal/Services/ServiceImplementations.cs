@@ -3500,14 +3500,15 @@ public class WorkQueueService : IWorkQueueService
         }
     }
 
-    public async Task OverrideAsync(string claimId, string overrideReason)
+    public async Task<ClaimResolutionResult> OverrideAsync(string claimId, string overrideReason, int? payerSequence = null,
+        string? pendFingerprint = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
         try
         {
             var response = await _httpClient.PostAsJsonAsync($"{baseUrl}/Claims/work-queue/{Uri.EscapeDataString(claimId)}/override",
-                new { OverrideReason = overrideReason });
-            response.EnsureSuccessStatusCode();
+                new { OverrideReason = overrideReason, PayerSequence = payerSequence, PendFingerprint = pendFingerprint });
+            return await ReadResolutionAsync(response);
         }
         catch (HttpRequestException ex)
         {
@@ -3516,12 +3517,14 @@ public class WorkQueueService : IWorkQueueService
         }
     }
 
-    public async Task ResolvePendedClaimAsync(
+    public async Task<ClaimResolutionResult> ResolvePendedClaimAsync(
         string claimId,
         string disposition,
         string reason,
         string? aiExaminerAgreement,
-        string examinerUserId)
+        string examinerUserId,
+        int? payerSequence = null,
+        string? pendFingerprint = null)
     {
         var baseUrl = _configuration["Services:ClaimsService"];
         try
@@ -3534,14 +3537,50 @@ public class WorkQueueService : IWorkQueueService
                     reason,
                     aiExaminerAgreement,
                     examinerUserId,
+                    payerSequence,
+                    pendFingerprint,
                 });
-            response.EnsureSuccessStatusCode();
+            return await ReadResolutionAsync(response);
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Service unavailable: {ServiceName}", "Claims Service");
             throw new ServiceUnavailableException("Claims Service", ex);
         }
+    }
+
+    /// <summary>
+    /// 202 → waiting for a second approver; 400 / 403 / 409 → the service's
+    /// refusal and reasons (shown to the examiner, never "service
+    /// unavailable"); anything else unsuccessful → service unavailable.
+    /// </summary>
+    private static async Task<ClaimResolutionResult> ReadResolutionAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
+        {
+            string? message = null;
+            try
+            {
+                var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                if (body.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && body.TryGetProperty("message", out var m) && m.ValueKind == System.Text.Json.JsonValueKind.String)
+                    message = m.GetString();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+            }
+            return new ClaimResolutionResult(true, message ?? "Waiting for a second approver.");
+        }
+
+        if (response.StatusCode is System.Net.HttpStatusCode.BadRequest
+            or System.Net.HttpStatusCode.Forbidden
+            or System.Net.HttpStatusCode.Conflict)
+        {
+            throw ClaimResolutionRefusedException.From(response.StatusCode, await response.Content.ReadAsStringAsync());
+        }
+
+        response.EnsureSuccessStatusCode();
+        return ClaimResolutionResult.Resolved;
     }
 }
 

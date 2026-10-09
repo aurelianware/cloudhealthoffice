@@ -120,6 +120,15 @@ public class AdapterClaim
     /// <summary>Institutional (837I) header detail; null for professional/dental.</summary>
     public InstitutionalClaimDetails? Institutional { get; set; }
 
+    /// <summary>837 2000B SBR01; see <see cref="Claim.PayerResponsibilityCode"/>.</summary>
+    public string? PayerResponsibilityCode { get; set; }
+
+    /// <summary>837 2320/2330B/2430 other payers; see <see cref="Claim.OtherPayers"/>.</summary>
+    public List<ClaimOtherPayer> OtherPayers { get; set; } = new();
+
+    /// <summary>See <see cref="Claim.UnmatchedOtherPayerLines"/>.</summary>
+    public List<ClaimOtherPayerLine> UnmatchedOtherPayerLines { get; set; } = new();
+
     /// <summary>Derived three-character type of bill; see <see cref="Claim.TypeOfBill"/>.</summary>
     public string? TypeOfBill =>
         InstitutionalClaimDetails.ComposeTypeOfBill(Institutional?.FacilityTypeCode, ClaimFrequencyCode);
@@ -190,6 +199,9 @@ public class AdapterClaim
         DiagnosisCodes = src.DiagnosisCodes.Select(AdapterDiagnosisCode.From).ToList(),
         ClaimLines = src.ClaimLines.Select(AdapterClaimLine.From).ToList(),
         Institutional = src.Institutional,
+        PayerResponsibilityCode = src.PayerResponsibilityCode,
+        OtherPayers = src.OtherPayers?.ToList() ?? new(),
+        UnmatchedOtherPayerLines = src.UnmatchedOtherPayerLines?.ToList() ?? new(),
         Status = src.Status,
         SubmittedDate = src.SubmittedDate,
         ReceivedDate = src.ReceivedDate,
@@ -254,6 +266,9 @@ public class AdapterClaim
         DiagnosisCodes = DiagnosisCodes.Select(d => d.ToDiagnosisCode()).ToList(),
         ClaimLines = ClaimLines.Select(l => l.ToClaimLine()).ToList(),
         Institutional = Institutional,
+        PayerResponsibilityCode = PayerResponsibilityCode,
+        OtherPayers = OtherPayers?.ToList() ?? new(),
+        UnmatchedOtherPayerLines = UnmatchedOtherPayerLines?.ToList() ?? new(),
         Status = Status,
         SubmittedDate = SubmittedDate,
         ReceivedDate = ReceivedDate,
@@ -391,6 +406,8 @@ public class AdapterAdjudicationResult
     public decimal CopayAmount { get; set; }
     public decimal PatientResponsibility { get; set; }
     public decimal? OopAppliedAmount { get; set; }
+    public decimal? DeductibleCreditedAmount { get; set; }
+    public int? CobPayerSequence { get; set; }
     public decimal PayerPayment { get; set; }
     public string? DenialReasonCode { get; set; }
     public string? DenialReason { get; set; }
@@ -408,6 +425,8 @@ public class AdapterAdjudicationResult
         CopayAmount = src.CopayAmount,
         PatientResponsibility = src.PatientResponsibility,
         OopAppliedAmount = src.OopAppliedAmount,
+        DeductibleCreditedAmount = src.DeductibleCreditedAmount,
+        CobPayerSequence = src.CobPayerSequence,
         PayerPayment = src.PayerPayment,
         DenialReasonCode = src.DenialReasonCode,
         DenialReason = src.DenialReason,
@@ -426,6 +445,8 @@ public class AdapterAdjudicationResult
         CopayAmount = CopayAmount,
         PatientResponsibility = PatientResponsibility,
         OopAppliedAmount = OopAppliedAmount,
+        DeductibleCreditedAmount = DeductibleCreditedAmount,
+        CobPayerSequence = CobPayerSequence,
         PayerPayment = PayerPayment,
         DenialReasonCode = DenialReasonCode,
         DenialReason = DenialReason,
@@ -443,6 +464,7 @@ public class AdapterLineAdjudicationResult
     public decimal PaidAmount { get; set; }
     public decimal PatientResponsibility { get; set; }
     public decimal? OopAppliedAmount { get; set; }
+    public decimal? DeductibleCreditedAmount { get; set; }
     public List<ClaimAdjustmentReason> AdjustmentReasons { get; set; } = new();
 
     public static AdapterLineAdjudicationResult From(LineAdjudicationResult src) => new()
@@ -451,6 +473,7 @@ public class AdapterLineAdjudicationResult
         PaidAmount = src.PaidAmount,
         PatientResponsibility = src.PatientResponsibility,
         OopAppliedAmount = src.OopAppliedAmount,
+        DeductibleCreditedAmount = src.DeductibleCreditedAmount,
         AdjustmentReasons = src.AdjustmentReasons.ToList(),
     };
 
@@ -460,6 +483,7 @@ public class AdapterLineAdjudicationResult
         PaidAmount = PaidAmount,
         PatientResponsibility = PatientResponsibility,
         OopAppliedAmount = OopAppliedAmount,
+        DeductibleCreditedAmount = DeductibleCreditedAmount,
         AdjustmentReasons = AdjustmentReasons.ToList(),
     };
 }

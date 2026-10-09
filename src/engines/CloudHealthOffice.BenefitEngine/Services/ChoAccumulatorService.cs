@@ -134,6 +134,32 @@ internal class ChoAccumulatorService : IAccumulatorService
         await Task.WhenAll(tasks);
     }
 
+    public async Task<IReadOnlyList<AccumulatorUpdate>> GetClaimUpdatesAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+    {
+        var tenantId = _tenantContext.TenantId;
+        var updates = new List<AccumulatorUpdate>();
+        foreach (var (owner, scope) in new[] { (memberId, AccumulatorScope.Individual), (subscriberId, AccumulatorScope.Family) })
+        {
+            var doc = await _repository.GetAsync(tenantId, owner, scope, benefitPlanId, planYear, ct);
+            var tx = doc?.Transactions.FirstOrDefault(t => t.ClaimId == claimId && !t.IsReversed);
+            if (tx is null) continue;
+            foreach (var e in tx.Entries)
+            {
+                if (!Enum.TryParse<AccumulatorType>(e.Type, out var type)) continue;
+                if (!Enum.TryParse<NetworkTier>(e.NetworkTier, out var tier)) continue;
+                updates.Add(new AccumulatorUpdate
+                {
+                    Type = type, Scope = scope, NetworkTier = tier, Amount = e.AmountApplied, Source = e.Source,
+                });
+            }
+        }
+        return updates;
+    }
+
     public async Task ReverseAsync(
         string memberId, string subscriberId,
         Guid benefitPlanId, string planYear,
@@ -202,13 +228,19 @@ internal class ChoAccumulatorService : IAccumulatorService
             foreach (var update in updates)
             {
                 var balance = GetOrCreateBalance(doc, update.Type, update.NetworkTier);
-                balance.AccumulatedAmount += update.Amount;
+                // Deductible: never past the plan limit as it stands at write
+                // time (a concurrent claim may have met it since this claim's
+                // working set was read; a conflict reloads and re-clamps).
+                var amount = update.ClampAtLimit is decimal limit && update.Amount > 0
+                    ? Math.Min(update.Amount, Math.Max(0, limit - balance.AccumulatedAmount))
+                    : update.Amount;
+                balance.AccumulatedAmount += amount;
 
                 transaction.Entries.Add(new AccumulatorTransactionEntry
                 {
                     Type = update.Type.ToString(),
                     NetworkTier = update.NetworkTier.ToString(),
-                    AmountApplied = update.Amount,
+                    AmountApplied = amount,
                     Source = update.Source
                 });
             }

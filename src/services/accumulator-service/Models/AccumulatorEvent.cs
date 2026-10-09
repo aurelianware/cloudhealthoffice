@@ -66,6 +66,22 @@ public class AccumulatorEvent
     /// reversal). This field exists for audit / debugging queries.
     /// </summary>
     public string? SourceClaimId { get; set; }
+
+    /// <summary>
+    /// True on rows written since the deltas were recorded as actually
+    /// applied (after clamping at the limits). Rows without it (legacy) hold
+    /// the requested deltas, which can exceed what the snapshot took: a
+    /// reversal of such a row replays the aggregate's event log to find the
+    /// applied amount instead of trusting the row (PR #1278 re-review N5).
+    /// </summary>
+    public bool DeltasClamped { get; set; }
+
+    /// <summary>
+    /// Deterministic document id for an event row: one per
+    /// (snapshot, version), so the store's id uniqueness serializes writers
+    /// on every backend (Cosmos has no secondary unique index here).
+    /// </summary>
+    public static string BuildId(string aggregateId, long version) => $"{aggregateId}:v{version}";
 }
 
 public class ServiceAccumulatorDeltaRow

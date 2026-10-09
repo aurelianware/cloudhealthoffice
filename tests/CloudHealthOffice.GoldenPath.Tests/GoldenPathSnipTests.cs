@@ -18,6 +18,7 @@ public class GoldenPathSnipTests
     [InlineData("04-denied-line")]
     [InlineData("05-inpatient-drg")]
     [InlineData("06-oop-max")]
+    [InlineData("07-tertiary-cob")]
     public void GoldenFixture_PassesSnipValidation(string name)
     {
         var result = new X12837SnipValidator().Validate(GoldenInputs.Edi837(name));

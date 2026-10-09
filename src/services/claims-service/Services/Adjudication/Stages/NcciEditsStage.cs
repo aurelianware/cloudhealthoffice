@@ -162,13 +162,7 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
             ? firstFailure.Message
             : $"{snapshots.Count} NCCI/MUE edit failures; first: {firstFailure.RuleId} {firstFailure.Message}";
 
-        context.PendDetails = new PendDetails
-        {
-            PendCode = pendCode,
-            PendReason = TruncatePendReason(pendReason),
-            PendedAt = DateTime.UtcNow,
-            EditFailures = snapshots,
-        };
+        RecordPend(context, pendCode, pendReason, snapshots);
 
         _logger.LogInformation(
             "NcciEditsStage recorded {Count} edit failure(s) on claim {ClaimVersionId} (mode={Mode}, pendCode={PendCode})",
@@ -189,12 +183,35 @@ public sealed class NcciEditsStage : IClaimAdjudicationStage
             ModifierOverridePresent = false,
         };
 
+        RecordPend(context, "NCCI", snapshot.Message, new List<NcciEditFailureSnapshot> { snapshot });
+    }
+
+    /// <summary>
+    /// Records the NCCI pend. An earlier stage's pend (e.g. COB, duplicate)
+    /// is kept as the claim's pend code — it routes the work queue and is
+    /// the first reason the examiner sees — and the NCCI reason is added to
+    /// <see cref="PendDetails.AdditionalPendReasons"/> with its edit failures,
+    /// so no reason is lost. With no earlier pend (or an earlier NCCI one) the
+    /// NCCI pend is the claim's pend, as before.
+    /// </summary>
+    private static void RecordPend(
+        ClaimAdjudicationContext context, string pendCode, string pendReason, List<NcciEditFailureSnapshot> snapshots)
+    {
+        if (context.PendDetails is { } existing
+            && !string.IsNullOrWhiteSpace(existing.PendCode)
+            && existing.PendCode is not ("NCCI" or "MUE"))
+        {
+            existing.AdditionalPendReasons.Add(TruncatePendReason($"{pendCode}: {pendReason}")!);
+            existing.EditFailures = snapshots;
+            return;
+        }
+
         context.PendDetails = new PendDetails
         {
-            PendCode = "NCCI",
-            PendReason = TruncatePendReason(snapshot.Message),
+            PendCode = pendCode,
+            PendReason = TruncatePendReason(pendReason),
             PendedAt = DateTime.UtcNow,
-            EditFailures = new List<NcciEditFailureSnapshot> { snapshot },
+            EditFailures = snapshots,
         };
     }
 

@@ -1,5 +1,7 @@
+using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.GoldenPath.Tests.Harness;
 using CloudHealthOffice.Testing.Mongo;
+using ClaimsService.Services.Adjudication;
 using Claims = ClaimsService.Models;
 
 namespace CloudHealthOffice.GoldenPath.Tests;
@@ -20,11 +22,31 @@ public class GoldenPathTests
 
     public GoldenPathTests(MongoRunnerFixture mongo) => _harness = new GoldenPathHarness(mongo);
 
-    private async Task<GoldenPathResult> RunAsync(string name, Action<InMemoryAccumulatorService>? prior = null)
+    private async Task<GoldenPathResult> RunAsync(
+        string name, Action<InMemoryAccumulatorService>? prior = null, string? planDocument = null,
+        IReadOnlyList<string>? otherCoverage = null,
+        string? pendingReviewStage = null, IReadOnlyList<ExaminerApproval>? approvals = null,
+        string? goldenName = null,
+        IReadOnlyList<GoldenScenario.ReviewStage>? reviewStages = null, bool expectRefused = false)
     {
-        var result = await _harness.RunAsync(GoldenInputs.Scenario(prior), GoldenInputs.Edi837(name));
+        var scenario = GoldenInputs.Scenario(prior);
+        scenario = new GoldenScenario
+        {
+            PlanDocument = planDocument ?? scenario.PlanDocument,
+            FeeSchedules = scenario.FeeSchedules,
+            Contracts = scenario.Contracts,
+            CategoryMappings = scenario.CategoryMappings,
+            PriorAccumulators = scenario.PriorAccumulators,
+            OtherCoverage = otherCoverage ?? [],
+            PendingReviewStage = pendingReviewStage,
+            Approvals = approvals ?? [],
+            ReviewStages = reviewStages ?? [],
+            ExpectApprovalsRefused = expectRefused,
+        };
+        var result = await _harness.RunAsync(scenario, GoldenInputs.Edi837(name));
+        if (expectRefused) return result; // still pended: no 835
         X12835.AssertBalanced(result.Edi835);
-        X12835.AssertMatchesGolden(name, result.Edi835);
+        X12835.AssertMatchesGolden(goldenName ?? name, result.Edi835);
         return result;
     }
 
@@ -173,4 +195,337 @@ public class GoldenPathTests
             r.FinalizedClaim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons
                 .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
     }
+
+    // 07 — We are the TERTIARY payer (2000B SBR*T) on a two-line claim;
+    // coverage-service also shows two other coverages ahead of us, so the
+    // COB stage (Order 275) agrees and clears claim-level COB.
+    // Member has met $440 of the $500 deductible ($60 left), OOP $440.
+    // Our allowed: 99214 $150 (billed 400, CO-45 250); 99213 $100 (billed 180, CO-45 80).
+    // Priced first as if we were the only plan: L1 deductible $60 + 20% × 90
+    //   = $18 → cost share $78, normal $72; L2 (deductible now met) 20% × 100
+    //   = $20 → cost share $20, normal $80.
+    // Primary (2320 SBR*P, OTHERPAYER1), line level (2430): L1 SVD02 $40
+    //   PR-1 $100; L2 SVD02 $72 PR-2 $18 (AMT*D $112).
+    // Secondary (2320 SBR*S, OTHERPAYER2), claim level only: AMT*D $60, CAS
+    //   OA-23 462, PR-1 50, PR-2 8 → its PR is $58: what the member still
+    //   owed on the whole claim after both payers. Its $60 payment is
+    //   prorated by charge 400 : 180 → L1 $41.37, L2 $18.63.
+    // Prior paid: L1 40 + 41.37 = $81.37, L2 72 + 18.63 = $90.63 → room
+    //   68.63 + 9.37 = $78. The secondary adjudicated both lines, so the claim
+    //   balance is min(78, 58) = $58 (NAIC MDL-120 §7 applies "for that
+    //   claim"; capping each line with the $58 prorated by charge paid only
+    //   $49.37 and left $8.63 neither paid nor billable — review M1).
+    // We pay min(72 + 80, 58) = $58.00; member min(98, 58 − 58) = $0.
+    // Lines: the $58 balance split by room — 58 × 68.63 / 78 = 51.03, and
+    //   6.97 — and our payment fills each line's balance:
+    //   L1: paid 51.03, OA-23 = 150 − 51.03 = 98.97. SVC 400 − (250 + 98.97) = 51.03 ✓
+    //   L2: paid 6.97,  OA-23 = 100 − 6.97 = 93.03.  SVC 180 − (80 + 93.03) = 6.97 ✓
+    // Claim: charge 580, allowed 250, plan $58.00 (CLP04 = BPR02), member $0
+    //   (CLP05 0.00); CLP02 = 3 (processed as tertiary — COB was applied as
+    //   payer 3). All payers: 112 + 60 + 58 = 230 ≤ 250 allowed.
+    // Accumulators (NAIC full credit, the plan default): deductible +$60 —
+    //   what we applied as the only plan — though the member owes no PR-1;
+    //   OOP +$0.
+    [Fact]
+    public async Task TertiaryCob_TwoPriorPayers_LineAndClaimLevel()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            otherCoverage: TertiaryCoverage);
+
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 58m, member: 0m);
+        Assert.Equal("T", r.FinalizedClaim.PayerResponsibilityCode);
+        Assert.Equal(3, r.FinalizedClaim.AdjudicationResult!.CobPayerSequence);
+        Assert.Equal(new[] { "P", "S" }, r.FinalizedClaim.OtherPayers.Select(p => p.PayerResponsibilityCode));
+        Assert.Equal(new[] { 51.03m, 6.97m },
+            r.FinalizedClaim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount));
+        Assert.Equal(
+            new[] { ("CO", "45", 250m), ("OA", "23", 98.97m) },
+            r.FinalizedClaim.ClaimLines[0].AdjudicationResult!.AdjustmentReasons
+                .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.Equal(
+            new[] { ("CO", "45", 80m), ("OA", "23", 93.03m) },
+            r.FinalizedClaim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons
+                .Select(a => (a.GroupCode, a.ReasonCode, a.Amount)));
+        Assert.Equal("3", X12835.Segments(r.Edi835).Single(s => s[0] == "CLP")[2]);
+
+        // The member owes nothing; the deductible is credited with the $60
+        // our plan applied before COB (NAIC MDL-120 §7), the OOP with $0.
+        Assert.Equal(0m, r.FinalizedEvent.DeductibleApplied);
+        Assert.Equal(60m, r.FinalizedEvent.DeductibleCredited);
+        Assert.Equal(new decimal?[] { 60m, null }, r.FinalizedEvent.LineItems.Select(l => l.DeductibleCredited));
+        Assert.Equal(0m, r.FinalizedEvent.OopApplied);
+        Assert.Equal(60m, Applied(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(0m, Applied(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    // 07 again with the plan set to MemberPaidOnly. That setting prices COB
+    // line by line, in line order (so splitting the claim cannot change the
+    // result), and credits the deductible only with what the member pays.
+    // Round 3: the secondary's claim-level amounts are spread by the balance
+    // the primary left on each line (its 2430 PR: L1 $100, L2 $18), not by
+    // charge — so its PR lands where the member still owed it, and the
+    // payment equals the NAIC claim-level total ($58.00; it was $49.37,
+    // leaving $8.63 neither paid nor billable).
+    //   secondary's $60 by 100:18 (truncated, remainder last): L1 50.84,
+    //   L2 9.16; its PR $58: L1 49.15, L2 8.85.
+    //   L1 allowed 150, alone: deductible 60 + 20% of 90 → plan 72. Pay
+    //     min(72, 150 − 40 − 50.84 = 59.16, PR 49.15) = 49.15; member 0;
+    //     OA-23 = 150 − 49.15 = 100.85; 400 − 250 − 100.85 = 49.15.
+    //   L2 allowed 100, the $60 deductible still open (L1 credited $0) →
+    //     plan alone 32. Pay min(32, 100 − 72 − 9.16 = 18.84, PR 8.85) = 8.85;
+    //     OA-23 = 91.15; 180 − 80 − 91.15 = 8.85.
+    // Paid 58.00 like NAIC (whose claim-level split is 51.03 / 6.97); the
+    // settings now differ only in the deductible credit: $0 here, $60 NAIC.
+    [Fact]
+    public async Task TertiaryCob_MemberPaidOnlyPlan_PaysTheNaicTotal_DeductibleNotCredited()
+    {
+        var plan = GoldenInputs.PlanDocument.Replace(
+            "\"familyAccumulatorModel\": \"Embedded\",",
+            "\"familyAccumulatorModel\": \"Embedded\",\n  \"cobDeductibleCredit\": \"MemberPaidOnly\",");
+        Assert.Contains("MemberPaidOnly", plan);
+
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m), plan,
+            otherCoverage: TertiaryCoverage, goldenName: "07-tertiary-cob-member-paid-only");
+
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 58.00m, member: 0m);
+        Assert.Equal(new[] { 49.15m, 8.85m },
+            r.FinalizedClaim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount));
+        Assert.Null(r.FinalizedEvent.DeductibleCredited);
+        Assert.All(r.FinalizedEvent.LineItems, l => Assert.Null(l.DeductibleCredited));
+        Assert.Equal(0m, Applied(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(0m, Applied(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    /// <summary>Coverage-service: a primary and a secondary ahead of this plan.</summary>
+    private static readonly string[] TertiaryCoverage = ["P", "S"];
+
+    // ── Re-review N1: examiner approval of a pended claim ─────────────────
+
+    private static decimal Written(GoldenPathResult r, AccumulatorType type) =>
+        r.AccumulatorUpdates.Where(u => u.Type == type && u.Scope == AccumulatorScope.Individual).Sum(u => u.Amount);
+
+    // 01 pended as a possible duplicate: priced read-only, so nothing was
+    // written while it waited. The examiner approves; approval re-adjudicates
+    // in Production — the same 835 as golden 01 ($32 paid, PR-1 $60, PR-2 $8)
+    // and the deductible accumulator gets the $60 the member pays (before
+    // the fix the approval paid with PR-1 $60 but recorded no deductible, so
+    // the member would meet it again on the next claim).
+    [Fact]
+    public async Task PendedDuplicate_ExaminerApproval_WritesAccumulators()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            pendingReviewStage: "DuplicateClaim",
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }]);
+
+        Assert.Equal("DUPLICATE", r.PendCode);
+        Assert.Equal(0, r.AccumulatorUpdatesBeforeApproval);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        AssertClaim(r, charge: 180m, allowed: 100m, paid: 32m, member: 68m);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(68m, Written(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    // 07 with coverage-service showing no other coverage: the 837 says we
+    // are tertiary — a payer-order mismatch, pended. A plain approval is
+    // refused (a COB pend is never paid as primary) and writes nothing.
+    // Sequence 3 disagrees with coverage-service (primary), so it needs an
+    // approver with claims:override-approve and a reason (round 3, B2):
+    // without that it is refused too. With it, the re-run applies tertiary
+    // COB — the golden 07 835 ($58.00) — and the deductible gets the NAIC
+    // credit ($60), the OOP $0.
+    [Fact]
+    public async Task PendedCobMismatch_PlainApprovalRefused_ConfirmedPayerOrderApplies()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            otherCoverage: [],
+            approvals:
+            [
+                new ExaminerApproval { ExaminerId = "examiner-1" },
+                new ExaminerApproval { ExaminerId = "examiner-1", PayerSequence = 3 },
+                new ExaminerApproval
+                {
+                    ExaminerId = "supervisor-1", PayerSequence = 3, Reason = "EOBs show two payers",
+                    PayerOrderOverrideAuthorized = true,
+                },
+            ]);
+
+        Assert.Equal("COB", r.PendCode);
+        Assert.Equal(0, r.AccumulatorUpdatesBeforeApproval);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pass },
+            r.ApprovalOutcomes);
+        Assert.Contains(r.ApprovalReasons[1], reason => reason.Contains("claims:override-approve"));
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 58m, member: 0m);
+        Assert.Equal(3, r.FinalizedClaim.AdjudicationResult!.CobPayerSequence);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(0m, Written(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    // ── Round 3, B1: the approval overrides only the reviewed pends ────
+
+    /// <summary>
+    /// The examiner reviewed a possible duplicate. When the approval
+    /// re-runs, provider integrity cannot be reached — a pend the examiner
+    /// never saw. It is not overridden: the approval is refused (the API
+    /// answers 409 for re-review) and nothing is written. Before, every
+    /// review-stage pend passed on the re-run and the claim paid a provider
+    /// nobody screened.
+    /// </summary>
+    [Fact]
+    public async Task Approval_NewProviderIntegrityPendOnTheRerun_IsRefused()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            pendingReviewStage: "DuplicateClaim",
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW",
+                    "Billing: Provider integrity check could not be reached.", OnlyOnRerun: true),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Contains(r.ApprovalReasons[0], reason => reason.StartsWith("ProviderIntegrity:"));
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    /// <summary>
+    /// The examiner reviewed "duplicate of CLM-1"; the re-run finds a
+    /// duplicate of a different claim. Same code, a new finding: refused.
+    /// </summary>
+    [Fact]
+    public async Task Approval_DifferentDuplicateOnTheRerun_IsRefused()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("DuplicateClaim", "DUPLICATE",
+                    "Line 1 duplicates CLM-1 line 1.", RerunReason: "Line 1 duplicates CLM-2 line 1."),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    /// <summary>
+    /// The pend the examiner reviewed — a provider-integrity manual review
+    /// and an NCCI edit added after it — is exactly what the re-run finds:
+    /// both are overridden and the claim pays, writing its accumulators.
+    /// </summary>
+    [Fact]
+    public async Task Approval_TheReviewedPendsOnly_AreOverridden()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW", "Billing: manual review required."),
+                new GoldenScenario.ReviewStage("NcciEdits", "NCCI", "1 NCCI/MUE edit failure.", AppendsToExisting: true),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }]);
+
+        Assert.Equal("MEDREVIEW", r.PendCode);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        AssertClaim(r, charge: 180m, allowed: 100m, paid: 32m, member: 68m);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+    }
+
+    /// <summary>
+    /// Round-3 verification, blocker 1 (scenario A): a possible duplicate,
+    /// then provider integrity's manual review — each stage replaces
+    /// PendDetails. Only the last used to be stored, so the examiner's
+    /// approval never covered the duplicate and every re-run pended again
+    /// (Pend, Pend, Pend…). Both pends are now stored (the first routes the
+    /// queue, the second is an additional reason); one approval overrides
+    /// both and the claim pays, writing its accumulators.
+    /// </summary>
+    [Fact]
+    public async Task TwoPends_DuplicateThenMedicalReview_OneApprovalCoversBoth()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("DuplicateClaim", "DUPLICATE", "Line 1 duplicates CLM-1 line 1."),
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW", "Billing: manual review required."),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }]);
+
+        Assert.Equal("DUPLICATE", r.PendCode);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        AssertClaim(r, charge: 180m, allowed: 100m, paid: 32m, member: 68m);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+    }
+
+    /// <summary>
+    /// A provider-integrity check that could not be reached is a transient
+    /// failure: even reviewed exactly, the approval does not override it —
+    /// the re-run retries the check (round-3 verification, M4).
+    /// </summary>
+    [Fact]
+    public async Task Approval_TransientFailure_IsNotOverridden_EvenWhenReviewed()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            reviewStages:
+            [
+                new GoldenScenario.ReviewStage("ProviderIntegrity", "MEDREVIEW",
+                    "Billing: Provider integrity check could not be reached."),
+            ],
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    // ── Round 3, B2: payerSequence ────────────────────────────────────
+
+    /// <summary>
+    /// The reviewer's case: golden 07 approved with payerSequence 1 paid
+    /// $152 although the primary and secondary had paid $172 of $250
+    /// allowed — $324 in all. Even an override-authorized approver alone
+    /// cannot price it as primary over a prior payment: it needs a second,
+    /// different approver. Refused; nothing written.
+    /// </summary>
+    [Fact]
+    public async Task Golden07_ApprovedAsPrimary_BySingleApprover_IsRefused()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            otherCoverage: [],
+            approvals:
+            [
+                new ExaminerApproval
+                {
+                    ExaminerId = "supervisor-1", PayerSequence = 1, Reason = "member says no other coverage",
+                    PayerOrderOverrideAuthorized = true,
+                },
+            ],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.Contains(r.ApprovalReasons[0], reason => reason.Contains("second, different approver"));
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    [Fact]
+    public async Task Golden07_PayerSequenceOutOfRange_IsRefused_NotClamped()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            otherCoverage: [],
+            approvals:
+            [
+                new ExaminerApproval { ExaminerId = "supervisor-1", PayerSequence = 0, PayerOrderOverrideAuthorized = true, Reason = "x" },
+                new ExaminerApproval { ExaminerId = "supervisor-1", PayerSequence = 4, PayerOrderOverrideAuthorized = true, Reason = "x" },
+            ],
+            expectRefused: true);
+
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pend }, r.ApprovalOutcomes);
+        Assert.All(r.ApprovalReasons, reasons => Assert.Contains(reasons, reason => reason.Contains("outside 1..3")));
+        Assert.Empty(r.AccumulatorUpdates);
+    }
+
+    private static decimal Applied(GoldenPathResult r, AccumulatorType type) =>
+        r.BenefitResult.AccumulatorSnapshot
+            .Single(s => s.Type == type && s.Scope == AccumulatorScope.Individual
+                && s.NetworkTier == CloudHealthOffice.BenefitEngine.Domain.NetworkTier.InNetwork)
+            .AmountApplied;
 }

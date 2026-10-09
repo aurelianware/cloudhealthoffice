@@ -5,6 +5,11 @@ using CloudHealthOffice.OperatingMode;
 using CobLineInput = CloudHealthOffice.CobEngine.Domain.CobLineInput;
 using CobLineResult = CloudHealthOffice.CobEngine.Domain.CobLineResult;
 using CobModel = CloudHealthOffice.CobEngine.Domain.CobModel;
+using PriorPayerAmount = CloudHealthOffice.CobEngine.Domain.PriorPayerAmount;
+using PriorPayerAdjudication = CloudHealthOffice.CobEngine.Domain.PriorPayerAdjudication;
+using PriorPayerLineAdjudication = CloudHealthOffice.CobEngine.Domain.PriorPayerLineAdjudication;
+using CobClaimInput = CloudHealthOffice.CobEngine.Domain.CobClaimInput;
+using CobClaimUnit = CloudHealthOffice.CobEngine.Domain.CobClaimUnit;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.BenefitEngine.Services;
@@ -175,6 +180,15 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             "workingSet",
             () => new AccumulatorWorkingSet(accumulators, plan, _logger));
 
+        // Re-adjudication of the same claim, or a replacement of an earlier
+        // one: price it against the balances without the claim's own earlier
+        // updates and without the replaced claim's (otherwise it would meet
+        // a deductible the claim it replaces already met), and reverse those
+        // updates when writing.
+        var priorUpdates = await ReadPriorUpdatesAsync(request, planYear, ct);
+        workingAccumulators.ExcludePriorUpdates(priorUpdates.Own);
+        workingAccumulators.ExcludePriorUpdates(priorUpdates.Replaced);
+
         // ── Step 3: Check for DRG/per-diem inpatient pricing ──
         var inpatientMethod = DetermineInpatientPricingMethod(request, plan);
 
@@ -184,12 +198,27 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             var drgResult = await MeasureStageAsync(
                 "drgProcessing",
                 () => ProcessDrgClaimAsync(
-                    request, plan, workingAccumulators, inpatientMethod, planYear, ct));
+                    request, plan, workingAccumulators, inpatientMethod, planYear,
+                    priorUpdates, ct));
 
             return drgResult with { Timings = timings };
         }
 
         // ── Step 4: Process each line (standard per-line adjudication) ──
+        // As a later payer (secondary, tertiary, …) every line is first
+        // priced as if this plan were the only plan — the deductible and OOP
+        // max carried from line to line as a primary payer would — and COB is
+        // then applied to the claim as a whole (NAIC MDL-120 §7: "for that
+        // claim"); see ApplyClaimLevelCob.
+        // MemberPaidOnly is the exception: its lines are priced one after the
+        // other with COB per line, each line crediting only the deductible
+        // the member pays after its COB — so the result does not depend on
+        // how the provider splits the services into claims (pricing them
+        // "as the only plan" first would credit the claim's deductible to its
+        // later lines but not to the next claim's).
+        var laterPayer = IsLaterPayer(request);
+        var perLineCob = laterPayer && plan.CobDeductibleCredit == CobDeductibleCredit.MemberPaidOnly;
+        var preCob = laterPayer && !perLineCob ? new Dictionary<int, CostShareCalcResult>() : null;
         var lineResults = await MeasureStageAsync("lineProcessing", async () =>
         {
             var results = new List<LineBenefitResult>();
@@ -197,12 +226,14 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             foreach (var line in request.Lines.OrderBy(l => l.LineNumber))
             {
                 var lineResult = await ProcessLineAsync(
-                    request, line, plan, workingAccumulators, ct);
+                    request, line, plan, workingAccumulators, ct, preCob, perLineCob);
                 results.Add(lineResult);
             }
 
             return results;
         });
+        if (preCob is not null)
+            lineResults = ApplyClaimLevelCob(request, plan, workingAccumulators, lineResults, preCob);
 
         // ── Guard: no lines processed → fail fast with a clear denial ──
         if (lineResults.Count == 0)
@@ -229,11 +260,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         {
             await MeasureTaskStageAsync(
                 "accumulatorWrite",
-                () => _accumulatorService.ApplyUpdatesAsync(
-                    request.MemberId, request.SubscriberId,
-                    request.BenefitPlanId, planYear,
-                    request.ClaimId,
-                    workingAccumulators.GetPendingUpdates(), ct));
+                () => WriteAccumulatorsAsync(
+                    request, planYear, workingAccumulators, priorUpdates, ct));
         }
 
         // ── Step 7: Determine overall claim outcome ──
@@ -249,8 +277,62 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             Lines = lineResults,
             Totals = totals,
             AccumulatorSnapshot = accumulatorSnapshot,
+            CobPayerSequence = laterPayer ? request.Cob!.PayerSequence : null,
             Timings = timings
         };
+    }
+
+    /// <summary>True when this plan pays after another payer (sequence ≥ 2).</summary>
+    private static bool IsLaterPayer(BenefitResolutionRequest request) =>
+        request.Cob is { PayerSequence: >= 2 };
+
+    /// <summary>The still-active accumulator updates of the claim itself and of the claim it replaces.</summary>
+    private sealed record PriorUpdates(IReadOnlyList<AccumulatorUpdate> Own, IReadOnlyList<AccumulatorUpdate> Replaced);
+
+    private async Task<PriorUpdates> ReadPriorUpdatesAsync(
+        BenefitResolutionRequest request, string planYear, CancellationToken ct)
+    {
+        async Task<IReadOnlyList<AccumulatorUpdate>> Read(string? claimId)
+        {
+            if (string.IsNullOrWhiteSpace(claimId)) return [];
+            var updates = await _accumulatorService.GetClaimUpdatesAsync(
+                request.MemberId, request.SubscriberId, request.BenefitPlanId, planYear, claimId, ct);
+            return updates?.ToList() ?? [];
+        }
+
+        var replaced = string.Equals(request.ReplacesClaimId, request.ClaimId, StringComparison.Ordinal)
+            ? null
+            : request.ReplacesClaimId;
+        return new PriorUpdates(await Read(request.ClaimId), await Read(replaced));
+    }
+
+    /// <summary>
+    /// Writes the claim's accumulator updates. The claim's own earlier
+    /// updates (re-adjudication) are reversed first — the store's apply is
+    /// idempotent per claim, so the new updates would otherwise be skipped —
+    /// and so are the updates of the claim it replaces, which this pricing
+    /// already excluded. Reversal is idempotent per claim in the store, so the
+    /// replaced claim's later void reverses nothing a second time.
+    /// </summary>
+    private async Task WriteAccumulatorsAsync(
+        BenefitResolutionRequest request, string planYear, AccumulatorWorkingSet working,
+        PriorUpdates prior, CancellationToken ct)
+    {
+        if (prior.Own.Count > 0)
+        {
+            await _accumulatorService.ReverseAsync(
+                request.MemberId, request.SubscriberId, request.BenefitPlanId, planYear, request.ClaimId, ct);
+        }
+        if (prior.Replaced.Count > 0)
+        {
+            await _accumulatorService.ReverseAsync(
+                request.MemberId, request.SubscriberId, request.BenefitPlanId, planYear, request.ReplacesClaimId!, ct);
+        }
+        await _accumulatorService.ApplyUpdatesAsync(
+            request.MemberId, request.SubscriberId,
+            request.BenefitPlanId, planYear,
+            request.ClaimId,
+            working.GetPendingUpdates(), ct);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -392,6 +474,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         AccumulatorWorkingSet workingAccumulators,
         InpatientPricingMethod method,
         string planYear,
+        PriorUpdates priorUpdates,
         CancellationToken ct)
     {
         var drgAllowed = request.DrgAllowedAmount!.Value;
@@ -499,8 +582,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             totalBilled, drgAllowed, costShareRules, workingAccumulators,
             effectiveNetworkTier, request.IsEmergency, plan,
             categoryMatch.ServiceTypeCode,
-            CobFor(request.Cob, lineNumber: 0, totalBilled, drgAllowed,
-                request.Cob?.PrimaryPayerPaymentByLine.Values.Sum() ?? 0));
+            StayCobFor(request, totalBilled, drgAllowed));
 
         // Allocate cost-sharing back to the lines for 835 reporting, in
         // proportion to each line's allowed amount (truncated to the cent,
@@ -522,6 +604,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // The OOP-counting portion of member responsibility (OopApplies), by
         // the same rule within each line's member share.
         var oopApplied = AllocateToLines(drgCostShare.OopApplied, members, members);
+        // Deductible credited to the accumulators: the PR-1 shares when it is
+        // the PR-1 total; otherwise (NAIC full credit as a later payer) the
+        // credited amount by allowed, by the same rule.
+        var deductiblesCredited = drgCostShare.DeductibleCredited == drgCostShare.DeductibleApplied
+            ? deductibles
+            : AllocateToLines(drgCostShare.DeductibleCredited, allowedByLine, allowedByLine);
         // Informational: the cost share the OOP cap forgave, by allowed.
         var oopReductions = AllocateToLines(drgCostShare.OopMaxReduction, allowedByLine, allowedByLine);
         // COB OA-23 by allowed; Σ caps = stay allowed − member = paid + OA-23,
@@ -571,6 +659,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 OopMaxReduction = oopReductions[i],
                 MemberResponsibility = members[i],
                 OopAppliedAmount = oopApplied[i],
+                DeductibleCreditedAmount = deductiblesCredited[i],
                 PlanPaidAmount = lineAllowed - members[i] - cobOa23s[i],
                 IsDrgPriced = true,
                 // Line-level CAS consistent with the allocated amounts
@@ -585,16 +674,13 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         var accumulatorSnapshot = workingAccumulators.GetSnapshot();
         if (request.ExecutionMode == AdjudicationExecutionMode.Production)
         {
-            await _accumulatorService.ApplyUpdatesAsync(
-                request.MemberId, request.SubscriberId,
-                request.BenefitPlanId, planYear,
-                request.ClaimId,
-                workingAccumulators.GetPendingUpdates(), ct);
+            await WriteAccumulatorsAsync(request, planYear, workingAccumulators, priorUpdates, ct);
         }
 
         return new BenefitResolutionResult
         {
             Success = true,
+            CobPayerSequence = IsLaterPayer(request) ? request.Cob!.PayerSequence : null,
             Lines = lineResults,
             Totals = totals,
             AccumulatorSnapshot = accumulatorSnapshot,
@@ -609,6 +695,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 OopMaxReduction = drgCostShare.OopMaxReduction,
                 MemberResponsibility = drgCostShare.MemberResponsibility,
                 PlanPaidAmount = drgCostShare.PlanPaid,
+                DeductibleCreditedAmount = drgCostShare.DeductibleCredited,
                 Adjustments = drgCostShare.Adjustments
             }
         };
@@ -623,7 +710,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         ClaimLineInput line,
         BenefitPlanConfig plan,
         AccumulatorWorkingSet accumulators,
-        CancellationToken ct)
+        CancellationToken ct,
+        Dictionary<int, CostShareCalcResult>? preCobSink = null,
+        bool perLineCob = false)
     {
         var billedAmount = line.BilledAmount;
         var allowedAmount = request.AllowedAmounts.GetValueOrDefault(line.LineNumber, billedAmount);
@@ -698,8 +787,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             request.IsEmergency, plan,
             categoryMatch.ServiceTypeCode, benefitCategory.ServiceTypeDescription,
             benefitCategory.AuthRequired,
-            CobFor(request.Cob, line.LineNumber, billedAmount, allowedAmount,
-                request.Cob?.PrimaryPayerPaymentByLine.GetValueOrDefault(line.LineNumber, 0) ?? 0));
+            laterPayer: preCobSink is not null || perLineCob,
+            preCobSink: preCobSink,
+            cob: perLineCob ? LineCobFor(request, line.LineNumber, billedAmount, allowedAmount) : null);
 
         if (benefitCategory.VisitLimit.HasValue)
         {
@@ -733,13 +823,17 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         string serviceTypeCode,
         string serviceTypeDescription,
         bool authRequired,
+        bool laterPayer = false,
+        Dictionary<int, CostShareCalcResult>? preCobSink = null,
         Func<decimal, CobLineResult>? cob = null)
     {
         var effectiveNetworkTier = isEmergency ? NetworkTier.InNetwork : networkTier;
 
         var costShareResult = ApplyCostSharingInternal(
             billedAmount, allowedAmount, costShareRules, accumulators,
-            effectiveNetworkTier, isEmergency, plan, serviceTypeCode, cob);
+            effectiveNetworkTier, isEmergency, plan, serviceTypeCode, cob: cob, laterPayer: laterPayer);
+        if (preCobSink is not null)
+            preCobSink[line.LineNumber] = costShareResult;
 
         return new LineBenefitResult
         {
@@ -759,6 +853,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             OopMaxReduction = costShareResult.OopMaxReduction,
             MemberResponsibility = costShareResult.MemberResponsibility,
             OopAppliedAmount = costShareResult.OopApplied,
+            DeductibleCreditedAmount = costShareResult.DeductibleCredited,
             PlanPaidAmount = costShareResult.PlanPaid,
             Adjustments = costShareResult.Adjustments
         };
@@ -779,7 +874,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         bool isEmergency,
         BenefitPlanConfig plan,
         string serviceTypeCode,
-        Func<decimal, CobLineResult>? cob = null)
+        Func<decimal, CobLineResult>? cob = null,
+        bool laterPayer = false)
     {
         var adjustments = new List<AdjustmentReason>();
 
@@ -821,6 +917,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             }
             // Exempt services (preventive): use the category's own rules as-is
         }
+
+        // ── 3b. COB deductible setting: a NoDeductible plan (e.g. Medicaid
+        // secondary) neither applies nor credits its deductible when it is
+        // not the first payer. Overrides the HDHP deductible-first rule.
+        if ((cob is not null || laterPayer) && plan.CobDeductibleCredit == CobDeductibleCredit.NoDeductible)
+            deductibleApplies = false;
 
         // ── 4. Apply the waterfall based on copay mode ──
         // Amounts only: the deductible accumulator is written after the OOP
@@ -934,6 +1036,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         //         + cost share the primary's payment covered,
         // so charge − ΣCAS = paid still holds and no CAS is negative.
         var planPaid = allowedAmount - (deductibleAmount + finalCopay + coinsuranceAmount);
+        // The deductible this plan applied as if it were the only plan
+        // (after the OOP cap, before COB): what NAIC full credit credits.
+        var deductibleBeforeCob = deductibleAmount;
         decimal cobOa23 = 0;
         if (cob is not null)
         {
@@ -949,19 +1054,38 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             cobOa23 = allowedAmount - (deductibleAmount + finalCopay + coinsuranceAmount) - planPaid;
         }
 
-        // ── 8. Accumulators record what the member actually owes ──
-        // After the OOP cap and COB: the OOP-counting part of the final
-        // PR amounts, and the deductible actually charged. The OOP-eligible
-        // amount is recomputed from the components (after the cap alone it
-        // equals the OOP remaining).
+        // ── 8. Accumulators ──
+        // OOP: what the member actually owes after the OOP cap and COB — the
+        // OOP-counting part of the final PR amounts, recomputed from the
+        // components (after the cap alone it equals the OOP remaining). NAIC
+        // MDL-120 §7 requires a secondary plan to credit its deductible, not
+        // its OOP maximum, and what other plans paid is not the member's
+        // out-of-pocket spending, so this holds under every
+        // CobDeductibleCredit setting.
+        // Deductible: the deductible charged (PR-1) — except that as a later
+        // payer under NaicFullCredit (the default) the plan credits the
+        // deductible it would have applied with no other coverage
+        // (MDL-120 §7: "shall credit to its plan deductible any amounts it
+        // would have credited to its deductible in the absence of other
+        // health care coverage"), including deductible a prior payer paid.
+        // deductibleBeforeCob already respects the remaining deductible
+        // (step 4) and the OOP cap (step 6); the working set also keeps the
+        // credit within the deductible left in the accumulators. This
+        // unit's 835 is unaffected; the credited deductible counts as met for
+        // this claim's later lines too (AccumulatorWorkingSet
+        // .ApplyDeductibleWithCredit), so they are priced as the plan would
+        // have priced them with no other coverage, and their PR-1 drops.
         oopEligible =
             (deductibleCountsToOop ? deductibleAmount : 0)
             + (copayCountsToOop ? finalCopay : 0)
             + (coinsuranceCountsToOop ? coinsuranceAmount : 0);
         if (oopEligible > 0)
             accumulators.ApplyOopMax(oopEligible, effectiveNetworkTier);
-        if (deductibleAmount > 0)
-            accumulators.ApplyDeductible(deductibleAmount, effectiveNetworkTier);
+        var deductibleToCredit = cob is not null && plan.CobDeductibleCredit == CobDeductibleCredit.NaicFullCredit
+            ? Math.Max(deductibleBeforeCob, deductibleAmount)
+            : deductibleAmount;
+        var deductibleCredited = accumulators.ApplyDeductibleWithCredit(
+            deductibleAmount, deductibleToCredit, effectiveNetworkTier);
 
         // ── 9. Patient-responsibility CAS (zero entries dropped), COB OA-23 ──
         if (deductibleAmount > 0)
@@ -987,7 +1111,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             OopApplied = oopEligible,
             PlanPaid = planPaid,
             CobOa23 = cobOa23,
-            Adjustments = adjustments
+            DeductibleCredited = deductibleCredited,
+            Adjustments = adjustments,
+            DeductibleCountsToOop = deductibleCountsToOop,
+            CopayCountsToOop = copayCountsToOop,
+            CoinsuranceCountsToOop = coinsuranceCountsToOop,
+            EffectiveNetworkTier = effectiveNetworkTier,
         };
     }
 
@@ -1006,54 +1135,226 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     // COB
     // ═══════════════════════════════════════════════════════════════════
 
-    // COB convention (secondary payer, PayerSequence 2), the same on the
-    // per-line path and the DRG / per-diem claim-level path:
+    // COB convention (this plan secondary, tertiary or later — PayerSequence
+    // ≥ 2), the same on the per-line path and the DRG / per-diem claim-level
+    // path:
     //
     //   1. This plan adjudicates as if primary: allowed, deductible, copay,
     //      coinsurance, OOP-max cap (PR amounts already reduced by the cap).
-    //   2. CloudHealthOffice.CobEngine applies the requested model —
-    //      complementary (pay up to our normal benefit, but no more than the
-    //      charge left after the primary) or non-duplication (pay only what
-    //      our normal benefit exceeds the primary's payment by).
-    //   3. The member owes what is left of our allowed amount after both
-    //      payers, never more than the pre-COB cost share. PR-1/2/3 are
-    //      reduced to that amount (coinsurance, then copay, then deductible —
-    //      the OOP cap's order), so ΣPR = MemberResponsibility; zero PR
-    //      entries are dropped.
-    //   4. One positive OA-23 carries the rest of allowed − paid (our COB
-    //      savings plus the cost share the primary covered). No CAS is ever
+    //   2. Every earlier payer's paid amount and patient responsibility for
+    //      the unit come from the claim's 2320/2430 data (line-level 2430
+    //      when present, else the claim-level amount prorated by charge —
+    //      CobEngine PriorPayerAllocator).
+    //   3. CloudHealthOffice.CobEngine applies the requested model —
+    //      standard / complementary (pay up to our normal benefit, no more
+    //      than allowed − all prior payments, nor more than the last prior
+    //      payer's patient responsibility) or non-duplication (pay only what
+    //      our normal benefit exceeds all prior payments by). NAIC MDL-120
+    //      §6.A(4), §7 — see CobCalculationService.
+    //   4. The member owes what is left after all payers, never more than
+    //      the pre-COB cost share. PR-1/2/3 are reduced to that amount
+    //      (coinsurance, then copay, then deductible — the OOP cap's order),
+    //      so ΣPR = MemberResponsibility; zero PR entries are dropped.
+    //   5. One positive OA-23 carries the rest of allowed − paid (our COB
+    //      savings plus the cost share the prior payers covered — the total
+    //      prior-payer reduction, however many payers). No CAS is ever
     //      negative and charge − ΣCAS = paid.
-    //   5. Deductible and OOP accumulators record the reduced PR amounts —
-    //      what the member actually owes on this claim.
+    //   6. The OOP accumulators record the reduced PR amounts — what the
+    //      member actually owes. The deductible accumulators follow the
+    //      plan's CobDeductibleCredit: NaicFullCredit (default) credits the
+    //      pre-COB deductible (MDL-120 §7), MemberPaidOnly the reduced PR-1,
+    //      NoDeductible applies and credits none.
     //
     // The DRG path computes all of this once for the stay, then allocates
-    // the reduced PR components and the OA-23 to the lines (truncated to the
-    // cent, remainder on the last line).
+    // the reduced PR components, the credited deductible and the OA-23 to
+    // the lines (truncated to the cent, remainder on the last line).
 
     private static readonly ICobCalculationService CobCalculator = new CobCalculationService();
 
-    /// <summary>
-    /// Builds the COB step for <see cref="ApplyCostSharingInternal"/>, or
-    /// null when this plan is not the secondary payer.
-    /// <paramref name="primaryPaid"/> is the primary payer's payment for the
-    /// same unit (one line, or the whole stay).
-    /// </summary>
-    private static Func<decimal, CobLineResult>? CobFor(
-        CobInfo? cob, int lineNumber, decimal billed, decimal allowed, decimal primaryPaid)
-    {
-        if (cob is not { PayerSequence: 2 })
-            return null;
+    private static CobModel ModelFor(CobInfo cob) =>
+        cob.UseComplementaryModel ? CobModel.Complementary : CobModel.NonDuplication;
 
-        return memberBeforeCob => CobCalculator.Calculate(new CobLineInput
+    /// <summary>
+    /// The prior payers as the CobEngine takes them: <see cref="CobInfo.PriorPayers"/>,
+    /// or the legacy secondary-only <see cref="CobInfo.PrimaryPayerPaymentByLine"/>
+    /// as one primary payer with line payments and no CAS (patient
+    /// responsibility unknown). Its claim total is every value, any key, so a
+    /// claim-level amount keyed outside the line numbers still counts.
+    /// </summary>
+    private static IReadOnlyList<PriorPayerAdjudication> PriorPayersFor(CobInfo cob) =>
+        cob.PriorPayers.Count > 0
+            ? cob.PriorPayers
+            : [new PriorPayerAdjudication
+            {
+                Sequence = 1,
+                PayerId = cob.PrimaryPayerId,
+                ClaimPaidAmount = cob.PrimaryPayerPaymentByLine.Values.Sum(),
+                Lines = cob.PrimaryPayerPaymentByLine
+                    .Select(kv => new PriorPayerLineAdjudication { LineNumber = kv.Key, PaidAmount = kv.Value })
+                    .ToList(),
+            }];
+
+    /// <summary>
+    /// Per-line COB for a <see cref="CobDeductibleCredit.MemberPaidOnly"/>
+    /// plan: the line's prior payer amounts (2430, or the 2320 amounts
+    /// prorated by charge — <see cref="PriorPayerAllocator.AllocateToLines"/>)
+    /// against the line's own cost share, as it is priced in line order. The
+    /// bound is the PR of the last payer that adjudicated the line.
+    /// </summary>
+    private static Func<decimal, CobLineResult> LineCobFor(
+        BenefitResolutionRequest request, int lineNumber, decimal billed, decimal allowed)
+    {
+        var cob = request.Cob!;
+        return memberBeforeCob =>
         {
-            LineNumber = lineNumber,
-            BilledAmount = billed,
-            SecondaryAllowedAmount = allowed,
-            SecondaryMemberResponsibilityBeforeCob = memberBeforeCob,
-            SecondaryPlanPaymentBeforeCob = allowed - memberBeforeCob,
-            PrimaryPayerPayment = primaryPaid,
-            Model = cob.UseComplementaryModel ? CobModel.Complementary : CobModel.NonDuplication,
+            var byLine = PriorPayerAllocator.AllocateToLines(
+                request.Lines.Select(l => new PriorPayerAllocator.ClaimLineCharge(l.LineNumber, l.BilledAmount)).ToList(),
+                PriorPayersFor(cob), cob.PayerSequence);
+            return CobCalculator.Calculate(new CobLineInput
+            {
+                LineNumber = lineNumber,
+                BilledAmount = billed,
+                SecondaryAllowedAmount = allowed,
+                SecondaryMemberResponsibilityBeforeCob = memberBeforeCob,
+                SecondaryPlanPaymentBeforeCob = allowed - memberBeforeCob,
+                PriorPayers = byLine.TryGetValue(lineNumber, out var amounts) && amounts.Count > 0
+                    ? amounts
+                    : [new PriorPayerAmount { Sequence = 1, PaidAmount = 0 }],
+                Model = ModelFor(cob),
+            });
+        };
+    }
+
+    /// <summary>
+    /// The COB step for the DRG / per-diem path: the whole stay is one unit,
+    /// every prior payer's claim totals against the stay's allowed.
+    /// </summary>
+    private static Func<decimal, CobLineResult>? StayCobFor(
+        BenefitResolutionRequest request, decimal billed, decimal allowed)
+    {
+        if (!IsLaterPayer(request)) return null;
+        var cob = request.Cob!;
+        return memberBeforeCob => CobCalculator.CalculateClaim(new CobClaimInput
+        {
+            Units = [new CobClaimUnit
+            {
+                LineNumber = 0, BilledAmount = billed, AllowedAmount = allowed, CostShareBeforeCob = memberBeforeCob,
+            }],
+            PriorPayers = PriorPayersFor(cob),
+            OurSequence = cob.PayerSequence,
+            Model = ModelFor(cob),
+            SingleStay = true,
+        }).Units[0];
+    }
+
+    /// <summary>
+    /// Per-line pricing as a later payer, second pass. The first pass priced
+    /// every line as if this plan were the only plan and wrote the primary-
+    /// payer deductible / OOP updates to the working set; this:
+    /// <list type="number">
+    ///   <item><description>undoes those deductible / OOP updates;</description></item>
+    ///   <item><description>runs claim-level COB (CobEngine
+    ///     <see cref="ICobCalculationService.CalculateClaim"/>) over the
+    ///     covered lines — denied lines take no part;</description></item>
+    ///   <item><description>per line, reduces PR-1/2/3 to the member's share
+    ///     (coinsurance, copay, then deductible), pays the COB payment, and
+    ///     reports the rest of allowed − paid as one positive OA-23;</description></item>
+    ///   <item><description>writes the OOP accumulators with the member's
+    ///     share and the deductible accumulators per
+    ///     <see cref="BenefitPlanConfig.CobDeductibleCredit"/>: NAIC full
+    ///     credit credits the first-pass (pre-COB) deductible — so the
+    ///     credited deductible also counted as met for the claim's later lines
+    ///     in the first pass — member-paid-only credits the reduced PR-1.</description></item>
+    /// </list>
+    /// </summary>
+    private static List<LineBenefitResult> ApplyClaimLevelCob(
+        BenefitResolutionRequest request,
+        BenefitPlanConfig plan,
+        AccumulatorWorkingSet accumulators,
+        List<LineBenefitResult> lines,
+        IReadOnlyDictionary<int, CostShareCalcResult> preCob)
+    {
+        var cob = request.Cob!;
+        accumulators.RollbackCostShareUpdates();
+
+        var covered = lines.Where(l => preCob.ContainsKey(l.LineNumber)).ToList();
+        if (covered.Count == 0) return lines;
+
+        var claimResult = CobCalculator.CalculateClaim(new CobClaimInput
+        {
+            Units = covered.Select(l => new CobClaimUnit
+            {
+                LineNumber = l.LineNumber,
+                BilledAmount = l.BilledAmount,
+                AllowedAmount = l.AllowedAmount,
+                CostShareBeforeCob = l.MemberResponsibility,
+            }).ToList(),
+            ClaimLineCharges = request.Lines
+                .Select(l => new PriorPayerAllocator.ClaimLineCharge(l.LineNumber, l.BilledAmount))
+                .ToList(),
+            PriorPayers = PriorPayersFor(cob),
+            OurSequence = cob.PayerSequence,
+            Model = ModelFor(cob),
         });
+        var byLine = claimResult.Units.ToDictionary(u => u.LineNumber);
+
+        var results = new List<LineBenefitResult>(lines.Count);
+        foreach (var line in lines)
+        {
+            if (!preCob.TryGetValue(line.LineNumber, out var r) || !byLine.TryGetValue(line.LineNumber, out var unit))
+            {
+                results.Add(line);
+                continue;
+            }
+
+            var deductible = r.DeductibleApplied;
+            var copay = r.CopayApplied;
+            var coinsurance = r.CoinsuranceApplied;
+            var memberBeforeCob = deductible + copay + coinsurance;
+            var toForgive = memberBeforeCob - Math.Min(unit.MemberResponsibility, memberBeforeCob);
+            coinsurance -= Forgive(coinsurance, ref toForgive);
+            copay -= Forgive(copay, ref toForgive);
+            deductible -= Forgive(deductible, ref toForgive);
+            var member = deductible + copay + coinsurance;
+            var paid = unit.SecondaryPlanPayment;
+            var oa23 = line.AllowedAmount - member - paid;
+
+            var oopApplied =
+                (r.DeductibleCountsToOop ? deductible : 0)
+                + (r.CopayCountsToOop ? copay : 0)
+                + (r.CoinsuranceCountsToOop ? coinsurance : 0);
+            if (oopApplied > 0)
+                accumulators.ApplyOopMax(oopApplied, r.EffectiveNetworkTier);
+            var toCredit = plan.CobDeductibleCredit == CobDeductibleCredit.NaicFullCredit
+                ? Math.Max(r.DeductibleApplied, deductible)
+                : deductible;
+            var credited = accumulators.ApplyDeductibleWithCredit(deductible, toCredit, r.EffectiveNetworkTier);
+
+            var adjustments = new List<AdjustmentReason>();
+            if (r.ContractualAdj > 0)
+                adjustments.Add(new AdjustmentReason { GroupCode = "CO", ReasonCode = "45", Amount = r.ContractualAdj });
+            if (deductible > 0)
+                adjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "1", Amount = deductible });
+            if (copay > 0)
+                adjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "3", Amount = copay });
+            if (coinsurance > 0)
+                adjustments.Add(new AdjustmentReason { GroupCode = "PR", ReasonCode = "2", Amount = coinsurance });
+            if (oa23 > 0)
+                adjustments.Add(new AdjustmentReason { GroupCode = "OA", ReasonCode = "23", Amount = oa23 });
+
+            results.Add(line with
+            {
+                DeductibleAmount = deductible,
+                CopayAmount = copay,
+                CoinsuranceAmount = coinsurance,
+                MemberResponsibility = member,
+                OopAppliedAmount = oopApplied,
+                DeductibleCreditedAmount = credited,
+                PlanPaidAmount = paid,
+                Adjustments = adjustments,
+            });
+        }
+        return results;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1223,6 +1524,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             TotalOopMaxReduction = lines.Sum(l => l.OopMaxReduction),
             TotalMemberResponsibility = lines.Sum(l => l.MemberResponsibility),
             TotalOopApplied = lines.Sum(l => l.OopAppliedAmount),
+            TotalDeductibleCredited = lines.Sum(l => l.DeductibleCreditedAmount),
             TotalPlanPaid = lines.Sum(l => l.PlanPaidAmount)
         };
     }
@@ -1255,6 +1557,12 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         public decimal PlanPaid { get; init; }
         /// <summary>Positive COB OA-23 (0 when not secondary).</summary>
         public decimal CobOa23 { get; init; }
+        /// <summary>Deductible credited to the accumulators (see CobDeductibleCredit).</summary>
+        public decimal DeductibleCredited { get; init; }
         public List<AdjustmentReason> Adjustments { get; init; } = [];
+        public bool DeductibleCountsToOop { get; init; } = true;
+        public bool CopayCountsToOop { get; init; } = true;
+        public bool CoinsuranceCountsToOop { get; init; } = true;
+        public NetworkTier EffectiveNetworkTier { get; init; }
     }
 }

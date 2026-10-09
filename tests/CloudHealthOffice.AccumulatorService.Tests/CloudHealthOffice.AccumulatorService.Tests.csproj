@@ -14,6 +14,8 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
+    <!-- Real mongod for the Mongo store tests (round 3: tombstones, leases, index initializer). -->
+    <PackageReference Include="EphemeralMongo" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\services\accumulator-service\accumulator-service.csproj" />
@@ -22,5 +24,9 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One shared mongod per collection; see tests/Shared/EphemeralMongo. -->
+    <Compile Include="..\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -1020,6 +1020,15 @@ public class ClaimPendDetails
     public DateTime PendedAt { get; set; }
     public List<ClaimPendEditFailure> EditFailures { get; set; } = new();
     public List<ClaimPendDuplicateFinding> DuplicateFindings { get; set; } = new();
+
+    /// <summary>Further pend reasons ("{code}: {reason}") on the same claim.</summary>
+    public List<string> AdditionalPendReasons { get; set; } = new();
+
+    /// <summary>
+    /// claims-service's fingerprint of exactly these pends: sent back with an
+    /// approval, so it applies only to what the examiner viewed.
+    /// </summary>
+    public string? Fingerprint { get; set; }
 }
 
 /// <summary>
@@ -2716,13 +2725,29 @@ public interface IWorkQueueService
     Task<List<WorkQueueItem>> GetQueueItemsAsync(string? queueType = null,
         string? assignedTo = null, int limit = 100);
     Task AssignClaimAsync(string claimId, string assignTo);
-    Task OverrideAsync(string claimId, string overrideReason);
-    Task ResolvePendedClaimAsync(
+    /// <summary>
+    /// Supervisor override (approval). <paramref name="payerSequence"/> is the
+    /// payer order confirmed for a COB pend. Throws
+    /// <see cref="ClaimResolutionRefusedException"/> with the service's reason
+    /// when it refuses (400 / 403 / 409).
+    /// </summary>
+    Task<ClaimResolutionResult> OverrideAsync(string claimId, string overrideReason, int? payerSequence = null,
+        string? pendFingerprint = null);
+
+    /// <summary>
+    /// Approve or deny a pended claim. <paramref name="payerSequence"/> is the
+    /// payer order confirmed for a COB pend. A 202 (waiting for a second
+    /// approver) returns <see cref="ClaimResolutionResult.AwaitingSecondApproval"/>;
+    /// a refusal throws <see cref="ClaimResolutionRefusedException"/>.
+    /// </summary>
+    Task<ClaimResolutionResult> ResolvePendedClaimAsync(
         string claimId,
         string disposition,
         string reason,
         string? aiExaminerAgreement,
-        string examinerUserId);
+        string examinerUserId,
+        int? payerSequence = null,
+        string? pendFingerprint = null);
 }
 
 public class WorkQueueSummary
@@ -2737,6 +2762,9 @@ public class WorkQueueSummary
 public class WorkQueueItem
 {
     public string ClaimId { get; set; } = string.Empty;
+
+    /// <summary>Fingerprint of the pends shown; sent back with an approval.</summary>
+    public string? PendFingerprint { get; set; }
     public string MemberName { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;

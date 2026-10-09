@@ -419,7 +419,10 @@ builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 
-builder.Services.AddScoped<IClaimAdjudicationOrchestrator, ClaimAdjudicationOrchestrator>();
+builder.Services.AddScoped<ClaimAdjudicationOrchestrator>();
+builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
+// Examiner approval of a pended claim re-runs the pipeline in Production.
+builder.Services.AddScoped<IClaimApprovalReadjudicator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
 
 var adjudicationMaxConcurrentCalls = Math.Max(
     1,

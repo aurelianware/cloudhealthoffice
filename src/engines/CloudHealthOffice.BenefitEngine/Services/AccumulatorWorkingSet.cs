@@ -238,7 +238,16 @@ public class AccumulatorWorkingSet
     // DEDUCTIBLE
     // ═══════════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// The deductible still to apply when pricing this claim's next unit.
+    /// Includes any NAIC COB credit given on this claim's earlier units
+    /// (see <see cref="ApplyDeductibleWithCredit"/>): deductible the plan
+    /// credited is met for the rest of the claim too.
+    /// </summary>
     public decimal GetRemainingDeductible(NetworkTier networkTier)
+        => RemainingDeductible(networkTier, Remaining);
+
+    private decimal RemainingDeductible(NetworkTier networkTier, Func<AccumulatorEntry, decimal> remaining)
     {
         if (_plan.FamilyAccumulatorModel == FamilyAccumulatorModel.Aggregate)
         {
@@ -246,7 +255,7 @@ public class AccumulatorWorkingSet
             // the fallback pool when no family deductible is configured.
             var pool = GetAggregatePool(AccumulatorType.FamilyDeductible,
                 AccumulatorType.IndividualDeductible, networkTier);
-            return pool is null ? 0 : Remaining(pool);
+            return pool is null ? 0 : remaining(pool);
         }
 
         // Embedded model: the member owes toward the deductible until either
@@ -258,9 +267,9 @@ public class AccumulatorWorkingSet
             AccumulatorScope.Family, networkTier));
 
         if (individual is null && familyEmb is null) return 0;
-        if (individual is null) return Remaining(familyEmb!);
-        if (familyEmb is null) return Remaining(individual);
-        return Math.Min(Remaining(individual), Remaining(familyEmb));
+        if (individual is null) return remaining(familyEmb!);
+        if (familyEmb is null) return remaining(individual);
+        return Math.Min(remaining(individual), remaining(familyEmb));
     }
 
     public void ApplyDeductible(decimal amount, NetworkTier networkTier)
@@ -292,6 +301,28 @@ public class AccumulatorWorkingSet
             fam.CurrentAccumulated += amount;
             RecordUpdate(fam, amount, "Deductible-Family");
         }
+    }
+
+    /// <summary>
+    /// Credits the deductible for one COB unit (a line, or a DRG stay) and
+    /// returns the amount credited. <paramref name="memberOwes"/> is the
+    /// deductible on the 835 (PR-1); <paramref name="toCredit"/> is what the
+    /// plan's setting credits — the same amount, or under NAIC full credit
+    /// the deductible the plan applied before COB (NAIC MDL-120 §7).
+    /// The credit is limited to the deductible left in the accumulators (it
+    /// never takes them past the limit). It counts as met for this claim's
+    /// later units as well as for the claims that follow: the plan prices the
+    /// rest of the claim as it would have with no other coverage.
+    /// </summary>
+    public decimal ApplyDeductibleWithCredit(decimal memberOwes, decimal toCredit, NetworkTier networkTier)
+    {
+        memberOwes = Math.Max(0, memberOwes);
+        toCredit = Math.Max(memberOwes, toCredit);
+        var credited = toCredit == memberOwes
+            ? memberOwes
+            : Math.Min(toCredit, Math.Max(memberOwes, GetRemainingDeductible(networkTier)));
+        ApplyDeductible(credited, networkTier);
+        return credited;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -441,6 +472,58 @@ public class AccumulatorWorkingSet
         _pendingUpdates.Clear();
     }
 
+    private static readonly HashSet<AccumulatorType> CostShareTypes =
+    [
+        AccumulatorType.IndividualDeductible,
+        AccumulatorType.FamilyDeductible,
+        AccumulatorType.IndividualOutOfPocketMax,
+        AccumulatorType.FamilyOutOfPocketMax,
+        AccumulatorType.AcaIndividualCap,
+    ];
+
+    /// <summary>
+    /// Undoes this claim's pending deductible, OOP-max and ACA-cap updates
+    /// (visit, day and dollar counts are kept). Coordination of benefits
+    /// prices the claim first as if this plan were the only plan — those
+    /// cost-share updates carry the deductible and OOP max from line to line
+    /// as a primary payer would — and then writes the updates it actually
+    /// owes after the claim-level COB calculation.
+    /// </summary>
+    public void RollbackCostShareUpdates()
+    {
+        foreach (var update in _pendingUpdates.Where(u => CostShareTypes.Contains(u.Type)).ToList())
+        {
+            if (_entries.TryGetValue(MakeKey(update.Type, update.Scope, update.NetworkTier), out var entry))
+                entry.CurrentAccumulated -= update.Amount;
+            _pendingUpdates.Remove(update);
+        }
+    }
+
+    /// <summary>
+    /// Takes a claim's own earlier, still-active accumulator updates out of
+    /// the starting balances, so re-adjudicating the same claim prices it
+    /// against the accumulators as they were without it — the same result
+    /// as the first pass, instead of a claim that has already met its own
+    /// deductible.
+    /// </summary>
+    public void ExcludePriorUpdates(IEnumerable<AccumulatorUpdate> updates)
+    {
+        foreach (var update in updates)
+        {
+            var key = update.Type switch
+            {
+                AccumulatorType.VisitCount => $"VisitCount:{update.Source.Split(':').LastOrDefault()}",
+                AccumulatorType.DayCount => $"DayCount:{update.Source.Split(':').LastOrDefault()}",
+                AccumulatorType.DollarLimit => $"DollarLimit:{update.Source.Split(':').LastOrDefault()}",
+                _ => MakeKey(update.Type, update.Scope, update.NetworkTier)
+            };
+            if (!_entries.TryGetValue(key, out var entry)) continue;
+            var amount = Math.Min(update.Amount, entry.CurrentAccumulated);
+            entry.OriginalAccumulated -= amount;
+            entry.CurrentAccumulated -= amount;
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // SNAPSHOT / PERSISTENCE
     // ═══════════════════════════════════════════════════════════════════
@@ -505,7 +588,11 @@ public class AccumulatorWorkingSet
             Scope = entry.Scope,
             NetworkTier = entry.NetworkTier,
             Amount = amount,
-            Source = source
+            Source = source,
+            ClampAtLimit = entry.Type is AccumulatorType.IndividualDeductible or AccumulatorType.FamilyDeductible
+                           && entry.LimitAmount > 0
+                ? entry.LimitAmount
+                : null,
         });
     }
 
@@ -535,7 +622,7 @@ public class AccumulatorWorkingSet
         public AccumulatorScope Scope { get; init; }
         public NetworkTier NetworkTier { get; init; }
         public decimal LimitAmount { get; set; }
-        public decimal OriginalAccumulated { get; init; }
+        public decimal OriginalAccumulated { get; set; }
         public decimal CurrentAccumulated { get; set; }
     }
 }
@@ -547,4 +634,13 @@ public record AccumulatorUpdate
     public NetworkTier NetworkTier { get; init; }
     public decimal Amount { get; init; }
     public string Source { get; init; } = default!;
+
+    /// <summary>
+    /// For a deductible update: the plan's deductible limit. The store adds
+    /// at most what is left under it at write time, so two claims
+    /// adjudicated concurrently against the same starting balance cannot
+    /// together credit past the limit (the store reloads and re-clamps on an
+    /// optimistic-concurrency conflict). Null = no clamp.
+    /// </summary>
+    public decimal? ClampAtLimit { get; init; }
 }

@@ -1259,13 +1259,32 @@
     {
         if (_claim == null) return;
         
+        // A COB pend needs the payer order the examiner confirmed.
+        int? payerSequence = null;
+        var reason = "Claim approved by claims examiner";
+        if (string.Equals(_claim.PendDetails?.PendCode, "COB", StringComparison.OrdinalIgnoreCase))
+        {
+            var dialog = await DialogService.ShowAsync<CobPayerOrderDialog>("Confirm payer order");
+            var choice = await dialog.Result;
+            if (choice is null || choice.Canceled || choice.Data is not CobPayerOrderDialog.CobPayerOrderChoice picked) return;
+            payerSequence = picked.PayerSequence;
+            reason = picked.Reason;
+        }
+
         try
         {
-            await ResolvePendedClaimAsync(
-                "Approved",
-                "Claim approved by claims examiner");
-            Snackbar.Add("Claim approved successfully", Severity.Success);
+            var result = await ResolvePendedClaimAsync("Approved", reason, payerSequence);
+            Snackbar.Add(result.AwaitingSecondApproval
+                ? result.Message ?? "Waiting for a second approver."
+                : "Claim approved successfully",
+                result.AwaitingSecondApproval ? Severity.Info : Severity.Success);
             await LoadClaimDetails();
+        }
+        catch (ClaimResolutionRefusedException ex)
+        {
+            // The service's own reason (e.g. a COB pend without a payer order,
+            // a new pend found on re-adjudication), not "service unavailable".
+            Snackbar.Add(ex.ToDisplayText(), Severity.Warning);
         }
         catch (Exception ex)
         {
@@ -1289,6 +1308,10 @@
                 Snackbar.Add("Claim denied successfully", Severity.Success);
                 await LoadClaimDetails();
             }
+            catch (ClaimResolutionRefusedException ex)
+            {
+                Snackbar.Add(ex.ToDisplayText(), Severity.Warning);
+            }
             catch (Exception ex)
             {
                 Snackbar.Add($"Error denying claim: {ex.Message}", Severity.Error);
@@ -1304,9 +1327,9 @@
         && (_claim.Status.Equals("Approved", StringComparison.OrdinalIgnoreCase)
             || _claim.Status.Equals("Denied", StringComparison.OrdinalIgnoreCase));
 
-    private async Task ResolvePendedClaimAsync(string disposition, string reason)
+    private async Task<ClaimResolutionResult> ResolvePendedClaimAsync(string disposition, string reason, int? payerSequence = null)
     {
-        if (_claim is null) return;
+        if (_claim is null) return ClaimResolutionResult.Resolved;
 
         string? agreement = null;
         if (_claim.AiExamination is not null)
@@ -1322,12 +1345,15 @@
         var user = await UserContextService.GetCurrentUserAsync();
         var examinerUserId = user?.UserId ?? user?.Email ?? "portal-examiner";
 
-        await WorkQueueService.ResolvePendedClaimAsync(
+        return await WorkQueueService.ResolvePendedClaimAsync(
             _claim.ClaimId,
             disposition,
             reason,
             agreement,
-            examinerUserId);
+            examinerUserId,
+            payerSequence,
+            // The pends this page showed: the approval applies to exactly those.
+            _claim.PendDetails?.Fingerprint);
     }
 
     private static string NormalizeDisposition(string disposition) => disposition switch

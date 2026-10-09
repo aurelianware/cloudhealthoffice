@@ -668,6 +668,7 @@ public class BenefitPlanServiceImpl : IBenefitPlanService
         MetalLevel = src.MetalLevel,
         LineOfBusiness = src.LineOfBusiness,
         FamilyAccumulatorModel = src.FamilyAccumulatorModel,
+        CobDeductibleCredit = src.CobDeductibleCredit,
         Benefits = src.Benefits.Select(CloneBenefit).ToList(),
         NetworkTiers = src.NetworkTiers.Select(CloneNetworkTier).ToList(),
         CostSharing = CloneCostSharing(src.CostSharing),

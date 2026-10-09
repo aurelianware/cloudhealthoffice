@@ -293,6 +293,28 @@ public interface IClaimRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// Takes the examiner-resolution lock on a Pended claim (PR #1278 round
+    /// 3, L10): a conditional write that succeeds only while the claim is
+    /// <see cref="ClaimStatus.Pended"/> and holds no unexpired lock, so two
+    /// concurrent approvals cannot both re-adjudicate and publish. False when
+    /// the claim is not Pended, is locked by another resolution, or is gone.
+    /// </summary>
+    Task<bool> TryAcquireResolutionLockAsync(
+        string tenantId, string claimId, string token, string? actorId, DateTime now, TimeSpan duration,
+        CancellationToken ct = default);
+
+    /// <summary>Clears the resolution lock if <paramref name="token"/> still holds it.</summary>
+    Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default);
+
+    /// <summary>
+    /// Replaces the claim only while <paramref name="lockToken"/> still holds
+    /// its resolution lock (fencing, round-3 verification L6): a resolver
+    /// whose lock expired and was taken over cannot finalize. Returns the
+    /// written claim, or null when the lock is no longer held.
+    /// </summary>
+    Task<Claim?> UpdateHoldingResolutionLockAsync(Claim claim, string lockToken, CancellationToken ct = default);
+
+    /// <summary>
     /// Candidate prior claims for duplicate detection
     /// (<see cref="Services.Adjudication.Stages.DuplicateClaimStage"/>).
     /// Returns live versions for <paramref name="tenantId"/> +
@@ -1844,6 +1866,84 @@ public class ClaimRepository : IClaimRepository
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             return false;
+        }
+    }
+
+    public async Task<bool> TryAcquireResolutionLockAsync(
+        string tenantId, string claimId, string token, string? actorId, DateTime now, TimeSpan duration,
+        CancellationToken ct = default)
+    {
+        var ops = new List<PatchOperation>
+        {
+            PatchOperation.Set("/resolutionLock", new ExaminerResolutionLock
+            {
+                Token = token, LockedBy = actorId, ExpiresAt = now + duration,
+            }),
+        };
+        // ISO-8601 UTC strings compare in time order.
+        var nowLiteral = now.ToUniversalTime().ToString("o");
+        var options = new PatchItemRequestOptions
+        {
+            FilterPredicate =
+                $"FROM c WHERE c.status = '{CosmosStatusLiteral(ClaimStatus.Pended)}' " +
+                "AND (NOT IS_DEFINED(c.resolutionLock) OR IS_NULL(c.resolutionLock) " +
+                $"OR c.resolutionLock.expiresAt < '{nowLiteral}')",
+        };
+        try
+        {
+            await _container.PatchItemAsync<Claim>(claimId, new PartitionKey(tenantId), ops, options, ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
+    public async Task<Claim?> UpdateHoldingResolutionLockAsync(Claim claim, string lockToken, CancellationToken ct = default)
+    {
+        var tenantId = GetTenantId();
+        claim.TenantId = tenantId;
+        ItemResponse<Claim> current;
+        try
+        {
+            current = await _container.ReadItemAsync<Claim>(claim.Id, new PartitionKey(tenantId), cancellationToken: ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+        if (current.Resource.ResolutionLock?.Token != lockToken) return null;
+        try
+        {
+            // The ETag makes the token check and the write one atomic step.
+            var written = await _container.ReplaceItemAsync(claim, claim.Id, new PartitionKey(tenantId),
+                new ItemRequestOptions { IfMatchEtag = current.ETag }, ct);
+            return written.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task ReleaseResolutionLockAsync(string tenantId, string claimId, string token, CancellationToken ct = default)
+    {
+        var options = new PatchItemRequestOptions
+        {
+            FilterPredicate = $"FROM c WHERE IS_DEFINED(c.resolutionLock) AND c.resolutionLock.token = '{token.Replace("'", "")}'",
+        };
+        try
+        {
+            await _container.PatchItemAsync<Claim>(claimId, new PartitionKey(tenantId),
+                [PatchOperation.Set<ExaminerResolutionLock?>("/resolutionLock", null)], options, ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            // Not ours any more (or gone): nothing to release.
         }
     }
 

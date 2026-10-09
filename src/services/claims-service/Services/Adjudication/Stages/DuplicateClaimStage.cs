@@ -68,6 +68,9 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
     public const string DuplicateGroupCode = "CO";
 
     public const string DuplicatePendCode = "DUPLICATE";
+
+    /// <summary>The candidate lookup failed: a transient failure, never overridden by an approval — the re-run retries it.</summary>
+    public const string LookupFailedReason = "Duplicate-claim check could not be completed; pended for review.";
     public const string ExactRuleId = "DUP001";
     public const string SuspectRuleId = "DUP002";
     public const string ExactDuplicateType = "Exact";
@@ -160,7 +163,7 @@ public sealed class DuplicateClaimStage : IClaimAdjudicationStage
                 activity?.SetTag("duplicate.outcome", "softvalidation");
                 return ClaimAdjudicationStageResult.Pass(StageName);
             }
-            const string reason = "Duplicate-claim check could not be completed; pended for review.";
+            const string reason = LookupFailedReason;
             context.PendDetails = new PendDetails
             {
                 PendCode = DuplicatePendCode,

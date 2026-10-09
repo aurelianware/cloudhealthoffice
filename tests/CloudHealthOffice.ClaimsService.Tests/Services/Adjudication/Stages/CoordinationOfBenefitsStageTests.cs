@@ -21,7 +21,7 @@ namespace CloudHealthOffice.ClaimsService.Tests.Services.Adjudication.Stages;
 /// Uses the REAL <see cref="PayerOrderService"/> so the engine surface
 /// behaviour is exercised end-to-end (it's pure-calculation, no I/O).
 /// </summary>
-public class CoordinationOfBenefitsStageTests
+public partial class CoordinationOfBenefitsStageTests
 {
     private const string TenantId = "tenant-1";
     private const string ClaimVersionId = "ver-cob-1";
@@ -47,7 +47,7 @@ public class CoordinationOfBenefitsStageTests
     {
         var stage = NewStage();
         Assert.Equal("CoordinationOfBenefits", stage.Name);
-        Assert.Equal(500, stage.Order);
+        Assert.Equal(275, stage.Order);
         // Decision 2 — disabling COB would let CHO-secondary claims
         // process as CHO-primary (wrong on the wire). Tenants set
         // CobMode=SoftValidation instead.
@@ -221,7 +221,7 @@ public class CoordinationOfBenefitsStageTests
     }
 
     [Fact]
-    public async Task SoftValidation_on_secondary_detection_returns_Pass_but_records_outcome()
+    public async Task SoftValidation_on_secondary_detection_pends_never_pays_as_primary()
     {
         _coverageClient.GetCobEntriesAsync(
                 TenantId, MemberId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
@@ -234,14 +234,16 @@ public class CoordinationOfBenefitsStageTests
         var result = await NewStage(CobEnforcementMode.SoftValidation)
             .ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        // PR #1278 re-review N4: SoftValidation used to Pass here, and the
+        // claim was priced as primary. A later-payer claim without usable COB
+        // data now pends in SoftValidation too.
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
         Assert.True(result.Continue);
+        Assert.False(ctx.CobResult!.ApplyCob);
         Assert.Equal(CobScenario.ChoSecondaryDetected, ctx.CobResult!.Scenario);
         Assert.Equal(
             CoordinationOfBenefitsStage.SecondaryNotSupportedPendReason,
             ctx.CobResult.PendReason);
-        // SoftValidation still records the audit-trail snapshot — telemetry
-        // captures the detection even though the stage outcome is Pass.
         Assert.NotNull(ctx.PendDetails);
         Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }

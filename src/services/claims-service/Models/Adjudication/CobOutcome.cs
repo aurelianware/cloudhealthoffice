@@ -64,6 +64,27 @@ public sealed class CobOutcome
     /// Medicare-primary cases the engine returns
     /// <see cref="PayerOrderRule.MedicareSecondaryPayer"/>.</summary>
     public PayerOrderRule? AppliedRule { get; init; }
+
+    /// <summary>
+    /// True when coverage-service and the 837 agree that this plan pays
+    /// after another payer and the 837 carries complete prior-payer data
+    /// (2320 / 2430): BenefitCalculationStage prices the claim as payer
+    /// <see cref="PayerSequence"/> and it finalizes. False in every other
+    /// case — no COB is applied.
+    /// </summary>
+    public bool ApplyCob { get; init; }
+
+    /// <summary>This plan's payer sequence from the 837 (2000B SBR01:
+    /// 1 primary, 2 secondary, 3 tertiary, 4–11); null when absent / U.</summary>
+    public int? PayerSequence { get; init; }
+
+    /// <summary>
+    /// True when an examiner confirmed the payer order on approval
+    /// (<see cref="Services.Adjudication.ExaminerApproval.PayerSequence"/>);
+    /// with <see cref="PayerSequence"/> 1 the claim is then priced as primary
+    /// even though the 837 said otherwise.
+    /// </summary>
+    public bool ConfirmedByExaminer { get; init; }
 }
 
 /// <summary>

@@ -13,7 +13,17 @@ public enum ApplyOutcome
 {
     Applied,
     Duplicate,
-    Orphan
+    Orphan,
+
+    /// <summary>
+    /// Another attempt for the same claim (or reversal) is in flight: nothing
+    /// was written. Not terminal — the consumer leaves the offset uncommitted
+    /// and the message is retried.
+    /// </summary>
+    InProgress,
+
+    /// <summary>Not applied by design (a denied claim): terminal, nothing written.</summary>
+    Skipped
 }
 
 public record ApplyResult(ApplyOutcome Outcome, AccumulatorSnapshot? Snapshot, string? EventId, string? Reason);

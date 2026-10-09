@@ -153,6 +153,125 @@ public class CostShareFinalizationSeamTests
         AssertLinesBalance(ctx, claim);
     }
 
+    // Tertiary payer, from the claim's own 837 payer data (no injected
+    // CobInfo): 2000B SBR01 "T", primary and secondary in OtherPayers with
+    // 2430 line adjudication; CoordinationOfBenefitsStage cleared COB, so
+    // BenefitCalculationStage.BuildCob sends both prior payers to the engine.
+    // Priced first as the only plan: L1 deductible 100 → cost share 100,
+    // normal 0; L2 deductible 20, copay 20, coinsurance 20% × 60 = 12 →
+    // cost share 52, normal 48.
+    // Prior paid per line 40 + 30 = 70 and 50 + 20 = 70 (room 30 + 30); the
+    // secondary adjudicated both lines and left the member PR 30 + 30 = 60 →
+    // claim balance min(60, 60) = 60. Claim-level COB: pay min(48, 60) = 48;
+    // member min(152, 60 − 48) = 12.
+    // Lines: the payment by normal benefit, within each line's balance (30):
+    // L2 30, then the 18 left to L1; the member's 12 on L1 (PR-1 12).
+    // L1: CO-45 50, PR-1 12, OA-23 = 100 − 12 − 18 = 70. L2: CO-45 100,
+    // OA-23 = 100 − 30 = 70 (NaicFullCredit).
+    // Deductible credit: NAIC full (default) credits the 100 + 20 the plan
+    // applied alone (= the 120 deductible, met). OOP / service rollup 12.
+    // MemberPaidOnly prices line by line instead (each line credits only
+    // what the member pays, so the result does not depend on claim
+    // splitting): L1 deductible 100, normal 0; the secondary left 30 →
+    // pay 0, PR-1 30. L2: 90 of the deductible left + copay 10 → normal 0;
+    // balance 30 → pay 0, PR-1 30. Pay 0, member 60, credited 60.
+    [Theory]
+    [InlineData(CobDeductibleCredit.NaicFullCredit, 120, 48, 12, 18, 30, 12, 0)]
+    [InlineData(CobDeductibleCredit.MemberPaidOnly, 60, 0, 60, 0, 0, 30, 30)]
+    public async Task TertiaryPayerCob_FromClaimPayerData_ReachesAccumulatorDeltas(
+        CobDeductibleCredit credit, decimal expectedDeductibleDelta, decimal expectedPaid, decimal expectedMember,
+        decimal paidL1, decimal paidL2, decimal pr1L1, decimal pr1L2)
+    {
+        static ClaimAdjustmentReason Cas(string group, string carc, decimal amount) =>
+            new() { GroupCode = group, ReasonCode = carc, Amount = amount };
+
+        var (ctx, claim, evt) = await AdjudicateAndFinalizeAsync(
+            oopMax: 3_000m,
+            deductibleCredit: credit,
+            configureClaim: c =>
+            {
+                c.PayerResponsibilityCode = "T";
+                c.OtherPayers =
+                [
+                    new ClaimOtherPayer
+                    {
+                        PayerResponsibilityCode = "P", PayerId = "PRIM", PaidAmount = 90m,
+                        LineAdjudications =
+                        [
+                            new() { LineNumber = 1, PaidAmount = 40m, Adjustments = [Cas("CO", "45", 50m), Cas("PR", "1", 60m)] },
+                            new() { LineNumber = 2, PaidAmount = 50m, Adjustments = [Cas("CO", "45", 100m), Cas("PR", "2", 50m)] },
+                        ],
+                    },
+                    new ClaimOtherPayer
+                    {
+                        PayerResponsibilityCode = "S", PayerId = "SEC", PaidAmount = 50m,
+                        LineAdjudications =
+                        [
+                            new() { LineNumber = 1, PaidAmount = 30m, Adjustments = [Cas("OA", "23", 90m), Cas("PR", "1", 30m)] },
+                            new() { LineNumber = 2, PaidAmount = 20m, Adjustments = [Cas("OA", "23", 150m), Cas("PR", "2", 30m)] },
+                        ],
+                    },
+                ];
+            });
+        var engine = ctx.BenefitResolutionResult!;
+
+        engine.Totals.TotalPlanPaid.Should().Be(expectedPaid);
+        engine.Totals.TotalMemberResponsibility.Should().Be(expectedMember);
+        engine.Totals.TotalDeductible.Should().Be(expectedMember);
+        engine.Totals.TotalDeductibleCredited.Should().Be(expectedDeductibleDelta);
+        ctx.AdjudicationResult!.DeductibleCreditedAmount.Should().Be(expectedDeductibleDelta);
+        ctx.AdjudicationResult.CobPayerSequence.Should().Be(3);
+
+        static List<(string, string, decimal)> ExpectedCas(decimal pr1, decimal co45) =>
+            pr1 > 0
+                ? [("CO", "45", co45), ("PR", "1", pr1), ("OA", "23", 70m)]
+                : [("CO", "45", co45), ("OA", "23", 70m)];
+        claim.ClaimLines[0].AdjudicationResult!.AdjustmentReasons
+            .Select(r => (r.GroupCode, r.ReasonCode, r.Amount)).Should().Equal(ExpectedCas(pr1L1, 50m));
+        claim.ClaimLines[1].AdjudicationResult!.AdjustmentReasons
+            .Select(r => (r.GroupCode, r.ReasonCode, r.Amount)).Should().Equal(ExpectedCas(pr1L2, 100m));
+        claim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount).Should().Equal(paidL1, paidL2);
+
+        evt.LineItems.Select(l => l.DeductibleApplied).Should().Equal(pr1L1, pr1L2);
+        var (deductible, oop, services) = AccumulatorDomainService.ComputeDeltas(evt);
+        deductible.Should().Be(expectedDeductibleDelta);
+        oop.Should().Be(expectedMember);
+        services.Sum(s => s.UsedDelta).Should().Be(expectedMember);
+
+        AssertClaimTotalsMatchLineCas(claim);
+        AssertLinesBalance(ctx, claim);
+    }
+
+    // accumulator-service: the credited deductible goes to the deductible
+    // delta (line items, or claim level when there are none); the service
+    // rollup and OOP keep the member's cost share. Null = DeductibleApplied.
+    [Fact]
+    public void ComputeDeltas_UsesDeductibleCredited_WhenPresent()
+    {
+        var lines = new ClaimFinalizedEvent
+        {
+            BenefitCategory = "OV",
+            LineItems =
+            {
+                new ClaimFinalizedLineItem { BenefitCategory = "OV", DeductibleApplied = 30m, DeductibleCredited = 100m, OopApplied = 30m },
+                new ClaimFinalizedLineItem { BenefitCategory = "OV", DeductibleApplied = 20m, OopApplied = 20m },
+            },
+        };
+        var (deductible, oop, services) = AccumulatorDomainService.ComputeDeltas(lines);
+        deductible.Should().Be(120m);
+        oop.Should().Be(50m);
+        services.Sum(s => s.UsedDelta).Should().Be(50m);
+
+        var claimLevel = new ClaimFinalizedEvent
+        {
+            BenefitCategory = "OV", DeductibleApplied = 30m, DeductibleCredited = 100m, OopApplied = 30m,
+        };
+        var (claimDeductible, claimOop, claimServices) = AccumulatorDomainService.ComputeDeltas(claimLevel);
+        claimDeductible.Should().Be(100m);
+        claimOop.Should().Be(30m);
+        claimServices.Sum(s => s.UsedDelta).Should().Be(30m);
+    }
+
     [Fact]
     public void FinalizedEvent_CountsOnlyPatientResponsibilityGroupAsCostShare()
     {
@@ -225,7 +344,9 @@ public class CostShareFinalizationSeamTests
 
     private static async Task<(ClaimAdjudicationContext Ctx, Claim Claim, ClaimFinalizedEvent Event)>
         AdjudicateAndFinalizeAsync(
-            decimal oopMax, CloudHealthOffice.BenefitEngine.Models.CobInfo? cob = null)
+            decimal oopMax, CloudHealthOffice.BenefitEngine.Models.CobInfo? cob = null,
+            Action<AdapterClaim>? configureClaim = null,
+            CobDeductibleCredit deductibleCredit = CobDeductibleCredit.NaicFullCredit)
     {
         var plan = new BenefitPlanConfig
         {
@@ -238,6 +359,7 @@ public class CostShareFinalizationSeamTests
             FamilyDeductible = 360m,
             IndividualOopMax = oopMax,
             FamilyOopMax = oopMax * 3,
+            CobDeductibleCredit = deductibleCredit,
             Categories =
             [
                 new BenefitCategoryConfig
@@ -292,9 +414,9 @@ public class CostShareFinalizationSeamTests
             new BenefitRuleGate(NullLogger<BenefitRuleGate>.Instance),
             NullLogger<BenefitCalculationEngine>.Instance);
 
-        // claims-service does not populate Cob yet (CHO-secondary claims pend
-        // in CoordinationOfBenefitsStage), so a secondary-payer seam injects
-        // it on the way into the real engine.
+        // BenefitCalculationStage builds Cob from the claim's 837 payer data
+        // (configureClaim); a test can instead inject a CobInfo on the way
+        // into the real engine (the legacy primary-payment-by-line input).
         IBenefitCalculationEngine stageEngine = cob is null ? engine : new WithCob(engine, cob);
 
         var stage = new BenefitCalculationStage(
@@ -327,6 +449,7 @@ public class CostShareFinalizationSeamTests
                         ServiceDateFrom = serviceDate, ServiceDateTo = serviceDate },
             },
         };
+        configureClaim?.Invoke(adapterClaim);
         var ctx = new ClaimAdjudicationContext
         {
             TenantId = "tenant-1",
@@ -337,6 +460,19 @@ public class CostShareFinalizationSeamTests
                 AllowedAmounts = adapterClaim.ClaimLines.ToDictionary(l => l.LineNumber, _ => 100m),
             },
             ResolvedMember = new ResolvedMember { MemberId = "MEM-1", IsSubscriber = true },
+            // What CoordinationOfBenefitsStage (Order 275) leaves when
+            // coverage-service and the 837 agree on a later payer sequence
+            // and the 837 carries complete prior-payer data.
+            CobResult = CloudHealthOffice.CobEngine.Domain.PayerResponsibility.ToSequence(adapterClaim.PayerResponsibilityCode) is >= 2 and var seq
+                ? new CobOutcome
+                {
+                    Scenario = seq == 2
+                        ? CobScenario.ChoSecondaryDetected
+                        : CobScenario.ChoTertiaryDetected,
+                    ApplyCob = true,
+                    PayerSequence = seq,
+                }
+                : null,
         };
 
         var stageResult = await stage.ExecuteAsync(ctx, CancellationToken.None);

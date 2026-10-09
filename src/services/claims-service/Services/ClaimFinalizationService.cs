@@ -174,19 +174,22 @@ public class ClaimFinalizationService : IClaimFinalizationService
     private readonly IClaimEventPublisher _kafkaEventPublisher;
     private readonly IClaimAdjustmentService _adjustmentService;
     private readonly ILogger<ClaimFinalizationService> _logger;
+    private readonly CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? _benefitEngine;
 
     public ClaimFinalizationService(
         IClaimRepository claimRepository,
         IClaimVersionEventPublisher versionEventPublisher,
         IClaimEventPublisher kafkaEventPublisher,
         IClaimAdjustmentService adjustmentService,
-        ILogger<ClaimFinalizationService> logger)
+        ILogger<ClaimFinalizationService> logger,
+        CloudHealthOffice.BenefitEngine.Services.IBenefitCalculationEngine? benefitEngine = null)
     {
         _claimRepository = claimRepository;
         _versionEventPublisher = versionEventPublisher;
         _kafkaEventPublisher = kafkaEventPublisher;
         _adjustmentService = adjustmentService;
         _logger = logger;
+        _benefitEngine = benefitEngine;
     }
 
     public async Task<ClaimFinalizationResult> FinalizeAsync(
@@ -332,6 +335,7 @@ public class ClaimFinalizationService : IClaimFinalizationService
             // only acts on a PendingReversal row, so repeating it is safe.
             _logger.LogInformation(
                 "Claim {ClaimId} already Voided; idempotent no-op apart from the adjustment transition", Sanitize(claim.Id));
+            await ReverseEngineAccumulatorsAsync(claim, ct);
             await CompleteAdjustmentOnReversalAsync(tenantId, claim.Id, request.ReversalRunId, ct);
             return ClaimVoidResult.AlreadyVoided(claim);
         }
@@ -414,6 +418,15 @@ public class ClaimFinalizationService : IClaimFinalizationService
         // only.
         await _kafkaEventPublisher.PublishClaimFinalizedAsync(updated, tenantId, ct);
 
+        // Decision 16 — un-apply the claim in the benefit engine's
+        // accumulator store (the one the next claim is priced against):
+        // deductible, OOP max, visit counts, including a NAIC COB deductible
+        // credit. Voids from the reversal run cover replacements too: the
+        // superseded version is voided here. Idempotent in the engine
+        // (keyed on the claim id). Non-blocking: the void has persisted; a
+        // repeat void re-drives it.
+        await ReverseEngineAccumulatorsAsync(updated, ct);
+
         // 5.12b Premise E — adjustment lifecycle callback. When the void
         // carries a ReversalRunId correlation, the in-flight adjustment
         // (whose PredecessorClaimId matches this voided claim and whose
@@ -429,6 +442,34 @@ public class ClaimFinalizationService : IClaimFinalizationService
             Sanitize(updated.Id), Sanitize(request.Reason), Sanitize(request.ReversalRunId));
 
         return ClaimVoidResult.Voided(updated);
+    }
+
+    private async Task ReverseEngineAccumulatorsAsync(Claim claim, CancellationToken ct)
+    {
+        if (_benefitEngine is null) return;
+        if (!Guid.TryParse(claim.BenefitPlanId, out var planId))
+        {
+            _logger.LogWarning(
+                "Void of claim {ClaimId}: BenefitPlanId is not a GUID; engine accumulators not reversed",
+                Sanitize(claim.Id));
+            return;
+        }
+        try
+        {
+            await _benefitEngine.ReverseClaimAsync(
+                claim.MemberId,
+                string.IsNullOrWhiteSpace(claim.SubscriberId) ? claim.MemberId : claim.SubscriberId!,
+                planId,
+                DateOnly.FromDateTime(claim.ServiceDateFrom),
+                claim.Id,
+                ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex,
+                "Void of claim {ClaimId}: reversing engine accumulators failed; a repeat void re-drives it",
+                Sanitize(claim.Id));
+        }
     }
 
     /// <summary>

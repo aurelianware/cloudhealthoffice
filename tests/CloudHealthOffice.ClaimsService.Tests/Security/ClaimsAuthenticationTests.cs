@@ -135,7 +135,7 @@ public class ClaimsAuthenticationTests : IClassFixture<ClaimsApiFactory>
     public async Task OverrideApproval_RequiresOverrideApprove()
     {
         var claim = StubClaim(ClaimStatus.Pended);
-        var body = new { overrideReason = "documentation supports payment" };
+        var body = new { overrideReason = "documentation supports payment", pendFingerprint = claim.PendDetails?.Fingerprint };
 
         var asExaminer = await Examiner().PostAsJsonAsync($"/api/claims/work-queue/{claim.Id}/override", body);
         Assert.Equal(HttpStatusCode.Forbidden, asExaminer.StatusCode);
