@@ -5,6 +5,7 @@ using ClaimsService.HostedServices;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using ClaimsService.Services.Adjudication;
 using CloudHealthOffice.BenefitEngine.Services;
 using CloudHealthOffice.NcciEngine.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -29,6 +30,22 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
     public IClaimAdjustmentRepository AdjustmentRepository { get; } = Substitute.For<IClaimAdjustmentRepository>();
     public IClaimAdjustmentService AdjustmentService { get; } = Substitute.For<IClaimAdjustmentService>();
     public IClaimImportTransactionRepository ImportTransactionRepository { get; } = Substitute.For<IClaimImportTransactionRepository>();
+
+    /// <summary>
+    /// Examiner-approval re-adjudication (the real one is the orchestrator's
+    /// pipeline). Passes by default; tests that exercise a refused approval
+    /// reconfigure it.
+    /// </summary>
+    public IClaimApprovalReadjudicator ApprovalReadjudicator { get; } = CreatePassingReadjudicator();
+
+    private static IClaimApprovalReadjudicator CreatePassingReadjudicator()
+    {
+        var readjudicator = Substitute.For<IClaimApprovalReadjudicator>();
+        readjudicator.ReadjudicateForApprovalAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>())
+            .Returns(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Pass, null));
+        return readjudicator;
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -128,6 +145,10 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
             }
             services.AddSingleton(Substitute.For<IBenefitCalculationEngine>());
+
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IClaimApprovalReadjudicator)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton(ApprovalReadjudicator);
 
             services.AddSingleton(ClaimRepository);
             services.AddSingleton(MassAdjudicationRunRepository);

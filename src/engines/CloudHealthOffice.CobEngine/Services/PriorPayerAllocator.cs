@@ -133,7 +133,7 @@ public static class PriorPayerAllocator
         /// <summary>
         /// The payer adjudicated the claim-level part: it paid something at
         /// claim level (2320 AMT*D above its 2430 total) or left the member
-        /// a claim-level PR. A payer that paid $0 at claim level with only
+        /// a claim-level PR (2320 CAS*PR). A payer that paid $0 at claim level with only
         /// CO/OA adjustments (e.g. CO-27, CO-22, CO-109, CO-96, CO-204) did
         /// not cover the service.
         /// </summary>
@@ -141,15 +141,18 @@ public static class PriorPayerAllocator
 
         /// <summary>
         /// Whether this payer adjudicated (covered) <paramref name="lineNumber"/>:
-        /// for a line it reported in 2430, it paid more than $0 or left a PR;
-        /// otherwise <see cref="ClaimLevelAdjudicated"/>. A denial (paid $0, no
-        /// PR — only CO/OA adjustments) is not an adjudication, so its PR of $0
-        /// must not bound what later payers pay.
+        /// on the line itself it paid more than $0 or left a PR (2430), or the
+        /// line is one its claim-level amounts belong to
+        /// (<see cref="ClaimLevelLines"/>) and it paid or left a PR at claim
+        /// level (<see cref="ClaimLevelAdjudicated"/>) — e.g. a $0 2430 line
+        /// with the deductible reported only in 2320 CAS*PR. The same rule as
+        /// the single-stay path, which sums a payer's line and claim amounts.
+        /// A denial (paid $0, no PR anywhere — only CO/OA adjustments) is not an
+        /// adjudication, so its PR of $0 must not bound what later payers pay.
         /// </summary>
         public bool AdjudicatedLine(int lineNumber) =>
-            Lines.TryGetValue(lineNumber, out var l) && l.Reported
-                ? l.Paid > 0 || l.ReportedPr > 0
-                : ClaimLevelAdjudicated;
+            (Lines.TryGetValue(lineNumber, out var l) && l.Reported && (l.Paid > 0 || l.ReportedPr > 0))
+            || (ClaimLevelAdjudicated && ClaimLevelLines.Contains(lineNumber));
     }
 
     /// <summary>
@@ -222,8 +225,7 @@ public static class PriorPayerAllocator
             // Unreported lines carry only the claim-level amounts; with every
             // line reported the claim level is a pure adjustment of the 2430
             // amounts, so "covered" follows the lines.
-            ClaimLevelAdjudicated = residual > 0 || claimPr > 0
-                || (unreported.Count == 0 && reported.Values.Any(r => r.Paid > 0 || r.Pr > 0)),
+            ClaimLevelAdjudicated = residual > 0 || claimPr > 0,
         };
     }
 

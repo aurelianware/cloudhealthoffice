@@ -59,6 +59,22 @@ internal sealed class GoldenScenario
     /// </summary>
     public IReadOnlyList<string> OtherCoverage { get; init; } = [];
 
+    /// <summary>
+    /// When set, a review stage with this name (e.g. "DuplicateClaim") pends
+    /// the claim at Order 120 — standing in for a possible-duplicate /
+    /// provider-integrity review. The claim must then pend, write no
+    /// accumulators, and finalize only through <see cref="Approvals"/>.
+    /// </summary>
+    public string? PendingReviewStage { get; init; }
+
+    /// <summary>
+    /// Examiner approvals tried in order on a pended claim (the controller's
+    /// resolve flow): each re-adjudicates through
+    /// <see cref="ClaimAdjudicationOrchestrator.ReadjudicateForApprovalAsync"/>.
+    /// Refused ones must write no accumulators; the last must pass.
+    /// </summary>
+    public IReadOnlyList<ExaminerApproval> Approvals { get; init; } = [];
+
     /// <summary>Payment-run date (BPR16); fixed so the 835 is reproducible.</summary>
     public DateTime PaymentDate { get; init; } = new(2026, 5, 15, 0, 0, 0, DateTimeKind.Utc);
 }
@@ -69,7 +85,20 @@ internal sealed record GoldenPathResult(
     ClaimFinalizedEvent FinalizedEvent,
     BenefitResolutionResult BenefitResult,
     Pay.PaymentRun PaymentRun,
-    string Edi835);
+    string Edi835)
+{
+    /// <summary>Outcome of each examiner approval attempt, in order (empty when the claim did not pend).</summary>
+    public IReadOnlyList<ClaimAdjudicationOutcome> ApprovalOutcomes { get; init; } = [];
+
+    /// <summary>Accumulator updates the engine had written before the approval that passed.</summary>
+    public int AccumulatorUpdatesBeforeApproval { get; init; }
+
+    /// <summary>The pend code the claim pended with (null when it did not pend).</summary>
+    public string? PendCode { get; init; }
+
+    /// <summary>Every accumulator update the engine wrote, in order.</summary>
+    public IReadOnlyList<AccumulatorUpdate> AccumulatorUpdates { get; init; } = [];
+}
 
 /// <summary>
 /// Runs one synthetic 837 down the money path with the production code at
@@ -164,6 +193,9 @@ internal sealed class GoldenPathHarness
                     .Select((seq, i) => new CobEntry { PayerName = $"OTHER{i + 1}", PayerId = $"OTHER{i + 1}", CoverageSequence = seq })
                     .ToList());
 
+            var stageList = new List<IClaimAdjudicationStage>();
+            if (scenario.PendingReviewStage is { } reviewStage)
+                stageList.Add(new PendingReviewStage(reviewStage));
             var stages = new IClaimAdjudicationStage[]
             {
                 new CoordinationOfBenefitsStage(
@@ -183,8 +215,9 @@ internal sealed class GoldenPathHarness
                 new PersistenceStage(claimRepository, NullLogger<PersistenceStage>.Instance),
             };
 
+            stageList.AddRange(stages);
             var orchestrator = new ClaimAdjudicationOrchestrator(
-                adapterFactory, planResolver, memberResolver, coverageResolver, stages,
+                adapterFactory, planResolver, memberResolver, coverageResolver, stageList,
                 Substitute.For<IClaimVersionEventPublisher>(), Substitute.For<IMessageBus>(), tenantContext,
                 Substitute.For<IClaimAdjustmentService>(),
                 Options.Create(new AdjudicationPipelineOptions()),
@@ -204,6 +237,38 @@ internal sealed class GoldenPathHarness
                 ct);
 
             var adjudicated = (await claimRepository.GetByIdAsync(submitted.Id))!;
+
+            // ── examiner resolve flow (pended claims) ───────────────────
+            var approvalOutcomes = new List<ClaimAdjudicationOutcome>();
+            var updatesBeforeApproval = accumulators.Applied.Count;
+            string? pendCode = null;
+            if (scenario.Approvals.Count > 0)
+            {
+                Assert.True(adjudicated.Status == Claims.ClaimStatus.Pended,
+                    $"expected the claim to pend; it is {adjudicated.Status}");
+                pendCode = adjudicated.PendDetails?.PendCode;
+                // A pended claim is priced read-only: nothing written.
+                Assert.Empty(accumulators.Applied);
+                foreach (var approval in scenario.Approvals)
+                {
+                    var rerun = await orchestrator.ReadjudicateForApprovalAsync(tenant, submitted.Id, approval, ct);
+                    approvalOutcomes.Add(rerun.Outcome);
+                    if (rerun.Outcome == ClaimAdjudicationOutcome.Pass) break;
+                    // A refused approval writes no accumulators either.
+                    Assert.Empty(accumulators.Applied);
+                }
+                Assert.Equal(ClaimAdjudicationOutcome.Pass, approvalOutcomes[^1]);
+
+                // ClaimsController.ResolvePendedClaim: the re-run persisted
+                // the result; the examiner's disposition sets Approved.
+                var resolved = (await claimRepository.GetByIdAsync(submitted.Id))!;
+                resolved.Status = Claims.ClaimStatus.Approved;
+                resolved.VersionState = ClaimRepository.MapStatusToVersionState(Claims.ClaimStatus.Approved);
+                resolved.AdjudicatedDate = DateTime.UtcNow;
+                await claimRepository.UpdateAsync(resolved);
+                adjudicated = (await claimRepository.GetByIdAsync(submitted.Id))!;
+            }
+
             Assert.True(adjudicated.Status == Claims.ClaimStatus.Approved,
                 $"claim adjudicated {adjudicated.Status}: pend {adjudicated.PendDetails?.PendCode} {adjudicated.PendDetails?.PendReason}; " +
                 $"denial {adjudicated.AdjudicationResult?.DenialReasonCode} {adjudicated.AdjudicationResult?.DenialReason}");
@@ -225,11 +290,39 @@ internal sealed class GoldenPathHarness
             Assert.NotNull(finalizedClaim);
             return new GoldenPathResult(
                 adjudicated, finalizedClaim!, ClaimEventPublisher.BuildFinalizedEvent(finalizedClaim!, tenant),
-                benefitResult!, run, edi835);
+                benefitResult!, run, edi835)
+            {
+                ApprovalOutcomes = approvalOutcomes,
+                AccumulatorUpdatesBeforeApproval = updatesBeforeApproval,
+                PendCode = pendCode,
+                AccumulatorUpdates = accumulators.Applied.ToList(),
+            };
         }
         finally
         {
             await _mongo.DropDatabaseAsync(database);
+        }
+    }
+
+    /// <summary>
+    /// A review stage that pends every claim (a possible duplicate) — what
+    /// an examiner resolves by approving.
+    /// </summary>
+    private sealed class PendingReviewStage(string name) : IClaimAdjudicationStage
+    {
+        public string Name => name;
+        public int Order => 120;
+        public bool IsRequired => false;
+
+        public Task<ClaimAdjudicationStageResult> ExecuteAsync(ClaimAdjudicationContext context, CancellationToken ct)
+        {
+            context.PendDetails = new Claims.PendDetails
+            {
+                PendCode = "DUPLICATE",
+                PendReason = "Possible duplicate of an earlier claim.",
+                PendedAt = DateTime.UtcNow,
+            };
+            return Task.FromResult(ClaimAdjudicationStageResult.Pend(name, "possible duplicate"));
         }
     }
 

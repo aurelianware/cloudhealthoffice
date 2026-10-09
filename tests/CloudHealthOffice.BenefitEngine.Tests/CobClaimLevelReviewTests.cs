@@ -3,6 +3,7 @@ using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.BenefitEngine.Models;
 using CloudHealthOffice.BenefitEngine.Persistence;
 using CloudHealthOffice.BenefitEngine.Services;
+using CloudHealthOffice.CobEngine.Domain;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -184,6 +185,115 @@ public partial class BenefitCalculationEngineTests
         var replaced = await engine.CalculateAsync(replacement);
         Assert.Equal(150m, replaced.Lines[0].DeductibleAmount);
         Assert.Equal(150m, store.Balance("MBR-001", AccumulatorType.IndividualDeductible));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Re-review N6 — a replacement is priced without its predecessor
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The original met the whole $500 deductible (allowed $900: deductible
+    /// $500 + 20% × 400 = $80 → pays $320). An identical replacement is
+    /// priced without the original's updates, so it pays the same $320 — not
+    /// the $720 of a claim whose deductible is already met — and writing it
+    /// reverses the original's updates. The original's later void reverses
+    /// nothing again: the deductible stays $500.
+    /// </summary>
+    [Fact]
+    public async Task Replacement_PricedWithoutThePredecessor_AndTheVoidDoesNotDoubleReverse()
+    {
+        var plan = CreateTestPlan(individualDeductible: 500, individualOopMax: 6000);
+        var (engine, store, _) = ChoEngine(plan, "48");
+        var original = CreateRequest(plan.Id, lines: ("99223", 1000m, 900m, "21")) with { ClaimId = "C1" };
+
+        var first = await engine.CalculateAsync(original);
+        Assert.Equal(320m, first.Totals.TotalPlanPaid);
+        Assert.Equal(500m, store.Balance("MBR-001", AccumulatorType.IndividualDeductible));
+
+        var replacement = original with { ClaimId = "C2", ReplacesClaimId = "C1" };
+        var second = await engine.CalculateAsync(replacement);
+
+        Assert.Equal(320m, second.Totals.TotalPlanPaid);
+        Assert.Equal(500m, second.Lines[0].DeductibleAmount);
+        Assert.Equal(500m, store.Balance("MBR-001", AccumulatorType.IndividualDeductible));
+        Assert.Equal(580m, store.Balance("MBR-001", AccumulatorType.IndividualOutOfPocketMax));
+
+        // The reversal run voids the superseded original.
+        await engine.ReverseClaimAsync("MBR-001", "SUB-001", plan.Id, original.ServiceDate, "C1");
+        Assert.Equal(500m, store.Balance("MBR-001", AccumulatorType.IndividualDeductible));
+        Assert.Equal(580m, store.Balance("MBR-001", AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Settings — the result must not depend on how services split into claims
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static BenefitPlanConfig DeductibleOnlyPlan(CobDeductibleCredit credit) =>
+        CreateTestPlan(individualDeductible: 500, individualOopMax: 6000) with
+        {
+            CobDeductibleCredit = credit,
+            Categories =
+            [
+                new BenefitCategoryConfig
+                {
+                    ServiceTypeCode = "DED",
+                    ServiceTypeDescription = "Deductible, then 100%",
+                    IsCovered = true,
+                    InNetworkCostSharing =
+                    [
+                        new CostShareRuleConfig { CostShareType = CostShareType.Deductible, DeductibleApplies = true },
+                    ],
+                },
+            ],
+        };
+
+    /// <summary>
+    /// Reviewer's example. Two services, allowed $500 each, $500 of the
+    /// deductible left; we are secondary. The primary paid L1 $500 (PR 0)
+    /// and L2 $0 (PR-1 $500). Run once as one two-line claim and once as two
+    /// one-line claims (accumulators carried over):
+    /// <list type="bullet">
+    ///   <item><description>NaicFullCredit: L1 meets the deductible as the only
+    ///     plan would (credited $500 though the member owes nothing); L2 is
+    ///     then paid in full — $500 either way.</description></item>
+    ///   <item><description>MemberPaidOnly: L1 credits only what the member
+    ///     pays ($0), so L2 still meets the deductible: the member owes $500,
+    ///     we pay $0 — either way. (Pricing the claim "as the only plan" first
+    ///     would pay $500 on one claim but $0 split across two.)</description></item>
+    /// </list>
+    /// </summary>
+    [Theory]
+    [InlineData(CobDeductibleCredit.NaicFullCredit, 500, 0)]
+    [InlineData(CobDeductibleCredit.MemberPaidOnly, 0, 500)]
+    public async Task ResultDoesNotDependOnClaimSplitting(CobDeductibleCredit credit, decimal expectedPaid, decimal expectedMember)
+    {
+        var plan = DeductibleOnlyPlan(credit);
+        PriorPayerAdjudication Primary(params (int line, decimal paid, (string, string, decimal)[] cas)[] lines) =>
+            PriorPayer(1, claimPaid: lines.Sum(l => l.paid), lines: lines);
+        (int, decimal, (string, string, decimal)[]) L1(int n) => (n, 500m, [("CO", "45", 100m)]);
+        (int, decimal, (string, string, decimal)[]) L2(int n) => (n, 0m, [("CO", "45", 100m), ("PR", "1", 500m)]);
+
+        // One claim.
+        var (oneEngine, oneStore, _) = ChoEngine(plan, "DED");
+        var one = await oneEngine.CalculateAsync(WithPriorPayers(
+            CreateRequest(plan.Id, lines: [("S1", 500m, 500m, "11"), ("S2", 500m, 500m, "11")]),
+            ourSequence: 2, complementary: true, Primary(L1(1), L2(2))));
+
+        // Two claims.
+        var (twoEngine, twoStore, _) = ChoEngine(plan, "DED");
+        var a = await twoEngine.CalculateAsync(WithPriorPayers(
+            CreateRequest(plan.Id, lines: ("S1", 500m, 500m, "11")), 2, true, Primary(L1(1))));
+        var b = await twoEngine.CalculateAsync(WithPriorPayers(
+            CreateRequest(plan.Id, lines: ("S2", 500m, 500m, "11")), 2, true, Primary(L2(1))));
+
+        Assert.Equal(expectedPaid, one.Totals.TotalPlanPaid);
+        Assert.Equal(expectedPaid, a.Totals.TotalPlanPaid + b.Totals.TotalPlanPaid);
+        Assert.Equal(expectedMember, one.Totals.TotalMemberResponsibility);
+        Assert.Equal(expectedMember, a.Totals.TotalMemberResponsibility + b.Totals.TotalMemberResponsibility);
+        Assert.Equal(oneStore.Balance("MBR-001", AccumulatorType.IndividualDeductible),
+            twoStore.Balance("MBR-001", AccumulatorType.IndividualDeductible));
+        Assert.Equal(500m, oneStore.Balance("MBR-001", AccumulatorType.IndividualDeductible));
+        Assert.All(one.Lines.Concat(a.Lines).Concat(b.Lines), AssertCasInvariants);
     }
 
     /// <summary>

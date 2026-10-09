@@ -1,6 +1,7 @@
 using CloudHealthOffice.BenefitEngine.Domain;
 using CloudHealthOffice.GoldenPath.Tests.Harness;
 using CloudHealthOffice.Testing.Mongo;
+using ClaimsService.Services.Adjudication;
 using Claims = ClaimsService.Models;
 
 namespace CloudHealthOffice.GoldenPath.Tests;
@@ -23,7 +24,9 @@ public class GoldenPathTests
 
     private async Task<GoldenPathResult> RunAsync(
         string name, Action<InMemoryAccumulatorService>? prior = null, string? planDocument = null,
-        IReadOnlyList<string>? otherCoverage = null)
+        IReadOnlyList<string>? otherCoverage = null,
+        string? pendingReviewStage = null, IReadOnlyList<ExaminerApproval>? approvals = null,
+        string? goldenName = null)
     {
         var scenario = GoldenInputs.Scenario(prior);
         scenario = new GoldenScenario
@@ -34,10 +37,12 @@ public class GoldenPathTests
             CategoryMappings = scenario.CategoryMappings,
             PriorAccumulators = scenario.PriorAccumulators,
             OtherCoverage = otherCoverage ?? [],
+            PendingReviewStage = pendingReviewStage,
+            Approvals = approvals ?? [],
         };
         var result = await _harness.RunAsync(scenario, GoldenInputs.Edi837(name));
         X12835.AssertBalanced(result.Edi835);
-        X12835.AssertMatchesGolden(name, result.Edi835);
+        X12835.AssertMatchesGolden(goldenName ?? name, result.Edi835);
         return result;
     }
 
@@ -249,11 +254,20 @@ public class GoldenPathTests
         Assert.Equal(0m, Applied(r, AccumulatorType.IndividualOutOfPocketMax));
     }
 
-    // 07 again with the plan set to MemberPaidOnly: the deductible setting
-    // changes only the accumulators. The 835 matches the same golden file
-    // byte for byte; the deductible is credited with what the member owes ($0).
+    // 07 again with the plan set to MemberPaidOnly. That setting prices COB
+    // line by line, in line order (re-review: so splitting the claim cannot
+    // change the result), and credits the deductible only with what the
+    // member pays. The 835 therefore differs from golden 07 on this
+    // multi-line claim:
+    //   secondary's $60 prorated by charge (truncated, remainder last):
+    //   L1 41.37, L2 18.63; its PR $58: L1 40.00, L2 18.00.
+    //   L1 allowed 150, alone: deductible 60 + 20% of 90 → plan 72. Pay
+    //     min(72, 150 − 40 − 41.37, PR 40) = 40.00; member 0; nothing credited.
+    //   L2 allowed 100, the $60 deductible still open (L1 credited $0) →
+    //     plan alone 32. Pay min(32, 100 − 72 − 18.63) = 9.37; member 0.
+    // Paid 49.37 (NAIC claim level: 58.00); deductible and OOP get $0.
     [Fact]
-    public async Task TertiaryCob_MemberPaidOnlyPlan_Same835_DeductibleNotCredited()
+    public async Task TertiaryCob_MemberPaidOnlyPlan_LineByLine835_DeductibleNotCredited()
     {
         var plan = GoldenInputs.PlanDocument.Replace(
             "\"familyAccumulatorModel\": \"Embedded\",",
@@ -261,9 +275,11 @@ public class GoldenPathTests
         Assert.Contains("MemberPaidOnly", plan);
 
         var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m), plan,
-            otherCoverage: TertiaryCoverage);
+            otherCoverage: TertiaryCoverage, goldenName: "07-tertiary-cob-member-paid-only");
 
-        AssertClaim(r, charge: 580m, allowed: 250m, paid: 58m, member: 0m);
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 49.37m, member: 0m);
+        Assert.Equal(new[] { 40.00m, 9.37m },
+            r.FinalizedClaim.ClaimLines.Select(l => l.AdjudicationResult!.PaidAmount));
         Assert.Null(r.FinalizedEvent.DeductibleCredited);
         Assert.All(r.FinalizedEvent.LineItems, l => Assert.Null(l.DeductibleCredited));
         Assert.Equal(0m, Applied(r, AccumulatorType.IndividualDeductible));
@@ -272,6 +288,58 @@ public class GoldenPathTests
 
     /// <summary>Coverage-service: a primary and a secondary ahead of this plan.</summary>
     private static readonly string[] TertiaryCoverage = ["P", "S"];
+
+    // ── Re-review N1: examiner approval of a pended claim ─────────────────
+
+    private static decimal Written(GoldenPathResult r, AccumulatorType type) =>
+        r.AccumulatorUpdates.Where(u => u.Type == type && u.Scope == AccumulatorScope.Individual).Sum(u => u.Amount);
+
+    // 01 pended as a possible duplicate: priced read-only, so nothing was
+    // written while it waited. The examiner approves; approval re-adjudicates
+    // in Production — the same 835 as golden 01 ($32 paid, PR-1 $60, PR-2 $8)
+    // and the deductible accumulator gets the $60 the member pays (before
+    // the fix the approval paid with PR-1 $60 but recorded no deductible, so
+    // the member would meet it again on the next claim).
+    [Fact]
+    public async Task PendedDuplicate_ExaminerApproval_WritesAccumulators()
+    {
+        var r = await RunAsync("01-office-visit", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            pendingReviewStage: "DuplicateClaim",
+            approvals: [new ExaminerApproval { ExaminerId = "examiner-1" }]);
+
+        Assert.Equal("DUPLICATE", r.PendCode);
+        Assert.Equal(0, r.AccumulatorUpdatesBeforeApproval);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        AssertClaim(r, charge: 180m, allowed: 100m, paid: 32m, member: 68m);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(68m, Written(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
+
+    // 07 with coverage-service showing no other coverage: the 837 says we
+    // are tertiary — a payer-order mismatch, pended. A plain approval is
+    // refused (a COB pend is never paid as primary) and writes nothing. The
+    // examiner confirms payer sequence 3: the re-run applies tertiary COB —
+    // the golden 07 835 ($58.00) — and the deductible gets the NAIC credit
+    // ($60), the OOP $0.
+    [Fact]
+    public async Task PendedCobMismatch_PlainApprovalRefused_ConfirmedPayerOrderApplies()
+    {
+        var r = await RunAsync("07-tertiary-cob", GoldenInputs.Prior(deductible: 440m, oop: 440m),
+            otherCoverage: [],
+            approvals:
+            [
+                new ExaminerApproval { ExaminerId = "examiner-1" },
+                new ExaminerApproval { ExaminerId = "examiner-1", PayerSequence = 3 },
+            ]);
+
+        Assert.Equal("COB", r.PendCode);
+        Assert.Equal(0, r.AccumulatorUpdatesBeforeApproval);
+        Assert.Equal(new[] { ClaimAdjudicationOutcome.Pend, ClaimAdjudicationOutcome.Pass }, r.ApprovalOutcomes);
+        AssertClaim(r, charge: 580m, allowed: 250m, paid: 58m, member: 0m);
+        Assert.Equal(3, r.FinalizedClaim.AdjudicationResult!.CobPayerSequence);
+        Assert.Equal(60m, Written(r, AccumulatorType.IndividualDeductible));
+        Assert.Equal(0m, Written(r, AccumulatorType.IndividualOutOfPocketMax));
+    }
 
     private static decimal Applied(GoldenPathResult r, AccumulatorType type) =>
         r.BenefitResult.AccumulatorSnapshot

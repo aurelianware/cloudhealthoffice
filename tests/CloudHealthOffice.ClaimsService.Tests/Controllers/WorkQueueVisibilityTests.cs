@@ -5,6 +5,7 @@ using System.Text.Json;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using ClaimsService.Services.Adjudication;
 using NSubstitute;
 using Xunit;
 
@@ -27,12 +28,18 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
     private readonly IClaimRepository _repo;
     private readonly IClaimVersionEventPublisher _versionPublisher;
     private readonly IClaimVersionEventReader _versionReader;
+    private readonly IClaimApprovalReadjudicator _readjudicator;
 
     public WorkQueueVisibilityTests(ClaimsApiFactory factory)
     {
         _repo = factory.ClaimRepository;
         _versionPublisher = factory.VersionEventPublisher;
         _versionReader = factory.VersionEventReader;
+        _readjudicator = factory.ApprovalReadjudicator;
+        _readjudicator.ClearReceivedCalls();
+        _readjudicator.ReadjudicateForApprovalAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>())
+            .Returns(new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Pass, null));
         _client = factory.CreateDefaultClient(
             new ChoDevelopmentTokenHandler("examiner-1", ChoRolePermissions.TenantAdmin));
         _client.DefaultRequestHeaders.Add("X-Tenant-ID", "test-tenant");
@@ -237,6 +244,100 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
             "test-tenant", "chain-1", Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// PR #1278 re-review N3: a claim pended by COB and then by NCCI shows
+    /// the examiner every reason, the COB one first (it is the pend code
+    /// that routes the queue).
+    /// </summary>
+    [Fact]
+    public async Task WorkQueueItems_lists_every_pend_reason_cob_first()
+    {
+        var claim = CobPendedClaim();
+        claim.PendDetails!.AdditionalPendReasons.Add("NCCI: bundled pair NE001");
+        _repo.SearchAsync(
+                memberId: null, providerNPI: null,
+                serviceDateFrom: null, serviceDateTo: null,
+                status: ClaimStatus.Pended, lineOfBusiness: null,
+                page: 1, pageSize: Arg.Any<int>())
+            .Returns(new[] { claim });
+
+        var response = await _client.GetAsync("/api/claims/work-queue/items");
+        response.EnsureSuccessStatusCode();
+
+        var item = Assert.Single((await response.Content.ReadFromJsonAsync<List<WorkQueueItemDto>>(Json))!);
+        Assert.Equal("COB", item.QueueReasonCode);
+        Assert.Equal(
+            new[] { "COB: Cloud Health Office is the secondary payer; primary payer Aetna", "NCCI: bundled pair NE001" },
+            item.PendReasons);
+    }
+
+    /// <summary>
+    /// Re-review N1: approval re-adjudicates the claim (so accumulators are
+    /// written by a Production pass). A COB pend approved without the payer
+    /// order the examiner confirmed is refused — never paid as primary — and
+    /// nothing is saved.
+    /// </summary>
+    [Fact]
+    public async Task ResolvePendedClaim_CobPend_WithoutPayerSequence_IsRefused()
+    {
+        var claim = CobPendedClaim();
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _readjudicator.ReadjudicateForApprovalAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ExaminerApproval>(), Arg.Any<CancellationToken>())
+            .Returns(new ApprovalReadjudicationResult(
+                ClaimAdjudicationOutcome.Pend, "payer order not confirmed", ["CoordinationOfBenefits: payer order not confirmed"]));
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new { disposition = "Approved", reason = "ok" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("payerSequence", body);
+        Assert.Contains("CoordinationOfBenefits: payer order not confirmed", body);
+        await _readjudicator.Received(1).ReadjudicateForApprovalAsync(
+            "test-tenant", claim.Id,
+            Arg.Is<ExaminerApproval>(a => a.PayerSequence == null && a.ExaminerId == "examiner-1"),
+            Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+    }
+
+    /// <summary>The examiner's confirmed payer order reaches the re-adjudication; a passing re-run approves.</summary>
+    [Fact]
+    public async Task ResolvePendedClaim_CobPend_WithPayerSequence_ReadjudicatesThenApproves()
+    {
+        var claim = CobPendedClaim();
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new { disposition = "Approved", reason = "secondary confirmed", payerSequence = 2 });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _readjudicator.Received(1).ReadjudicateForApprovalAsync(
+            "test-tenant", claim.Id,
+            Arg.Is<ExaminerApproval>(a => a.PayerSequence == 2),
+            Arg.Any<CancellationToken>());
+        await _repo.Received(1).UpdateAsync(Arg.Is<Claim>(saved => saved.Status == ClaimStatus.Approved));
+    }
+
+    /// <summary>A denial does not re-adjudicate.</summary>
+    [Fact]
+    public async Task ResolvePendedClaim_Deny_DoesNotReadjudicate()
+    {
+        var claim = NcciPendedClaim();
+        _repo.GetByIdAsync(claim.Id).Returns(claim);
+        _repo.UpdateAsync(Arg.Any<Claim>()).Returns(call => call.Arg<Claim>());
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/claims/work-queue/{claim.Id}/resolve",
+            new { disposition = "Denied", reason = "bundled" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _readjudicator.DidNotReceiveWithAnyArgs().ReadjudicateForApprovalAsync(default!, default!, default!, default);
+    }
+
     [Fact]
     public async Task ResolvePendedClaim_Denies_Only_Pended_Claims()
     {
@@ -267,6 +368,7 @@ public class WorkQueueVisibilityTests : IClassFixture<ClaimsApiFactory>
         public string QueueReason { get; set; } = string.Empty;
         public string QueueReasonCode { get; set; } = string.Empty;
         public List<string> ProcedureCodes { get; set; } = new();
+        public List<string> PendReasons { get; set; } = new();
     }
 
     private sealed class AuditEntryDto

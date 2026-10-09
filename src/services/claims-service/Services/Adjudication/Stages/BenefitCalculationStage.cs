@@ -136,7 +136,11 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 eligibilityReason);
         }
 
-        if (HasUnreconciledRetroactivePlanChange(context.ResolvedMember, claim.ServiceDateFrom, out var pendReason))
+        // Review pends below are what an examiner resolves by approving the
+        // claim (ExaminerApproval): the approval re-run skips them.
+        var examinerApproved = context.ExaminerApproval is not null;
+
+        if (!examinerApproved && HasUnreconciledRetroactivePlanChange(context.ResolvedMember, claim.ServiceDateFrom, out var pendReason))
         {
             context.PendDetails = new PendDetails
             {
@@ -148,7 +152,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pend(StageName, pendReason);
         }
 
-        if (HasUnreviewedSubrogationIndicator(claim, out var subrogationReason))
+        if (!examinerApproved && HasUnreviewedSubrogationIndicator(claim, out var subrogationReason))
         {
             context.PendDetails = new PendDetails
             {
@@ -160,7 +164,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pend(StageName, subrogationReason);
         }
 
-        if (HasUnmetMedicaidSpendDown(context.ResolvedMember, out var spendDownReason))
+        if (!examinerApproved && HasUnmetMedicaidSpendDown(context.ResolvedMember, out var spendDownReason))
         {
             context.PendDetails = new PendDetails
             {
@@ -205,14 +209,16 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Pend(StageName, pricingReason);
         }
 
-        // The 837 sends this plan as a later payer but the COB stage (which
-        // runs before this one) did not settle the payer order — e.g. it is
-        // disabled. Never price a later-payer claim as primary.
-        if (PayerResponsibility.ToSequence(claim.PayerResponsibilityCode) >= 2 && context.CobResult is null)
+        // The 837 (SBR01) or coverage-service puts this plan after another
+        // payer, but the COB stage did not clear COB for the claim (it pended
+        // or denied, ran in a mode that passed without COB, or did not run).
+        // Never price a later-payer claim as primary — unless an examiner
+        // confirmed on approval that this plan is primary.
+        if (IsLaterPayerWithoutCob(context))
         {
             const string cobReason =
-                "The 837 submits this plan as a later payer (SBR01), but coordination of benefits was not " +
-                "determined for the claim; benefit calculation deferred.";
+                "This plan pays after another payer (837 SBR01 or coverage records), but coordination of " +
+                "benefits was not cleared for the claim; benefit calculation deferred.";
             context.PendDetails ??= new PendDetails
             {
                 PendCode = CoordinationOfBenefitsStage.CobPendCode,
@@ -493,7 +499,10 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             // COB only when the COB stage cleared it: coverage-service and the
             // 837 agree on the payer order and the 837 carries complete
             // prior-payer data.
-            Cob = context.CobResult is { ApplyCob: true } ? BuildCob(claim) : null,
+            Cob = context.CobResult is { ApplyCob: true } cleared ? BuildCob(claim, cleared.PayerSequence) : null,
+            // A corrected version is priced without the accumulators of the
+            // version it replaces (claims-service adjustment workflow).
+            ReplacesClaimId = string.IsNullOrWhiteSpace(claim.PredecessorVersionId) ? null : claim.PredecessorVersionId,
             // A claim an earlier stage already pended (COB, duplicate, …) is
             // priced read-only: no accumulator is written for a claim that
             // will not finalize now. It is priced again when it is released.
@@ -512,9 +521,24 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// the claim. Standard (complementary) COB is the model: the claim does
     /// not carry the plan's COB method.
     /// </summary>
-    internal static CobInfo? BuildCob(AdapterClaim claim)
+    /// <summary>
+    /// True when the 837 (2000B SBR01) or coverage-service puts this plan
+    /// after another payer and COB was not cleared (<see cref="CobOutcome.ApplyCob"/>)
+    /// — except when an examiner confirmed on approval that it is primary.
+    /// </summary>
+    internal static bool IsLaterPayerWithoutCob(ClaimAdjudicationContext context)
     {
-        var ourSequence = PayerResponsibility.ToSequence(claim.PayerResponsibilityCode);
+        var cob = context.CobResult;
+        if (cob is { ApplyCob: true }) return false;
+        if (cob is { ConfirmedByExaminer: true, PayerSequence: 1 }) return false;
+        var claimSaysLater = PayerResponsibility.ToSequence(context.Claim.PayerResponsibilityCode) >= 2;
+        var coverageSaysLater = cob?.Scenario is CobScenario.ChoSecondaryDetected or CobScenario.ChoTertiaryDetected;
+        return claimSaysLater || coverageSaysLater;
+    }
+
+    internal static CobInfo? BuildCob(AdapterClaim claim, int? sequence = null)
+    {
+        var ourSequence = sequence ?? PayerResponsibility.ToSequence(claim.PayerResponsibilityCode);
         if (ourSequence is not >= 2)
             return null;
 
@@ -719,7 +743,11 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             CopayAmount = totals.TotalCopay,
             PatientResponsibility = totals.TotalMemberResponsibility,
             OopAppliedAmount = totals.TotalOopApplied,
-            DeductibleCreditedAmount = totals.TotalDeductibleCredited,
+            // Set only when COB was applied: a primary claim leaves it null so
+            // the finalized event carries no DeductibleCredited, and an older
+            // benefit-plan-service (no such field → 0) can never zero out a
+            // primary claim's deductible credit.
+            DeductibleCreditedAmount = result.CobPayerSequence is null ? null : totals.TotalDeductibleCredited,
             CobPayerSequence = result.CobPayerSequence,
             PayerPayment = totals.TotalPlanPaid,
             DenialReasonCode = result.Success ? null : result.DenialReasonCode,
@@ -744,7 +772,7 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
                 PaidAmount = l.PlanPaidAmount,
                 PatientResponsibility = l.MemberResponsibility,
                 OopAppliedAmount = l.OopAppliedAmount,
-                DeductibleCreditedAmount = l.DeductibleCreditedAmount,
+                DeductibleCreditedAmount = result.CobPayerSequence is null ? null : l.DeductibleCreditedAmount,
                 AdjustmentReasons = MergeAdjustments(
                     MapLineAdjustments(l),
                     i < priorLines.Count ? priorLines[i].AdjustmentReasons : null),

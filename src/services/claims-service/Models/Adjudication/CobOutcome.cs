@@ -77,6 +77,14 @@ public sealed class CobOutcome
     /// <summary>This plan's payer sequence from the 837 (2000B SBR01:
     /// 1 primary, 2 secondary, 3 tertiary, 4–11); null when absent / U.</summary>
     public int? PayerSequence { get; init; }
+
+    /// <summary>
+    /// True when an examiner confirmed the payer order on approval
+    /// (<see cref="Services.Adjudication.ExaminerApproval.PayerSequence"/>);
+    /// with <see cref="PayerSequence"/> 1 the claim is then priced as primary
+    /// even though the 837 said otherwise.
+    /// </summary>
+    public bool ConfirmedByExaminer { get; init; }
 }
 
 /// <summary>

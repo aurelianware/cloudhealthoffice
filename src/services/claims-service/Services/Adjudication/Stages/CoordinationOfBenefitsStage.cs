@@ -57,10 +57,12 @@ namespace ClaimsService.Services.Adjudication.Stages;
 /// <para>
 /// <b>Required (Decision 2).</b> <see cref="IsRequired"/> = true. Disabling
 /// COB enforcement would let CHO-secondary claims process as CHO-primary
-/// — wrong on the wire. Tenants that don't want CoB gating set
-/// <c>CobMode = SoftValidation</c> instead of disabling the stage; the
-/// detection still happens, telemetry still fires, but the stage returns
-/// Pass.
+/// — wrong on the wire. <c>CobMode = SoftValidation</c> no longer passes a
+/// later-payer claim (PR #1278 re-review N4): it would price as primary a
+/// claim this plan is not primary on. A later-payer claim without usable
+/// COB data pends in <c>SoftValidation</c> and <c>PendForSecondary</c>, and
+/// is denied in <c>Deny</c> — never paid. SoftValidation still passes a
+/// coverage-service outage on a claim the 837 sends as primary.
 /// </para>
 ///
 /// <para>
@@ -202,6 +204,9 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
                 "Claim is missing MemberId; coordination-of-benefits lookup cannot run.");
         }
 
+        if (context.ExaminerApproval?.PayerSequence is int examinerSequence)
+            return ResolveExaminerPayerOrder(context, activity, examinerSequence);
+
         var serviceDate = ResolveEarliestServiceDate(context.Claim);
 
         IReadOnlyList<CobEntry>? entries;
@@ -309,35 +314,13 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
                 $"'{context.Claim.PayerResponsibilityCode}') submits it as payer {claimSequence}.");
         }
 
-        var claim = context.Claim;
-        var sequenced = (claim.OtherPayers ?? [])
-            .Select(p => PayerResponsibility.ToSequence(p.PayerResponsibilityCode))
-            .Where(s => s is not null)
-            .Select(s => s!.Value)
-            .ToList();
-        var duplicate = sequenced.GroupBy(s => s).FirstOrDefault(g => g.Count() > 1)?.Key
-                        ?? (sequenced.Contains(claimSequence.Value) ? claimSequence : null);
-        if (duplicate is not null)
+        switch (PriorPayerDataProblem(context.Claim, claimSequence.Value))
         {
-            return BuildDataPend(context, activity, classification, DuplicatePayerSequencePendReason,
-                $"The 837 lists payer sequence {duplicate} more than once (2320 SBR01 / 2000B SBR01); " +
-                "the payer order is ambiguous.");
+            case { Code: SecondaryNotSupportedPendReason }:
+                return BuildSecondaryOutcome(context, activity, classification, entries);
+            case { } problem:
+                return BuildDataPend(context, activity, classification, problem.Code, problem.Message);
         }
-
-        if (claim.UnmatchedOtherPayerLines is { Count: > 0 } unmatched)
-        {
-            return BuildDataPend(context, activity, classification, UnmatchedLineAdjudicationPendReason,
-                $"{unmatched.Count} 2430 line adjudication(s) (SVD01 " +
-                $"{string.Join(", ", unmatched.Select(u => u.PayerId ?? "?").Distinct())}) match no other payer's " +
-                "2330B NM109, REF*2U or REF*FY; prior payments cannot be placed in the payer order.");
-        }
-
-        var complete = Enumerable.Range(1, claimSequence.Value - 1).All(seq =>
-            (claim.OtherPayers ?? []).Any(p =>
-                PayerResponsibility.ToSequence(p.PayerResponsibilityCode) == seq
-                && (p.PaidAmount is not null || p.LineAdjudications.Count > 0)));
-        if (!complete)
-            return BuildSecondaryOutcome(context, activity, classification, entries);
 
         activity?.SetTag("cob.apply", true);
         context.CobResult = new CobOutcome
@@ -350,6 +333,86 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
             AppliedRule = ResolveAppliedRule(context, entries),
             ApplyCob = true,
             PayerSequence = claimSequence,
+        };
+        return ClaimAdjudicationStageResult.Pass(StageName);
+    }
+
+    private sealed record DataProblem(string Code, string Message);
+
+    /// <summary>
+    /// Why the 837's prior-payer data cannot support pricing this plan as
+    /// payer <paramref name="ourSequence"/>, or null when it can: duplicate
+    /// sequences, 2430 loops matching no payer, or no 2320 with a paid amount
+    /// (AMT*D or 2430 SVD) for some earlier sequence (reported with the
+    /// legacy <see cref="SecondaryNotSupportedPendReason"/> code).
+    /// </summary>
+    private static DataProblem? PriorPayerDataProblem(AdapterClaim claim, int ourSequence)
+    {
+        var sequenced = (claim.OtherPayers ?? [])
+            .Select(p => PayerResponsibility.ToSequence(p.PayerResponsibilityCode))
+            .Where(s => s is not null)
+            .Select(s => s!.Value)
+            .ToList();
+        var duplicate = sequenced.GroupBy(s => s).FirstOrDefault(g => g.Count() > 1)?.Key
+                        ?? (sequenced.Contains(ourSequence) ? ourSequence : null);
+        if (duplicate is not null)
+        {
+            return new(DuplicatePayerSequencePendReason,
+                $"The 837 lists payer sequence {duplicate} more than once (2320 SBR01 / 2000B SBR01); " +
+                "the payer order is ambiguous.");
+        }
+
+        if (claim.UnmatchedOtherPayerLines is { Count: > 0 } unmatched)
+        {
+            return new(UnmatchedLineAdjudicationPendReason,
+                $"{unmatched.Count} 2430 line adjudication(s) (SVD01 " +
+                $"{string.Join(", ", unmatched.Select(u => u.PayerId ?? "?").Distinct())}) match no other payer's " +
+                "2330B NM109, REF*2U or REF*FY; prior payments cannot be placed in the payer order.");
+        }
+
+        var missing = Enumerable.Range(1, ourSequence - 1).Where(seq =>
+            !(claim.OtherPayers ?? []).Any(p =>
+                PayerResponsibility.ToSequence(p.PayerResponsibilityCode) == seq
+                && (p.PaidAmount is not null || p.LineAdjudications.Count > 0))).ToList();
+        return missing.Count == 0
+            ? null
+            : new(SecondaryNotSupportedPendReason,
+                $"The 837 carries no prior-payer data (2320 with AMT*D or 2430 SVD) for payer sequence(s) " +
+                $"{string.Join(", ", missing)}.");
+    }
+
+    /// <summary>
+    /// Examiner approval of a COB pend (<see cref="ExaminerApproval.PayerSequence"/>):
+    /// the examiner confirmed the payer order. 1 → priced as primary. 2 or
+    /// more → priced as that payer, which needs the prior payers' data on the
+    /// 837 for every earlier sequence; otherwise the claim stays pended (the
+    /// approval is refused) with the data problem as the reason.
+    /// </summary>
+    private ClaimAdjudicationStageResult ResolveExaminerPayerOrder(
+        ClaimAdjudicationContext context, Activity? activity, int payerSequence)
+    {
+        activity?.SetTag("cob.examiner_payer_sequence", payerSequence);
+        var classification = new ScenarioClassification(
+            payerSequence switch
+            {
+                <= 1 => CobScenario.ChoPrimaryNoSecondary,
+                2 => CobScenario.ChoSecondaryDetected,
+                _ => CobScenario.ChoTertiaryDetected,
+            },
+            IsMedicarePrimary: false, PrimaryPayerName: null, PrimaryPayerId: null);
+
+        if (payerSequence >= 2 && PriorPayerDataProblem(context.Claim, payerSequence) is { } problem)
+        {
+            return BuildDataPend(context, activity, classification, problem.Code,
+                $"Examiner confirmed payer sequence {payerSequence}, but: {problem.Message}");
+        }
+
+        context.CobResult = new CobOutcome
+        {
+            Scenario = classification.Scenario,
+            ApplyCob = payerSequence >= 2,
+            PayerSequence = Math.Max(1, payerSequence),
+            ConfirmedByExaminer = true,
         };
         return ClaimAdjudicationStageResult.Pass(StageName);
     }
@@ -590,18 +653,18 @@ public sealed class CoordinationOfBenefitsStage : IClaimAdjudicationStage
                 activity?.SetTag("cob.outcome_mode", "deny");
                 return ClaimAdjudicationStageResult.Deny(
                     StageName,
-                    "denied for CHO-secondary scenario; secondary calculation deferred to Phase 2");
+                    "denied for CHO-secondary scenario: the 837 carries no usable prior-payer data (Deny mode)");
 
+            // SoftValidation used to pass here, pricing a claim this plan is
+            // not primary on as primary. A later-payer claim without usable
+            // COB data is never paid: it pends in SoftValidation too.
             case CobEnforcementMode.SoftValidation:
-                activity?.SetTag("cob.outcome_mode", "softvalidation");
-                return ClaimAdjudicationStageResult.Pass(StageName);
-
             case CobEnforcementMode.PendForSecondary:
             default:
                 activity?.SetTag("cob.outcome_mode", "pend");
                 return ClaimAdjudicationStageResult.Pend(
                     StageName,
-                    "pended for CHO-secondary scenario; secondary calculation deferred to Phase 2");
+                    "pended for CHO-secondary scenario: the 837 carries no usable prior-payer data; approval needs an examiner-confirmed payer order");
         }
     }
 

@@ -19,6 +19,15 @@ public record BenefitResolutionRequest
     public Dictionary<int, decimal> AllowedAmounts { get; init; } = [];
     public string ClaimId { get; init; } = default!;
 
+    /// <summary>
+    /// The claim this one replaces (a corrected version — claims-service
+    /// <c>PredecessorVersionId</c>), if any. Its accumulator updates are kept
+    /// out of the starting balances (the replacement must not meet a
+    /// deductible its predecessor met) and reversed when this claim's
+    /// updates are written.
+    /// </summary>
+    public string? ReplacesClaimId { get; init; }
+
     // Claim-level context
     /// <summary>
     /// Line of business from coverage (1=Commercial, 2=Medicare, 3=Medicaid, etc.).

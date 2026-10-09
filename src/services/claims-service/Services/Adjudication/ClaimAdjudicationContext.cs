@@ -152,6 +152,14 @@ public class ClaimAdjudicationContext
     public CobOutcome? CobResult { get; set; }
 
     /// <summary>
+    /// Set when this run re-adjudicates a pended claim an examiner approved
+    /// (<see cref="IClaimApprovalReadjudicator"/>): review pends the examiner
+    /// resolved pass, and the COB stage uses the payer order the examiner
+    /// confirmed. Null on a normal run.
+    /// </summary>
+    public ExaminerApproval? ExaminerApproval { get; set; }
+
+    /// <summary>
     /// AI-backed examination invocation outcome populated by
     /// <see cref="Stages.AiExaminationStage"/> (capability 5.9). Null
     /// until the stage runs. α posture (mirrors 5.4 scrubbing / 5.8 CoB):

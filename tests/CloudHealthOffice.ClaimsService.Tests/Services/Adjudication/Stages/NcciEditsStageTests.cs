@@ -92,6 +92,48 @@ public class NcciEditsStageTests
         Assert.True(snapshot.IsModifierAddressable());
     }
 
+    /// <summary>
+    /// PR #1278 re-review N3: the COB stage (Order 275) pended first; the
+    /// NCCI pend must not overwrite it. The COB code stays the claim's pend
+    /// code (it routes the work queue and is the first reason the examiner
+    /// sees) and the NCCI reason is added, so the examiner sees both.
+    /// </summary>
+    [Fact]
+    public async Task Earlier_COB_pend_is_kept_and_NCCI_reason_is_added()
+    {
+        _engine.ScrubAsync(Arg.Any<EngineModels.NcciScrubRequest>(), Arg.Any<CancellationToken>())
+            .Returns(BuildResultWithFailure(NewNcciPairFailure()));
+        var ctx = NewContext(c => c.PendDetails = new PendDetails
+        {
+            PendCode = "COB",
+            PendReason = "cob-payer-order-mismatch",
+            PendedAt = DateTime.UtcNow,
+        });
+
+        var result = await NewStage(NcciEnforcementMode.PendForReview).ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
+        Assert.Equal("COB", ctx.PendDetails!.PendCode);
+        Assert.Equal("cob-payer-order-mismatch", ctx.PendDetails.PendReason);
+        var added = Assert.Single(ctx.PendDetails.AdditionalPendReasons);
+        Assert.StartsWith("NCCI: ", added);
+        Assert.Single(ctx.PendDetails.EditFailures);
+    }
+
+    /// <summary>An earlier NCCI/MUE pend (a re-run) is still replaced, as before.</summary>
+    [Fact]
+    public async Task Earlier_NCCI_pend_is_replaced()
+    {
+        _engine.ScrubAsync(Arg.Any<EngineModels.NcciScrubRequest>(), Arg.Any<CancellationToken>())
+            .Returns(BuildResultWithFailure(NewMueFailure()));
+        var ctx = NewContext(c => c.PendDetails = new PendDetails { PendCode = "NCCI", PendReason = "old" });
+
+        await NewStage(NcciEnforcementMode.PendForReview).ExecuteAsync(ctx, CancellationToken.None);
+
+        Assert.Equal("MUE", ctx.PendDetails!.PendCode);
+        Assert.Empty(ctx.PendDetails.AdditionalPendReasons);
+    }
+
     [Fact]
     public async Task Mue_failure_in_PendForReview_uses_Mue_pendCode()
     {

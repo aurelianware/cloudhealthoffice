@@ -221,7 +221,7 @@ public partial class CoordinationOfBenefitsStageTests
     }
 
     [Fact]
-    public async Task SoftValidation_on_secondary_detection_returns_Pass_but_records_outcome()
+    public async Task SoftValidation_on_secondary_detection_pends_never_pays_as_primary()
     {
         _coverageClient.GetCobEntriesAsync(
                 TenantId, MemberId, Arg.Any<DateTime>(), false, Arg.Any<CancellationToken>())
@@ -234,14 +234,16 @@ public partial class CoordinationOfBenefitsStageTests
         var result = await NewStage(CobEnforcementMode.SoftValidation)
             .ExecuteAsync(ctx, CancellationToken.None);
 
-        Assert.Equal(ClaimAdjudicationOutcome.Pass, result.Outcome);
+        // PR #1278 re-review N4: SoftValidation used to Pass here, and the
+        // claim was priced as primary. A later-payer claim without usable COB
+        // data now pends in SoftValidation too.
+        Assert.Equal(ClaimAdjudicationOutcome.Pend, result.Outcome);
         Assert.True(result.Continue);
+        Assert.False(ctx.CobResult!.ApplyCob);
         Assert.Equal(CobScenario.ChoSecondaryDetected, ctx.CobResult!.Scenario);
         Assert.Equal(
             CoordinationOfBenefitsStage.SecondaryNotSupportedPendReason,
             ctx.CobResult.PendReason);
-        // SoftValidation still records the audit-trail snapshot — telemetry
-        // captures the detection even though the stage outcome is Pass.
         Assert.NotNull(ctx.PendDetails);
         Assert.Equal("COB", ctx.PendDetails!.PendCode);
     }

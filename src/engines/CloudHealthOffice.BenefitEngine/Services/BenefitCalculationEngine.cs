@@ -180,11 +180,14 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             "workingSet",
             () => new AccumulatorWorkingSet(accumulators, plan, _logger));
 
-        // Re-adjudication of the same claim: price it against the balances
-        // without its own earlier updates (otherwise the claim would meet its
-        // own deductible), and replace those updates when writing.
-        var ownPriorUpdates = await ReadOwnPriorUpdatesAsync(request, planYear, ct);
-        workingAccumulators.ExcludePriorUpdates(ownPriorUpdates);
+        // Re-adjudication of the same claim, or a replacement of an earlier
+        // one: price it against the balances without the claim's own earlier
+        // updates and without the replaced claim's (otherwise it would meet
+        // a deductible the claim it replaces already met), and reverse those
+        // updates when writing.
+        var priorUpdates = await ReadPriorUpdatesAsync(request, planYear, ct);
+        workingAccumulators.ExcludePriorUpdates(priorUpdates.Own);
+        workingAccumulators.ExcludePriorUpdates(priorUpdates.Replaced);
 
         // ── Step 3: Check for DRG/per-diem inpatient pricing ──
         var inpatientMethod = DetermineInpatientPricingMethod(request, plan);
@@ -196,7 +199,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                 "drgProcessing",
                 () => ProcessDrgClaimAsync(
                     request, plan, workingAccumulators, inpatientMethod, planYear,
-                    ownPriorUpdates.Count > 0, ct));
+                    priorUpdates, ct));
 
             return drgResult with { Timings = timings };
         }
@@ -207,8 +210,15 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         // max carried from line to line as a primary payer would — and COB is
         // then applied to the claim as a whole (NAIC MDL-120 §7: "for that
         // claim"); see ApplyClaimLevelCob.
+        // MemberPaidOnly is the exception: its lines are priced one after the
+        // other with COB per line, each line crediting only the deductible
+        // the member pays after its COB — so the result does not depend on
+        // how the provider splits the services into claims (pricing them
+        // "as the only plan" first would credit the claim's deductible to its
+        // later lines but not to the next claim's).
         var laterPayer = IsLaterPayer(request);
-        var preCob = laterPayer ? new Dictionary<int, CostShareCalcResult>() : null;
+        var perLineCob = laterPayer && plan.CobDeductibleCredit == CobDeductibleCredit.MemberPaidOnly;
+        var preCob = laterPayer && !perLineCob ? new Dictionary<int, CostShareCalcResult>() : null;
         var lineResults = await MeasureStageAsync("lineProcessing", async () =>
         {
             var results = new List<LineBenefitResult>();
@@ -216,7 +226,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             foreach (var line in request.Lines.OrderBy(l => l.LineNumber))
             {
                 var lineResult = await ProcessLineAsync(
-                    request, line, plan, workingAccumulators, ct, preCob);
+                    request, line, plan, workingAccumulators, ct, preCob, perLineCob);
                 results.Add(lineResult);
             }
 
@@ -251,7 +261,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             await MeasureTaskStageAsync(
                 "accumulatorWrite",
                 () => WriteAccumulatorsAsync(
-                    request, planYear, workingAccumulators, ownPriorUpdates.Count > 0, ct));
+                    request, planYear, workingAccumulators, priorUpdates, ct));
         }
 
         // ── Step 7: Determine overall claim outcome ──
@@ -276,29 +286,47 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
     private static bool IsLaterPayer(BenefitResolutionRequest request) =>
         request.Cob is { PayerSequence: >= 2 };
 
-    private async Task<IReadOnlyList<AccumulatorUpdate>> ReadOwnPriorUpdatesAsync(
+    /// <summary>The still-active accumulator updates of the claim itself and of the claim it replaces.</summary>
+    private sealed record PriorUpdates(IReadOnlyList<AccumulatorUpdate> Own, IReadOnlyList<AccumulatorUpdate> Replaced);
+
+    private async Task<PriorUpdates> ReadPriorUpdatesAsync(
         BenefitResolutionRequest request, string planYear, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.ClaimId)) return [];
-        var updates = await _accumulatorService.GetClaimUpdatesAsync(
-            request.MemberId, request.SubscriberId, request.BenefitPlanId, planYear, request.ClaimId, ct);
-        return updates?.ToList() ?? [];
+        async Task<IReadOnlyList<AccumulatorUpdate>> Read(string? claimId)
+        {
+            if (string.IsNullOrWhiteSpace(claimId)) return [];
+            var updates = await _accumulatorService.GetClaimUpdatesAsync(
+                request.MemberId, request.SubscriberId, request.BenefitPlanId, planYear, claimId, ct);
+            return updates?.ToList() ?? [];
+        }
+
+        var replaced = string.Equals(request.ReplacesClaimId, request.ClaimId, StringComparison.Ordinal)
+            ? null
+            : request.ReplacesClaimId;
+        return new PriorUpdates(await Read(request.ClaimId), await Read(replaced));
     }
 
     /// <summary>
-    /// Writes the claim's accumulator updates. When the same claim had
-    /// already applied updates (re-adjudication), they are reversed first:
-    /// the store's apply is idempotent per claim, so the new updates would
-    /// otherwise be skipped and the old ones kept.
+    /// Writes the claim's accumulator updates. The claim's own earlier
+    /// updates (re-adjudication) are reversed first — the store's apply is
+    /// idempotent per claim, so the new updates would otherwise be skipped —
+    /// and so are the updates of the claim it replaces, which this pricing
+    /// already excluded. Reversal is idempotent per claim in the store, so the
+    /// replaced claim's later void reverses nothing a second time.
     /// </summary>
     private async Task WriteAccumulatorsAsync(
         BenefitResolutionRequest request, string planYear, AccumulatorWorkingSet working,
-        bool replacesOwnPriorUpdates, CancellationToken ct)
+        PriorUpdates prior, CancellationToken ct)
     {
-        if (replacesOwnPriorUpdates)
+        if (prior.Own.Count > 0)
         {
             await _accumulatorService.ReverseAsync(
                 request.MemberId, request.SubscriberId, request.BenefitPlanId, planYear, request.ClaimId, ct);
+        }
+        if (prior.Replaced.Count > 0)
+        {
+            await _accumulatorService.ReverseAsync(
+                request.MemberId, request.SubscriberId, request.BenefitPlanId, planYear, request.ReplacesClaimId!, ct);
         }
         await _accumulatorService.ApplyUpdatesAsync(
             request.MemberId, request.SubscriberId,
@@ -446,7 +474,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         AccumulatorWorkingSet workingAccumulators,
         InpatientPricingMethod method,
         string planYear,
-        bool replacesOwnPriorUpdates,
+        PriorUpdates priorUpdates,
         CancellationToken ct)
     {
         var drgAllowed = request.DrgAllowedAmount!.Value;
@@ -646,7 +674,7 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         var accumulatorSnapshot = workingAccumulators.GetSnapshot();
         if (request.ExecutionMode == AdjudicationExecutionMode.Production)
         {
-            await WriteAccumulatorsAsync(request, planYear, workingAccumulators, replacesOwnPriorUpdates, ct);
+            await WriteAccumulatorsAsync(request, planYear, workingAccumulators, priorUpdates, ct);
         }
 
         return new BenefitResolutionResult
@@ -683,7 +711,8 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         BenefitPlanConfig plan,
         AccumulatorWorkingSet accumulators,
         CancellationToken ct,
-        Dictionary<int, CostShareCalcResult>? preCobSink = null)
+        Dictionary<int, CostShareCalcResult>? preCobSink = null,
+        bool perLineCob = false)
     {
         var billedAmount = line.BilledAmount;
         var allowedAmount = request.AllowedAmounts.GetValueOrDefault(line.LineNumber, billedAmount);
@@ -758,8 +787,9 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
             request.IsEmergency, plan,
             categoryMatch.ServiceTypeCode, benefitCategory.ServiceTypeDescription,
             benefitCategory.AuthRequired,
-            laterPayer: preCobSink is not null,
-            preCobSink: preCobSink);
+            laterPayer: preCobSink is not null || perLineCob,
+            preCobSink: preCobSink,
+            cob: perLineCob ? LineCobFor(request, line.LineNumber, billedAmount, allowedAmount) : null);
 
         if (benefitCategory.VisitLimit.HasValue)
         {
@@ -794,13 +824,14 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
         string serviceTypeDescription,
         bool authRequired,
         bool laterPayer = false,
-        Dictionary<int, CostShareCalcResult>? preCobSink = null)
+        Dictionary<int, CostShareCalcResult>? preCobSink = null,
+        Func<decimal, CobLineResult>? cob = null)
     {
         var effectiveNetworkTier = isEmergency ? NetworkTier.InNetwork : networkTier;
 
         var costShareResult = ApplyCostSharingInternal(
             billedAmount, allowedAmount, costShareRules, accumulators,
-            effectiveNetworkTier, isEmergency, plan, serviceTypeCode, cob: null, laterPayer: laterPayer);
+            effectiveNetworkTier, isEmergency, plan, serviceTypeCode, cob: cob, laterPayer: laterPayer);
         if (preCobSink is not null)
             preCobSink[line.LineNumber] = costShareResult;
 
@@ -1162,6 +1193,37 @@ public class BenefitCalculationEngine : IBenefitCalculationEngine
                     .Select(kv => new PriorPayerLineAdjudication { LineNumber = kv.Key, PaidAmount = kv.Value })
                     .ToList(),
             }];
+
+    /// <summary>
+    /// Per-line COB for a <see cref="CobDeductibleCredit.MemberPaidOnly"/>
+    /// plan: the line's prior payer amounts (2430, or the 2320 amounts
+    /// prorated by charge — <see cref="PriorPayerAllocator.AllocateToLines"/>)
+    /// against the line's own cost share, as it is priced in line order. The
+    /// bound is the PR of the last payer that adjudicated the line.
+    /// </summary>
+    private static Func<decimal, CobLineResult> LineCobFor(
+        BenefitResolutionRequest request, int lineNumber, decimal billed, decimal allowed)
+    {
+        var cob = request.Cob!;
+        return memberBeforeCob =>
+        {
+            var byLine = PriorPayerAllocator.AllocateToLines(
+                request.Lines.Select(l => new PriorPayerAllocator.ClaimLineCharge(l.LineNumber, l.BilledAmount)).ToList(),
+                PriorPayersFor(cob), cob.PayerSequence);
+            return CobCalculator.Calculate(new CobLineInput
+            {
+                LineNumber = lineNumber,
+                BilledAmount = billed,
+                SecondaryAllowedAmount = allowed,
+                SecondaryMemberResponsibilityBeforeCob = memberBeforeCob,
+                SecondaryPlanPaymentBeforeCob = allowed - memberBeforeCob,
+                PriorPayers = byLine.TryGetValue(lineNumber, out var amounts) && amounts.Count > 0
+                    ? amounts
+                    : [new PriorPayerAmount { Sequence = 1, PaidAmount = 0 }],
+                Model = ModelFor(cob),
+            });
+        };
+    }
 
     /// <summary>
     /// The COB step for the DRG / per-diem path: the whole stay is one unit,

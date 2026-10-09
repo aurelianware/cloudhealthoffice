@@ -16,7 +16,7 @@ namespace ClaimsService.Services.Adjudication;
 /// member + plan once via the cached resolvers, then iterates the
 /// registered stages in <see cref="IClaimAdjudicationStage.Order"/> order.
 /// </summary>
-public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrator
+public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrator, IClaimApprovalReadjudicator
 {
     private readonly ClaimAdapterFactory _adapterFactory;
     private readonly IBenefitPlanResolver _planResolver;
@@ -108,13 +108,25 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
             return;
         }
 
+        var context = await PrepareContextAsync(
+            message.TenantId, message.ClaimVersionId, claim,
+            message.ActorId, message.CorrelationId ?? messageContext.CorrelationId, ct).ConfigureAwait(false);
+
+        await RunPipelineAsync(context, ct).ConfigureAwait(false);
+        await EmitAdjudicatedEventAsync(context, ct).ConfigureAwait(false);
+    }
+
+    private async Task<ClaimAdjudicationContext> PrepareContextAsync(
+        string tenantId, string claimVersionId, AdapterClaim claim,
+        string? actorId, string? correlationId, CancellationToken ct)
+    {
         var context = new ClaimAdjudicationContext
         {
-            TenantId = message.TenantId,
-            ClaimVersionId = message.ClaimVersionId,
+            TenantId = tenantId,
+            ClaimVersionId = claimVersionId,
             Claim = claim,
-            ActorId = message.ActorId,
-            CorrelationId = message.CorrelationId ?? messageContext.CorrelationId,
+            ActorId = actorId,
+            CorrelationId = correlationId,
         };
 
         // The X12 837 on-ramp (ClaimsV1Controller.ImportRaw837 ->
@@ -128,7 +140,7 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         {
             var resolvedPlanId = await _coverageResolver
                 .ResolveBenefitPlanIdAsync(
-                    message.TenantId, claim.MemberId, claim.ServiceDateFrom,
+                    tenantId, claim.MemberId, claim.ServiceDateFrom,
                     MapInsuranceLineCode(claim.ClaimType), ct)
                 .ConfigureAwait(false);
 
@@ -141,18 +153,75 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
         if (!string.IsNullOrWhiteSpace(claim.BenefitPlanId))
         {
             context.ResolvedPlan = await _planResolver
-                .GetPlanAsync(message.TenantId, claim.BenefitPlanId!, ct)
+                .GetPlanAsync(tenantId, claim.BenefitPlanId!, ct)
                 .ConfigureAwait(false);
         }
         if (!string.IsNullOrWhiteSpace(claim.MemberId))
         {
             context.ResolvedMember = await _memberResolver
-                .GetMemberAsync(message.TenantId, claim.MemberId, ct)
+                .GetMemberAsync(tenantId, claim.MemberId, ct)
                 .ConfigureAwait(false);
         }
 
+        return context;
+    }
+
+    /// <summary>
+    /// Stages whose Pend is a review an examiner resolves by approving the
+    /// claim (possible duplicate, provider integrity, network, NCCI edits,
+    /// AI advisory). On an approval re-run their Pend becomes Pass. Not in
+    /// the set: pricing and benefit calculation (a pend there means the
+    /// amounts could not be computed) and coordination of benefits (its pends
+    /// need an examiner-confirmed payer order — see
+    /// <see cref="ExaminerApproval.PayerSequence"/>).
+    /// </summary>
+    private static readonly HashSet<string> ExaminerOverridableStages = new(StringComparer.Ordinal)
+    {
+        Stages.DuplicateClaimStage.StageName,
+        Stages.ProviderIntegrityStage.StageName,
+        Stages.NetworkCredentialingStage.StageName,
+        Stages.NcciEditsStage.StageName,
+        Stages.AiExaminationStage.StageName,
+        Stages.ScrubbingStage.StageName,
+    };
+
+    /// <summary>
+    /// Examiner approval of a pended claim: re-runs the whole pipeline in
+    /// Production with the examiner's decision applied (review pends cleared,
+    /// a COB pend resolved by the payer order the examiner confirmed), so the
+    /// final payment and the accumulator writes come from a real Production
+    /// pass — never from a pended (read-only) pricing. Persistence writes the
+    /// result; the caller finalizes only on <see cref="ClaimAdjudicationOutcome.Pass"/>.
+    /// </summary>
+    public async Task<ApprovalReadjudicationResult> ReadjudicateForApprovalAsync(
+        string tenantId, string claimId, ExaminerApproval approval, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(approval);
+        _tenantContext.TenantId = tenantId;
+
+        var adapter = await _adapterFactory.GetAdapterAsync(tenantId, ct).ConfigureAwait(false);
+        var claim = (await adapter.GetClaimAsync(
+            new ClaimAdapterRequest { TenantId = tenantId, ClaimId = claimId },
+            ct).ConfigureAwait(false)).Claim;
+        if (claim is null)
+            return new ApprovalReadjudicationResult(ClaimAdjudicationOutcome.Reject, $"Claim {claimId} not found.");
+
+        // The pended projection is replaced by this run.
+        claim.AdjudicationResult = null;
+        var context = await PrepareContextAsync(
+            tenantId, claim.ClaimVersionId is { Length: > 0 } v ? v : claim.Id, claim,
+            approval.ExaminerId, approval.CorrelationId, ct).ConfigureAwait(false);
+        context.ExaminerApproval = approval;
+
         await RunPipelineAsync(context, ct).ConfigureAwait(false);
         await EmitAdjudicatedEventAsync(context, ct).ConfigureAwait(false);
+
+        var outcome = ResolveFinalOutcome(context);
+        var reasons = context.StageResults
+            .Where(r => r.Outcome != ClaimAdjudicationOutcome.Pass && !string.IsNullOrEmpty(r.Reason))
+            .Select(r => $"{r.StageName}: {r.Reason}")
+            .ToList();
+        return new ApprovalReadjudicationResult(outcome, reasons.FirstOrDefault(), reasons);
     }
 
     private static bool HasMeaningfulAdjudicationProjection(AdapterClaim claim)
@@ -222,6 +291,23 @@ public sealed class ClaimAdjudicationOrchestrator : IClaimAdjudicationOrchestrat
                     stage.Name, SanitizeForLog(context.ClaimVersionId));
                 result = ClaimAdjudicationStageResult.Reject(
                     stage.Name, $"{stage.Name} threw: {ex.GetType().Name}");
+            }
+
+            // Examiner approval re-run: a review pend the examiner resolved
+            // passes (recorded in the notes) so the claim prices in
+            // Production and finalizes.
+            if (context.ExaminerApproval is not null
+                && result.Outcome == ClaimAdjudicationOutcome.Pend
+                && ExaminerOverridableStages.Contains(stage.Name))
+            {
+                result = new ClaimAdjudicationStageResult
+                {
+                    StageName = result.StageName,
+                    Continue = true,
+                    Outcome = ClaimAdjudicationOutcome.Pass,
+                    Reason = result.Reason,
+                    Notes = [.. result.Notes, $"Pend resolved by examiner approval: {result.Reason}"],
+                };
             }
 
             context.StageResults.Add(result);

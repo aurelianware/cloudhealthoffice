@@ -1270,6 +1270,15 @@ public class PendDetails
     /// Empty when no duplicate was found.
     /// </summary>
     public List<DuplicateFindingSnapshot> DuplicateFindings { get; set; } = new();
+
+    /// <summary>
+    /// Further pend reasons ("{code}: {reason}") a later stage found while
+    /// the claim was already pended for <see cref="PendCode"/> — e.g. NCCI
+    /// edit failures on a claim pended for COB. <see cref="PendCode"/> (which
+    /// routes the work queue) stays the first reason; every reason is shown
+    /// to the examiner.
+    /// </summary>
+    public List<string> AdditionalPendReasons { get; set; } = new();
 }
 
 /// <summary>

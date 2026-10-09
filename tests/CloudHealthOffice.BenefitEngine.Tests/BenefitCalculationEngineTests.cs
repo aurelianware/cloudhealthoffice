@@ -2200,12 +2200,11 @@ public partial class BenefitCalculationEngineTests
     }
 
     /// <summary>
-    /// NaicFullCredit and MemberPaidOnly produce the same 835: the claim is
-    /// always priced as if this plan were the only plan (NAIC MDL-120 §7),
-    /// so the setting changes only the deductible accumulators. (Compared
-    /// with line-by-line COB before claim-level COB, multi-line secondary /
-    /// tertiary 835s do change — see the MultiLine tests; NoDeductible changes
-    /// the 835 by not applying the deductible.) $300 of deductible left. Line: allowed $300 all
+    /// For a single COB unit (one line, or a DRG stay) NaicFullCredit and
+    /// MemberPaidOnly produce the same 835 and differ only in the deductible
+    /// accumulators. On a multi-line claim they differ: NaicFullCredit prices
+    /// the claim as the only plan and applies COB to the whole claim;
+    /// MemberPaidOnly prices line by line — see the MultiLine tests. $300 of deductible left. Line: allowed $300 all
     /// deductible, prior payers $150 → we pay $0, member $150 (PR-1);
     /// credited $300 vs $150. DRG: deductible $300 + coinsurance $2,340,
     /// prior payers $4,000 → we pay $8,000, member $0; credited $300 vs $0.
@@ -2215,7 +2214,7 @@ public partial class BenefitCalculationEngineTests
     [InlineData(3, false)]
     [InlineData(2, true)]
     [InlineData(3, true)]
-    public async Task CobDeductibleCredit_NaicAndMemberPaidOnly_ProduceTheSame835(int ourSequence, bool drg)
+    public async Task CobDeductibleCredit_SingleUnit_NaicAndMemberPaidOnly_ProduceTheSame835(int ourSequence, bool drg)
     {
         async Task<BenefitResolutionResult> Run(CobDeductibleCredit credit)
         {
@@ -2305,12 +2304,10 @@ public partial class BenefitCalculationEngineTests
     /// Lines: payment by normal benefit up to min(normal, room) — L2 $50 —
     /// then the $6 left to L1's room; the member's $194 on L1 (PR-1).
     /// L1: paid 6, PR-1 194, OA-23 = 300 − 194 − 6 = 100. L2: paid 50,
-    /// OA-23 50. The 835 is the same under MemberPaidOnly (the setting only
-    /// changes the accumulators): deductible credited 300 (NAIC: what the
-    /// plan applied alone) vs 194 (PR-1); OOP 194 either way.
+    /// OA-23 50. NAIC credits the 300 the plan applied alone; OOP 194.
     /// </summary>
     [Fact]
-    public async Task CobDeductibleCredit_MultiLineSecondary_ClaimLevelCob()
+    public async Task CobDeductibleCredit_MultiLineSecondary_NaicClaimLevel_MemberPaidOnlyLineByLine()
     {
         async Task<BenefitResolutionResult> Run(CobDeductibleCredit credit)
         {
@@ -2333,11 +2330,18 @@ public partial class BenefitCalculationEngineTests
         Assert.Equal(194m, naic.Totals.TotalMemberResponsibility);
         Assert.Equal(2, naic.CobPayerSequence);
 
+        // MemberPaidOnly prices line by line (COB per line, each line
+        // crediting only the PR-1 the member pays): L1 deductible 300, prior
+        // $100 → balance 200: pay 0, PR-1 200, OA-23 100. L2: $100 of
+        // deductible still left → normal 0; prior $50 → pay 0, PR-1 50,
+        // OA-23 50. Credited 200 + 50.
         var memberPaid = await Run(CobDeductibleCredit.MemberPaidOnly);
-        Assert.Equal(naic.Lines.Select(Cas), memberPaid.Lines.Select(Cas));
-        Assert.Equal(new[] { 194m, 0m }, memberPaid.Lines.Select(l => l.DeductibleCreditedAmount));
-        Assert.Equal(194m, Snapshot(memberPaid, AccumulatorType.IndividualDeductible).AmountApplied);
-        Assert.Equal(194m, Snapshot(memberPaid, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
+        Assert.Equal(new[] { 0m, 0m }, memberPaid.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(new[] { ("CO", "45", 100m), ("PR", "1", 200m), ("OA", "23", 100m) }, Cas(memberPaid.Lines[0]));
+        Assert.Equal(new[] { ("CO", "45", 100m), ("PR", "1", 50m), ("OA", "23", 50m) }, Cas(memberPaid.Lines[1]));
+        Assert.Equal(new[] { 200m, 50m }, memberPaid.Lines.Select(l => l.DeductibleCreditedAmount));
+        Assert.Equal(250m, Snapshot(memberPaid, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(250m, Snapshot(memberPaid, AccumulatorType.IndividualOutOfPocketMax).AmountApplied);
 
         Assert.All(naic.Lines, AssertCasInvariants);
         Assert.All(memberPaid.Lines, AssertCasInvariants);
@@ -2360,10 +2364,10 @@ public partial class BenefitCalculationEngineTests
     /// Claim: pay min(96, 40) = $40, member $0. (Line-level capping with the
     /// PR prorated $20 per line paid only $20: L1's normal is $0.)
     /// L1: paid 20, OA-23 130. L2: paid 20, OA-23 130.
-    /// Deductible credited: NAIC $150 (L1), member-paid-only $0.
+    /// NAIC credits the $150 the plan applied alone (L1).
     /// </summary>
     [Fact]
-    public async Task CobDeductibleCredit_MultiLineTertiary_ClaimLevelCob()
+    public async Task CobDeductibleCredit_MultiLineTertiary_NaicClaimLevel_MemberPaidOnlyLineByLine()
     {
         async Task<BenefitResolutionResult> Run(CobDeductibleCredit credit)
         {
@@ -2391,9 +2395,15 @@ public partial class BenefitCalculationEngineTests
         Assert.Equal(40m, naic.Totals.TotalPlanPaid);
         Assert.Equal(3, naic.CobPayerSequence);
 
+        // MemberPaidOnly, line by line: L1 deductible 150; prior paid 80 and
+        // the secondary left $20 (its PR prorated by charge) → pay 0, PR-1 20.
+        // L2: $130 of deductible still left + copay $20 → normal 0; balance
+        // 20 → pay 0, PR-1 20. Credited 20 + 20.
         var memberPaid = await Run(CobDeductibleCredit.MemberPaidOnly);
-        Assert.Equal(naic.Lines.Select(Cas), memberPaid.Lines.Select(Cas));
-        Assert.Equal(0m, Snapshot(memberPaid, AccumulatorType.IndividualDeductible).AmountApplied);
+        Assert.Equal(new[] { 0m, 0m }, memberPaid.Lines.Select(l => l.PlanPaidAmount));
+        Assert.Equal(new[] { 20m, 20m }, memberPaid.Lines.Select(l => l.DeductibleAmount));
+        Assert.Equal(new[] { 130m, 130m }, memberPaid.Lines.Select(l => Oa23(l.Adjustments)));
+        Assert.Equal(40m, Snapshot(memberPaid, AccumulatorType.IndividualDeductible).AmountApplied);
 
         Assert.All(naic.Lines, AssertCasInvariants);
         Assert.All(memberPaid.Lines, AssertCasInvariants);

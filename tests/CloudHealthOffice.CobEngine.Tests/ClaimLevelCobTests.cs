@@ -86,6 +86,48 @@ public class ClaimLevelCobTests
         Assert.Equal(60m, result.MemberResponsibility);
     }
 
+    /// <summary>
+    /// Re-review N2. The prior payer reported both lines in 2430 with $0 paid
+    /// and no line CAS, but its 2320 has CAS*PR-1 $120 (the deductible) —
+    /// it adjudicated, the member owes $120 after it. Bound = $120, so we pay
+    /// $120, not the $200 an "unadjudicated" reading allowed (an $80
+    /// overpayment). The single-stay path (claim totals) agrees.
+    /// </summary>
+    [Fact]
+    public void ZeroPaid2430Lines_WithClaimLevelPr_AreAdjudicated()
+    {
+        PriorPayerAdjudication Payer() => new()
+        {
+            Sequence = 1,
+            ClaimPaidAmount = 0m,
+            ClaimAdjustments = [Adj("PR", "1", 120m), Adj("CO", "45", 80m)],
+            Lines =
+            [
+                new() { LineNumber = 1, PaidAmount = 0m },
+                new() { LineNumber = 2, PaidAmount = 0m },
+            ],
+        };
+
+        var lines = Svc.CalculateClaim(new CobClaimInput
+        {
+            Units =
+            [
+                new() { LineNumber = 1, BilledAmount = 100m, AllowedAmount = 100m, CostShareBeforeCob = 0m },
+                new() { LineNumber = 2, BilledAmount = 100m, AllowedAmount = 100m, CostShareBeforeCob = 0m },
+            ],
+            PriorPayers = [Payer()],
+        });
+        var stay = Svc.CalculateClaim(new CobClaimInput
+        {
+            SingleStay = true,
+            Units = [new() { LineNumber = 0, BilledAmount = 200m, AllowedAmount = 200m, CostShareBeforeCob = 0m }],
+            PriorPayers = [Payer()],
+        });
+
+        Assert.Equal(120m, lines.PlanPayment);
+        Assert.Equal(120m, stay.PlanPayment);
+    }
+
     [Fact]
     public void PerLineCalculate_DenialIsUnbounded_AdjudicatedPrBounds()
     {

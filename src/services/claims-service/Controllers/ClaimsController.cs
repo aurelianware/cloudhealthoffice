@@ -5,6 +5,8 @@ using ClaimsService.Exceptions;
 using ClaimsService.Models;
 using ClaimsService.Repositories;
 using ClaimsService.Services;
+using ClaimsService.Services.Adjudication;
+using ClaimsService.Models.Adjudication;
 using CloudHealthOffice.Infrastructure.Security;
 
 namespace ClaimsService.Controllers;
@@ -29,6 +31,8 @@ public class ClaimsController : ControllerBase
     private readonly ICurrentActor _actor;
     private readonly ILogger<ClaimsController> _logger;
 
+    private readonly IClaimApprovalReadjudicator? _approvalReadjudicator;
+
     public ClaimsController(
         IClaimRepository claimRepository,
         IMassAdjudicationRunRepository massAdjudicationRunRepository,
@@ -43,8 +47,10 @@ public class ClaimsController : ControllerBase
         IClaimDiagnosisMetadataEnricher diagnosisMetadataEnricher,
         IConfiguration configuration,
         ICurrentActor actor,
-        ILogger<ClaimsController> logger)
+        ILogger<ClaimsController> logger,
+        IClaimApprovalReadjudicator? approvalReadjudicator = null)
     {
+        _approvalReadjudicator = approvalReadjudicator;
         _claimRepository = claimRepository;
         _massAdjudicationRunRepository = massAdjudicationRunRepository;
         _auditRepository = auditRepository;
@@ -1413,6 +1419,7 @@ public class ClaimsController : ControllerBase
                 ServiceDate = c.ClaimLines.FirstOrDefault()?.ServiceDateFrom ?? c.CreatedDate,
                 QueueReason = MapPendReason(pendCode),
                 QueueReasonCode = pendCode ?? "REVIEW",
+                PendReasons = PendReasonsOf(c),
                 DaysInQueue = (int)(DateTime.UtcNow - c.LastUpdatedDate).TotalDays,
                 Priority = (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 14 ? "High" :
                            (DateTime.UtcNow - c.LastUpdatedDate).TotalDays > 7 ? "Medium" : "Low",
@@ -1474,6 +1481,7 @@ public class ClaimsController : ControllerBase
             {
                 Disposition = "Approved",
                 Reason = request.OverrideReason,
+                PayerSequence = request.PayerSequence,
             });
 
         return result;
@@ -1510,6 +1518,54 @@ public class ClaimsController : ControllerBase
         // The examiner is the authenticated caller; a body-supplied
         // ExaminerUserId is ignored.
         var examinerUserId = ResolveActorId();
+
+        // Approval re-adjudicates the claim in Production with the examiner's
+        // decision applied, so the payment and the accumulators (deductible,
+        // OOP) come from a real Production pass — a pended claim was priced
+        // read-only and wrote none. A COB pend needs the payer order the
+        // examiner confirmed (payerSequence); it is never paid as primary by
+        // a plain approval. Anything the examiner did not resolve (pricing,
+        // COB data) keeps the claim pended and the approval is refused.
+        if (disposition == ClaimStatus.Approved)
+        {
+            if (_approvalReadjudicator is null)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Approval re-adjudication is unavailable",
+                    detail: "An approved pended claim must be re-adjudicated before it finalizes.");
+            }
+
+            var rerun = await _approvalReadjudicator.ReadjudicateForApprovalAsync(
+                GetTenantId(),
+                claim.Id,
+                new ExaminerApproval
+                {
+                    ExaminerId = examinerUserId,
+                    CorrelationId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier,
+                    PayerSequence = request.PayerSequence,
+                },
+                HttpContext.RequestAborted);
+
+            if (rerun.Outcome != ClaimAdjudicationOutcome.Pass)
+            {
+                var needsPayerOrder = string.Equals(claim.PendDetails?.PendCode, "COB", StringComparison.OrdinalIgnoreCase)
+                                      && request.PayerSequence is null;
+                return Conflict(new
+                {
+                    error = needsPayerOrder
+                        ? "This claim is pended for coordination of benefits: approving it requires the payer order " +
+                          "you confirmed (payerSequence: 1 = primary, 2 = secondary, 3+ = tertiary or later)."
+                        : $"Re-adjudication for approval did not pass ({rerun.Outcome}); the claim was not approved.",
+                    outcome = rerun.Outcome.ToString(),
+                    reasons = rerun.UnresolvedReasons ?? (rerun.Reason is null ? [] : [rerun.Reason]),
+                });
+            }
+
+            // The re-run persisted the new adjudication result; finalize that.
+            claim = await _claimRepository.GetByIdAsync(claimId) ?? claim;
+        }
+
         var actedAt = DateTime.UtcNow;
         claim.LastUpdatedBy = examinerUserId;
         claim.Status = disposition;
@@ -1576,6 +1632,24 @@ public class ClaimsController : ControllerBase
         return Ok(updated);
     }
 
+    /// <summary>
+    /// Every reason the claim is pended for, the routing one first:
+    /// "{PendCode}: {PendReason}", then
+    /// <see cref="PendDetails.AdditionalPendReasons"/> (e.g. NCCI failures on
+    /// a claim pended for COB).
+    /// </summary>
+    private static List<string> PendReasonsOf(Claim c)
+    {
+        var reasons = new List<string>();
+        if (c.PendDetails is { } pend)
+        {
+            if (!string.IsNullOrWhiteSpace(pend.PendCode) || !string.IsNullOrWhiteSpace(pend.PendReason))
+                reasons.Add($"{pend.PendCode}: {pend.PendReason}".Trim());
+            reasons.AddRange(pend.AdditionalPendReasons ?? []);
+        }
+        return reasons;
+    }
+
     private static string MapPendReason(string? code) => code switch
     {
         "NCCI" or "MUE" => "NCCI Edit Failure",
@@ -1625,6 +1699,9 @@ public class WorkQueueItem
     public DateTime ServiceDate { get; set; }
     public string QueueReason { get; set; } = string.Empty;
     public string QueueReasonCode { get; set; } = string.Empty;
+
+    /// <summary>Every pend reason, the routing one (<see cref="QueueReasonCode"/>) first.</summary>
+    public List<string> PendReasons { get; set; } = new();
     public int DaysInQueue { get; set; }
     public string Priority { get; set; } = "Low";
     public string AssignedTo { get; set; } = string.Empty;
@@ -1661,6 +1738,9 @@ public class AssignClaimRequest
 public class OverrideClaimRequest
 {
     public string OverrideReason { get; set; } = string.Empty;
+
+    /// <summary>See <see cref="ResolvePendedClaimRequest.PayerSequence"/>.</summary>
+    public int? PayerSequence { get; set; }
 }
 
 public class ResolvePendedClaimRequest
@@ -1671,6 +1751,14 @@ public class ResolvePendedClaimRequest
 
     /// <summary>Ignored: the examiner is the authenticated caller.</summary>
     public string? ExaminerUserId { get; set; }
+
+    /// <summary>
+    /// For approving a claim pended for coordination of benefits: the payer
+    /// order the examiner confirmed — 1 = this plan is primary, 2 =
+    /// secondary, 3+ = tertiary or later (the 837 must then carry the earlier
+    /// payers' 2320/2430 data). Required for a COB pend; ignored otherwise.
+    /// </summary>
+    public int? PayerSequence { get; set; }
 }
 
 public class ClaimAuditTimelineEntry
