@@ -67,6 +67,17 @@ public static class X12837ClaimMapper
 
             BillingProviderNPI = source.BillingProvider.Npi,
             BillingProviderName = source.BillingProvider.Name,
+            PayToAddress = MapAddress(source.PayToAddress),
+            PayToPlan = source.PayToPlan is { } plan
+                ? new ClaimPayToPlan
+                {
+                    Name = plan.Name,
+                    IdentifierQualifier = plan.IdentificationQualifier,
+                    Identifier = plan.IdentificationCode,
+                    TaxId = plan.TaxId,
+                    Address = MapAddress(plan.Address),
+                }
+                : null,
             RenderingProviderNPI = source.ClaimHeader.RenderingProvider?.Npi,
             RenderingProviderName = source.ClaimHeader.RenderingProvider?.Name,
 
@@ -161,6 +172,19 @@ public static class X12837ClaimMapper
         EngineModels.ClaimType.Dental => ClaimType.Dental,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown engine ClaimType")
     };
+
+    private static ClaimAddress? MapAddress(EngineModels.ProviderAddress? address) =>
+        address is null
+            ? null
+            : new ClaimAddress
+            {
+                Line1 = address.Line1,
+                Line2 = string.IsNullOrEmpty(address.Line2) ? null : address.Line2,
+                City = address.City,
+                State = string.IsNullOrEmpty(address.State) ? null : address.State,
+                PostalCode = string.IsNullOrEmpty(address.PostalCode) ? null : address.PostalCode,
+                CountryCode = string.IsNullOrEmpty(address.CountryCode) ? null : address.CountryCode,
+            };
 
     private static AdapterDiagnosisCode MapDiagnosis(EngineModels.DiagnosisCode d) => new()
     {

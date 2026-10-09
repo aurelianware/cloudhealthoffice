@@ -140,6 +140,9 @@ public class PaymentRunService : IPaymentRunService
             //         allowed); a claim without one is listed on the run.
             var fetched = await FetchClaimsAsync(paymentRun.TenantId, paymentRun.Criteria, ClaimStatus.Approved);
             var claims = await ExcludeAlreadyPaidAsync(fetched, paymentRun);
+            // A claim naming a pay-to plan (837 2010AC) is paid to the plan,
+            // not to a provider NPI: neither paid nor remitted by a run.
+            claims = ExcludePayToPlan(claims, paymentRun, denied: false);
             claims = ExcludeNotPayable(claims, paymentRun);
             claims = ExcludeUnbalancedServiceLines(claims, paymentRun, denied: false);
 
@@ -161,7 +164,7 @@ public class PaymentRunService : IPaymentRunService
             var resolvedTradingPartners = claims.Count == 0 && denials.Count == 0
                 ? new Dictionary<string, TradingPartnerSummary>(StringComparer.Ordinal)
                 : await ResolveTradingPartnersAsync(
-                    claims.Concat(denials).Select(c => c.PayToProviderNPI ?? c.BillingProviderNPI).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal),
+                    claims.Concat(denials).Select(c => c.PayeeNpi).Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.Ordinal),
                     tenantId,
                     environment,
                     paymentRun.Warnings);
@@ -219,7 +222,7 @@ public class PaymentRunService : IPaymentRunService
             var issuedPayments = new List<Payment>();
             foreach (var group in claimGroups)
             {
-                var providerNpi = group.Value.First().PayToProviderNPI ?? group.Value.First().BillingProviderNPI;
+                var providerNpi = group.Value.First().PayeeNpi;
                 string? tradingPartnerId = null;
                 if (!string.IsNullOrEmpty(providerNpi)
                     && resolvedTradingPartners.TryGetValue(providerNpi, out var partner))
@@ -623,6 +626,50 @@ public class PaymentRunService : IPaymentRunService
     }
 
     /// <summary>
+    /// Leaves out claims that name a pay-to plan (837 Loop 2010AC). On those
+    /// the plan is the entity to be paid for the subrogation (X12 RFI 1107);
+    /// paying the billing provider's NPI, as a run does, would pay the wrong
+    /// party, and remitting a denial to the billing provider's trading partner
+    /// would send it to the wrong party. Approved and denied alike, they are
+    /// not reserved, finalized, paid or remitted, and are listed on the run
+    /// (<see cref="PaymentRun.PayToPlanClaimIds"/>) for manual handling. Nothing
+    /// is recorded, so every later run lists them again.
+    /// </summary>
+    private List<ClaimDto> ExcludePayToPlan(List<ClaimDto> claims, PaymentRun paymentRun, bool denied)
+    {
+        var kept = new List<ClaimDto>(claims.Count);
+        foreach (var claim in claims)
+        {
+            if (claim.PayToPlan is null)
+            {
+                kept.Add(claim);
+                continue;
+            }
+
+            paymentRun.PayToPlanClaimIds.Add(claim.Id);
+            paymentRun.Warnings.Add(
+                $"{(denied ? "Denied claim" : "Claim")} {claim.Id} not paid or remitted: it names a pay-to plan (837 Loop 2010AC, subrogation demand), " +
+                "which is the entity to be paid instead of the billing provider; a payment run pays providers by NPI, so it needs manual handling");
+        }
+        return kept;
+    }
+
+    /// <summary>
+    /// The 835 payee N3/N4 address for a payment of <paramref name="claims"/>:
+    /// their 837 pay-to address (2010AB) when every claim is to the same payee
+    /// NPI and carries the same pay-to address; otherwise null (no N3/N4).
+    /// </summary>
+    public static PayeeAddress? SharedPayToAddress(IReadOnlyCollection<ClaimDto> claims)
+    {
+        var first = claims.FirstOrDefault();
+        if (first?.PayToAddress is not { } address)
+            return null;
+        return claims.All(c => string.Equals(c.PayeeNpi, first.PayeeNpi, StringComparison.Ordinal) && address.SameAs(c.PayToAddress))
+            ? address
+            : null;
+    }
+
+    /// <summary>
     /// Keeps only claims that are payable: claims-service status Approved
     /// (the search asks for status=Approved; anything else returned — Pended,
     /// Denied, with a possibly stale payerPayment — is refused here too), and
@@ -776,8 +823,13 @@ public class PaymentRunService : IPaymentRunService
                 remitted.Count, paymentRun.PaymentRunNumber);
         }
 
-        var withReason = new List<ClaimDto>(candidates.Count);
-        foreach (var claim in candidates.Where(c => !remitted.Contains(c.Id)))
+        // A denied subrogation demand (837 2010AC) is no more the billing
+        // provider's to receive than a paid one: it is not remitted to the
+        // billing provider's trading partner either.
+        var notRemitted = ExcludePayToPlan(candidates.Where(c => !remitted.Contains(c.Id)).ToList(), paymentRun, denied: true);
+
+        var withReason = new List<ClaimDto>(notRemitted.Count);
+        foreach (var claim in notRemitted)
         {
             if (!string.IsNullOrWhiteSpace(claim.AdjudicationResult?.DenialReasonCode)
                 || claim.AdjudicationResult?.AdjustmentReasons is { Count: > 0 })
@@ -800,7 +852,7 @@ public class PaymentRunService : IPaymentRunService
         var payable = new List<ClaimDto>(claims.Count);
         foreach (var claim in claims)
         {
-            var npi = claim.PayToProviderNPI ?? claim.BillingProviderNPI;
+            var npi = claim.PayeeNpi;
             if (!string.IsNullOrEmpty(npi) && resolved.ContainsKey(npi))
             {
                 payable.Add(claim);
@@ -847,7 +899,7 @@ public class PaymentRunService : IPaymentRunService
         if (!criteria.GroupByProvider)
             return new Dictionary<string, List<ClaimDto>> { { "ALL", claims } };
 
-        var groups = claims.GroupBy(c => c.PayToProviderNPI ?? c.BillingProviderNPI)
+        var groups = claims.GroupBy(c => c.PayeeNpi)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         if (criteria.MaxClaimsPerPayment.HasValue)
@@ -946,7 +998,7 @@ public class PaymentRunService : IPaymentRunService
         string? paymentMethod = null)
     {
         var firstClaim = claims.First();
-        var providerNpi = firstClaim.PayToProviderNPI ?? firstClaim.BillingProviderNPI;
+        var providerNpi = firstClaim.PayeeNpi;
 
         var payment = new Payment
         {
@@ -958,6 +1010,7 @@ public class PaymentRunService : IPaymentRunService
             PayerId = _configuration["Payer:Id"] ?? "CHO",
             PayeeName = firstClaim.PayeeNameOr(providerKey),
             PayeeNPI = providerNpi,
+            PayeeAddress = SharedPayToAddress(claims),
             TradingPartnerId = tradingPartnerId,
             // Issued, not yet finalized in claims-service. Becomes Posted once
             // every claim in it is finalized; a crash before that leaves it
@@ -1048,7 +1101,7 @@ public class PaymentRunService : IPaymentRunService
         foreach (var group in claimGroups)
         {
             var first = group.Value.First();
-            var npi = first.PayToProviderNPI ?? first.BillingProviderNPI;
+            var npi = first.PayeeNpi;
             if (string.IsNullOrEmpty(npi))
             {
                 result[group.Key] = ("CHK", "no payee NPI to find an approved EFT account for");
@@ -1109,7 +1162,7 @@ public class PaymentRunService : IPaymentRunService
         var inputs = new List<EraPaymentInput>();
         var traceSequence = 0;
         var byPartner = denials
-            .Select(d => (Claim: d, Npi: d.PayToProviderNPI ?? d.BillingProviderNPI))
+            .Select(d => (Claim: d, Npi: d.PayeeNpi))
             .Where(x => !string.IsNullOrEmpty(x.Npi) && resolved.ContainsKey(x.Npi))
             .GroupBy(x => resolved[x.Npi].TradingPartnerId, StringComparer.Ordinal);
 
@@ -1133,6 +1186,7 @@ public class PaymentRunService : IPaymentRunService
                     PayerId = _configuration["Payer:Id"] ?? "CHO",
                     PayeeName = first.Claim.PayeeNameOr(first.Npi),
                     PayeeNPI = first.Npi,
+                    PayeeAddress = SharedPayToAddress(group.Select(x => x.Claim).ToList()),
                     TradingPartnerId = group.Key,
                     RunId = paymentRun.Id,
                     RunNumber = paymentRun.PaymentRunNumber,
@@ -1305,7 +1359,6 @@ public class ClaimDto
     public string ClaimNumber { get; set; } = string.Empty;
     public string MemberId { get; set; } = string.Empty;
     public string BillingProviderNPI { get; set; } = string.Empty;
-    public string? PayToProviderNPI { get; set; }
     public string? RenderingProviderNPI { get; set; }
 
     /// <summary>
@@ -1317,27 +1370,37 @@ public class ClaimDto
     public string? ProviderName { get; set; }
 
     /// <summary>
-    /// True when the claim names a pay-to provider NPI different from the
-    /// billing provider NPI: the payee (N104) is then the pay-to provider.
+    /// claims-service <c>Claim.PayToAddress</c>: the 837 Loop 2010AB pay-to
+    /// address. In 5010 that loop is an address only (NM103 onward are not
+    /// used, X12 RFI 1522), so there is no pay-to NPI or name: the payee is
+    /// the billing provider, paid at this address. 835 payee N3/N4.
     /// </summary>
-    [JsonIgnore]
-    public bool HasDistinctPayToProvider =>
-        !string.IsNullOrWhiteSpace(PayToProviderNPI)
-        && !string.Equals(PayToProviderNPI.Trim(), BillingProviderNPI?.Trim(), StringComparison.Ordinal);
+    public PayeeAddress? PayToAddress { get; set; }
 
     /// <summary>
-    /// The N1*PE (1000B) payee name. The billing provider's name only when the
-    /// payee is the billing provider: with a distinct pay-to NPI the billing
-    /// name would label a different organization than N104, so the pay-to NPI
-    /// is the name (claims-service sends no pay-to name). Otherwise
-    /// <see cref="ProviderName"/>, or <paramref name="fallback"/> when it is
+    /// claims-service <c>Claim.PayToPlan</c>: the 837 Loop 2010AC pay-to plan
+    /// (subrogation demand, BHT06 = 31). When present the plan is the
+    /// entity to be paid (X12 RFI 1107), not the billing provider.
+    /// </summary>
+    public PayToPlanDto? PayToPlan { get; set; }
+
+    /// <summary>
+    /// The payee's NPI (835 1000B N104, N103 = XX): the billing provider NPI
+    /// (837 2010AA). 5010 has no pay-to provider NPI: the billing provider is
+    /// the pay-to provider (X12 RFI 1606), and the NPI on the claim flows
+    /// through to the 835 (X12 RFI 1559).
+    /// </summary>
+    [JsonIgnore]
+    public string PayeeNpi => BillingProviderNPI;
+
+    /// <summary>
+    /// The N1*PE (1000B) payee name: the billing provider's name
+    /// (<see cref="ProviderName"/>), or <paramref name="fallback"/> when it is
     /// blank. Not length-limited here: N102 is cut to 60 characters when the
     /// 835 is written (<see cref="Era835Names.N102"/>).
     /// </summary>
     public string PayeeNameOr(string fallback) =>
-        HasDistinctPayToProvider ? PayToProviderNPI!.Trim()
-        : string.IsNullOrWhiteSpace(ProviderName) ? fallback
-        : ProviderName.Trim();
+        string.IsNullOrWhiteSpace(ProviderName) ? fallback : ProviderName.Trim();
 
     public string? PayerClaimControlNumber { get; set; }
 
@@ -1389,6 +1452,23 @@ public class ClaimDto
     /// </summary>
     [JsonPropertyName("claimLines")]
     public List<ClaimServiceLineDto>? ServiceLines { get; set; }
+}
+
+/// <summary>
+/// claims-service <c>ClaimPayToPlan</c>: the 837 Loop 2010AC pay-to plan.
+/// </summary>
+public class PayToPlanDto
+{
+    /// <summary>NM103 pay-to plan name.</summary>
+    public string Name { get; set; } = string.Empty;
+    /// <summary>NM108: PI or XV.</summary>
+    public string? IdentifierQualifier { get; set; }
+    /// <summary>NM109 pay-to plan identifier.</summary>
+    public string? Identifier { get; set; }
+    /// <summary>REF*EI pay-to plan tax id.</summary>
+    public string? TaxId { get; set; }
+    /// <summary>N3/N4 pay-to plan address.</summary>
+    public PayeeAddress? Address { get; set; }
 }
 
 /// <summary>

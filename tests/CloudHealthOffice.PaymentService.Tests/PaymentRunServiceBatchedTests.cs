@@ -495,23 +495,117 @@ public class PaymentRunServiceBatchedTests
         Assert.Equal(8, b.Single(s => s[0] == "CLP").Length); // professional: ends at CLP07
     }
 
+    // ── Payee (1000B): the billing provider, at its 2010AB pay-to address ──
+
+    private static PayeeAddress PayToAddress(string line1 = "PO BOX 1234") =>
+        new() { Line1 = line1, City = "SPRINGFIELD", State = "IL", PostalCode = "627010001" };
+
     [Fact]
-    public async Task ExecutePaymentRunAsync_DistinctPayToNpi_PayeeNameIsThePayToNpi_NotTheBillingProviderName()
+    public async Task ExecutePaymentRunAsync_PayToAddress_PayeeIsTheBillingProvider_N3N4AreThePayToAddress()
     {
         var run = PendingRun();
         _runRepo.GetByIdAsync(run.Id).Returns(run);
         _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
         var claim = ClaimWithLines("c-payto", 80m, 80m);
-        claim.ProviderName = "ACME BILLING GROUP"; // the billing provider (NPI-A), not the payee
-        claim.PayToProviderNPI = "NPI-B";
+        claim.ProviderName = "ACME BILLING GROUP";
+        claim.PayToAddress = PayToAddress();
         SetupClaimsResponse(new[] { claim }, Array.Empty<ClaimDto>());
         var (envelopes, payments) = SetupRealGenerator();
 
         await CreateRealService().ExecutePaymentRunAsync(run.Id);
 
-        Assert.Equal(("NPI-B", "NPI-B"), (Assert.Single(payments).PayeeNPI, payments[0].PayeeName));
+        var payment = Assert.Single(payments);
+        Assert.Equal(("NPI-A", "ACME BILLING GROUP"), (payment.PayeeNPI, payment.PayeeName));
         var segments = Segments(Assert.Single(envelopes).EdiContent);
-        Assert.Equal(new[] { "N1", "PE", "NPI-B", "XX", "NPI-B" }, segments.Single(s => s[0] == "N1" && s[1] == "PE"));
+        var n1 = segments.FindIndex(s => s[0] == "N1" && s[1] == "PE");
+        Assert.Equal(new[] { "N1", "PE", "ACME BILLING GROUP", "XX", "NPI-A" }, segments[n1]);
+        Assert.Equal(new[] { "N3", "PO BOX 1234" }, segments[n1 + 1]);
+        Assert.Equal(new[] { "N4", "SPRINGFIELD", "IL", "627010001" }, segments[n1 + 2]);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_NoPayToAddress_NoPayeeN3N4()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        SetupClaimsResponse(new[] { ClaimWithLines("c-1", 80m, 80m) }, Array.Empty<ClaimDto>());
+        var (envelopes, payments) = SetupRealGenerator();
+
+        await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Null(Assert.Single(payments).PayeeAddress);
+        var segments = Segments(Assert.Single(envelopes).EdiContent);
+        Assert.DoesNotContain(segments, s => s[0] is "N3" or "N4");
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_ClaimsDisagreeOnPayToAddress_PaidTogether_NoPayeeN3N4()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var a = ClaimWithLines("c-a", 80m, 80m);
+        a.PayToAddress = PayToAddress("PO BOX 1");
+        var b = ClaimWithLines("c-b", 80m, 80m);
+        b.PayToAddress = PayToAddress("PO BOX 2");
+        SetupClaimsResponse(new[] { a, b }, Array.Empty<ClaimDto>());
+        var (envelopes, payments) = SetupRealGenerator();
+
+        await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Null(Assert.Single(payments).PayeeAddress);
+        Assert.DoesNotContain(Segments(Assert.Single(envelopes).EdiContent), s => s[0] is "N3" or "N4");
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_PayToPlanClaim_NotPaidToTheBillingProvider_Listed()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var subrogation = ClaimWithLines("c-subro", 80m, 80m);
+        subrogation.PayToPlan = new PayToPlanDto { Name = "SYNTHETIC MEDICAID PLAN", IdentifierQualifier = "PI", Identifier = "PLAN01", TaxId = "000000001" };
+        SetupClaimsResponse(new[] { subrogation, ClaimWithLines("c-ok", 80m, 80m) }, Array.Empty<ClaimDto>());
+        var (envelopes, payments) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(new[] { "c-subro" }, result.PayToPlanClaimIds);
+        Assert.Contains(result.Warnings, w => w.Contains("c-subro") && w.Contains("2010AC"));
+        Assert.Equal(new[] { "c-ok" }, Assert.Single(payments).ClaimPayments.Select(c => c.ClaimId));
+        Assert.DoesNotContain(Segments(Assert.Single(envelopes).EdiContent), s => s[0] == "CLP" && s[1] == "CLM-c-subro");
+        // Left alone: not reserved, not finalized in claims-service (stays Approved).
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "c-subro");
+        Assert.Contains(_reservations.All, r => r.ClaimId == "c-ok");
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/c-subro/"));
+        Assert.Contains(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/c-ok/"));
+        Assert.DoesNotContain("c-subro", result.ClaimIds);
+    }
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_DeniedPayToPlanClaim_NotRemittedToTheBillingProvider_Listed()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        var subrogation = Denied("d-subro");
+        subrogation.PayToPlan = new PayToPlanDto { Name = "SYNTHETIC MEDICAID PLAN", IdentifierQualifier = "PI", Identifier = "PLAN01", TaxId = "000000001" };
+        SetupClaimsResponse(new[] { ClaimWithLines("c-ok", 80m, 80m) }, new[] { subrogation, Denied("d-ok") });
+        var (envelopes, payments) = SetupRealGenerator();
+
+        var result = await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal(PaymentRunStatus.Completed, result.Status);
+        Assert.Equal(new[] { "d-subro" }, result.PayToPlanClaimIds);
+        Assert.Contains(result.Warnings, w => w.Contains("Denied claim d-subro") && w.Contains("2010AC"));
+        Assert.Equal(new[] { "d-ok" }, result.RemittedDeniedClaimIds);
+        var envelope = Assert.Single(envelopes);
+        Assert.DoesNotContain("d-subro", envelope.ClaimIds);
+        Assert.DoesNotContain(Segments(envelope.EdiContent), s => s[0] == "CLP" && s[1] == "CLM-d-subro");
+        Assert.DoesNotContain(payments.SelectMany(p => p.ClaimPayments), cp => cp.ClaimId == "d-subro");
+        Assert.DoesNotContain(_reservations.All, r => r.ClaimId == "d-subro");
+        Assert.DoesNotContain(_claimsHandler.RecordedRequests, r => r.Method == HttpMethod.Post && r.Uri.AbsolutePath.Contains("/d-subro/"));
     }
 
     // ── Denials: zero-pay claims in the run's 835 ─────────────────────────
