@@ -160,6 +160,15 @@ public class ClaimAdjudicationContext
     public ExaminerApproval? ExaminerApproval { get; set; }
 
     /// <summary>
+    /// Set by <see cref="Stages.PersistenceStage"/> when an approval re-run's
+    /// fenced write was refused because the examiner resolution lock is no
+    /// longer held (PR #1279 B1). Such a run must emit nothing — no audit
+    /// event, no Service Bus message, no adjustment callback — because the
+    /// resolver that took the lock over owns the claim's outcome.
+    /// </summary>
+    public bool ResolutionLockLost { get; set; }
+
+    /// <summary>
     /// The pends an approval re-run overrode ("{stage}: {code}: {reason}"),
     /// for the persisted audit record. Empty outside an approval re-run.
     /// </summary>

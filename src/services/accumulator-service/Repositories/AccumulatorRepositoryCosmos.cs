@@ -226,23 +226,28 @@ public class ProcessedClaimStoreCosmos : IProcessedClaimStore
         _col = db.GetContainer("AccumulatorProcessedClaims");
     }
 
-    public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default)
+    public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default) =>
+        (await BeginLeaseAsync(tenantId, claimId, ct)).Outcome;
+
+    public async Task<ClaimLease> BeginLeaseAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var now = _clock.GetUtcNow().UtcDateTime;
         var id = ProcessedClaim.BuildId(tenantId, claimId);
         var pk = new PartitionKey(tenantId);
+        var token = Guid.NewGuid().ToString("N");
         var marker = new ProcessedClaim
         {
             Id = id,
             TenantId = tenantId,
             ClaimId = claimId,
             ProcessedAt = now,
-            Outcome = "Pending"
+            Outcome = "Pending",
+            LeaseToken = token,
         };
         try
         {
             await _col.CreateItemAsync(marker, pk, cancellationToken: ct);
-            return BeginClaimOutcome.Proceed;
+            return new ClaimLease(BeginClaimOutcome.Proceed, token);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
         {
@@ -256,25 +261,62 @@ public class ProcessedClaimStoreCosmos : IProcessedClaimStore
             }
             catch (CosmosException nf) when (nf.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                return BeginClaimOutcome.InProgress;
+                return new ClaimLease(BeginClaimOutcome.InProgress, null);
             }
 
             if (!string.Equals(existing.Resource.Outcome, "Pending", StringComparison.Ordinal))
-                return BeginClaimOutcome.AlreadyApplied;
+                return new ClaimLease(BeginClaimOutcome.AlreadyApplied, null);
             if (existing.Resource.ProcessedAt > now - _lease)
-                return BeginClaimOutcome.InProgress;
+                return new ClaimLease(BeginClaimOutcome.InProgress, null);
 
             existing.Resource.ProcessedAt = now;
+            existing.Resource.LeaseToken = token;
             try
             {
                 await _col.ReplaceItemAsync(existing.Resource, id, pk,
                     new ItemRequestOptions { IfMatchEtag = existing.ETag }, ct);
-                return BeginClaimOutcome.Proceed;
+                return new ClaimLease(BeginClaimOutcome.Proceed, token);
             }
             catch (CosmosException pf) when (pf.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
             {
-                return BeginClaimOutcome.InProgress;
+                return new ClaimLease(BeginClaimOutcome.InProgress, null);
             }
+        }
+    }
+
+    public async Task<bool> CompleteLeaseAsync(
+        string tenantId, string claimId, string leaseToken, string resultingEventId, string outcome,
+        string? reversalKind = null, CancellationToken ct = default)
+    {
+        var id = ProcessedClaim.BuildId(tenantId, claimId);
+        var pk = new PartitionKey(tenantId);
+        ItemResponse<ProcessedClaim> current;
+        try
+        {
+            current = await _col.ReadItemAsync<ProcessedClaim>(id, pk, cancellationToken: ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+        var marker = current.Resource;
+        if (!string.Equals(marker.Outcome, "Pending", StringComparison.Ordinal)
+            || !string.Equals(marker.LeaseToken, leaseToken, StringComparison.Ordinal))
+            return false;
+        marker.ResultingEventId = resultingEventId;
+        marker.Outcome = outcome;
+        marker.ReversalKind = reversalKind;
+        marker.ProcessedAt = DateTime.UtcNow;
+        try
+        {
+            // The ETag makes the lease check and the write one atomic step.
+            await _col.ReplaceItemAsync(marker, id, pk, new ItemRequestOptions { IfMatchEtag = current.ETag }, ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
         }
     }
 

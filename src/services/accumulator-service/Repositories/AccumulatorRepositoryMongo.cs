@@ -165,22 +165,27 @@ public class ProcessedClaimStoreMongo : IProcessedClaimStore
         await _col.DeleteOneAsync(filter, ct);
     }
 
-    public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default)
+    public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default) =>
+        (await BeginLeaseAsync(tenantId, claimId, ct)).Outcome;
+
+    public async Task<ClaimLease> BeginLeaseAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var id = ProcessedClaim.BuildId(tenantId, claimId);
         var now = _clock.GetUtcNow().UtcDateTime;
+        var token = Guid.NewGuid().ToString("N");
         var marker = new ProcessedClaim
         {
             Id = id,
             TenantId = tenantId,
             ClaimId = claimId,
             ProcessedAt = now,
-            Outcome = "Pending"
+            Outcome = "Pending",
+            LeaseToken = token,
         };
         try
         {
             await _col.InsertOneAsync(marker, cancellationToken: ct);
-            return BeginClaimOutcome.Proceed;
+            return new ClaimLease(BeginClaimOutcome.Proceed, token);
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
@@ -194,15 +199,36 @@ public class ProcessedClaimStoreMongo : IProcessedClaimStore
                 Builders<ProcessedClaim>.Filter.Eq(p => p.Outcome, "Pending"),
                 Builders<ProcessedClaim>.Filter.Lte(p => p.ProcessedAt, now - _lease));
             var taken = await _col.UpdateOneAsync(
-                takeover, Builders<ProcessedClaim>.Update.Set(p => p.ProcessedAt, now), cancellationToken: ct);
-            if (taken.ModifiedCount == 1) return BeginClaimOutcome.Proceed;
+                takeover,
+                Builders<ProcessedClaim>.Update.Set(p => p.ProcessedAt, now).Set(p => p.LeaseToken, token),
+                cancellationToken: ct);
+            if (taken.ModifiedCount == 1) return new ClaimLease(BeginClaimOutcome.Proceed, token);
 
             var existing = await GetAsync(tenantId, claimId, ct);
-            if (existing is null) return BeginClaimOutcome.InProgress;
-            return string.Equals(existing.Outcome, "Pending", StringComparison.Ordinal)
+            if (existing is null) return new ClaimLease(BeginClaimOutcome.InProgress, null);
+            return new ClaimLease(string.Equals(existing.Outcome, "Pending", StringComparison.Ordinal)
                 ? BeginClaimOutcome.InProgress
-                : BeginClaimOutcome.AlreadyApplied;
+                : BeginClaimOutcome.AlreadyApplied, null);
         }
+    }
+
+    public async Task<bool> CompleteLeaseAsync(
+        string tenantId, string claimId, string leaseToken, string resultingEventId, string outcome,
+        string? reversalKind = null, CancellationToken ct = default)
+    {
+        // The filter is the fence: still Pending, still this attempt's lease.
+        var filter = Builders<ProcessedClaim>.Filter.And(
+            Builders<ProcessedClaim>.Filter.Eq(p => p.TenantId, tenantId),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.Id, ProcessedClaim.BuildId(tenantId, claimId)),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.Outcome, "Pending"),
+            Builders<ProcessedClaim>.Filter.Eq(p => p.LeaseToken, leaseToken));
+        var update = Builders<ProcessedClaim>.Update
+            .Set(p => p.ResultingEventId, resultingEventId)
+            .Set(p => p.Outcome, outcome)
+            .Set(p => p.ReversalKind, reversalKind)
+            .Set(p => p.ProcessedAt, DateTime.UtcNow);
+        var result = await _col.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount == 1;
     }
 
     public async Task CompleteAsync(string tenantId, string claimId, string resultingEventId, string outcome, CancellationToken ct = default)

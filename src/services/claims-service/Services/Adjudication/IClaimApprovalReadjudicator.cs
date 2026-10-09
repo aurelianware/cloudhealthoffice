@@ -23,6 +23,16 @@ public sealed record ExaminerApproval
 
     public string? CorrelationId { get; init; }
 
+    /// <summary>
+    /// The examiner resolution lock this approval holds
+    /// (<c>Claim.ResolutionLock.Token</c>). The re-run's persistence write is
+    /// conditional on the claim still holding it (PR #1278 follow-up 1): a
+    /// re-run that outlived its lock writes nothing, so it cannot overwrite
+    /// the result of the examiner who took over. Null only outside the
+    /// examiner-resolution endpoint (unfenced).
+    /// </summary>
+    public string? ResolutionLockToken { get; init; }
+
     /// <summary>The examiner's reason (required for a payer-order override).</summary>
     public string? Reason { get; init; }
 
@@ -121,6 +131,13 @@ public sealed record ApprovalReadjudicationResult(
 {
     /// <summary>The pends the re-run overrode ("{stage}: {code}: {reason}"), for the audit record.</summary>
     public IReadOnlyList<string> OverriddenPends { get; init; } = [];
+
+    /// <summary>
+    /// The re-run's write was refused because the resolution lock was taken
+    /// over; nothing was persisted or emitted. The caller returns the
+    /// lost-lock 409.
+    /// </summary>
+    public bool ResolutionLockLost { get; init; }
 }
 
 /// <summary>

@@ -77,11 +77,30 @@ public class AccumulatorEvent
     public bool DeltasClamped { get; set; }
 
     /// <summary>
+    /// On a <c>ClaimReversed</c> or <c>ClaimTombstoned</c> row: why the claim
+    /// was backed out — <see cref="ReversalKinds.Replacement"/> (a frequency-7
+    /// claim replaced it), <see cref="ReversalKinds.Void"/> (a frequency-8
+    /// void or the claim's own void) or <see cref="ReversalKinds.Denial"/>.
+    /// Only a replacement makes a later replacement of the same original a
+    /// "second replacement". Null on rows written before it was recorded
+    /// (treated as a replacement when the source is another claim).
+    /// </summary>
+    public string? ReversalKind { get; set; }
+
+    /// <summary>
     /// Deterministic document id for an event row: one per
     /// (snapshot, version), so the store's id uniqueness serializes writers
     /// on every backend (Cosmos has no secondary unique index here).
     /// </summary>
     public static string BuildId(string aggregateId, long version) => $"{aggregateId}:v{version}";
+}
+
+/// <summary>Values of <see cref="AccumulatorEvent.ReversalKind"/>.</summary>
+public static class ReversalKinds
+{
+    public const string Replacement = "Replacement";
+    public const string Void = "Void";
+    public const string Denial = "Denial";
 }
 
 public class ServiceAccumulatorDeltaRow
@@ -113,6 +132,18 @@ public class ProcessedClaim
 
     /// <summary>Applied | OrphanSkipped.</summary>
     public string Outcome { get; set; } = "Applied";
+
+    /// <summary>
+    /// Identifies the attempt that holds a Pending marker: set when the marker
+    /// is created or an expired one is taken over. Completing the marker is
+    /// conditional on it (<see cref="Repositories.IProcessedClaimStore.CompleteLeaseAsync"/>),
+    /// so an attempt whose lease was taken over cannot overwrite the new
+    /// holder's outcome (a tombstone, say).
+    /// </summary>
+    public string? LeaseToken { get; set; }
+
+    /// <summary>On a reversal tombstone: see <see cref="AccumulatorEvent.ReversalKind"/>.</summary>
+    public string? ReversalKind { get; set; }
 
     public static string BuildId(string tenantId, string claimId) => $"{tenantId}:{claimId}";
 }

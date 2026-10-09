@@ -92,20 +92,20 @@ public class AccumulatorService : IAccumulatorService
             && !string.IsNullOrWhiteSpace(evt.OriginalClaimId)
             && !string.Equals(evt.OriginalClaimId, evt.ClaimId, StringComparison.Ordinal))
         {
-            var reversed = await ReverseClaimAsync(evt.TenantId, evt.OriginalClaimId!, evt.ClaimId, ct);
+            var kind = evt.ClaimFrequencyCode == "8" ? ReversalKinds.Void : ReversalKinds.Replacement;
+            var reversed = await ReverseClaimAsync(evt.TenantId, evt.OriginalClaimId!, evt.ClaimId, kind, evt, ct);
             if (evt.ClaimFrequencyCode == "8" || reversed.Outcome == ApplyOutcome.InProgress) return reversed;
 
             // A second replacement of an original another replacement already
             // replaced: both would count (the original is reversed only once).
             // The chain must name the latest version; this one is not applied
-            // and is reported for review.
-            if (evt.ClaimFrequencyCode == "7"
-                && await ReplacedByAsync(evt.TenantId, evt.OriginalClaimId!, ct) is { } replacer
-                && !string.Equals(replacer, evt.ClaimId, StringComparison.Ordinal)
-                && !string.Equals(replacer, evt.OriginalClaimId, StringComparison.Ordinal))
-            {
+            // and is reported for review. A void of the original is not a
+            // replacement (follow-up 3): the first replacement after it counts.
+            var replacer = await ReplacementOfRecordAsync(evt, ct);
+            if (replacer is null)
+                return new ApplyResult(ApplyOutcome.InProgress, null, null, "ReplacementInProgress");
+            if (!string.Equals(replacer, evt.ClaimId, StringComparison.Ordinal))
                 return await SkipSecondReplacementAsync(evt, replacer, ct);
-            }
         }
 
         // A void (claims-service maps Voided → "Reversed"): back out what
@@ -113,7 +113,7 @@ public class AccumulatorService : IAccumulatorService
         // own (tenantId, claimId) marker — already "Applied" — does not
         // swallow it.
         if (IsReversal(evt.FinalStatus))
-            return await ReverseClaimAsync(evt.TenantId, evt.ClaimId, evt.ClaimId, ct);
+            return await ReverseClaimAsync(evt.TenantId, evt.ClaimId, evt.ClaimId, ReversalKinds.Void, evt, ct);
 
         // A denied claim contributes nothing (round 3, H4): a claim pended
         // after benefit calculation and then denied by an examiner can still
@@ -126,7 +126,8 @@ public class AccumulatorService : IAccumulatorService
         // regenerated EventIds (re-finalization must not double-count). A Pending
         // marker from a crashed prior attempt (older than the lease) does NOT
         // block retry; a younger one is an attempt still in flight — retry later.
-        var begin = await _processed.TryBeginAsync(evt.TenantId, evt.ClaimId, ct);
+        var lease = await _processed.BeginLeaseAsync(evt.TenantId, evt.ClaimId, ct);
+        var begin = lease.Outcome;
         if (begin == BeginClaimOutcome.AlreadyApplied)
         {
             // Also a claim reversed before its apply arrived (tombstone,
@@ -140,6 +141,7 @@ public class AccumulatorService : IAccumulatorService
         }
         if (begin == BeginClaimOutcome.InProgress)
             return new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress");
+        var leaseToken = lease.Token!;
 
         for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
         {
@@ -148,7 +150,7 @@ public class AccumulatorService : IAccumulatorService
             // plan year that contained the service date.
             var snapshot = await ResolveSnapshotAsync(evt, ct);
             if (snapshot is null)
-                return await OrphanAsync(evt, ct);
+                return await OrphanAsync(evt, leaseToken, ct);
 
             if (await CatchUpAsync(snapshot, ct)) continue;
 
@@ -157,9 +159,16 @@ public class AccumulatorService : IAccumulatorService
             var already = await _repo.GetClaimAppliedEventAsync(evt.TenantId, evt.ClaimId, ct);
             if (already is not null)
             {
-                await _processed.CompleteAsync(evt.TenantId, evt.ClaimId, already.Id, "Applied", ct);
+                await _processed.CompleteLeaseAsync(evt.TenantId, evt.ClaimId, leaseToken, already.Id, "Applied", ct: ct);
                 return new ApplyResult(ApplyOutcome.Duplicate, snapshot, already.Id, "DuplicateClaim");
             }
+
+            // Follow-up 2: this attempt may have stalled past its lease while
+            // a replacement (or void) took the marker over and tombstoned it.
+            // Checked on every pass, after the snapshot read: the tombstone
+            // bumps the snapshot version, so an append computed before it
+            // conflicts, and the re-read lands here.
+            if (await LostToReversalAsync(evt, leaseToken, ct) is { } lost) return lost;
 
             var (requestedDeductible, requestedOop, serviceDeltas) = ComputeDeltas(evt);
             var requestedFamilyDeductible = evt.IsFamilyAggregate ? requestedDeductible : 0m;
@@ -215,7 +224,16 @@ public class AccumulatorService : IAccumulatorService
 
             if (!await _repo.TryAppendEventAsync(auditEvent, ct)) continue;
             await ProjectAsync(snapshot, expectedVersion, ct);
-            await _processed.CompleteAsync(evt.TenantId, evt.ClaimId, auditEvent.Id, "Applied", ct);
+            if (!await _processed.CompleteLeaseAsync(evt.TenantId, evt.ClaimId, leaseToken, auditEvent.Id, "Applied", ct: ct))
+            {
+                // The row landed first (the versioned append serializes it
+                // against the tombstone row), so whoever took the lease over
+                // finds it and reverses it; the row is the truth.
+                _logger.LogWarning(
+                    "Claim {ClaimId} tenant {TenantId}: applied, but its marker lease was taken over meanwhile; " +
+                    "the reversal that took it over reverses this row",
+                    SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId));
+            }
 
             await _publisher.PublishAdjustedAsync(new AccumulatorAdjustedEvent
             {
@@ -239,7 +257,36 @@ public class AccumulatorService : IAccumulatorService
         throw new AccumulatorWriteContentionException(evt.TenantId, evt.ClaimId);
     }
 
-    private async Task<ApplyResult> OrphanAsync(ClaimFinalizedEvent evt, CancellationToken ct)
+    /// <summary>
+    /// Null while this attempt still holds the claim's Pending marker and no
+    /// reversal of the claim has completed; otherwise the result to return
+    /// without applying (follow-up 2).
+    /// </summary>
+    private async Task<ApplyResult?> LostToReversalAsync(ClaimFinalizedEvent evt, string leaseToken, CancellationToken ct)
+    {
+        var marker = await _processed.GetAsync(evt.TenantId, evt.ClaimId, ct);
+        if (marker is { Outcome: "Pending" } && string.Equals(marker.LeaseToken, leaseToken, StringComparison.Ordinal))
+        {
+            var reversal = await _processed.GetAsync(evt.TenantId, evt.ClaimId + ":reversal", ct);
+            if (reversal is null || string.Equals(reversal.Outcome, "Pending", StringComparison.Ordinal)) return null;
+            _logger.LogWarning(
+                "Claim {ClaimId} tenant {TenantId}: a reversal of it completed ({Outcome}) before its apply; not applied",
+                SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId), reversal.Outcome);
+            return new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome);
+        }
+
+        _logger.LogWarning(
+            "Claim {ClaimId} tenant {TenantId}: this apply's lease was taken over ({Outcome}); not applied",
+            SanitizeForLog(evt.ClaimId), SanitizeForLog(evt.TenantId), marker?.Outcome ?? "gone");
+        return marker switch
+        {
+            { Outcome: "Pending" } => new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress"),
+            { Outcome: ReversedBeforeApplyOutcome } => new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome),
+            _ => new ApplyResult(ApplyOutcome.Duplicate, null, null, marker?.Outcome ?? "LeaseLost"),
+        };
+    }
+
+    private async Task<ApplyResult> OrphanAsync(ClaimFinalizedEvent evt, string leaseToken, CancellationToken ct)
     {
         _logger.LogWarning(
             "Orphan claim: ServiceDate {ServiceDate} does not map to any known plan-year snapshot for member {MemberId} tenant {TenantId}. ClaimId={ClaimId}",
@@ -255,7 +302,7 @@ public class AccumulatorService : IAccumulatorService
             Reason = "No AccumulatorSnapshot matches ServiceDate plan year"
         }, ct);
 
-        await _processed.CompleteAsync(evt.TenantId, evt.ClaimId, resultingEventId: string.Empty, outcome: "OrphanSkipped", ct);
+        await _processed.CompleteLeaseAsync(evt.TenantId, evt.ClaimId, leaseToken, string.Empty, "OrphanSkipped", ct: ct);
         return new ApplyResult(ApplyOutcome.Orphan, null, null, "OrphanServiceDate");
     }
 
@@ -455,24 +502,76 @@ public class AccumulatorService : IAccumulatorService
     /// <summary>Marker outcome of a second replacement of an already-replaced original: not applied.</summary>
     public const string SecondReplacementOutcome = "SecondReplacementSkipped";
 
+    /// <summary>Marker outcome of <c>{original}:replacement</c>: names the replacement of record.</summary>
+    public const string ReplacementOfRecordOutcome = "ReplacementOfRecord";
+
     /// <summary>
-    /// The claim that replaced <paramref name="originalClaimId"/>: the
-    /// ClaimReversed row's source, or the replacement named on a
-    /// reversed-before-apply tombstone; null when it was not replaced.
+    /// The claim that replaced <paramref name="originalClaimId"/>: the source
+    /// of its ClaimReversed row or reversed-before-apply tombstone when that
+    /// reversal was a replacement, else the replacement of record
+    /// (<c>{original}:replacement</c>); null when it was not replaced. A void
+    /// (follow-up 3) is not a replacement. A row or tombstone written before
+    /// the kind was recorded counts as a replacement when its source is
+    /// another claim (the earlier behaviour).
     /// </summary>
     private async Task<string?> ReplacedByAsync(string tenantId, string originalClaimId, CancellationToken ct)
     {
         var row = await _repo.GetClaimReversedEventAsync(tenantId, originalClaimId, ct);
-        if (row is not null) return row.SourceReference;
-        var marker = await _processed.GetAsync(tenantId, originalClaimId + ":reversal", ct);
-        return marker is { Outcome: ReversedBeforeApplyOutcome } && !string.IsNullOrEmpty(marker.ResultingEventId)
-            ? marker.ResultingEventId
+        if (row is not null)
+        {
+            if (IsReplacement(row.ReversalKind, row.SourceReference, originalClaimId)) return row.SourceReference;
+        }
+        else
+        {
+            var tombstone = await _processed.GetAsync(tenantId, originalClaimId + ":reversal", ct);
+            if (tombstone is { Outcome: ReversedBeforeApplyOutcome }
+                && IsReplacement(tombstone.ReversalKind, tombstone.ResultingEventId, originalClaimId))
+                return tombstone.ResultingEventId;
+        }
+
+        var record = await _processed.GetAsync(tenantId, originalClaimId + ":replacement", ct);
+        return record is { Outcome: ReplacementOfRecordOutcome } && !string.IsNullOrEmpty(record.ResultingEventId)
+            ? record.ResultingEventId
             : null;
+    }
+
+    private static bool IsReplacement(string? kind, string? source, string originalClaimId) =>
+        !string.IsNullOrEmpty(source)
+        && !string.Equals(source, originalClaimId, StringComparison.Ordinal)
+        && (kind is null || string.Equals(kind, ReversalKinds.Replacement, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The replacement of record for <paramref name="evt"/>'s original:
+    /// the replacer its reversal names, or — when the original was voided
+    /// rather than replaced, so no reversal names a replacer — the first
+    /// replacement to claim <c>{original}:replacement</c>. Null while another
+    /// replacement is claiming it (retry).
+    /// </summary>
+    private async Task<string?> ReplacementOfRecordAsync(ClaimFinalizedEvent evt, CancellationToken ct)
+    {
+        var original = evt.OriginalClaimId!;
+        if (await ReplacedByAsync(evt.TenantId, original, ct) is { } replacer) return replacer;
+
+        var key = original + ":replacement";
+        var lease = await _processed.BeginLeaseAsync(evt.TenantId, key, ct);
+        switch (lease.Outcome)
+        {
+            case BeginClaimOutcome.Proceed:
+                await _processed.CompleteLeaseAsync(evt.TenantId, key, lease.Token!, evt.ClaimId,
+                    ReplacementOfRecordOutcome, ReversalKinds.Replacement, ct);
+                return evt.ClaimId;
+            case BeginClaimOutcome.InProgress:
+                return null;
+            default:
+                var record = await _processed.GetAsync(evt.TenantId, key, ct);
+                return string.IsNullOrEmpty(record?.ResultingEventId) ? evt.ClaimId : record.ResultingEventId;
+        }
     }
 
     private async Task<ApplyResult> SkipSecondReplacementAsync(ClaimFinalizedEvent evt, string replacer, CancellationToken ct)
     {
-        switch (await _processed.TryBeginAsync(evt.TenantId, evt.ClaimId, ct))
+        var lease = await _processed.BeginLeaseAsync(evt.TenantId, evt.ClaimId, ct);
+        switch (lease.Outcome)
         {
             case BeginClaimOutcome.InProgress:
                 return new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress");
@@ -492,7 +591,7 @@ public class AccumulatorService : IAccumulatorService
             ServiceDate = evt.ServiceDate,
             Reason = $"Replaces {evt.OriginalClaimId}, already replaced by {replacer}; a replacement must name the latest version.",
         }, ct);
-        await _processed.CompleteAsync(evt.TenantId, evt.ClaimId, replacer, SecondReplacementOutcome, ct);
+        await _processed.CompleteLeaseAsync(evt.TenantId, evt.ClaimId, lease.Token!, replacer, SecondReplacementOutcome, ct: ct);
         return new ApplyResult(ApplyOutcome.Skipped, null, null, SecondReplacementOutcome);
     }
 
@@ -511,20 +610,20 @@ public class AccumulatorService : IAccumulatorService
 
     private async Task<ApplyResult> SkipDeniedAsync(ClaimFinalizedEvent evt, CancellationToken ct)
     {
-        var begin = await _processed.TryBeginAsync(evt.TenantId, evt.ClaimId, ct);
-        switch (begin)
+        var lease = await _processed.BeginLeaseAsync(evt.TenantId, evt.ClaimId, ct);
+        switch (lease.Outcome)
         {
             case BeginClaimOutcome.InProgress:
                 return new ApplyResult(ApplyOutcome.InProgress, null, null, "ApplyInProgress");
             case BeginClaimOutcome.Proceed:
-                await _processed.CompleteAsync(evt.TenantId, evt.ClaimId, string.Empty, DeniedOutcome, ct);
+                await _processed.CompleteLeaseAsync(evt.TenantId, evt.ClaimId, lease.Token!, string.Empty, DeniedOutcome, ct: ct);
                 return new ApplyResult(ApplyOutcome.Skipped, null, null, DeniedOutcome);
         }
 
         // Already processed: if it applied, the denial backs that out.
         var marker = await _processed.GetAsync(evt.TenantId, evt.ClaimId, ct);
         if (marker?.Outcome == "Applied")
-            return await ReverseClaimAsync(evt.TenantId, evt.ClaimId, evt.ClaimId, ct);
+            return await ReverseClaimAsync(evt.TenantId, evt.ClaimId, evt.ClaimId, ReversalKinds.Denial, evt, ct);
         return new ApplyResult(ApplyOutcome.Duplicate, null, null, marker?.Outcome ?? DeniedOutcome);
     }
 
@@ -541,15 +640,21 @@ public class AccumulatorService : IAccumulatorService
     /// has a unique index on it). A claim that never applied reverses nothing.
     /// </summary>
     private async Task<ApplyResult> ReverseClaimAsync(
-        string tenantId, string claimId, string sourceReference, CancellationToken ct)
+        string tenantId, string claimId, string sourceReference, string kind, ClaimFinalizedEvent context,
+        CancellationToken ct)
     {
         var key = claimId + ":reversal";
-        var begin = await _processed.TryBeginAsync(tenantId, key, ct);
-        if (begin == BeginClaimOutcome.AlreadyApplied)
+        var keyLease = await _processed.BeginLeaseAsync(tenantId, key, ct);
+        if (keyLease.Outcome == BeginClaimOutcome.AlreadyApplied)
             return new ApplyResult(ApplyOutcome.Duplicate, null, null, "DuplicateReversal");
-        if (begin == BeginClaimOutcome.InProgress)
+        if (keyLease.Outcome == BeginClaimOutcome.InProgress)
             return new ApplyResult(ApplyOutcome.InProgress, null, null, "ReversalInProgress");
+        var keyToken = keyLease.Token!;
 
+        // The original's own marker, once this reversal has taken it over
+        // (it was never seen, or its apply crashed): fences that apply.
+        string? originalToken = null;
+        var tookOverStaleApply = false;
         var appliedWithoutRow = false;
         for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
         {
@@ -592,27 +697,46 @@ public class AccumulatorService : IAccumulatorService
                     // lands; an older one is a crashed apply, taken over like
                     // a never-seen claim — leave a tombstone so its apply
                     // (when redelivered) is skipped.
-                    switch (await _processed.TryBeginAsync(tenantId, claimId, ct))
+                    if (originalToken is null)
                     {
-                        case BeginClaimOutcome.Proceed:
-                            // The tombstone names the replacement that made it
-                            // (ResultingEventId), so a second replacement of the
-                            // same original is recognised.
-                            await _processed.CompleteAsync(tenantId, claimId, sourceReference, ReversedBeforeApplyOutcome, ct);
-                            await _processed.CompleteAsync(tenantId, key, sourceReference, ReversedBeforeApplyOutcome, ct);
-                            _logger.LogInformation(
-                                "Reversal for claim {ClaimId} tenant {TenantId} arrived before its apply; " +
-                                "the apply will be skipped",
-                                SanitizeForLog(claimId), SanitizeForLog(tenantId));
-                            return new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome);
-                        case BeginClaimOutcome.InProgress:
+                        var taken = await _processed.BeginLeaseAsync(tenantId, claimId, ct);
+                        if (taken.Outcome == BeginClaimOutcome.InProgress)
+                        {
                             // The original's apply is in flight.
                             await _processed.ReleaseAsync(tenantId, key, ct);
                             return new ApplyResult(ApplyOutcome.InProgress, null, null, "OriginalApplyInProgress");
-                        default:
-                            // It completed meanwhile: re-read its row.
-                            continue;
+                        }
+                        // It completed meanwhile: re-read its row.
+                        if (taken.Outcome != BeginClaimOutcome.Proceed) continue;
+                        originalToken = taken.Token!;
+                        tookOverStaleApply = original is not null;
                     }
+
+                    // Follow-up 2: a "crashed" apply may only be stalled. Its
+                    // completion is fenced by the lease just taken; its append
+                    // is fenced by a zero-delta row that bumps the snapshot
+                    // version, so an append it computed earlier conflicts and
+                    // its re-read sees it lost the lease. If its row landed
+                    // first, reverse that row instead.
+                    if (tookOverStaleApply
+                        && !await AppendTombstoneRowAsync(tenantId, claimId, sourceReference, kind, context, ct))
+                        continue;
+
+                    // The tombstone names the replacement that made it
+                    // (ResultingEventId) and the kind, so a second replacement
+                    // of the same original is recognised and a void is not.
+                    if (!await _processed.CompleteLeaseAsync(
+                            tenantId, claimId, originalToken, sourceReference, ReversedBeforeApplyOutcome, kind, ct))
+                    {
+                        originalToken = null;
+                        continue;
+                    }
+                    await _processed.CompleteLeaseAsync(tenantId, key, keyToken, sourceReference, ReversedBeforeApplyOutcome, kind, ct);
+                    _logger.LogInformation(
+                        "Reversal for claim {ClaimId} tenant {TenantId} arrived before its apply; " +
+                        "the apply will be skipped",
+                        SanitizeForLog(claimId), SanitizeForLog(tenantId));
+                    return new ApplyResult(ApplyOutcome.Duplicate, null, null, ReversedBeforeApplyOutcome);
                 }
 
                 // Terminal without a row (orphan, denied, already tombstoned):
@@ -620,7 +744,7 @@ public class AccumulatorService : IAccumulatorService
                 _logger.LogInformation(
                     "Reversal for claim {ClaimId} tenant {TenantId}: nothing applied ({Outcome}); nothing to reverse",
                     SanitizeForLog(claimId), SanitizeForLog(tenantId), original.Outcome);
-                await _processed.CompleteAsync(tenantId, key, string.Empty, "NothingToReverse", ct);
+                await _processed.CompleteLeaseAsync(tenantId, key, keyToken, string.Empty, "NothingToReverse", kind, ct);
                 return new ApplyResult(ApplyOutcome.Duplicate, null, null, "NothingToReverse");
             }
 
@@ -629,7 +753,8 @@ public class AccumulatorService : IAccumulatorService
                 _logger.LogWarning(
                     "Reversal for claim {ClaimId} tenant {TenantId}: its snapshot is gone; nothing to reverse",
                     SanitizeForLog(claimId), SanitizeForLog(tenantId));
-                await _processed.CompleteAsync(tenantId, key, string.Empty, "NothingToReverse", ct);
+                await _processed.CompleteLeaseAsync(tenantId, key, keyToken, string.Empty, "NothingToReverse", kind, ct);
+                await CompleteTakenOverOriginalAsync(tenantId, claimId, originalToken, applied.Id, ct);
                 return new ApplyResult(ApplyOutcome.Duplicate, null, null, "NothingToReverse");
             }
 
@@ -638,7 +763,8 @@ public class AccumulatorService : IAccumulatorService
             var existingReversal = await _repo.GetClaimReversedEventAsync(tenantId, claimId, ct);
             if (existingReversal is not null)
             {
-                await _processed.CompleteAsync(tenantId, key, existingReversal.Id, "Reversed", ct);
+                await _processed.CompleteLeaseAsync(tenantId, key, keyToken, existingReversal.Id, "Reversed", existingReversal.ReversalKind, ct);
+                await CompleteTakenOverOriginalAsync(tenantId, claimId, originalToken, applied.Id, ct);
                 return new ApplyResult(ApplyOutcome.Duplicate, snapshot, existingReversal.Id, "DuplicateReversal");
             }
 
@@ -670,6 +796,7 @@ public class AccumulatorService : IAccumulatorService
                 PlanYearStart = snapshot.PlanYearStart,
                 PlanYearEnd = snapshot.PlanYearEnd,
                 EventType = "ClaimReversed",
+                ReversalKind = kind,
                 SourceReference = sourceReference,
                 SourceClaimId = claimId,
                 ActorId = "system",
@@ -689,7 +816,8 @@ public class AccumulatorService : IAccumulatorService
             // reversal of this claim: re-read; the check above then sees it.
             if (!await _repo.TryAppendEventAsync(reversal, ct)) continue;
             await ProjectAsync(snapshot, expectedVersion, ct);
-            await _processed.CompleteAsync(tenantId, key, reversal.Id, "Reversed", ct);
+            await _processed.CompleteLeaseAsync(tenantId, key, keyToken, reversal.Id, "Reversed", kind, ct);
+            await CompleteTakenOverOriginalAsync(tenantId, claimId, originalToken, applied.Id, ct);
 
             await _publisher.PublishAdjustedAsync(new AccumulatorAdjustedEvent
             {
@@ -711,6 +839,70 @@ public class AccumulatorService : IAccumulatorService
         }
 
         throw new AccumulatorWriteContentionException(tenantId, key);
+    }
+
+    /// <summary>Event type of the zero-delta row a tombstone writes to bump the snapshot version.</summary>
+    public const string ClaimTombstonedEventType = "ClaimTombstoned";
+
+    /// <summary>
+    /// Fences a stalled apply of <paramref name="claimId"/> whose lease a
+    /// reversal took over (follow-up 2): appends a zero-delta
+    /// <see cref="ClaimTombstonedEventType"/> row at the next version of the
+    /// snapshot the claim would apply to (resolved from
+    /// <paramref name="context"/>, the reversing claim). Event rows are one
+    /// per (snapshot, version), so this and the stalled apply's append are
+    /// ordered: if the apply's row lands first this returns false (reverse
+    /// that row); otherwise the apply's append conflicts and its re-read sees
+    /// the lost lease. True when nothing resolves a snapshot (nothing to fence).
+    /// </summary>
+    private async Task<bool> AppendTombstoneRowAsync(
+        string tenantId, string claimId, string sourceReference, string kind, ClaimFinalizedEvent context,
+        CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
+        {
+            var snapshot = await ResolveSnapshotAsync(context, ct);
+            if (snapshot is null) return true;
+            if (await CatchUpAsync(snapshot, ct)) continue;
+            if (await _repo.GetClaimAppliedEventAsync(tenantId, claimId, ct) is not null) return false;
+
+            var expectedVersion = snapshot.Version;
+            snapshot.Version = expectedVersion + 1;
+            var row = new AccumulatorEvent
+            {
+                Id = AccumulatorEvent.BuildId(snapshot.Id, snapshot.Version),
+                TenantId = tenantId,
+                EventId = Guid.NewGuid().ToString(),
+                AggregateId = snapshot.Id,
+                Version = snapshot.Version,
+                MemberId = snapshot.MemberId,
+                PlanYearStart = snapshot.PlanYearStart,
+                PlanYearEnd = snapshot.PlanYearEnd,
+                EventType = ClaimTombstonedEventType,
+                ReversalKind = kind,
+                SourceReference = sourceReference,
+                SourceClaimId = claimId,
+                ActorId = "system",
+                DeltasClamped = true,
+                OccurredAt = DateTime.UtcNow,
+            };
+            if (!await _repo.TryAppendEventAsync(row, ct)) continue;
+            await ProjectAsync(snapshot, expectedVersion, ct);
+            return true;
+        }
+        throw new AccumulatorWriteContentionException(tenantId, claimId + ":tombstone");
+    }
+
+    /// <summary>
+    /// The reversal took the original's marker over, then found its row (the
+    /// stalled apply landed first): mark it Applied so its redelivery is a
+    /// duplicate rather than waiting out the lease.
+    /// </summary>
+    private async Task CompleteTakenOverOriginalAsync(
+        string tenantId, string claimId, string? originalToken, string appliedEventId, CancellationToken ct)
+    {
+        if (originalToken is null) return;
+        await _processed.CompleteLeaseAsync(tenantId, claimId, originalToken, appliedEventId, "Applied", ct: ct);
     }
 
     private readonly record struct AppliedAmounts(decimal Deductible, decimal Oop, decimal FamilyDeductible, decimal FamilyOop);

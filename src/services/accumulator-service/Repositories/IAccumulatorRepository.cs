@@ -89,6 +89,25 @@ public interface IProcessedClaimStore
     /// </summary>
     Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default);
 
+    /// <summary>
+    /// <see cref="TryBeginAsync"/>, returning the lease token of the Pending
+    /// marker on <see cref="BeginClaimOutcome.Proceed"/> (null otherwise).
+    /// Every Proceed (a new marker or a takeover) gets a fresh token.
+    /// </summary>
+    Task<ClaimLease> BeginLeaseAsync(string tenantId, string claimId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Completes the marker only if it is still Pending under
+    /// <paramref name="leaseToken"/>. Returns false, and writes nothing, when
+    /// the lease was taken over or the marker already completed (PR #1278
+    /// follow-up 2: a stalled apply must not overwrite a replacement's
+    /// tombstone).
+    /// </summary>
+    Task<bool> CompleteLeaseAsync(
+        string tenantId, string claimId, string leaseToken, string resultingEventId, string outcome,
+        string? reversalKind = null, CancellationToken ct = default);
+
+    /// <summary>Unconditional completion (tests, tooling); the service completes through <see cref="CompleteLeaseAsync"/>.</summary>
     Task CompleteAsync(string tenantId, string claimId, string resultingEventId, string outcome, CancellationToken ct = default);
 
     /// <summary>
@@ -100,6 +119,9 @@ public interface IProcessedClaimStore
 
     Task<ProcessedClaim?> GetAsync(string tenantId, string claimId, CancellationToken ct = default);
 }
+
+/// <summary>The outcome of <see cref="IProcessedClaimStore.BeginLeaseAsync"/> and, on Proceed, the lease token.</summary>
+public sealed record ClaimLease(BeginClaimOutcome Outcome, string? Token);
 
 public enum BeginClaimOutcome
 {
