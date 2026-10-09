@@ -115,6 +115,7 @@ public static class Era835ClaimPaymentBuilder
         }
 
         var claimPaid = denied ? 0m : PlanPaidAmountOf(claim);
+        var isInstitutional = claim.ClaimType == ClaimFormType.Institutional;
         if (denied)
             headerCas = WithDenialAmount(headerCas, claim, serviceLines);
         if (serviceLines.Count > 0)
@@ -131,7 +132,11 @@ public static class Era835ClaimPaymentBuilder
             PaymentAmount = claimPaid,
             PatientResponsibilityAmount = claim.AdjudicationResult?.PatientResponsibility ?? 0m,
             PayerClaimControlNumber = claim.PayerClaimControlNumber,
-            IsInstitutional = claim.ClaimType == ClaimFormType.Institutional,
+            IsInstitutional = isInstitutional,
+            // CLP08 / CLP09 / CLP11: reported for an institutional claim only.
+            FacilityTypeCode = isInstitutional ? Code(claim.Institutional?.FacilityTypeCode) : null,
+            ClaimFrequencyCode = isInstitutional ? Code(claim.ClaimFrequencyCode) : null,
+            DrgCode = isInstitutional ? Code(claim.Institutional?.DrgCode) : null,
             MemberId = claim.MemberId,
             RenderingProviderNPI = claim.RenderingProviderNPI,
             ClaimAdjustments = headerCas,
@@ -164,8 +169,27 @@ public static class Era835ClaimPaymentBuilder
         ArgumentNullException.ThrowIfNull(mapper);
 
         var source = RecordedWithAdjustments(original) ? original : WithDerivedAdjustments(original, predecessor, mapper);
-        return Negated(source);
+        return WithInstitutionalCodes(Negated(source), predecessor);
     }
+
+    /// <summary>
+    /// The reversal's CLP08 / CLP09 / CLP11 are the original's. An
+    /// institutional original recorded before they were carried gets them
+    /// from the predecessor claim (the same claim), so the reversal still
+    /// reports the required facility type and frequency codes.
+    /// </summary>
+    private static ClaimPayment WithInstitutionalCodes(ClaimPayment reversal, ClaimDto predecessor)
+    {
+        if (!reversal.IsInstitutional)
+            return reversal;
+        reversal.FacilityTypeCode ??= Code(predecessor.Institutional?.FacilityTypeCode);
+        reversal.ClaimFrequencyCode ??= Code(predecessor.ClaimFrequencyCode);
+        reversal.DrgCode ??= Code(predecessor.Institutional?.DrgCode);
+        return reversal;
+    }
+
+    /// <summary>A code as reported, or null when blank.</summary>
+    private static string? Code(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// True when the recorded claim payment carries its adjustments: a line
@@ -288,6 +312,9 @@ public static class Era835ClaimPaymentBuilder
         PayerClaimControlNumber = cp.PayerClaimControlNumber,
         MemberId = cp.MemberId,
         IsInstitutional = cp.IsInstitutional,
+        FacilityTypeCode = cp.FacilityTypeCode,
+        ClaimFrequencyCode = cp.ClaimFrequencyCode,
+        DrgCode = cp.DrgCode,
         ClaimReceivedDate = cp.ClaimReceivedDate,
         RenderingProviderNPI = cp.RenderingProviderNPI,
         RemarkCodes = cp.RemarkCodes.ToList(),

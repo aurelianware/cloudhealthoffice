@@ -451,6 +451,50 @@ public class PaymentRunServiceBatchedTests
         Assert.Equal(130m, segments.Where(s => s[0] == "CLP").Sum(s => decimal.Parse(s[4])));
     }
 
+    // ── claims-service wire: payee name and institutional CLP ──────────────
+
+    [Fact]
+    public async Task ExecutePaymentRunAsync_ClaimsServiceWire_PayeeIsBillingProviderName_InstitutionalClpCarriesCodes()
+    {
+        var run = PendingRun();
+        _runRepo.GetByIdAsync(run.Id).Returns(run);
+        _runRepo.UpdateAsync(Arg.Any<PaymentRun>()).Returns(call => call.Arg<PaymentRun>());
+        // As claims-service sends Claim: camelCase, enums as numbers,
+        // billingProviderName, institutional detail on Claim.Institutional.
+        const string approved = """
+            [{"id":"c-ip","claimNumber":"CLM-IP","memberId":"m1","billingProviderNPI":"NPI-A",
+              "billingProviderName":"SYNTHETIC GENERAL HOSPITAL","totalChargeAmount":1000,"status":5,
+              "claimType":2,"claimFrequencyCode":"1",
+              "institutional":{"facilityTypeCode":"11","drgCode":"470"},
+              "adjudicationResult":{"payerPayment":600,"patientResponsibility":0,
+                "adjustmentReasons":[{"groupCode":"CO","reasonCode":"45","amount":400}]}},
+             {"id":"c-prof","claimNumber":"CLM-PROF","memberId":"m2","billingProviderNPI":"NPI-B",
+              "totalChargeAmount":100,"status":5,"claimType":1,
+              "adjudicationResult":{"payerPayment":80,"patientResponsibility":0,
+                "adjustmentReasons":[{"groupCode":"CO","reasonCode":"45","amount":20}]}}]
+            """;
+        _claimsHandler.NextResponse = req =>
+            req.Method == HttpMethod.Get && req.RequestUri!.AbsolutePath.StartsWith("/api/claims/search")
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(req.RequestUri.Query.Contains("status=6") ? "[]" : approved,
+                        System.Text.Encoding.UTF8, "application/json"),
+                }
+                : new HttpResponseMessage(HttpStatusCode.OK);
+        var (envelopes, payments) = SetupRealGenerator();
+
+        await CreateRealService().ExecutePaymentRunAsync(run.Id);
+
+        Assert.Equal("SYNTHETIC GENERAL HOSPITAL", payments.Single(p => p.PayeeNPI == "NPI-A").PayeeName);
+        Assert.Equal("NPI-B", payments.Single(p => p.PayeeNPI == "NPI-B").PayeeName); // no name sent: the NPI
+        var a = Segments(envelopes.Single(e => e.TradingPartnerId == "TP-A").EdiContent);
+        Assert.Equal(new[] { "N1", "PE", "SYNTHETIC GENERAL HOSPITAL", "XX", "NPI-A" }, a.Single(s => s[0] == "N1" && s[1] == "PE"));
+        Assert.Equal(new[] { "CLP", "CLM-IP", "1", "1000.00", "600.00", "0.00", "HM", "c-ip", "11", "1", "", "470" },
+            a.Single(s => s[0] == "CLP"));
+        var b = Segments(envelopes.Single(e => e.TradingPartnerId == "TP-B").EdiContent);
+        Assert.Equal(8, b.Single(s => s[0] == "CLP").Length); // professional: ends at CLP07
+    }
+
     // ── Denials: zero-pay claims in the run's 835 ─────────────────────────
 
     private void SetupClaimsResponse(IEnumerable<ClaimDto> approved, IEnumerable<ClaimDto> denied)
