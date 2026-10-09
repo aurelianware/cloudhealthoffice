@@ -92,7 +92,11 @@ public class PaymentEstimateService : IPaymentEstimateService
             PlanId = request.BenefitPlanId.ToString(),
             BilledAmount = line.ChargeAmount,
             Units = line.Units,
-            LineNumber = line.LineNumber
+            LineNumber = line.LineNumber,
+            // Same facility-setting inputs AdjudicationController sends, so an
+            // institutional estimate prices at the rate adjudication will allow.
+            BillType = request.BillType,
+            IsInstitutional = claimTypeCode == "837I",
         }).ToList();
 
         var pricing = await _rateEngine.ResolveBatchAsync(pricingRequests, ct);

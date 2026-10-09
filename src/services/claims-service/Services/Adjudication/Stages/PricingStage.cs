@@ -192,6 +192,11 @@ public sealed class PricingStage : IClaimAdjudicationStage
             ? inpatient.CalculateLengthOfStay()
             : null;
         var billType = claim.TypeOfBill;
+        // An 837I claim is a facility setting even when no type of bill could be
+        // built (no Institutional.FacilityTypeCode): its place-of-service slot then
+        // holds the CLM05-1 facility type ("13"), not a CMS POS. Same claim-type
+        // test BenefitCalculationStage uses for PlaceOfServiceIsFacilityType.
+        var isInstitutional = claim.ClaimType == ClaimsService.Models.ClaimType.Institutional;
 
         return claim.ClaimLines
             .OrderBy(l => l.LineNumber)
@@ -219,6 +224,7 @@ public sealed class PricingStage : IClaimAdjudicationStage
                 LengthOfStay = lengthOfStay,
                 RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode,
                 BillType = billType,
+                IsInstitutional = isInstitutional,
             })
             .ToList();
     }

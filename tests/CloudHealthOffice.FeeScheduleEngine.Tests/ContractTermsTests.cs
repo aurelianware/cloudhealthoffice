@@ -439,6 +439,57 @@ public class ContractTermsTests
         Assert.Equal(75m, result.AllowedAmount);
     }
 
+    // Review finding 1: an 837I claim with no FacilityTypeCode has no type of bill,
+    // but its POS slot still holds a facility type ("13" = hospital outpatient,
+    // which is POS 13 "assisted living" — non-facility — if read as a CMS POS).
+    [Theory]
+    [InlineData("13", null)]
+    [InlineData("13", "")]
+    [InlineData("11", null)]
+    [InlineData("13", "N/A")]
+    public async Task InstitutionalClaim_WithoutValidBillType_StillFacility(string facilityTypeCode, string? billType)
+    {
+        var request = Request("99213", pos: facilityTypeCode, billType: billType) with { IsInstitutional = true };
+
+        var flat = await Engine(FlatWithFacilityPrice(), lesserOf: null).ResolveAsync(request);
+        var rvu = await Engine(RvuSchedule(), lesserOf: null).ResolveAsync(request);
+
+        Assert.Equal(75m, flat.AllowedAmount);
+        Assert.Equal(RvuFacility, rvu.AllowedAmount);
+    }
+
+    // Review finding 2: only a valid NUBC type of bill marks a professional line as
+    // institutional; junk in BillType leaves it on the POS rule.
+    [Theory]
+    [InlineData("0")]
+    [InlineData("N/A")]
+    [InlineData("11")]
+    [InlineData("1111")]
+    [InlineData("13X")]
+    [InlineData("  ")]
+    public async Task ProfessionalLine_WithJunkBillType_StaysNonFacility(string billType)
+    {
+        var request = Request("99213", pos: "11", billType: billType);
+
+        var flat = await Engine(FlatWithFacilityPrice(), lesserOf: null).ResolveAsync(request);
+        var rvu = await Engine(RvuSchedule(), lesserOf: null).ResolveAsync(request);
+
+        Assert.Equal(110m, flat.AllowedAmount);
+        Assert.Equal(RvuNonFacility, rvu.AllowedAmount);
+    }
+
+    [Theory]
+    [InlineData("131")]
+    [InlineData("0131")]
+    [InlineData(" 131 ")]
+    public async Task ValidBillType_WithoutInstitutionalFlag_IsFacility(string billType)
+    {
+        var result = await Engine(FlatWithFacilityPrice(), lesserOf: null)
+            .ResolveAsync(Request("99213", pos: "11", billType: billType));
+
+        Assert.Equal(75m, result.AllowedAmount);
+    }
+
     private static async Task AssertSetting(string pos, bool facility)
     {
         Assert.Equal(facility, FacilityPlaceOfService.IsFacility(pos));

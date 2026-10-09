@@ -1,6 +1,7 @@
 using CloudHealthOffice.FeeScheduleEngine.Domain;
 using CloudHealthOffice.FeeScheduleEngine.Models;
 using CloudHealthOffice.FeeScheduleEngine.Persistence;
+using CloudHealthOffice.ReferenceData.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace CloudHealthOffice.FeeScheduleEngine.Services;
@@ -62,15 +63,19 @@ public class RateResolutionService : IRateResolutionService
         => FacilityPlaceOfService.IsFacility(placeOfServiceCode);
 
     /// <summary>
-    /// Whether a claim line takes the facility rate. An institutional line (one that
-    /// carries a <see cref="PricingRequest.BillType"/>) is billed by a facility and is
-    /// always a facility setting: its <see cref="PricingRequest.PlaceOfServiceCode"/>
+    /// Whether a claim line takes the facility rate. An institutional line — the
+    /// claim type is institutional (<see cref="PricingRequest.IsInstitutional"/>) or it
+    /// carries a valid <see cref="PricingRequest.BillType"/> — is billed by a facility
+    /// and is always a facility setting: its <see cref="PricingRequest.PlaceOfServiceCode"/>
     /// then holds the 837I CLM05-1 facility type code ("13" = hospital outpatient),
     /// which is not a CMS place of service and is never read against the POS list.
+    /// A malformed bill type ("0", "N/A") does not make a line institutional; the
+    /// validity rule is <see cref="NubcTypeOfBill"/>, shared with the benefit engine.
     /// A professional line uses <see cref="IsFacilityPlaceOfService"/>.
     /// </summary>
     internal static bool IsFacilitySetting(PricingRequest request)
-        => !string.IsNullOrWhiteSpace(request.BillType)
+        => request.IsInstitutional
+           || NubcTypeOfBill.IsValid(request.BillType)
            || IsFacilityPlaceOfService(request.PlaceOfServiceCode);
 
     /// <summary>

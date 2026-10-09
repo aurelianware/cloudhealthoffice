@@ -291,9 +291,13 @@ BenefitEngine and claims-service have no facility-rate POS list
   new in 2022, and Medicare telehealth in CY 2022 to 2023 was generally billed
   with the in-person POS and modifier 95, so the rule is not date-dependent.
 - **Institutional lines.** An 837I line carries the facility type code (CLM05-1)
-  in `PlaceOfServiceCode`, which is not a CMS POS. A request with a `BillType`
-  is always a facility setting and its facility type code is never read against
-  the POS list. Before, facility types 11 and 12 (hospital inpatient) were read
+  in `PlaceOfServiceCode`, which is not a CMS POS. A request flagged
+  `IsInstitutional` (callers set it from the claim type, so an 837I claim with
+  no buildable type of bill still counts) or carrying a valid `BillType`
+  (`NubcTypeOfBill`, the rule the benefit engine also uses) is always a facility
+  setting and its facility type code is never read against the POS list. A
+  malformed `BillType` on a professional claim is ignored. Estimates send the
+  same claim type and bill type as adjudication, so both price alike. Before, facility types 11 and 12 (hospital inpatient) were read
   as POS 11 / 12 and took the non-facility rate; other facility types
   already took the facility rate.
 - **Not modelled:** §20.4.2's code-level exceptions (professional component of
