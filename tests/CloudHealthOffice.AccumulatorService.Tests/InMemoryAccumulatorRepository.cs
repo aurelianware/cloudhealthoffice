@@ -144,18 +144,23 @@ public class InMemoryProcessedClaimStore : IProcessedClaimStore
 
     public TimeSpan Lease { get; set; } = ProcessedClaimLease.Timeout;
 
-    public Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default)
+    public async Task<BeginClaimOutcome> TryBeginAsync(string tenantId, string claimId, CancellationToken ct = default) =>
+        (await BeginLeaseAsync(tenantId, claimId, ct)).Outcome;
+
+    public Task<ClaimLease> BeginLeaseAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var key = $"{tenantId}:{claimId}";
+        var token = Guid.NewGuid().ToString("N");
         if (_map.TryGetValue(key, out var existing))
         {
             if (!string.Equals(existing.Outcome, "Pending", StringComparison.Ordinal))
-                return Task.FromResult(BeginClaimOutcome.AlreadyApplied);
+                return Task.FromResult(new ClaimLease(BeginClaimOutcome.AlreadyApplied, null));
             // Pending within the lease = in flight; older = crashed, take it over.
             if (existing.ProcessedAt > Now - Lease)
-                return Task.FromResult(BeginClaimOutcome.InProgress);
+                return Task.FromResult(new ClaimLease(BeginClaimOutcome.InProgress, null));
             existing.ProcessedAt = Now;
-            return Task.FromResult(BeginClaimOutcome.Proceed);
+            existing.LeaseToken = token;
+            return Task.FromResult(new ClaimLease(BeginClaimOutcome.Proceed, token));
         }
         _map[key] = new ProcessedClaim
         {
@@ -163,9 +168,26 @@ public class InMemoryProcessedClaimStore : IProcessedClaimStore
             TenantId = tenantId,
             ClaimId = claimId,
             ProcessedAt = Now,
-            Outcome = "Pending"
+            Outcome = "Pending",
+            LeaseToken = token,
         };
-        return Task.FromResult(BeginClaimOutcome.Proceed);
+        return Task.FromResult(new ClaimLease(BeginClaimOutcome.Proceed, token));
+    }
+
+    public Task<bool> CompleteLeaseAsync(
+        string tenantId, string claimId, string leaseToken, string resultingEventId, string outcome,
+        string? reversalKind = null, CancellationToken ct = default)
+    {
+        var key = $"{tenantId}:{claimId}";
+        if (!_map.TryGetValue(key, out var p)
+            || !string.Equals(p.Outcome, "Pending", StringComparison.Ordinal)
+            || !string.Equals(p.LeaseToken, leaseToken, StringComparison.Ordinal))
+            return Task.FromResult(false);
+        p.ResultingEventId = resultingEventId;
+        p.Outcome = outcome;
+        p.ReversalKind = reversalKind;
+        p.ProcessedAt = DateTime.UtcNow;
+        return Task.FromResult(true);
     }
 
     public Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default)

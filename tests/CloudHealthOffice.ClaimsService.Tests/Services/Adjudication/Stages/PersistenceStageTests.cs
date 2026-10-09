@@ -166,6 +166,43 @@ public class PersistenceStageTests
             Arg.Is<ClaimStatus?>(status => status == ClaimStatus.Denied));
     }
 
+    // ── PR #1278 follow-up 1: the approval re-run's write is fenced ──
+
+    [Fact]
+    public async Task Execute_ApprovalRerun_FencesTheWriteOnTheResolutionLock()
+    {
+        var ctx = BuildContext();
+        ctx.ExaminerApproval = new ExaminerApproval { ExaminerId = "examiner-1", ResolutionLockToken = "lock-a" };
+        _repository.UpdateAdjudicationProjectionAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<AdjudicationResult>(),
+                Arg.Any<IReadOnlyList<LineAdjudicationResult>>(), Arg.Any<CancellationToken>(),
+                Arg.Any<PendDetails?>(), Arg.Any<bool>(), Arg.Any<ClaimStatus?>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(false);
+
+        var result = await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            "tenant-1", "ver-1", Arg.Any<AdjudicationResult>(),
+            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(), Arg.Any<bool>(), Arg.Any<ClaimStatus?>(), Arg.Any<string?>(), Arg.Is<string?>("lock-a"));
+        Assert.Equal(ClaimAdjudicationOutcome.Reject, result.Outcome);
+        Assert.Contains("resolution lock", result.Reason);
+    }
+
+    [Fact]
+    public async Task Execute_OrdinaryRun_IsNotFenced()
+    {
+        var ctx = BuildContext();
+        StubRepositoryReturns(true);
+
+        await _sut.ExecuteAsync(ctx, CancellationToken.None);
+
+        await _repository.Received(1).UpdateAdjudicationProjectionAsync(
+            "tenant-1", "ver-1", Arg.Any<AdjudicationResult>(),
+            Arg.Any<IReadOnlyList<LineAdjudicationResult>>(), Arg.Any<CancellationToken>(),
+            Arg.Any<PendDetails?>(), Arg.Any<bool>(), Arg.Any<ClaimStatus?>(), Arg.Any<string?>(), Arg.Is<string?>(t => t == null));
+    }
+
     private void StubRepositoryReturns(bool value) =>
         _repository.UpdateAdjudicationProjectionAsync(
             Arg.Any<string>(),

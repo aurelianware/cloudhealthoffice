@@ -23,6 +23,16 @@ public sealed record ExaminerApproval
 
     public string? CorrelationId { get; init; }
 
+    /// <summary>
+    /// The examiner resolution lock this approval holds
+    /// (<c>Claim.ResolutionLock.Token</c>). The re-run's persistence write is
+    /// conditional on the claim still holding it (PR #1278 follow-up 1): a
+    /// re-run that outlived its lock writes nothing, so it cannot overwrite
+    /// the result of the examiner who took over. Null only outside the
+    /// examiner-resolution endpoint (unfenced).
+    /// </summary>
+    public string? ResolutionLockToken { get; init; }
+
     /// <summary>The examiner's reason (required for a payer-order override).</summary>
     public string? Reason { get; init; }
 

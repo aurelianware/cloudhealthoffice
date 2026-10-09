@@ -37,6 +37,10 @@ public class ClaimsApiFactory : WebApplicationFactory<Program>
         // The fenced final write (round-3 verification, L6): the lock holds.
         repository.UpdateHoldingResolutionLockAsync(Arg.Any<Claim>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Claim>());
+        // Follow-up 1: the lock is still held when the resolver checks.
+        repository.HoldsResolutionLockAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         return repository;
     }
     public IMassAdjudicationRunRepository MassAdjudicationRunRepository { get; } = Substitute.For<IMassAdjudicationRunRepository>();

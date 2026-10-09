@@ -1302,12 +1302,25 @@ public class PendDetails
     public List<string> AdditionalPendReasons { get; set; } = new();
 
     /// <summary>
-    /// Identifies exactly this set of pends: when the claim was pended plus a
-    /// hash of every "{code}: {reason}". The examiner's client sends back the
-    /// fingerprint of the pends they viewed; an approval whose fingerprint no
-    /// longer matches the stored pends (a re-adjudication changed them) is
-    /// refused with 409 (PR #1278 round-3 verification, M4). Derived; not
-    /// stored in Mongo.
+    /// Identifies exactly this set of pends: a hash of every "{code}: {reason}"
+    /// (the routing pend and every additional one) and of the findings behind
+    /// them (NCCI/MUE edit failures, duplicate matches), each sorted ordinally
+    /// so the order a stage happened to store them in does not matter. The
+    /// examiner's client sends back the fingerprint of the pends they viewed;
+    /// an approval whose fingerprint no longer matches the stored pends (a
+    /// re-adjudication changed them) is refused with 409 (PR #1278 round-3
+    /// verification, M4). Derived; not stored in Mongo.
+    /// <para>
+    /// It does not include <see cref="PendedAt"/> (follow-up 5): every re-run
+    /// sets a new PendedAt, so a failed (transient) approval that re-pended
+    /// the claim with the same pends invalidated the examiner's fingerprint
+    /// and any waiting first approval. Dropping it does not reopen the
+    /// "pends changed between page load and click" hole: a re-adjudication
+    /// that changes anything the examiner was shown — a pend, a reason, a
+    /// finding — changes the hash; one that produces exactly the same pends
+    /// and findings leaves the examiner's review exactly as accurate, and the
+    /// approval re-run overrides only the pends matching what was reviewed.
+    /// </para>
     /// </summary>
     [BsonIgnore]
     [JsonPropertyName("fingerprint")]
@@ -1317,16 +1330,23 @@ public class PendDetails
     public static string ComputeFingerprint(PendDetails? pend)
     {
         if (pend is null) return string.Empty;
-        var entries = new List<string> { $"{pend.PendCode}: {pend.PendReason}" };
-        entries.AddRange(pend.AdditionalPendReasons ?? []);
-        var pendedAt = pend.PendedAt.Kind == DateTimeKind.Unspecified
-            ? DateTime.SpecifyKind(pend.PendedAt, DateTimeKind.Utc)
-            : pend.PendedAt.ToUniversalTime();
-        // Millisecond precision: what every store keeps.
-        pendedAt = new DateTime(pendedAt.Ticks - pendedAt.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
-        var hash = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(string.Join('\n', entries)));
-        return $"{pendedAt:yyyyMMdd'T'HHmmssfff'Z'}-{Convert.ToHexString(hash, 0, 12).ToLowerInvariant()}";
+        var reasons = new List<string> { $"{pend.PendCode}: {pend.PendReason}" };
+        reasons.AddRange(pend.AdditionalPendReasons ?? []);
+        reasons.Sort(StringComparer.Ordinal);
+
+        var findings = (pend.EditFailures ?? [])
+            .Select(f => string.Join('|', "EDIT", f.EditType, f.RuleId, f.Column1Code, f.Column2Code,
+                string.Join(',', (f.AffectedLineNumbers ?? []).Order()),
+                f.UnitsBilled?.ToString(System.Globalization.CultureInfo.InvariantCulture), f.MueMaxUnits))
+            .Concat((pend.DuplicateFindings ?? [])
+                .Select(d => string.Join('|', "DUP", d.DuplicateType, d.RuleId, d.LineNumber,
+                    d.MatchedClaimId, d.MatchedLineNumber)))
+            .ToList();
+        findings.Sort(StringComparer.Ordinal);
+
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+            string.Join('\n', reasons) + "\n\u001e\n" + string.Join('\n', findings)));
+        return $"v2-{Convert.ToHexString(hash, 0, 12).ToLowerInvariant()}";
     }
 }
 
