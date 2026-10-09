@@ -75,7 +75,7 @@ public class RepricingService : IRepricingService
         List<PricedLine> pricedLines;
         if (loaded.Schedule.Type == EngineDomain.FeeScheduleType.Drg && string.IsNullOrEmpty(request.DrgCode))
         {
-            // CHO has no MS-DRG grouper: an inpatient claim without a DRG cannot be priced.
+            // Cloud Health Office has no MS-DRG grouper: an inpatient claim without a DRG cannot be priced.
             warnings.Add("No DRG code provided. Inpatient pricing requires a valid MS-DRG. Provide DrgCode or ensure diagnoses support DRG grouping.");
             pricedLines = request.Lines.Select(l => NotPriced(l, "DRG code required for inpatient pricing")).ToList();
         }
@@ -201,6 +201,11 @@ public class RepricingService : IRepricingService
                     drgNotFoundReported = true;
                     priced.Add(NotPriced(line, $"DRG {request.DrgCode} not found"));
                 }
+                else if (loaded.UnpricedReasons?.GetValueOrDefault(line.ProcedureCode ?? string.Empty) is { } unpricedReason)
+                {
+                    warnings.Add($"Line {line.LineNumber}: {unpricedReason}.");
+                    priced.Add(NotPriced(line, unpricedReason));
+                }
                 else
                 {
                     warnings.Add($"Line {line.LineNumber}: Code {line.ProcedureCode} not found in {request.FeeScheduleId}.");
@@ -262,7 +267,9 @@ public class RepricingService : IRepricingService
             var weighted = drgLine?.DrgWeight is > 0m;
             return new PricingBreakdown
             {
-                BaseRate = result.BaseAmount,
+                // The hospital base rate for a weighted DRG (the case rate is base × weight);
+                // the flat case rate otherwise.
+                BaseRate = weighted ? schedule.DrgBaseRate ?? drgLine!.Rate : result.BaseAmount,
                 DrgRelativeWeight = drgLine?.DrgWeight,
                 HospitalBaseRate = weighted ? schedule.DrgBaseRate ?? drgLine!.Rate : null,
             };

@@ -413,7 +413,7 @@ public class RateResolutionService : IRateResolutionService
 
         var claimRate = amounts[0];
         var rateName = schedules[0].FeeScheduleType == FeeScheduleType.Drg ? "DRG case rate" : "per diem";
-        var billed = indexes.Select(i => Math.Max(finalResults[i].BilledAmount, 0m)).ToList();
+        var billed = indexes.Select(i => BilledInCents(finalResults[i].BilledAmount)).ToList();
         var totalBilled = billed.Sum();
 
         // Lesser-of-billed for a stay compares the claim-level rate with the stay's
@@ -493,7 +493,7 @@ public class RateResolutionService : IRateResolutionService
         if (result.RateSource is RateSource.BilledCharges or RateSource.Unresolved or RateSource.Capitation)
             return result;
 
-        var billed = Math.Max(result.BilledAmount, 0m);
+        var billed = BilledInCents(result.BilledAmount);
         if (result.AllowedAmount <= billed)
             return result;
 
@@ -507,6 +507,13 @@ public class RateResolutionService : IRateResolutionService
             },
         };
     }
+
+    /// <summary>
+    /// A billed charge as used for lesser-of and per-stay allocation: never negative,
+    /// rounded to cents, so an allowed amount derived from it stays in whole cents.
+    /// </summary>
+    private static decimal BilledInCents(decimal billedAmount)
+        => Math.Round(Math.Max(billedAmount, 0m), 2);
 
     private static RateAdjustment LesserOfAdjustment(string rateName, decimal rate, decimal billed) => new()
     {

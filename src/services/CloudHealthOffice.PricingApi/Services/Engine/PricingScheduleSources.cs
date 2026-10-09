@@ -19,11 +19,14 @@ public sealed record PricingLineDetail(string? ApcCode, decimal? ConversionFacto
 /// <summary>
 /// A fee schedule in the engine's model (<see cref="EngineModels.FeeSchedule"/>), ready for
 /// <c>RateResolutionService</c>, plus the version label the Pricing API reports.
+/// <paramref name="UnpricedReasons"/> names codes the store holds but deliberately did not
+/// load (by procedure code), with the reason the response reports for them.
 /// </summary>
 public sealed record LoadedPricingSchedule(
     EngineModels.FeeSchedule Schedule,
     string Version,
-    IReadOnlyDictionary<string, PricingLineDetail> Details);
+    IReadOnlyDictionary<string, PricingLineDetail> Details,
+    IReadOnlyDictionary<string, string>? UnpricedReasons = null);
 
 /// <summary>
 /// Where the Pricing API reads fee schedules from. Repricing always runs on the
@@ -64,6 +67,10 @@ public interface IPricingScheduleSource
 ///   rate, <c>DrgWeight</c> = relative weight (case rate = base × weight).</item>
 ///   <item>Schedule type: RBRVS → MedicareMpfs, OPPS → MedicareOpps, Medicaid → Medicaid,
 ///   Commercial → Commercial.</item>
+///   <item>Locality: with a locality, that locality's row. Without one, the national row
+///   (no locality). A code that has only locality-specific rows is not priced when no
+///   locality is given; the response names the reason, so a geographic rate is never
+///   picked arbitrarily.</item>
 /// </list>
 /// The legacy store cannot express percent-of-Medicare, per diem or contract terms;
 /// those price only from the canonical store (<see cref="EngineStoreScheduleSource"/>).
@@ -91,6 +98,7 @@ public sealed class LegacyEntryScheduleSource : IPricingScheduleSource
             TermDate = info.TermDate?.ToDateTime(TimeOnly.MinValue),
         };
         var details = new Dictionary<string, PricingLineDetail>(StringComparer.OrdinalIgnoreCase);
+        var unpriced = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         if (query.ClaimType == ClaimType.Inpatient)
         {
@@ -109,17 +117,33 @@ public sealed class LegacyEntryScheduleSource : IPricingScheduleSource
                 ? []
                 : await _repo.LookupCodesAsync(feeScheduleId, codes, query.Locality);
 
-            // Without a locality a code may have one row per locality; the first
-            // wins, as in the single-code lookup.
-            foreach (var entry in entries.GroupBy(e => e.ProcedureCode, StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
+            foreach (var rows in entries.GroupBy(e => e.ProcedureCode, StringComparer.OrdinalIgnoreCase))
             {
+                var entry = SelectLocalityRow(rows.ToList(), query.Locality);
+                if (entry is null)
+                {
+                    unpriced[rows.Key] =
+                        $"Code {rows.Key} has only locality-specific rates in {feeScheduleId}; provide a locality";
+                    continue;
+                }
+
                 schedule.Lines.Add(ToLine(entry));
                 details[entry.ProcedureCode] = new PricingLineDetail(entry.ApcCode, entry.ConversionFactor);
             }
         }
 
-        return new LoadedPricingSchedule(schedule, info.Version, details);
+        return new LoadedPricingSchedule(schedule, info.Version, details, unpriced);
     }
+
+    /// <summary>
+    /// The row a code prices from. With a locality the repository returns only that
+    /// locality's row (one per schedule, code and locality). Without one, the national
+    /// row (null or empty locality); null when the code has only locality-specific rows.
+    /// </summary>
+    internal static FeeScheduleEntry? SelectLocalityRow(IReadOnlyList<FeeScheduleEntry> rows, string? locality)
+        => !string.IsNullOrWhiteSpace(locality)
+            ? rows.FirstOrDefault(r => string.Equals(r.Locality, locality, StringComparison.OrdinalIgnoreCase))
+            : rows.FirstOrDefault(r => string.IsNullOrWhiteSpace(r.Locality));
 
     /// <summary>The legacy store holds no cross-schedule references.</summary>
     public Task<EngineModels.FeeSchedule?> GetReferencedAsync(string feeScheduleId, CancellationToken ct = default)

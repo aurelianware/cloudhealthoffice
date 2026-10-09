@@ -185,6 +185,39 @@ public class ContractTermsTests
     }
 
     [Fact]
+    public async Task LesserOf_On_DrgStay_SubCentBilled_EveryLineInWholeCents()
+    {
+        // Sub-cent billed charges (e.g. from an upstream feed): the stay total and
+        // every allocated share stay in whole cents and still sum to the stay amount.
+        var engine = Engine(Drg("470", 10_000m), lesserOf: true);
+
+        var results = await engine.ResolveBatchAsync(
+        [
+            Request("", billed: 1000.004m, drgCode: "470", lineNumber: 1, totalLines: 3, revenueCode: "0120"),
+            Request("", billed: 2000.006m, drgCode: "470", lineNumber: 2, totalLines: 3, revenueCode: "0250"),
+            Request("", billed: 333.333m, drgCode: "470", lineNumber: 3, totalLines: 3, revenueCode: "0300"),
+        ]);
+
+        Assert.Equal(3333.34m, results.TotalAllowedAmount); // 1000.00 + 2000.01 + 333.33
+        Assert.All(results.LineResults, r =>
+        {
+            Assert.Equal(Math.Round(r.AllowedAmount, 2), r.AllowedAmount);
+            Assert.True(r.LesserOfBilledApplied);
+        });
+    }
+
+    [Fact]
+    public async Task LesserOf_On_SubCentBilled_AllowedInWholeCents()
+    {
+        var engine = Engine(Commercial(("99213", 150m)), lesserOf: true);
+
+        var result = await engine.ResolveAsync(Request("99213", billed: 99.996m));
+
+        Assert.Equal(100.00m, result.AllowedAmount);
+        Assert.True(result.LesserOfBilledApplied);
+    }
+
+    [Fact]
     public async Task LesserOf_On_BilledChargeFallback_Untouched()
     {
         // No rate line: the engine falls back to billed charges, which lesser-of leaves alone.

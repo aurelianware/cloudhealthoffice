@@ -353,6 +353,8 @@ public class RepricingServiceTests
         result.Lines[0].Status.Should().Be(PricingStatus.Priced);
         result.Lines[0].Breakdown.DrgRelativeWeight.Should().Be(1.9m);
         result.Lines[0].Breakdown.HospitalBaseRate.Should().Be(7000.00m);
+        // BaseRate keeps its meaning: the hospital base rate, not base × weight.
+        result.Lines[0].Breakdown.BaseRate.Should().Be(7000.00m);
     }
 
     [Fact]
@@ -477,6 +479,77 @@ public class RepricingServiceTests
         result.Lines[0].AllowedAmount.Should().Be(1000.00m);
         result.Warnings.Should().Contain(w => w.Contains("Modifier 66") && w.Contains("by report"));
     }
+
+    [Fact]
+    public async Task RepriceClaimAsync_NoLocality_UsesNationalRow_NotALocalityRow()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupRows(scheduleId,
+            Row(scheduleId, "99213", 130.00m, locality: "01"),
+            Row(scheduleId, "99213", 110.00m, locality: null),
+            Row(scheduleId, "99213", 125.00m, locality: "05"));
+
+        var result = await _sut.RepriceClaimAsync(BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "99213", Units = 1 }
+        }));
+
+        result.Lines[0].AllowedAmount.Should().Be(110.00m);
+        result.Lines[0].Status.Should().Be(PricingStatus.Priced);
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_NoLocality_OnlyLocalityRows_NotPricedWithReason()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        SetupRows(scheduleId,
+            Row(scheduleId, "99213", 130.00m, locality: "01"),
+            Row(scheduleId, "99213", 125.00m, locality: "05"));
+
+        var result = await _sut.RepriceClaimAsync(BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "99213", Units = 1 }
+        }));
+
+        result.Lines[0].Status.Should().Be(PricingStatus.NotFound);
+        result.Lines[0].AllowedAmount.Should().Be(0m);
+        result.Lines[0].StatusReason.Should().Contain("only locality-specific rates").And.Contain("provide a locality");
+        result.Warnings.Should().Contain(w => w.Contains("Line 1") && w.Contains("provide a locality"));
+    }
+
+    [Fact]
+    public async Task RepriceClaimAsync_WithLocality_UsesThatLocalityRow()
+    {
+        var scheduleId = "MEDICARE_RBRVS_2025";
+        SetupScheduleInfo(scheduleId);
+        // The repository filters by locality when one is given.
+        _feeScheduleRepo.Setup(r => r.LookupCodesAsync(scheduleId, It.IsAny<IEnumerable<string>>(), "05"))
+            .ReturnsAsync(new List<FeeScheduleEntry> { Row(scheduleId, "99213", 125.00m, locality: "05") });
+
+        var request = BuildRequest(scheduleId, ClaimType.Professional, lines: new[]
+        {
+            new ClaimLineRequest { LineNumber = 1, ProcedureCode = "99213", Units = 1 }
+        }) with { Locality = "05" };
+
+        var result = await _sut.RepriceClaimAsync(request);
+
+        result.Lines[0].AllowedAmount.Should().Be(125.00m);
+    }
+
+    private static FeeScheduleEntry Row(string scheduleId, string code, decimal rate, string? locality) => new()
+    {
+        FeeScheduleId = scheduleId,
+        ProcedureCode = code,
+        Locality = locality,
+        NonFacilityRate = rate,
+        FacilityRate = rate,
+    };
+
+    private void SetupRows(string scheduleId, params FeeScheduleEntry[] rows)
+        => _feeScheduleRepo.Setup(r => r.LookupCodesAsync(scheduleId, It.IsAny<IEnumerable<string>>(), null))
+            .ReturnsAsync(rows.ToList());
 
     [Fact]
     public async Task RepriceClaimAsync_RepeatedLineNumbers_PricedByPosition()
