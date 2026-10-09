@@ -16,6 +16,10 @@ public sealed class ReconcileOptions
     /// <summary>Required with <see cref="Execute"/>: the SHA-256 of the reviewed CSV.</summary>
     public string? ExpectedSha256 { get; init; }
     public required string Operator { get; init; }
+    /// <summary>Required: the database the operator means to touch; must be the configured one.</summary>
+    public string? ConfirmDatabase { get; init; }
+    /// <summary>When given, the CSV may hold rows for these tenants only.</summary>
+    public IReadOnlyCollection<string>? Tenants { get; init; }
     public string? LogFile { get; init; }
 }
 
@@ -38,8 +42,12 @@ public sealed class CsvHashMismatchException(string expected, string actual)
 /// (<see cref="LegacyPostingLister"/> output with decision, reviewer and ticket filled in).
 /// <list type="bullet">
 /// <item>Dry-run unless <see cref="ReconcileOptions.Execute"/> is set with the CSV's SHA-256.</item>
+/// <item>Refuses to run against a database other than the confirmed one, a CSV listed in another
+///   environment, or (for execute) a database no guard-capable ar-service has started against
+///   (<see cref="ArServiceCapabilities"/>).</item>
 /// <item><c>CORRECTED_MANUALLY</c>: the application gets the sentinel posted id
-///   <c>manual-{posting}-{index}</c>; no balance changes, and apply and void never touch it.</item>
+///   <c>manual-{posting}-{index}</c>; no balance changes, and apply and void never touch it.
+///   It is carried out even when the balance no longer exists (recorded as missing).</item>
 /// <item><c>APPLY_CREDIT</c>: the balance gets the controller's own credit entry
 ///   (<c>cash-{posting}-{index}</c>, <see cref="CashPostingLedger.CreditEntry"/>) through the
 ///   service's version-checked balance repository; an entry already on the balance is not added again.</item>
@@ -47,20 +55,16 @@ public sealed class CsvHashMismatchException(string expected, string actual)
 ///   every row must match the live posting and balances, or the posting is refused.</item>
 /// <item>Running again changes nothing: a reconciled posting with the same decisions is reported
 ///   as already reconciled.</item>
+/// <item>Every step is audited append-only (<see cref="LegacyReconciliationAudit"/>,
+///   <see cref="LegacyReconciliationRun"/>).</item>
 /// </list>
 /// </summary>
 public sealed class LegacyPostingReconciler
 {
     public const string CorrectedManually = "CORRECTED_MANUALLY";
     public const string ApplyCredit = "APPLY_CREDIT";
+    public const string ReviewedAtFormat = "yyyy-MM-dd";
     private const int MaxConcurrencyAttempts = 5;
-
-    private static readonly string[] RequiredColumns =
-    [
-        "tenant_id", "posting_id", "posting_number", "posting_status", "posting_amount", "applied_amount",
-        "application_index", "ar_balance_id", "gl_account_id", "amount_applied",
-        "decision", "reviewer", "reviewed_at", "ticket", "note"
-    ];
 
     private readonly TenantDatabases _databases;
     private readonly Action<string> _out;
@@ -71,6 +75,12 @@ public sealed class LegacyPostingReconciler
         _out = output;
     }
 
+    /// <summary>Test seam: runs just before each balance save.</summary>
+    internal Func<ArBalance, Task>? BeforeBalanceSave { get; set; }
+
+    /// <summary>Test seam: runs just before the posting is saved.</summary>
+    internal Func<CashPosting, Task>? BeforePostingSave { get; set; }
+
     public static string Sha256Of(string path)
     {
         using var stream = File.OpenRead(path);
@@ -79,6 +89,8 @@ public sealed class LegacyPostingReconciler
 
     public async Task<ReconcileResult> RunAsync(ReconcileOptions options)
     {
+        _databases.Confirm(options.ConfirmDatabase);
+
         var bytes = await File.ReadAllBytesAsync(options.CsvPath);
         var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         if (options.Execute)
@@ -91,48 +103,58 @@ public sealed class LegacyPostingReconciler
                 throw new ArgumentException("--execute requires --operator <your name or id>");
         }
 
-        var rows = Csv.ParseWithHeader(new System.Text.UTF8Encoding(false).GetString(bytes));
-        var missing = RequiredColumns.Where(c => rows.Count > 0 && !rows[0].Fields.ContainsKey(c)).ToList();
-        if (rows.Count == 0)
-            missing = [];
-        if (missing.Count > 0)
-            throw new FormatException($"CSV lacks column(s): {string.Join(", ", missing)}");
+        var rows = Csv.ParseWithHeader(new System.Text.UTF8Encoding(false).GetString(bytes), LegacyPostingLister.Header);
+        CheckEnvironment(rows, options.Tenants);
+
+        var mode = options.Execute ? "EXECUTE" : "DRY-RUN (nothing is changed)";
+        _out($"Legacy cash posting reconciliation — {mode}");
+        _out(_databases.Describe());
+        var capabilities = await ArServiceCapabilities.ReadAsync(_databases.Base);
+        CheckService(capabilities, options.Execute);
 
         var runId = options.Execute ? $"legacy-recon-{DateTime.UtcNow:yyyyMMddTHHmmssfffZ}-{sha[..12]}" : null;
         var result = new ReconcileResult { CsvSha256 = sha, Executed = options.Execute, RunId = runId };
-        var mode = options.Execute ? "EXECUTE" : "DRY-RUN (nothing is changed)";
-        _out($"Legacy cash posting reconciliation — {mode}");
         _out($"CSV {Path.GetFileName(options.CsvPath)} sha256={sha} rows={rows.Count} operator={options.Operator}");
         if (runId != null)
             _out($"Run id {runId}");
 
-        LegacyReconciliationRun? run = null;
         var runs = _databases.Base.GetCollection<LegacyReconciliationRun>(LegacyReconciliationRun.Collection);
         if (options.Execute)
         {
-            run = new LegacyReconciliationRun
+            await runs.InsertOneAsync(new LegacyReconciliationRun
             {
-                Id = runId!, Operator = options.Operator, CsvSha256 = sha,
-                CsvFileName = Path.GetFileName(options.CsvPath), StartedAt = DateTime.UtcNow, LogFile = options.LogFile
-            };
-            await runs.InsertOneAsync(run);
+                Id = runId!, State = RunState.Running, Operator = options.Operator,
+                Host = _databases.Host, Database = _databases.BaseDatabaseName, UseTenantScoping = _databases.UseTenantScoping,
+                CsvSha256 = sha, CsvFileName = Path.GetFileName(options.CsvPath), StartedAt = DateTime.UtcNow,
+                LogFile = options.LogFile, ServiceBuild = capabilities?.Build
+            });
+        }
+
+        async Task Record(PostingOutcome outcome)
+        {
+            Report(outcome, options.Execute);
+            result.Postings.Add(outcome);
+            if (runId != null)
+                await runs.UpdateOneAsync(r => r.Id == runId,
+                    LegacyReconciliationRun.Update.Push(r => r.Postings, outcome).Set(r => r.CurrentPosting, null));
         }
 
         // Rows without a tenant or posting id cannot be matched to anything.
         foreach (var (rowNumber, fields) in rows.Where(r => Key(r.Fields) == null))
         {
-            var outcome = new PostingOutcome
+            await Record(new PostingOutcome
             {
                 TenantId = Value(fields, "tenant_id"), PostingId = Value(fields, "posting_id"),
                 Outcome = string.IsNullOrWhiteSpace(Value(fields, "decision")) ? OutcomeKind.Skipped : OutcomeKind.Refused,
                 Reasons = { $"row {rowNumber}: tenant_id and posting_id are required" }
-            };
-            Report(outcome, options.Execute);
-            result.Postings.Add(outcome);
+            });
         }
 
         foreach (var group in rows.Where(r => Key(r.Fields) != null).GroupBy(r => Key(r.Fields)!.Value))
         {
+            if (runId != null)
+                await runs.UpdateOneAsync(r => r.Id == runId,
+                    LegacyReconciliationRun.Update.Set(r => r.CurrentPosting, $"{group.Key.Tenant}/{group.Key.Posting}"));
             PostingOutcome outcome;
             try
             {
@@ -146,21 +168,64 @@ public sealed class LegacyPostingReconciler
                     Reasons = { $"{ex.GetType().Name}: {ex.Message} — nothing double-posts on a re-run; run again after fixing the cause" }
                 };
             }
-            Report(outcome, options.Execute);
-            result.Postings.Add(outcome);
+            await Record(outcome);
         }
 
         _out($"Summary: reconciled={result.Count(OutcomeKind.Reconciled)} alreadyReconciled={result.Count(OutcomeKind.AlreadyReconciled)} " +
              $"skipped={result.Count(OutcomeKind.Skipped)} refused={result.Count(OutcomeKind.Refused)} failed={result.Count(OutcomeKind.Failed)}" +
              (options.Execute ? string.Empty : " (dry-run: would be reconciled)"));
 
-        if (run != null)
-        {
-            run.FinishedAt = DateTime.UtcNow;
-            run.Postings = result.Postings;
-            await runs.ReplaceOneAsync(r => r.Id == run.Id, run);
-        }
+        if (runId != null)
+            await runs.UpdateOneAsync(r => r.Id == runId,
+                LegacyReconciliationRun.Update.Set(r => r.State, RunState.Finished).Set(r => r.FinishedAt, DateTime.UtcNow));
         return result;
+    }
+
+    /// <summary>The CSV was listed from this environment, and holds only the tenants asked for.</summary>
+    private void CheckEnvironment(List<(int RowNumber, Dictionary<string, string> Fields)> rows, IReadOnlyCollection<string>? tenants)
+    {
+        var wrong = rows
+            .Where(r => Value(r.Fields, "source_database") != _databases.BaseDatabaseName || Value(r.Fields, "source_host") != _databases.Host)
+            .Select(r => $"{Value(r.Fields, "source_database")} on {Value(r.Fields, "source_host")}")
+            .Distinct().ToList();
+        if (wrong.Count > 0)
+            throw new EnvironmentMismatchException(
+                $"the CSV was listed from {string.Join("; ", wrong)}, not from database {_databases.BaseDatabaseName} on {_databases.Host}. " +
+                "Nothing was changed. Reconcile a CSV only against the environment it was listed from.");
+
+        if (tenants is { Count: > 0 })
+        {
+            var others = rows.Select(r => Csv.Unguard(Value(r.Fields, "tenant_id").Trim()))
+                .Where(t => !tenants.Contains(t)).Distinct().ToList();
+            if (others.Count > 0)
+                throw new EnvironmentMismatchException(
+                    $"the CSV has rows for tenant(s) {string.Join(", ", others)}, outside --tenant {string.Join(",", tenants)}. Nothing was changed.");
+        }
+    }
+
+    /// <summary>
+    /// Execute needs a guard-capable ar-service on this database: the build that writes balance
+    /// versions and posted ids itself, refuses unreconciled legacy postings, and ignores unknown
+    /// elements. An older build would fail to read what the tool writes, and could overwrite a
+    /// credit with an unconditional balance save.
+    /// </summary>
+    private void CheckService(ArServiceCapabilities? capabilities, bool execute)
+    {
+        var missing = capabilities == null
+            ? ArServiceCapabilities.Current.ToList()
+            : ArServiceCapabilities.Current.Except(capabilities.Capabilities).ToList();
+        if (missing.Count == 0)
+        {
+            _out($"ar-service: build {capabilities!.Build} on {capabilities.Host}, last started {capabilities.LastStartedAt:u}, capabilities {string.Join(", ", capabilities.Capabilities)}");
+            return;
+        }
+        var message = capabilities == null
+            ? $"no ar-service capability marker in {_databases.BaseDatabaseName}.{ArServiceCapabilities.Collection}: no ar-service build with the legacy posting guard has started against this database"
+            : $"the ar-service capability marker (build {capabilities.Build}, last started {capabilities.LastStartedAt:u}) lacks {string.Join(", ", missing)}";
+        if (execute)
+            throw new EnvironmentMismatchException(
+                $"{message}. Deploy the ar-service build with the guard first, then run again. Nothing was changed.");
+        _out($"WARNING: {message}. --execute will be refused until it is deployed.");
     }
 
     private void Report(PostingOutcome outcome, bool executed)
@@ -229,11 +294,11 @@ public sealed class LegacyPostingReconciler
         DateTime? reviewedAt = null;
         if (reviewedAts.Count == 1)
         {
-            if (DateTime.TryParse(reviewedAts[0], CultureInfo.InvariantCulture,
+            if (DateTime.TryParseExact(reviewedAts[0], ReviewedAtFormat, CultureInfo.InvariantCulture,
                     DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
                 reviewedAt = parsed;
             else
-                reasons.Add($"reviewed_at '{reviewedAts[0]}' is not a date");
+                reasons.Add($"reviewed_at '{reviewedAts[0]}' must be a date written {ReviewedAtFormat} (for example 2026-10-08); a spreadsheet may have reformatted it");
         }
         var note = string.Join(" | ", decided.Select(r => Value(r.Fields, "note").Trim()).Where(v => v.Length > 0).Distinct());
         if (reasons.Count > 0)
@@ -264,9 +329,9 @@ public sealed class LegacyPostingReconciler
                 return Refuse(outcome);
             }
             if (options.Execute)
-                await CompleteLeftoverAuditsAsync(audits, posting);
+                await ConfirmEarlierRunAsync(audits, posting, runId!);
             outcome.Outcome = OutcomeKind.AlreadyReconciled;
-            reasons.Add($"reconciled on {posting.LegacyReconciliation.ReconciledAt:u} by {posting.LegacyReconciliation.ReconciledBy} (CSV {posting.LegacyReconciliation.CsvSha256}); nothing to do");
+            reasons.Add($"reconciled on {posting.LegacyReconciliation.ReconciledAt:u} by {posting.LegacyReconciliation.ReconciledBy} (CSV {posting.LegacyReconciliation.CsvSha256}, run {posting.LegacyReconciliation.RunId}); nothing to do");
             return outcome;
         }
 
@@ -334,136 +399,202 @@ public sealed class LegacyPostingReconciler
             return outcome;
         }
 
-        // ── Execute ───────────────────────────────────────────────────────
+        return await ExecuteAsync(outcome, tenantId, posting, plan, live, postings, balances, audits, database,
+            options, sha, runId!, reviewer, reviewedAt, ticket, note);
+    }
+
+    private async Task<PostingOutcome> ExecuteAsync(
+        PostingOutcome outcome, string tenantId, CashPosting posting, List<Planned> plan, Dictionary<string, ArBalance> live,
+        IMongoCollection<CashPosting> postings, IMongoCollection<ArBalance> balances, IMongoCollection<LegacyReconciliationAudit> audits,
+        IMongoDatabase database, ReconcileOptions options, string sha, string runId,
+        string reviewer, DateTime? reviewedAt, string ticket, string note)
+    {
+        var reasons = outcome.Reasons;
         var now = DateTime.UtcNow;
-        var records = new Dictionary<int, LegacyReconciliationAudit>();
-        foreach (var step in plan)
+        var ids = plan.ToDictionary(s => s.Index, s => LegacyReconciliationAudit.IdFor(runId, tenantId, posting.Id, s.Index));
+        var runs = _databases.Base.GetCollection<LegacyReconciliationRun>(LegacyReconciliationRun.Collection);
+
+        // Write-ahead: the intent is durable before any balance or posting changes. Inserted, never replaced.
+        await audits.InsertManyAsync(plan.Select(step => new LegacyReconciliationAudit
         {
-            var record = new LegacyReconciliationAudit
-            {
-                Id = LegacyReconciliationAudit.IdFor(tenantId, posting.Id, step.Index),
-                RunId = runId!, State = AuditState.Intended, Operator = options.Operator, At = now, CsvSha256 = sha,
-                TenantId = tenantId, PostingId = posting.Id, PostingNumber = posting.PostingNumber,
-                ApplicationIndex = step.Index, ArBalanceId = step.Application.ArBalanceId,
-                Decision = step.Decision == LegacyReconciliationDecision.ApplyCredit ? ApplyCredit : CorrectedManually,
-                Amount = step.Application.AmountApplied, PostedEntryId = step.PostedEntryId,
-                Before = BalanceSnapshot.Of(live[step.Application.ArBalanceId]),
-                Reviewer = reviewer, ReviewedAt = reviewedAt?.ToString("o"), Ticket = ticket, Note = note
-            };
-            // Write-ahead: the intent is durable before any balance or posting changes.
-            await audits.ReplaceOneAsync(a => a.Id == record.Id, record, new ReplaceOptions { IsUpsert = true });
-            records[step.Index] = record;
+            Id = ids[step.Index], RunId = runId, State = AuditState.Intended, Operator = options.Operator, At = now, CsvSha256 = sha,
+            Host = _databases.Host, Database = database.DatabaseNamespace.DatabaseName,
+            TenantId = tenantId, PostingId = posting.Id, PostingNumber = posting.PostingNumber,
+            ApplicationIndex = step.Index, ArBalanceId = step.Application.ArBalanceId,
+            BalanceMissing = !live.ContainsKey(step.Application.ArBalanceId),
+            Decision = step.Decision == LegacyReconciliationDecision.ApplyCredit ? ApplyCredit : CorrectedManually,
+            Amount = step.Application.AmountApplied, PostedEntryId = step.PostedEntryId,
+            Before = live.TryGetValue(step.Application.ArBalanceId, out var b) ? BalanceSnapshot.Of(b) : null,
+            Reviewer = reviewer, ReviewedAt = reviewedAt?.ToString(ReviewedAtFormat, CultureInfo.InvariantCulture), Ticket = ticket, Note = note,
+            Events = { AuditEvent.Of(AuditEvent.Intended, step.Decision == LegacyReconciliationDecision.ApplyCredit
+                ? $"credit {step.Application.AmountApplied} as {step.PostedEntryId}"
+                : $"mark corrected manually as {step.PostedEntryId}{(live.ContainsKey(step.Application.ArBalanceId) ? "" : " (balance missing)")}") }
+        }));
+
+        var u = Builders<LegacyReconciliationAudit>.Update;
+        Task Append(IEnumerable<Planned> steps, AuditEvent ev, UpdateDefinition<LegacyReconciliationAudit>? also = null)
+        {
+            var update = also == null ? u.Push(a => a.Events, ev) : u.Combine(u.Push(a => a.Events, ev), also);
+            return audits.UpdateManyAsync(Builders<LegacyReconciliationAudit>.Filter.In(a => a.Id, steps.Select(s => ids[s.Index])), update);
         }
 
-        var credits = plan.Where(p => p.Decision == LegacyReconciliationDecision.ApplyCredit).ToList();
-        if (credits.Count > 0)
+        try
         {
-            // The service's own repository: a save of a stale balance fails and is retried on a fresh read.
-            var repository = new MongoArBalanceRepository(database, TenantDatabases.AccessorFor(tenantId), NullLogger<MongoArBalanceRepository>.Instance);
-            for (var attempt = 1; ; attempt++)
+            var latest = live;
+            var creditedThisRun = new HashSet<int>();
+            var credits = plan.Where(p => p.Decision == LegacyReconciliationDecision.ApplyCredit).ToList();
+            if (credits.Count > 0)
             {
-                var fresh = await ReadBalancesAsync(balances, tenantId, posting.Id, plan, reasons);
-                if (reasons.Count > 0)
-                    return Refuse(outcome);
-                var changed = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var step in plan)
+                // The service's own repository: a save of a stale balance fails and is retried on a fresh read.
+                var repository = new MongoArBalanceRepository(database, TenantDatabases.AccessorFor(tenantId), NullLogger<MongoArBalanceRepository>.Instance);
+                for (var attempt = 1; ; attempt++)
                 {
-                    var balance = fresh[step.Application.ArBalanceId];
-                    records[step.Index].Before = BalanceSnapshot.Of(balance);
-                    records[step.Index].Credited = false;
-                    if (step.Decision == LegacyReconciliationDecision.ApplyCredit
-                        && balance.PostingEntries.All(e => e.EntryId != step.PostedEntryId))
+                    var fresh = await ReadBalancesAsync(balances, tenantId, posting.Id, plan, reasons);
+                    latest = fresh;
+                    if (reasons.Count > 0)
                     {
-                        CashPostingLedger.Post(balance, CashPostingLedger.CreditEntry(posting, step.Index, options.Operator, now,
-                            $"Legacy reconciliation ({ticket}){(string.IsNullOrEmpty(step.Application.Memo) ? "" : ": " + step.Application.Memo)}"), posting.PayerType);
-                        changed.Add(balance.Id);
-                        records[step.Index].Credited = true;
+                        await Append(plan, AuditEvent.Of(AuditEvent.Failed, string.Join("; ", reasons)), u.Set(a => a.State, AuditState.Failed));
+                        return Refuse(outcome);
                     }
-                    records[step.Index].After = BalanceSnapshot.Of(balance);
-                }
-                try
-                {
-                    foreach (var balance in fresh.Values.Where(b => changed.Contains(b.Id)))
+
+                    var toCredit = credits
+                        .Where(s => fresh[s.Application.ArBalanceId].PostingEntries.All(e => e.EntryId != s.PostedEntryId))
+                        .GroupBy(s => s.Application.ArBalanceId)
+                        .ToList();
+                    string? saving = null;
+                    try
                     {
-                        balance.LastUpdatedAt = now;
-                        await repository.UpdateAsync(balance);
+                        foreach (var group in toCredit)
+                        {
+                            saving = group.Key;
+                            var balance = fresh[group.Key];
+                            foreach (var step in group)
+                                CashPostingLedger.Post(balance, CashPostingLedger.CreditEntry(posting, step.Index, options.Operator, now,
+                                    $"Legacy reconciliation ({ticket}){(string.IsNullOrEmpty(step.Application.Memo) ? "" : ": " + step.Application.Memo)}"), posting.PayerType);
+                            balance.LastUpdatedAt = now;
+                            await Append(group, AuditEvent.Of(AuditEvent.CreditIntended,
+                                $"saving balance {balance.Id} over version {balance.Version} (attempt {attempt})", BalanceSnapshot.Of(balance)));
+
+                            if (BeforeBalanceSave != null)
+                                await BeforeBalanceSave(balance);
+                            await repository.UpdateAsync(balance);
+
+                            // Durable as soon as the balance is saved, before anything else can fail.
+                            var after = BalanceSnapshot.Of(balance);
+                            await Append(group, AuditEvent.Of(AuditEvent.Credited, $"balance {balance.Id} saved at version {balance.Version}", after),
+                                u.Set(a => a.Credited, true).Set(a => a.After, after));
+                            await runs.UpdateOneAsync(r => r.Id == runId, LegacyReconciliationRun.Update.Push(r => r.Actions, new RunAction
+                            {
+                                At = DateTime.UtcNow, TenantId = tenantId, PostingId = posting.Id, ArBalanceId = balance.Id,
+                                EntryIds = group.Select(s => s.PostedEntryId).ToList(), Amount = group.Sum(s => s.Application.AmountApplied), After = after
+                            }));
+                            foreach (var step in group)
+                                creditedThisRun.Add(step.Index);
+                        }
+                        break;
                     }
-                    // The saved version is one higher than the snapshot taken before the save.
-                    foreach (var step in plan.Where(s => changed.Contains(s.Application.ArBalanceId)))
-                        records[step.Index].After!.Version = fresh[step.Application.ArBalanceId].Version;
-                    break;
+                    catch (ArConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+                    {
+                        _out($"  balance {saving} changed concurrently; re-reading (attempt {attempt + 1})");
+                        await Append(credits.Where(s => s.Application.ArBalanceId == saving),
+                            AuditEvent.Of(AuditEvent.ConcurrencyRetry, $"balance {saving} changed concurrently; attempt {attempt + 1}"));
+                    }
                 }
-                catch (ArConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+
+                var already = credits.Where(s => !creditedThisRun.Contains(s.Index)).ToList();
+                if (already.Count > 0)
+                    await Append(already, AuditEvent.Of(AuditEvent.AlreadyOnBalance, "credit entry already on the balance; not credited again"));
+            }
+
+            // The posting: posted ids and the reconciliation record, saved only if nobody changed it since it was read.
+            var readAt = posting.LastUpdatedAt;
+            var readStatus = posting.Status;
+            foreach (var step in plan)
+            {
+                step.Application.PostedEntryId = step.PostedEntryId;
+                step.Application.PostedAt = now;
+            }
+            posting.LegacyReconciliation = new LegacyPostingReconciliation
+            {
+                Status = LegacyReconciliationStatus.Reconciled,
+                ReviewedBy = reviewer, ReviewedAt = reviewedAt, Ticket = ticket, Note = note.Length > 0 ? note : null,
+                ReconciledBy = options.Operator, ReconciledAt = now, CsvSha256 = sha, RunId = runId,
+                Applications = plan.Select(p => new LegacyApplicationDecision
                 {
-                    _out($"  balance changed concurrently; re-reading (attempt {attempt + 1})");
-                }
+                    ApplicationIndex = p.Index, ArBalanceId = p.Application.ArBalanceId, Amount = p.Application.AmountApplied,
+                    Decision = p.Decision, PostedEntryId = p.PostedEntryId, BalanceMissing = !latest.ContainsKey(p.Application.ArBalanceId)
+                }).ToList()
+            };
+            posting.LastUpdatedAt = now;
+            if (BeforePostingSave != null)
+                await BeforePostingSave(posting);
+            var f = Builders<CashPosting>.Filter;
+            var saved = await postings.ReplaceOneAsync(
+                f.Eq(p => p.Id, posting.Id) & f.Eq(p => p.TenantId, tenantId) & f.Eq(p => p.LastUpdatedAt, readAt) & f.Eq(p => p.Status, readStatus),
+                posting);
+            if (saved.MatchedCount == 0)
+            {
+                await Append(plan, AuditEvent.Of(AuditEvent.PostingSaveConflict,
+                    "the posting changed while it was being reconciled and was not saved; credits made are recognised by entry id on a re-run"),
+                    u.Set(a => a.State, AuditState.Failed));
+                outcome.Outcome = OutcomeKind.Failed;
+                reasons.Add("the posting changed while it was being reconciled and was not saved; any credit already made is recognised by its entry id, so run again");
+                return outcome;
+            }
+
+            foreach (var step in plan)
+            {
+                var completed = u.Set(a => a.State, AuditState.Completed).Set(a => a.CompletedAt, DateTime.UtcNow);
+                if (!creditedThisRun.Contains(step.Index))
+                    completed = completed.Set(a => a.After,
+                        latest.TryGetValue(step.Application.ArBalanceId, out var balance) ? BalanceSnapshot.Of(balance) : null);
+                await Append([step], AuditEvent.Of(AuditEvent.PostingSaved, $"posting saved; PostedEntryId := {step.PostedEntryId}"), completed);
             }
         }
-        else
+        catch (Exception ex)
         {
-            foreach (var step in plan)
-                records[step.Index].After = BalanceSnapshot.Of(live[step.Application.ArBalanceId]);
-        }
-
-        // The posting: posted ids and the reconciliation record, saved only if nobody changed it since it was read.
-        var readAt = posting.LastUpdatedAt;
-        var readStatus = posting.Status;
-        foreach (var step in plan)
-        {
-            step.Application.PostedEntryId = step.PostedEntryId;
-            step.Application.PostedAt = now;
-        }
-        posting.LegacyReconciliation = new LegacyPostingReconciliation
-        {
-            Status = LegacyReconciliationStatus.Reconciled,
-            ReviewedBy = reviewer, ReviewedAt = reviewedAt, Ticket = ticket, Note = note.Length > 0 ? note : null,
-            ReconciledBy = options.Operator, ReconciledAt = now, CsvSha256 = sha,
-            Applications = plan.Select(p => new LegacyApplicationDecision
+            try
             {
-                ApplicationIndex = p.Index, ArBalanceId = p.Application.ArBalanceId, Amount = p.Application.AmountApplied,
-                Decision = p.Decision, PostedEntryId = p.PostedEntryId
-            }).ToList()
-        };
-        posting.LastUpdatedAt = now;
-        var f = Builders<CashPosting>.Filter;
-        var saved = await postings.ReplaceOneAsync(
-            f.Eq(p => p.Id, posting.Id) & f.Eq(p => p.TenantId, tenantId) & f.Eq(p => p.LastUpdatedAt, readAt) & f.Eq(p => p.Status, readStatus),
-            posting);
-        if (saved.MatchedCount == 0)
-        {
-            outcome.Outcome = OutcomeKind.Failed;
-            reasons.Add("the posting changed while it was being reconciled and was not saved; any credit already made is recognised by its entry id, so run again");
-            return outcome;
+                await Append(plan, AuditEvent.Of(AuditEvent.Failed, $"{ex.GetType().Name}: {ex.Message}"), u.Set(a => a.State, AuditState.Failed));
+            }
+            catch
+            {
+                // The original error is what matters; the run record and log carry it.
+            }
+            throw;
         }
 
-        foreach (var record in records.Values)
-        {
-            record.State = AuditState.Completed;
-            record.CompletedAt = DateTime.UtcNow;
-            await audits.ReplaceOneAsync(a => a.Id == record.Id, record);
-        }
-
+        var creditCount = plan.Count(p => p.Decision == LegacyReconciliationDecision.ApplyCredit);
         outcome.Outcome = OutcomeKind.Reconciled;
-        reasons.Add($"reconciled {plan.Count} application(s): {credits.Count} credited, {plan.Count - credits.Count} marked corrected manually");
+        reasons.Add($"reconciled {plan.Count} application(s): {creditCount} credited, {plan.Count - creditCount} marked corrected manually");
         return outcome;
     }
 
+    /// <summary>
+    /// Reads every balance the plan touches. A missing balance refuses an <c>APPLY_CREDIT</c> but
+    /// not a <c>CORRECTED_MANUALLY</c>, which changes no balance; it is left out of the result.
+    /// </summary>
     private async Task<Dictionary<string, ArBalance>> ReadBalancesAsync(
         IMongoCollection<ArBalance> balances, string tenantId, string postingId, List<Planned> plan, List<string> reasons)
     {
         var result = new Dictionary<string, ArBalance>(StringComparer.Ordinal);
+        var missing = new HashSet<string>(StringComparer.Ordinal);
         foreach (var step in plan)
         {
             var id = step.Application.ArBalanceId;
-            if (!result.TryGetValue(id, out var balance))
+            if (!result.TryGetValue(id, out var balance) && !missing.Contains(id))
             {
                 balance = await balances.Find(b => b.Id == id && b.TenantId == tenantId).FirstOrDefaultAsync();
                 if (balance == null)
-                {
-                    reasons.Add($"application {step.Index}: AR balance {id} not found");
-                    continue;
-                }
-                result[id] = balance;
+                    missing.Add(id);
+                else
+                    result[id] = balance;
+            }
+            if (balance == null)
+            {
+                if (step.Decision == LegacyReconciliationDecision.ApplyCredit)
+                    reasons.Add($"application {step.Index}: AR balance {id} not found; {ApplyCredit} needs it ({CorrectedManually} can be recorded without it)");
+                continue;
             }
             if (!string.Equals(balance.GlAccountId, step.Application.GlAccountId, StringComparison.Ordinal))
                 reasons.Add($"application {step.Index}: AR balance {id} belongs to GL account {balance.GlAccountId}, not {step.Application.GlAccountId}");
@@ -476,7 +607,11 @@ public sealed class LegacyPostingReconciler
 
     private static string Describe(Planned step, CashPosting posting, Dictionary<string, ArBalance> balances, string postedBy, string verb)
     {
-        var balance = balances[step.Application.ArBalanceId];
+        var head = $"app {step.Index} -> balance {step.Application.ArBalanceId} (GL {step.Application.GlAccountId}) amount {step.Application.AmountApplied} " +
+                   $"{(step.Decision == LegacyReconciliationDecision.ApplyCredit ? ApplyCredit : CorrectedManually)}: ";
+        if (!balances.TryGetValue(step.Application.ArBalanceId, out var balance))
+            return head + $"{verb}mark corrected manually, no credit; PostedEntryId := {step.PostedEntryId}; balance NOT FOUND (recorded as missing)";
+
         var before = BalanceSnapshot.Of(balance);
         string action;
         if (step.Decision == LegacyReconciliationDecision.CorrectedManually)
@@ -493,21 +628,25 @@ public sealed class LegacyPostingReconciler
             action = $"{verb}credit {step.Application.AmountApplied} as entry {step.PostedEntryId}";
         }
         var after = BalanceSnapshot.Of(balance);
-        return $"app {step.Index} -> balance {step.Application.ArBalanceId} (GL {step.Application.GlAccountId}) amount {step.Application.AmountApplied} " +
-               $"{(step.Decision == LegacyReconciliationDecision.ApplyCredit ? ApplyCredit : CorrectedManually)}: {action}; " +
-               $"balance before [{before}] after [{after}]";
+        return head + $"{action}; balance before [{before}] after [{after}]";
     }
 
-    private static async Task CompleteLeftoverAuditsAsync(IMongoCollection<LegacyReconciliationAudit> audits, CashPosting posting)
+    /// <summary>
+    /// The posting was saved by an earlier run that stopped before completing its audit records:
+    /// those records gain an event saying so (their history is kept).
+    /// </summary>
+    private static async Task ConfirmEarlierRunAsync(IMongoCollection<LegacyReconciliationAudit> audits, CashPosting posting, string runId)
     {
-        // The posting was saved but the run stopped before its audit records were completed.
-        var leftovers = await audits.Find(a => a.PostingId == posting.Id && a.TenantId == posting.TenantId && a.State == AuditState.Intended).ToListAsync();
-        foreach (var record in leftovers)
-        {
-            record.State = AuditState.Completed;
-            record.CompletedAt = posting.LegacyReconciliation?.ReconciledAt ?? DateTime.UtcNow;
-            await audits.ReplaceOneAsync(a => a.Id == record.Id, record);
-        }
+        var earlierRun = posting.LegacyReconciliation?.RunId;
+        if (earlierRun == null)
+            return;
+        var f = Builders<LegacyReconciliationAudit>.Filter;
+        await audits.UpdateManyAsync(
+            f.Eq(a => a.RunId, earlierRun) & f.Eq(a => a.PostingId, posting.Id) & f.Eq(a => a.TenantId, posting.TenantId) & f.Eq(a => a.State, AuditState.Intended),
+            Builders<LegacyReconciliationAudit>.Update
+                .Push(a => a.Events, AuditEvent.Of(AuditEvent.ConfirmedByLaterRun, $"run {runId} found the posting reconciled by this run"))
+                .Set(a => a.State, AuditState.Completed)
+                .Set(a => a.CompletedAt, posting.LegacyReconciliation!.ReconciledAt));
     }
 
     private static PostingOutcome Refuse(PostingOutcome outcome)
@@ -524,7 +663,7 @@ public sealed class LegacyPostingReconciler
 
     private static void ExpectMoney(List<string> reasons, string column, string csv, decimal live)
     {
-        if (!decimal.TryParse(csv.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+        if (!decimal.TryParse(Csv.Unguard(csv.Trim()), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
             reasons.Add($"{column}: CSV value '{csv}' is not an amount");
         else if (value != live)
             reasons.Add($"{column}: CSV has {value}, live data has {live}");

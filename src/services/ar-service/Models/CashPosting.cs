@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ArService.Models;
 
@@ -7,6 +8,7 @@ namespace ArService.Models;
 /// Cash receipt — applies payments received to open AR balances with batch posting rules.
 /// QNXT analog: Cash Receipt.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class CashPosting
 {
     [Required]
@@ -69,6 +71,7 @@ public class CashPosting
     public LegacyPostingReconciliation? LegacyReconciliation { get; set; }
 }
 
+[BsonIgnoreExtraElements]
 public class CashApplication
 {
     [Required]

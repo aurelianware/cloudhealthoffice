@@ -189,6 +189,9 @@ corrected those balances by hand, so crediting them now could credit a balance t
   - `CORRECTED_MANUALLY` sets the sentinel id `manual-{posting}-{index}`. Apply never credits
     that application and void never debits it.
   - `APPLY_CREDIT` posts the same `cash-{posting}-{index}` entry that apply would.
+- **Order:** deploy the guard build first (it includes #1271), then run the tool. The tool refuses
+  to execute until that build's capability marker (`ar_service_capabilities`) is in the database.
+  Older builds cannot read what the tool writes.
 - **This is a deploy blocker.** See
   [AR legacy posting reconciliation](../operations/AR-LEGACY-POSTING-RECONCILIATION.md).
 

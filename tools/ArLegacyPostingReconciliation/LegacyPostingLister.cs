@@ -26,6 +26,8 @@ public sealed class LegacyPostingLister
         "amount_applied", "application_memo",
         "balance_found", "balance_closing_balance", "balance_manual_adjustment_credits", "balance_has_cash_entry",
         "posting_created_at", "posting_created_by", "posting_last_updated_at", "applied_by",
+        // Where the listing was taken: reconcile refuses the CSV against any other environment.
+        "source_database", "source_host",
         // Filled in by finance:
         "decision", "reviewer", "reviewed_at", "ticket", "note"
     ];
@@ -57,14 +59,14 @@ public sealed class LegacyPostingLister
                 foreach (var (application, index) in CashPostingLedger.LegacyApplications(posting))
                 {
                     var balance = await balances.Find(b => b.Id == application.ArBalanceId && b.TenantId == posting.TenantId).FirstOrDefaultAsync();
-                    rows.Add(Row(posting, application, index, balance));
+                    rows.Add(Row(posting, application, index, balance, _databases));
                 }
             }
         }
         return rows;
     }
 
-    private static string[] Row(CashPosting posting, CashApplication application, int index, ArBalance? balance)
+    private static string[] Row(CashPosting posting, CashApplication application, int index, ArBalance? balance, TenantDatabases databases)
     {
         var entryId = CashPostingLedger.CreditEntryId(posting.Id, index);
         return
@@ -82,6 +84,7 @@ public sealed class LegacyPostingLister
             balance == null ? string.Empty : (balance.PostingEntries.Any(e => e.EntryId == entryId) ? "true" : "false"),
             Timestamp(posting.CreatedAt), posting.CreatedBy ?? string.Empty, Timestamp(posting.LastUpdatedAt),
             AppliedByNotRecorded,
+            databases.BaseDatabaseName, databases.Host,
             string.Empty, string.Empty, string.Empty, string.Empty, string.Empty
         ];
     }

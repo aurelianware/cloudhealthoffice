@@ -8,49 +8,55 @@ namespace ArLegacyPostingReconciliation;
 /// balances (PR #1271). See docs/operations/AR-LEGACY-POSTING-RECONCILIATION.md.
 ///
 /// Usage:
-///   dotnet run --project tools/ArLegacyPostingReconciliation -- list --out legacy-postings.csv [--tenant T1,T2]
-///   dotnet run --project tools/ArLegacyPostingReconciliation -- reconcile --csv reviewed.csv [--log file]
-///   dotnet run --project tools/ArLegacyPostingReconciliation -- reconcile --csv reviewed.csv \
-///       --execute --sha256 &lt;hash&gt; --operator &lt;name&gt; [--log file]
-///   dotnet run --project tools/ArLegacyPostingReconciliation -- hash --csv reviewed.csv
+///   ... list      --out legacy-postings.csv --confirm-database &lt;db&gt; [--tenant T1,T2]
+///   ... reconcile --csv reviewed.csv --confirm-database &lt;db&gt; [--tenant T1,T2] [--log file]
+///   ... reconcile --csv reviewed.csv --confirm-database &lt;db&gt; --execute --sha256 &lt;hash&gt; --operator &lt;name&gt; [--tenant T1,T2] [--log file]
+///   ... hash      --csv reviewed.csv
 ///
-/// Configuration (appsettings.json, env vars MongoDb__..., or --MongoDb:...): the same as ar-service.
+/// Database settings (appsettings.json or env vars MongoDb__...), the same as ar-service:
 ///   MongoDb:ConnectionString   required (MongoDB, or Cosmos DB for MongoDB)
 ///   MongoDb:DatabaseName       default CloudHealthOffice
 ///   MongoDb:UseTenantScoping   default false
+///
+/// Exit codes: 0 done, nothing refused or failed; 1 some posting refused or failed;
+/// 2 invalid arguments or CSV (nothing changed); 3 CSV hash mismatch (nothing changed);
+/// 4 wrong environment or no guard-capable ar-service (nothing changed).
 /// </summary>
 public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        if (args.Length == 0 || args[0].StartsWith('-'))
+        CommandLine line;
+        try
+        {
+            line = CommandLine.Parse(args);
+        }
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
             return Usage();
-        var command = args[0].ToLowerInvariant();
-        var rest = Normalize(args.Skip(1).ToArray());
+        }
 
         var config = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: true)
             .AddEnvironmentVariables()
-            .AddCommandLine(rest)
             .Build();
 
         try
         {
-            switch (command)
+            switch (line.Command)
             {
                 case "hash":
                 {
-                    var csv = Required(config, "csv");
+                    var csv = line.Required("csv");
                     Console.WriteLine($"{LegacyPostingReconciler.Sha256Of(csv)}  {csv}");
                     return 0;
                 }
                 case "list":
-                    return await ListAsync(config);
-                case "reconcile":
-                    return await ReconcileAsync(config);
+                    return await ListAsync(config, line);
                 default:
-                    return Usage();
+                    return await ReconcileAsync(config, line);
             }
         }
         catch (ArgumentException ex)
@@ -63,9 +69,14 @@ public static class Program
             Console.Error.WriteLine(ex.Message);
             return 3;
         }
+        catch (EnvironmentMismatchException ex)
+        {
+            Console.Error.WriteLine($"Refused: {ex.Message}");
+            return 4;
+        }
         catch (FormatException ex)
         {
-            Console.Error.WriteLine($"CSV unreadable: {ex.Message}. Nothing was changed.");
+            Console.Error.WriteLine($"CSV refused: {ex.Message}. Nothing was changed.");
             return 2;
         }
     }
@@ -81,73 +92,71 @@ public static class Program
             config.GetValue("MongoDb:UseTenantScoping", false));
     }
 
-    private static async Task<int> ListAsync(IConfiguration config)
+    private static async Task<int> ListAsync(IConfiguration config, CommandLine line)
     {
-        var output = Required(config, "out");
-        var tenants = (config["tenant"] ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-        var rows = await new LegacyPostingLister(Databases(config)).ListAsync(tenants);
+        var output = line.Required("out");
+        var databases = Databases(config);
+        Console.WriteLine(databases.Describe());
+        databases.Confirm(line["confirm-database"]);
+
+        var rows = await new LegacyPostingLister(databases).ListAsync(line.List("tenant"));
         await using (var writer = new StreamWriter(output, append: false, new System.Text.UTF8Encoding(false)))
             await LegacyPostingLister.WriteCsvAsync(writer, rows);
         var postings = rows.Select(r => (r[0], r[1])).Distinct().Count();
         Console.WriteLine($"{postings} legacy posting(s), {rows.Count} application row(s) written to {output}");
         Console.WriteLine($"sha256 {LegacyPostingReconciler.Sha256Of(output)}");
+        Console.WriteLine("The file holds payer names and ids: keep it in the restricted ticket storage only (see the runbook).");
         return 0;
     }
 
-    private static async Task<int> ReconcileAsync(IConfiguration config)
+    private static async Task<int> ReconcileAsync(IConfiguration config, CommandLine line)
     {
-        var csv = Required(config, "csv");
-        var execute = config.GetValue("execute", false);
-        var logFile = config["log"]
+        var csv = line.Required("csv");
+        var execute = line.Has("execute");
+        var databases = Databases(config);
+        // Before the log file is opened: a wrong environment leaves nothing behind. The
+        // refusal names the configured host and database; the run prints them first thing.
+        databases.Confirm(line["confirm-database"]);
+
+        var logFile = line["log"]
             ?? $"ar-legacy-reconciliation-{DateTime.UtcNow:yyyyMMddTHHmmssZ}-{(execute ? "execute" : "dryrun")}.log";
-        var op = config["operator"] ?? (execute ? string.Empty : Environment.UserName);
+        var op = line["operator"] ?? (execute ? string.Empty : Environment.UserName);
 
         await using var log = new StreamWriter(logFile, append: true, new System.Text.UTF8Encoding(false)) { AutoFlush = true };
-        void Output(string line)
+        void Output(string text)
         {
-            Console.WriteLine(line);
-            log.WriteLine($"{DateTime.UtcNow:O} {line}");
+            Console.WriteLine(text);
+            log.WriteLine($"{DateTime.UtcNow:O} {text}");
         }
 
-        var reconciler = new LegacyPostingReconciler(Databases(config), Output);
-        var result = await reconciler.RunAsync(new ReconcileOptions
+        var result = await new LegacyPostingReconciler(databases, Output).RunAsync(new ReconcileOptions
         {
             CsvPath = csv,
             Execute = execute,
-            ExpectedSha256 = config["sha256"],
+            ExpectedSha256 = line["sha256"],
             Operator = op,
+            ConfirmDatabase = line["confirm-database"],
+            Tenants = line.List("tenant"),
             LogFile = Path.GetFullPath(logFile)
         });
         Output($"Log written to {Path.GetFullPath(logFile)}");
         return result.Count(OutcomeKind.Refused) + result.Count(OutcomeKind.Failed) == 0 ? 0 : 1;
     }
 
-    private static string Required(IConfiguration config, string key) =>
-        string.IsNullOrWhiteSpace(config[key]) ? throw new ArgumentException($"--{key} is required.") : config[key]!;
-
-    /// <summary>Lets <c>--execute</c> stand alone as a switch.</summary>
-    private static string[] Normalize(string[] args)
-    {
-        var result = new List<string>();
-        for (var i = 0; i < args.Length; i++)
-        {
-            result.Add(args[i]);
-            if (args[i] == "--execute" && (i + 1 >= args.Length || args[i + 1].StartsWith("--")))
-                result.Add("true");
-        }
-        return result.ToArray();
-    }
-
     private static int Usage()
     {
         Console.Error.WriteLine("""
             Usage:
-              list      --out <file.csv> [--tenant T1,T2]      list legacy cash postings (read-only)
-              hash      --csv <file.csv>                       print the SHA-256 of a CSV
-              reconcile --csv <file.csv> [--log <file>]        dry-run: print what would be done
-              reconcile --csv <file.csv> --execute --sha256 <hash> --operator <name> [--log <file>]
-            See docs/operations/AR-LEGACY-POSTING-RECONCILIATION.md.
+              list      --out <file.csv> --confirm-database <db> [--tenant T1,T2]
+                        list legacy cash postings (read-only)
+              hash      --csv <file.csv>
+                        print the SHA-256 of a CSV
+              reconcile --csv <file.csv> --confirm-database <db> [--tenant T1,T2] [--log <file>]
+                        dry-run: print what would be done
+              reconcile --csv <file.csv> --confirm-database <db> --execute --sha256 <hash> --operator <name>
+                        [--tenant T1,T2] [--log <file>]
+            Database settings come from MongoDb__ConnectionString, MongoDb__DatabaseName and
+            MongoDb__UseTenantScoping. See docs/operations/AR-LEGACY-POSTING-RECONCILIATION.md.
             """);
         return 2;
     }

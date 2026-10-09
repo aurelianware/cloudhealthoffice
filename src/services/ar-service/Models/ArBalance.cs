@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ArService.Models;
 
@@ -7,6 +8,7 @@ namespace ArService.Models;
 /// Running balance per GL account per period.
 /// Tracks debits, credits, sponsor/member split, aging buckets, and reconciliation status.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ArBalance
 {
     [Required]
@@ -71,6 +73,7 @@ public class ArBalance
 /// <summary>
 /// Individual posting entry within an AR balance record
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ArPostingEntry
 {
     public string EntryId { get; set; } = Guid.NewGuid().ToString();

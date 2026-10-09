@@ -53,11 +53,10 @@ public static class CashPostingLedger
         posting.Applications.Select((a, i) => (a, i)).Where(x => x.a.AmountApplied > 0 && x.a.PostedEntryId == null);
 
     /// <summary>
-    /// Apply and void must refuse this posting until finance has reconciled it.
+    /// Apply and void must refuse this posting until finance has reconciled it. Reconciling
+    /// gives every legacy application a posted id, so a reconciled posting is no longer legacy.
     /// </summary>
-    public static bool RequiresLegacyReconciliation(CashPosting posting) =>
-        IsLegacy(posting)
-        || posting.LegacyReconciliation?.Status == LegacyReconciliationStatus.PendingReview;
+    public static bool RequiresLegacyReconciliation(CashPosting posting) => IsLegacy(posting);
 
     /// <summary>The credit entry application <paramref name="index"/> posts to its balance.</summary>
     public static ArPostingEntry CreditEntry(CashPosting posting, int index, string? postedBy, DateTime postedAt, string? memo = null)

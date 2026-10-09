@@ -98,13 +98,21 @@ public class LegacyPostingGuardTests
     }
 
     [Fact]
-    public async Task Apply_PendingReviewMarker_Is409()
+    public async Task CorrectedManually_WithItsBalanceGone_CanStillBeAppliedAndVoided()
     {
-        var posting = Legacy(CashPostingStatus.PartiallyApplied, 1000m, ("bal-1", 600m));
-        posting.Applications[0].PostedEntryId = "cash-cp-1-0";
-        posting.LegacyReconciliation = new LegacyPostingReconciliation { Status = LegacyReconciliationStatus.PendingReview };
+        // The tool reconciles CORRECTED_MANUALLY even when the balance no longer exists; apply
+        // and void never look a manual- application's balance up, so the posting is not stuck.
+        var posting = Legacy(CashPostingStatus.PartiallyApplied, 1000m, ("bal-gone", 600m));
+        posting.Applications[0].PostedEntryId = CashPostingLedger.ManualEntryId("cp-1", 0);
+        posting.LegacyReconciliation = new LegacyPostingReconciliation
+        {
+            Applications = { new LegacyApplicationDecision { ApplicationIndex = 0, ArBalanceId = "bal-gone", Amount = 600m, Decision = LegacyReconciliationDecision.CorrectedManually, PostedEntryId = "manual-cp-1-0", BalanceMissing = true } }
+        };
 
-        ShouldBeLegacyConflict(await _controller.ApplyCashPosting("cp-1"));
+        (await _controller.ApplyCashPosting("cp-1")).Result.Should().BeOfType<OkObjectResult>();
+        (await _controller.VoidCashPosting("cp-1")).Result.Should().BeOfType<OkObjectResult>();
+        _saved!.Status.Should().Be(CashPostingStatus.Voided);
+        _balances.Updates.Should().Be(0);
     }
 
     [Fact]

@@ -4422,14 +4422,45 @@ public class ArServiceImpl : IArService
 
     public async Task ApplyCashPostingAsync(string id)
     {
-        try { var r = await _httpClient.PostAsync($"{BaseUrl}/v1/ar/cash-postings/{id}/apply", null); r.EnsureSuccessStatusCode(); }
+        try
+        {
+            var r = await _httpClient.PostAsync($"{BaseUrl}/v1/ar/cash-postings/{id}/apply", null);
+            await ThrowIfRequiresReconciliationAsync(r, id, "applied");
+            r.EnsureSuccessStatusCode();
+        }
         catch (HttpRequestException ex) { _logger.LogError(ex, "AR Service unavailable"); throw new ServiceUnavailableException("AR Service", ex); }
     }
 
     public async Task VoidCashPostingAsync(string id)
     {
-        try { var r = await _httpClient.PostAsync($"{BaseUrl}/v1/ar/cash-postings/{id}/void", null); r.EnsureSuccessStatusCode(); }
+        try
+        {
+            var r = await _httpClient.PostAsync($"{BaseUrl}/v1/ar/cash-postings/{id}/void", null);
+            await ThrowIfRequiresReconciliationAsync(r, id, "voided");
+            r.EnsureSuccessStatusCode();
+        }
         catch (HttpRequestException ex) { _logger.LogError(ex, "AR Service unavailable"); throw new ServiceUnavailableException("AR Service", ex); }
+    }
+
+    /// <summary>A 409 LegacyPostingRequiresReconciliation is a business refusal, not an outage.</summary>
+    private async Task ThrowIfRequiresReconciliationAsync(HttpResponseMessage response, string id, string action)
+    {
+        if (response.StatusCode != HttpStatusCode.Conflict)
+            return;
+        string? code = null;
+        try
+        {
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (body.RootElement.ValueKind == JsonValueKind.Object
+                && body.RootElement.TryGetProperty("code", out var value) && value.ValueKind == JsonValueKind.String)
+                code = value.GetString();
+        }
+        catch (JsonException) { }
+        if (code == CashPostingRequiresReconciliationException.Code)
+        {
+            _logger.LogWarning("Cash posting {PostingId} cannot be {Action}: legacy posting awaiting finance reconciliation", id, action);
+            throw new CashPostingRequiresReconciliationException(id, action);
+        }
     }
 
     // ── Adjustments ─────────────────────────────────────────────────────

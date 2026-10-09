@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace ArService.Models;
 
@@ -7,6 +8,7 @@ namespace ArService.Models;
 /// AR Adjustment — write-offs, retroactive enrollment corrections, grace period adjustments.
 /// QNXT analog: AR Adjustment.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class ArAdjustment
 {
     [Required]

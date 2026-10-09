@@ -1,3 +1,5 @@
+using MongoDB.Bson.Serialization.Attributes;
+
 namespace ArService.Models;
 
 /// <summary>
@@ -12,10 +14,15 @@ namespace ArService.Models;
 /// <c>tools/ArLegacyPostingReconciliation</c>; see
 /// docs/operations/AR-LEGACY-POSTING-RECONCILIATION.md.
 /// </para>
+/// <para>
+/// The tool sets this only when the posting is reconciled; a legacy posting not yet
+/// reconciled has none (null), and that is what the guard refuses.
+/// </para>
 /// </summary>
+[BsonIgnoreExtraElements]
 public class LegacyPostingReconciliation
 {
-    public LegacyReconciliationStatus Status { get; set; } = LegacyReconciliationStatus.PendingReview;
+    public LegacyReconciliationStatus Status { get; set; } = LegacyReconciliationStatus.Reconciled;
 
     /// <summary>The finance reviewer named in the reviewed CSV.</summary>
     public string? ReviewedBy { get; set; }
@@ -32,10 +39,14 @@ public class LegacyPostingReconciliation
     /// <summary>SHA-256 of the reviewed CSV that was executed.</summary>
     public string? CsvSha256 { get; set; }
 
+    /// <summary>The tool run that reconciled it (its audit records carry the same id).</summary>
+    public string? RunId { get; set; }
+
     /// <summary>The decision for each legacy application.</summary>
     public List<LegacyApplicationDecision> Applications { get; set; } = new();
 }
 
+[BsonIgnoreExtraElements]
 public class LegacyApplicationDecision
 {
     /// <summary>Index of the application in <see cref="CashPosting.Applications"/>.</summary>
@@ -46,12 +57,18 @@ public class LegacyApplicationDecision
 
     /// <summary><c>cash-{posting}-{index}</c> when credited, <c>manual-{posting}-{index}</c> when not.</summary>
     public string PostedEntryId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True when the application's AR balance no longer existed at reconciliation. Only a
+    /// <see cref="LegacyReconciliationDecision.CorrectedManually"/> decision can be carried out then.
+    /// </summary>
+    public bool BalanceMissing { get; set; }
 }
 
 public enum LegacyReconciliationStatus
 {
-    /// <summary>Not yet reviewed: apply and void are refused.</summary>
-    PendingReview = 1,
+    // 1 was PendingReview, which no build ever wrote: "not reconciled" is a null
+    // LegacyReconciliation. The value is not reused.
 
     /// <summary>Every legacy application was decided and carried out.</summary>
     Reconciled = 2

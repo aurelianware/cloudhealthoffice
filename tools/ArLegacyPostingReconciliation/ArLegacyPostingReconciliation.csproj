@@ -15,8 +15,11 @@
     <ProjectReference Include="..\..\src\services\ar-service\ar-service.csproj" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ArLegacyPostingReconciliation.Tests" />
   </ItemGroup>
 
   <ItemGroup>
