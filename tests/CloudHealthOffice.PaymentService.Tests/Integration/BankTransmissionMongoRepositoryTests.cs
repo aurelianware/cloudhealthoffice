@@ -128,6 +128,58 @@ public sealed class BankTransmissionMongoRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Concurrent_reissues_of_one_remainder_record_exactly_one_and_one_outbox_entry()
+    {
+        var runs = Runs();
+        await runs.CreateAsync(new PaymentRun
+        {
+            Id = "run-x", PaymentRunNumber = "PR-X", Status = PaymentRunStatus.Completed,
+            EftFile = new PaymentRunEftFile
+            {
+                FileReference = "FFS-PR-X-R1", Sha256 = new string('a', 64),
+                VoidedPayments =
+                {
+                    new VoidedPaymentNotice { PaymentId = "p-0", UnpaidRemainder = 10m },
+                    new VoidedPaymentNotice { PaymentId = "p-9", UnpaidRemainder = 75m },
+                },
+            },
+        });
+        PaymentFileOutboxMessage Message(int i) => new()
+        {
+            EventId = "ev-reissue-p9", Type = "VoidRemainderReissued", PayloadJson = $"{{\"reference\":\"CHK-{i}\"}}", CreatedAt = DateTime.UtcNow,
+        };
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(i => Task.Run(() =>
+            runs.TryRecordRemainderReissueAsync("run-x", "p-9", DateTime.UtcNow, $"treasury-{i}", "Check", $"CHK-{i}", Message(i), $"reissued {i}"))));
+
+        Assert.Equal(1, results.Count(r => r));
+        var stored = (await runs.GetByIdAsync("run-x"))!;
+        var entry = Assert.Single(stored.GlOutbox);
+        var winner = Array.IndexOf(results, true);
+        var notice = stored.EftFile!.VoidedPayments.Single(v => v.PaymentId == "p-9");
+        Assert.Equal(($"CHK-{winner}", $"treasury-{winner}"), (notice.RemainderReissueReference, notice.RemainderReissuedBy));
+        Assert.Contains($"CHK-{winner}", entry.PayloadJson);
+        Assert.Null(stored.EftFile.VoidedPayments.Single(v => v.PaymentId == "p-0").RemainderReissuedAt); // the other notice untouched
+        Assert.Equal(new[] { $"reissued {winner}" }, stored.Warnings);
+        Assert.False(await runs.TryRecordRemainderReissueAsync("run-x", "p-9", DateTime.UtcNow, "treasury-9", "Check", "CHK-9", Message(9), "again"));
+    }
+
+    [Fact]
+    public async Task An_eft_file_save_never_appends_a_second_outbox_entry_with_an_existing_event_id()
+    {
+        var runs = Runs();
+        var existing = new PaymentFileOutboxMessage { EventId = "ev-1", Type = "ProviderRefundOwed", PayloadJson = "{}", CreatedAt = DateTime.UtcNow };
+        await runs.CreateAsync(new PaymentRun { Id = "run-d", PaymentRunNumber = "PR-D", GlOutbox = { existing } });
+        var file = new PaymentRunEftFile { FileReference = "FFS-PR-D", Sha256 = new string('b', 64) };
+        await runs.TrySaveEftFileAsync("run-d", file, null, Array.Empty<CheckFallbackPayment>(), Array.Empty<string>());
+
+        Assert.False(await runs.TrySaveEftFileAsync("run-d", file, file.Sha256, Array.Empty<CheckFallbackPayment>(), Array.Empty<string>(), new[] { existing }));
+        Assert.True(await runs.TrySaveEftFileAsync("run-d", file, file.Sha256, Array.Empty<CheckFallbackPayment>(), Array.Empty<string>(),
+            new[] { new PaymentFileOutboxMessage { EventId = "ev-2", Type = "ProviderRefundOwed", PayloadJson = "{}", CreatedAt = DateTime.UtcNow } }));
+        Assert.Equal(new[] { "ev-1", "ev-2" }, (await runs.GetByIdAsync("run-d"))!.GlOutbox.Select(m => m.EventId));
+    }
+
+    [Fact]
     public async Task Eft_file_repin_applies_only_to_the_superseded_file_and_keeps_it_in_history()
     {
         var runs = Runs();

@@ -562,15 +562,23 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             throw new SeparationOfDutiesException(
                 $"Separation of duties: you excluded payment {notice.CheckNumber}, so you cannot record its reissue. Another user with payments:approve must.");
 
-        notice.RemainderReissuedAt = Now;
+        var at = Now;
+        notice.RemainderReissuedAt = at;
         notice.RemainderReissuedBy = user;
         notice.RemainderReissueMethod = Clean(method.Trim());
         notice.RemainderReissueReference = Clean(reference.Trim());
-        var message = GlEventOutbox.VoidRemainderReissued(run, notice, Clean(reason.Trim()), user, Now);
+        var message = GlEventOutbox.VoidRemainderReissued(run, notice, Clean(reason.Trim()), user, at);
         var warning = $"Remainder {notice.UnpaidRemainder:F2} of payment {notice.CheckNumber} (NPI {notice.PayeeNpi}) reissued by {user}: " +
                       $"{notice.RemainderReissueMethod} {notice.RemainderReissueReference} ({Clean(reason)})";
-        if (!await _runs.TrySaveEftFileAsync(run.Id, file, file.Sha256, Array.Empty<CheckFallbackPayment>(), new[] { warning }, new[] { message }))
-            throw new PaymentFileTransmissionStateException($"Payment run {run.PaymentRunNumber} changed meanwhile; check it and try again.");
+        // Conditional on that notice having no reissue yet: of two concurrent requests one wins, the other is 409.
+        if (!await _runs.TryRecordRemainderReissueAsync(run.Id, paymentId, at, user, notice.RemainderReissueMethod, notice.RemainderReissueReference,
+                message, warning))
+        {
+            var latest = (await LoadRunAsync(run.Id)).EftFile?.VoidedPayments.FirstOrDefault(v => v.PaymentId == paymentId);
+            throw new PaymentFileTransmissionStateException(latest?.RemainderReissuedAt != null
+                ? $"The remainder of payment {notice.CheckNumber} was just reissued by {latest.RemainderReissuedBy} ({latest.RemainderReissueReference})."
+                : $"Payment run {run.PaymentRunNumber} changed meanwhile; check it and try again.");
+        }
         _logger.LogWarning("AUDIT payment run {RunNumber}: {Warning}", Clean(run.PaymentRunNumber), Clean(warning));
         return notice;
     }

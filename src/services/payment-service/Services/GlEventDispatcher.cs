@@ -115,31 +115,36 @@ public sealed class MongoGlOutboxStore : IGlOutboxStore
             filter &= f.Eq("TenantId", tenantId);
         var compiled = outbox.Compile();
         var docs = await collection.Find(filter).Sort(Builders<T>.Sort.Ascending("_id")).Limit(limit).ToListAsync(cancellationToken);
+        // One delivery per event id per document, even if an older save left a duplicate entry.
         return docs.SelectMany(d => compiled(d)
                 .Where(m => m.PublishedAt == null && (dueBy == null || m.NextAttemptAt == null || m.NextAttemptAt <= dueBy))
-                .Select(m => new PendingGlEvent(source, id(d), tenant(d), m)))
+                .GroupBy(m => m.EventId, StringComparer.Ordinal)
+                .Select(g => new PendingGlEvent(source, id(d), tenant(d), g.First())))
             .ToList();
     }
 
     public Task MarkPublishedAsync(PendingGlEvent pending, DateTime at, CancellationToken cancellationToken = default)
         => UpdateElementAsync(pending, field => new BsonDocument("$set", new BsonDocument
         {
-            { $"{field}.$.{nameof(PaymentFileOutboxMessage.PublishedAt)}", at },
-            { $"{field}.$.{nameof(PaymentFileOutboxMessage.LastError)}", BsonNull.Value },
+            { $"{field}.$[m].{nameof(PaymentFileOutboxMessage.PublishedAt)}", at },
+            { $"{field}.$[m].{nameof(PaymentFileOutboxMessage.LastError)}", BsonNull.Value },
         }), cancellationToken);
 
     public Task MarkFailedAsync(PendingGlEvent pending, string error, DateTime nextAttemptAt, CancellationToken cancellationToken = default)
         => UpdateElementAsync(pending, field => new BsonDocument
         {
-            { "$inc", new BsonDocument($"{field}.$.{nameof(PaymentFileOutboxMessage.PublishAttempts)}", 1) },
+            { "$inc", new BsonDocument($"{field}.$[m].{nameof(PaymentFileOutboxMessage.PublishAttempts)}", 1) },
             { "$set", new BsonDocument
                 {
-                    { $"{field}.$.{nameof(PaymentFileOutboxMessage.LastError)}", error },
-                    { $"{field}.$.{nameof(PaymentFileOutboxMessage.NextAttemptAt)}", nextAttemptAt },
+                    { $"{field}.$[m].{nameof(PaymentFileOutboxMessage.LastError)}", error },
+                    { $"{field}.$[m].{nameof(PaymentFileOutboxMessage.NextAttemptAt)}", nextAttemptAt },
                 } },
         }, cancellationToken);
 
-    /// <summary>A positional update of the one outbox element with the event's id (field names as the driver maps them).</summary>
+    /// <summary>
+    /// An update of every outbox element with the event's id (array filter; field names as the
+    /// driver maps them): a duplicate entry is marked with the first, never re-sent for ever.
+    /// </summary>
     private Task UpdateElementAsync(PendingGlEvent pending, Func<string, BsonDocument> update, CancellationToken cancellationToken)
     {
         var (collection, field) = pending.Source switch
@@ -154,7 +159,14 @@ public sealed class MongoGlOutboxStore : IGlOutboxStore
             { "TenantId", pending.TenantId },
             { $"{field}.{nameof(PaymentFileOutboxMessage.EventId)}", pending.Message.EventId },
         };
-        return collection.UpdateOneAsync(filter, update(field), cancellationToken: cancellationToken);
+        var options = new UpdateOptions
+        {
+            ArrayFilters = new[]
+            {
+                new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument($"m.{nameof(PaymentFileOutboxMessage.EventId)}", pending.Message.EventId)),
+            },
+        };
+        return collection.UpdateOneAsync(filter, update(field), options, cancellationToken);
     }
 }
 

@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Driver;
 using PaymentService.Models;
 
@@ -139,7 +140,11 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         if (addWarnings.Count > 0)
             updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.Warnings, addWarnings));
         if (addGlEvents is { Count: > 0 })
+        {
+            // Never a second outbox entry with an id already there: the save then does not apply (the caller re-reads).
+            filter &= f.Nin("GlOutbox.EventId", addGlEvents.Select(e => e.EventId));
             updates.Add(Builders<PaymentRun>.Update.PushEach(x => x.GlOutbox, addGlEvents));
+        }
         var result = await _collection.UpdateOneAsync(filter, Builders<PaymentRun>.Update.Combine(updates));
         return result.MatchedCount == 1;
     }
@@ -154,9 +159,45 @@ public class PaymentRunRepositoryMongo : IPaymentRunRepository
         if (addWarnings is { Count: > 0 })
             update = update.PushEach(x => x.Warnings, addWarnings);
         if (addGlEvents is { Count: > 0 })
+        {
+            filter &= f.Nin("GlOutbox.EventId", addGlEvents.Select(e => e.EventId));
             update = update.PushEach(x => x.GlOutbox, addGlEvents);
+        }
         var result = await _collection.UpdateOneAsync(filter, update);
         return result.MatchedCount == 1;
+    }
+
+    public async Task<bool> TryRecordRemainderReissueAsync(string id, string paymentId, DateTime at, string by, string method, string reference,
+        PaymentFileOutboxMessage message, string warning)
+    {
+        var tenantId = GetTenantId();
+        var raw = _collection.Database.GetCollection<BsonDocument>(_collection.CollectionNamespace.CollectionName);
+        // Matches only while that notice has no reissue and no outbox entry has the event's id:
+        // of two concurrent reissues exactly one applies.
+        var filter = new BsonDocument
+        {
+            { "_id", id },
+            { "TenantId", tenantId },
+            { "EftFile.VoidedPayments", new BsonDocument("$elemMatch", new BsonDocument { { "PaymentId", paymentId }, { "RemainderReissuedAt", BsonNull.Value } }) },
+            { "GlOutbox.EventId", new BsonDocument("$ne", message.EventId) },
+        };
+        var update = new BsonDocument
+        {
+            { "$set", new BsonDocument
+                {
+                    { "EftFile.VoidedPayments.$[v].RemainderReissuedAt", at },
+                    { "EftFile.VoidedPayments.$[v].RemainderReissuedBy", by },
+                    { "EftFile.VoidedPayments.$[v].RemainderReissueMethod", method },
+                    { "EftFile.VoidedPayments.$[v].RemainderReissueReference", reference },
+                } },
+            { "$push", new BsonDocument { { "GlOutbox", message.ToBsonDocument() }, { "Warnings", warning } } },
+        };
+        var options = new UpdateOptions
+        {
+            ArrayFilters = new[] { new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument("v.PaymentId", paymentId)) },
+        };
+        var result = await raw.UpdateOneAsync(filter, update, options);
+        return result.ModifiedCount == 1;
     }
 
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)

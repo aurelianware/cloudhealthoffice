@@ -363,6 +363,31 @@ public class PaymentVoidBeforeTransmissionTests
     }
 
     [Fact]
+    public async Task A_reissue_that_read_the_notice_before_a_concurrent_one_landed_is_refused()
+    {
+        var (run, _, kept) = await PinnedRunAsync();
+        var reversedClaim = kept.ClaimPayments.Single(c => c.PaymentAmount == 125m).ClaimId;
+        await ReverseAsync(kept, held: true, claimIds: reversedClaim);
+        await Service("treasury-2").ExcludePaymentsAsync(run.Id, new[] { kept.Id }, "c1 recouped");
+        // Right after the service reads the run, another user's reissue lands.
+        _h.Runs.AfterGet = async () =>
+        {
+            _h.Runs.AfterGet = null;
+            Assert.True(await _h.Runs.TryRecordRemainderReissueAsync(run.Id, kept.Id, DateTime.UtcNow, "treasury-5", "Check", "CHK-FIRST",
+                new PaymentFileOutboxMessage { EventId = GlEventTypes.EventIdFor(FfsRunHarness.Tenant, $"reissue:{kept.Id}", GlEventTypes.VoidRemainderReissued),
+                    Type = GlEventTypes.VoidRemainderReissued, PayloadJson = "{}", CreatedAt = DateTime.UtcNow }, "first"));
+        };
+
+        var ex = await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(
+            () => Service("treasury-4").ReissueRemainderAsync(run.Id, kept.Id, "Check", "CHK-SECOND", "c2 owed"));
+
+        Assert.Contains("just reissued by treasury-5", ex.Message);
+        var stored = (await _h.Runs.GetByIdAsync(run.Id))!;
+        Assert.Equal("CHK-FIRST", stored.EftFile!.VoidedPayments.Single().RemainderReissueReference);
+        Assert.Single(stored.GlOutbox, m => m.Type == GlEventTypes.VoidRemainderReissued);
+    }
+
+    [Fact]
     public async Task A_refund_owed_is_rebuilt_from_the_ledger_when_the_completion_crashed_after_reversing_the_recovery()
     {
         var (run, voided, _) = await PinnedRunAsync();

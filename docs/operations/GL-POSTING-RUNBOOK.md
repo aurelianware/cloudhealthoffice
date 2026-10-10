@@ -179,7 +179,9 @@ handling, plus:
   - Pay the remainder another way (for example a manual check). Then a second user (not the
     one who excluded the payment, nor the run's maker or executor) records it, once:
     `POST /api/paymentruns/{id}/eft-file/voided-payments/{paymentId}/reissue-remainder`
-    `{ "method": "Check", "reference": "CHK-…", "reason": "..." }`.
+    `{ "method": "Check", "reference": "CHK-…", "reason": "..." }`. The write is
+    conditional on that notice having no reissue yet: of two concurrent requests, one
+    records and the other gets 409, changing nothing.
   - That queues `VoidRemainderReissued`. The GL posts Dr ClaimsPayable / Cr Cash against the
     payable the original accrual left, so nothing is accrued twice. The open item then closes.
     Map the `Cash` role first, or the reissue parks `NeedsMapping` and the item stays open.

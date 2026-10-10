@@ -170,7 +170,11 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
             run.CheckFallbacks.AddRange(addFallbacks);
             run.Warnings.AddRange(addWarnings);
             if (addGlEvents != null)
+            {
+                if (addGlEvents.Any(e => run.GlOutbox.Any(m => m.EventId == e.EventId)))
+                    return Task.FromResult(false);
                 run.GlOutbox.AddRange(addGlEvents);
+            }
             EftFileWrites++;
             return Task.FromResult(true);
         }
@@ -190,6 +194,25 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
                 run.Warnings.AddRange(addWarnings);
             if (addGlEvents != null)
                 run.GlOutbox.AddRange(addGlEvents);
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<bool> TryRecordRemainderReissueAsync(string id, string paymentId, DateTime at, string by, string method, string reference,
+        PaymentFileOutboxMessage message, string warning)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            var notice = run?.EftFile?.VoidedPayments.FirstOrDefault(v => v.PaymentId == paymentId);
+            if (run == null || notice == null || notice.RemainderReissuedAt != null || run.GlOutbox.Any(m => m.EventId == message.EventId))
+                return Task.FromResult(false);
+            notice.RemainderReissuedAt = at;
+            notice.RemainderReissuedBy = by;
+            notice.RemainderReissueMethod = method;
+            notice.RemainderReissueReference = reference;
+            run.GlOutbox.Add(message);
+            run.Warnings.Add(warning);
             return Task.FromResult(true);
         }
     }

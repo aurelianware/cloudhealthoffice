@@ -293,6 +293,27 @@ public sealed class MongoGlOutboxStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_duplicated_outbox_entry_is_delivered_once_and_marked_with_the_first()
+    {
+        var runs = _db.GetCollection<PaymentRun>("PaymentRuns");
+        await runs.InsertOneAsync(new PaymentRun { Id = "run-dup", TenantId = "t1", GlOutbox = { Message("same", 1), Message("same", 2), Message("other", 3) } });
+        var store = new MongoGlOutboxStore(_db);
+        var now = new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc);
+
+        var due = await store.ListDueAsync(now, 10);
+        Assert.Equal(new[] { "same", "other" }, due.Select(d => d.Message.EventId));
+
+        await store.MarkFailedAsync(due[0], "ar-service answered 503", now.AddMinutes(1));
+        var stored = await runs.Find(r => r.Id == "run-dup").SingleAsync();
+        Assert.All(stored.GlOutbox.Where(m => m.EventId == "same"), m => Assert.Equal(1, m.PublishAttempts));
+
+        await store.MarkPublishedAsync(due[0], now);
+        stored = await runs.Find(r => r.Id == "run-dup").SingleAsync();
+        Assert.All(stored.GlOutbox.Where(m => m.EventId == "same"), m => Assert.NotNull(m.PublishedAt));
+        Assert.Equal(new[] { "other" }, (await store.ListUnpublishedAsync("t1")).Select(d => d.Message.EventId));
+    }
+
+    [Fact]
     public async Task A_mark_never_touches_another_tenants_document()
     {
         await _db.GetCollection<PaymentRun>("PaymentRuns").InsertOneAsync(
