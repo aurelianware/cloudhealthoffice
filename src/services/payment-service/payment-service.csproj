@@ -14,6 +14,8 @@
     <!-- Bank transmission of the run's NACHA file (SFTP, pinned host key, Key Vault credentials). -->
     <ProjectReference Include="..\shared\CloudHealthOffice.NachaTransmission\CloudHealthOffice.NachaTransmission.csproj" />
     <ProjectReference Include="..\shared\CloudHealthOffice.BankReconciliation\CloudHealthOffice.BankReconciliation.csproj" />
+    <!-- GL source event contracts (PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted). -->
+    <ProjectReference Include="..\shared\CloudHealthOffice.Finance.Contracts\CloudHealthOffice.Finance.Contracts.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="MongoDB.Driver" />

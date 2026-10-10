@@ -221,6 +221,17 @@ public class Payment
     /// (<c>ProviderReceivableRecord</c>) holds the matching Recovered entry.
     /// </summary>
     public List<ReceivableOffset> ReceivableOffsets { get; set; } = new();
+
+    /// <summary>
+    /// Set when the payment was reversed before its run's NACHA file went to the bank and
+    /// a re-pinned file left it out: it was never paid (its 835 said it would be). The
+    /// receivable its reversal opened is cancelled; GL relieves its payable.
+    /// </summary>
+    public DateTime? VoidedBeforePaymentAt { get; set; }
+    public string? VoidedBeforePaymentBy { get; set; }
+
+    /// <summary>The re-pinned file that left it out.</summary>
+    public string? VoidedBeforePaymentFileReference { get; set; }
 }
 
 /// <summary>One receivable recovered from a payment (see <see cref="Payment.ReceivableOffsets"/>).</summary>

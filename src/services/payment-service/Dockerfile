@@ -13,6 +13,7 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infr
 COPY src/services/shared/CloudHealthOffice.FieldProtection/CloudHealthOffice.FieldProtection.csproj src/services/shared/CloudHealthOffice.FieldProtection/
 COPY src/services/shared/CloudHealthOffice.NachaTransmission/CloudHealthOffice.NachaTransmission.csproj src/services/shared/CloudHealthOffice.NachaTransmission/
 COPY src/services/shared/CloudHealthOffice.BankReconciliation/CloudHealthOffice.BankReconciliation.csproj src/services/shared/CloudHealthOffice.BankReconciliation/
+COPY src/services/shared/CloudHealthOffice.Finance.Contracts/CloudHealthOffice.Finance.Contracts.csproj src/services/shared/CloudHealthOffice.Finance.Contracts/
 RUN dotnet restore src/services/payment-service/payment-service.csproj
 
 # Copy source code and build
@@ -21,6 +22,7 @@ COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/C
 COPY src/services/shared/CloudHealthOffice.FieldProtection/ src/services/shared/CloudHealthOffice.FieldProtection/
 COPY src/services/shared/CloudHealthOffice.NachaTransmission/ src/services/shared/CloudHealthOffice.NachaTransmission/
 COPY src/services/shared/CloudHealthOffice.BankReconciliation/ src/services/shared/CloudHealthOffice.BankReconciliation/
+COPY src/services/shared/CloudHealthOffice.Finance.Contracts/ src/services/shared/CloudHealthOffice.Finance.Contracts/
 RUN dotnet build src/services/payment-service/payment-service.csproj -c Release --no-restore
 
 # Publish stage
