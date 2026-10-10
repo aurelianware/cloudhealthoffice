@@ -7,8 +7,16 @@ name: CMS-0057-F Acceptance Evidence
 # (tests/Cms0057Acceptance.Tests/scenarios.json) — the machine-readable source
 # of truth — not from prose or test names.
 #
-# On main, after a fully passing, reconciled run, a SANITIZED public-safe
-# snapshot (tools/Cms0057Evidence --public-output) is committed into the site
+# PUBLISH IS PAUSED (owner decision Q-1, docs/epa-gap-matrix.md §6.1 / §7.1):
+# scenario statuses are hand-declared in scenarios.json and several backing
+# tests are tautological, so the public snapshot overclaims. The `evidence` job
+# still runs and uploads artifacts; only the `publish` job below is disabled.
+# The already-published JSON under src/site/** is intentionally left untouched
+# here; public copy is handled in a separate, owner-approved PR.
+#
+# When publishing is enabled: on main, after a fully passing, reconciled run, a
+# SANITIZED public-safe snapshot (tools/Cms0057Evidence --public-output) is
+# committed into the site
 # tree (src/site/insights/cms-0057-f/cms0057-public-evidence.json). That commit
 # touches only src/site/**, so it triggers the Pages deploy but NOT this workflow
 # (whose paths never include src/site/**) — no loop, and no [skip ci] that would
@@ -194,11 +202,16 @@ jobs:
   # ── Publish the latest validated public snapshot (main only) ────────────────
   # Depends on `evidence` succeeding, so a failed run can never publish. Commits
   # the sanitized snapshot into the site tree; that push deploys via Pages.
+  #
+  # PAUSED (owner decision Q-1, docs/epa-gap-matrix.md §6.1 / §7.1). The leading
+  # `false &&` disables this job unconditionally until the generator derives
+  # scenario statuses from docs/epa-gap-matrix.md and the owner approves
+  # re-enabling it. Re-enable only by removing `false &&` in a reviewed PR.
   publish:
-    name: Publish latest validated evidence
+    name: Publish latest validated evidence (paused, Q-1)
     runs-on: ubuntu-latest
     needs: evidence
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: false && github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
 
