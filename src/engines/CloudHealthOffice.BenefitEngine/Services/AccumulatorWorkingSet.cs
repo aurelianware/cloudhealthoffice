@@ -589,7 +589,13 @@ public class AccumulatorWorkingSet
             NetworkTier = entry.NetworkTier,
             Amount = amount,
             Source = source,
+            // Money caps are clamped by the store at write time (deductibles,
+            // OOP maximums, the ACA individual cap): a concurrent claim for
+            // the same member or family may have taken the room this pricing
+            // saw; the store reports what it trimmed.
             ClampAtLimit = entry.Type is AccumulatorType.IndividualDeductible or AccumulatorType.FamilyDeductible
+                               or AccumulatorType.IndividualOutOfPocketMax or AccumulatorType.FamilyOutOfPocketMax
+                               or AccumulatorType.AcaIndividualCap
                            && entry.LimitAmount > 0
                 ? entry.LimitAmount
                 : null,
@@ -636,7 +642,7 @@ public record AccumulatorUpdate
     public string Source { get; init; } = default!;
 
     /// <summary>
-    /// For a deductible update: the plan's deductible limit. The store adds
+    /// For a deductible, OOP-maximum or ACA-cap update: the plan's limit. The store adds
     /// at most what is left under it at write time, so two claims
     /// adjudicated concurrently against the same starting balance cannot
     /// together credit past the limit (the store reloads and re-clamps on an

@@ -424,9 +424,17 @@ builder.Services.AddScoped<IClaimAdjudicationStage, CoordinationOfBenefitsStage>
 builder.Services.AddScoped<IClaimAdjudicationStage, AiExaminationStage>();
 builder.Services.AddScoped<IClaimAdjudicationStage, PersistenceStage>();
 
+// Accumulator outbox: a finally adjudicated claim's engine commit (or a
+// denial's terminal reversal) is written on the claim with the write that
+// finalizes it, attempted at once, and re-driven by this dispatcher with
+// backoff until the engine store has it (see claim-cob-pipeline.md).
+builder.Services.Configure<AccumulatorOutboxOptions>(builder.Configuration.GetSection(AccumulatorOutboxOptions.SectionName));
+builder.Services.AddScoped<IAccumulatorOutboxProcessor, AccumulatorOutboxProcessor>();
+builder.Services.AddHostedService<AccumulatorOutboxDispatcher>();
+
 builder.Services.AddScoped<ClaimAdjudicationOrchestrator>();
 builder.Services.AddScoped<IClaimAdjudicationOrchestrator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
-// Examiner approval of a pended claim re-runs the pipeline in Production.
+// Examiner approval of a pended claim re-runs the pipeline (accumulators committed after the final write).
 builder.Services.AddScoped<IClaimApprovalReadjudicator>(sp => sp.GetRequiredService<ClaimAdjudicationOrchestrator>());
 
 var adjudicationMaxConcurrentCalls = Math.Max(

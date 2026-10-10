@@ -178,6 +178,66 @@ public class HttpBenefitCalculationEngineClientReverseTests
         Assert.Equal("fallback-tenant", _handler.LastRequest!.Headers.GetValues("X-Tenant-ID").Single());
     }
 
+    private static AccumulatorCommit SampleCommit() => new()
+    {
+        CommitId = "commit-1", ClaimId = "claim-1", MemberId = "member-1", SubscriberId = "member-1",
+        BenefitPlanId = Guid.Parse("11111111-1111-1111-1111-111111111111"), PlanYear = "2026",
+    };
+
+    /// <summary>
+    /// commit-accumulators accepts only claims-service's service principal:
+    /// the commit carries this service's token even inside an examiner's
+    /// request (whose user token the outbound handler would forward), and
+    /// the clamps come back.
+    /// </summary>
+    [Fact]
+    public async Task CommitAccumulatorsAsync_CarriesTheServiceToken_AndReturnsTheClamps()
+    {
+        _tenantContext.TenantId.Returns("tenant-x");
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<CloudHealthOffice.Infrastructure.Security.IChoServiceTokenSource>(
+            services,
+            new CloudHealthOffice.Infrastructure.Security.LocalKeyChoServiceTokenSource(
+                CloudHealthOffice.Infrastructure.Security.ChoDevelopmentAuth.ServiceTokenIssuer(), "claims-service"));
+        var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+        _handler.RespondWith(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"outcome":"Committed","clamped":[{"type":"IndividualDeductible","scope":"Individual","networkTier":"InNetwork","requested":100,"applied":50,"limit":500}]}""",
+                Encoding.UTF8, "application/json"),
+        });
+        var sut = new HttpBenefitCalculationEngineClient(
+            _factory, _httpContext, _tenantContext, NullLogger<HttpBenefitCalculationEngineClient>.Instance, provider);
+
+        var result = await sut.CommitAccumulatorsAsync(SampleCommit());
+
+        Assert.Equal(AccumulatorCommitOutcome.Committed, result.Outcome);
+        var clamp = Assert.Single(result.Clamped);
+        Assert.Equal(AccumulatorType.IndividualDeductible, clamp.Type);
+        Assert.Equal(50m, clamp.Applied);
+        var auth = _handler.LastRequest!.Headers.Authorization!;
+        Assert.Equal("Bearer", auth.Scheme);
+        var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(auth.Parameter);
+        Assert.Contains(jwt.Claims, c => c.Value == "claims-service");
+        Assert.Equal("tenant-x", _handler.LastRequest.Headers.GetValues("X-Tenant-ID").Single());
+    }
+
+    /// <summary>A refused commit surfaces its status (the outbox records it; nothing from the body is kept).</summary>
+    [Fact]
+    public async Task CommitAccumulatorsAsync_NonSuccess_ThrowsWithTheStatus()
+    {
+        _tenantContext.TenantId.Returns("tenant-x");
+        _handler.RespondWith(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+        {
+            Content = new StringContent("member M-123 amount 100"),
+        });
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => CreateClient().CommitAccumulatorsAsync(SampleCommit()));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ex.StatusCode);
+        Assert.DoesNotContain("M-123", ex.Message);
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private HttpResponseMessage _response = new(HttpStatusCode.NoContent);

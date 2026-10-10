@@ -221,6 +221,8 @@ internal sealed class GoldenPathHarness
             var reviewOrder = 121;
             foreach (var review in scenario.ReviewStages)
                 stageList.Add(new PendingReviewStage(review, reviewOrder++));
+            var engineClient = new HttpBenefitCalculationEngineClient(http, new HttpContextAccessor(), tenantContext,
+                NullLogger<HttpBenefitCalculationEngineClient>.Instance);
             var stages = new IClaimAdjudicationStage[]
             {
                 new CoordinationOfBenefitsStage(
@@ -241,12 +243,17 @@ internal sealed class GoldenPathHarness
             };
 
             stageList.AddRange(stages);
+            // The accumulator outbox: a passing claim's commit is written with
+            // its Approved status and driven right after the run.
+            var outbox = new AccumulatorOutboxProcessor(claimRepository, engineClient, tenantContext,
+                Options.Create(new AccumulatorOutboxOptions()), NullLogger<AccumulatorOutboxProcessor>.Instance);
             var orchestrator = new ClaimAdjudicationOrchestrator(
                 adapterFactory, planResolver, memberResolver, coverageResolver, stageList,
                 Substitute.For<IClaimVersionEventPublisher>(), Substitute.For<IMessageBus>(), tenantContext,
                 Substitute.For<IClaimAdjustmentService>(),
                 Options.Create(new AdjudicationPipelineOptions()),
-                NullLogger<ClaimAdjudicationOrchestrator>.Instance);
+                NullLogger<ClaimAdjudicationOrchestrator>.Instance,
+                outbox);
 
             await orchestrator.AdjudicateAsync(
                 new ClaimVersionSubmittedMessage
@@ -278,13 +285,20 @@ internal sealed class GoldenPathHarness
                 // ClaimsController.ResolvePendedClaim passes the persisted
                 // pend — what the examiner reviewed.
                 var reviewed = adjudicated.PendDetails;
+                ApprovalReadjudicationResult? passed = null;
                 foreach (var approval in scenario.Approvals)
                 {
                     var rerun = await orchestrator.ReadjudicateForApprovalAsync(
                         tenant, submitted.Id, approval with { ReviewedPend = reviewed }, ct);
                     approvalOutcomes.Add(rerun.Outcome);
                     approvalReasons.Add(rerun.UnresolvedReasons ?? []);
-                    if (rerun.Outcome == ClaimAdjudicationOutcome.Pass) break;
+                    // The re-run commits nothing itself (the resolver does, after its final write).
+                    Assert.Empty(accumulators.Applied);
+                    if (rerun.Outcome == ClaimAdjudicationOutcome.Pass)
+                    {
+                        passed = rerun;
+                        break;
+                    }
                     // A refused approval writes no accumulators either.
                     Assert.Empty(accumulators.Applied);
                 }
@@ -308,7 +322,13 @@ internal sealed class GoldenPathHarness
                 resolved.Status = Claims.ClaimStatus.Approved;
                 resolved.VersionState = ClaimRepository.MapStatusToVersionState(Claims.ClaimStatus.Approved);
                 resolved.AdjudicatedDate = DateTime.UtcNow;
+                // …with the commit the re-run prepared in its accumulator
+                // outbox, written by that same final write, then driven.
+                Assert.NotNull(passed!.PreparedAccumulatorCommit);
+                resolved.PendingAccumulatorCommit = Claims.AccumulatorOutboxItem.ForCommit(passed.PreparedAccumulatorCommit!, DateTime.UtcNow);
                 await claimRepository.UpdateAsync(resolved);
+                Assert.Equal(AccumulatorOutboxResult.Committed, await outbox.ProcessAsync(
+                    tenant, submitted.Id, Claims.AccumulatorOutboxKind.Commit, passed.PreparedAccumulatorCommit!.CommitId, ct));
                 adjudicated = (await claimRepository.GetByIdAsync(submitted.Id))!;
             }
 
@@ -385,11 +405,16 @@ internal sealed class GoldenPathHarness
     }
 
     /// <summary>The stored plan document, read as benefit-plan-service's store returns it.</summary>
-    private static BenefitPlan LoadPlan(string json)
+    internal static BenefitPlan LoadPlan(string json)
         => JsonSerializer.Deserialize<BenefitPlan>(json, Wire.BenefitPlanService)!;
 
-    private static DelegatingServiceHandler BenefitPlanServiceHandler(
-        GoldenScenario scenario, string planJson, InMemoryAccumulatorService accumulators,
+    /// <summary>
+    /// benefit-plan-service's adjudication endpoints the claims pipeline
+    /// calls (resolve-rates, calculate-benefits, commit-accumulators,
+    /// reverse-claim), over the real engine and <paramref name="accumulators"/>.
+    /// </summary>
+    internal static DelegatingServiceHandler BenefitPlanServiceHandler(
+        GoldenScenario scenario, string planJson, IAccumulatorService accumulators,
         Action<BenefitResolutionResult> onCalculated)
     {
         var rates = new RateResolutionService(
@@ -437,6 +462,23 @@ internal sealed class GoldenPathHarness
                     var result = await engine.CalculateAsync(benefitRequest, ct);
                     onCalculated(result);
                     return DelegatingServiceHandler.Json(result, Wire.BenefitPlanService);
+                }
+                case "/api/v1/adjudication/commit-accumulators":
+                {
+                    // AdjudicationController.CommitAccumulators.
+                    var commit = (await request.Content!.ReadFromJsonAsync<AccumulatorCommit>(Wire.BenefitPlanService, ct))!;
+                    var result = await engine.CommitAccumulatorsAsync(commit, ct);
+                    return DelegatingServiceHandler.Json(
+                        new BenefitPlanService.Controllers.AccumulatorCommitResponse { Outcome = result.Outcome, Clamped = result.Clamped },
+                        Wire.BenefitPlanService);
+                }
+                case "/api/v1/adjudication/reverse-claim":
+                {
+                    // AdjudicationController.ReverseClaim.
+                    var reverse = (await request.Content!.ReadFromJsonAsync<BenefitPlanService.Controllers.ReverseClaimRequest>(Wire.BenefitPlanService, ct))!;
+                    await engine.ReverseClaimAsync(reverse.MemberId, reverse.SubscriberId ?? string.Empty,
+                        reverse.BenefitPlanId, reverse.ServiceDate, reverse.OriginalClaimId, ct);
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
                 }
                 default:
                     return new HttpResponseMessage(HttpStatusCode.NotFound);

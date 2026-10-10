@@ -441,7 +441,13 @@ builder.Services.AddChoHealthChecks(options =>
     if (!estimateOnly)
         options.HttpDependencies["claims-service"] =
             $"{claimsServiceHealthUrl.TrimEnd('/')}/health/live";
-});
+})
+    // The accumulator Redis holds the commit journal and the void / denial
+    // fences: it must not evict (maxmemory-policy noeviction).
+    .AddCheck<BenefitPlanService.HealthChecks.RedisAccumulatorEvictionHealthCheck>(
+        BenefitPlanService.HealthChecks.RedisAccumulatorEvictionHealthCheck.Name, tags: ["ready", "cache"]);
+builder.Services.AddSingleton<BenefitPlanService.HealthChecks.RedisAccumulatorEvictionHealthCheck>();
+builder.Services.AddHostedService<BenefitPlanService.HealthChecks.RedisAccumulatorEvictionStartupCheck>();
 
 // No CORS: this service is called server-to-server only (the portal is
 // Blazor Server), so browsers on other origins get no CORS grant.

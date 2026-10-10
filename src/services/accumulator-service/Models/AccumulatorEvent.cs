@@ -145,5 +145,25 @@ public class ProcessedClaim
     /// <summary>On a reversal tombstone: see <see cref="AccumulatorEvent.ReversalKind"/>.</summary>
     public string? ReversalKind { get; set; }
 
+    /// <summary>
+    /// The snapshot the apply holding this Pending marker will append to
+    /// (its member and plan year), recorded under the lease before the
+    /// append (<see cref="Repositories.IProcessedClaimStore.RecordLeaseTargetAsync"/>).
+    /// A reversal that takes a stale Pending marker over fences that snapshot
+    /// — the original's own — with its zero-delta tombstone row, even when the
+    /// replacement resolves to another member or plan year. Null when no apply
+    /// got that far (it then cannot append: recording needs the lease).
+    /// </summary>
+    public string? TargetSnapshotId { get; set; }
+
+    /// <summary>See <see cref="TargetSnapshotId"/>.</summary>
+    public string? TargetMemberId { get; set; }
+
+    /// <summary>See <see cref="TargetSnapshotId"/>.</summary>
+    public DateTime? TargetPlanYearStart { get; set; }
+
+    /// <summary>See <see cref="TargetSnapshotId"/>.</summary>
+    public DateTime? TargetPlanYearEnd { get; set; }
+
     public static string BuildId(string tenantId, string claimId) => $"{tenantId}:{claimId}";
 }

@@ -74,6 +74,73 @@ public class AccumulatorTotalsResponse
 {
     /// <summary>One entry per (AccumulatorType × NetworkTier) combination that has a non-zero balance.</summary>
     public List<AccumulatorTotalEntry> Totals { get; set; } = new();
+
+    /// <summary>
+    /// What each counted claim contributes to <see cref="Totals"/> (deductible and OOP
+    /// entries; the totals are their sums). The Redis accumulator cache journals the
+    /// rebuild per claim from these, so a later commit (a replacement, a re-commit) can
+    /// undo exactly what the rebuild put in for that claim.
+    /// </summary>
+    public List<ClaimAccumulatorTotals> Claims { get; set; } = new();
+}
+
+/// <summary>One claim's contribution to <see cref="AccumulatorTotalsResponse.Totals"/>.</summary>
+public class ClaimAccumulatorTotals
+{
+    public string ClaimId { get; set; } = string.Empty;
+    public List<AccumulatorTotalEntry> Totals { get; set; } = new();
+}
+
+/// <summary>
+/// One counted claim row for <c>GET /api/claims/accumulator-totals</c>, and the shared
+/// rule (Mongo and Cosmos) that turns rows into totals and per-claim contributions.
+/// </summary>
+public sealed record AccumulatorTotalsRow(
+    string ClaimId, string? NetworkTier, decimal Deductible, decimal Coinsurance, decimal Copay, decimal Oop)
+{
+    public static AccumulatorTotalsResponse Build(IEnumerable<AccumulatorTotalsRow> rows, string scope)
+    {
+        var deductibleType = scope == "Family" ? "FamilyDeductible" : "IndividualDeductible";
+        var oopType = scope == "Family" ? "FamilyOutOfPocketMax" : "IndividualOutOfPocketMax";
+        var deductible = new Dictionary<string, decimal>();
+        var oop = new Dictionary<string, decimal>();
+        var coinsurance = new Dictionary<string, decimal>();
+        var copay = new Dictionary<string, decimal>();
+        var perClaim = new Dictionary<string, ClaimAccumulatorTotals>(StringComparer.Ordinal);
+
+        foreach (var row in rows)
+        {
+            var tier = row.NetworkTier ?? "InNetwork";
+            deductible[tier] = deductible.GetValueOrDefault(tier) + row.Deductible;
+            oop[tier] = oop.GetValueOrDefault(tier) + row.Oop;
+            coinsurance[tier] = coinsurance.GetValueOrDefault(tier) + row.Coinsurance;
+            copay[tier] = copay.GetValueOrDefault(tier) + row.Copay;
+
+            if (!perClaim.TryGetValue(row.ClaimId, out var claim))
+                perClaim[row.ClaimId] = claim = new ClaimAccumulatorTotals { ClaimId = row.ClaimId };
+            if (row.Deductible > 0)
+                claim.Totals.Add(new AccumulatorTotalEntry { AccumulatorType = deductibleType, NetworkTier = tier, AccumulatedAmount = row.Deductible });
+            if (row.Oop > 0)
+                claim.Totals.Add(new AccumulatorTotalEntry { AccumulatorType = oopType, NetworkTier = tier, AccumulatedAmount = row.Oop });
+        }
+
+        var totals = new List<AccumulatorTotalEntry>();
+        foreach (var (tier, amount) in deductible)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = deductibleType, NetworkTier = tier, AccumulatedAmount = amount });
+        foreach (var (tier, amount) in oop)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = oopType, NetworkTier = tier, AccumulatedAmount = amount });
+        // Coinsurance and copay are part of OOP; surfaced for the portal's breakdown.
+        foreach (var (tier, amount) in coinsurance)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Coinsurance", NetworkTier = tier, AccumulatedAmount = amount });
+        foreach (var (tier, amount) in copay)
+            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay", NetworkTier = tier, AccumulatedAmount = amount });
+
+        return new AccumulatorTotalsResponse
+        {
+            Totals = totals,
+            Claims = perClaim.Values.Where(c => c.Totals.Count > 0).OrderBy(c => c.ClaimId, StringComparer.Ordinal).ToList(),
+        };
+    }
 }
 
 /// <summary>One aggregated accumulator bucket.</summary>

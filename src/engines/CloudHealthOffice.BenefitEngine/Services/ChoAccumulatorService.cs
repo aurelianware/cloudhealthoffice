@@ -175,6 +175,64 @@ internal class ChoAccumulatorService : IAccumulatorService
                 benefitPlanId, planYear, claimId, ct));
     }
 
+    public async Task ReverseTerminallyAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+    {
+        var tenantId = _tenantContext.TenantId;
+
+        await Task.WhenAll(
+            ReverseDocAsync(tenantId, memberId, AccumulatorScope.Individual,
+                benefitPlanId, planYear, claimId, ct, terminal: true),
+            ReverseDocAsync(tenantId, subscriberId, AccumulatorScope.Family,
+                benefitPlanId, planYear, claimId, ct, terminal: true));
+    }
+
+    /// <summary>
+    /// Writes a prepared commit, one versioned write per document (individual,
+    /// family): in that write the claim's own active transaction (an earlier
+    /// adjudication of it) and the replaced claim's are reversed, the new
+    /// updates applied (deductible clamped at write time) and the transaction
+    /// tagged with the commit id. A document that fences the claim
+    /// (<see cref="AccumulatorDocument.ReversedClaimIds"/>) refuses it: the
+    /// fence and the apply are decided by the same version-checked write, so
+    /// a denial or void that lands first always wins.
+    /// </summary>
+    public async Task<AccumulatorCommitResult> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        if (string.IsNullOrWhiteSpace(commit.ClaimId))
+            throw new ArgumentException("The commit names no claim.", nameof(commit));
+        var tenantId = _tenantContext.TenantId;
+        var replaced = string.IsNullOrWhiteSpace(commit.ReplacesClaimId)
+                       || string.Equals(commit.ReplacesClaimId, commit.ClaimId, StringComparison.Ordinal)
+            ? null
+            : commit.ReplacesClaimId;
+
+        var outcomes = await Task.WhenAll(
+            CommitDocAsync(tenantId, commit.MemberId, AccumulatorScope.Individual, commit, replaced,
+                commit.Updates.Where(u => u.Scope == AccumulatorScope.Individual).ToList(), ct),
+            CommitDocAsync(tenantId, commit.SubscriberId, AccumulatorScope.Family, commit, replaced,
+                commit.Updates.Where(u => u.Scope == AccumulatorScope.Family).ToList(), ct));
+
+        if (outcomes.Any(o => o.Outcome == AccumulatorCommitOutcome.RefusedClaimReversed))
+        {
+            _logger.LogWarning(
+                "Commit {CommitId} for claim {ClaimId} refused: the claim was reversed terminally (void or denial)",
+                SanitizeForLog(commit.CommitId), SanitizeForLog(commit.ClaimId));
+            return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
+        }
+        return new AccumulatorCommitResult
+        {
+            Outcome = outcomes.All(o => o.Outcome == AccumulatorCommitOutcome.AlreadyCommitted)
+                ? AccumulatorCommitOutcome.AlreadyCommitted
+                : AccumulatorCommitOutcome.Committed,
+            Clamped = outcomes.SelectMany(o => o.Clamped).ToList(),
+        };
+    }
+
     public async Task ResetForPlanYearAsync(
         Guid benefitPlanId, string planYear,
         CancellationToken ct = default)
@@ -207,6 +265,11 @@ internal class ChoAccumulatorService : IAccumulatorService
             var doc = await _repository.GetAsync(
                           tenantId, ownerId, scope, benefitPlanId, planYear, ct)
                       ?? CreateEmptyDocument(tenantId, ownerId, scope, benefitPlanId, planYear);
+
+            // The terminal fence (ReversedClaimIds) governs CommitAsync, the
+            // claims pipeline's write. This direct Production write keeps its
+            // earlier semantics for other callers (a void then a
+            // re-adjudication of the same claim id applies again).
 
             // ── Idempotency check ──
             if (doc.Transactions.Any(t => t.ClaimId == claimId && !t.IsReversed))
@@ -282,7 +345,7 @@ internal class ChoAccumulatorService : IAccumulatorService
     private async Task ReverseDocAsync(
         string tenantId, string ownerId, AccumulatorScope scope,
         Guid benefitPlanId, string planYear,
-        string claimId, CancellationToken ct)
+        string claimId, CancellationToken ct, bool terminal = false)
     {
         for (int attempt = 0; attempt < MaxConcurrencyRetries; attempt++)
         {
@@ -291,47 +354,40 @@ internal class ChoAccumulatorService : IAccumulatorService
 
             if (doc is null)
             {
-                _logger.LogDebug(
-                    "No {Scope} accumulator document found for owner {OwnerId}. Nothing to reverse.",
-                    scope, ownerId);
-                return;
+                if (!terminal)
+                {
+                    _logger.LogDebug(
+                        "No {Scope} accumulator document found for owner {OwnerId}. Nothing to reverse.",
+                        scope, SanitizeForLog(ownerId));
+                    return;
+                }
+                // Nothing applied yet, but the fence is still written: a
+                // commit already in flight must find it.
+                doc = CreateEmptyDocument(tenantId, ownerId, scope, benefitPlanId, planYear);
             }
 
+            var fence = terminal && !doc.ReversedClaimIds.Contains(claimId);
             var tx = doc.Transactions
                 .FirstOrDefault(t => t.ClaimId == claimId && !t.IsReversed);
 
-            if (tx is null)
+            if (tx is null && !fence)
             {
                 _logger.LogInformation(
                     "Claim {ClaimId} has no active transaction in {Scope} doc {DocId}. " +
                     "Already reversed or never applied.",
-                    claimId, scope, doc.Id);
+                    SanitizeForLog(claimId), scope, SanitizeForLog(doc.Id));
                 return;
             }
 
-            // ── Negate each accumulated amount ──
-            foreach (var entry in tx.Entries)
-            {
-                var balance = doc.Balances.FirstOrDefault(
-                    b => b.Type == entry.Type && b.NetworkTier == entry.NetworkTier);
-
-                if (balance is not null)
-                {
-                    // Clamp at zero — accumulated amount should never go negative
-                    balance.AccumulatedAmount = Math.Max(0,
-                        balance.AccumulatedAmount - entry.AmountApplied);
-                }
-            }
-
-            tx.IsReversed = true;
-            tx.ReversedAt = DateTime.UtcNow;
+            if (fence) doc.ReversedClaimIds.Add(claimId);
+            if (tx is not null) ReverseTransaction(doc, tx);
 
             try
             {
                 await _repository.UpsertAsync(doc, ct);
                 _logger.LogInformation(
-                    "Reversed claim {ClaimId} accumulator entries on {DocId}",
-                    claimId, doc.Id);
+                    "Reversed claim {ClaimId} on {DocId} (entries reversed: {Reversed}, fenced: {Fenced})",
+                    SanitizeForLog(claimId), SanitizeForLog(doc.Id), tx is not null, fence);
                 return;
             }
             catch (OptimisticConcurrencyException)
@@ -343,6 +399,107 @@ internal class ChoAccumulatorService : IAccumulatorService
                     attempt + 1, MaxConcurrencyRetries, claimId);
             }
         }
+    }
+
+    /// <summary>
+    /// One document's part of <see cref="CommitAsync"/>, as a single
+    /// versioned write with optimistic-concurrency retry.
+    /// </summary>
+    private async Task<AccumulatorCommitResult> CommitDocAsync(
+        string tenantId, string ownerId, AccumulatorScope scope,
+        AccumulatorCommit commit, string? replacedClaimId, List<AccumulatorUpdate> updates,
+        CancellationToken ct)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            var doc = await _repository.GetAsync(
+                          tenantId, ownerId, scope, commit.BenefitPlanId, commit.PlanYear, ct)
+                      ?? CreateEmptyDocument(tenantId, ownerId, scope, commit.BenefitPlanId, commit.PlanYear);
+
+            if (doc.ReversedClaimIds.Contains(commit.ClaimId))
+                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.RefusedClaimReversed);
+
+            var own = doc.Transactions.FirstOrDefault(t => t.ClaimId == commit.ClaimId && !t.IsReversed);
+            if (own is not null && string.Equals(own.CommitId, commit.CommitId, StringComparison.Ordinal))
+                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
+
+            var replaced = replacedClaimId is null
+                ? null
+                : doc.Transactions.FirstOrDefault(t => t.ClaimId == replacedClaimId && !t.IsReversed);
+
+            // Nothing to reverse and nothing to apply on this document.
+            if (own is null && replaced is null && updates.Count == 0)
+                return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.AlreadyCommitted);
+
+            if (own is not null) ReverseTransaction(doc, own);
+            if (replaced is not null) ReverseTransaction(doc, replaced);
+
+            var clamped = new List<AccumulatorClamp>();
+            if (updates.Count > 0)
+            {
+                var transaction = new AccumulatorTransaction
+                {
+                    ClaimId = commit.ClaimId,
+                    AppliedAt = DateTime.UtcNow,
+                    CommitId = commit.CommitId,
+                    Entries = []
+                };
+                foreach (var update in updates)
+                {
+                    var balance = GetOrCreateBalance(doc, update.Type, update.NetworkTier);
+                    // Money caps: never past the limit as it stands now.
+                    var amount = update.ClampAtLimit is decimal limit && update.Amount > 0
+                        ? Math.Min(update.Amount, Math.Max(0, limit - balance.AccumulatedAmount))
+                        : update.Amount;
+                    if (amount != update.Amount)
+                    {
+                        clamped.Add(new AccumulatorClamp
+                        {
+                            Type = update.Type, Scope = update.Scope, NetworkTier = update.NetworkTier,
+                            Requested = update.Amount, Applied = amount, Limit = update.ClampAtLimit ?? 0m,
+                        });
+                    }
+                    balance.AccumulatedAmount += amount;
+                    transaction.Entries.Add(new AccumulatorTransactionEntry
+                    {
+                        Type = update.Type.ToString(),
+                        NetworkTier = update.NetworkTier.ToString(),
+                        AmountApplied = amount,
+                        Source = update.Source
+                    });
+                }
+                doc.Transactions.Add(transaction);
+            }
+
+            try
+            {
+                await _repository.UpsertAsync(doc, ct);
+                _logger.LogDebug(
+                    "Committed {Count} accumulator entries for claim {ClaimId} (commit {CommitId}) to {DocId}",
+                    updates.Count, SanitizeForLog(commit.ClaimId), SanitizeForLog(commit.CommitId), SanitizeForLog(doc.Id));
+                return new AccumulatorCommitResult { Outcome = AccumulatorCommitOutcome.Committed, Clamped = clamped };
+            }
+            catch (OptimisticConcurrencyException) when (attempt < MaxConcurrencyRetries - 1)
+            {
+                _logger.LogDebug(
+                    "Concurrency conflict on commit attempt {Attempt}/{Max} for claim {ClaimId}, doc {DocId}. Reloading.",
+                    attempt + 1, MaxConcurrencyRetries, SanitizeForLog(commit.ClaimId), SanitizeForLog(doc.Id));
+            }
+        }
+    }
+
+    /// <summary>Negates a transaction's entries (never below zero) and marks it reversed.</summary>
+    private static void ReverseTransaction(AccumulatorDocument doc, AccumulatorTransaction tx)
+    {
+        foreach (var entry in tx.Entries)
+        {
+            var balance = doc.Balances.FirstOrDefault(
+                b => b.Type == entry.Type && b.NetworkTier == entry.NetworkTier);
+            if (balance is not null)
+                balance.AccumulatedAmount = Math.Max(0, balance.AccumulatedAmount - entry.AmountApplied);
+        }
+        tx.IsReversed = true;
+        tx.ReversedAt = DateTime.UtcNow;
     }
 
     // ═══════════════════════════════════════════════════════════════════

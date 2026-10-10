@@ -515,7 +515,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         bool isPend = false,
         ClaimStatus? resolvedStatus = null,
         string? resolvedBenefitPlanId = null,
-        string? requiredResolutionLockToken = null)
+        string? requiredResolutionLockToken = null,
+        AccumulatorOutboxItem? pendingAccumulatorCommit = null)
     {
         var b = Builders<Claim>.Filter;
 
@@ -632,7 +633,8 @@ public class ClaimRepositoryMongo : IClaimRepository
                     ct,
                     adjudicationResult,
                     head.Status,
-                    requiredResolutionLockToken)
+                    requiredResolutionLockToken,
+                    resolvedStatus == ClaimStatus.Approved ? pendingAccumulatorCommit : null)
                 .ConfigureAwait(false);
         }
 
@@ -722,7 +724,8 @@ public class ClaimRepositoryMongo : IClaimRepository
         CancellationToken ct,
         AdjudicationResult? incomingAdjudication = null,
         ClaimStatus? preWriteStatus = null,
-        string? requiredResolutionLockToken = null)
+        string? requiredResolutionLockToken = null,
+        AccumulatorOutboxItem? pendingAccumulatorCommit = null)
     {
         var b = Builders<Claim>.Filter;
         // Follow-up 1 (PR #1279 review): an approval re-run's status write is
@@ -738,6 +741,10 @@ public class ClaimRepositoryMongo : IClaimRepository
         var statusUpdate = Builders<Claim>.Update
             .Set(c => c.Status, desiredStatus)
             .Set(c => c.VersionState, desiredVersionState);
+        // The accumulator outbox entry lands with the status that finalizes
+        // the claim, or not at all.
+        if (pendingAccumulatorCommit is not null)
+            statusUpdate = statusUpdate.Set(c => c.PendingAccumulatorCommit, pendingAccumulatorCommit);
 
         var result = await _collection.UpdateOneAsync(statusFilter, statusUpdate, cancellationToken: ct);
         if (result.MatchedCount > 0)
@@ -838,63 +845,134 @@ public class ClaimRepositoryMongo : IClaimRepository
         else
             filter = builder.And(filter, builder.Eq(c => c.MemberId, ownerId));
 
-        var rows = await _collection
-            .Aggregate()
-            .Match(filter)
-            .Group(
-                c => c.AdjudicationResult!.NetworkTier,
-                g => new AccumulatorTotalsAggregationRow
-                {
-                    NetworkTier = g.Key,
-                    DeductibleAmount = g.Sum(c => c.AdjudicationResult!.DeductibleAmount),
-                    CoinsuranceAmount = g.Sum(c => c.AdjudicationResult!.CoinsuranceAmount),
-                    CopayAmount = g.Sum(c => c.AdjudicationResult!.CopayAmount),
-                    PatientResponsibility = g.Sum(c => c.AdjudicationResult!.PatientResponsibility),
-                    // OOP-eligible amount; legacy rows without it count full
-                    // patient responsibility.
-                    OopAppliedAmount = g.Sum(c => c.AdjudicationResult!.OopAppliedAmount
-                        ?? c.AdjudicationResult!.PatientResponsibility)
-                })
+        // A version superseded by an adjustment (VersionState Adjusted, or
+        // SupersededAt set while Status still says Paid) no longer counts: its
+        // replacement does, once it is finalized, and the replacement's commit
+        // takes nothing of the predecessor back from a rebuilt cache.
+        filter = builder.And(filter,
+            builder.Ne(c => c.VersionState, ClaimVersionState.Adjusted),
+            builder.Eq(c => c.SupersededAt, null));
+
+        var rows = await _collection.Find(filter)
+            .Project(c => new
+            {
+                c.Id,
+                c.AdjudicationResult!.NetworkTier,
+                c.AdjudicationResult.DeductibleAmount,
+                c.AdjudicationResult.CoinsuranceAmount,
+                c.AdjudicationResult.CopayAmount,
+                c.AdjudicationResult.PatientResponsibility,
+                c.AdjudicationResult.OopAppliedAmount,
+            })
             .ToListAsync(ct);
 
-        var deductibleType = scope == "Family" ? "FamilyDeductible"     : "IndividualDeductible";
-        var oopType        = scope == "Family" ? "FamilyOutOfPocketMax"  : "IndividualOutOfPocketMax";
-
-        var deductible  = new Dictionary<string, decimal>();
-        var oop         = new Dictionary<string, decimal>();
-        var coinsurance = new Dictionary<string, decimal>();
-        var copay       = new Dictionary<string, decimal>();
-
-        foreach (var row in rows)
-        {
-            var tier = row.NetworkTier ?? "InNetwork";
-            deductible[tier]  = deductible.GetValueOrDefault(tier)  + row.DeductibleAmount;
-            oop[tier]         = oop.GetValueOrDefault(tier)         + row.OopAppliedAmount;
-            coinsurance[tier] = coinsurance.GetValueOrDefault(tier) + row.CoinsuranceAmount;
-            copay[tier]       = copay.GetValueOrDefault(tier)       + row.CopayAmount;
-        }
-
-        var totals = new List<AccumulatorTotalEntry>();
-        foreach (var (tier, amount) in deductible)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = deductibleType, NetworkTier = tier, AccumulatedAmount = amount });
-        foreach (var (tier, amount) in oop)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = oopType, NetworkTier = tier, AccumulatedAmount = amount });
-        foreach (var (tier, amount) in coinsurance)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Coinsurance", NetworkTier = tier, AccumulatedAmount = amount });
-        foreach (var (tier, amount) in copay)
-            if (amount > 0) totals.Add(new AccumulatorTotalEntry { AccumulatorType = "Copay", NetworkTier = tier, AccumulatedAmount = amount });
-
-        return new AccumulatorTotalsResponse { Totals = totals };
+        // OOP-eligible amount; legacy rows without it count full patient responsibility.
+        return AccumulatorTotalsRow.Build(rows.Select(r => new AccumulatorTotalsRow(
+            r.Id, r.NetworkTier, r.DeductibleAmount, r.CoinsuranceAmount, r.CopayAmount,
+            r.OopAppliedAmount ?? r.PatientResponsibility)), scope);
     }
 
-    private sealed class AccumulatorTotalsAggregationRow
+    // ── accumulator outbox ──────────────────────────────────────────────
+
+    private static FilterDefinition<Claim> OutboxSlotIs(AccumulatorOutboxKind kind, string itemId) =>
+        kind == AccumulatorOutboxKind.Commit
+            ? Builders<Claim>.Filter.Eq(c => c.PendingAccumulatorCommit!.Id, itemId)
+            : Builders<Claim>.Filter.Eq(c => c.PendingAccumulatorReversal!.Id, itemId);
+
+    public async Task<IReadOnlyList<Claim>> FindDueAccumulatorOutboxAsync(long nowMs, int limit, CancellationToken ct = default)
     {
-        public string? NetworkTier { get; set; }
-        public decimal DeductibleAmount { get; set; }
-        public decimal CoinsuranceAmount { get; set; }
-        public decimal CopayAmount { get; set; }
-        public decimal PatientResponsibility { get; set; }
-        public decimal OopAppliedAmount { get; set; }
+        var b = Builders<Claim>.Filter;
+        var filter = b.Or(
+            b.Lte(c => c.PendingAccumulatorCommit!.DueAtMs, nowMs),
+            b.Lte(c => c.PendingAccumulatorReversal!.DueAtMs, nowMs));
+        return await _collection.Find(filter).Limit(limit).ToListAsync(ct);
+    }
+
+    public async Task<long?> OldestAccumulatorOutboxAsync(CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        async Task<long?> Oldest(FilterDefinition<Claim> present, SortDefinition<Claim> sort, Func<Claim, long?> pick)
+        {
+            var claim = await _collection.Find(present).Sort(sort).Limit(1).FirstOrDefaultAsync(ct);
+            return claim is null ? null : pick(claim);
+        }
+        var commit = await Oldest(b.Ne(c => c.PendingAccumulatorCommit, null),
+            Builders<Claim>.Sort.Ascending(c => c.PendingAccumulatorCommit!.CreatedAtMs), c => c.PendingAccumulatorCommit?.CreatedAtMs);
+        var reversal = await Oldest(b.Ne(c => c.PendingAccumulatorReversal, null),
+            Builders<Claim>.Sort.Ascending(c => c.PendingAccumulatorReversal!.CreatedAtMs), c => c.PendingAccumulatorReversal?.CreatedAtMs);
+        return (commit, reversal) switch
+        {
+            (null, null) => null,
+            ({ } a, null) => a,
+            (null, { } r) => r,
+            ({ } a, { } r) => Math.Min(a, r),
+        };
+    }
+
+    public async Task<Claim?> GetForAccumulatorOutboxAsync(string tenantId, string claimId, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var claim = await _collection.Find(b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId))).FirstOrDefaultAsync(ct);
+        return claim is null ? null : Hydrate(claim);
+    }
+
+    public async Task<bool> CompleteAccumulatorOutboxAsync(
+        string tenantId, string claimId, AccumulatorOutboxKind kind, string itemId,
+        AccumulatorClampReview? clampReview = null, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId), OutboxSlotIs(kind, itemId));
+        var update = kind == AccumulatorOutboxKind.Commit
+            ? Builders<Claim>.Update.Set(c => c.PendingAccumulatorCommit, null)
+            : Builders<Claim>.Update.Set(c => c.PendingAccumulatorReversal, null);
+        if (clampReview is not null) update = update.Set(c => c.AccumulatorClampReview, clampReview);
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount == 1;
+    }
+
+    public async Task<bool> RescheduleAccumulatorOutboxAsync(
+        string tenantId, string claimId, AccumulatorOutboxKind kind, string itemId,
+        int attempts, DateTime nextAttemptAt, string? lastError, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(b.Eq(c => c.TenantId, tenantId), b.Eq(c => c.Id, claimId), OutboxSlotIs(kind, itemId));
+        var due = AccumulatorOutboxItem.ToMs(nextAttemptAt);
+        var update = kind == AccumulatorOutboxKind.Commit
+            ? Builders<Claim>.Update
+                .Set(c => c.PendingAccumulatorCommit!.Attempts, attempts)
+                .Set(c => c.PendingAccumulatorCommit!.NextAttemptAt, nextAttemptAt)
+                .Set(c => c.PendingAccumulatorCommit!.DueAtMs, due)
+                .Set(c => c.PendingAccumulatorCommit!.LastError, lastError)
+            : Builders<Claim>.Update
+                .Set(c => c.PendingAccumulatorReversal!.Attempts, attempts)
+                .Set(c => c.PendingAccumulatorReversal!.NextAttemptAt, nextAttemptAt)
+                .Set(c => c.PendingAccumulatorReversal!.DueAtMs, due)
+                .Set(c => c.PendingAccumulatorReversal!.LastError, lastError);
+        var result = await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
+        return result.MatchedCount == 1;
+    }
+
+    public async Task<IReadOnlyList<Claim>> GetAccumulatorClampReviewsAsync(int limit, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var filter = b.And(
+            b.Eq(c => c.TenantId, GetTenantId()),
+            b.Ne(c => c.AccumulatorClampReview, null),
+            b.Eq(c => c.AccumulatorClampReview!.Resolved, false));
+        return (await _collection.Find(filter).Limit(limit).ToListAsync(ct)).Select(Hydrate).ToList();
+    }
+
+    public async Task<bool> ResolveAccumulatorClampReviewAsync(string claimId, string resolvedBy, CancellationToken ct = default)
+    {
+        var b = Builders<Claim>.Filter;
+        var result = await _collection.UpdateOneAsync(
+            b.And(b.Eq(c => c.TenantId, GetTenantId()), b.Eq(c => c.Id, claimId), b.Ne(c => c.AccumulatorClampReview, null)),
+            Builders<Claim>.Update
+                .Set(c => c.AccumulatorClampReview!.Resolved, true)
+                .Set(c => c.AccumulatorClampReview!.ResolvedBy, resolvedBy)
+                .Set(c => c.AccumulatorClampReview!.ResolvedAt, DateTime.UtcNow),
+            cancellationToken: ct);
+        return result.MatchedCount == 1;
     }
 
     public async Task<bool> MarkSupersededProjectionAsync(

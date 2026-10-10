@@ -118,6 +118,28 @@ public interface IProcessedClaimStore
     Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default);
 
     Task<ProcessedClaim?> GetAsync(string tenantId, string claimId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Records on the claim's marker the snapshot its apply is about to
+    /// append to — only while the marker is still Pending under
+    /// <paramref name="leaseToken"/>. Returns false, and writes nothing, when
+    /// the lease was taken over or the marker completed: the apply must then
+    /// stop without appending. Recorded before every append to a snapshot not
+    /// recorded yet, so a reversal that takes the lease over knows which
+    /// snapshot a stalled append could still land on.
+    /// </summary>
+    Task<bool> RecordLeaseTargetAsync(
+        string tenantId, string claimId, string leaseToken, LeaseTarget target, CancellationToken ct = default);
+}
+
+/// <summary>The snapshot an apply targets: see <see cref="ProcessedClaim.TargetSnapshotId"/>.</summary>
+public sealed record LeaseTarget(string SnapshotId, string MemberId, DateTime PlanYearStart, DateTime PlanYearEnd)
+{
+    /// <summary>The target recorded on <paramref name="marker"/>, or null.</summary>
+    public static LeaseTarget? From(ProcessedClaim? marker) =>
+        marker is { TargetSnapshotId: { Length: > 0 } id, TargetMemberId: { Length: > 0 } member, TargetPlanYearStart: { } start }
+            ? new LeaseTarget(id, member, start, marker.TargetPlanYearEnd ?? start.AddYears(1).AddDays(-1))
+            : null;
 }
 
 /// <summary>The outcome of <see cref="IProcessedClaimStore.BeginLeaseAsync"/> and, on Proceed, the lease token.</summary>

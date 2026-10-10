@@ -63,6 +63,51 @@ public interface IAccumulatorService
         string claimId,
         CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<AccumulatorUpdate>>([]);
+
+    /// <summary>
+    /// Writes a prepared commit (<see cref="AccumulatorCommit"/>): reverses
+    /// the claim's own still-active updates and those of the claim it
+    /// replaces, then applies the commit's updates. Refused (nothing written)
+    /// for a claim reversed terminally (<see cref="ReverseTerminallyAsync"/>).
+    /// <para>The default runs the store's own reverse and apply one after the
+    /// other, without the terminal fence (stores that keep no per-claim
+    /// journal). <c>ChoAccumulatorService</c> does it in one versioned write
+    /// per document, with the fence.</para>
+    /// </summary>
+    async Task<AccumulatorCommitResult> CommitAsync(AccumulatorCommit commit, CancellationToken ct = default)
+    {
+        var own = await GetClaimUpdatesAsync(
+            commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, ct);
+        if (own.Count > 0)
+            await ReverseAsync(commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, ct);
+        if (!string.IsNullOrWhiteSpace(commit.ReplacesClaimId)
+            && !string.Equals(commit.ReplacesClaimId, commit.ClaimId, StringComparison.Ordinal))
+        {
+            var replaced = await GetClaimUpdatesAsync(
+                commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, commit.ReplacesClaimId, ct);
+            if (replaced.Count > 0)
+                await ReverseAsync(commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, commit.ReplacesClaimId!, ct);
+        }
+        await ApplyUpdatesAsync(
+            commit.MemberId, commit.SubscriberId, commit.BenefitPlanId, commit.PlanYear, commit.ClaimId, commit.Updates, ct);
+        return AccumulatorCommitResult.Of(AccumulatorCommitOutcome.Committed);
+    }
+
+    /// <summary>
+    /// <see cref="ReverseAsync"/> for a claim that will never apply again (a
+    /// void, or an examiner's denial): also fences the claim id, so a
+    /// <see cref="CommitAsync"/> of it that arrives later (a resolver whose
+    /// lock expired, a stalled pipeline run) is refused inside the same
+    /// versioned write. The direct <see cref="ApplyUpdatesAsync"/> (a
+    /// Production pricing) is not fenced. The default (stores without a
+    /// per-claim journal) only reverses.
+    /// </summary>
+    Task ReverseTerminallyAsync(
+        string memberId, string subscriberId,
+        Guid benefitPlanId, string planYear,
+        string claimId,
+        CancellationToken ct = default)
+        => ReverseAsync(memberId, subscriberId, benefitPlanId, planYear, claimId, ct);
 }
 
 // ═══════════════════════════════════════════════════════════════════

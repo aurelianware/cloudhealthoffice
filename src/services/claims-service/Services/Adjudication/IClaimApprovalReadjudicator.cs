@@ -138,16 +138,26 @@ public sealed record ApprovalReadjudicationResult(
     /// lost-lock 409.
     /// </summary>
     public bool ResolutionLockLost { get; init; }
+
+    /// <summary>
+    /// On <see cref="ClaimAdjudicationOutcome.Pass"/>: the accumulator write
+    /// the re-run's (read-only) benefit calculation prepared. The re-run
+    /// commits nothing; the resolver commits this once its lock-fenced final
+    /// write has landed, so a resolver that lost its lock never writes
+    /// accumulators. Null when benefit calculation did not run.
+    /// </summary>
+    public CloudHealthOffice.BenefitEngine.Models.AccumulatorCommit? PreparedAccumulatorCommit { get; init; }
 }
 
 /// <summary>
-/// Re-runs adjudication for an examiner-approved pended claim, in Production,
-/// with the examiner's decision applied: only the pends the examiner
-/// reviewed (<see cref="ExaminerApproval.ReviewedPend"/>) are cleared, a COB
-/// pend is resolved by <see cref="ExaminerApproval.PayerSequence"/>. The
-/// payment and the accumulator writes then come from a Production pass — a
-/// claim pended before benefit calculation is priced read-only and never
-/// wrote any.
+/// Re-runs adjudication for an examiner-approved pended claim with the
+/// examiner's decision applied: only the pends the examiner reviewed
+/// (<see cref="ExaminerApproval.ReviewedPend"/>) are cleared, a COB pend is
+/// resolved by <see cref="ExaminerApproval.PayerSequence"/>. The payment comes
+/// from that fresh pricing; the accumulator write it prepared is returned
+/// (<see cref="ApprovalReadjudicationResult.PreparedAccumulatorCommit"/>) and
+/// committed by the caller after its lock-fenced final write — the re-run
+/// itself writes no accumulators.
 /// </summary>
 public interface IClaimApprovalReadjudicator
 {

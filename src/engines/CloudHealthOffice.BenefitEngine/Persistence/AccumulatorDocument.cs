@@ -1,4 +1,5 @@
 using CloudHealthOffice.BenefitEngine.Domain;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace CloudHealthOffice.BenefitEngine.Persistence;
 
@@ -38,6 +39,7 @@ namespace CloudHealthOffice.BenefitEngine.Persistence;
 /// Persisted accumulator state for a single owner (member or subscriber)
 /// within a benefit plan year.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class AccumulatorDocument
 {
     /// <summary>
@@ -58,6 +60,13 @@ public class AccumulatorDocument
     /// </summary>
     public string Scope { get; set; } = default!;
 
+    /// <summary>
+    /// Stored as a standard (subtype 4) UUID. The 3.x Mongo driver refuses to
+    /// write a Guid whose representation is unspecified, and nothing registers
+    /// a global Guid serializer, so without this the Mongo store could not
+    /// insert a document at all.
+    /// </summary>
+    [BsonGuidRepresentation(MongoDB.Bson.GuidRepresentation.Standard)]
     public Guid BenefitPlanId { get; set; }
     public string PlanYear { get; set; } = default!;
 
@@ -81,6 +90,19 @@ public class AccumulatorDocument
     public List<AccumulatorTransaction> Transactions { get; set; } = [];
 
     /// <summary>
+    /// Claims reversed terminally on this document — voided, or denied by an
+    /// examiner (<c>IAccumulatorService.ReverseTerminallyAsync</c>). A later
+    /// commit (<c>IAccumulatorService.CommitAsync</c>, the claims pipeline's
+    /// write) of one of these claim ids is refused inside the same versioned
+    /// write that would have applied it, so a write that was
+    /// already in flight when the claim was denied (an approval re-run whose
+    /// resolution lock expired) can never leave the denied claim's amounts
+    /// behind. A void or denial is final for a claim id: a corrected claim is
+    /// a new claim (frequency 7) with its own id.
+    /// </summary>
+    public List<string> ReversedClaimIds { get; set; } = [];
+
+    /// <summary>
     /// ETag from the last Cosmos read/write. Not persisted in the document body —
     /// populated from ItemResponse.ETag after every Cosmos operation.
     /// Used as IfMatchEtag on subsequent writes for optimistic concurrency.
@@ -97,6 +119,7 @@ public class AccumulatorDocument
 /// <summary>
 /// Accumulated amount for a single accumulator type and network tier.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class AccumulatorBalance
 {
     /// <summary>AccumulatorType enum name (e.g., "IndividualDeductible").</summary>
@@ -119,12 +142,20 @@ public class AccumulatorBalance
 /// One claim's contribution to accumulators.
 /// Enables idempotent re-processing and full reversal of voided claims.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class AccumulatorTransaction
 {
     public string ClaimId { get; set; } = default!;
     public DateTime AppliedAt { get; set; }
     public bool IsReversed { get; set; }
     public DateTime? ReversedAt { get; set; }
+
+    /// <summary>
+    /// The <c>AccumulatorCommit.CommitId</c> that wrote this transaction (a
+    /// committed Prospective pricing); null for a direct Production write. A
+    /// repeated commit with the same id is a no-op.
+    /// </summary>
+    public string? CommitId { get; set; }
 
     /// <summary>
     /// Per-bucket amounts applied by this claim.
@@ -135,6 +166,7 @@ public class AccumulatorTransaction
 /// <summary>
 /// Amount applied to a single accumulator bucket within one transaction.
 /// </summary>
+[BsonIgnoreExtraElements]
 public class AccumulatorTransactionEntry
 {
     /// <summary>AccumulatorType enum name.</summary>

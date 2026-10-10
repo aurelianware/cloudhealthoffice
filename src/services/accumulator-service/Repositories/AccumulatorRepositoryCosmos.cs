@@ -320,6 +320,41 @@ public class ProcessedClaimStoreCosmos : IProcessedClaimStore
         }
     }
 
+    public async Task<bool> RecordLeaseTargetAsync(
+        string tenantId, string claimId, string leaseToken, LeaseTarget target, CancellationToken ct = default)
+    {
+        var id = ProcessedClaim.BuildId(tenantId, claimId);
+        var pk = new PartitionKey(tenantId);
+        ItemResponse<ProcessedClaim> current;
+        try
+        {
+            current = await _col.ReadItemAsync<ProcessedClaim>(id, pk, cancellationToken: ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+        var marker = current.Resource;
+        if (!string.Equals(marker.Outcome, "Pending", StringComparison.Ordinal)
+            || !string.Equals(marker.LeaseToken, leaseToken, StringComparison.Ordinal))
+            return false;
+        marker.TargetSnapshotId = target.SnapshotId;
+        marker.TargetMemberId = target.MemberId;
+        marker.TargetPlanYearStart = target.PlanYearStart;
+        marker.TargetPlanYearEnd = target.PlanYearEnd;
+        try
+        {
+            // ETag: the lease check and the write are one step (as CompleteLeaseAsync).
+            await _col.ReplaceItemAsync(marker, id, pk, new ItemRequestOptions { IfMatchEtag = current.ETag }, ct);
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is System.Net.HttpStatusCode.PreconditionFailed
+                                             or System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
     public async Task ReleaseAsync(string tenantId, string claimId, CancellationToken ct = default)
     {
         var id = ProcessedClaim.BuildId(tenantId, claimId);

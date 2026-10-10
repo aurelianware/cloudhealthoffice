@@ -84,6 +84,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
     /// </summary>
     public const string PricingRequiredPendCode = PricingStage.PricingUnavailablePendCode;
 
+    /// <summary>Pend code when benefit-plan-service prepares no deferred accumulator commit (older build).</summary>
+    public const string DeferredCommitUnsupportedPendCode = "ACCUMCOMMIT";
+
+    /// <summary>A transient reason (never overridden by an approval; the re-run retries it).</summary>
+    public const string DeferredCommitUnsupportedReason =
+        "Benefit calculation service unavailable for accumulator commits (benefit-plan-service prepares no deferred " +
+        "accumulator commit; it is older than claims-service). Retried once it is upgraded.";
+
     private readonly IBenefitCalculationEngine _engine;
     private readonly IMemberResolver _memberResolver;
     private readonly IAuthorizationValidationClient _authorizationValidationClient;
@@ -286,6 +294,29 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             return ClaimAdjudicationStageResult.Deny(
                 StageName,
                 result.DenialReasonDescription ?? result.DenialReasonCode ?? "Benefit denied");
+        }
+
+        // Capability check (rolling deploys): a benefit-plan-service older than
+        // this claims-service prices read-only but prepares no commit, so the
+        // claim's accumulators could never be written. Never pass it without
+        // them — and never dead-letter it: pend with a transient reason (an
+        // approval retries the check instead of overriding it).
+        if (result.PreparedAccumulatorCommit is null)
+        {
+            if (context.PendDetails is null)
+            {
+                context.PendDetails = new PendDetails
+                {
+                    PendCode = DeferredCommitUnsupportedPendCode,
+                    PendReason = DeferredCommitUnsupportedReason,
+                    PendedAt = DateTime.UtcNow,
+                };
+            }
+            else
+            {
+                context.PendDetails.AdditionalPendReasons.Add($"{DeferredCommitUnsupportedPendCode}: {DeferredCommitUnsupportedReason}");
+            }
+            return ClaimAdjudicationStageResult.Pend(StageName, DeferredCommitUnsupportedReason);
         }
 
         return ClaimAdjudicationStageResult.Pass(StageName);
@@ -519,12 +550,14 @@ public sealed class BenefitCalculationStage : IClaimAdjudicationStage
             // A corrected version is priced without the accumulators of the
             // version it replaces (claims-service adjustment workflow).
             ReplacesClaimId = string.IsNullOrWhiteSpace(claim.PredecessorVersionId) ? null : claim.PredecessorVersionId,
-            // A claim an earlier stage already pended (COB, duplicate, …) is
-            // priced read-only: no accumulator is written for a claim that
-            // will not finalize now. It is priced again when it is released.
-            ExecutionMode = context.StageResults.Any(r => r.Outcome == ClaimAdjudicationOutcome.Pend)
-                ? AdjudicationExecutionMode.Prospective
-                : AdjudicationExecutionMode.Production,
+            // Always priced read-only. The engine returns the write it would
+            // make (PreparedAccumulatorCommit). It is saved on the claim as an
+            // outbox entry only by the write that makes the claim Approved
+            // (PersistenceStage's status patch, or the examiner's lock-fenced
+            // final write in ClaimsController.ResolvePendedClaim), so a claim
+            // a later stage pends (NCCI at 400, AI at 600) or denies writes
+            // nothing.
+            ExecutionMode = AdjudicationExecutionMode.Prospective,
         };
     }
 
