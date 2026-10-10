@@ -179,6 +179,8 @@ public sealed class PremiumBankStatementsController : ControllerBase
                         return BadRequest(new { error = "A lockbox deposit is applied from its lockbox file, not to an invoice: load the lockbox file, then MarkMatched." });
                     var invoice = string.IsNullOrWhiteSpace(request.InvoiceId) ? null : await _invoices.GetByIdAsync(request.InvoiceId);
                     if (invoice is null) return BadRequest(new { error = "invoiceId must name an existing invoice." });
+                    if (invoice.Status == Models.InvoiceStatus.Draft)
+                        return BadRequest(new { error = "A draft invoice has not been issued and cannot be paid." });
                     var tx = (await _store.GetTransactionsAsync(_actor.TenantId, item.StatementId, ct)).FirstOrDefault(t => t.Id == item.TransactionId)
                              ?? throw new KeyNotFoundException($"Bank transaction {item.TransactionId} not found");
                     var decision = await _matcher.ApplyAsync(tx, invoice);

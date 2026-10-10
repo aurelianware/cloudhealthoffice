@@ -349,6 +349,26 @@ public sealed class PremiumBankReconciliationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DraftInvoice_IsNeverMatchedOrApplied()
+    {
+        var invoice = await Invoice("INV-2026-8008", 300m);
+        invoice.Status = InvoiceStatus.Draft;
+        await _invoices.UpdateAsync(invoice);
+
+        var item = (await Reconcile(Line(new Tx("165", 30000, CustomerReference: "INV-2026-8008")))).Items.Single();
+
+        item.Status.Should().Be(ReconciliationStatus.Suspense);
+        item.Candidates.Should().BeEmpty();
+        (await Reload(invoice))!.Payments.Should().BeEmpty();
+
+        var controller = new PremiumBankStatementsController(_ingestion, _runner, _store, _matcher, _invoices, _batches, _actor.Object,
+            Options.Create(_reconOptions), new BankStatementSupersessionService(_store, Options.Create(_reconOptions), NullLogger<BankStatementSupersessionService>.Instance));
+        (await controller.Resolve(item.Id, new ResolvePremiumSuspenseRequest { Action = PremiumSuspenseAction.ApplyToInvoice, InvoiceId = invoice.Id, Note = "try" }, CancellationToken.None))
+            .Result.Should().BeOfType<BadRequestObjectResult>();
+        (await Reload(invoice))!.Payments.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task LineAppliedBeforeACrash_IsRecordedAsApplied_WhenTheFileIsReconciledAgain()
     {
         var invoice = await Invoice("INV-2026-8005", 600m);

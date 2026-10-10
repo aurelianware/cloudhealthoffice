@@ -279,7 +279,8 @@ public sealed class PremiumBankTransactionMatcher : IBankTransactionMatcher
         foreach (var token in tokens.Where(t => pattern.IsMatch(t)))
         foreach (var invoice in await _invoices.GetByInvoiceNumberAsync(token))
         {
-            if (invoice.BalanceDue > 0 && invoice.Status is not (InvoiceStatus.Paid or InvoiceStatus.Voided or InvoiceStatus.WriteOff))
+            // A Draft (rated, not issued) is never matched or applied.
+            if (invoice.BalanceDue > 0 && invoice.Status is not (InvoiceStatus.Paid or InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Draft))
                 found[invoice.Id] = invoice;
         }
         return found.Values.ToList();
