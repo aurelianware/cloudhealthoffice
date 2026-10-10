@@ -124,6 +124,15 @@ public interface IPaymentFileTransmissionService
     /// </summary>
     Task<PaymentRunEftFile> ExcludePaymentsAsync(string paymentRunId, IReadOnlyCollection<string> paymentIds, string reason,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records that the unreversed remainder of an excluded payment (<see cref="VoidedPaymentNotice.UnpaidRemainder"/>)
+    /// was paid to the provider (e.g. a manual check), with its reference: audited, by someone other
+    /// than whoever excluded it (and not the run's maker or executor). Queues VoidRemainderReissued:
+    /// the GL relieves the remaining payable against cash, so nothing is accrued twice. Once only.
+    /// </summary>
+    Task<VoidedPaymentNotice> ReissueRemainderAsync(string paymentRunId, string paymentId, string method, string reference, string reason,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionService
@@ -534,6 +543,38 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         return RepinCoreAsync(paymentRunId, $"excluded by finance: {reason}", paymentIds.ToHashSet(StringComparer.Ordinal), cancellationToken);
     }
 
+    public async Task<VoidedPaymentNotice> ReissueRemainderAsync(string paymentRunId, string paymentId, string method, string reference, string reason,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reference) || string.IsNullOrWhiteSpace(reason) || string.IsNullOrWhiteSpace(method))
+            throw new ArgumentException("A method, the payment's reference (e.g. check number) and a reason are required.");
+        var run = await LoadRunAsync(paymentRunId);
+        var user = _separation.EnsureMayTransmit(run.PaymentRunNumber, run.CreatedBy, run.ExecutedBy);
+        var file = run.EftFile ?? throw new KeyNotFoundException($"Payment run {run.PaymentRunNumber} has no EFT file.");
+        var notice = file.VoidedPayments.FirstOrDefault(v => v.PaymentId == paymentId)
+                     ?? throw new KeyNotFoundException($"Payment {paymentId} was not left out of payment run {run.PaymentRunNumber}'s file.");
+        if (notice.UnpaidRemainder <= 0m)
+            throw new PaymentFileTransmissionStateException($"Payment {notice.CheckNumber} has no unreversed remainder to reissue.");
+        if (notice.RemainderReissuedAt != null)
+            throw new PaymentFileTransmissionStateException(
+                $"The remainder of payment {notice.CheckNumber} was already reissued ({notice.RemainderReissueReference}).");
+        if (string.Equals(notice.VoidedBy, user, StringComparison.OrdinalIgnoreCase))
+            throw new SeparationOfDutiesException(
+                $"Separation of duties: you excluded payment {notice.CheckNumber}, so you cannot record its reissue. Another user with payments:approve must.");
+
+        notice.RemainderReissuedAt = Now;
+        notice.RemainderReissuedBy = user;
+        notice.RemainderReissueMethod = Clean(method.Trim());
+        notice.RemainderReissueReference = Clean(reference.Trim());
+        var message = GlEventOutbox.VoidRemainderReissued(run, notice, Clean(reason.Trim()), user, Now);
+        var warning = $"Remainder {notice.UnpaidRemainder:F2} of payment {notice.CheckNumber} (NPI {notice.PayeeNpi}) reissued by {user}: " +
+                      $"{notice.RemainderReissueMethod} {notice.RemainderReissueReference} ({Clean(reason)})";
+        if (!await _runs.TrySaveEftFileAsync(run.Id, file, file.Sha256, Array.Empty<CheckFallbackPayment>(), new[] { warning }, new[] { message }))
+            throw new PaymentFileTransmissionStateException($"Payment run {run.PaymentRunNumber} changed meanwhile; check it and try again.");
+        _logger.LogWarning("AUDIT payment run {RunNumber}: {Warning}", Clean(run.PaymentRunNumber), Clean(warning));
+        return notice;
+    }
+
     private async Task<PaymentRunEftFile> RepinCoreAsync(string paymentRunId, string reason, IReadOnlySet<string> overrides,
         CancellationToken cancellationToken)
     {
@@ -897,21 +938,49 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
             {
                 if (outstanding >= c.Amount)
                     break;
+                // The marker ties the reversal to this void in the ledger itself, so the refund is
+                // rebuilt below even if this completion is interrupted before it is saved.
                 await _receivables.ReverseRecoveryAsync(run.TenantId, c.ReceivableId, recovery.PaymentId!, user,
-                    $"{reason}: recovered for a payment that was never made");
+                    $"{reason}: recovered for a payment that was never made {VoidMarker(notice.PaymentId)}");
                 outstanding += recovery.Amount;
-                var refund = $"Provider {notice.PayeeNpi} had {recovery.Amount:F2} withheld from payment {recovery.PaymentId} (run {recovery.RunNumber}) " +
-                             $"against receivable {c.ReceivableId}, which reverses payment {notice.CheckNumber} that was never paid: the recovery was reversed " +
-                             "and the provider is owed that amount back (refund it and post it in the GL by hand).";
-                notice.RefundsOwed.Add(refund);
-                warnings.Add(refund);
-                // An open item in the GL reconciliation until finance posts the refund.
-                glEvents.Add(GlEventOutbox.ProviderRefundOwed(run, notice, c.ReceivableId, recovery.PaymentId!, recovery.RunNumber,
-                    recovery.Amount, user, Now));
-                _logger.LogCritical("AUDIT {Refund}", Clean(refund));
             }
         }
         await _receivables.CancelForUnpaidPaymentAsync(run.TenantId, c.ReceivableId, notice.PaymentId, c.Amount, user, reason);
+        await RebuildRefundsOwedAsync(run, notice, c.ReceivableId, user, warnings, glEvents);
+    }
+
+    private static string VoidMarker(string paymentId) => $"[void {paymentId}]";
+
+    /// <summary>
+    /// The refunds owed for this void, from the ledger's RecoveryReversed entries marked with it:
+    /// on every completion, so a refund whose reversal landed but whose record did not (a crash, or
+    /// conflicting saves) is recorded the next time. The GL event id is deterministic.
+    /// </summary>
+    private async Task RebuildRefundsOwedAsync(PaymentRun run, VoidedPaymentNotice notice, string receivableId, string user,
+        List<string> warnings, List<PaymentFileOutboxMessage> glEvents)
+    {
+        var receivable = await _receivables!.GetAsync(run.TenantId, receivableId);
+        if (receivable == null)
+            return;
+        var marker = VoidMarker(notice.PaymentId);
+        foreach (var reversed in receivable.Entries.Where(e => e.Type == ReceivableEntryType.RecoveryReversed && e.PaymentId != null
+                                                               && e.Note?.Contains(marker, StringComparison.Ordinal) == true))
+        {
+            var recovering = reversed.PaymentId!;
+            var runNumber = receivable.Entries.LastOrDefault(e => e.Type == ReceivableEntryType.Recovered && e.PaymentId == recovering)?.RunNumber;
+            var message = GlEventOutbox.ProviderRefundOwed(run, notice, receivableId, recovering, runNumber, reversed.Amount, user, Now);
+            if (run.GlOutbox.All(m => m.EventId != message.EventId) && glEvents.All(m => m.EventId != message.EventId))
+                glEvents.Add(message);
+            var key = $"{receivableId}|{recovering}";
+            if (notice.RefundsOwed.Any(r => r.Contains(key, StringComparison.Ordinal)))
+                continue;
+            var refund = $"Provider {notice.PayeeNpi} had {reversed.Amount:F2} withheld from payment {recovering} (run {runNumber}) " +
+                         $"against receivable {receivableId}, which reverses payment {notice.CheckNumber} that was never paid: the recovery was reversed " +
+                         $"and the provider is owed that amount back (refund it and post it in the GL by hand). [{key}]";
+            notice.RefundsOwed.Add(refund);
+            warnings.Add(refund);
+            _logger.LogCritical("AUDIT {Refund}", Clean(refund));
+        }
     }
 
     /// <summary>The file's payments reached the bank: receivables held for their void are released (best effort; audited).</summary>

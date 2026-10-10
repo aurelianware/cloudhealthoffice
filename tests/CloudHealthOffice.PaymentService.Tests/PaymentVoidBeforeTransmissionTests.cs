@@ -347,6 +347,48 @@ public class PaymentVoidBeforeTransmissionTests
         // Second person: the one who excluded it may not send the new file.
         await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("treasury-2").TransmitAsync(run.Id));
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+
+        // The 75 still owed is paid another way and recorded by a second person, once.
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("treasury-2").ReissueRemainderAsync(run.Id, kept.Id, "Check", "CHK-1", "c2 owed"));
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("maker-1").ReissueRemainderAsync(run.Id, kept.Id, "Check", "CHK-1", "c2 owed"));
+        await Assert.ThrowsAsync<ArgumentException>(() => Service("treasury-4").ReissueRemainderAsync(run.Id, kept.Id, "Check", " ", "c2 owed"));
+        var reissued = await Service("treasury-4").ReissueRemainderAsync(run.Id, kept.Id, "Check", "CHK-55012", "c2 owed; paid by manual check");
+        Assert.Equal(("treasury-4", "CHK-55012"), (reissued.RemainderReissuedBy, reissued.RemainderReissueReference));
+        var after = (await _h.Runs.GetByIdAsync(run.Id))!;
+        Assert.NotNull(Assert.Single(after.EftFile!.VoidedPayments).RemainderReissuedAt);
+        var reissueEvent = JsonSerializer.Deserialize<VoidRemainderReissuedEvent>(
+            Assert.Single(after.GlOutbox, m => m.Type == GlEventTypes.VoidRemainderReissued).PayloadJson, GlEventTypes.Json)!;
+        Assert.Equal((75m, kept.Id, "CHK-55012"), (reissueEvent.Amount, reissueEvent.PaymentId, reissueEvent.Reference));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-4").ReissueRemainderAsync(run.Id, kept.Id, "Check", "CHK-2", "again"));
+    }
+
+    [Fact]
+    public async Task A_refund_owed_is_rebuilt_from_the_ledger_when_the_completion_crashed_after_reversing_the_recovery()
+    {
+        var (run, voided, _) = await PinnedRunAsync();
+        var receivable = (await ReverseAsync(voided))!;
+        var later = LaterPayment(OtherNpi, 30m);
+        await _h.Ledger.ApplyRecoveriesAsync(FfsRunHarness.Tenant, later, "run-later", "PR-LATER", "approver-9");
+        // The completion reverses the recovery and cancels the receivable, then crashes before the run is saved.
+        _h.Runs.FailNextEftFileSave = new TimeoutException("database");
+
+        await Service("treasury-2").RedateAsync(run.Id, "payment reversed before transmission");
+
+        var unsaved = (await _h.Runs.GetByIdAsync(run.Id))!;
+        Assert.False(Assert.Single(unsaved.EftFile!.VoidedPayments).Completed);
+        Assert.DoesNotContain(unsaved.GlOutbox, m => m.Type == GlEventTypes.ProviderRefundOwed);
+        Assert.Equal(ReceivableStatus.Cancelled, (await _h.Ledger.GetAsync(FfsRunHarness.Tenant, receivable.Id))!.Status);
+
+        // The next completion has nothing left to reverse, but rebuilds the refund from the ledger.
+        await Service("treasury-3").TransmitAsync(run.Id);
+
+        var stored = (await _h.Runs.GetByIdAsync(run.Id))!;
+        var notice = Assert.Single(stored.EftFile!.VoidedPayments);
+        Assert.True(notice.Completed);
+        Assert.Contains(later.Id, Assert.Single(notice.RefundsOwed));
+        var refund = JsonSerializer.Deserialize<ProviderRefundOwedEvent>(
+            Assert.Single(stored.GlOutbox, m => m.Type == GlEventTypes.ProviderRefundOwed).PayloadJson, GlEventTypes.Json)!;
+        Assert.Equal((30m, later.Id), (refund.Amount, refund.RecoveringPaymentId));
     }
 
     [Fact]

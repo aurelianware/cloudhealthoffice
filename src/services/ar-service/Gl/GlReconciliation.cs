@@ -67,6 +67,9 @@ public sealed class GlRunReconciliation
     public decimal TransmittedPayable { get; init; }
     public decimal VoidedPayable { get; init; }
 
+    /// <summary>Remainders of excluded payments paid another way (VoidRemainderReissued).</summary>
+    public decimal ReissuedPayable { get; init; }
+
     /// <summary>Accrued minus transmitted minus voided (net of reversals and reposts).</summary>
     public decimal OutstandingPayable { get; init; }
     public List<GlReconciliationFlag> Flags { get; init; } = new();
@@ -144,6 +147,28 @@ public static class GlReconciliationBuilder
                 Amount = e.ClaimedAmount, Detail = e.ParkDetail, ReceivedAt = e.ReceivedAt,
             })
             .ToList();
+        // The unreversed remainder of an excluded payment: still owed to the provider until its
+        // reissue posts (VoidRemainderReissued).
+        var byId = events.ToDictionary(e => e.EventId, StringComparer.Ordinal);
+        foreach (var v in events.Where(e => e.Type == GlEventTypes.PaymentVoidedBeforeTransmission
+                                            && e.Status is not GlSourceEventStatus.Dismissed
+                                            && e.ParkReason != GlParkReason.PreCutover))
+        {
+            var payload = System.Text.Json.JsonSerializer.Deserialize<PaymentVoidedBeforeTransmissionEvent>(v.PayloadJson, GlEventTypes.Json);
+            if (payload is not { UnpaidRemainder: > 0m })
+                continue;
+            var reissueId = GlEventTypes.EventIdFor(tenantId, $"reissue:{payload.PaymentId}", GlEventTypes.VoidRemainderReissued);
+            if (byId.TryGetValue(reissueId, out var reissue) && reissue.Status is GlSourceEventStatus.Posted or GlSourceEventStatus.Dismissed)
+                continue;
+            openItems.Add(new GlOpenItem
+            {
+                EventId = v.EventId, Type = "VoidRemainderUnpaid", PaymentRunId = payload.PaymentRunId,
+                Reference = $"{payload.PaymentRunNumber}/{payload.CheckNumber}", Amount = payload.UnpaidRemainder, ReceivedAt = v.ReceivedAt,
+                Detail = $"{payload.UnpaidRemainder:F2} of payment {payload.CheckNumber} (NPI {payload.PayeeNpi}) was not reversed and is still owed: " +
+                         "pay it and record it (POST /api/paymentruns/{id}/eft-file/voided-payments/{paymentId}/reissue-remainder in payment-service)" +
+                         (reissue == null ? string.Empty : $"; its reissue event is {reissue.Status} {reissue.ParkReason}"),
+            });
+        }
         return new GlReconciliationReport
         {
             OpenItems = openItems,
@@ -193,6 +218,7 @@ public static class GlReconciliationBuilder
             var accrualChain = Chain(runId, $"accrual:{runId}");
             var achChain = Chain(runId, $"ach:{runId}");
             var voidChain = bySource[runId].Where(e => e.Id.StartsWith(GlJournal.KeyFor(tenantId, "void:"), StringComparison.Ordinal)).ToList();
+            var reissueChain = bySource[runId].Where(e => e.Id.StartsWith(GlJournal.KeyFor(tenantId, "reissue:"), StringComparison.Ordinal)).ToList();
             var accrualLive = Live(accrualChain);
             var achLive = Live(achChain);
 
@@ -223,6 +249,7 @@ public static class GlReconciliationBuilder
             var accrued = PayableCredit(accrualChain);
             var transmitted = -PayableCredit(achChain);
             var voided = -PayableCredit(voidChain);
+            var reissued = -PayableCredit(reissueChain);
             var preCutover = accrualEvent is { Status: GlSourceEventStatus.Parked, ParkReason: GlParkReason.PreCutover };
 
             var flags = new List<GlReconciliationFlag>();
@@ -243,9 +270,9 @@ public static class GlReconciliationBuilder
                     flags.Add(GlReconciliationFlag.DuplicateTransmission);
                 if (achLive != null && fileEvent?.EntryId == achLive.Id && fileEvent.ClaimedAmount != transmitted)
                     flags.Add(GlReconciliationFlag.TransmissionAmountMismatch);
-                if (transmitted + voided > accrued) flags.Add(GlReconciliationFlag.TransmittedMoreThanAccrued);
+                if (transmitted + voided + reissued > accrued) flags.Add(GlReconciliationFlag.TransmittedMoreThanAccrued);
                 if (fileEvent != null && payload != null && (fileTotal != inFile || unknownInFile)) flags.Add(GlReconciliationFlag.FileDiffersFromAchPayments);
-                if (accrued - transmitted - voided > 0m) flags.Add(GlReconciliationFlag.PayableOutstanding);
+                if (accrued - transmitted - voided - reissued > 0m) flags.Add(GlReconciliationFlag.PayableOutstanding);
                 if ((accrualChain.Count > 0 && accrualLive == null) || (achChain.Count > 0 && achLive == null))
                     flags.Add(GlReconciliationFlag.EntryReversed);
             }
@@ -262,7 +289,8 @@ public static class GlReconciliationBuilder
                 FileCreditTotal = fileTotal,
                 TransmittedPayable = transmitted,
                 VoidedPayable = voided,
-                OutstandingPayable = accrued - transmitted - voided,
+                ReissuedPayable = reissued,
+                OutstandingPayable = accrued - transmitted - voided - reissued,
                 Flags = flags.Distinct().ToList(),
             }, accrualLive?.Period ?? accrualChain.FirstOrDefault()?.Period));
         }

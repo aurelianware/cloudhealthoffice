@@ -50,6 +50,10 @@ internal sealed class InMemoryGl : IGlJournalRepository, IGlSourceEventRepositor
                 && (afterId == null || string.CompareOrdinal(e.Id, afterId) > 0))
             .OrderBy(e => e.Id, StringComparer.Ordinal).Take(limit).ToList());
 
+    public Task<IReadOnlyList<GlSourceEvent>> ListWaitingForAsync(string tenantId, string eventId, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<GlSourceEvent>>(Events.Where(e => e.TenantId == tenantId && e.WaitingForEventId == eventId
+            && e.Status == GlSourceEventStatus.Parked).ToList());
+
     public Task<IReadOnlyList<GlSourceEvent>> ListPageAsync(string tenantId, GlSourceEventStatus? status, string? afterId, int limit, CancellationToken cancellationToken = default)
         => Task.FromResult<IReadOnlyList<GlSourceEvent>>(Events.Where(e => e.TenantId == tenantId && (status == null || e.Status == status)
                 && (afterId == null || string.CompareOrdinal(e.Id, afterId) > 0))
@@ -291,7 +295,7 @@ internal static class GlFixtures
         });
 
     public static GlEventEnvelope PaymentVoided(string runId, string paymentId, decimal amount, DateTime? at = null, DateTime? runExecutedAt = null,
-        string reversalRunId = "rr-1", DateTime? reversalExecutedAt = null)
+        string reversalRunId = "rr-1", DateTime? reversalExecutedAt = null, decimal unpaidRemainder = 0m)
         => Envelope(GlEventTypes.PaymentVoidedBeforeTransmission, $"payment-void:{paymentId}", new PaymentVoidedBeforeTransmissionEvent
         {
             TenantId = Tenant,
@@ -303,6 +307,7 @@ internal static class GlFixtures
             Amount = amount,
             ReversalRunId = reversalRunId,
             ReversalRunExecutedAt = reversalExecutedAt,
+            UnpaidRemainder = unpaidRemainder,
             SupersededFileReference = $"FFS-PR-{runId}",
             NewFileReference = $"FFS-PR-{runId}-R1",
             VoidedAt = at ?? new DateTime(2026, 5, 22, 11, 0, 0, DateTimeKind.Utc),

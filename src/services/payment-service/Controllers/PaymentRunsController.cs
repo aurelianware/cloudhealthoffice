@@ -373,6 +373,33 @@ public class PaymentRunsController : ControllerBase
         return result.Result!;
     }
 
+    /// <summary>
+    /// Records that the unreversed remainder of a payment excluded from the run's file was paid to
+    /// the provider another way (method, reference). payments:approve, a user who neither excluded it
+    /// nor created or executed the run; once only. The GL moves the remaining payable to cash.
+    /// </summary>
+    [HttpPost("{id}/eft-file/voided-payments/{paymentId}/reissue-remainder")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(VoidedPaymentNotice), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<VoidedPaymentNotice>> ReissueRemainder(
+        string id, string paymentId, [FromBody] ReissueRemainderRequest? request,
+        [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Reason) || string.IsNullOrWhiteSpace(request.Reference) || string.IsNullOrWhiteSpace(request.Method))
+            return Problem(title: "Method, reference and reason required", detail: "Say how the remainder was paid, its reference and why.",
+                statusCode: StatusCodes.Status400BadRequest);
+        var result = await TransmissionAction(async () =>
+        {
+            var notice = await transmissions.ReissueRemainderAsync(id, paymentId, request.Method, request.Reference, request.Reason, cancellationToken);
+            return new ObjectResult(notice) { StatusCode = StatusCodes.Status200OK };
+        });
+        return result.Result!;
+    }
+
     private async Task<ActionResult<PaymentFileTransmission>> TransmissionAction(Func<Task<ActionResult<PaymentFileTransmission>>> action)
     {
         if (_actor.IsService)
@@ -507,6 +534,16 @@ internal static class ReservationRelease
             return controller.Problem(title: "Reservation not released", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
         }
     }
+}
+
+public class ReissueRemainderRequest
+{
+    /// <summary>How it was paid (e.g. "Check").</summary>
+    public string? Method { get; set; }
+
+    /// <summary>The payment's reference (check number, bank reference).</summary>
+    public string? Reference { get; set; }
+    public string? Reason { get; set; }
 }
 
 public class ExcludePaymentsRequest

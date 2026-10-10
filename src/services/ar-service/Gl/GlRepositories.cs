@@ -34,6 +34,9 @@ public interface IGlSourceEventRepository
 
     /// <summary>One page, ordered by id: the records after <paramref name="afterId"/> (null: from the start), at most <paramref name="limit"/>.</summary>
     Task<IReadOnlyList<GlSourceEvent>> ListPageAsync(string tenantId, GlSourceEventStatus? status, string? afterId, int limit, CancellationToken cancellationToken = default);
+
+    /// <summary>Parked records waiting for <paramref name="eventId"/> (<see cref="GlSourceEvent.WaitingForEventId"/>).</summary>
+    Task<IReadOnlyList<GlSourceEvent>> ListWaitingForAsync(string tenantId, string eventId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -153,8 +156,11 @@ public sealed class MongoGlSourceEventRepository : IGlSourceEventRepository
 
     public async Task<bool> TryInsertAsync(GlSourceEvent record, CancellationToken cancellationToken = default)
     {
-        IndexGuard.EnsureOnce(CollectionName, () => _collection.Indexes.CreateOne(new CreateIndexModel<GlSourceEvent>(
-            Builders<GlSourceEvent>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.Status).Ascending(x => x.Id))));
+        IndexGuard.EnsureOnce(CollectionName, () => _collection.Indexes.CreateMany(new[]
+        {
+            new CreateIndexModel<GlSourceEvent>(Builders<GlSourceEvent>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.Status).Ascending(x => x.Id)),
+            new CreateIndexModel<GlSourceEvent>(Builders<GlSourceEvent>.IndexKeys.Ascending(x => x.TenantId).Ascending(x => x.WaitingForEventId)),
+        }));
         record.Id = GlSourceEvent.KeyFor(record.TenantId, record.EventId);
         record.Version = Guid.NewGuid().ToString("N");
         try
@@ -192,6 +198,10 @@ public sealed class MongoGlSourceEventRepository : IGlSourceEventRepository
         var all = await GlPaging.ReadAllAsync((after, size) => ListPageAsync(tenantId, status, after, size, cancellationToken), e => e.Id);
         return all.OrderBy(e => e.ReceivedAt).ThenBy(e => e.EventId, StringComparer.Ordinal).ToList();
     }
+
+    public async Task<IReadOnlyList<GlSourceEvent>> ListWaitingForAsync(string tenantId, string eventId, CancellationToken cancellationToken = default)
+        => await _collection.Find(x => x.TenantId == tenantId && x.WaitingForEventId == eventId && x.Status == GlSourceEventStatus.Parked)
+            .Limit(GlPaging.PageSize).ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<GlSourceEvent>> ListPageAsync(string tenantId, GlSourceEventStatus? status, string? afterId, int limit, CancellationToken cancellationToken = default)
     {

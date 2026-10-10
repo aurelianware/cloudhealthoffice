@@ -146,10 +146,18 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
 
     public int EftFileWrites;
 
+    /// <summary>When set, the next EFT-file save throws it (a crash between a ledger write and the run's record).</summary>
+    public Exception? FailNextEftFileSave { get; set; }
+
     public Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
         IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
         IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
+        if (FailNextEftFileSave is { } failure)
+        {
+            FailNextEftFileSave = null;
+            throw failure;
+        }
         lock (_items)
         {
             var run = _items.FirstOrDefault(r => r.Id == id);

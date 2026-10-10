@@ -292,6 +292,7 @@ public sealed class FfsEftFileService : IFfsEftFileService
             file.VoidedPayments.Add(new VoidedPaymentNotice
             {
                 PaymentId = payment.Id,
+                VoidedBy = actorUserId,
                 CheckNumber = payment.CheckNumber,
                 PayeeNpi = payment.PayeeNPI ?? string.Empty,
                 Amount = payment.TotalPaymentAmount,

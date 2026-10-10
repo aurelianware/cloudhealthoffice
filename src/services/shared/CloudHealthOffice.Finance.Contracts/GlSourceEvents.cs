@@ -33,12 +33,18 @@ public static class GlEventTypes
     /// </summary>
     public const string ProviderRefundOwed = "ProviderRefundOwed";
 
+    /// <summary>
+    /// The unreversed remainder of a payment excluded from its file was paid to the provider
+    /// another way (e.g. a manual check): the remaining payable moves to cash.
+    /// </summary>
+    public const string VoidRemainderReissued = "VoidRemainderReissued";
+
     // Seams, not produced yet:
     //   PaymentFileSettled   - bank acknowledgement / settlement: ACH in transit -> cash.
     //   PaymentFileReturned  - an ACH return: cash/in transit -> payable again.
     //   CapitationDisbursed, PremiumCashReceived - capitation-service / premium-billing-service.
 
-    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted, PaymentVoidedBeforeTransmission, ProviderRefundOwed];
+    public static readonly IReadOnlyList<string> All = [PaymentRunExecuted, ReversalRunExecuted, PaymentFileTransmitted, PaymentVoidedBeforeTransmission, ProviderRefundOwed, VoidRemainderReissued];
 
     /// <summary>The JSON options every GL payload is written and read with (camelCase).</summary>
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -224,4 +230,25 @@ public sealed record ProviderRefundOwedEvent
     public decimal Amount { get; init; }
     public DateTime RecordedAt { get; init; }
     public string RecordedBy { get; init; } = string.Empty;
+}
+
+/// <summary>The unreversed remainder of an excluded payment was paid to the provider another way.</summary>
+public sealed record VoidRemainderReissuedEvent
+{
+    public string EventId { get; init; } = string.Empty;
+    public string TenantId { get; init; } = string.Empty;
+    public string PaymentRunId { get; init; } = string.Empty;
+    public string PaymentRunNumber { get; init; } = string.Empty;
+    public string PaymentId { get; init; } = string.Empty;
+    public string CheckNumber { get; init; } = string.Empty;
+    public string? PayeeNpi { get; init; }
+
+    /// <summary>The remainder paid: what was still payable for the excluded payment.</summary>
+    public decimal Amount { get; init; }
+    public string Method { get; init; } = string.Empty;
+    public string Reference { get; init; } = string.Empty;
+    public string Reason { get; init; } = string.Empty;
+    public DateTime ReissuedAt { get; init; }
+    public string ReissuedBy { get; init; } = string.Empty;
+    public DateTime? PaymentRunExecutedAt { get; init; }
 }

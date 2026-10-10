@@ -69,7 +69,7 @@ public class GlReviewFixesTests
 
         var parked = await Service().IngestAsync(GlFixtures.PaymentVoided("run-1", "run-1-p1", 100m), GlFixtures.Tenant);
 
-        parked.ParkReason.Should().Be(GlParkReason.NeedsMapping);
+        parked.Status.Should().Be(GlSourceEventStatus.Parked); // waiting for its recoupment (not registered here)
         GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries).Runs.Single().Flags.Should().Contain(GlReconciliationFlag.VoidParked);
     }
 
@@ -134,15 +134,92 @@ public class GlReviewFixesTests
     }
 
     [Fact]
-    public async Task A_file_whose_run_is_not_known_yet_waits_for_the_accrual_then_posts_on_retry()
+    public async Task A_file_whose_run_is_not_known_yet_waits_for_the_accrual_and_posts_when_it_arrives()
     {
         var file = await Service().IngestAsync(GlFixtures.FileTransmitted("run-1", "FFS-PR-run-1", 100m), GlFixtures.Tenant);
 
-        file.ParkReason.Should().Be(GlParkReason.PreCutover);
+        file.ParkReason.Should().Be(GlParkReason.AwaitingSourceEvent);
         file.ParkDetail.Should().Contain("not known yet");
 
         await Service().IngestAsync(GlFixtures.RunExecuted(), GlFixtures.Tenant);
-        (await Service().RetryAsync(GlFixtures.Tenant, file.EventId, null, null, "controller-1")).Status.Should().Be(GlSourceEventStatus.Posted);
+
+        // Re-checked automatically: no retry needed.
+        var settled = _gl.Events.Single(e => e.EventId == file.EventId);
+        (settled.Status, settled.LastAttemptBy, settled.WaitingForEventId).Should().Be((GlSourceEventStatus.Posted, GlPostingService.RecheckActor, (string?)null));
+        _gl.Entries.Should().Contain(e => e.Kind == GlEntryKind.AchTransmission);
+    }
+
+    [Fact]
+    public async Task A_file_of_a_pre_cutover_run_waits_then_becomes_PreCutover_when_the_accrual_arrives()
+    {
+        var file = await Service().IngestAsync(GlFixtures.FileTransmitted("old-1", "FFS-PR-old-1", 100m), GlFixtures.Tenant);
+
+        await Service().IngestAsync(GlFixtures.RunExecuted("old-1", new DateTime(2026, 4, 28, 14, 0, 0, DateTimeKind.Utc)), GlFixtures.Tenant);
+
+        _gl.Events.Single(e => e.EventId == file.EventId).ParkReason.Should().Be(GlParkReason.PreCutover);
+        _gl.Entries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_void_waits_for_its_recoupment_and_posts_when_it_posts()
+    {
+        await Service().IngestAsync(GlFixtures.RunExecuted("run-1", null, AchPayments("run-1", 40m)), GlFixtures.Tenant);
+        // The void arrives first: it is not dated by the payment run, it waits.
+        var voided = await Service().IngestAsync(GlFixtures.PaymentVoided("run-1", "run-1-p1", 40m,
+            reversalExecutedAt: new DateTime(2026, 5, 22, 10, 0, 0, DateTimeKind.Utc)), GlFixtures.Tenant);
+        voided.ParkReason.Should().Be(GlParkReason.AwaitingSourceEvent);
+        voided.ParkDetail.Should().Contain("has not arrived");
+
+        // The recoupment arrives but parks (unmapped receivable): the void keeps waiting.
+        _options = GlFixtures.Options(unmapped: GlPostingRole.ProviderReceivable);
+        var recoupment = await Service().IngestAsync(GlFixtures.ReversalExecuted("rr-1", amount: 40m), GlFixtures.Tenant);
+        recoupment.ParkReason.Should().Be(GlParkReason.NeedsMapping);
+        _gl.Events.Single(e => e.EventId == voided.EventId).ParkReason.Should().Be(GlParkReason.AwaitingSourceEvent);
+
+        // Mapped and retried: the recoupment posts, and the void with it.
+        _options = GlFixtures.Options();
+        (await Service().RetryAsync(GlFixtures.Tenant, recoupment.EventId, null, null, "controller-1")).Status.Should().Be(GlSourceEventStatus.Posted);
+        _gl.Events.Single(e => e.EventId == voided.EventId).Status.Should().Be(GlSourceEventStatus.Posted);
+        Balance(GlPostingRole.ProviderReceivable).Should().Be(0m);
+        Balance(GlPostingRole.ClaimsPayable).Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task An_unreversed_remainder_is_an_open_item_until_its_reissue_posts_against_the_original_payable()
+    {
+        // Payment p1 (200) partly reversed (125) and excluded from the file; p2 (50) is sent.
+        await Service().IngestAsync(GlFixtures.RunExecuted("run-1", null, AchPayments("run-1", 200m, 50m)), GlFixtures.Tenant);
+        await Service().IngestAsync(GlFixtures.ReversalExecuted("rr-1", amount: 125m), GlFixtures.Tenant);
+        await Service().IngestAsync(GlFixtures.PaymentVoided("run-1", "run-1-p1", 125m, unpaidRemainder: 75m), GlFixtures.Tenant);
+        await Service().IngestAsync(GlFixtures.FileTransmitted("run-1", "FFS-PR-run-1-R1", 50m, paymentIds: ["run-1-p2"]), GlFixtures.Tenant);
+
+        var open = GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries);
+        var item = open.OpenItems.Should().ContainSingle().Subject;
+        (item.Type, item.Amount).Should().Be(("VoidRemainderUnpaid", 75m));
+        item.Detail.Should().Contain("reissue-remainder");
+        open.Runs.Single().OutstandingPayable.Should().Be(75m);
+        open.Balanced.Should().BeFalse();
+
+        var reissue = GlFixtures.Envelope(GlEventTypes.VoidRemainderReissued, "reissue:run-1-p1", new VoidRemainderReissuedEvent
+        {
+            TenantId = GlFixtures.Tenant, PaymentRunId = "run-1", PaymentRunNumber = "PR-run-1", PaymentId = "run-1-p1", CheckNumber = "0001000001",
+            PayeeNpi = "111", Amount = 75m, Method = "Check", Reference = "CHK-55012", Reason = "c2 owed",
+            ReissuedAt = new DateTime(2026, 5, 25, 9, 0, 0, DateTimeKind.Utc), ReissuedBy = "treasury-3",
+            PaymentRunExecutedAt = new DateTime(2026, 5, 20, 14, 0, 0, DateTimeKind.Utc),
+        });
+        (await Service().IngestAsync(reissue, GlFixtures.Tenant)).Status.Should().Be(GlSourceEventStatus.Posted);
+
+        var entry = _gl.Entries.Single(e => e.Kind == GlEntryKind.RemainderReissue);
+        entry.Lines.Select(l => (l.Role, l.Debit, l.Credit)).Should().Equal((GlPostingRole.ClaimsPayable, 75m, 0m), (GlPostingRole.Cash, 0m, 75m));
+        // Nothing accrued twice: expense = 250 - 125 recouped; payable fully settled; receivable cleared.
+        Balance(GlPostingRole.ClaimsExpense).Should().Be(125m);
+        Balance(GlPostingRole.ClaimsPayable).Should().Be(0m);
+        Balance(GlPostingRole.ProviderReceivable).Should().Be(0m);
+        var closed = GlReconciliationBuilder.Build(GlFixtures.Tenant, null, _gl.Events, _gl.Entries);
+        closed.OpenItems.Should().BeEmpty();
+        var run = closed.Runs.Single();
+        (run.ReissuedPayable, run.OutstandingPayable).Should().Be((75m, 0m));
+        closed.Balanced.Should().BeTrue();
     }
 
     [Fact]

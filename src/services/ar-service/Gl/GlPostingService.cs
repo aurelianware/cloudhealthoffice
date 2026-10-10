@@ -152,6 +152,7 @@ public sealed class GlPostingService
                         ?? throw new GlStateException($"GL event {envelope.EventId} could not be recorded; deliver it again.");
             return Duplicate(raced, sha);
         }
+        await ReleaseWaitersAsync(record, cancellationToken);
         return GlIngestResult.From(record, duplicate: false);
     }
 
@@ -176,11 +177,21 @@ public sealed class GlPostingService
         EnsureEnabled();
         var record = await _events.GetAsync(tenantId, eventId, cancellationToken)
                      ?? throw new KeyNotFoundException($"No GL event {eventId}.");
-        if (record.Status != GlSourceEventStatus.Parked)
-            throw new GlStateException($"GL event {eventId} is {record.Status}, not parked.");
         if ((entryDate != null || includeBeforeCutover) && string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason is required to post an event on another date or from before the cutover.");
+        var result = await RetryCoreAsync(record, entryDate, reason, actor, includeBeforeCutover, cancellationToken);
+        await ReleaseWaitersAsync(result, cancellationToken);
+        return GlIngestResult.From(result, duplicate: false);
+    }
 
+    /// <summary>The system actor of automatic re-checks (an event's dependency settled).</summary>
+    public const string RecheckActor = "gl-recheck";
+
+    private async Task<GlSourceEvent> RetryCoreAsync(GlSourceEvent record, DateTime? entryDate, string? reason, string actor, bool includeBeforeCutover,
+        CancellationToken cancellationToken)
+    {
+        if (record.Status != GlSourceEventStatus.Parked)
+            throw new GlStateException($"GL event {record.EventId} is {record.Status}, not parked.");
         var envelope = EnvelopeOf(record);
         if (entryDate != null)
         {
@@ -196,8 +207,8 @@ public sealed class GlPostingService
         await PostAsync(envelope, record, entryDate?.Date, reason == null ? null : Clean(reason), actor, cancellationToken,
             new PostOptions { IncludeBeforeCutover = includeBeforeCutover });
         if (!await _events.TryReplaceAsync(record, readVersion, cancellationToken))
-            throw new GlStateException($"GL event {eventId} changed meanwhile; check it and retry.");
-        return GlIngestResult.From(record, duplicate: false);
+            throw new GlStateException($"GL event {record.EventId} changed meanwhile; check it and retry.");
+        return record;
     }
 
     /// <summary>A parked event finance decided not to post (e.g. a duplicate transmission): kept, with the reason.</summary>
@@ -490,9 +501,10 @@ public sealed class GlPostingService
         record.SourceReference = proposal.SourceReference;
         record.ClaimedAmount = proposal.ClaimedAmount;
 
-        if (!options.IncludeBeforeCutover && await PreCutoverAsync(record, proposal, cancellationToken) is { } before)
+        if (await CutoverHoldAsync(record, proposal, cancellationToken) is { } hold
+            && !(options.IncludeBeforeCutover && hold.Reason == GlParkReason.PreCutover))
         {
-            Park(record, GlParkReason.PreCutover, before);
+            Park(record, hold.Reason, hold.Detail, hold.WaitingFor);
             return;
         }
 
@@ -598,6 +610,7 @@ public sealed class GlPostingService
         record.Status = GlSourceEventStatus.Posted;
         record.ParkReason = null;
         record.ParkDetail = null;
+        record.WaitingForEventId = null;
         record.EntryId = entry.Id;
         _logger.LogInformation(PostedEvent,
             "AUDIT GL entry {EntryId} ({Kind}) of tenant {TenantId} posted from event {EventId} ({Reference}) on {Date:yyyy-MM-dd}: {Total:F2}",
@@ -605,42 +618,81 @@ public sealed class GlPostingService
             entry.EntryDate, entry.TotalDebit);
     }
 
+    private sealed record CutoverHold(GlParkReason Reason, string Detail, string? WaitingFor);
+
     /// <summary>
-    /// Why the event is about a run executed before the tenant's cutover (null when it is not).
-    /// The run's execution date comes from the event, or else from the run's accrual event in
-    /// the register; when neither tells, it is held (never guessed).
+    /// Why the event cannot post here yet because of the cutover (null when it can): its run was
+    /// executed before the cutover (PreCutover), or the event it depends on to tell has not
+    /// settled yet (AwaitingSourceEvent, re-checked automatically when that event posts or parks
+    /// PreCutover). A void depends on its recoupment(s); a transmission without the run's
+    /// execution date on the run's accrual. Never guessed.
     /// </summary>
-    private async Task<string?> PreCutoverAsync(GlSourceEvent record, GlProposedEntry proposal, CancellationToken cancellationToken)
+    private async Task<CutoverHold?> CutoverHoldAsync(GlSourceEvent record, GlProposedEntry proposal, CancellationToken cancellationToken)
     {
         if (_options.CutoverFor(record.TenantId) is not { } cutover)
             return null; // tenant not configured: it parks as NeedsMapping; while enabled the validator requires a cutover
         if (proposal.RecoupmentReversalRunIds.Count > 0)
         {
             // A void settles its recoupment: it is in this GL exactly when the recoupment is.
-            var recoupments = new List<GlSourceEvent?>();
+            var recoupments = new List<(string EventId, GlSourceEvent? Event)>();
             foreach (var reversalRunId in proposal.RecoupmentReversalRunIds)
-                recoupments.Add(await _events.GetAsync(record.TenantId,
-                    GlEventTypes.EventIdFor(record.TenantId, $"reversal-run:{reversalRunId}", GlEventTypes.ReversalRunExecuted), cancellationToken));
-            if (recoupments.Any(r => r?.Status == GlSourceEventStatus.Posted))
+            {
+                var id = GlEventTypes.EventIdFor(record.TenantId, $"reversal-run:{reversalRunId}", GlEventTypes.ReversalRunExecuted);
+                recoupments.Add((id, await _events.GetAsync(record.TenantId, id, cancellationToken)));
+            }
+            if (recoupments.Any(r => r.Event?.Status == GlSourceEventStatus.Posted))
                 return null;
-            if (recoupments.All(r => r is { Status: GlSourceEventStatus.Parked, ParkReason: GlParkReason.PreCutover }))
-                return $"its recoupment (reversal run {string.Join(", ", proposal.RecoupmentReversalRunIds)}) is before the GL cutover {cutover:yyyy-MM-dd}; " +
-                       "it is in the opening balances";
+            if (recoupments.All(r => r.Event is { Status: GlSourceEventStatus.Parked, ParkReason: GlParkReason.PreCutover }))
+                return new CutoverHold(GlParkReason.PreCutover,
+                    $"its recoupment (reversal run {string.Join(", ", proposal.RecoupmentReversalRunIds)}) is before the GL cutover {cutover:yyyy-MM-dd}; " +
+                    "it is in the opening balances", null);
+            var pending = recoupments.First(r => r.Event is not { Status: GlSourceEventStatus.Parked, ParkReason: GlParkReason.PreCutover });
+            return new CutoverHold(GlParkReason.AwaitingSourceEvent,
+                $"waiting for its recoupment (reversal run {string.Join(", ", proposal.RecoupmentReversalRunIds)}): " +
+                (pending.Event == null ? "it has not arrived" : $"it is {pending.Event.Status} {pending.Event.ParkReason}") +
+                "; posted automatically once it posts", pending.EventId);
         }
         if (proposal.RunExecutedAt is { } executed)
             return executed < cutover
-                ? $"run {proposal.SourceReference} was executed {executed:yyyy-MM-dd}, before the GL cutover {cutover:yyyy-MM-dd}; its accounting is in the opening balances"
+                ? new CutoverHold(GlParkReason.PreCutover,
+                    $"run {proposal.SourceReference} was executed {executed:yyyy-MM-dd}, before the GL cutover {cutover:yyyy-MM-dd}; its accounting is in the opening balances", null)
                 : null;
         if (proposal.PaymentRunId == null)
             return null;
         var accrualId = GlEventTypes.EventIdFor(record.TenantId, $"payment-run:{proposal.PaymentRunId}", GlEventTypes.PaymentRunExecuted);
         var accrual = await _events.GetAsync(record.TenantId, accrualId, cancellationToken);
         if (accrual == null)
-            return $"the execution date of run {proposal.PaymentRunId} is not known yet (its PaymentRunExecuted event has not arrived), " +
-                   $"so it cannot be placed against the GL cutover {cutover:yyyy-MM-dd}; retry it once the accrual is in";
+            return new CutoverHold(GlParkReason.AwaitingSourceEvent,
+                $"the execution date of run {proposal.PaymentRunId} is not known yet (its PaymentRunExecuted event has not arrived), " +
+                $"so it cannot be placed against the GL cutover {cutover:yyyy-MM-dd}; posted automatically once the accrual is in", accrualId);
         return accrual.Status == GlSourceEventStatus.Parked && accrual.ParkReason == GlParkReason.PreCutover
-            ? $"run {proposal.PaymentRunId} was executed before the GL cutover {cutover:yyyy-MM-dd} (its accrual is PreCutover)"
+            ? new CutoverHold(GlParkReason.PreCutover, $"run {proposal.PaymentRunId} was executed before the GL cutover {cutover:yyyy-MM-dd} (its accrual is PreCutover)", null)
             : null;
+    }
+
+    /// <summary>
+    /// Events parked waiting for <paramref name="settled"/> are re-checked now that it posted (or
+    /// parked PreCutover), by the system; each may in turn release its own waiters.
+    /// </summary>
+    private async Task ReleaseWaitersAsync(GlSourceEvent settled, CancellationToken cancellationToken, int depth = 0)
+    {
+        if (depth > 5 || !(settled.Status == GlSourceEventStatus.Posted
+                           || settled is { Status: GlSourceEventStatus.Parked, ParkReason: GlParkReason.PreCutover }))
+            return;
+        foreach (var waiter in await _events.ListWaitingForAsync(settled.TenantId, settled.EventId, cancellationToken))
+        {
+            try
+            {
+                var rechecked = await RetryCoreAsync(waiter, null, null, RecheckActor, false, cancellationToken);
+                await ReleaseWaitersAsync(rechecked, cancellationToken, depth + 1);
+            }
+            catch (GlStateException ex)
+            {
+                // Changed meanwhile, or its period lease lapsed: it stays parked and is retried with the next event or by hand.
+                _logger.LogWarning("GL event {EventId} waiting for {Settled} was not re-checked ({Error})",
+                    SanitizeForLog(waiter.EventId), SanitizeForLog(settled.EventId), SanitizeForLog(ex.Message));
+            }
+        }
     }
 
     /// <summary>A refund owed to a provider: registered and parked as an open item; finance posts it by hand.</summary>
@@ -684,11 +736,12 @@ public sealed class GlPostingService
         return null;
     }
 
-    private void Park(GlSourceEvent record, GlParkReason reason, string detail)
+    private void Park(GlSourceEvent record, GlParkReason reason, string detail, string? waitingFor = null)
     {
         record.Status = GlSourceEventStatus.Parked;
         record.ParkReason = reason;
         record.ParkDetail = Clean(detail);
+        record.WaitingForEventId = waitingFor;
         record.EntryId = null;
         _logger.LogWarning(ParkedEvent, "AUDIT GL event {EventId} ({Type}) of tenant {TenantId} parked ({Reason}): {Detail}",
             SanitizeForLog(record.EventId), SanitizeForLog(record.Type), SanitizeForLog(record.TenantId), reason, SanitizeForLog(detail));

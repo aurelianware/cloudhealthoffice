@@ -62,6 +62,7 @@ public static class GlEntryBuilder
                 GlEventTypes.PaymentVoidedBeforeTransmission => Void(Read<PaymentVoidedBeforeTransmissionEvent>(envelope)),
                 // Posted by hand (see GlPostingService): an open item, never an automatic entry.
                 GlEventTypes.ProviderRefundOwed => null,
+                GlEventTypes.VoidRemainderReissued => Reissue(Read<VoidRemainderReissuedEvent>(envelope)),
                 _ => throw new GlInvalidPayloadException($"Unknown GL event type '{envelope.Type}'."),
             };
         }
@@ -203,6 +204,34 @@ public static class GlEntryBuilder
             [
                 (GlPostingRole.ClaimsPayable, e.Amount, 0m, $"payable relieved: payment {e.CheckNumber} is never paid (file {e.SupersededFileReference} superseded)"),
                 (GlPostingRole.ProviderReceivable, 0m, e.Amount, $"receivable of reversal run {e.ReversalRunId} cancelled: payment {e.CheckNumber} was never paid"),
+            ],
+        };
+    }
+
+    private static GlProposedEntry? Reissue(VoidRemainderReissuedEvent e)
+    {
+        Require(!string.IsNullOrEmpty(e.PaymentRunId), "VoidRemainderReissued has no paymentRunId.");
+        Require(!string.IsNullOrEmpty(e.PaymentId), "VoidRemainderReissued has no paymentId.");
+        Money(e.Amount, $"reissued remainder of payment {e.CheckNumber}");
+        if (e.Amount == 0m)
+            return null;
+        // Against the payable the original accrual left: nothing is accrued twice.
+        return new GlProposedEntry
+        {
+            Kind = GlEntryKind.RemainderReissue,
+            Key = $"reissue:{e.PaymentId}",
+            SourceDocumentId = e.PaymentRunId,
+            SourceReference = $"{e.PaymentRunNumber}/{e.CheckNumber}",
+            EntryDate = e.ReissuedAt.Date,
+            Description = $"Remainder of payment {e.CheckNumber} (payment run {e.PaymentRunNumber}) paid by {e.Method} {e.Reference}",
+            PostedBy = e.ReissuedBy,
+            ClaimedAmount = e.Amount,
+            RunExecutedAt = e.PaymentRunExecutedAt,
+            PaymentRunId = e.PaymentRunId,
+            Lines =
+            [
+                (GlPostingRole.ClaimsPayable, e.Amount, 0m, $"remainder of excluded payment {e.CheckNumber} paid ({e.Method} {e.Reference})"),
+                (GlPostingRole.Cash, 0m, e.Amount, $"{e.Method} {e.Reference} to NPI {e.PayeeNpi}"),
             ],
         };
     }

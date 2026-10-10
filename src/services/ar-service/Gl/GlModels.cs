@@ -42,6 +42,9 @@ public enum GlEntryKind
     /// <summary>NACHA file at the bank: Dr claims payable, Cr ACH in transit.</summary>
     AchTransmission,
 
+    /// <summary>The unreversed remainder of an excluded payment paid another way: Dr claims payable, Cr cash.</summary>
+    RemainderReissue,
+
     /// <summary>An operator's correction: the mirror image of an earlier entry.</summary>
     Reversal,
 
@@ -167,6 +170,13 @@ public enum GlParkReason
     /// finance posts it by hand and dismisses the event with a reason naming the posting.
     /// </summary>
     ManualPostingRequired,
+
+    /// <summary>
+    /// It depends on another event that has not settled yet (a void on its recoupment, a
+    /// transmission without a run date on the run's accrual): re-checked automatically when that
+    /// event posts or parks PreCutover (<see cref="GlSourceEvent.WaitingForEventId"/>).
+    /// </summary>
+    AwaitingSourceEvent,
 }
 
 /// <summary>
@@ -191,6 +201,9 @@ public sealed class GlSourceEvent
     public GlSourceEventStatus Status { get; set; }
     public GlParkReason? ParkReason { get; set; }
     public string? ParkDetail { get; set; }
+
+    /// <summary>While parked AwaitingSourceEvent: the event whose settling re-checks this one.</summary>
+    public string? WaitingForEventId { get; set; }
     public string? EntryId { get; set; }
     public int Attempts { get; set; }
     public DateTime? LastAttemptAt { get; set; }

@@ -156,8 +156,17 @@ public class VoidedPaymentNotice
     /// <summary>The payable never to be paid (what was reversed, net of the payment's own recoveries).</summary>
     public decimal PayableRelieved { get; set; }
 
-    /// <summary>Not reversed: still owed to the provider, to be reissued by a person.</summary>
+    /// <summary>Not reversed: still owed to the provider, to be reissued by a person (reissue-remainder).</summary>
     public decimal UnpaidRemainder { get; set; }
+
+    /// <summary>Who left the payment out (the re-pin or exclusion); may not record its reissue.</summary>
+    public string? VoidedBy { get; set; }
+
+    /// <summary>The remainder was paid to the provider (recorded by reissue-remainder).</summary>
+    public DateTime? RemainderReissuedAt { get; set; }
+    public string? RemainderReissuedBy { get; set; }
+    public string? RemainderReissueMethod { get; set; }
+    public string? RemainderReissueReference { get; set; }
 
     /// <summary>The payment recovered receivables; those recoveries were undone.</summary>
     public bool OffsetsReversed { get; set; }

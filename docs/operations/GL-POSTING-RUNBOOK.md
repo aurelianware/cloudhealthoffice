@@ -53,6 +53,10 @@ payment voided before its file was sent ─ PaymentVoidedBeforeTransmission ┘
   - `InvalidPayload`: a negative or non-money amount, totals that do not add up, or a
     file with debits.
   - `PreCutover`: the run was executed before the tenant's `CutoverDate` (section 3a).
+  - `AwaitingSourceEvent`: it depends on another event that has not settled: a void on its
+    recoupment, or an undated transmission on its run's accrual. It is re-checked
+    automatically (`waitingForEventId`).
+  - `ManualPostingRequired`: a refund owed to a provider (an open item).
 - **Append-only.** No entry is ever updated or deleted. Corrections are reversing
   entries (`POST /api/gl/entries/{id}/reverse`). An entry can be reversed only once, and
   a reversal cannot itself be reversed. The register record of an event can change
@@ -125,10 +129,18 @@ payments. A held receivable is never offset against later payments to the provid
   entry) and later runs recover it.
 - For a file sent outside this system, a person releases it:
   `POST /api/receivables/{id}/release` `{ "reason": "..." }` (payments:approve, a user).
+  **This includes a tenant with bank transmission on whose file was nevertheless sent by
+  hand** (downloaded and uploaded to the bank outside payment-service). No Transmitted
+  record exists for that file, so every receivable held for its payments stays
+  `PendingVoid` until it is released this way, one by one. Check
+  `GET /api/receivables?status=PendingVoid` after any manual send.
 
 A receivable opened before this existed may already have been partly recovered when the
 void completes. The completion then reverses the newest recoveries until the cancellation
-fits. Each reversed recovery is recorded in four places:
+fits. The ledger entry of each reversed recovery is marked with the void (`[void {paymentId}]`).
+Every completion rebuilds the refunds owed from those marked entries, so a refund is never
+lost if the completion is interrupted after the ledger write. Each refund is recorded in
+four places:
 - the notice's `refundsOwed`;
 - a run warning;
 - a critical audit log;
@@ -160,18 +172,32 @@ nor its executor, the drop is probed for a Failed file, and someone else approve
 the new file. The other payees are paid, with the same void, receivable, 835-notice and GL
 handling, plus:
 - **Partly reversed:** only the reversed part is relieved (`payableRelieved`). The rest
-  (`unpaidRemainder`) stays payable and is still owed to the provider; a person must reissue
-  it (run warning).
+  (`unpaidRemainder`) stays payable and is still owed to the provider. Its claims stay with
+  this run (they are finalized as paid), so no later run pays them.
+  - The GL reconciliation lists it as an open item, `VoidRemainderUnpaid`, and is not
+    balanced until it is resolved.
+  - Pay the remainder another way (for example a manual check). Then a second user (not the
+    one who excluded the payment, nor the run's maker or executor) records it, once:
+    `POST /api/paymentruns/{id}/eft-file/voided-payments/{paymentId}/reissue-remainder`
+    `{ "method": "Check", "reference": "CHK-…", "reason": "..." }`.
+  - That queues `VoidRemainderReissued`. The GL posts Dr ClaimsPayable / Cr Cash against the
+    payable the original accrual left, so nothing is accrued twice. The open item then closes.
+    Map the `Cash` role first, or the reissue parks `NeedsMapping` and the item stays open.
 - **Offsets:** the receivables the payment recovered are owed again (its recoveries are
   undone, since it is never made). The GL void entry is the payable net of those offsets.
 
 A reversal still running is always refused (wait for it). Excluding a payment that has no
 completed reversal is refused.
 
-**Cutover:** a void follows its recoupment, not its payment run. It posts here whenever the
-recouping reversal run's `ReversalRunExecuted` posted here. If that run is before the cutover
-(`PreCutover`), the void is PreCutover too. Without the recoupment in the register, the
-reversal run's execution date decides.
+**Cutover:** a void follows its recoupment, not its payment run.
+- It posts here whenever the recouping reversal run's `ReversalRunExecuted` posted here.
+- If that event is `PreCutover`, the void is PreCutover too.
+- While the recoupment has not arrived, or is parked for another reason, the void parks as
+  `AwaitingSourceEvent` ("waiting for its recoupment"). It is re-checked automatically when
+  the recoupment posts or parks PreCutover; nobody needs to retry it.
+
+A transmission event without the run's execution date waits the same way for the run's
+accrual.
 
 ## 2. Accounts (per tenant, validated at startup)
 
@@ -242,8 +268,8 @@ listed, but parked as `PreCutover`, not posted:
 - reversal runs executed before the cutover.
 
 The run's execution date comes from the event. Older transmission events lack it; for
-those the run's accrual event decides. If the accrual has not arrived yet, the event
-parks as `PreCutover` "not known yet" and posts on retry once the accrual is in.
+those the run's accrual event decides. If the accrual has not arrived yet, the event parks
+as `AwaitingSourceEvent` and is re-checked automatically when the accrual arrives.
 
 Opening-balance step, once, before enabling:
 1. Choose the cutover date with the controller: the first day of an open period, after the
@@ -322,7 +348,11 @@ work. Service tokens cannot make GL corrections.
 | `EntryReversed` | an operator reversed one of the run's entries and nothing replaces it. A repost (`{key}:r{n}`) clears it; reconciliation counts every entry of a key with its reversals and reposts. |
 | `VoidParked` | a PaymentVoidedBeforeTransmission event is parked: the payable of a payment that will never be paid is not relieved. Fix and retry. |
 
-**Open items** (`openItems`, report level): refunds owed to providers (`ProviderRefundOwed`, parked `ManualPostingRequired`). Post each by hand, then dismiss its event naming the posting. The report is not balanced while any is open.
+**Open items** (`openItems`, report level). The report is not balanced while any is open.
+- Refunds owed to providers (`ProviderRefundOwed`, parked `ManualPostingRequired`): post each
+  by hand, then dismiss its event naming the posting.
+- Unreversed remainders of excluded payments (`VoidRemainderUnpaid`): pay the remainder and
+  record it with reissue-remainder (see "Payments reversed before their file was sent").
 | `PreCutover` | informational: the run is before the GL cutover and is in the opening balances (section 3a). |
 
 `glClaimsPayableBalance` is credits minus debits on every ClaimsPayable line.

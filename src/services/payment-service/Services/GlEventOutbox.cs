@@ -125,6 +125,30 @@ public static class GlEventOutbox
         return Message(eventId, GlEventTypes.PaymentVoidedBeforeTransmission, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
     }
 
+    /// <summary>The VoidRemainderReissued event of an excluded payment's remainder (deterministic per payment).</summary>
+    public static PaymentFileOutboxMessage VoidRemainderReissued(PaymentRun run, VoidedPaymentNotice notice, string reason, string by, DateTime at)
+    {
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"reissue:{notice.PaymentId}", GlEventTypes.VoidRemainderReissued);
+        var payload = new VoidRemainderReissuedEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            PaymentRunId = run.Id,
+            PaymentRunNumber = run.PaymentRunNumber,
+            PaymentId = notice.PaymentId,
+            CheckNumber = notice.CheckNumber,
+            PayeeNpi = notice.PayeeNpi,
+            Amount = notice.UnpaidRemainder,
+            Method = notice.RemainderReissueMethod ?? string.Empty,
+            Reference = notice.RemainderReissueReference ?? string.Empty,
+            Reason = reason,
+            ReissuedAt = at,
+            ReissuedBy = by,
+            PaymentRunExecutedAt = run.ExecutionStartedAt,
+        };
+        return Message(eventId, GlEventTypes.VoidRemainderReissued, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
+    }
+
     /// <summary>The ProviderRefundOwed event of one reversed recovery (deterministic per receivable, recovering and voided payment).</summary>
     public static PaymentFileOutboxMessage ProviderRefundOwed(PaymentRun run, VoidedPaymentNotice notice, string receivableId,
         string recoveringPaymentId, string? recoveringRunNumber, decimal amount, string by, DateTime at)

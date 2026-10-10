@@ -71,6 +71,7 @@ public sealed class GlPostingOptionsValidator : IValidateOptions<GlPostingOption
         (GlPostingRole.ClaimsExpense, GlPostingRole.ProviderReceivable),
         (GlPostingRole.ClaimsPayable, GlPostingRole.AchInTransit),
         (GlPostingRole.ClaimsPayable, GlPostingRole.ProviderReceivable),
+        (GlPostingRole.ClaimsPayable, GlPostingRole.Cash),
     ];
 
     public ValidateOptionsResult Validate(string? name, GlPostingOptions options)
