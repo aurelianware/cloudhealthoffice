@@ -80,6 +80,18 @@ public class EnrollmentRaw834Ta1Tests
     }
 
     [Fact]
+    public async Task ImportFailingAfterItStarted_KeepsTheControlNumber()
+    {
+        var ctl = Controller();
+        _import.Setup(s => s.ImportEnrollmentAsync(It.IsAny<Enrollment834>(), "t1")).ThrowsAsync(new InvalidOperationException("member-service down"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ctl.ImportRaw834(File(Edi834())));
+
+        // Members may have been written: the resend is refused as a duplicate, not imported again.
+        var resent = await Controller().ImportRaw834(File(Edi834()));
+        Assert.Contains("*R*025~", Assert.IsType<BadRequestObjectResult>(resent.Result).Value!.ToString());
+    }
+
+    [Fact]
     public async Task NoAckRequested_ImportsWithoutTa1_AndASecondUploadIsADuplicate()
     {
         var ctl = Controller();

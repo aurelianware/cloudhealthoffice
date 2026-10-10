@@ -150,28 +150,60 @@ public class Raw837Ta1Tests : IClassFixture<Ta1ClaimsApiFactory>
     }
 
     [Fact]
-    public async Task ImportFailingAfterTheEnvelope_ReleasesTheControlNumber_SoTheResendIsProcessed()
+    public async Task ImportFailingBeforeAnyClaimWasSubmitted_ReleasesTheControlNumber()
     {
-        var edi = Sample(NextControl());
-        _service.ClearSubstitute();
-        _service
-            .SubmitAsync(Arg.Any<AdapterClaim>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns<Task<ClaimSubmissionResult>>(_ => throw new InvalidOperationException("database unavailable"));
+        // A valid envelope whose transaction set carries no CLM: refused before any submission.
+        var control = NextControl();
+        var body = Snip.Snip837Samples.ProfessionalBody("CLM-TA1-NOCLM").Where(seg => !seg.StartsWith("CLM*", StringComparison.Ordinal)).ToList();
+        var edi = Snip.Snip837Samples.Wrap(Snip.Snip837Samples.ProfessionalVersion, body)
+            .Replace("*000000101*0*T*:", $"*{control}*0*T*:", StringComparison.Ordinal)
+            .Replace("IEA*1*000000101", $"IEA*1*{control}", StringComparison.Ordinal);
 
         var failed = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
-        Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, failed.StatusCode);
+        Assert.Equal(["000"], (await failed.Content.ReadFromJsonAsync<Raw837ImportResult>())!.InterchangeNoteCodes);
 
+        // The number was given back: the resend is judged on its content again, not refused with 025.
+        var resent = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
+        var result = (await resent.Content.ReadFromJsonAsync<Raw837ImportResult>())!;
+        Assert.Equal(["000"], result.InterchangeNoteCodes);
+        Assert.NotNull(result.Error);
+        await _service.DidNotReceiveWithAnyArgs().SubmitAsync(default!, default!, default, default, default);
+    }
+
+    private static string TwoClaims(string isa13)
+    {
+        var a = Snip.Snip837Samples.ProfessionalBody("CLM-TA1-A" + isa13[^4..]);
+        var b = Snip.Snip837Samples.ProfessionalBody("CLM-TA1-B" + isa13[^4..]);
+        return Snip.Snip837Samples.Wrap(Snip.Snip837Samples.ProfessionalVersion, a, b)
+            .Replace("*000000101*0*T*:", $"*{isa13}*0*T*:", StringComparison.Ordinal)
+            .Replace("IEA*1*000000101", $"IEA*1*{isa13}", StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailureAfterAClaimWasSubmitted_KeepsTheControlNumber(bool cancelled)
+    {
+        var control = NextControl();
         _service.ClearSubstitute();
         _service
             .SubmitAsync(Arg.Any<AdapterClaim>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(ci => ClaimSubmissionResult.Ok(ci.Arg<AdapterClaim>()));
-        var resent = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
-        Assert.Equal(HttpStatusCode.OK, resent.StatusCode);
-        Assert.Equal(1, (await resent.Content.ReadFromJsonAsync<Raw837ImportResult>())!.SucceededCount);
+            .Returns(ci => ci.Arg<AdapterClaim>().ClaimNumber.StartsWith("CLM-TA1-B", StringComparison.Ordinal)
+                ? (cancelled
+                    ? Task.FromException<ClaimSubmissionResult>(new OperationCanceledException("client went away"))
+                    : Task.FromException<ClaimSubmissionResult>(new InvalidOperationException("database unavailable")))
+                : Task.FromResult(ClaimSubmissionResult.Ok(ci.Arg<AdapterClaim>())));
 
-        // Processed once: now it is a duplicate.
-        var third = await _client.PostAsync("/api/v1/claims/import/raw837", File(edi));
-        Assert.Equal(HttpStatusCode.BadRequest, third.StatusCode);
+        var failed = await _client.PostAsync("/api/v1/claims/import/raw837", File(TwoClaims(control)));
+        Assert.NotEqual(HttpStatusCode.OK, failed.StatusCode);
+
+        // Claim A may have been created: the resend is refused, not imported again.
+        _service.ClearReceivedCalls();
+        var resent = await _client.PostAsync("/api/v1/claims/import/raw837", File(TwoClaims(control)));
+        Assert.Equal(HttpStatusCode.BadRequest, resent.StatusCode);
+        Assert.Contains("*R*025~", (await resent.Content.ReadFromJsonAsync<Raw837ImportResult>())!.AcknowledgmentTa1);
+        await _service.DidNotReceiveWithAnyArgs().SubmitAsync(default!, default!, default, default, default);
     }
 
     [Fact]

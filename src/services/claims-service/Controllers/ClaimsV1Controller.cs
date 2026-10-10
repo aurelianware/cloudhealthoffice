@@ -56,6 +56,13 @@ public class ClaimsV1Controller : ControllerBase
     private readonly Snip.Snip837ValidationOptions _snipOptions;
     private readonly IX12InterchangeIntake? _interchangeIntake;
 
+    /// <summary>
+    /// Set (1) once any claim of the raw 837 upload reached SubmitAsync. From
+    /// then on the upload may have created claims, so its ISA13 is never
+    /// released: a resend would import them again.
+    /// </summary>
+    private int _raw837SubmissionStarted;
+
     public ClaimsV1Controller(
         ClaimAdapterFactory adapterFactory,
         IClaimSubmissionService submissionService,
@@ -185,16 +192,21 @@ public class ClaimsV1Controller : ControllerBase
         }
 
         // The envelope claimed its ISA13. If the file then cannot be imported
-        // (unreadable, no claims, an error), give it back so the partner's
-        // resend is processed rather than refused as a duplicate (TA105 025).
+        // before any claim was submitted (unreadable, no claims, an error),
+        // give it back so the partner's resend is processed rather than
+        // refused as a duplicate (TA105 025). Once a claim reached submission
+        // the number is kept, whatever happens next (an error on a later
+        // claim, the client disconnecting): submission does not de-duplicate
+        // claim numbers, so a resend would create the earlier claims again.
         try
         {
             var imported = await ImportAcceptedRaw837Async(file, ediContent, envelope, ct);
-            if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null)
+            if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null
+                && Volatile.Read(ref _raw837SubmissionStarted) == 0)
                 await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
             return imported;
         }
-        catch when (envelope is not null)
+        catch when (envelope is not null && Volatile.Read(ref _raw837SubmissionStarted) == 0)
         {
             await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
             throw;
@@ -280,6 +292,7 @@ public class ClaimsV1Controller : ControllerBase
             ClaimSubmissionResult? result = null;
             if (snipErrors is null)
             {
+                Interlocked.Exchange(ref _raw837SubmissionStarted, 1);
                 result = await _submissionService.SubmitAsync(
                     adapterClaim,
                     tenantId,

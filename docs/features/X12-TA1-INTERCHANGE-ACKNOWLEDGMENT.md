@@ -89,6 +89,13 @@ two concurrent receipts of the same interchange cannot both get through.
   - an exception.
 
   A receipt claimed later by another request is never released.
+
+  The number is released only if nothing was written yet. Once a claim of
+  an 837 reached submission, or an 834 reached the enrollment import, the
+  number is kept, even when a later claim fails or the client disconnects.
+  Neither submission nor the import de-duplicates a replayed file, so a
+  resend would create the earlier records again. The partner then gets 025
+  and must resend under a new ISA13, after the file's state has been checked.
 - `DuplicateWindowDays` 0 turns the check off everywhere. That is for
   sandboxes where the same sample file is uploaded again and again; leave it on
   in production.
@@ -97,6 +104,10 @@ two concurrent receipts of the same interchange cannot both get through.
 - `Reject` answers ISA15 = T with TA1 R / 020, so test data is never imported as production.
 - `Accept` processes it.
 - When unset: `Reject` in Production, `Accept` everywhere else.
+- claims-service, enrollment-import-service and eligibility-service set it
+  explicitly: `Reject` in `appsettings.json`, which is the production base,
+  and `Accept` in `appsettings.Development.json`. A test environment sets
+  `X12Interchange__TestInterchangeHandling=Accept`.
 
 **When a TA1 is produced.** When ISA14 = 1, or whenever TA104 is not `A`. With
 ISA14 = 0 and a clean envelope there is no TA1. The TA1 goes back the way the

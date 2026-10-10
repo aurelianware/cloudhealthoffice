@@ -20,6 +20,13 @@ public class EnrollmentController : ControllerBase
     private readonly ILogger<EnrollmentController> _logger;
     private readonly IX12InterchangeIntake? _interchangeIntake;
 
+    /// <summary>
+    /// Set once the raw 834 reached ImportEnrollmentAsync. The import writes
+    /// members, coverage and transaction rows as it goes, and a replay is not
+    /// guaranteed to be a no-op, so from then on the ISA13 is never released.
+    /// </summary>
+    private bool _raw834ImportStarted;
+
     public EnrollmentController(
         IEnrollmentImportService importService,
         IEnrollment834EdiParser ediParser,
@@ -117,11 +124,11 @@ public class EnrollmentController : ControllerBase
         try
         {
             var imported = await ImportAcceptedRaw834Async(file, tenantId, ediContent, envelope);
-            if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null)
+            if (imported.Result is ObjectResult { StatusCode: >= 400 } && envelope is not null && !_raw834ImportStarted)
                 await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
             return imported;
         }
-        catch when (envelope is not null)
+        catch when (envelope is not null && !_raw834ImportStarted)
         {
             await _interchangeIntake!.ReleaseAsync(intakeRequest!, envelope, CancellationToken.None);
             throw;
@@ -148,6 +155,7 @@ public class EnrollmentController : ControllerBase
 
         // The importing user is the token subject; nothing in the body can claim it.
         enrollment.ActorId = _actor.UserId;
+        _raw834ImportStarted = true;
         var result = await _importService.ImportEnrollmentAsync(enrollment, tenantId);
 
         if (envelope is not null)
