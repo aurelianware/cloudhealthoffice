@@ -35,6 +35,8 @@
     <Compile Include="..\..\..\..\tests\Shared\EphemeralMongo\*.cs" Link="Shared\EphemeralMongo\%(Filename)%(Extension)" />
     <!-- Cosmos DB emulator fixture; see tests/Shared/CosmosEmulator. -->
     <Compile Include="..\..\..\..\tests\Shared\CosmosEmulator\*.cs" Link="Shared\CosmosEmulator\%(Filename)%(Extension)" />
+    <!-- Synthetic BAI2 files (shared with the bank reconciliation library's tests). -->
+    <Compile Include="..\..\shared\CloudHealthOffice.BankReconciliation.Tests\Bai2Builder.cs" Link="Shared\Bai2Builder.cs" />
   </ItemGroup>
 
 </Project>

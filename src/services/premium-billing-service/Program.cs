@@ -137,6 +137,11 @@ builder.Services.AddScoped<ISponsorBankAccountSource, HttpSponsorBankAccountSour
 builder.Services.AddChoFieldProtection(builder.Configuration, builder.Environment, "premium-billing-service");
 builder.Services.AddChoNachaTransmission(builder.Configuration, builder.Environment, "premium-billing-service", databaseProvider);
 
+// BAI2 bank statements: premium cash confirmed or applied from the bank's
+// report, everything else in a suspense queue (BankReconciliation/).
+PremiumBillingService.BankReconciliation.PremiumBankReconciliationRegistration.AddPremiumBankReconciliation(
+    builder.Services, builder.Configuration, builder.Environment, databaseProvider);
+
 // HttpClients for service-to-service communication. AddChoAuthentication puts
 // ChoOutboundTokenHandler on every factory client: a caller's token is
 // forwarded, and with no caller a service token is minted for the tenant the
