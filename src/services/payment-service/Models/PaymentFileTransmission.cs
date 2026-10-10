@@ -34,6 +34,12 @@ public enum PaymentFileTransmissionStatus
     /// against the drop's listing, or a second user records what the bank says.
     /// </summary>
     NeedsReview,
+
+    /// <summary>
+    /// Replaced by a re-dated file (<see cref="PaymentFileTransmission.SupersededByFileReference"/>).
+    /// Final: never sent, retried, reconciled or resolved. Kept for audit.
+    /// </summary>
+    Superseded,
 }
 
 /// <summary>How the bank's receipt of a file was established.</summary>
@@ -143,6 +149,10 @@ public sealed class PaymentFileTransmission
     [JsonPropertyName("transmittedBy")] public string? TransmittedBy { get; set; }
     [JsonPropertyName("confirmedBy")] public PaymentFileDeliveryEvidence? ConfirmedBy { get; set; }
 
+    /// <summary>When Superseded: the re-dated file that replaced this one.</summary>
+    [JsonPropertyName("supersededByFileReference")] public string? SupersededByFileReference { get; set; }
+    [JsonPropertyName("supersededAt")] public DateTime? SupersededAt { get; set; }
+
     [JsonPropertyName("acknowledgement")] public PaymentFileAcknowledgementStatus Acknowledgement { get; set; } = PaymentFileAcknowledgementStatus.NotApplicable;
     [JsonPropertyName("acknowledgedAt")] public DateTime? AcknowledgedAt { get; set; }
     [JsonPropertyName("acknowledgementReference")] public string? AcknowledgementReference { get; set; }
@@ -194,6 +204,9 @@ public enum PaymentFileTransmissionAction
     /// Transmitted, it is forced back to NeedsReview.
     /// </summary>
     LateOutcome,
+
+    /// <summary>The file was replaced by a re-dated one; this record is final.</summary>
+    Superseded,
 }
 
 /// <summary>One audited action: operator, file hash, result. Never file content or bank numbers.</summary>

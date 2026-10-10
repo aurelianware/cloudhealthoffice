@@ -36,6 +36,14 @@ public interface IPaymentRunRepository
     Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
         IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings);
 
+    /// <summary>
+    /// Replaces the pinned EFT file with a re-dated one and appends the old one
+    /// (<paramref name="superseded"/>, with its Superseded* fields set) to
+    /// <see cref="PaymentRun.EftFileHistory"/>, only while the pinned file's SHA-256
+    /// is still <c>superseded.Sha256</c>. Touches nothing else on the run.
+    /// </summary>
+    Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded);
+
     Task DeleteAsync(string id);
 }
 
@@ -265,6 +273,40 @@ public class PaymentRunRepository : IPaymentRunRepository
             }
         }
         throw new InvalidOperationException($"Payment run {id} kept changing; its EFT file was not recorded");
+    }
+
+    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded)
+    {
+        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            ItemResponse<PaymentRun> current;
+            try
+            {
+                current = await _container.ReadItemAsync<PaymentRun>(id, new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            var run = current.Resource;
+            if (run.EftFile == null || !string.Equals(run.EftFile.Sha256, superseded.Sha256, StringComparison.Ordinal))
+                return false;
+            run.EftFile = file;
+            run.EftFileHistory.Add(superseded);
+            try
+            {
+                await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId),
+                    new ItemRequestOptions { IfMatchEtag = current.ETag });
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Changed since read: re-check on the new version.
+            }
+        }
+        throw new InvalidOperationException($"Payment run {id} kept changing; its EFT file was not re-dated");
     }
 
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)

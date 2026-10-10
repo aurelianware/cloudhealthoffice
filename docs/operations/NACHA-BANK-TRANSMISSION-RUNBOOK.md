@@ -43,27 +43,54 @@ approve + transmit (user != run creator, != run executor)   POST /api/paymentrun
 - **Never changed bytes.** Each attempt regenerates the file from the run and the
   approved accounts. If a payee's account changed since approval the bytes differ
   and the attempt is refused (409 "File differs from the approved file").
+- **Effective entry dates.** All dates are in `BankTransmission:BankTimeZone`
+  (default America/New_York) on the Federal Reserve calendar (weekends and Fed
+  holidays are not banking days).
+  - **At run create:** `paymentDate` in the request is optional. A requested date
+    may not be in the past or more than a year ahead (400). Without one, the run's
+    payment date (the 835's) is the next banking day.
+  - **When the file is first pinned** (`POST .../eft-file`): its effective entry
+    date is the first banking day on or after the later of the requested payment
+    date (only if one was requested) and the earliest acceptable date (the next
+    banking day after today, or today with `AllowSameDayEffectiveDate`). A weekend
+    or holiday is rolled forward; a run executed days after it was created still
+    gets a future date. The date is part of the pinned bytes.
+  - **At send time** only a date that is past (or today, without same-day) is
+    refused. Such a file is re-dated (below), never edited.
 - **Never stale money.** Before every attempt, first or retry (409 "Approval no
   longer valid", audited, nothing sent):
-  - the effective entry date (the run's payment date, pinned in the file) must be a
-    Federal Reserve banking day **after** today in `BankTransmission:BankTimeZone`
-    (default America/New_York); `BankTransmission:AllowSameDayEffectiveDate=true`
-    accepts today (same-day ACH; mind the bank's cut-offs);
+  - the pinned effective entry date must still be acceptable (above);
   - the file must pay exactly the payments approved, each still this run's ACH
     payment, not in Exception, amounts unchanged, none of its claims reserved for a
     reversal run, none of its claims now paid by another run (reissued).
-  A stale file is never "fixed" by the service: a new file needs a new approval
-  (today: cancel/reverse and pay in a new run; a re-issue flow is a follow-up).
+- **Re-dating** (`POST .../eft-file/redate`, reason required). Only for a file whose
+  date can no longer be sent, and only while its transmission record is absent,
+  `Pending` or `Failed` (which includes a `NeedsReview` resolved "not received").
+  Never `Transmitting`, `Transmitted` or an unresolved `NeedsReview`. It works in
+  two steps, so the old file is unsendable before the new one exists:
+  1. The old record becomes `Superseded`, linked to the new file reference. If the
+     file was never approved, a `Superseded` record is created for it.
+  2. A new file is pinned: created now, a new effective date chosen as above, a new
+     file ID modifier, reference and name ending `-R{n}`. The old file moves to the
+     run's `eftFileHistory`.
+
+  The new file needs a fresh approval (`POST .../transmission`). A `Superseded`
+  record is final: it is never sent, retried, reconciled or resolved. If the
+  re-date is interrupted between the two steps, calling it again completes it.
 - **Duplicate files.** Each run's file gets its own file ID modifier (A-Z, 0-9) for
   its creation day, claimed once per tenant, destination and origin
   (`NachaFileIdModifiers`) and kept on the run, so two runs completed in the same
   minute never produce headers the bank would reject as duplicates, and every
   rebuild stays byte-identical. At most 36 files per day. Files pinned before this
   rebuild with `Nacha:FileIdModifier` (default A).
-- **Dual control.** Extends payment-run maker-checker: neither the run's creator nor
-  its executor may approve, retry or reconcile its transmission; a run without a
-  recorded creator is refused; service tokens never can. A `NeedsReview` file is
-  resolved by a user who neither approved, attempted nor reconciled it.
+- **Dual control.** Extends payment-run maker-checker. Neither the run's creator nor
+  its executor may approve, retry, reconcile or re-date its transmission; service
+  tokens never can. A `NeedsReview` file is resolved by a user who neither approved,
+  attempted nor reconciled it. **Rollout:** paying a run by ACH therefore needs
+  **three different users**: the creator (maker), the executor (checker) and the
+  transmitter (approver). Resolving an unknown outcome needs a **fourth**. Runs with
+  no recorded creator (created before creators came from the token) **cannot be
+  transmitted** at all: pay them another way, or recreate them.
 - **Atomic rename assumption.** The upload writes `.{name}.{guid}.part`, then
   renames it. Only "final name present, temporary gone" counts as delivered after a
   failed rename reply; "temporary still there" is **unknown** (NeedsReview, the
@@ -177,6 +204,7 @@ test files; it only sends a completed run's live credits. Therefore:
 | `GET /api/paymentruns/{id}/eft-file/transmission` | payments:read | the record (404 if never approved) |
 | `POST /api/paymentruns/{id}/eft-file/transmission` | payments:approve, user, not the run creator or executor | approve + send, or retry a `Failed` one. 200 `Transmitted`, 502 `Failed`, 409 `NeedsReview` / hash mismatch / approval no longer valid / in progress / disabled |
 | `POST .../eft-file/transmission/reconcile` | payments:approve, user, not the run creator or executor | `NeedsReview` only: lists the drop (read-only). File there with the expected size: `Transmitted` (`confirmedBy: RemoteListing`); otherwise stays `NeedsReview` |
+| `POST .../eft-file/redate` body `{"reason": "..."}` | payments:approve, user, not the run creator or executor; works while disabled (sends nothing) | only when the pinned date can no longer be sent and the record is absent / `Pending` / `Failed`: old record `Superseded`, new `-R{n}` file pinned (needs a fresh approval). 409 otherwise |
 | `POST .../eft-file/transmission/resolve` body `{"bankReceived": true, "reason": "..."}` (or `false`) | payments:approve, user, not the run creator or executor, not the approver, not anyone who attempted or reconciled it; works while disabled | `NeedsReview` only. `true`: `Transmitted` (`BankConfirmation`). `false`: `Failed` (may then be retried) |
 
 ### Failed
@@ -207,11 +235,15 @@ were already issued as ACH). Do not work around it.
 
 ### Approval no longer valid (409)
 
-The effective entry date is today or past (or not a banking day), or a payment in
-the file was reversed, reissued by another run, moved to check, put in Exception
-or changed. Nothing was sent and the refusal is on the record. Do not change the
-clock, the date or the record: the money in the file is not what was approved.
-Settle the payments by a new run (and a new approval).
+Nothing was sent, and the refusal is on the record. There are two causes:
+
+- **The effective entry date passed** (or is today, without same-day). This happens
+  when approval or a retry came too late. Re-date the file
+  (`POST .../eft-file/redate` with a reason), then approve the new `-R{n}` file.
+- **A payment in the file changed**: reversed, reissued by another run, moved to
+  check, put in Exception, or a different amount. The money in the file is not what
+  was approved. Do not re-date and do not change the record. Settle the payments
+  another way (a new run and a new approval).
 
 ## 8. Disabling / emergency stop
 
@@ -243,7 +275,17 @@ approval, which needs the flag on, does).
   `INachaFileEncryptor` seam (shared library, documented TODO) before the upload (bank's public key from Key Vault)
   and hash both the clear and the encrypted bytes.
 - **Prenote / test file generation** (section 6).
-- **Re-issuing a stale file** with a new effective date (today: a new run).
+- **File ID modifiers in capitation-service and premium-billing-service.** Those
+  services still use a fixed `FileIdModifier` (`Nacha:FileIdModifier`, default A;
+  `capitation-service/Services/NachaCreditFileService.cs`,
+  `premium-billing-service/Services/NachaFileService.cs`). Two of their files on one
+  day, or one of theirs and a payment-service file with the same immediate
+  destination and origin, can be rejected by the bank as duplicates. Until they use
+  an allocator like payment-service's: give each sending service its own **immediate
+  origin** (or its own bank drop) with the bank, and keep to one file per service
+  per day.
+- **GenerationCount** on a pinned file can miss an increment when two
+  reproductions race (it is informational only).
 - **Cosmos repository tests.** The Mongo stores are tested against a real mongod
   (EphemeralMongo); the Cosmos implementations get emulator tests from the separate
   Cosmos CI work.

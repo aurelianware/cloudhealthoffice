@@ -76,6 +76,15 @@ public class PaymentRunEftFile
     /// </summary>
     public string? FileIdModifier { get; set; }
 
+    /// <summary>0 for the first file; n for the n-th re-date (file reference and name end in -R{n}).</summary>
+    public int Revision { get; set; }
+
+    /// <summary>Set on a file in <see cref="PaymentRun.EftFileHistory"/>: when, by whom and why it was replaced, and by which file.</summary>
+    public DateTime? SupersededAt { get; set; }
+    public string? SupersededBy { get; set; }
+    public string? SupersededReason { get; set; }
+    public string? SupersededByFileReference { get; set; }
+
     public DateTime FirstGeneratedAt { get; set; }
     public string? FirstGeneratedBy { get; set; }
     public DateTime? LastVerifiedAt { get; set; }

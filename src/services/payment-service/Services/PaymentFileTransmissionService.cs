@@ -104,6 +104,16 @@ public interface IPaymentFileTransmissionService
     /// Not received: Failed, so it may be retried.
     /// </summary>
     Task<PaymentFileTransmission> ResolveAsync(string paymentRunId, bool bankReceived, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Re-dates a file whose effective entry date can no longer be sent: the old
+    /// file's record (created if it was never approved) becomes Superseded, linked to
+    /// the new file, and a new file is pinned that needs a fresh approval. Allowed only
+    /// when the old record is absent, Pending or Failed (Failed includes a resolved
+    /// "bank did not receive it"); never Transmitting, Transmitted or NeedsReview.
+    /// Returns the new pinned file (facts only).
+    /// </summary>
+    Task<PaymentRunEftFile> RedateAsync(string paymentRunId, string reason, CancellationToken cancellationToken = default);
 }
 
 public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionService
@@ -117,6 +127,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     public static readonly EventId ResolvedEvent = new(4937, "PaymentFileTransmissionResolved");
     public static readonly EventId UnrecordedEvent = new(4938, "PaymentFileTransmissionOutcomeNotRecorded");
     public static readonly EventId DisabledEvent = new(4939, "PaymentFileTransmissionDisabled");
+    public static readonly EventId SupersededEvent = new(4940, "PaymentFileSuperseded");
 
     private const string SystemActor = "payment-service";
 
@@ -131,6 +142,7 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     private readonly INachaRemoteFileProbe _probe;
     private readonly IRunSeparationOfDuties _separation;
     private readonly BankTransmissionOptions _options;
+    private readonly AchEffectiveDatePolicy _dates;
     private readonly TimeProvider _clock;
     private readonly ILogger<PaymentFileTransmissionService> _logger;
 
@@ -144,9 +156,11 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         INachaRemoteFileProbe probe,
         IRunSeparationOfDuties separation,
         IOptions<BankTransmissionOptions> options,
+        AchEffectiveDatePolicy effectiveDates,
         ILogger<PaymentFileTransmissionService> logger,
         TimeProvider? clock = null)
     {
+        _dates = effectiveDates;
         _runs = runs;
         _payments = payments;
         _reservations = reservations;
@@ -196,6 +210,12 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
                     return record;
                 case PaymentFileTransmissionStatus.NeedsReview:
                     throw new PaymentFileTransmissionStateException(NeedsReviewMessage(record));
+                case PaymentFileTransmissionStatus.Superseded:
+                    // Only reachable if a re-date was interrupted between superseding the
+                    // record and pinning the new file: finish the re-date instead.
+                    throw new PaymentFileTransmissionStateException(
+                        $"NACHA file {record.FileReference} was superseded by a re-date and is never sent. Re-date it again " +
+                        "(POST .../eft-file/redate) to pin its replacement.");
                 case PaymentFileTransmissionStatus.Transmitting:
                     if (record.LeaseUntil > Now)
                         throw new PaymentFileTransmissionStateException(
@@ -475,6 +495,100 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
         return record;
     }
 
+    public async Task<PaymentRunEftFile> RedateAsync(string paymentRunId, string reason, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason is required to re-date a NACHA file.");
+        reason = Clean(reason.Trim());
+        if (reason.Length > 500) reason = reason[..500];
+
+        // Not gated by BankTransmission:Enabled: re-dating builds a file and sends nothing.
+        var run = await LoadRunAsync(paymentRunId);
+        var user = _separation.EnsureMayTransmit(run.PaymentRunNumber, run.CreatedBy, run.ExecutedBy);
+        var pinned = RequireTransmittableFile(run);
+        var nextReference = $"FFS-{run.PaymentRunNumber}-R{pinned.Revision + 1}";
+
+        var record = await _store.GetAsync(run.TenantId, pinned.FileReference, cancellationToken);
+        var resuming = record?.Status == PaymentFileTransmissionStatus.Superseded
+                       && record.SupersededByFileReference == nextReference;
+        if (!resuming && _dates.SendProblem(pinned.EffectiveEntryDate) == null)
+            throw new PaymentFileTransmissionStateException(
+                $"NACHA file {pinned.FileReference} (effective {pinned.EffectiveEntryDate:yyyy-MM-dd}) can still be sent; it is not re-dated.");
+
+        // 1. Make the old file unsendable first: its record becomes Superseded (or a
+        //    Superseded record is created, so nobody can approve it meanwhile).
+        if (record == null)
+        {
+            var placeholder = new PaymentFileTransmission
+            {
+                TenantId = run.TenantId,
+                PaymentRunId = run.Id,
+                PaymentRunNumber = run.PaymentRunNumber,
+                FileReference = pinned.FileReference,
+                FileName = pinned.FileName,
+                ApprovedSha256 = pinned.Sha256,
+                ByteSize = pinned.ByteSize,
+                EntryCount = pinned.EntryCount,
+                TotalCreditAmount = pinned.TotalCreditAmount,
+                EffectiveEntryDate = pinned.EffectiveEntryDate,
+                RunCreatedBy = run.CreatedBy,
+                RunExecutedBy = run.ExecutedBy,
+                ApprovedPaymentIds = PaymentIdsOf(pinned),
+                Status = PaymentFileTransmissionStatus.Superseded,
+                SupersededByFileReference = nextReference,
+                SupersededAt = Now,
+                CreatedAt = Now,
+                UpdatedAt = Now,
+            };
+            Append(placeholder, PaymentFileTransmissionAction.Superseded, user, pinned.Sha256, PaymentFileTransmissionStatus.Superseded,
+                $"never approved; superseded by {nextReference}: {reason}");
+            if (!await _store.TryInsertAsync(placeholder, cancellationToken))
+                throw new PaymentFileTransmissionStateException(
+                    $"NACHA file {pinned.FileReference} was just approved by someone else. Check its status before re-dating.");
+        }
+        else if (!resuming)
+        {
+            if (record.Status is not (PaymentFileTransmissionStatus.Pending or PaymentFileTransmissionStatus.Failed))
+            {
+                await RefuseAsync(record, user, pinned.Sha256, $"re-date refused: the file is {record.Status}");
+                throw new PaymentFileTransmissionStateException(
+                    $"NACHA file {record.FileReference} is {record.Status}; it cannot be re-dated" +
+                    (record.Status == PaymentFileTransmissionStatus.NeedsReview
+                        ? " until the bank's answer is recorded (it may already be at the bank)."
+                        : record.Status == PaymentFileTransmissionStatus.Transmitted ? " (it is at the bank)." : "."));
+            }
+            var readVersion = record.Version;
+            var previous = record.Status;
+            record.Status = PaymentFileTransmissionStatus.Superseded;
+            record.SupersededByFileReference = nextReference;
+            record.SupersededAt = Now;
+            record.UpdatedAt = Now;
+            Append(record, PaymentFileTransmissionAction.Superseded, user, record.ApprovedSha256, PaymentFileTransmissionStatus.Superseded,
+                $"was {previous}; superseded by {nextReference}: {reason}");
+            if (!await _store.TryReplaceAsync(record, readVersion, CancellationToken.None))
+                throw new PaymentFileTransmissionStateException($"NACHA file {record.FileReference} changed meanwhile. Check its status.");
+        }
+
+        // 2. Pin the new file. If this fails the old record stays Superseded (never
+        //    sendable) and the re-date can simply be repeated.
+        FfsEftFileOutcome outcome;
+        try
+        {
+            outcome = await _eftFiles.RepinAsync(run.Id, user, reason, cancellationToken);
+        }
+        catch (RunConflictException ex)
+        {
+            throw new PaymentFileTransmissionStateException(ex.Message);
+        }
+        var file = outcome.Run.EftFile!;
+        _logger.LogWarning(SupersededEvent,
+            "AUDIT NACHA file {Old} of payment run {RunNumber} superseded by {User}: re-dated as {New} effective {Effective:yyyy-MM-dd}, " +
+            "sha256 {Sha256}; it needs a fresh approval ({Reason})",
+            Clean(pinned.FileReference), Clean(run.PaymentRunNumber), Clean(user), Clean(file.FileReference), file.EffectiveEntryDate,
+            file.Sha256, reason);
+        return file;
+    }
+
     private void EnsureEnabled(string paymentRunId)
     {
         if (_options.Enabled)
@@ -506,38 +620,19 @@ public sealed class PaymentFileTransmissionService : IPaymentFileTransmissionSer
     private static List<string> PaymentIdsOf(PaymentRunEftFile file)
         => file.Entries.SelectMany(e => e.PaymentIds).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToList();
 
-    /// <summary>The bank's calendar date now.</summary>
-    private DateTime BankToday()
-    {
-        TimeZoneInfo zone;
-        try
-        {
-            zone = TimeZoneInfo.FindSystemTimeZoneById(_options.BankTimeZone);
-        }
-        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
-        {
-            // No tz database: Eastern Standard Time, the earlier of the two offsets
-            // (never later than the bank's real date).
-            zone = TimeZoneInfo.CreateCustomTimeZone("cho-bank-fallback", TimeSpan.FromHours(-5), "bank", "bank");
-        }
-        return TimeZoneInfo.ConvertTimeFromUtc(Now, zone).Date;
-    }
-
     /// <summary>
     /// Null while the approval still describes the money; otherwise why not. Checks
-    /// the effective entry date, and that every payment in the file is the one
+    /// the effective entry date (only that it is not past, or today without same-day:
+    /// a future weekend or holiday is the bank's to roll, and pinned dates are already
+    /// rolled), and that every payment in the file is the one
     /// approved: present, issued by this run, ACH, not a reversal, not in Exception,
     /// its amounts still summing to the file's credits, none of its claims reserved
     /// for reversal, and none of its claims' payment reservation held by another run.
     /// </summary>
     private async Task<string?> StaleReasonAsync(PaymentRun run, PaymentRunEftFile file, PaymentFileTransmission? record, CancellationToken cancellationToken)
     {
-        var effective = file.EffectiveEntryDate.Date;
-        var today = BankToday();
-        if (!AchBankingCalendar.IsBankingDay(effective))
-            return $"its effective entry date {effective:yyyy-MM-dd} is not a banking day";
-        if (effective < today || (effective == today && !_options.AllowSameDayEffectiveDate))
-            return $"its effective entry date {effective:yyyy-MM-dd} is not after today ({today:yyyy-MM-dd} at the bank)";
+        if (_dates.SendProblem(file.EffectiveEntryDate) is { } dateProblem)
+            return dateProblem + "; re-date the file (POST .../eft-file/redate) and approve the new one";
 
         var ids = PaymentIdsOf(file);
         if (record != null && !record.ApprovedPaymentIds.SequenceEqual(ids, StringComparer.Ordinal))

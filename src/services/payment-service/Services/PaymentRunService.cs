@@ -9,7 +9,13 @@ namespace PaymentService.Services;
 
 public interface IPaymentRunService
 {
-    Task<PaymentRun> CreatePaymentRunAsync(PaymentRunCriteria criteria, string? createdBy = null);
+    /// <param name="paymentDate">
+    /// The requested payment (ACH effective entry) date, or null for the next banking
+    /// day. A requested date may not be in the past or more than a year ahead
+    /// (<see cref="ArgumentException"/>); a weekend or holiday is rolled forward when
+    /// the NACHA file is pinned.
+    /// </param>
+    Task<PaymentRun> CreatePaymentRunAsync(PaymentRunCriteria criteria, string? createdBy = null, DateTime? paymentDate = null);
     Task<PaymentRun> ExecutePaymentRunAsync(string paymentRunId);
 
     /// <summary>
@@ -39,6 +45,7 @@ public class PaymentRunService : IPaymentRunService
     private readonly IClaimReservationRepository _reservations;
     private readonly IProviderReceivableLedger? _receivables;
     private readonly IProviderPayeeAccountSource _payeeAccounts;
+    private readonly AchEffectiveDatePolicy _effectiveDates;
 
     public PaymentRunService(
         IPaymentRepository paymentRepository,
@@ -54,8 +61,11 @@ public class PaymentRunService : IPaymentRunService
         IRunSeparationOfDuties separationOfDuties,
         IClaimReservationRepository reservations,
         IProviderReceivableLedger? receivables = null,
-        IProviderPayeeAccountSource? payeeAccounts = null)
+        IProviderPayeeAccountSource? payeeAccounts = null,
+        AchEffectiveDatePolicy? effectiveDates = null)
     {
+        _effectiveDates = effectiveDates
+            ?? new AchEffectiveDatePolicy(Microsoft.Extensions.Options.Options.Create(new BankTransmissionOptions()), TimeProvider.System);
         _reservations = reservations;
         _receivables = receivables;
         _payeeAccounts = payeeAccounts ?? new UnconfiguredProviderPayeeAccountSource();
@@ -72,15 +82,23 @@ public class PaymentRunService : IPaymentRunService
         _configuration = configuration;
     }
 
-    public async Task<PaymentRun> CreatePaymentRunAsync(PaymentRunCriteria criteria, string? createdBy = null)
+    public async Task<PaymentRun> CreatePaymentRunAsync(PaymentRunCriteria criteria, string? createdBy = null, DateTime? paymentDate = null)
     {
+        if (paymentDate.HasValue && _effectiveDates.RequestedDateProblem(paymentDate.Value) is { } problem)
+            throw new ArgumentException(problem, nameof(paymentDate));
+
         var paymentRun = new PaymentRun
         {
             PaymentRunNumber = $"PR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper()}",
             Criteria = criteria,
             CreatedBy = createdBy,
             Status = PaymentRunStatus.Pending,
-            NextCheckNumber = await GetNextCheckNumberAsync()
+            NextCheckNumber = await GetNextCheckNumberAsync(),
+            // Set deliberately, never the model default: the requested date, or the
+            // next banking day. The NACHA file re-chooses a default date when it is
+            // pinned (the run may execute days later).
+            PaymentDate = DateTime.SpecifyKind(paymentDate?.Date ?? _effectiveDates.Choose(null), DateTimeKind.Utc),
+            PaymentDateRequested = paymentDate.HasValue,
         };
 
         var created = await _paymentRunRepository.CreateAsync(paymentRun);

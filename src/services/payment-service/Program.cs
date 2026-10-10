@@ -124,6 +124,9 @@ builder.Services.AddScoped<IFfsEftFileService, FfsEftFileService>();
 // SFTP, Key Vault or tenant-service client is even registered: the service
 // refuses before doing anything. See docs/operations/NACHA-BANK-TRANSMISSION-RUNBOOK.md.
 builder.Services.Configure<BankTransmissionOptions>(builder.Configuration.GetSection(BankTransmissionOptions.SectionName));
+// Effective entry dates (bank time zone, Federal Reserve calendar): chosen when a
+// run is created and when its NACHA file is pinned, checked when it is sent.
+builder.Services.AddSingleton<AchEffectiveDatePolicy>();
 if (builder.Configuration.GetValue<bool>($"{BankTransmissionOptions.SectionName}:Enabled"))
 {
     CloudHealthOffice.NachaTransmission.NachaTransmissionServiceCollectionExtensions.AddChoNachaTransmission(

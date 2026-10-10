@@ -66,9 +66,18 @@ public class PaymentRunsController : ControllerBase
             request.Criteria.LineOfBusiness, SanitizeForLog(request.Criteria.ProviderNPI));
 
         // The creator is the token subject; request.CreatedBy is never read.
-        var paymentRun = await _paymentRunService.CreatePaymentRunAsync(
-            request.Criteria,
-            _actor.UserId);
+        PaymentRun paymentRun;
+        try
+        {
+            paymentRun = await _paymentRunService.CreatePaymentRunAsync(
+                request.Criteria,
+                _actor.UserId,
+                request.PaymentDate);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(title: "Invalid payment date", detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
 
         return CreatedAtAction(
             nameof(GetPaymentRunById),
@@ -298,6 +307,38 @@ public class PaymentRunsController : ControllerBase
             Ok(await transmissions.ResolveAsync(id, request.BankReceived.Value, request.Reason, cancellationToken)));
     }
 
+    /// <summary>
+    /// Re-date a run's NACHA file whose effective entry date can no longer be sent:
+    /// a new file (new creation time, effective date chosen now, new file ID modifier,
+    /// reference and name ending -R{n}) replaces the pinned one. The old file's
+    /// transmission record becomes Superseded (kept, linked, never sendable). Allowed
+    /// only when the old file was never approved, or its record is Pending or Failed
+    /// (including "bank did not receive it"); never when Transmitting, Transmitted or
+    /// NeedsReview. The new file needs a fresh approval (POST .../transmission).
+    /// payments:approve, a user who neither created nor executed the run; reason required.
+    /// </summary>
+    [HttpPost("{id}/eft-file/redate")]
+    [RequirePermission("payments:approve")]
+    [ProducesResponseType(typeof(PaymentRunEftFile), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<PaymentRunEftFile>> RedateEftFile(
+        string id, [FromBody] RedateEftFileRequest? request,
+        [FromServices] IPaymentFileTransmissionService transmissions, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Reason))
+            return Problem(title: "Reason required", detail: "A reason is required to re-date a NACHA file.",
+                statusCode: StatusCodes.Status400BadRequest);
+        var result = await TransmissionAction(async () =>
+        {
+            var file = await transmissions.RedateAsync(id, request.Reason, cancellationToken);
+            return new ObjectResult(file) { StatusCode = StatusCodes.Status200OK };
+        });
+        return result.Result!;
+    }
+
     private async Task<ActionResult<PaymentFileTransmission>> TransmissionAction(Func<Task<ActionResult<PaymentFileTransmission>>> action)
     {
         if (_actor.IsService)
@@ -434,10 +475,23 @@ internal static class ReservationRelease
     }
 }
 
+public class RedateEftFileRequest
+{
+    /// <summary>Why the file is re-dated (e.g. "approved after its effective date passed").</summary>
+    public string? Reason { get; set; }
+}
+
 public class CreatePaymentRunRequest
 {
     public PaymentRunCriteria Criteria { get; set; } = new();
     /// <summary>Ignored: the creator is the token subject.</summary>
     public string? CreatedBy { get; set; }
+
+    /// <summary>
+    /// Optional payment (ACH effective entry) date: not in the past, at most a year
+    /// ahead (else 400). A weekend or holiday is rolled to the next banking day when
+    /// the NACHA file is pinned. Omitted: the next banking day, re-chosen at pinning.
+    /// </summary>
+    public DateTime? PaymentDate { get; set; }
     public string? Description { get; set; }
 }

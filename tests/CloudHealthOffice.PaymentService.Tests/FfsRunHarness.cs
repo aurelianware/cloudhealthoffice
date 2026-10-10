@@ -33,6 +33,11 @@ internal sealed class FfsRunHarness
     public ProviderReceivableLedger Ledger { get; }
     public TestActor Approver { get; } = TestActor.Approver();
 
+    /// <summary>The clock and options the effective-date rules use (tests that move time set them).</summary>
+    public TimeProvider Clock { get; set; } = TimeProvider.System;
+    public BankTransmissionOptions DateOptions { get; set; } = new();
+    public AchEffectiveDatePolicy Dates => new(Microsoft.Extensions.Options.Options.Create(DateOptions), Clock);
+
     private readonly IEraEnvelopeRepository _envelopes = Substitute.For<IEraEnvelopeRepository>();
     private readonly ITradingPartnersClient _partners = Substitute.For<ITradingPartnersClient>();
     private readonly ICarcRarcMappingService _mapper = Substitute.For<ICarcRarcMappingService>();
@@ -99,10 +104,10 @@ internal sealed class FfsRunHarness
     public PaymentRunService Service(IProviderPayeeAccountSource? accounts = null) => new(
         Payments, Runs, new BatchEraGeneratorService(NullLogger<BatchEraGeneratorService>.Instance),
         _mapper, _envelopes, _partners, _http, NullLogger<PaymentRunService>.Instance, Configuration,
-        Approver, Approver.SeparationOfDuties(), Reservations, Ledger, accounts ?? Accounts);
+        Approver, Approver.SeparationOfDuties(), Reservations, Ledger, accounts ?? Accounts, Dates);
 
     public FfsEftFileService EftFiles(IProviderPayeeAccountSource? accounts = null)
-        => new(Runs, Payments, accounts ?? Accounts, Configuration, Modifiers, NullLogger<FfsEftFileService>.Instance);
+        => new(Runs, Payments, accounts ?? Accounts, Configuration, Modifiers, Dates, NullLogger<FfsEftFileService>.Instance, Clock);
 
     /// <summary>Creates and executes one ACH payment run paying <paramref name="claims"/>.</summary>
     public async Task<PaymentRun> ExecuteRunAsync(params ClaimDto[] claims)
@@ -131,6 +136,25 @@ internal sealed class FfsRunHarness
         var executed = await Service().ExecutePaymentRunAsync(run.Id);
         _nextCheck = executed.NextCheckNumber;
         return executed;
+    }
+
+    /// <summary>
+    /// Creates a run the way the API does (PaymentRunService.CreatePaymentRunAsync,
+    /// real defaults: no payment date injected unless <paramref name="paymentDate"/>
+    /// is given) as maker-1, then executes it as the approver.
+    /// </summary>
+    public async Task<PaymentRun> CreateAndExecuteRunAsync(DateTime? paymentDate, params ClaimDto[] claims)
+    {
+        Claims.NextResponse = req =>
+            req.Method == HttpMethod.Get && req.RequestUri!.AbsolutePath.StartsWith("/api/claims/search")
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(req.RequestUri.Query.Contains("status=5") ? claims.ToList() : new List<ClaimDto>()),
+                }
+                : new HttpResponseMessage(HttpStatusCode.OK);
+
+        var created = await Service().CreatePaymentRunAsync(new PaymentRunCriteria { GroupByProvider = true }, "maker-1", paymentDate);
+        return await Service().ExecutePaymentRunAsync(created.Id);
     }
 
     public static List<string[]> Segments(EraEnvelopeRecord envelope)

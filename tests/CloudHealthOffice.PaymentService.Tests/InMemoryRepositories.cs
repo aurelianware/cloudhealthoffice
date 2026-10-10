@@ -145,6 +145,19 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
         }
     }
 
+    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run?.EftFile == null || run.EftFile.Sha256 != superseded.Sha256)
+                return Task.FromResult(false);
+            run.EftFile = JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(file));
+            run.EftFileHistory.Add(JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(superseded))!);
+            return Task.FromResult(true);
+        }
+    }
+
     /// <summary>Changes a stored run in place (a concurrent writer), bypassing the service.</summary>
     public void Mutate(string id, Action<PaymentRun> change)
     {

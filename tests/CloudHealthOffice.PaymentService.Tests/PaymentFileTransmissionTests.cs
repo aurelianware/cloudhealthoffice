@@ -37,13 +37,15 @@ public class PaymentFileTransmissionTests
     {
         _h.Partner(Npi, "TP-A");
         _h.Accounts.Eft(Npi, account: Account, tin: "12-3456789");
+        _h.Clock = _clock;
+        _h.DateOptions = _options;
     }
 
     private PaymentFileTransmissionService Service(string user = "treasury-1", bool isService = false,
         INachaTransmitter? transmitter = null, INachaRemoteFileProbe? probe = null)
         => new(_h.Runs, _h.Payments, _h.Reservations, _h.EftFiles(), _store, transmitter ?? _bank, probe ?? _bank,
             new TestActor(user, FfsRunHarness.Tenant, isService).SeparationOfDuties(),
-            Options.Create(_options), _log, _clock);
+            Options.Create(_options), new AchEffectiveDatePolicy(Options.Create(_options), _clock), _log, _clock);
 
     /// <summary>An executed ACH run (created by maker-1) whose EFT file was generated and pinned.</summary>
     private async Task<PaymentRun> PinnedRunAsync()
@@ -87,7 +89,8 @@ public class PaymentFileTransmissionTests
         Assert.Equal((run.Id, 200m, 1, record.ApprovedSha256, "Upload"),
             (payload.PaymentRunId, payload.TotalCreditAmount, payload.EntryCount, payload.Sha256, payload.ConfirmedBy));
         Assert.Equal(message.EventId, payload.EventId);
-        Assert.Equal(run.PaymentDate.Date, payload.EffectiveEntryDate);
+        Assert.Equal(run.EftFile.EffectiveEntryDate, payload.EffectiveEntryDate);
+        Assert.Equal(new DateTime(2026, 5, 4), payload.EffectiveEntryDate); // Fri May 1 -> next banking day, Mon May 4
 
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await _store.GetAsync(FfsRunHarness.Tenant, run.EftFile.FileReference))!.Status);
         AssertNoBankNumbers();
@@ -568,16 +571,199 @@ public class PaymentFileTransmissionTests
         Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
     }
 
+    private void At(int year, int month, int day) => _clock.Now = new DateTimeOffset(year, month, day, 15, 0, 0, TimeSpan.Zero);
+
+    /// <summary>A run created and executed through the real service (no injected payment date), its file pinned.</summary>
+    private async Task<PaymentRun> RealRunAsync(DateTime? requested = null)
+    {
+        var run = await _h.CreateAndExecuteRunAsync(requested, FfsRunHarness.Claim("c1", Npi, 125m), FfsRunHarness.Claim("c2", Npi, 75m));
+        return (await _h.EftFiles().GenerateAsync(run.Id, "approver-2")).Run;
+    }
+
+    [Theory]
+    [InlineData(2026, 5, 6, 2026, 5, 7)]   // Wednesday: next banking day Thursday (the old +3 default was a Saturday)
+    [InlineData(2026, 5, 7, 2026, 5, 8)]   // Thursday: Friday (old default: Sunday)
+    [InlineData(2026, 5, 8, 2026, 5, 11)]  // Friday: Monday
+    [InlineData(2026, 5, 22, 2026, 5, 26)] // Friday before Memorial Day: Tuesday (old default: the holiday)
+    [InlineData(2026, 11, 25, 2026, 11, 27)] // day before Thanksgiving: Friday
+    public async Task A_run_created_with_the_real_defaults_gets_a_banking_day_and_sends(int y, int m, int d, int ey, int em, int ed)
+    {
+        At(y, m, d);
+
+        var run = await RealRunAsync();
+
+        Assert.False(run.PaymentDateRequested);
+        Assert.Equal(new DateTime(ey, em, ed), run.PaymentDate.Date);
+        Assert.Equal(new DateTime(ey, em, ed), run.EftFile!.EffectiveEntryDate.Date);
+        Assert.True(AchBankingCalendar.IsBankingDay(run.EftFile.EffectiveEntryDate));
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
+        Assert.Single(_bank.Sent);
+    }
+
     [Fact]
-    public async Task An_effective_entry_date_that_is_not_a_banking_day_is_refused()
+    public async Task A_run_executed_days_after_creation_gets_its_file_dated_at_pinning_not_at_creation()
+    {
+        At(2026, 5, 4);
+        var run = await _h.CreateAndExecuteRunAsync(null, FfsRunHarness.Claim("c1", Npi, 125m));
+        Assert.Equal(new DateTime(2026, 5, 5), run.PaymentDate.Date);
+
+        At(2026, 5, 12); // the run's default date is long past when its file is generated and pinned
+        var pinned = (await _h.EftFiles().GenerateAsync(run.Id, "approver-2")).Run;
+
+        Assert.Equal(new DateTime(2026, 5, 13), pinned.EftFile!.EffectiveEntryDate.Date);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
+    }
+
+    [Fact]
+    public async Task A_requested_weekend_date_is_rolled_and_a_past_one_refused_at_create()
+    {
+        At(2026, 5, 4);
+
+        var run = await RealRunAsync(requested: new DateTime(2026, 5, 16)); // a Saturday
+
+        Assert.True(run.PaymentDateRequested);
+        Assert.Equal(new DateTime(2026, 5, 18), run.EftFile!.EffectiveEntryDate.Date);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _h.Service().CreatePaymentRunAsync(new PaymentRunCriteria(), "maker-1", new DateTime(2026, 5, 1)));
+    }
+
+    [Fact]
+    public async Task A_late_first_send_is_refused_then_re_dated_and_sent_once()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        var original = run.EftFile!;
+        Assert.Equal(new DateTime(2026, 5, 5), original.EffectiveEntryDate.Date);
+
+        At(2026, 5, 7); // nobody approved it in time
+        await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service().TransmitAsync(run.Id));
+        Assert.Empty(_bank.Sent);
+
+        // The run's maker and executor may not re-date it; a reason is required.
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("maker-1").RedateAsync(run.Id, "late"));
+        await Assert.ThrowsAsync<SeparationOfDutiesException>(() => Service("approver-1").RedateAsync(run.Id, "late"));
+        await Assert.ThrowsAsync<ArgumentException>(() => Service().RedateAsync(run.Id, " "));
+
+        var redated = await Service("treasury-2").RedateAsync(run.Id, "approval came after the effective date");
+
+        Assert.Equal(($"{original.FileReference}-R1", 1), (redated.FileReference, redated.Revision));
+        Assert.EndsWith("-R1.ach", redated.FileName);
+        Assert.Equal(new DateTime(2026, 5, 8), redated.EffectiveEntryDate.Date);
+        Assert.NotEqual(original.Sha256, redated.Sha256);
+        var stored = (await _h.Runs.GetByIdAsync(run.Id))!;
+        var history = Assert.Single(stored.EftFileHistory);
+        Assert.Equal((original.Sha256, "treasury-2", redated.FileReference), (history.Sha256, history.SupersededBy, history.SupersededByFileReference));
+
+        // The old file's record is Superseded (created, since it was never approved) and linked.
+        var old = (await _store.GetAsync(FfsRunHarness.Tenant, original.FileReference))!;
+        Assert.Equal((PaymentFileTransmissionStatus.Superseded, redated.FileReference), (old.Status, old.SupersededByFileReference));
+        Assert.Equal(PaymentFileTransmissionAction.Superseded, old.Attempts.Last().Action);
+
+        // The new file needs (and gets) a fresh approval; it is sent once.
+        var sent = await Service().TransmitAsync(run.Id);
+        Assert.Equal((PaymentFileTransmissionStatus.Transmitted, redated.FileReference, redated.Sha256), (sent.Status, sent.FileReference, sent.ApprovedSha256));
+        Assert.EndsWith("-R1.ach", Assert.Single(_bank.Sent).FileName);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service("treasury-3").TransmitAsync(run.Id)).Status);
+        Assert.Single(_bank.Sent);
+        Assert.Equal(PaymentFileTransmissionStatus.Superseded, (await _store.GetAsync(FfsRunHarness.Tenant, original.FileReference))!.Status);
+    }
+
+    [Fact]
+    public async Task A_failed_file_past_its_date_can_be_re_dated_and_its_record_is_kept_superseded()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        _bank.Script.Enqueue(InMemoryBank.UploadFails);
+        await Service().TransmitAsync(run.Id);
+        var reference = run.EftFile!.FileReference;
+
+        At(2026, 5, 6);
+        await Service("treasury-3").RedateAsync(run.Id, "bank outage past the effective date");
+
+        var old = (await _store.GetAsync(FfsRunHarness.Tenant, reference))!;
+        Assert.Equal(PaymentFileTransmissionStatus.Superseded, old.Status);
+        Assert.Contains(old.Attempts, a => a.Action == PaymentFileTransmissionAction.Transmit && a.Result == PaymentFileTransmissionStatus.Failed);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
+        Assert.Equal(2, _bank.Sent.Count); // the failed upload and the re-dated send
+        Assert.Single(_bank.Drop);
+    }
+
+    [Fact]
+    public async Task Re_dating_is_refused_for_a_transmitted_file()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        await Service().TransmitAsync(run.Id);
+        At(2026, 5, 8);
+
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").RedateAsync(run.Id, "again"));
+
+        Assert.Empty((await _h.Runs.GetByIdAsync(run.Id))!.EftFileHistory);
+        Assert.Single(_bank.Sent);
+    }
+
+    [Fact]
+    public async Task Re_dating_is_refused_while_NeedsReview_and_allowed_once_the_bank_says_not_received()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        _bank.Script.Enqueue(InMemoryBank.AmbiguousNothingLanded);
+        await Service().TransmitAsync(run.Id);
+        At(2026, 5, 8);
+
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").RedateAsync(run.Id, "late"));
+        Assert.Empty((await _h.Runs.GetByIdAsync(run.Id))!.EftFileHistory);
+
+        await Service("treasury-4").ResolveAsync(run.Id, false, "bank confirmed no file received, ref 12");
+        var redated = await Service("treasury-3").RedateAsync(run.Id, "not received; re-date");
+
+        Assert.Equal(1, redated.Revision);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
+        Assert.Equal(2, _bank.Sent.Count);
+    }
+
+    [Fact]
+    public async Task A_file_that_can_still_be_sent_is_not_re_dated()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service().RedateAsync(run.Id, "just because"));
+
+        Assert.Empty((await _h.Runs.GetByIdAsync(run.Id))!.EftFileHistory);
+        Assert.Empty(_store.All);
+    }
+
+    [Fact]
+    public async Task A_superseded_record_is_never_sendable()
     {
         var run = await PinnedRunAsync();
-        _h.Runs.Mutate(run.Id, r => r.EftFile!.EffectiveEntryDate = new DateTime(2026, 5, 9)); // a Saturday
+        var superseded = Record(run, PaymentFileTransmissionStatus.Superseded);
+        superseded.SupersededByFileReference = run.EftFile!.FileReference + "-R1";
+        _store.Put(superseded);
 
-        var ex = await Assert.ThrowsAsync<PaymentFileApprovalStaleException>(() => Service().TransmitAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service().TransmitAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").ReconcileAsync(run.Id));
+        await Assert.ThrowsAsync<PaymentFileTransmissionStateException>(() => Service("treasury-3").ResolveAsync(run.Id, true, "x"));
 
-        Assert.Contains("not a banking day", ex.Message);
         Assert.Empty(_bank.Sent);
+    }
+
+    [Fact]
+    public async Task An_interrupted_re_date_can_be_completed()
+    {
+        At(2026, 5, 4);
+        var run = await RealRunAsync();
+        At(2026, 5, 7);
+        // The record was superseded, but the new file was never pinned (a crash in between).
+        var superseded = Record(run, PaymentFileTransmissionStatus.Superseded);
+        superseded.SupersededByFileReference = run.EftFile!.FileReference + "-R1";
+        _store.Put(superseded);
+
+        var redated = await Service().RedateAsync(run.Id, "finish the re-date");
+
+        Assert.Equal(1, redated.Revision);
+        Assert.Equal(PaymentFileTransmissionStatus.Transmitted, (await Service().TransmitAsync(run.Id)).Status);
     }
 
     [Fact]

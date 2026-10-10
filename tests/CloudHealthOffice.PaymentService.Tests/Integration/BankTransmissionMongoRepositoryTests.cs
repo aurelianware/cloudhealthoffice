@@ -128,6 +128,25 @@ public sealed class BankTransmissionMongoRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Eft_file_repin_applies_only_to_the_superseded_file_and_keeps_it_in_history()
+    {
+        var runs = Runs();
+        await runs.CreateAsync(new PaymentRun { Id = "run-r", PaymentRunNumber = "PR-R", Status = PaymentRunStatus.Completed });
+        var first = new PaymentRunEftFile { FileReference = "FFS-PR-R", Sha256 = new string('c', 64) };
+        await runs.TrySaveEftFileAsync("run-r", first, null, Array.Empty<CheckFallbackPayment>(), Array.Empty<string>());
+
+        first.SupersededByFileReference = "FFS-PR-R-R1";
+        var second = new PaymentRunEftFile { FileReference = "FFS-PR-R-R1", Sha256 = new string('e', 64), Revision = 1 };
+        Assert.True(await runs.TryRepinEftFileAsync("run-r", second, first));
+        // A second re-pin against the old file (a concurrent re-date) is refused.
+        Assert.False(await runs.TryRepinEftFileAsync("run-r", new PaymentRunEftFile { Sha256 = new string('f', 64) }, first));
+
+        var stored = (await runs.GetByIdAsync("run-r"))!;
+        Assert.Equal(("FFS-PR-R-R1", 1), (stored.EftFile!.FileReference, stored.EftFile.Revision));
+        Assert.Equal("FFS-PR-R-R1", Assert.Single(stored.EftFileHistory).SupersededByFileReference);
+    }
+
+    [Fact]
     public async Task Eft_file_write_pins_once_and_touches_nothing_else()
     {
         var runs = Runs();
