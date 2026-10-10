@@ -38,4 +38,21 @@ public sealed class InMemoryClaimImportTransactionRepository : IClaimImportTrans
             return Task.FromResult(result);
         }
     }
+
+    public Task<IReadOnlyList<ClaimImportTransaction>> ListWithSnipWarningsAsync(
+        string tenantId, string? ruleId = null, int? level = null, string? submitterId = null, int limit = 100)
+    {
+        lock (_sync)
+        {
+            IReadOnlyList<ClaimImportTransaction> result = _transactions
+                .Where(t => t.TenantId == tenantId)
+                .Where(t => submitterId is null || t.SubmitterIdNormalized == submitterId || t.ApplicationSenderCodeNormalized == submitterId)
+                .Where(t => t.SnipWarnings.Any(w =>
+                    (ruleId is null || w.RuleId == ruleId) && (level is null || w.Level == level)))
+                .OrderByDescending(t => t.ReceivedAt)
+                .Take(limit)
+                .ToList();
+            return Task.FromResult(result);
+        }
+    }
 }

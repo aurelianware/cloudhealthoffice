@@ -73,22 +73,181 @@ and component position, and a message. It does not throw on bad input.
 | 1 Syntax | ISA fixed widths; ISA/IEA, GS/GE and ST/SE control numbers and counts; duplicate ST02; unknown segment ids; X12 mandatory elements; numeric and date/time formats |
 | 2 Implementation guide | BHT values; 1000A/1000B; HL hierarchy (sequence, parents, child codes); required 2010AA/2000B/2010BA/2010BB/2000C segments (incl. billing tax id); CLM05 and CLM06–09; principal diagnosis; at most 12 diagnoses (837P); LX numbering; SV1/SV2 and their qualifiers; DTP*434 on 837I |
 | 3 Balancing | CLM02 = ΣSV102 (837P) / ΣSV203 (837I) |
-| 4 Situational | DTP*472 on every 837P line, and on 837I outpatient lines when the statement covers more than one day; 837I inpatient (TOB x1x) needs DTP*435 and CL1; line dates inside the statement period and not after BHT04; NPI check digit (Luhn, prefix 80840); billing address not a PO Box; subscriber-is-patient (SBR02=18) needs DMG and no 2000C; frequency 7/8 needs REF*F8; SV107 pointers point at existing diagnoses |
+| 4 Situational | DTP*472 on every 837P line, and on 837I outpatient lines when the statement covers more than one day; every line has a usable service date (line DTP*472, or DTP*434 on an 837I: `L4-SERVICE-DATE`); 837I inpatient (TOB x1x) needs DTP*435 and CL1; line dates inside the statement period and not after BHT04; NPI check digit (Luhn, prefix 80840); billing address not a PO Box; subscriber-is-patient (SBR02=18) needs DMG and no 2000C; frequency 7/8 needs REF*F8; SV107 pointers point at existing diagnoses |
 | 5 Code sets | ICD-10-CM format (no decimal point) and no ICD-9 qualifiers on or after 2015-10-01; ICD-10-PCS format; CPT/HCPCS and modifier formats; CMS place-of-service list; revenue code and type-of-bill formats. Membership checks run only when an `ISnipCodeSetReference` is registered. |
 
 Each level's action is configurable under `ClaimsImport:Snip`:
 
 ```json
-"ClaimsImport": { "Snip": { "Enabled": true, "Level1": "Reject", "Level2": "Reject",
+"ClaimsImport": { "Snip": { "Enabled": true, "Level1": "Reject", "Level2": "Warn",
                             "Level3": "Reject", "Level4": "Reject", "Level5": "Warn" } }
 ```
 
-These values are also the defaults. Level 5 warns by default because, without a code-set
-reference, its checks are format checks only.
+These values are also the defaults:
+
+- **Level 2 warns at go-live.** Implementation-guide findings (for example a claim-level
+  `DTP*472` on an 837P, rule `L2-2300-DTP472`) are accepted and reported, and every one is
+  logged and recorded with the submitter (see "Level 2 warnings: log and record" below), so
+  each partner can be moved to `Reject` once its files are clean.
+- Levels 1, 3 and 4 reject.
+- Level 5 warns because, without a code-set reference, its checks are format checks only.
 
 - `Reject` rejects the transaction set: 999 IK5 `R`.
 - `Warn` reports the finding but accepts the set: IK3/IK4 detail with IK5 `E`.
 - `Off` skips the level.
+
+Values must be the names `Reject`, `Warn` or `Off` (any case). claims-service validates the
+section at start-up (`Snip837ValidationOptionsValidator`, `ValidateOnStart`) and refuses to
+start on any of these:
+
+- a numeric value (`5`, `7`, even `1`)
+- a misspelling (`Rejct`), which the configuration binder would otherwise drop silently
+  inside `PartnerOverrides`
+- a key other than `Level1`–`Level5` under an override
+- an empty override entry
+
+### Integrity rules (always reject)
+
+A few rules guard data that would be silently wrong downstream if accepted: wrong member,
+wrong price, wrong date. These rules reject whatever the level setting is, including `Off`,
+and whatever a partner override says. Levels 2 and 4 always run so that these rules are
+checked. The list is `SnipIntegrityRules.Rules`:
+
+| Rule | Applies to | Why it is pinned |
+| --- | --- | --- |
+| `L2-HL02` | 837P, 837I | The parser attaches loops by file order, not by HL02. A misparented 2000B/2000C puts the claim under the wrong subscriber or patient, so it gets the wrong member and accumulators. |
+| `L2-HL03` | 837P, 837I | An HL level code other than 20/22/23 leaves the previous subscriber/patient context open, so the next claim inherits another member. |
+| `L2-CLM05-1` | 837P, 837I | A missing facility / place-of-service code is defaulted to `11` by the mapper, so the claim would be priced for the wrong setting. (A missing CLM05-2/-3 stays `L2-CLM05`, Warn.) |
+| `L2-SV203` | 837I | A missing line charge prices the line with billed = 0, and Level 3 balancing skips lines without a charge. |
+| `L2-HI-PRINCIPAL` | 837I only | An 837I with no principal diagnosis adjudicates with no diagnoses. 837I has no SV107 pointer check to catch it. On an 837P it follows Level 2. |
+| `L4-DTP472` | 837P only | An 837P line without DTP*472 has no service date. The mapper does not fall back to a claim-level date. |
+| `L4-SERVICE-DATE` | 837P, 837I | A line with no usable service date (no DTP*472 and, on an 837I, no DTP*434 statement period, or a DTP*472 that does not parse) maps to 0001-01-01. Plan-year and coverage checks would then deny it in an 835 instead of rejecting it in the 999. |
+
+Every other Level 2 rule follows `Level2`, including the claim-level DTP*472 rule
+(`L2-2300-DTP472`), HL01 sequencing and HL04 child codes (the parser uses neither), and
+DTP*434 on its own (lines fall back to it, and `L4-SERVICE-DATE` covers the case where
+neither date is sent). As a second check, `ClaimSubmissionService` refuses any claim whose
+`ServiceDateFrom` is missing (`ServiceDateFrom: Required`). That covers claims from every
+intake path, not just the 837.
+
+### Per-partner overrides
+
+`ClaimsImport:Snip:PartnerOverrides` overrides individual levels for one submitter. The key
+is the interchange sender id **ISA06** only (the trading partner's `x12Config.senderId` in
+trading-partner-service). GS02 is never used for matching, because the sender chooses it: a
+sender cannot pick up another partner's override by copying that partner's GS02. Matching
+ignores case and surrounding spaces. A level the override leaves unset uses the global value,
+and a submitter with no override gets the global levels. Overrides never relax an integrity
+rule.
+
+```json
+"ClaimsImport": { "Snip": {
+  "Level2": "Warn",
+  "PartnerOverrides": {
+    "SUBMITTER01": { "Level2": "Reject" },
+    "LEGACYCH":    { "Level3": "Warn" }
+  } } }
+```
+
+As environment variables: `ClaimsImport__Snip__PartnerOverrides__SUBMITTER01__Level2=Reject`.
+
+The override applies to that interchange's envelope checks (Level 1 on ISA/IEA, GS/GE) and
+to every transaction set in it. Each `ClaimImportTransaction` stores the matched key in
+`snipPartnerOverride` (null = global levels). The log entry carries it as `SnipPolicy`
+(`default` or `partner:<key>`).
+
+Overrides live in claims-service configuration, not on the trading-partner record. The raw
+837 upload is tenant-scoped and does not resolve a trading partner, and claims-service has no
+trading-partner-service client. Keying on ISA06 matches the same `x12Config.senderId` value
+without adding a cross-service call to the intake path. Changing an override needs a config
+change and restart (or reload) of claims-service.
+
+### Level 2 warnings: log and record
+
+The import (`POST .../import/raw837`) writes one structured `Warning` log entry per Level 2
+finding at `Warn`, with event id `8372` / `SnipLevel2Warning` and these properties:
+
+| Property | Source |
+| --- | --- |
+| `RuleId` | e.g. `L2-2300-DTP472` |
+| `Location` | loop, segment with its qualifier code, element, e.g. `2300 DTP*472`, `2300 CLM05-2` |
+| `SubmitterQualifier` / `SubmitterId` | ISA05 / ISA06 |
+| `ApplicationSenderCode` | GS02 |
+| `InterchangeControlNumber` / `GroupControlNumber` / `TransactionSetControlNumber` | ISA13 / GS06 / ST02 |
+| `ClaimNumber` | CLM01 (as already logged for import failures) |
+| `SetAccepted` | false when another finding rejected the same set |
+| `TenantId`, `SnipPolicy` | tenant; `default` or `partner:<key>` |
+
+No message text, member name, member id or date is logged. The only value read from the file
+for `Location` is a 1–3 character alphanumeric qualifier code (`472`, `F8`, `85`). The
+dry-run `/validate` endpoint does not log or record.
+
+The durable record is the existing `ClaimImportTransaction` (Mongo
+`claim-import-transactions`). Each claim's record now also holds `submitterQualifier`,
+`submitterId`, `applicationSenderCode`, `interchangeControlNumber`, `groupControlNumber`,
+`snipPartnerOverride` and `snipWarnings`. These are the API JSON names; Mongo stores the
+PascalCase property names. The record also holds `SubmitterIdNormalized` and
+`ApplicationSenderCodeNormalized` (trimmed, upper-case), which the submitter filter matches
+on. GS02 is stored trimmed. Both classes are `[BsonIgnoreExtraElements]`, so rolling back to
+a build without these fields still reads the documents.
+
+`snipWarnings` lists every Warn-level finding (any level) for the claim and its transaction
+set: level, rule id, location, loop, segment id/position, element/component, data element
+reference and `claimLevel`. **What is stored, privacy-wise:**
+
+- `message` is stored for Level 2 findings only. Level 2 messages name the rule and
+  position, not claim values.
+- Messages at other levels can include claim values such as diagnosis or procedure codes and
+  amounts, so `message` is null for those findings.
+- The record as a whole is not PHI-free. It already holds `MemberId` and `ClaimNumber`
+  (CLM01, a patient account number), like the rest of `ClaimImportTransaction`. Treat the
+  collection and the endpoint as PHI-bearing.
+
+**How findings attach to claims.** Findings are attached by CLM01 within a transaction set:
+
+- A finding with a CLM01 goes to the claims with that CLM01. Claims that repeat a CLM01 in
+  one set share each other's claim-level findings.
+- Set-level findings (no CLM01) go to every claim in the set.
+- Claims from a rejected set are recorded too (status `Rejected`), with any Warn findings
+  they had, so they also show up in the `snip-warnings` query. Filter on `status` if you only
+  want accepted claims.
+
+The service tries to create an index on `(TenantId, SnipWarnings.RuleId, ReceivedAt)` at
+start-up. If the store refuses it (e.g. Cosmos DB for MongoDB limits on compound indexes
+over array paths), it logs a warning and starts anyway; the query then scans the tenant's
+import transactions.
+
+With `Cosmos` configured, claims-service has no Mongo store for these records. It falls back
+to the per-pod in-memory repository, so there the records and the `snip-warnings` query
+cover only that pod's imports since its last restart. The structured log entries are the
+durable source in that setup.
+
+To find who sends a claim-level DTP*472:
+
+```bash
+curl "http://claims-service.cloudhealthoffice/api/v1/claims/import-transactions/snip-warnings?ruleId=L2-2300-DTP472" \
+  -H "X-Tenant-ID: <tenant>"
+# narrow with &submitterId=<ISA06 or GS02, any case>&level=2&limit=500
+```
+
+Or aggregate in Mongo:
+
+```js
+db["claim-import-transactions"].aggregate([
+  { $match: { TenantId: "<tenant>", "SnipWarnings.RuleId": "L2-2300-DTP472" } },
+  { $group: { _id: "$SubmitterIdNormalized", claims: { $sum: 1 }, lastSeen: { $max: "$ReceivedAt" } } }])
+```
+
+Then flip a clean partner with `PartnerOverrides:<ISA06>:Level2 = Reject`.
+
+### Warn findings in the 999
+
+A Warn finding gets the same 999 detail as a reject, and only the acknowledgment code
+changes: IK3 (segment, position, loop, IK304), `CTX*CLM01`, IK4 when the finding is
+element-level, then IK5 `E` with `I5`, and AK9 `E`. A Level 2 warning cannot mask a reject:
+if another finding in the set rejects, IK5 is `R`. This follows the 005010X231A1 meaning of
+"accepted but errors were noted". The 999 does not show whether a finding came from a
+warning or a reject. The IK5 code and the response's `snipIssues[].severity` tell them apart.
 
 `POST /api/v1/claims/import/raw837` validates first:
 
@@ -120,7 +279,7 @@ Rules and limits:
 - **Finding caps.** Findings are capped per transaction set and per file (`MaxFindingsPerTransactionSet` and `MaxFindingsPerFile`, default 1,000 each), with a single "too many findings" entry when a cap is hit. Findings dropped by a cap still count toward acceptance. The 999 lists at most 1,000 IK3 loops per set.
 - **Never throws.** A file cut off mid-transaction-set is rejected with L1 findings. An unexpected failure becomes an `L1-VALIDATION-FAILED` finding.
 - **Echoed values.** Segment ids are echoed only as valid 2–3 character ids; anything else is replaced with `???`.
-- **Import record.** Each `ClaimImportTransaction` records its transaction set's ST02 and IK5 code and the 999's ISA13. The 999 text itself is returned in the response and is not stored.
+- **Import record.** Each `ClaimImportTransaction` records its transaction set's ST02 and IK5 code, the 999's ISA13, the submitter (ISA05/ISA06, GS02), ISA13/GS06 of the inbound file, the partner override in force and its Warn-level findings (`snipWarnings`). The 999 text itself is returned in the response and is not stored.
 
 ## Why `BenefitPlanId` starts blank
 
@@ -167,7 +326,10 @@ import history — accepted/rejected status and error text — without needing r
 ### 837 file rejected at upload (400) or claims rejected by SNIP
 - `acknowledgmentCode` is `R`/`P` → read `snipIssues` (or the 999's IK3/IK4): each names
   the level, rule, loop and segment position. Fix the file or, if a level should only warn
-  for this deployment, set `ClaimsImport:Snip:LevelN` to `Warn`.
+  for this deployment, set `ClaimsImport:Snip:LevelN` to `Warn` (or only for one submitter:
+  `ClaimsImport:Snip:PartnerOverrides:<ISA06>:LevelN`).
+- `acknowledgmentCode` is `E` → accepted with Warn findings; see
+  `GET /api/v1/claims/import-transactions/snip-warnings` and the `SnipLevel2Warning` log entries.
 - No `CLM` segments found → not a valid 837, or wrong transaction type.
 - Parse failure → check the error message; `X12837Parser` throws `X12FormatException` with
   the specific segment/reason.

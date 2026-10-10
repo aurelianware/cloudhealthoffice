@@ -132,6 +132,12 @@ public sealed class SnipTransactionSetOutcome
 
     /// <summary>999 IK502–IK506 transaction-set syntax error codes.</summary>
     public List<string> TransactionSetErrorCodes { get; } = [];
+
+    /// <summary>
+    /// The <see cref="Snip837ValidationOptions.PartnerOverrides"/> key whose
+    /// levels validated this set, or null when the global levels applied.
+    /// </summary>
+    public string? PartnerOverrideKey { get; set; }
 }
 
 /// <summary>Validation outcome of one GS/GE functional group.</summary>
@@ -160,6 +166,13 @@ public sealed class SnipFunctionalGroupOutcome
     /// <summary>Group error codes found while Level 1 is set to Warn: reported in AK9, the group is not rejected.</summary>
     public List<string> GroupWarningCodes { get; } = [];
 
+    /// <summary>The partner-override key in force for the group (see <see cref="SnipTransactionSetOutcome.PartnerOverrideKey"/>).</summary>
+    public string? PartnerOverrideKey { get; set; }
+
+    /// <summary>The options in force for this group's submitter.</summary>
+    [JsonIgnore]
+    internal Snip837ValidationOptions? EffectiveOptions { get; set; }
+
     /// <summary>True when the group's own codes or its interchange reject it.</summary>
     public bool Rejected => GroupErrorCodes.Count > 0 || Interchange.Rejected;
 
@@ -185,6 +198,13 @@ public sealed class SnipInterchangeOutcome
     public string? ReceiverQualifier { get; init; }
     public string? ReceiverId { get; init; }
     public string? ControlNumber { get; init; }
+
+    /// <summary>The partner-override key matched on ISA06, or null.</summary>
+    public string? PartnerOverrideKey { get; set; }
+
+    /// <summary>The options in force for envelope (ISA/IEA) checks of this interchange.</summary>
+    [JsonIgnore]
+    internal Snip837ValidationOptions? EffectiveOptions { get; set; }
 
     /// <summary>ISA15 as sent (P or T); echoed in the 999.</summary>
     public string? UsageIndicator { get; init; }
@@ -251,10 +271,24 @@ public sealed class SnipValidationResult
 
 
 /// <summary>
-/// Configuration (section <c>ClaimsImport:Snip</c>). Defaults: levels 1–4
-/// reject, level 5 warns — the code-set checks are format checks unless a
-/// <see cref="ISnipCodeSetReference"/> is registered, so on their own they
-/// are reported rather than allowed to reject.
+/// Configuration (section <c>ClaimsImport:Snip</c>). Defaults: levels 1, 3
+/// and 4 reject; level 2 warns (go-live posture: implementation-guide
+/// findings are accepted, reported in the 999 as IK3/IK4 with IK5 E, and
+/// recorded per submitter so a partner can be moved to Reject once its
+/// files are clean); level 5 warns — the code-set checks are format checks
+/// unless a <see cref="ISnipCodeSetReference"/> is registered, so on their
+/// own they are reported rather than allowed to reject.
+/// <para>
+/// <see cref="PartnerOverrides"/> overrides individual levels for one
+/// submitter, keyed by ISA06 only (interchange sender id, the trading
+/// partner's <c>x12Config.senderId</c>). GS02 is chosen by the sender and is
+/// never used for matching, so one sender cannot pick up another partner's
+/// override. A level an override leaves unset uses the global value.
+/// </para>
+/// <para>
+/// Neither the levels nor the overrides affect
+/// <see cref="SnipIntegrityRules"/>: those rules always run and always reject.
+/// </para>
 /// </summary>
 public sealed class Snip837ValidationOptions
 {
@@ -264,7 +298,7 @@ public sealed class Snip837ValidationOptions
     public bool Enabled { get; set; } = true;
 
     public SnipAction Level1 { get; set; } = SnipAction.Reject;
-    public SnipAction Level2 { get; set; } = SnipAction.Reject;
+    public SnipAction Level2 { get; set; } = SnipAction.Warn;
     public SnipAction Level3 { get; set; } = SnipAction.Reject;
     public SnipAction Level4 { get; set; } = SnipAction.Reject;
     public SnipAction Level5 { get; set; } = SnipAction.Warn;
@@ -278,6 +312,51 @@ public sealed class Snip837ValidationOptions
     /// <summary>Findings kept for the whole file (envelope plus all transaction sets).</summary>
     public int MaxFindingsPerFile { get; set; } = 1000;
 
+    /// <summary>
+    /// Per-submitter level overrides, keyed by ISA06 (trimmed,
+    /// case-insensitive). Example: <c>ClaimsImport:Snip:PartnerOverrides:SUBMITTER01:Level2 = Reject</c>.
+    /// </summary>
+    public Dictionary<string, SnipLevelOverrides> PartnerOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The options in force for one submitter: the global levels with the
+    /// <see cref="PartnerOverrides"/> entry for its ISA06 applied.
+    /// <paramref name="matchedKey"/> is the override key used, or null when
+    /// the global levels apply.
+    /// </summary>
+    public Snip837ValidationOptions ForSubmitter(string? interchangeSenderId, out string? matchedKey)
+    {
+        matchedKey = null;
+        var candidate = interchangeSenderId?.Trim();
+        if (PartnerOverrides is not { Count: > 0 } || string.IsNullOrEmpty(candidate)) return this;
+
+        // The binder may replace the dictionary (losing the comparer), so match case-insensitively here.
+        SnipLevelOverrides? match = null;
+        foreach (var (key, value) in PartnerOverrides)
+        {
+            if (value is not null && string.Equals(key.Trim(), candidate, StringComparison.OrdinalIgnoreCase))
+            {
+                match = value;
+                matchedKey = key.Trim();
+                break;
+            }
+        }
+        if (match is null) return this;
+
+        return new Snip837ValidationOptions
+        {
+            Enabled = Enabled,
+            Level1 = match.Level1 ?? Level1,
+            Level2 = match.Level2 ?? Level2,
+            Level3 = match.Level3 ?? Level3,
+            Level4 = match.Level4 ?? Level4,
+            Level5 = match.Level5 ?? Level5,
+            MaxFindingsPerTransactionSet = MaxFindingsPerTransactionSet,
+            MaxFindingsPerFile = MaxFindingsPerFile,
+            PartnerOverrides = PartnerOverrides,
+        };
+    }
+
     public SnipAction ActionFor(SnipLevel level) => level switch
     {
         SnipLevel.Syntax => Level1,
@@ -287,4 +366,134 @@ public sealed class Snip837ValidationOptions
         SnipLevel.ExternalCodeSets => Level5,
         _ => SnipAction.Reject,
     };
+}
+
+/// <summary>Per-submitter SNIP level overrides; a null level uses the global setting.</summary>
+public sealed class SnipLevelOverrides
+{
+    public SnipAction? Level1 { get; set; }
+    public SnipAction? Level2 { get; set; }
+    public SnipAction? Level3 { get; set; }
+    public SnipAction? Level4 { get; set; }
+    public SnipAction? Level5 { get; set; }
+}
+
+/// <summary>
+/// Rules that always reject, whatever the level setting (including Off) or
+/// partner override. Each one guards data that, if accepted, would be
+/// silently wrong downstream (wrong member, wrong price, wrong date) rather
+/// than merely non-conformant. Everything else follows its level.
+/// </summary>
+public static class SnipIntegrityRules
+{
+    public enum Scope { All, Institutional, Professional }
+
+    public sealed record Rule(string RuleId, Scope AppliesTo, string Reason);
+
+    public static IReadOnlyList<Rule> Rules { get; } =
+    [
+        new("L2-HL02", Scope.All,
+            "The parser attaches loops by file order, not by HL02: a misparented 2000B/2000C puts the claim under the wrong subscriber or patient (wrong member, wrong accumulators)."),
+        new("L2-HL03", Scope.All,
+            "An HL level code other than 20/22/23 leaves the previous subscriber/patient context open, so the next claim inherits another member."),
+        new("L2-CLM05-1", Scope.All,
+            "A missing facility / place-of-service code is defaulted to 11 by the mapper, so the claim would be priced for the wrong setting."),
+        new("L2-SV203", Scope.All,
+            "A missing 837I line charge prices the line with billed = 0, and Level 3 balancing skips lines without a charge."),
+        new("L2-HI-PRINCIPAL", Scope.Institutional,
+            "An 837I without a principal diagnosis adjudicates with no diagnoses at all (837I has no SV107 pointer check to catch it)."),
+        new("L4-DTP472", Scope.Professional,
+            "An 837P line without DTP*472 has no service date (the mapper does not fall back to a claim-level date): it would price and accumulate as 0001-01-01."),
+        new("L4-SERVICE-DATE", Scope.All,
+            "A line with no usable service date (no DTP*472 and, on an 837I, no DTP*434 statement period) maps to 0001-01-01: plan-year and coverage checks then deny it as an 835 denial instead of a 999 reject."),
+    ];
+
+    private static readonly Dictionary<string, Scope> ById = Rules.ToDictionary(r => r.RuleId, r => r.AppliesTo, StringComparer.Ordinal);
+
+    /// <summary>True when <paramref name="ruleId"/> is pinned to Reject for this transaction type.</summary>
+    public static bool IsPinned(string ruleId, bool institutional) =>
+        ById.TryGetValue(ruleId, out var scope) && scope switch
+        {
+            Scope.All => true,
+            Scope.Institutional => institutional,
+            Scope.Professional => !institutional,
+            _ => false,
+        };
+}
+
+/// <summary>
+/// Fails start-up on a SNIP setting that is not a defined action name:
+/// numeric values (5, 7), misspellings (<c>Rejct</c>, which the binder
+/// silently drops inside <see cref="Snip837ValidationOptions.PartnerOverrides"/>),
+/// unknown keys and empty override entries. Reads the raw configuration
+/// section as well as the bound options so nothing the binder drops is missed.
+/// </summary>
+public sealed class Snip837ValidationOptionsValidator(Microsoft.Extensions.Configuration.IConfiguration? configuration = null)
+    : Microsoft.Extensions.Options.IValidateOptions<Snip837ValidationOptions>
+{
+    private static readonly string[] LevelKeys = ["Level1", "Level2", "Level3", "Level4", "Level5"];
+
+    public Microsoft.Extensions.Options.ValidateOptionsResult Validate(string? name, Snip837ValidationOptions options)
+    {
+        var errors = new List<string>();
+
+        foreach (var (key, action) in LevelKeys.Zip(new[] { options.Level1, options.Level2, options.Level3, options.Level4, options.Level5 }))
+            if (!Enum.IsDefined(action)) errors.Add($"{Snip837ValidationOptions.SectionName}:{key} has undefined value {(int)action}.");
+
+        foreach (var (partner, overrides) in options.PartnerOverrides ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(partner))
+                errors.Add($"{Snip837ValidationOptions.SectionName}:PartnerOverrides has an empty ISA06 key.");
+            if (overrides is null)
+            {
+                errors.Add($"{Snip837ValidationOptions.SectionName}:PartnerOverrides:{partner} is empty.");
+                continue;
+            }
+            foreach (var (key, action) in LevelKeys.Zip(new[] { overrides.Level1, overrides.Level2, overrides.Level3, overrides.Level4, overrides.Level5 }))
+                if (action is { } a && !Enum.IsDefined(a))
+                    errors.Add($"{Snip837ValidationOptions.SectionName}:PartnerOverrides:{partner}:{key} has undefined value {(int)a}.");
+        }
+
+        if (configuration is not null)
+            ValidateRaw(configuration.GetSection(Snip837ValidationOptions.SectionName), errors);
+
+        return errors.Count == 0
+            ? Microsoft.Extensions.Options.ValidateOptionsResult.Success
+            : Microsoft.Extensions.Options.ValidateOptionsResult.Fail(errors.Distinct());
+    }
+
+    private static void ValidateRaw(Microsoft.Extensions.Configuration.IConfigurationSection section, List<string> errors)
+    {
+        foreach (var key in LevelKeys)
+        {
+            var raw = section[key];
+            if (raw is not null && !IsActionName(raw))
+                errors.Add($"{section.Path}:{key} = '{raw}' is not Reject, Warn or Off.");
+        }
+
+        foreach (var partner in section.GetSection("PartnerOverrides").GetChildren())
+        {
+            var levels = partner.GetChildren().ToList();
+            if (levels.Count == 0)
+            {
+                errors.Add($"{partner.Path} is empty; give it at least one LevelN.");
+                continue;
+            }
+            foreach (var level in levels)
+            {
+                if (!LevelKeys.Contains(level.Key, StringComparer.OrdinalIgnoreCase))
+                    errors.Add($"{level.Path} is not a SNIP level key (Level1–Level5).");
+                else if (level.Value is null || !IsActionName(level.Value))
+                    errors.Add($"{level.Path} = '{level.Value}' is not Reject, Warn or Off.");
+            }
+        }
+    }
+
+    /// <summary>Only the names Reject, Warn and Off (any case); numbers are refused.</summary>
+    private static bool IsActionName(string raw)
+    {
+        var value = raw.Trim();
+        return value.Length > 0 && !value.Any(char.IsAsciiDigit)
+            && Enum.TryParse<SnipAction>(value, ignoreCase: true, out var action) && Enum.IsDefined(action);
+    }
 }
