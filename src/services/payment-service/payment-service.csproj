@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\CloudHealthOffice.Infrastructure\CloudHealthOffice.Infrastructure.csproj" />
+    <!-- Bank transmission of the run's NACHA file (SFTP, pinned host key, Key Vault credentials). -->
+    <ProjectReference Include="..\shared\CloudHealthOffice.NachaTransmission\CloudHealthOffice.NachaTransmission.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Azure.Cosmos" />
     <PackageReference Include="MongoDB.Driver" />

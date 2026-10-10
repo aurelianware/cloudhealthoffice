@@ -55,11 +55,20 @@ public sealed class NachaTransmissionReceipt
 /// </summary>
 public sealed class NachaTransmissionException : Exception
 {
-    public NachaTransmissionException(string message, bool notConfigured = false, bool deliveryUnknown = false) : base(message)
+    public NachaTransmissionException(string message, bool notConfigured = false, bool deliveryUnknown = false, bool hostKeyRejected = false) : base(message)
     {
         NotConfigured = notConfigured;
         DeliveryUnknown = deliveryUnknown;
+        HostKeyRejected = hostKeyRejected;
     }
+
+    /// <summary>
+    /// The server presented an SSH host key that is not the pinned one (or none
+    /// was verified). Nothing was authenticated or sent. A security event (the
+    /// bank changed its key, or something is in the path): never re-pin
+    /// automatically; confirm the new key with the bank out of band.
+    /// </summary>
+    public bool HostKeyRejected { get; }
 
     /// <summary>The tenant has no usable transmission configuration (as opposed to a failed attempt).</summary>
     public bool NotConfigured { get; }
@@ -80,6 +89,66 @@ public interface INachaTransmitter
     /// or throws <see cref="NachaTransmissionException"/>.
     /// </summary>
     Task<NachaTransmissionReceipt> TransmitAsync(NachaTransmissionRequest request, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// TODO(PGP): encryption of the file for banks that require OpenPGP on top of
+/// SFTP. Not implemented and not wired: the repository has no OpenPGP library or
+/// key-handling pattern yet. When added, the transmitter calls it after the
+/// approved-hash check and before the upload, with the bank's public key read
+/// from Key Vault (<c>nacha--{tenantId}--pgp-public-key</c>); receipts keep the
+/// SHA-256 of the clear file (what was approved) and add the encrypted bytes'
+/// hash and size, and reconciliation compares the encrypted size.
+/// See docs/operations/NACHA-BANK-TRANSMISSION-RUNBOOK.md, section 9.
+/// </summary>
+public interface INachaFileEncryptor
+{
+    /// <summary>The bytes to upload for <paramref name="clearFile"/>, and the name suffix (e.g. ".pgp").</summary>
+    Task<(byte[] Encrypted, string FileNameSuffix)> EncryptAsync(string tenantId, byte[] clearFile, CancellationToken cancellationToken = default);
+}
+
+/// <summary>What a look at the bank's drop found for one file name.</summary>
+public enum NachaRemoteFilePresence
+{
+    /// <summary>A file of that name and of the expected byte size is in the drop.</summary>
+    Present,
+
+    /// <summary>
+    /// No file of that name is in the drop. Not proof it never arrived: many
+    /// banks move a file out of the drop once they collect it.
+    /// </summary>
+    Absent,
+
+    /// <summary>A file of that name is there, but not of the expected size: proof of nothing.</summary>
+    DifferentSize,
+}
+
+/// <summary>The answer of <see cref="INachaRemoteFileProbe.CheckAsync"/>. Never carries file content.</summary>
+public sealed class NachaRemoteFileCheck
+{
+    public required NachaRemoteFilePresence Presence { get; init; }
+
+    /// <summary>Host and directory (never credentials).</summary>
+    public required string Destination { get; init; }
+
+    /// <summary>The remote file's size, when it is there and the server reported one.</summary>
+    public long? RemoteByteSize { get; init; }
+}
+
+/// <summary>
+/// Looks in the tenant's bank drop for one file name, read-only (nothing is
+/// written, renamed or deleted). Used to reconcile a transmission whose outcome
+/// is unknown before anything could be sent again. Same settings, pinned host
+/// key and credentials as <see cref="INachaTransmitter"/>.
+/// </summary>
+public interface INachaRemoteFileProbe
+{
+    /// <summary>
+    /// Whether <paramref name="fileName"/> is in the drop with
+    /// <paramref name="expectedByteSize"/> bytes. Throws
+    /// <see cref="NachaTransmissionException"/> when the drop cannot be reached or listed.
+    /// </summary>
+    Task<NachaRemoteFileCheck> CheckAsync(string tenantId, string fileName, long expectedByteSize, CancellationToken cancellationToken = default);
 }
 
 internal static class NachaFileNames

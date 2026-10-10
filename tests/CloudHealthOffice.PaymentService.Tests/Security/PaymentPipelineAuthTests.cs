@@ -236,6 +236,48 @@ public class PaymentPipelineAuthTests : IClassFixture<PaymentPipelineFactory>
     }
 
     [Fact]
+    public async Task BankTransmission_IsOffByDefault_409_AndNothingIsDone()
+    {
+        PendingRun("run-tx-1", Maker).Status = PaymentRunStatus.Completed;
+
+        var response = await As(Approver, ChoRolePermissions.FinanceApprover).PostAsync("/api/paymentruns/run-tx-1/eft-file/transmission", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("disabled", await response.Content.ReadAsStringAsync());
+        Assert.Empty(_f.Transmissions.All);
+        await _f.Runs.DidNotReceiveWithAnyArgs().UpdateAsync(default!);
+        Assert.IsType<global::PaymentService.Services.DisabledNachaTransmitter>(
+            _f.Services.GetRequiredService<CloudHealthOffice.NachaTransmission.INachaTransmitter>());
+    }
+
+    [Fact]
+    public async Task BankTransmission_WithoutPaymentsApprove_OrWithAServiceToken_Is403()
+    {
+        PendingRun("run-tx-2", Maker).Status = PaymentRunStatus.Completed;
+
+        foreach (var path in new[] { "transmission", "transmission/reconcile", "transmission/resolve" })
+        {
+            var preparer = await PreparerWithoutFinanceWrite().PostAsJsonAsync($"/api/paymentruns/run-tx-2/eft-file/{path}",
+                new { bankReceived = true, reason = "x" });
+            var service = await ServiceToken().PostAsJsonAsync($"/api/paymentruns/run-tx-2/eft-file/{path}",
+                new { bankReceived = true, reason = "x" });
+            Assert.Equal(HttpStatusCode.Forbidden, preparer.StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, service.StatusCode);
+        }
+        Assert.Empty(_f.Transmissions.All);
+    }
+
+    [Fact]
+    public async Task BankTransmission_StatusOfAFileNeverApproved_Is404()
+    {
+        PendingRun("run-tx-3", Maker);
+
+        var response = await As(Maker, ChoRolePermissions.Finance).GetAsync("/api/paymentruns/run-tx-3/eft-file/transmission");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Receivables_AreReadableWithPaymentsRead_AndScopedToTheTokenTenant()
     {
         var store = _f.Services.GetRequiredService<global::PaymentService.Repositories.IProviderReceivableRepository>();

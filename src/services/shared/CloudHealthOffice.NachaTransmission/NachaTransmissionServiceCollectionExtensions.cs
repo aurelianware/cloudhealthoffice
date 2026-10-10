@@ -92,6 +92,11 @@ public static class NachaTransmissionServiceCollectionExtensions
             throw new InvalidOperationException($"Unknown NachaTransmission:Mode '{mode}'. Use Sftp (default) or LocalFolder.");
         }
 
+        // The read-only drop listing used to reconcile an ambiguous transmission:
+        // the same instance (settings, pinned key, credentials) as the transmitter.
+        services.AddSingleton<INachaRemoteFileProbe>(sp => sp.GetRequiredService<INachaTransmitter>() as INachaRemoteFileProbe
+            ?? throw new InvalidOperationException("The configured NACHA transmitter cannot list the bank's drop."));
+
         if (databaseProvider == ChoDatabaseProvider.MongoDb)
             services.AddScoped<INachaHeldFileStore>(sp => new MongoNachaHeldFileStore(sp.GetRequiredService<IMongoDatabase>()));
         else if (databaseProvider == null && LocalFolderNachaTransmitter.IsAllowed(environment))

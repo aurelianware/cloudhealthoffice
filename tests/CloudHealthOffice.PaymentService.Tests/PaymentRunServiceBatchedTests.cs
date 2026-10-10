@@ -763,7 +763,9 @@ public class PaymentRunServiceBatchedTests
             Assert.Equal("0.00", bpr[2]);
             Assert.Equal("NON", bpr[4]); // run method is ACH, but nothing is paid
             Assert.All(bpr.Skip(5).Take(11), e => Assert.Equal(string.Empty, e));
-            Assert.Equal("20260504", bpr[16]);
+            // Execution fixes the payment date (a default date: the next banking day).
+            Assert.Equal(result.PaymentDate.ToString("yyyyMMdd"), bpr[16]);
+            Assert.True(AchBankingCalendar.IsBankingDay(result.PaymentDate));
             var trn = segments.Single(s => s[0] == "TRN");
             Assert.Equal("1123456789", trn[3]);
             traces.Add(trn[2]);

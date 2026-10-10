@@ -10,11 +10,15 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/payment-service/payment-service.csproj src/services/payment-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.FieldProtection/CloudHealthOffice.FieldProtection.csproj src/services/shared/CloudHealthOffice.FieldProtection/
+COPY src/services/shared/CloudHealthOffice.NachaTransmission/CloudHealthOffice.NachaTransmission.csproj src/services/shared/CloudHealthOffice.NachaTransmission/
 RUN dotnet restore src/services/payment-service/payment-service.csproj
 
 # Copy source code and build
 COPY src/services/payment-service/ src/services/payment-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.FieldProtection/ src/services/shared/CloudHealthOffice.FieldProtection/
+COPY src/services/shared/CloudHealthOffice.NachaTransmission/ src/services/shared/CloudHealthOffice.NachaTransmission/
 RUN dotnet build src/services/payment-service/payment-service.csproj -c Release --no-restore
 
 # Publish stage

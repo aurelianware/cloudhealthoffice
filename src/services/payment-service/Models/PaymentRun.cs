@@ -259,6 +259,20 @@ public class PaymentRun
     public DateTime PaymentDate { get; set; } = DateTime.UtcNow.AddDays(3);
 
     /// <summary>
+    /// True when the creator asked for <see cref="PaymentDate"/> (validated at create).
+    /// False when it was set by default (the next banking day): the NACHA file's
+    /// effective entry date is then chosen when the file is pinned, never taken
+    /// from a date that may have passed by then.
+    /// </summary>
+    public bool PaymentDateRequested { get; set; }
+
+    /// <summary>
+    /// Earlier EFT files of this run, superseded by a re-date (oldest first). Kept
+    /// for audit; never rebuilt or sent.
+    /// </summary>
+    public List<PaymentRunEftFile> EftFileHistory { get; set; } = new();
+
+    /// <summary>
     /// Scheduled run (vs manual)
     /// </summary>
     public bool IsScheduled { get; set; } = false;

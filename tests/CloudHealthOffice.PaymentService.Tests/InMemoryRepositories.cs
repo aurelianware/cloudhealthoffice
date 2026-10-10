@@ -122,7 +122,61 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
         }
     }
 
-    public Task<PaymentRun> UpdateAsync(PaymentRun run) { lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); } return Task.FromResult(run); }
+    /// <summary>When set, the next UpdateAsync throws it (a transient database error).</summary>
+    public Exception? FailNextUpdate { get; set; }
+
+    public Task<PaymentRun> UpdateAsync(PaymentRun run)
+    {
+        if (FailNextUpdate is { } failure)
+        {
+            FailNextUpdate = null;
+            throw failure;
+        }
+        lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); }
+        return Task.FromResult(run);
+    }
+
+    public int EftFileWrites;
+
+    public Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run == null)
+                return Task.FromResult(false);
+            var holds = expectedSha256 == null ? run.EftFile == null : run.EftFile?.Sha256 == expectedSha256;
+            if (!holds)
+                return Task.FromResult(false);
+            run.EftFile = JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(file));
+            run.CheckFallbacks.AddRange(addFallbacks);
+            run.Warnings.AddRange(addWarnings);
+            EftFileWrites++;
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            if (run?.EftFile == null || run.EftFile.Sha256 != superseded.Sha256)
+                return Task.FromResult(false);
+            run.EftFile = JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(file));
+            run.EftFileHistory.Add(JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(superseded))!);
+            if (addWarnings != null)
+                run.Warnings.AddRange(addWarnings);
+            return Task.FromResult(true);
+        }
+    }
+
+    /// <summary>Changes a stored run in place (a concurrent writer), bypassing the service.</summary>
+    public void Mutate(string id, Action<PaymentRun> change)
+    {
+        lock (_items) change(_items.First(r => r.Id == id));
+    }
 
     public Task<bool> RecordReservationOutcomesAsync(string id, ReservationOutcomes outcomes)
     {
@@ -301,4 +355,83 @@ public sealed class InMemoryReservationAuditLog : IReservationAuditLog
             .Where(e => e.TenantId == tenantId && (runId == null || e.RunId == runId))
             .OrderByDescending(e => e.At)
             .ToList());
+}
+
+/// <summary>File ID modifier claims in memory, with the stores' insert-if-absent semantics.</summary>
+public sealed class InMemoryNachaFileIdModifierAllocator : INachaFileIdModifierAllocator
+{
+    private readonly Dictionary<string, string> _holders = new();
+
+    public Task<string> AllocateAsync(string tenantId, string immediateDestination, string immediateOrigin, DateTime fileCreationDate, string runId)
+        => NachaFileIdModifiers.AllocateAsync(tenantId, immediateDestination, immediateOrigin, fileCreationDate, runId, claim =>
+        {
+            lock (_holders)
+            {
+                _holders.TryAdd(claim.Id, claim.RunId);
+                return Task.FromResult(_holders[claim.Id]);
+            }
+        });
+}
+
+/// <summary>
+/// Transmission records in memory with the stores' semantics: copies in and
+/// out, insert-if-absent, replace only while the version is the one read.
+/// </summary>
+public sealed class InMemoryPaymentFileTransmissionRepository : IPaymentFileTransmissionRepository
+{
+    private readonly Dictionary<string, string> _json = new();
+
+    /// <summary>When set, the next replace throws it (a database outage after the send).</summary>
+    public Exception? FailNextReplace { get; set; }
+
+    private static PaymentFileTransmission Copy(PaymentFileTransmission r)
+        => JsonSerializer.Deserialize<PaymentFileTransmission>(JsonSerializer.Serialize(r))!;
+
+    public IReadOnlyList<PaymentFileTransmission> All
+    {
+        get { lock (_json) return _json.Values.Select(j => JsonSerializer.Deserialize<PaymentFileTransmission>(j)!).ToList(); }
+    }
+
+    public string RawJson { get { lock (_json) return string.Join("\n", _json.Values); } }
+
+    /// <summary>Writes a record as is (tests that start from a given state).</summary>
+    public void Put(PaymentFileTransmission record)
+    {
+        record.Id = PaymentFileTransmission.KeyFor(record.TenantId, record.FileReference);
+        if (string.IsNullOrEmpty(record.Version)) record.Version = Guid.NewGuid().ToString("N");
+        lock (_json) _json[record.Id] = JsonSerializer.Serialize(record);
+    }
+
+    public Task<PaymentFileTransmission?> GetAsync(string tenantId, string fileReference, CancellationToken cancellationToken = default)
+    {
+        lock (_json)
+            return Task.FromResult(_json.TryGetValue(PaymentFileTransmission.KeyFor(tenantId, fileReference), out var j)
+                ? JsonSerializer.Deserialize<PaymentFileTransmission>(j) is { } r && r.TenantId == tenantId ? r : null
+                : null);
+    }
+
+    public Task<bool> TryInsertAsync(PaymentFileTransmission record, CancellationToken cancellationToken = default)
+    {
+        record.Id = PaymentFileTransmission.KeyFor(record.TenantId, record.FileReference);
+        record.Version = Guid.NewGuid().ToString("N");
+        lock (_json) return Task.FromResult(_json.TryAdd(record.Id, JsonSerializer.Serialize(Copy(record))));
+    }
+
+    public Task<bool> TryReplaceAsync(PaymentFileTransmission record, string expectedVersion, CancellationToken cancellationToken = default)
+    {
+        lock (_json)
+        {
+            if (FailNextReplace is { } failure)
+            {
+                FailNextReplace = null;
+                throw failure;
+            }
+            if (!_json.TryGetValue(record.Id, out var j)
+                || JsonSerializer.Deserialize<PaymentFileTransmission>(j)!.Version != expectedVersion)
+                return Task.FromResult(false);
+            record.Version = Guid.NewGuid().ToString("N");
+            _json[record.Id] = JsonSerializer.Serialize(record);
+            return Task.FromResult(true);
+        }
+    }
 }

@@ -133,7 +133,10 @@ from the service to the tenant's bank by SFTP. premium-billing-service (debits:
 `POST eft/nacha/generate`, the NACHA part of `POST eft/drafts/batch`) and
 capitation-service (credits: `POST disbursements/nacha-file`, the NACHA part of
 `POST disbursements/batch`) use it after the existing checks (payments:approve,
-user token, maker-checker).
+user token, maker-checker). payment-service (FFS payment-run credits) uses the
+transmitter directly, behind its own exactly-once transmission record, off by
+default (`BankTransmission:Enabled`): see
+[NACHA-BANK-TRANSMISSION-RUNBOOK.md](../operations/NACHA-BANK-TRANSMISSION-RUNBOOK.md).
 
 - **What the approver gets:** counts, debit and credit totals, one line per
   entry (sponsor group or provider NPI, name, last 4, amount, trace number),
@@ -189,7 +192,12 @@ user token, maker-checker).
   verified out of band.
 - **Atomic upload:** the file is written as `.{name}.{guid}.part` in the
   remote directory, then renamed to its final name; a partial upload is
-  deleted; an existing file of the same name is never overwritten.
+  deleted; an existing file of the same name is never overwritten. After the
+  upload completed, a failed rename counts as delivered only when the final name
+  is there and the temporary one is gone; anything else (including "temporary
+  still there") is delivery unknown and the temporary file is left in place
+  (servers may rename by copy-then-delete). A failure closing the session after
+  the rename never makes a delivered file look undelivered.
 - **Development:** `NachaTransmission:Mode=LocalFolder` writes to a local
   folder (`NachaTransmission:LocalFolder`, default
   `{temp}/cho-nacha-outbox/{service}/{tenant}`) the same way. Startup fails

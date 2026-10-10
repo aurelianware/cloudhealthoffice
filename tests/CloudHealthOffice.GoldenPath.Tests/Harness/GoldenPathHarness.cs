@@ -498,6 +498,9 @@ internal sealed class GoldenPathHarness
             Criteria = new Pay.PaymentRunCriteria { GroupByProvider = true, IncludeDeniedClaims = true },
             NextCheckNumber = 1000001,
             PaymentDate = scenario.PaymentDate,
+            // The scenario's date is the requested payment date: execution keeps it
+            // (as BPR16) while it is still ahead of "today" (pinned below).
+            PaymentDateRequested = true,
             PaymentMethod = "CHK",
             CreatedBy = "golden-maker",
         };
@@ -554,7 +557,10 @@ internal sealed class GoldenPathHarness
             envelopeRepository, tradingPartners, http,
             NullLogger<PaymentRunService>.Instance, configuration, actor,
             new RunSeparationOfDuties(actor, NullLogger<RunSeparationOfDuties>.Instance),
-            reservations);
+            reservations,
+            effectiveDates: new AchEffectiveDatePolicy(
+                Microsoft.Extensions.Options.Options.Create(new BankTransmissionOptions()),
+                new PinnedClock(PinnedNowFor(scenario.PaymentDate))));
 
         var executed = await service.ExecutePaymentRunAsync(run.Id);
         Assert.Equal(Pay.PaymentRunStatus.Completed, executed.Status);
@@ -575,5 +581,20 @@ internal sealed class GoldenPathHarness
     {
         public AcaLimits? GetForPlanYear(int planYear) => new(planYear, 10_150m, 20_300m);
         public IReadOnlyCollection<int> ConfiguredPlanYears => new[] { 2026 };
+    }
+
+    /// <summary>
+    /// "Now" for the payment-date rules: noon UTC the day before the scenario's
+    /// payment date (the same calendar day in the bank's time zone), so the requested
+    /// date is still ahead and execution keeps it as BPR16, whatever the real date is.
+    /// </summary>
+    internal static DateTimeOffset PinnedNowFor(DateTime paymentDate)
+        => new(paymentDate.Date.AddDays(-1).AddHours(12), TimeSpan.Zero);
+
+    private sealed class PinnedClock : TimeProvider
+    {
+        private readonly DateTimeOffset _now;
+        public PinnedClock(DateTimeOffset now) => _now = now;
+        public override DateTimeOffset GetUtcNow() => _now;
     }
 }

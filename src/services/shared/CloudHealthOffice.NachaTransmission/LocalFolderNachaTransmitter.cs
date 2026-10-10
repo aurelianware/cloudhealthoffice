@@ -9,7 +9,7 @@ namespace CloudHealthOffice.NachaTransmission;
 /// Development and Testing, where it would leave full account numbers on a
 /// pod's disk.
 /// </summary>
-public sealed class LocalFolderNachaTransmitter : INachaTransmitter
+public sealed class LocalFolderNachaTransmitter : INachaTransmitter, INachaRemoteFileProbe
 {
     private readonly string _root;
     private readonly TimeProvider _clock;
@@ -28,6 +28,21 @@ public sealed class LocalFolderNachaTransmitter : INachaTransmitter
 
     public static bool IsAllowed(IHostEnvironment environment)
         => environment.IsDevelopment() || environment.IsEnvironment("Testing");
+
+    public Task<NachaRemoteFileCheck> CheckAsync(string tenantId, string fileName, long expectedByteSize, CancellationToken cancellationToken = default)
+    {
+        var directory = Path.Combine(_root, NachaFileNames.Require(tenantId));
+        var path = Path.Combine(directory, NachaFileNames.Require(fileName));
+        var info = new FileInfo(path);
+        return Task.FromResult(new NachaRemoteFileCheck
+        {
+            Presence = !info.Exists ? NachaRemoteFilePresence.Absent
+                : info.Length == expectedByteSize ? NachaRemoteFilePresence.Present
+                : NachaRemoteFilePresence.DifferentSize,
+            Destination = $"file://{directory}",
+            RemoteByteSize = info.Exists ? info.Length : null,
+        });
+    }
 
     public Task<NachaTransmissionReceipt> TransmitAsync(NachaTransmissionRequest request, CancellationToken cancellationToken = default)
     {
