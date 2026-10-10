@@ -32,6 +32,12 @@ public interface IPremiumInvoiceRepository
     /// </summary>
     Task<IEnumerable<PremiumInvoice>> ListByMemberAsync(string memberId, int take = 12);
 
+    /// <summary>
+    /// Inserts the invoice. Throws <see cref="InvoiceAlreadyExistsException"/>
+    /// when an invoice with the same id exists (rated invoices have a
+    /// deterministic id per group and period, so a second generation of the
+    /// same invoice cannot create a duplicate).
+    /// </summary>
     Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice);
 
     /// <summary>
@@ -41,10 +47,53 @@ public interface IPremiumInvoiceRepository
     /// </summary>
     Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice);
     Task DeleteAsync(string id);
+
+    /// <summary>
+    /// <see cref="CreateAsync"/> fenced by the group's billing lease: nothing is
+    /// written unless <paramref name="lease"/> still holds it (it is renewed).
+    /// Throws <see cref="BillingLeaseLostException"/> otherwise. Stores that can
+    /// do both writes atomically override this (Cosmos: transactional batch;
+    /// Mongo on a replica set: a transaction); the default renews, then writes.
+    /// </summary>
+    async Task<PremiumInvoice> CreateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration)
+    {
+        if (!await leases.RenewAsync(lease, now, duration))
+            throw new BillingLeaseLostException(lease.GroupNumber);
+        return await CreateAsync(invoice);
+    }
+
+    /// <summary><see cref="UpdateAsync"/> fenced by the group's billing lease (see <see cref="CreateFencedAsync"/>).</summary>
+    async Task<PremiumInvoice> UpdateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration)
+    {
+        if (!await leases.RenewAsync(lease, now, duration))
+            throw new BillingLeaseLostException(lease.GroupNumber);
+        return await UpdateAsync(invoice);
+    }
+}
+
+/// <summary>An invoice with this id already exists.</summary>
+public sealed class InvoiceAlreadyExistsException : Exception
+{
+    public InvoiceAlreadyExistsException(string invoiceId)
+        : base($"Invoice {invoiceId} already exists")
+    {
+        InvoiceId = invoiceId;
+    }
+
+    public string InvoiceId { get; }
 }
 
 public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 {
+    /// <summary>
+    /// Status as stored: <see cref="Middleware.CosmosSystemTextJsonSerializer"/> writes enums as
+    /// camelCase strings, so queries must compare with the same string (an int never matches).
+    /// </summary>
+    public static string StoredStatus(InvoiceStatus status) =>
+        System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(status.ToString());
+
     private readonly Container _container;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<PremiumInvoiceRepository> _logger;
@@ -71,6 +120,9 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice?> GetByIdAsync(string id)
     {
+        // Billing leases share this container: a lease id is never an invoice.
+        if (BillingLease.IsLeaseId(id))
+            return null;
         var tenantId = GetTenantId();
         try
         {
@@ -122,7 +174,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         var query = new QueryDefinition(
             "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.status = @status ORDER BY c.dueDate")
             .WithParameter("@tenantId", tenantId)
-            .WithParameter("@status", (int)status);
+            .WithParameter("@status", StoredStatus(status));
 
         return await ExecuteQueryAsync(query);
     }
@@ -136,7 +188,8 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         int pageSize = 50)
     {
         var tenantId = GetTenantId();
-        var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId";
+        // Billing leases share this container (docType billingLease): never list them as invoices.
+        var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId AND NOT IS_DEFINED(c.docType)";
         var parameters = new List<(string, object)> { ("@tenantId", tenantId) };
 
         if (!string.IsNullOrEmpty(groupNumber))
@@ -157,7 +210,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         if (status.HasValue)
         {
             queryText += " AND c.status = @status";
-            parameters.Add(("@status", (int)status.Value));
+            parameters.Add(("@status", StoredStatus(status.Value)));
         }
 
         queryText += " ORDER BY c.billingPeriodStart DESC";
@@ -176,12 +229,14 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         var now = DateTime.UtcNow;
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.balanceDue > 0 AND c.dueDate < @now AND c.status != @voided AND c.status != @writeOff AND c.status != @paid ORDER BY c.dueDate")
+            "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.balanceDue > 0 AND c.dueDate < @now " +
+            "AND c.status != @voided AND c.status != @writeOff AND c.status != @paid AND c.status != @draft ORDER BY c.dueDate")
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@now", now)
-            .WithParameter("@voided", (int)InvoiceStatus.Voided)
-            .WithParameter("@writeOff", (int)InvoiceStatus.WriteOff)
-            .WithParameter("@paid", (int)InvoiceStatus.Paid);
+            .WithParameter("@voided", StoredStatus(InvoiceStatus.Voided))
+            .WithParameter("@writeOff", StoredStatus(InvoiceStatus.WriteOff))
+            .WithParameter("@paid", StoredStatus(InvoiceStatus.Paid))
+            .WithParameter("@draft", StoredStatus(InvoiceStatus.Draft));
 
         return await ExecuteQueryAsync(query);
     }
@@ -195,10 +250,11 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         // for the tenant and filter to those that mention the member.
         var query = new QueryDefinition(
             "SELECT TOP @take * FROM c " +
-            "WHERE c.tenantId = @tenantId " +
+            "WHERE c.tenantId = @tenantId AND c.status != @draft " +
             "AND EXISTS(SELECT VALUE l FROM l IN c.lineItems WHERE l.memberId = @memberId) " +
             "ORDER BY c.billingPeriodStart DESC")
             .WithParameter("@take", take)
+            .WithParameter("@draft", StoredStatus(InvoiceStatus.Draft))
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@memberId", memberId);
 
@@ -207,10 +263,20 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice> CreateAsync(PremiumInvoice invoice)
     {
+        BillingLease.RefuseLeaseId(invoice.Id);
         invoice.TenantId = GetTenantId();
         invoice.CreatedAt = DateTime.UtcNow;
         invoice.LastUpdatedAt = DateTime.UtcNow;
-        var response = await _container.CreateItemAsync(invoice, new PartitionKey(invoice.TenantId));
+        ItemResponse<PremiumInvoice> response;
+        try
+        {
+            response = await _container.CreateItemAsync(invoice, new PartitionKey(invoice.TenantId));
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            throw new InvoiceAlreadyExistsException(invoice.Id);
+        }
+        response.Resource.ETag = response.ETag;
         _logger.LogInformation("Created premium invoice {InvoiceNumber} for group {GroupNumber}",
             invoice.InvoiceNumber, invoice.GroupNumber);
         return response.Resource;
@@ -218,6 +284,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
 
     public async Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice)
     {
+        BillingLease.RefuseLeaseId(invoice.Id);
         invoice.LastUpdatedAt = DateTime.UtcNow;
         invoice.Version++;
         try
@@ -235,8 +302,74 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         }
     }
 
+    public Task<PremiumInvoice> CreateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration) => WriteFencedAsync(invoice, create: true, leases, lease, now, duration);
+
+    public Task<PremiumInvoice> UpdateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration) => WriteFencedAsync(invoice, create: false, leases, lease, now, duration);
+
+    /// <summary>
+    /// True fencing: one transactional batch in the tenant's partition replaces the lease
+    /// document only if it is still the version this holder wrote (renewing it) and
+    /// creates or replaces the invoice (ETag-checked). Either both are written or neither.
+    /// </summary>
+    private async Task<PremiumInvoice> WriteFencedAsync(PremiumInvoice invoice, bool create, IBillingLeaseRepository leases,
+        BillingLeaseHandle lease, DateTime now, TimeSpan duration)
+    {
+        BillingLease.RefuseLeaseId(invoice.Id);
+        if (leases is not BillingLeaseRepositoryCosmos || lease.ETag == null)
+        {
+            if (!await leases.RenewAsync(lease, now, duration))
+                throw new BillingLeaseLostException(lease.GroupNumber);
+            return create ? await CreateAsync(invoice) : await UpdateAsync(invoice);
+        }
+
+        var tenantId = GetTenantId();
+        var key = new PartitionKey(tenantId);
+        var leaseDocument = new BillingLease
+        {
+            Id = BillingLease.IdFor(tenantId, lease.GroupNumber), TenantId = tenantId, LeaseGroupNumber = lease.GroupNumber,
+            LeaseOwner = lease.Owner, AcquiredAt = now, ExpiresAt = now + duration
+        };
+        invoice.TenantId = tenantId;
+        invoice.LastUpdatedAt = DateTime.UtcNow;
+        if (create)
+            invoice.CreatedAt = invoice.LastUpdatedAt;
+        else
+            invoice.Version++;
+
+        var batch = _container.CreateTransactionalBatch(key)
+            .ReplaceItem(leaseDocument.Id, leaseDocument, new TransactionalBatchItemRequestOptions { IfMatchEtag = lease.ETag });
+        batch = create
+            ? batch.CreateItem(invoice)
+            : batch.ReplaceItem(invoice.Id, invoice, new TransactionalBatchItemRequestOptions { IfMatchEtag = invoice.ETag });
+
+        using var response = await batch.ExecuteAsync();
+        if (!response.IsSuccessStatusCode)
+        {
+            if (!create)
+                invoice.Version--;
+            if (response.Count > 0 && response[0].StatusCode is System.Net.HttpStatusCode.PreconditionFailed or System.Net.HttpStatusCode.NotFound)
+                throw new BillingLeaseLostException(lease.GroupNumber);
+            var invoiceStatus = response.Count > 1 ? response[1].StatusCode : response.StatusCode;
+            if (invoiceStatus == System.Net.HttpStatusCode.Conflict)
+                throw new InvoiceAlreadyExistsException(invoice.Id);
+            if (invoiceStatus is System.Net.HttpStatusCode.PreconditionFailed or System.Net.HttpStatusCode.NotFound)
+                throw new ConcurrencyConflictException($"Invoice {invoice.InvoiceNumber} was changed by someone else; re-read it and retry");
+            throw new InvalidOperationException($"Fenced write of invoice {invoice.InvoiceNumber} failed: {response.StatusCode} {response.ErrorMessage}");
+        }
+
+        lease.ETag = response[0].ETag;
+        var saved = response.GetOperationResultAtIndex<PremiumInvoice>(1).Resource;
+        saved.ETag = response[1].ETag;
+        _logger.LogInformation("Wrote premium invoice {InvoiceNumber} under the billing lease of group {GroupNumber}",
+            saved.InvoiceNumber, lease.GroupNumber);
+        return saved;
+    }
+
     public async Task DeleteAsync(string id)
     {
+        BillingLease.RefuseLeaseId(id);
         var tenantId = GetTenantId();
         await _container.DeleteItemAsync<PremiumInvoice>(id, new PartitionKey(tenantId));
         _logger.LogInformation("Deleted premium invoice {Id}", SanitizeForLog(id));

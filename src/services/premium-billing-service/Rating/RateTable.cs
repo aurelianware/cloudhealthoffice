@@ -51,6 +51,36 @@ public enum CompositeBasis
     TierFactors
 }
 
+/// <summary>
+/// How a partial month is charged. The rule belongs to the plan's rate filing,
+/// so it is carried (and versioned) on the rate table.
+/// </summary>
+public enum ProrationRule
+{
+    /// <summary>
+    /// By the day: monthly premium × days ÷ days in the month, with the
+    /// household and the rate of each day.
+    /// </summary>
+    Daily,
+
+    /// <summary>
+    /// By the half month (days 1–15 and 16–end): each half costs half the
+    /// monthly premium and is charged in full, with the household covered on
+    /// its first day, when coverage is in force on that first day. Coverage
+    /// that starts after a half's first day is first charged at the next half;
+    /// coverage that ends inside a half is charged for that whole half.
+    /// </summary>
+    HalfMonth,
+
+    /// <summary>
+    /// By the whole month: the month is charged in full, with the household
+    /// covered on the 1st, when coverage is in force on the 1st. Coverage that
+    /// starts after the 1st is first charged the following month; coverage
+    /// that ends during the month is charged for the whole month.
+    /// </summary>
+    FullMonth
+}
+
 /// <summary>An amount per coverage tier.</summary>
 public class TierAmounts
 {
@@ -113,6 +143,19 @@ public class RateTable
 
     public string? Name { get; set; }
 
+    /// <summary>
+    /// Version of this table. Stored versions are immutable: a correction is a
+    /// new version, and invoice lines record the version they were rated with.
+    /// Set by the rate-table store; 0 for a table that was never stored.
+    /// </summary>
+    public int Version { get; set; }
+
+    /// <summary>SHA-256 of the version's rating content as stored (set by the rate-table store).</summary>
+    public string? ContentHash { get; set; }
+
+    /// <summary>How partial months are charged under this table (see <see cref="ProrationRule"/>).</summary>
+    public ProrationRule Proration { get; set; } = ProrationRule.Daily;
+
     /// <summary>First day the rates apply.</summary>
     public DateTime EffectiveFrom { get; set; }
 
@@ -168,6 +211,8 @@ public class RateTable
             errors.Add("PlanId is required");
         if (EffectiveTo.HasValue && EffectiveTo.Value.Date < EffectiveFrom.Date)
             errors.Add("EffectiveTo is before EffectiveFrom");
+        if (!Enum.IsDefined(Proration))
+            errors.Add($"Unknown proration rule {Proration}");
 
         switch (Method)
         {
@@ -235,6 +280,14 @@ public class RateTableValidationException : Exception
     {
         Errors = errors;
     }
+}
+
+/// <summary>A rate table version as invoice lines record it: <c>{id}@v{version}</c>.</summary>
+public static class RateTableReference
+{
+    public static string Of(string rateTableId, int version) => $"{rateTableId}@v{version}";
+
+    public static string Of(RateTable table) => Of(table.Id, table.Version);
 }
 
 public class RateTableNotFoundException : Exception

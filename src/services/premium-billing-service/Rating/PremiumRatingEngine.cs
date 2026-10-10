@@ -94,6 +94,8 @@ public class MemberRating
 public class RatingResult
 {
     public string RateTableId { get; set; } = string.Empty;
+    public int RateTableVersion { get; set; }
+    public string? RateTableHash { get; set; }
     public RatingMethod Method { get; set; }
     public CoverageTier Tier { get; set; }
     public decimal BasePremium { get; set; }
@@ -162,9 +164,20 @@ public static class PremiumRatingEngine
             throw new ArgumentException($"Rate table is for plan {table.PlanId}, coverage {enrollment.CoverageId} is plan {enrollment.PlanId}");
         if (enrollment.Members.Count(m => m.Relationship == MemberRelationship.Subscriber) != 1)
             throw new ArgumentException($"Coverage {enrollment.CoverageId} must have exactly one subscriber");
+        // An unset date of birth would rate as a 2,000-year-old (factor of the oldest band).
+        var undated = enrollment.Members.FirstOrDefault(m => m.DateOfBirth == default);
+        if (undated != null)
+            throw new ArgumentException($"Member {undated.MemberId} of coverage {enrollment.CoverageId} has no date of birth");
 
         var tier = enrollment.Tier ?? DeriveTier(enrollment.Members);
-        var result = new RatingResult { RateTableId = table.Id, Method = table.Method, Tier = tier };
+        var result = new RatingResult
+        {
+            RateTableId = table.Id,
+            RateTableVersion = table.Version,
+            RateTableHash = table.ContentHash,
+            Method = table.Method,
+            Tier = tier
+        };
 
         switch (table.Method)
         {

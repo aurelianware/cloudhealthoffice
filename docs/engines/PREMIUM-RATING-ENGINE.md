@@ -12,7 +12,7 @@ lines. It is pure code with no I/O and no clock, so every amount can be checked 
 - [Tobacco surcharge](#tobacco-surcharge)
 - [Invoice calculation](#invoice-calculation)
 - [Rounding](#rounding)
-- [Status and next steps](#status-and-next-steps)
+- [Status](#status)
 
 ---
 
@@ -111,10 +111,14 @@ group's coverage as recorded on the billing date (including coverage terminated 
 the last invoice), and a `BilledLedger` built from the group's earlier invoices
 (`BilledLedger.FromInvoices`; voided invoices count for nothing).
 
-1. **Current month.** Each coverage active on any day of the month gets one line.
-   The month is split wherever the household or the rate table changes: a coverage or
+1. **Current month.** Each coverage charged for the month gets one line per rate-table
+   version used (normally one). The month is divided by the table's `Proration` rule
+   (`Daily`, `HalfMonth`, `FullMonth`; see
+   [premium-rated-billing.md](../architecture/premium-rated-billing.md#proration-rules)).
+   Under `Daily` it is split wherever the household or the rate table changes: a coverage or
    dependent starting or ending mid-month, or a new rate period. Each piece is rated with
    only the members covered then and prorated by day (premium × days ÷ days in month).
+   Lines record the rate table id, version and hash, and their segments.
 2. **Retro.** Each earlier month within `MaxRetroMonths` (default 3) that has an invoice
    is reconciled one coverage at a time. If the correct charge differs from what was billed
    (line items plus the calculator's earlier retro adjustments for that month), the
@@ -126,9 +130,10 @@ the last invoice), and a `BilledLedger` built from the group's earlier invoices
    - `RetroTerm` when nothing is due, or when coverage ended inside the month;
    - otherwise `RateChange`, for example after a tier change.
    Months that have no invoice are not reconciled; their own billing run bills them.
-3. **Missing rate table.** A coverage-month with no rate table in force is left off the
-   invoice and listed in `InvoiceCalculation.Issues`. The rest of the group's invoice
-   is still produced.
+3. **Missing rate table.** A coverage-month with no rate table in force (or an invalid
+   plan, or unusable member data) is left off the invoice and listed in
+   `InvoiceCalculation.Issues` with a code. The rest of the group's invoice is still
+   computed; rated billing keeps such an invoice in Draft. A line is never `0.00`.
 
 ### Worked example (unit test `MarchInvoice_HandChecked_ProrationRetroAddsAndRetroTerm`)
 
@@ -151,16 +156,15 @@ for A (EE, 500) and B (Family, 1,400). The March invoice is computed on 2026-02-
 
 Money is rounded to the cent half away from zero. Age-band premiums are rounded per
 member, and the household premium is the sum of those rounded amounts. Prorated amounts
-are rounded once, per coverage and month.
+are rounded once per segment (adjacent pieces at the same rate version and premium are
+merged first); a line is the sum of its segments and the invoice total the sum of its
+lines. The full rule is in
+[premium-rated-billing.md](../architecture/premium-rated-billing.md#rounding).
 
-## Status and next steps
+## Status
 
-The engine, the federal age curve, the catalog and the invoice calculator are implemented
-and unit-tested. Two pieces are not wired yet:
-
-- **Billing-run integration.** `ExecuteBillingRunAsync` still bills coverage-service's
-  `monthlyPremium`. Rating each household needs coverage-service to return each member's
-  date of birth, relationship and tobacco status, and the tier, with the coverage, including
-  coverage terminated since the last invoice.
-- **Rate-table storage and API.** Tables are plain documents (`RateTable`), but there is no
-  repository or controller yet. The catalog is built from whatever source holds them.
+The engine, the federal age curve, the catalog and the invoice calculator are wired into
+the billing run behind a per-tenant flag (rated billing), with rate tables stored as
+immutable versions (`/api/v1/rate-tables`). See
+[premium-rated-billing.md](../architecture/premium-rated-billing.md) and the
+[runbook](../operations/PREMIUM-RATED-BILLING-RUNBOOK.md).

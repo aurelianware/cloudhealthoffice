@@ -20,6 +20,7 @@ data:
   CosmosDb__DatabaseName: "CloudHealthOffice"
   CoverageService__BaseUrl: "http://coverage-service.cloudhealthoffice"
   SponsorService__BaseUrl: "http://sponsor-service.cloudhealthoffice"
+  MemberService__BaseUrl: "http://member-service.cloudhealthoffice"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -93,6 +94,11 @@ spec:
             configMapKeyRef:
               name: premium-billing-service-config
               key: SponsorService__BaseUrl
+        - name: MemberService__BaseUrl
+          valueFrom:
+            configMapKeyRef:
+              name: premium-billing-service-config
+              key: MemberService__BaseUrl
         - name: Stripe__SecretKey
           valueFrom:
             secretKeyRef:
