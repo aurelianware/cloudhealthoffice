@@ -47,6 +47,12 @@ public class RepricingController : ControllerBase
     /// Supports Professional (RBRVS), Outpatient (OPPS), and Inpatient (MS-DRG) claim types.
     /// Multiple procedure reduction, modifier adjustments, and facility/non-facility differentials 
     /// are applied automatically per CMS rules.
+    ///
+    /// Optional <c>claimType</c> (professional, institutional, outpatient, inpatient, dental) and
+    /// <c>billType</c> (NUBC type of bill, e.g. "131") select the setting as adjudication does:
+    /// institutional claims always take the facility rate. An invalid <c>billType</c>, or one on a
+    /// professional or dental claim, returns 400 <c>INVALID_BILL_TYPE</c>. A request with neither
+    /// is priced as a professional claim by place of service.
     /// </remarks>
     [HttpPost("reprice")]
     [ProducesResponseType(typeof(ApiResponse<RepricingResponse>), StatusCodes.Status200OK)]
@@ -65,6 +71,9 @@ public class RepricingController : ControllerBase
                 Error = new ApiError { Code = "INVALID_REQUEST", Message = "At least one claim line is required." }
             });
         }
+
+        if (RepricingClaimSetting.Validate(request) is { } invalid)
+            return BadRequest(new ApiResponse<object> { Success = false, Error = invalid });
 
         try
         {
@@ -112,6 +121,27 @@ public class RepricingController : ControllerBase
                 Success = false,
                 Error = new ApiError { Code = "BATCH_TOO_LARGE", Message = "Maximum 100 claims per batch request." }
             });
+        }
+
+        for (var i = 0; i < requests.Count; i++)
+        {
+            if (requests[i]?.Lines is null or { Count: 0 })
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = new ApiError { Code = "INVALID_REQUEST", Message = $"Claim {i}: at least one claim line is required." }
+                });
+            }
+
+            if (RepricingClaimSetting.Validate(requests[i]) is { } invalid)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Error = invalid with { Message = $"Claim {i}: {invalid.Message}" }
+                });
+            }
         }
 
         var results = new List<RepricingResponse>();

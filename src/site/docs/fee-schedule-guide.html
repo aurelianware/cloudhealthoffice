@@ -434,7 +434,7 @@
             <tr><th>API Endpoint</th><th>Method</th><th>Input</th><th>Output</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>/api/v1/reprice</code></td><td>POST</td><td>Procedure code, modifier, POS, date of service, provider NPI, member plan, LOB</td><td>Allowed amount, fee schedule used, rate effective date, multiple procedure adjustments</td></tr>
+            <tr><td><code>/api/v1/reprice</code></td><td>POST</td><td>Procedure code, modifier, POS, date of service, provider NPI, member plan, LOB; optional claim type (professional, institutional, outpatient, inpatient, dental) and NUBC type of bill (institutional claims take the facility rate)</td><td>Allowed amount, fee schedule used, rate effective date, multiple procedure adjustments</td></tr>
             <tr><td><code>/api/v1/reprice/batch</code></td><td>POST</td><td>Array of claim lines (same fields as single reprice)</td><td>Array of repricing results with per-line detail</td></tr>
             <tr><td><code>/api/v1/reprice/estimate</code></td><td>POST</td><td>Procedure code, modifier, POS, provider NPI, plan ID</td><td>Estimated allowed amount (uses current date; no member-specific accumulators)</td></tr>
             <tr><td><code>/api/v1/fee-schedules/{id}/rates</code></td><td>GET</td><td>Fee schedule ID, optional procedure code filter</td><td>Rate table entries matching the filter criteria</td></tr>

@@ -108,7 +108,10 @@ try
                 1. Browse available fee schedules at GET /api/v1/fee-schedules (no auth needed)
                 2. Register for a free API key at https://cloudhealthoffice.com/pricing-api
                 3. Look up a code: GET /api/v1/lookup/99213 (CMS Medicare schedules: no auth needed)
-                4. Reprice a claim: POST /api/v1/reprice (X-API-Key)
+                4. Reprice a claim: POST /api/v1/reprice (X-API-Key). Send claimType
+                   (professional, institutional, outpatient, inpatient, dental) and, for
+                   institutional claims, billType (NUBC type of bill, e.g. "131"):
+                   institutional claims take the facility rate.
 
                 CHO callers use a CHO bearer token instead of an API key.
                 """,
@@ -124,6 +127,11 @@ try
                 Url = new Uri("https://github.com/aurelianware/cloudhealthoffice/blob/main/LICENSE")
             }
         });
+
+        // Field descriptions (claimType, billType, ...) come from the model XML docs.
+        var xmlDocs = Path.Combine(AppContext.BaseDirectory, $"{typeof(Program).Assembly.GetName().Name}.xml");
+        if (File.Exists(xmlDocs))
+            c.IncludeXmlComments(xmlDocs);
 
         c.AddSecurityDefinition("ApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
         {

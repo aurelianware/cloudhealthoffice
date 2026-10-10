@@ -72,8 +72,9 @@ public class RateResolutionService : IRateResolutionService
     /// A malformed bill type ("0", "N/A") does not make a line institutional; the
     /// validity rule is <see cref="NubcTypeOfBill"/>, shared with the benefit engine.
     /// A professional line uses <see cref="IsFacilityPlaceOfService"/>.
+    /// Public so callers that display the setting (PricingApi) use the same rule.
     /// </summary>
-    internal static bool IsFacilitySetting(PricingRequest request)
+    public static bool IsFacilitySetting(PricingRequest request)
         => request.IsInstitutional
            || NubcTypeOfBill.IsValid(request.BillType)
            || IsFacilityPlaceOfService(request.PlaceOfServiceCode);
