@@ -204,12 +204,19 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
 
         var response = await _client.PostAsync("/api/v1/claims/import/raw837", BuildFileContent(truncated));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // No IEA: the interchange envelope is rejected (TA105 023) with a TA1,
+        // and its contents never reach SNIP, so there is no 999.
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<Raw837ImportResult>();
-        Assert.Equal("R", result!.AcknowledgmentCode);
-        Assert.Contains(result.SnipIssues, i => i.RuleId == "L1-SE-MISSING");
-        Assert.All(result.Results, r => Assert.False(r.Success));
+        Assert.Equal("R", result!.InterchangeAcknowledgmentCode);
+        Assert.Equal(["023"], result.InterchangeNoteCodes);
+        Assert.Contains("TA1*", result.AcknowledgmentTa1);
+        Assert.Contains("*R*023~", result.AcknowledgmentTa1);
+        Assert.Null(result.Acknowledgment999);
+        Assert.Null(result.AcknowledgmentCode);
+        Assert.Empty(result.Results);
         await _service.DidNotReceiveWithAnyArgs().SubmitAsync(default!, default!, default, default, default);
+        await _transactions.DidNotReceiveWithAnyArgs().CreateAsync(default!);
     }
 
     [Fact]
