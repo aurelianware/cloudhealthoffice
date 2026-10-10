@@ -58,6 +58,8 @@ public class MembersPremiumController : ControllerBase
         DateTime nowUtc)
     {
         var summary = new MemberPremiumSummary { MemberId = memberId };
+        // A draft is not a bill yet: it is not shown to the member and owes nothing.
+        invoices = invoices.Where(i => i.Status != InvoiceStatus.Draft).ToList();
         if (invoices.Count == 0) return summary;
 
         var ordered = invoices
@@ -90,7 +92,7 @@ public class MembersPremiumController : ControllerBase
         // Grace only applies when there's still money owed and the invoice
         // hasn't already closed out (Paid/Voided/WriteOff).
         if (invoice.BalanceDue <= 0m) return state;
-        if (invoice.Status is InvoiceStatus.Paid or InvoiceStatus.Voided or InvoiceStatus.WriteOff)
+        if (invoice.Status is InvoiceStatus.Paid or InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Draft)
             return state;
 
         // Grace window opens on DueDate; closes on GracePeriodExpires.

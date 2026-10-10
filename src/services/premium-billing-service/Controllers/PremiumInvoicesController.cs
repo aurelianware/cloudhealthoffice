@@ -19,15 +19,92 @@ public class PremiumInvoicesController : ControllerBase
     private readonly IPremiumBillingService _billingService;
     private readonly IPremiumInvoiceRepository _invoiceRepository;
     private readonly ILogger<PremiumInvoicesController> _logger;
+    private readonly IRatedInvoiceGenerator? _ratedInvoices;
+    private readonly ICurrentActor? _actor;
 
     public PremiumInvoicesController(
         IPremiumBillingService billingService,
         IPremiumInvoiceRepository invoiceRepository,
-        ILogger<PremiumInvoicesController> logger)
+        ILogger<PremiumInvoicesController> logger,
+        IRatedInvoiceGenerator? ratedInvoices = null,
+        ICurrentActor? actor = null)
     {
         _billingService = billingService;
         _invoiceRepository = invoiceRepository;
         _logger = logger;
+        _ratedInvoices = ratedInvoices;
+        _actor = actor;
+    }
+
+    /// <summary>
+    /// Recompute a Draft rated invoice (after a missing rate table or member
+    /// data was fixed). Issued invoices are never recomputed: 400.
+    /// </summary>
+    [HttpPost("{id}/regenerate")]
+    [ProducesResponseType(typeof(PremiumInvoice), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PremiumInvoice>> RegenerateDraft(string id, CancellationToken cancellationToken)
+    {
+        if (_ratedInvoices == null || _actor == null)
+            return BadRequest(new { error = "Rated billing is not available" });
+        try
+        {
+            var outcome = await _ratedInvoices.RegenerateDraftAsync(id, _actor.TenantId, _actor.UserId, cancellationToken);
+            return Ok(outcome.Invoice);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException or BillingLeaseLostException)
+        {
+            // Regenerated (review it again), or another run holds the group: 409, the caller may retry.
+            return Conflict(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Issue a Draft rated invoice that has no rating exceptions (tenants that
+    /// hold rated invoices for review). Its lines are fixed from then on.
+    /// </summary>
+    [HttpPost("{id}/issue")]
+    [ProducesResponseType(typeof(PremiumInvoice), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PremiumInvoice>> IssueDraft(string id, CancellationToken cancellationToken)
+    {
+        if (_ratedInvoices == null || _actor == null)
+            return BadRequest(new { error = "Rated billing is not available" });
+        try
+        {
+            return Ok(await _ratedInvoices.IssueDraftAsync(id, _actor.TenantId, _actor.UserId, cancellationToken));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException or BillingLeaseLostException)
+        {
+            // Regenerated (review it again), or another run holds the group: 409, the caller may retry.
+            return Conflict(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
@@ -115,6 +192,11 @@ public class PremiumInvoicesController : ControllerBase
         catch (ConcurrencyConflictException ex)
         {
             // Kept changing under us after retries: the caller may retry.
+            return Conflict(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex is GroupBillingBusyException or BillingLeaseLostException)
+        {
+            // A rated invoice is voided under its group's billing lease; a run holds it: retry shortly.
             return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)

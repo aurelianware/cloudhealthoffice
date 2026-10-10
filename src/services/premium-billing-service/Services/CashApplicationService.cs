@@ -216,7 +216,7 @@ public sealed class CashApplicationService : ICashApplicationService
                     throw new InvalidOperationException("Only a positive amount can be applied to an invoice");
                 invoice = await _invoices.GetByIdAsync(request.InvoiceId ?? string.Empty)
                           ?? throw new KeyNotFoundException($"Invoice {request.InvoiceId} not found");
-                if (invoice.Status is InvoiceStatus.Voided or InvoiceStatus.WriteOff)
+                if (invoice.Status is InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Draft)
                     throw new InvalidOperationException($"Invoice {invoice.InvoiceNumber} is {invoice.Status}");
                 break;
             case RemittanceExceptionAction.CreditSponsorAccount:
@@ -305,7 +305,7 @@ public sealed class CashApplicationService : ICashApplicationService
         var candidates = (await _invoices.GetByInvoiceNumberAsync(reference)).ToList();
         if (candidates.Count == 0 && !string.Equals(reference, reference.ToUpperInvariant(), StringComparison.Ordinal))
             candidates = (await _invoices.GetByInvoiceNumberAsync(reference.ToUpperInvariant())).ToList();
-        var open = candidates.Where(i => i.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff)).ToList();
+        var open = candidates.Where(i => i.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Draft)).ToList();
 
         if (candidates.Count == 0)
             return await QueueRowAsync(batch, item, RemittanceExceptionReason.InvoiceNotFound, $"No invoice numbered {reference}");
@@ -371,7 +371,7 @@ public sealed class CashApplicationService : ICashApplicationService
         {
             var invoice = await _invoices.GetByIdAsync(invoiceId)
                           ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
-            if (invoice.Status is InvoiceStatus.Voided or InvoiceStatus.WriteOff)
+            if (invoice.Status is InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Draft)
                 return null;
 
             var already = invoice.Payments.FirstOrDefault(isThisPayment);
@@ -523,7 +523,7 @@ public static class SponsorAccountBalances
         string groupNumber, DateTime? lastPaymentAt)
     {
         var open = (await invoices.GetByGroupNumberAsync(groupNumber))
-            .Where(i => i.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff) && i.BalanceDue > 0)
+            .Where(i => i.Status is not (InvoiceStatus.Voided or InvoiceStatus.WriteOff or InvoiceStatus.Draft) && i.BalanceDue > 0)
             .Sum(i => i.BalanceDue);
         return await accounts.UpdateAsync(groupNumber, account =>
         {
