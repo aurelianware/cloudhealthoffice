@@ -72,6 +72,13 @@ public sealed class ClaimIndexInitializer : IHostedService
                 .Ascending(t => t.TenantId)
                 .Descending(t => t.ReceivedAt)),
             cancellationToken: cancellationToken);
+        // SNIP warning lookups: "who sends rule X" (e.g. L2-2300-DTP472).
+        txnCollection.Indexes.CreateOne(new CreateIndexModel<ClaimImportTransaction>(
+            Builders<ClaimImportTransaction>.IndexKeys
+                .Ascending(t => t.TenantId)
+                .Ascending("SnipWarnings.RuleId")
+                .Descending(t => t.ReceivedAt)),
+            cancellationToken: cancellationToken);
 
         _logger.LogInformation("Claim indexes ensured on collection 'Claims'.");
         return Task.CompletedTask;

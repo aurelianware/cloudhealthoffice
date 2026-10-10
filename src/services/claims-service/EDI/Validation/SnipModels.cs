@@ -132,6 +132,12 @@ public sealed class SnipTransactionSetOutcome
 
     /// <summary>999 IK502–IK506 transaction-set syntax error codes.</summary>
     public List<string> TransactionSetErrorCodes { get; } = [];
+
+    /// <summary>
+    /// The <see cref="Snip837ValidationOptions.PartnerOverrides"/> key whose
+    /// levels validated this set, or null when the global levels applied.
+    /// </summary>
+    public string? PartnerOverrideKey { get; set; }
 }
 
 /// <summary>Validation outcome of one GS/GE functional group.</summary>
@@ -160,6 +166,13 @@ public sealed class SnipFunctionalGroupOutcome
     /// <summary>Group error codes found while Level 1 is set to Warn: reported in AK9, the group is not rejected.</summary>
     public List<string> GroupWarningCodes { get; } = [];
 
+    /// <summary>The partner-override key in force for the group (see <see cref="SnipTransactionSetOutcome.PartnerOverrideKey"/>).</summary>
+    public string? PartnerOverrideKey { get; set; }
+
+    /// <summary>The options in force for this group's submitter.</summary>
+    [JsonIgnore]
+    internal Snip837ValidationOptions? EffectiveOptions { get; set; }
+
     /// <summary>True when the group's own codes or its interchange reject it.</summary>
     public bool Rejected => GroupErrorCodes.Count > 0 || Interchange.Rejected;
 
@@ -185,6 +198,13 @@ public sealed class SnipInterchangeOutcome
     public string? ReceiverQualifier { get; init; }
     public string? ReceiverId { get; init; }
     public string? ControlNumber { get; init; }
+
+    /// <summary>The partner-override key matched on ISA06, or null.</summary>
+    public string? PartnerOverrideKey { get; set; }
+
+    /// <summary>The options in force for envelope (ISA/IEA) checks of this interchange.</summary>
+    [JsonIgnore]
+    internal Snip837ValidationOptions? EffectiveOptions { get; set; }
 
     /// <summary>ISA15 as sent (P or T); echoed in the 999.</summary>
     public string? UsageIndicator { get; init; }
@@ -251,10 +271,20 @@ public sealed class SnipValidationResult
 
 
 /// <summary>
-/// Configuration (section <c>ClaimsImport:Snip</c>). Defaults: levels 1–4
-/// reject, level 5 warns — the code-set checks are format checks unless a
-/// <see cref="ISnipCodeSetReference"/> is registered, so on their own they
-/// are reported rather than allowed to reject.
+/// Configuration (section <c>ClaimsImport:Snip</c>). Defaults: levels 1, 3
+/// and 4 reject; level 2 warns (go-live posture: implementation-guide
+/// findings are accepted, reported in the 999 as IK3/IK4 with IK5 E, and
+/// recorded per submitter so a partner can be moved to Reject once its
+/// files are clean); level 5 warns — the code-set checks are format checks
+/// unless a <see cref="ISnipCodeSetReference"/> is registered, so on their
+/// own they are reported rather than allowed to reject.
+/// <para>
+/// <see cref="PartnerOverrides"/> overrides individual levels for one
+/// submitter, keyed by ISA06 (interchange sender id, the trading partner's
+/// <c>x12Config.senderId</c>) or, when no ISA06 key matches, GS02
+/// (application sender code). A level an override leaves unset uses the
+/// global value.
+/// </para>
 /// </summary>
 public sealed class Snip837ValidationOptions
 {
@@ -264,7 +294,7 @@ public sealed class Snip837ValidationOptions
     public bool Enabled { get; set; } = true;
 
     public SnipAction Level1 { get; set; } = SnipAction.Reject;
-    public SnipAction Level2 { get; set; } = SnipAction.Reject;
+    public SnipAction Level2 { get; set; } = SnipAction.Warn;
     public SnipAction Level3 { get; set; } = SnipAction.Reject;
     public SnipAction Level4 { get; set; } = SnipAction.Reject;
     public SnipAction Level5 { get; set; } = SnipAction.Warn;
@@ -278,6 +308,55 @@ public sealed class Snip837ValidationOptions
     /// <summary>Findings kept for the whole file (envelope plus all transaction sets).</summary>
     public int MaxFindingsPerFile { get; set; } = 1000;
 
+    /// <summary>
+    /// Per-submitter level overrides, keyed by ISA06 or GS02 (trimmed,
+    /// case-insensitive). Example: <c>ClaimsImport:Snip:PartnerOverrides:SUBMITTER01:Level2 = Reject</c>.
+    /// </summary>
+    public Dictionary<string, SnipLevelOverrides> PartnerOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The options in force for one submitter: the global levels with the
+    /// matching <see cref="PartnerOverrides"/> entry applied (ISA06 first,
+    /// then GS02). <paramref name="matchedKey"/> is the override key used,
+    /// or null when the global defaults apply.
+    /// </summary>
+    public Snip837ValidationOptions ForSubmitter(string? interchangeSenderId, string? applicationSenderCode, out string? matchedKey)
+    {
+        matchedKey = null;
+        if (PartnerOverrides is not { Count: > 0 }) return this;
+
+        // The binder may replace the dictionary (losing the comparer), so match case-insensitively here.
+        SnipLevelOverrides? match = null;
+        foreach (var candidate in new[] { interchangeSenderId?.Trim(), applicationSenderCode?.Trim() })
+        {
+            if (string.IsNullOrEmpty(candidate)) continue;
+            foreach (var (key, value) in PartnerOverrides)
+            {
+                if (value is not null && string.Equals(key.Trim(), candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    match = value;
+                    matchedKey = key.Trim();
+                    break;
+                }
+            }
+            if (match is not null) break;
+        }
+        if (match is null) return this;
+
+        return new Snip837ValidationOptions
+        {
+            Enabled = Enabled,
+            Level1 = match.Level1 ?? Level1,
+            Level2 = match.Level2 ?? Level2,
+            Level3 = match.Level3 ?? Level3,
+            Level4 = match.Level4 ?? Level4,
+            Level5 = match.Level5 ?? Level5,
+            MaxFindingsPerTransactionSet = MaxFindingsPerTransactionSet,
+            MaxFindingsPerFile = MaxFindingsPerFile,
+            PartnerOverrides = PartnerOverrides,
+        };
+    }
+
     public SnipAction ActionFor(SnipLevel level) => level switch
     {
         SnipLevel.Syntax => Level1,
@@ -287,4 +366,14 @@ public sealed class Snip837ValidationOptions
         SnipLevel.ExternalCodeSets => Level5,
         _ => SnipAction.Reject,
     };
+}
+
+/// <summary>Per-submitter SNIP level overrides; a null level uses the global setting.</summary>
+public sealed class SnipLevelOverrides
+{
+    public SnipAction? Level1 { get; set; }
+    public SnipAction? Level2 { get; set; }
+    public SnipAction? Level3 { get; set; }
+    public SnipAction? Level4 { get; set; }
+    public SnipAction? Level5 { get; set; }
 }

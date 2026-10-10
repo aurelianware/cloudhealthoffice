@@ -300,6 +300,23 @@ public class ClaimsV1ControllerRaw837Tests : IClassFixture<ClaimsApiFactory>
         Assert.Equal("CLM-1", body![0].ClaimNumber);
     }
 
+    [Fact]
+    public async Task ListSnipWarningTransactions_PassesFiltersToRepository()
+    {
+        _transactions.ListWithSnipWarningsAsync("test-tenant", "L2-2300-DTP472", 2, "SUB001", 50)
+            .Returns(new List<ClaimImportTransaction>
+            {
+                new() { TenantId = "test-tenant", ClaimNumber = "CLM-W", SubmitterId = "SUB001" }
+            });
+
+        var response = await _client.GetAsync(
+            "/api/v1/claims/import-transactions/snip-warnings?ruleId=L2-2300-DTP472&level=2&submitterId=SUB001&limit=50");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<ClaimImportTransaction>>();
+        Assert.Equal("SUB001", Assert.Single(body!).SubmitterId);
+    }
+
     private static MultipartFormDataContent BuildFileContent(string ediContent, string fileName = "test.837")
     {
         var content = new MultipartFormDataContent();
