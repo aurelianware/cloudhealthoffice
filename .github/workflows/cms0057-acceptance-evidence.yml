@@ -3,9 +3,9 @@ name: CMS-0057-F Acceptance Evidence
 # Runs the CMS-0057-F acceptance suite and generates versioned, reproducible
 # evidence (JSON + Markdown + HTML) tied to the tested commit. The evidence
 # separates Cloud Health Office product capability (Replace) from external-core
-# integration capability (Augment), derived from the scenario manifest
-# (tests/Cms0057Acceptance.Tests/scenarios.json) — the machine-readable source
-# of truth — not from prose or test names.
+# integration capability (Augment). Replace statuses come from the status table
+# in docs/epa-gap-matrix.md §11 (owner decision Q-1); scenario names and Augment
+# statuses come from tests/Cms0057Acceptance.Tests/scenarios.json.
 #
 # On main, after a fully passing, reconciled run, a SANITIZED public-safe
 # snapshot (tools/Cms0057Evidence --public-output) is committed into the site
@@ -26,6 +26,7 @@ on:
       - 'tools/Cms0057Evidence/**'
       - 'tools/Cms0057Evidence.Tests/**'
       - 'docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md'
+      - 'docs/epa-gap-matrix.md'                   # Replace status table (§11)
       - '.github/workflows/cms0057-acceptance-evidence.yml'
       # Runtime/domain code that can change CMS-0057-F behavior without touching
       # the acceptance project. Kept to services/engines that materially serve a
@@ -49,6 +50,7 @@ on:
       - 'tools/Cms0057Evidence/**'
       - 'tools/Cms0057Evidence.Tests/**'
       - 'docs/compliance/CMS0057-ACCEPTANCE-INVENTORY.md'
+      - 'docs/epa-gap-matrix.md'
       - '.github/workflows/cms0057-acceptance-evidence.yml'
       - 'src/services/fhir-service/**'
       - 'src/services/authorization-service/**'
@@ -114,6 +116,7 @@ jobs:
           mkdir -p artifacts/cms0057-evidence artifacts/public
           dotnet run --project tools/Cms0057Evidence -c Debug --no-build -- \
             --manifest tests/Cms0057Acceptance.Tests/scenarios.json \
+            --status-matrix docs/epa-gap-matrix.md \
             --results "$TRX" \
             --test-assembly "$ASM" \
             --output artifacts/cms0057-evidence \
