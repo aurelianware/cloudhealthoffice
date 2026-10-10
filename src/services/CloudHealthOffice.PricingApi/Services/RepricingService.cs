@@ -60,14 +60,21 @@ public class RepricingService : IRepricingService
 
     public async Task<RepricingResponse> RepriceClaimAsync(RepricingRequest request)
     {
+        if (RepricingClaimSetting.Validate(request) is { } invalid)
+            throw new InvalidOperationException(invalid.Message);
+
         var requestId = Guid.NewGuid().ToString("N")[..12];
         var warnings = new List<string>();
+        var claimType = RepricingClaimSetting.ResolveClaimType(request);
+        if (RepricingClaimSetting.ContradictionWarning(request) is { } contradiction)
+            warnings.Add(contradiction);
 
         var query = new PricingScheduleQuery(
-            request.ClaimType,
+            claimType,
             request.Locality,
             request.Lines.Select(l => l.ProcedureCode).ToList(),
-            request.DrgCode);
+            request.DrgCode,
+            RepricingClaimSetting.NormalizedBillType(request));
 
         var loaded = await _scheduleSource.LoadAsync(request.FeeScheduleId, query)
             ?? throw new InvalidOperationException($"Fee schedule '{request.FeeScheduleId}' not found.");
@@ -89,7 +96,8 @@ public class RepricingService : IRepricingService
             RequestId = requestId,
             FeeScheduleId = request.FeeScheduleId,
             FeeScheduleVersion = loaded.Version,
-            ClaimType = request.ClaimType,
+            ClaimType = claimType,
+            BillType = RepricingClaimSetting.NormalizedBillType(request),
             DrgCode = request.DrgCode,
             TotalAllowed = pricedLines.Sum(l => l.AllowedAmount),
             TotalBilled = request.Lines.Any(l => l.BilledAmount.HasValue)
@@ -148,6 +156,8 @@ public class RepricingService : IRepricingService
             ? "11"
             : request.PlaceOfService.Trim();
         var today = DateTime.UtcNow.Date;
+        var isInstitutional = RepricingClaimSetting.IsInstitutional(RepricingClaimSetting.ResolveClaimType(request));
+        var billType = RepricingClaimSetting.NormalizedBillType(request);
 
         return request.Lines.Select((line, index) => new EngineModels.PricingRequest
         {
@@ -163,7 +173,11 @@ public class RepricingService : IRepricingService
             LineNumber = index + 1,
             TotalLineCount = request.Lines.Count,
             DrgCode = string.IsNullOrWhiteSpace(request.DrgCode) ? null : request.DrgCode.Trim(),
-            RevenueCode = line.RevenueCode,
+            RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode,
+            // Set from the claim type as adjudication does: an institutional claim always
+            // takes the facility rate (RateResolutionService.IsFacilitySetting).
+            BillType = billType,
+            IsInstitutional = isInstitutional,
         }).ToList();
     }
 
@@ -177,7 +191,8 @@ public class RepricingService : IRepricingService
         var resultSet = await engine.ResolveBatchAsync(engineRequests);
         var results = resultSet.LineResults.ToDictionary(r => r.LineNumber);
 
-        var isFacility = EngineDomain.FacilityPlaceOfService.IsFacility(engineRequests.FirstOrDefault()?.PlaceOfServiceCode);
+        // The setting the engine priced in (institutional claim, type of bill or facility POS).
+        var isFacility = engineRequests.Count > 0 && RateResolutionService.IsFacilitySetting(engineRequests[0]);
         var perStayLines = resultSet.LineResults.Count(r => r.IsPerStayRate);
         var drgNotFoundReported = false;
         var priced = new List<PricedLine>(request.Lines.Count);
