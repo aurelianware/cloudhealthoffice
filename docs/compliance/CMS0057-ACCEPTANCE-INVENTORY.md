@@ -10,6 +10,13 @@ current code. It is the source of truth the executable harness
 > untrusted until the controllers and adapters proved them. Where the code does
 > not support a scenario, it is marked GAP with the exact missing file/symbol.
 
+> **Superseded statuses (2026-10-10).** The CHO Replace statuses in this
+> document predate the ePA audit and overstate capability. The authoritative
+> Replace status of every scenario is now the table in
+> [`docs/epa-gap-matrix.md` §11](../epa-gap-matrix.md), which the evidence
+> generator reads (owner decision Q-1). Where this document disagrees, the
+> matrix wins. The per-scenario prose below has not yet been rewritten.
+
 ---
 
 ## Product / services boundary
@@ -216,27 +223,41 @@ dimensions, not one.
 
 ## Machine-readable source of truth & CI evidence
 
-The status of every scenario is declared in one machine-readable manifest —
-**`tests/Cms0057Acceptance.Tests/scenarios.json`** (`schemaVersion: 1`). It is the
-single source of truth for the two-dimension status; the human table below is a
-derived view of it. Statuses are constrained to `PASSABLE | PARTIAL | GAP | N/A`.
+Scenario status comes from two machine-readable files:
 
-Three things stay in sync with the manifest, so a QNXT integration gap is never
-presented as a Cloud Health Office product gap:
+- **Cloud Health Office Replace status** — the table in
+  [`docs/epa-gap-matrix.md` §11](../epa-gap-matrix.md), one row per scenario
+  with its matrix refs and justification.
+- **Scenario ids, names, capabilities and Augment (external-core) status** —
+  **`tests/Cms0057Acceptance.Tests/scenarios.json`** (`schemaVersion: 1`). It no
+  longer carries a `replace` status; the generator rejects a manifest that does.
 
-- **The acceptance suite** validates it — `ScenarioManifestTests` reconciles
-  every `[Trait("Scenario"/"Backend"/"Kind")]` against the manifest (unknown or
-  duplicate ids, invalid statuses, a scenario silently losing all its tests, or
-  a scenario declared PASSABLE for a backend but backed only by GAP-assertion
-  tests all fail the build).
+Statuses are constrained to `PASSABLE | PARTIAL | GAP | N/A`. The human table
+below predates the matrix and is not a derived view of it (see the note at the
+top).
+
+These stay in sync, so a QNXT integration gap is never presented as a Cloud
+Health Office product gap:
+
+- **The acceptance suite** validates the manifest — `ScenarioManifestTests`
+  reconciles every `[Trait("Scenario"/"Backend"/"Kind")]` against it (unknown or
+  duplicate ids, invalid Augment statuses, a scenario silently losing all its
+  tests, an Augment backend declared PASSABLE but backed only by GAP-assertion
+  tests, or a reintroduced `replace` status all fail the build).
 - **The evidence generator** — `tools/Cms0057Evidence` — reads the manifest, the
+  matrix status table (`--status-matrix`, default `docs/epa-gap-matrix.md`), the
   acceptance-suite TRX, and the suite's traits and emits versioned, deterministic
   evidence (`cms0057-evidence.json` / `.md` / `.html`) bound to the tested commit
   SHA. It keeps **declared capability status** separate from **test execution
   status**: a passing GAP-assertion test confirms the gap and never becomes
-  PASSABLE.
+  PASSABLE. It fails the build when the matrix table is missing a scenario, has
+  a row for an unknown one, has a duplicate row or an unknown status, or marks a
+  scenario PASSABLE that has no passing, non-GAP Replace test. It cannot tell
+  whether a passing test is tautological; the matrix row is where that judgement
+  is recorded.
 - **CI** — the `CMS-0057-F Acceptance Evidence` workflow runs the suite, generates
   the evidence, and uploads it as the `cms0057-acceptance-evidence-<sha>` artifact.
+  Committing the public snapshot into `src/site/` is paused (Q-1).
 
 `PASSABLE` means the repository's defined acceptance scenario is supported by the
 tested implementation. It is not a CMS certification and does not by itself
@@ -245,7 +266,8 @@ establish production readiness for a specific payer deployment.
 ### When the evidence regenerates
 
 The `CMS-0057-F Acceptance Evidence` workflow runs not only when the acceptance
-suite, the manifest, this inventory, or the evidence tooling change, but also when
+suite, the manifest, the ePA gap matrix (`docs/epa-gap-matrix.md`), this
+inventory, or the evidence tooling change, but also when
 runtime/domain code that can change CMS-0057-F behavior changes — the FHIR,
 authorization, member, provider, claims, benefit-plan, consent, and smart-auth
 services, plus the operating-mode and prior-auth-rule engines. So a behavior change
