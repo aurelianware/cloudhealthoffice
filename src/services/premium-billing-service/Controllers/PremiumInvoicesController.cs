@@ -61,7 +61,7 @@ public class PremiumInvoicesController : ControllerBase
         {
             return Conflict(new { error = ex.Message });
         }
-        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException)
+        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException or BillingLeaseLostException)
         {
             // Regenerated (review it again), or another run holds the group: 409, the caller may retry.
             return Conflict(new { error = ex.Message });
@@ -96,7 +96,7 @@ public class PremiumInvoicesController : ControllerBase
         {
             return Conflict(new { error = ex.Message });
         }
-        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException)
+        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException or BillingLeaseLostException)
         {
             // Regenerated (review it again), or another run holds the group: 409, the caller may retry.
             return Conflict(new { error = ex.Message });

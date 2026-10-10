@@ -58,15 +58,32 @@ billing run (POST /api/v1/billing-runs/{id}/execute)
             7. create with a deterministic id, or replace the Draft (version / ETag checked)
 ```
 
-**Group lease.** Every read → compute → write of a group (generate, regenerate,
-issue) holds the group's billing lease: one document per tenant and group
-(`BillingLeases`; id = hash of tenant and group), taken by a create that only one
-writer wins, or by a conditional takeover once it expires (Mongo: unique `_id` and a
-conditional update; Cosmos: create conflict and an ETag-checked replace in partition
-`/tenantId`). The lease lasts `GroupLeaseSeconds` (300) and is released as soon as the
-invoice is written; a second writer waits up to `GroupLeaseWaitSeconds` (60) and then
-fails that group with a run warning. Two periods of one group are therefore never
-reconciled from the same ledger, so one retro change cannot be billed twice.
+**Group lease and fencing.** Every read → compute → write of a group (generate,
+regenerate, issue, and the void of a rated invoice) holds the group's billing lease:
+one document per tenant and group (id = hash of tenant and group), taken by a create
+that only one writer wins, or by a conditional takeover once it expires. The lease
+lasts `GroupLeaseSeconds` (300); a second writer waits up to `GroupLeaseWaitSeconds`
+(60) and then fails that group with a run warning (409 from the API).
+
+A holder that stalls past its lease (and was taken over) must not write what it
+computed from the older ledger, so the lease **fences** the writes:
+
+- **Heartbeats.** The holder renews the lease (only if it still owns it and it has
+  not expired) after the coverage-service call and after the member census; a failed
+  renewal stops the run (`BillingLeaseLostException`) before anything is written.
+- **Fenced invoice writes.** Cosmos DB: the lease documents live in the
+  `PremiumInvoices` container (`docType = billingLease`, same `/tenantId` partition),
+  and each invoice create or replace goes in one transactional batch with a replace of
+  the lease document conditioned on the ETag this holder last wrote. A taken-over
+  lease has another ETag, so the batch writes nothing. MongoDB on a replica set: the
+  lease renewal (owner must match) and the invoice write run in one multi-document
+  transaction. MongoDB standalone (no transactions): the lease is renewed immediately
+  before the write (owner and unexpired); the milliseconds between the two are not
+  fenced.
+- **Account credits** are idempotent by invoice id (below), so they need no fence.
+
+Two periods of one group are therefore never reconciled from the same ledger, and a
+retro change is billed once.
 
 A coverage-service, member-service or database failure fails that group's invoice
 (a billing-run warning); it never produces a `$0` or partial issued invoice.
@@ -177,11 +194,14 @@ exactly the effective date.
   size is above `RateCorrectionReviewThreshold` (default 0: always), the invoice stays
   Draft with a `RATE_CORRECTION` review reason until someone issues it.
 - **Net credits.** When retro credits exceed the month's charges the issued invoice is
-  a net credit. The credit is moved, once per invoice, to the sponsor account's
-  unapplied credit (entry `RatedInvoiceCredit`), and the invoice is settled by a
-  `SponsorAccountCredit` payment of the same (negative) amount: balance due 0, status
-  Paid. The credit is then held on the account as unapplied credit, the same as an
-  overpayment received by cash application.
+  a net credit. It is saved first, settled by a `SponsorAccountCredit` payment of the
+  same (negative) amount (balance due 0, status Paid); only then is the credit posted
+  to the sponsor account's unapplied credit (entry `rated-credit-{invoiceId}`, type
+  `RatedInvoiceCredit`), once per invoice. If the process dies between the two, the
+  next run finds the invoice issued and posts the missing entry (self-healing); a void
+  cannot land in between because it takes the group lease, and a credit invoice is
+  Paid and cannot be voided. The credit is then held on the account as unapplied
+  credit, the same as an overpayment received by cash application.
 
 ## Rounding
 
@@ -255,7 +275,7 @@ Review reasons (`reviewReasons`; they do not block an explicit issue): `HELD_FOR
 |---|---|---|
 | Rate table versions | collection `RateTables`, `_id` = hash of tenant + table id, plus version | container `RateTables`, partition `/tenantId` |
 | Invoices | `PremiumInvoices` (unchanged; new optional fields) | `PremiumInvoices` (unchanged; new optional fields) |
-| Group billing leases | collection `BillingLeases` | container `BillingLeases`, partition `/tenantId` |
+| Group billing leases | collection `BillingLeases` | in container `PremiumInvoices` (`docType = billingLease`), partition `/tenantId` |
 | Net credits | `SponsorAccounts` (existing) | `SponsorAccounts` (existing) |
 
 The Cosmos invoice repository's status filters (`GetOverdueAsync`, `GetByStatusAsync`,
@@ -269,11 +289,12 @@ they previously compared with the enum's number and never matched a stored statu
 - Billing runs list only Active sponsors, so retro terms reported after a group itself
   terminated are not credited automatically. The runbook gives the manual procedure;
   an automatic final adjustment invoice for terminated groups is a follow-up.
-- A lease that expires while its holder is still working (a run slower than
-  `GroupLeaseSeconds`) can be taken over; the deterministic invoice id and the
-  version/ETag-checked writes still prevent a duplicate or lost invoice, but not a
-  retro charge computed from the older ledger. Keep the lease well above a group's
-  generation time.
+- On a standalone MongoDB (no replica set) the lease fence is renew-then-write, not
+  atomic; production MongoDB should run as a replica set (Cosmos DB is always fenced
+  atomically).
+- Heartbeats run between the coverage-service and member-service calls, not between
+  their pages; a single very slow listing can still outlive the lease, in which case
+  the run is stopped at its next heartbeat or write and writes nothing.
 - Rated lines are per subscriber, so a dependent's premium tab (which finds invoices
   by line member) no longer lists the group's rated invoices; composite invoices have
   no member line at all and appear on no member's tab.

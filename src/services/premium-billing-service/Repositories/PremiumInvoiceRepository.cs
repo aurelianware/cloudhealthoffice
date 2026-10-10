@@ -47,6 +47,30 @@ public interface IPremiumInvoiceRepository
     /// </summary>
     Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice);
     Task DeleteAsync(string id);
+
+    /// <summary>
+    /// <see cref="CreateAsync"/> fenced by the group's billing lease: nothing is
+    /// written unless <paramref name="lease"/> still holds it (it is renewed).
+    /// Throws <see cref="BillingLeaseLostException"/> otherwise. Stores that can
+    /// do both writes atomically override this (Cosmos: transactional batch;
+    /// Mongo on a replica set: a transaction); the default renews, then writes.
+    /// </summary>
+    async Task<PremiumInvoice> CreateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration)
+    {
+        if (!await leases.RenewAsync(lease, now, duration))
+            throw new BillingLeaseLostException(lease.GroupNumber);
+        return await CreateAsync(invoice);
+    }
+
+    /// <summary><see cref="UpdateAsync"/> fenced by the group's billing lease (see <see cref="CreateFencedAsync"/>).</summary>
+    async Task<PremiumInvoice> UpdateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration)
+    {
+        if (!await leases.RenewAsync(lease, now, duration))
+            throw new BillingLeaseLostException(lease.GroupNumber);
+        return await UpdateAsync(invoice);
+    }
 }
 
 /// <summary>An invoice with this id already exists.</summary>
@@ -161,7 +185,8 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         int pageSize = 50)
     {
         var tenantId = GetTenantId();
-        var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId";
+        // Billing leases share this container (docType billingLease): never list them as invoices.
+        var queryText = "SELECT * FROM c WHERE c.tenantId = @tenantId AND NOT IS_DEFINED(c.docType)";
         var parameters = new List<(string, object)> { ("@tenantId", tenantId) };
 
         if (!string.IsNullOrEmpty(groupNumber))
@@ -270,6 +295,70 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
             invoice.Version--;
             throw new ConcurrencyConflictException($"Invoice {invoice.InvoiceNumber} was changed by someone else; re-read it and retry");
         }
+    }
+
+    public Task<PremiumInvoice> CreateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration) => WriteFencedAsync(invoice, create: true, leases, lease, now, duration);
+
+    public Task<PremiumInvoice> UpdateFencedAsync(PremiumInvoice invoice, IBillingLeaseRepository leases, BillingLeaseHandle lease,
+        DateTime now, TimeSpan duration) => WriteFencedAsync(invoice, create: false, leases, lease, now, duration);
+
+    /// <summary>
+    /// True fencing: one transactional batch in the tenant's partition replaces the lease
+    /// document only if it is still the version this holder wrote (renewing it) and
+    /// creates or replaces the invoice (ETag-checked). Either both are written or neither.
+    /// </summary>
+    private async Task<PremiumInvoice> WriteFencedAsync(PremiumInvoice invoice, bool create, IBillingLeaseRepository leases,
+        BillingLeaseHandle lease, DateTime now, TimeSpan duration)
+    {
+        if (leases is not BillingLeaseRepositoryCosmos || lease.ETag == null)
+        {
+            if (!await leases.RenewAsync(lease, now, duration))
+                throw new BillingLeaseLostException(lease.GroupNumber);
+            return create ? await CreateAsync(invoice) : await UpdateAsync(invoice);
+        }
+
+        var tenantId = GetTenantId();
+        var key = new PartitionKey(tenantId);
+        var leaseDocument = new BillingLease
+        {
+            Id = BillingLease.IdFor(tenantId, lease.GroupNumber), TenantId = tenantId, LeaseGroupNumber = lease.GroupNumber,
+            LeaseOwner = lease.Owner, AcquiredAt = now, ExpiresAt = now + duration
+        };
+        invoice.TenantId = tenantId;
+        invoice.LastUpdatedAt = DateTime.UtcNow;
+        if (create)
+            invoice.CreatedAt = invoice.LastUpdatedAt;
+        else
+            invoice.Version++;
+
+        var batch = _container.CreateTransactionalBatch(key)
+            .ReplaceItem(leaseDocument.Id, leaseDocument, new TransactionalBatchItemRequestOptions { IfMatchEtag = lease.ETag });
+        batch = create
+            ? batch.CreateItem(invoice)
+            : batch.ReplaceItem(invoice.Id, invoice, new TransactionalBatchItemRequestOptions { IfMatchEtag = invoice.ETag });
+
+        using var response = await batch.ExecuteAsync();
+        if (!response.IsSuccessStatusCode)
+        {
+            if (!create)
+                invoice.Version--;
+            if (response.Count > 0 && response[0].StatusCode is System.Net.HttpStatusCode.PreconditionFailed or System.Net.HttpStatusCode.NotFound)
+                throw new BillingLeaseLostException(lease.GroupNumber);
+            var invoiceStatus = response.Count > 1 ? response[1].StatusCode : response.StatusCode;
+            if (invoiceStatus == System.Net.HttpStatusCode.Conflict)
+                throw new InvoiceAlreadyExistsException(invoice.Id);
+            if (invoiceStatus is System.Net.HttpStatusCode.PreconditionFailed or System.Net.HttpStatusCode.NotFound)
+                throw new ConcurrencyConflictException($"Invoice {invoice.InvoiceNumber} was changed by someone else; re-read it and retry");
+            throw new InvalidOperationException($"Fenced write of invoice {invoice.InvoiceNumber} failed: {response.StatusCode} {response.ErrorMessage}");
+        }
+
+        lease.ETag = response[0].ETag;
+        var saved = response.GetOperationResultAtIndex<PremiumInvoice>(1).Resource;
+        saved.ETag = response[1].ETag;
+        _logger.LogInformation("Wrote premium invoice {InvoiceNumber} under the billing lease of group {GroupNumber}",
+            saved.InvoiceNumber, lease.GroupNumber);
+        return saved;
     }
 
     public async Task DeleteAsync(string id)

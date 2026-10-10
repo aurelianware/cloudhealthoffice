@@ -74,6 +74,12 @@ public interface IRatedInvoiceGenerator
     /// is saved and <see cref="DraftOutOfDateException"/> is thrown.
     /// </summary>
     Task<PremiumInvoice> IssueDraftAsync(string invoiceId, string tenantId, string? actor, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs another writer of a rated invoice (a void) under the group's billing
+    /// lease, so it cannot land in the middle of a generation or issue.
+    /// </summary>
+    Task<T> RunUnderGroupLeaseAsync<T>(string groupNumber, Func<Task<T>> action, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -140,7 +146,7 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
     {
         var settings = Settings(tenantId);
         return WithGroupLeaseAsync(sponsor.GroupNumber,
-            () => GenerateLockedAsync(sponsor, tenantId, BilledLedger.MonthStart(billingPeriod), billingRunId, actor, settings, cancellationToken),
+            lease => GenerateLockedAsync(sponsor, tenantId, BilledLedger.MonthStart(billingPeriod), billingRunId, actor, settings, lease, cancellationToken),
             cancellationToken);
     }
 
@@ -159,7 +165,7 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
         var first = await _invoices.GetByIdAsync(invoiceId) ?? throw new KeyNotFoundException($"Invoice {invoiceId} not found");
         RequireRatedDraft(first, "issued");
 
-        return await WithGroupLeaseAsync(first.GroupNumber, async () =>
+        return await WithGroupLeaseAsync(first.GroupNumber, async lease =>
         {
             // Re-read under the lease: what we hold now is what nobody else is changing.
             var invoice = await _invoices.GetByIdAsync(invoiceId) ?? throw new KeyNotFoundException($"Invoice {invoiceId} not found");
@@ -174,30 +180,49 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
             var reviewedFingerprint = invoice.RatingFingerprint;
             var reviewedBasis = invoice.ReconciledInvoiceIds.ToList();
             var state = await ComputeAsync(invoice, SponsorOf(invoice), tenantId, period, invoice.BillingRunId, actor, settings,
-                groupInvoices.Where(i => i.Id != invoice.Id).ToList(), cancellationToken);
+                groupInvoices.Where(i => i.Id != invoice.Id).ToList(), lease, cancellationToken);
 
             if (!state.Clean)
             {
-                await _invoices.UpdateAsync(invoice);
+                await UpdateFencedAsync(invoice, lease);
                 throw new InvalidOperationException(
                     $"Invoice {invoice.InvoiceNumber} has {invoice.RatingExceptions.Count} rating exception(s); resolve them and regenerate it first");
             }
             if (reviewedFingerprint != invoice.RatingFingerprint || !reviewedBasis.SequenceEqual(invoice.ReconciledInvoiceIds))
             {
-                await _invoices.UpdateAsync(invoice);
+                await UpdateFencedAsync(invoice, lease);
                 throw new DraftOutOfDateException(invoice.InvoiceNumber);
             }
 
-            await IssueAsync(invoice);
+            Issue(invoice);
             invoice.LastUpdatedBy = actor;
-            var saved = await _invoices.UpdateAsync(invoice);
+            var saved = await UpdateFencedAsync(invoice, lease);
+            await EnsureCreditMovedAsync(saved);
             Log(saved, "issued");
             return saved;
         }, cancellationToken);
     }
 
+    public Task<T> RunUnderGroupLeaseAsync<T>(string groupNumber, Func<Task<T>> action, CancellationToken cancellationToken = default) =>
+        WithGroupLeaseAsync(groupNumber, _ => action(), cancellationToken);
+
+    private TimeSpan LeaseDuration => TimeSpan.FromSeconds(_options.GroupLeaseSeconds);
+
+    /// <summary>Extends the lease between steps; a holder whose lease was taken over stops before it writes anything.</summary>
+    private async Task HeartbeatAsync(BillingLeaseHandle lease)
+    {
+        if (!await _leases.RenewAsync(lease, _clock.GetUtcNow().UtcDateTime, LeaseDuration))
+            throw new BillingLeaseLostException(lease.GroupNumber);
+    }
+
+    private Task<PremiumInvoice> CreateFencedAsync(PremiumInvoice invoice, BillingLeaseHandle lease) =>
+        _invoices.CreateFencedAsync(invoice, _leases, lease, _clock.GetUtcNow().UtcDateTime, LeaseDuration);
+
+    private Task<PremiumInvoice> UpdateFencedAsync(PremiumInvoice invoice, BillingLeaseHandle lease) =>
+        _invoices.UpdateFencedAsync(invoice, _leases, lease, _clock.GetUtcNow().UtcDateTime, LeaseDuration);
+
     private async Task<RatedInvoiceOutcome> GenerateLockedAsync(SponsorDto sponsor, string tenantId, DateTime period,
-        string? billingRunId, string? actor, RatedBillingTenantOptions settings, CancellationToken cancellationToken)
+        string? billingRunId, string? actor, RatedBillingTenantOptions settings, BillingLeaseHandle lease, CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -211,7 +236,11 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
                 return new(RatedInvoiceOutcomeKind.UnratedInvoiceExists, unrated);
             var issued = samePeriod.FirstOrDefault(i => i.Status != InvoiceStatus.Draft);
             if (issued != null)
+            {
+                // Self-heal: a net credit whose account entry was not posted (a crash between the save and the post).
+                await EnsureCreditMovedAsync(issued);
                 return new(RatedInvoiceOutcomeKind.AlreadyIssued, issued);
+            }
             var draft = samePeriod.FirstOrDefault();
             var earlier = EarlierDraft(groupInvoices, period, settings, draft?.Id);
             if (earlier != null)
@@ -228,26 +257,30 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
                 CreatedBy = actor
             };
 
-            var state = await ComputeAsync(invoice, sponsor, tenantId, period, billingRunId, actor, settings, history, cancellationToken);
+            var state = await ComputeAsync(invoice, sponsor, tenantId, period, billingRunId, actor, settings, history, lease, cancellationToken);
             if (state.Clean && !state.NeedsReview)
-                await IssueAsync(invoice);
+                Issue(invoice);
 
             try
             {
+                // The invoice is saved first (fenced by the lease); a net credit is moved to the
+                // account only once its invoice is saved, keyed by that invoice.
                 if (draft == null)
                 {
-                    var created = await _invoices.CreateAsync(invoice);
+                    var created = await CreateFencedAsync(invoice, lease);
+                    await EnsureCreditMovedAsync(created);
                     Log(created, "created");
                     return new(RatedInvoiceOutcomeKind.Created, created);
                 }
-                var saved = await _invoices.UpdateAsync(invoice);
+                var saved = await UpdateFencedAsync(invoice, lease);
+                await EnsureCreditMovedAsync(saved);
                 Log(saved, "regenerated");
                 return new(RatedInvoiceOutcomeKind.Regenerated, saved);
             }
             catch (Exception ex) when (ex is InvoiceAlreadyExistsException or ConcurrencyConflictException && attempt < MaxAttempts)
             {
-                // Someone changed this invoice although we hold the lease (an expired lease, or a
-                // writer that takes none such as a void): look again.
+                // Someone changed this invoice although we hold the lease (a writer that takes
+                // none): look again. A lost lease is not retried (BillingLeaseLostException).
                 _logger.LogInformation("Rated invoice for group {GroupNumber} {Period:yyyy-MM} changed concurrently; re-reading",
                     sponsor.GroupNumber, period);
             }
@@ -272,11 +305,12 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
         return settings;
     }
 
-    private async Task<T> WithGroupLeaseAsync<T>(string groupNumber, Func<Task<T>> action, CancellationToken cancellationToken)
+    private async Task<T> WithGroupLeaseAsync<T>(string groupNumber, Func<BillingLeaseHandle, Task<T>> action, CancellationToken cancellationToken)
     {
         var owner = Guid.NewGuid().ToString("N");
         var waited = Stopwatch.StartNew();
-        while (!await _leases.TryAcquireAsync(groupNumber, owner, _clock.GetUtcNow().UtcDateTime, TimeSpan.FromSeconds(_options.GroupLeaseSeconds)))
+        BillingLeaseHandle? lease;
+        while ((lease = await _leases.TryAcquireAsync(groupNumber, owner, _clock.GetUtcNow().UtcDateTime, LeaseDuration)) == null)
         {
             if (waited.Elapsed > TimeSpan.FromSeconds(_options.GroupLeaseWaitSeconds))
                 throw new GroupBillingBusyException(groupNumber);
@@ -284,11 +318,11 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
         }
         try
         {
-            return await action();
+            return await action(lease);
         }
         finally
         {
-            await _leases.ReleaseAsync(groupNumber, owner);
+            await _leases.ReleaseAsync(lease);
         }
     }
 
@@ -314,14 +348,16 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
     /// <summary>Recomputes the invoice's content in place and leaves it a Draft; the caller decides whether to issue.</summary>
     private async Task<ComputeState> ComputeAsync(PremiumInvoice invoice, SponsorDto sponsor, string tenantId, DateTime period,
         string? billingRunId, string? actor, RatedBillingTenantOptions settings, List<PremiumInvoice> history,
-        CancellationToken cancellationToken)
+        BillingLeaseHandle lease, CancellationToken cancellationToken)
     {
         var now = _clock.GetUtcNow().UtcDateTime;
         var periodEnd = period.AddMonths(1).AddDays(-1);
 
         // Any failure here fails this group's invoice (a run warning), never a $0 or partial issued invoice.
         var coverages = await _coverage.GetAllCoveragesByGroupAsync(tenantId, sponsor.GroupNumber, cancellationToken);
+        await HeartbeatAsync(lease);
         var census = await _members.GetRatingCensusAsync(tenantId, sponsor.GroupNumber, cancellationToken);
+        await HeartbeatAsync(lease);
         var catalog = RateTableCatalog.Tolerant(
             RateTableRecord.Current(await _rateTables.ListVersionsAsync()).Select(r => r.ToRatingTable()));
 
@@ -436,11 +472,12 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
     }
 
     /// <summary>
-    /// Issues the computed invoice. A net credit (retro credits above the
-    /// month's charges) is moved to the sponsor's unapplied credit, once per
-    /// invoice, and the invoice is settled by that transfer.
+    /// Issues the computed invoice (not saved yet). A net credit (retro credits
+    /// above the month's charges) is settled by a <c>SponsorAccountCredit</c>
+    /// payment of the same amount; the account itself is credited by
+    /// <see cref="EnsureCreditMovedAsync"/> only after this invoice is saved.
     /// </summary>
-    private async Task IssueAsync(PremiumInvoice invoice)
+    private void Issue(PremiumInvoice invoice)
     {
         var now = _clock.GetUtcNow().UtcDateTime;
         invoice.Status = InvoiceStatus.Generated;
@@ -450,9 +487,41 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
             return;
         if (_accounts == null)
             throw new InvalidOperationException($"Invoice {invoice.InvoiceNumber} is a net credit and there is no sponsor account store");
+        var entryId = CreditEntryId(invoice);
+        invoice.Payments.Add(new InvoicePayment
+        {
+            PaymentId = entryId,
+            Amount = invoice.TotalAmount,
+            PaymentDate = now,
+            ReceivedDate = now,
+            PaymentMethod = CreditTransferMethod,
+            ReferenceNumber = entryId,
+            RecordedBy = "rated-billing"
+        });
+        invoice.RecalculateTotals();
+        invoice.Status = InvoiceStatus.Paid;
+    }
 
-        var entryId = $"rated-credit-{invoice.Id}";
-        var credit = -invoice.TotalAmount;
+    private const string CreditTransferMethod = "SponsorAccountCredit";
+
+    private static string CreditEntryId(PremiumInvoice invoice) => $"rated-credit-{invoice.Id}";
+
+    /// <summary>
+    /// Posts the account credit of a saved, issued net-credit invoice, once:
+    /// keyed by the invoice, so a retry, a rerun or a second writer posts nothing
+    /// more. Called after every save of an issued rated invoice and for an
+    /// already issued one (self-healing a crash between the save and the post).
+    /// </summary>
+    private async Task EnsureCreditMovedAsync(PremiumInvoice invoice)
+    {
+        if (invoice.PricingSource != PricingSource.RatingEngine || invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Voided)
+            return;
+        var transfer = invoice.Payments.FirstOrDefault(p => p.PaymentMethod == CreditTransferMethod && p.PaymentId == CreditEntryId(invoice));
+        if (transfer == null || _accounts == null)
+            return;
+        var entryId = transfer.PaymentId;
+        var credit = -transfer.Amount;
+        var now = _clock.GetUtcNow().UtcDateTime;
         await _accounts.UpdateAsync(invoice.GroupNumber, account =>
         {
             var earlier = account.Entries.FirstOrDefault(e => e.EntryId == entryId);
@@ -477,18 +546,6 @@ public sealed class RatedInvoiceGenerator : IRatedInvoiceGenerator
                 PostedBy = "rated-billing"
             });
         });
-        invoice.Payments.Add(new InvoicePayment
-        {
-            PaymentId = entryId,
-            Amount = invoice.TotalAmount,
-            PaymentDate = now,
-            ReceivedDate = now,
-            PaymentMethod = "SponsorAccountCredit",
-            ReferenceNumber = entryId,
-            RecordedBy = "rated-billing"
-        });
-        invoice.RecalculateTotals();
-        invoice.Status = InvoiceStatus.Paid;
     }
 
     /// <summary>Same rule as unrated invoices: the sponsor's billing day of the period, or 30 days out if it has passed.</summary>

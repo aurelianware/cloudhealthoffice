@@ -17,9 +17,11 @@ as before. Design: [premium-rated-billing.md](../architecture/premium-rated-bill
    `member-service` in `ChoAuth:Outbound:Hosts` (in `appsettings.json`), and its own
    service token (`ChoAuth:ServiceToken`, as for the sponsor bank-details lookup): the
    census admits only premium-billing-service's service token, never a user's.
-2. **Cosmos DB only:** create containers `RateTables` and `BillingLeases`, both with
-   partition key `/tenantId`, in the service's database. (Mongo creates the collections
-   on first write.)
+2. **Cosmos DB only:** create container `RateTables` with partition key `/tenantId` in
+   the service's database (group billing leases are kept in the existing
+   `PremiumInvoices` container). **MongoDB:** run it as a replica set so lease-fenced
+   invoice writes are transactional; Mongo creates the `RateTables` and `BillingLeases`
+   collections on first write.
 3. **Load rate tables** for every plan the tenant's groups are enrolled in, covering
    at least the retro window (default 3 months) before the first rated period:
    `POST /api/v1/rate-tables` (finance:write) with `{ "table": { ... }, "changeReason": "..." }`.
@@ -149,8 +151,10 @@ equals the line's `rateTableHash`).
 
 - **Net credit invoices** (retro credits above the month's charges) are issued with
   their credit moved to the sponsor account's unapplied credit (entry
-  `RatedInvoiceCredit`); the invoice shows a `SponsorAccountCredit` payment and a zero
-  balance.
+  `rated-credit-{invoiceId}`, type `RatedInvoiceCredit`); the invoice shows a
+  `SponsorAccountCredit` payment and a zero balance. The invoice is saved before the
+  account is credited; if a run dies in between, the next run for the period posts the
+  missing entry. Voiding a rated invoice waits for its group's billing lease.
 - **Terminated groups.** Billing runs bill Active sponsors only, so a retro term reported
   after the whole group terminated is not credited automatically. Compute the credit
   from the coverage-month shown on the last rated invoices and post it to the sponsor

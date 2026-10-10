@@ -523,16 +523,24 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
     public async Task GroupLease_IsExclusiveUntilReleasedOrExpired()
     {
         var now = D(2026, 3, 1);
-        (await Leases.TryAcquireAsync(Group, "one", now, TimeSpan.FromMinutes(5))).Should().BeTrue();
-        (await Leases.TryAcquireAsync(Group, "two", now.AddMinutes(1), TimeSpan.FromMinutes(5))).Should().BeFalse();
-        (await Leases.TryAcquireAsync("OTHER-GROUP", "two", now, TimeSpan.FromMinutes(5))).Should().BeTrue();
+        var one = await Leases.TryAcquireAsync(Group, "one", now, TimeSpan.FromMinutes(5));
+        one.Should().NotBeNull();
+        (await Leases.TryAcquireAsync(Group, "two", now.AddMinutes(1), TimeSpan.FromMinutes(5))).Should().BeNull();
+        (await Leases.TryAcquireAsync("OTHER-GROUP", "two", now, TimeSpan.FromMinutes(5))).Should().NotBeNull();
 
-        await Leases.ReleaseAsync(Group, "two"); // not the holder: no effect
-        (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(2), TimeSpan.FromMinutes(5))).Should().BeFalse();
+        await Leases.ReleaseAsync(new BillingLeaseHandle { GroupNumber = Group, Owner = "two" }); // not the holder: no effect
+        (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(2), TimeSpan.FromMinutes(5))).Should().BeNull();
+        (await Leases.RenewAsync(one!, now.AddMinutes(3), TimeSpan.FromMinutes(5))).Should().BeTrue("the holder extends its lease");
 
-        (await Leases.TryAcquireAsync(Group, "two", now.AddMinutes(6), TimeSpan.FromMinutes(5))).Should().BeTrue("the first lease expired");
-        await Leases.ReleaseAsync(Group, "two");
-        (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(7), TimeSpan.FromMinutes(5))).Should().BeTrue();
+        // Expired (renewed to 3 + 5 = 8 minutes): "two" takes it over, and "one" can no longer renew it.
+        var two = await Leases.TryAcquireAsync(Group, "two", now.AddMinutes(9), TimeSpan.FromMinutes(5));
+        two.Should().NotBeNull("the first lease expired");
+        (await Leases.RenewAsync(one!, now.AddMinutes(9), TimeSpan.FromMinutes(5))).Should().BeFalse("its lease was taken over");
+        await Leases.ReleaseAsync(one!); // no longer the holder: no effect
+        (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(10), TimeSpan.FromMinutes(5))).Should().BeNull();
+
+        await Leases.ReleaseAsync(two!);
+        (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(10), TimeSpan.FromMinutes(5))).Should().NotBeNull();
     }
 
     [SkippableFact]
@@ -541,12 +549,207 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         Options.GroupLeaseWaitSeconds = 0;
         await SaveTierTable();
         Enroll("cov-A", "A", D(2026, 1, 1));
-        (await Leases.TryAcquireAsync(Group, "someone-else", Clock.Now, TimeSpan.FromMinutes(5))).Should().BeTrue();
+        (await Leases.TryAcquireAsync(Group, "someone-else", Clock.Now, TimeSpan.FromMinutes(5))).Should().NotBeNull();
 
         var generate = () => Generate(D(2026, 3, 1));
 
         await generate.Should().ThrowAsync<GroupBillingBusyException>();
         (await GroupInvoices()).Should().BeEmpty();
+    }
+
+    [SkippableFact]
+    public async Task FencedWrite_ByAHolderWhoseLeaseWasTakenOver_WritesNothing()
+    {
+        var now = D(2026, 3, 1);
+        var stale = await Leases.TryAcquireAsync(Group, "stale", now, TimeSpan.FromMinutes(5));
+        (await Leases.TryAcquireAsync(Group, "current", now.AddMinutes(6), TimeSpan.FromMinutes(5))).Should().NotBeNull();
+        var invoice = new PremiumInvoice
+        {
+            Id = "fenced-1", InvoiceNumber = "INV-FENCED", GroupNumber = Group,
+            BillingPeriodStart = D(2026, 3, 1), BillingPeriodEnd = D(2026, 3, 31), DueDate = D(2026, 3, 1)
+        };
+
+        var write = () => Invoices.CreateFencedAsync(invoice, Leases, stale!, now.AddMinutes(7), TimeSpan.FromMinutes(5));
+
+        await write.Should().ThrowAsync<BillingLeaseLostException>();
+        (await Invoices.GetByIdAsync("fenced-1")).Should().BeNull();
+    }
+
+    private sealed class StallingCoverage(FakeCoverage inner, FixedClock clock) : ICoverageServiceClient
+    {
+        public readonly TaskCompletionSource FirstInside = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource SecondDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _calls;
+
+        public Task<List<CoverageDto>> GetActiveCoveragesByGroupAsync(string t, string g, CancellationToken c = default) =>
+            throw new NotSupportedException();
+
+        public async Task<List<CoverageDto>> GetAllCoveragesByGroupAsync(string t, string g, CancellationToken c = default)
+        {
+            var records = await inner.GetAllCoveragesByGroupAsync(t, g, c);
+            if (Interlocked.Increment(ref _calls) == 1)
+            {
+                clock.Now = clock.Now.AddSeconds(400); // the first run stalls past its 300 s lease
+                FirstInside.SetResult();
+                await SecondDone.Task;
+            }
+            return records;
+        }
+    }
+
+    [SkippableFact]
+    public async Task ExpiredLease_StaleRunWritesNothing_SoARetroChangeIsBilledOnce()
+    {
+        // Review probe 2: March stalls in coverage-service past its lease; April takes the lease
+        // over, reconciles February and writes; March then resumes. It must not write.
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+        Enroll("cov-B", "B", D(2026, 2, 1));
+        var coverage = new StallingCoverage(Coverage, Clock);
+
+        var march = Task.Run(() => Generator(coverage).GenerateAsync(Sponsor, Tenant, D(2026, 3, 1), "r", "u"));
+        await coverage.FirstInside.Task;
+        try
+        {
+            (await Generator(coverage).GenerateAsync(Sponsor, Tenant, D(2026, 4, 1), "r", "u")).Kind.Should().Be(RatedInvoiceOutcomeKind.Created);
+        }
+        finally
+        {
+            coverage.SecondDone.SetResult();
+        }
+
+        await FluentActions.Awaiting(() => march).Should().ThrowAsync<BillingLeaseLostException>();
+        (await GroupInvoices()).Should().NotContain(i => i.BillingPeriodStart == D(2026, 3, 1));
+        (await RetroFor("cov-B", D(2026, 2, 1))).Should().Be(500m);
+    }
+
+    private sealed class VoidRacingInvoices(IPremiumInvoiceRepository inner) : IPremiumInvoiceRepository
+    {
+        public bool Armed;
+        public Task<PremiumInvoice?> GetByIdAsync(string id) => inner.GetByIdAsync(id);
+        public Task<IEnumerable<PremiumInvoice>> GetByBillingPeriodAsync(DateTime d) => inner.GetByBillingPeriodAsync(d);
+        public Task<IEnumerable<PremiumInvoice>> SearchAsync(string? g = null, DateTime? f = null, DateTime? t = null, InvoiceStatus? s = null, int page = 1, int pageSize = 50) => inner.SearchAsync(g, f, t, s, page, pageSize);
+        public Task<IEnumerable<PremiumInvoice>> GetByInvoiceNumberAsync(string n) => inner.GetByInvoiceNumberAsync(n);
+        public Task<IEnumerable<PremiumInvoice>> GetByGroupNumberAsync(string g) => inner.GetByGroupNumberAsync(g);
+        public Task<IEnumerable<PremiumInvoice>> GetByStatusAsync(InvoiceStatus s) => inner.GetByStatusAsync(s);
+        public Task<IEnumerable<PremiumInvoice>> GetOverdueAsync() => inner.GetOverdueAsync();
+        public Task<IEnumerable<PremiumInvoice>> ListByMemberAsync(string m, int take = 12) => inner.ListByMemberAsync(m, take);
+        public Task<PremiumInvoice> CreateAsync(PremiumInvoice i) => inner.CreateAsync(i);
+        public Task DeleteAsync(string id) => inner.DeleteAsync(id);
+
+        public async Task<PremiumInvoice> UpdateAsync(PremiumInvoice invoice)
+        {
+            if (Armed && invoice.Status != InvoiceStatus.Draft)
+            {
+                Armed = false;
+                // A writer that takes no lease voids the Draft between the computation and this save.
+                var current = await inner.GetByIdAsync(invoice.Id);
+                current!.Status = InvoiceStatus.Voided;
+                await inner.UpdateAsync(current);
+                throw new ConcurrencyConflictException("raced");
+            }
+            return await inner.UpdateAsync(invoice);
+        }
+    }
+
+    private async Task<(decimal AccountCredit, decimal InvoiceCredit)> MarchCredits()
+    {
+        var account = await Accounts.GetAsync(Group);
+        var invoices = (await GroupInvoices()).Where(i => i.BillingPeriodStart == D(2026, 3, 1) && i.Status != InvoiceStatus.Voided);
+        return (account?.UnappliedCredit ?? 0m, invoices.Sum(i => -i.TotalAmount));
+    }
+
+    private async Task<PremiumInvoice> HeldNetCreditDraft()
+    {
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        Enroll("cov-B", "B", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+        foreach (var record in Coverage.Records)
+            record.TerminationDate = D(2026, 1, 31);
+        Options.Tenants[Tenant].HoldForReview = true;
+        var draft = (await Generate(D(2026, 3, 1))).Invoice;
+        draft.Status.Should().Be(InvoiceStatus.Draft);
+        Options.Tenants[Tenant].HoldForReview = false;
+        return draft;
+    }
+
+    [SkippableFact]
+    public async Task NetCredit_DraftVoidedDuringIssue_CreditIsMovedOnce()
+    {
+        // Review probe 2: the save of the issued credit invoice fails because the Draft was voided
+        // meanwhile; the retry issues reissue -2. The account must hold exactly one credit.
+        var draft = await HeldNetCreditDraft();
+        var racing = new VoidRacingInvoices(Invoices) { Armed = true };
+        var generator = new RatedInvoiceGenerator(racing, RateTables, Coverage, Census, Leases,
+            Microsoft.Extensions.Options.Options.Create(Options), Clock, NullLogger<RatedInvoiceGenerator>.Instance, Accounts);
+
+        try { await generator.RegenerateDraftAsync(draft.Id, Tenant, "u"); } catch (Exception) { }
+        try { await Generate(D(2026, 3, 1)); } catch (Exception) { }
+
+        var (account, invoices) = await MarchCredits();
+        invoices.Should().Be(1000m);
+        account.Should().Be(invoices, "the credit on the account matches the non-void credit invoice");
+    }
+
+    private sealed class CrashOnceAccounts(ISponsorAccountRepository inner) : ISponsorAccountRepository
+    {
+        public bool Armed = true;
+        public Task<SponsorAccount?> GetAsync(string groupNumber) => inner.GetAsync(groupNumber);
+
+        public Task<SponsorAccount> UpdateAsync(string groupNumber, Action<SponsorAccount> change)
+        {
+            if (Armed)
+            {
+                Armed = false;
+                throw new TimeoutException("the process died before the account was credited");
+            }
+            return inner.UpdateAsync(groupNumber, change);
+        }
+    }
+
+    [SkippableFact]
+    public async Task NetCredit_CrashAfterTheSave_IsPostedByTheNextRun_Once()
+    {
+        var draft = await HeldNetCreditDraft();
+        var crashing = new RatedInvoiceGenerator(Invoices, RateTables, Coverage, Census, Leases,
+            Microsoft.Extensions.Options.Options.Create(Options), Clock, NullLogger<RatedInvoiceGenerator>.Instance,
+            new CrashOnceAccounts(Accounts));
+
+        var issue = () => crashing.RegenerateDraftAsync(draft.Id, Tenant, "u");
+        await issue.Should().ThrowAsync<TimeoutException>();
+        (await Invoices.GetByIdAsync(draft.Id))!.Status.Should().Be(InvoiceStatus.Paid, "the invoice was saved before the account post");
+        (await MarchCredits()).AccountCredit.Should().Be(0m);
+
+        // The next run finds it issued and posts the missing credit, once.
+        (await Generate(D(2026, 3, 1))).Kind.Should().Be(RatedInvoiceOutcomeKind.AlreadyIssued);
+        (await Generate(D(2026, 3, 1))).Kind.Should().Be(RatedInvoiceOutcomeKind.AlreadyIssued);
+        (await MarchCredits()).Should().Be((1000m, 1000m));
+    }
+
+    [SkippableFact]
+    public async Task VoidOfARatedInvoice_TakesTheGroupLease()
+    {
+        Options.Tenants[Tenant].HoldForReview = true;
+        Options.GroupLeaseWaitSeconds = 0;
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        var draft = (await Generate(D(2026, 3, 1))).Invoice;
+        var actor = new Mock<CloudHealthOffice.Infrastructure.Security.ICurrentActor>();
+        actor.SetupGet(a => a.UserId).Returns("finance-user");
+        var billing = new PremiumBillingService.Services.PremiumBillingService(
+            new Mock<IBillingRunRepository>().Object, Invoices, new Mock<ISponsorServiceClient>().Object, Coverage, actor.Object,
+            NullLogger<PremiumBillingService.Services.PremiumBillingService>.Instance, Accounts, Generator(),
+            Microsoft.Extensions.Options.Options.Create(Options));
+
+        var held = await Leases.TryAcquireAsync(Group, "a-generation", Clock.Now, TimeSpan.FromMinutes(5));
+        var voidWhileHeld = () => billing.VoidInvoiceAsync(draft.Id, "duplicate");
+        await voidWhileHeld.Should().ThrowAsync<GroupBillingBusyException>();
+        (await Invoices.GetByIdAsync(draft.Id))!.Status.Should().Be(InvoiceStatus.Draft);
+
+        await Leases.ReleaseAsync(held!);
+        (await billing.VoidInvoiceAsync(draft.Id, "duplicate")).Status.Should().Be(InvoiceStatus.Voided);
     }
 
     // ── Review regressions: credits and corrections ────────────────────
@@ -687,4 +890,44 @@ public sealed class RatedBillingMongoTests(MongoRunnerFixture mongo) : RatedBill
             await mongo.DropDatabaseAsync(database);
         }
     }
+}
+
+/// <summary>A mongod started as a single-node replica set, so multi-document transactions work.</summary>
+public sealed class MongoReplicaSetFixture : IDisposable
+{
+    private readonly EphemeralMongo.IMongoRunner _runner;
+
+    public MongoReplicaSetFixture()
+    {
+        var options = TestMongo.Options();
+        options.UseSingleNodeReplicaSet = true;
+        _runner = EphemeralMongo.MongoRunner.Run(options);
+        Client = new MongoClient(_runner.ConnectionString);
+    }
+
+    public IMongoClient Client { get; }
+
+    public void Dispose() => _runner.Dispose();
+}
+
+/// <summary>
+/// <see cref="RatedBillingScenarios"/> on a replica-set mongod: invoice writes are fenced
+/// by the group lease inside a multi-document transaction (the standalone run above uses
+/// renew-then-write).
+/// </summary>
+public sealed class RatedBillingMongoReplicaSetTests(MongoReplicaSetFixture mongo) : RatedBillingScenarios, IClassFixture<MongoReplicaSetFixture>
+{
+    private IMongoDatabase _database = null!;
+
+    protected override Task<Stores> CreateStoresAsync(IHttpContextAccessor http)
+    {
+        _database = mongo.Client.GetDatabase($"pb_rated_rs_{Guid.NewGuid():N}");
+        return Task.FromResult(new Stores(
+            new PremiumInvoiceRepositoryMongo(_database, http, NullLogger<PremiumInvoiceRepositoryMongo>.Instance),
+            new RateTableRepositoryMongo(_database, http),
+            new BillingLeaseRepositoryMongo(_database, http),
+            new SponsorAccountRepositoryMongo(_database, http)));
+    }
+
+    public override Task DisposeAsync() => mongo.Client.DropDatabaseAsync(_database.DatabaseNamespace.DatabaseName);
 }

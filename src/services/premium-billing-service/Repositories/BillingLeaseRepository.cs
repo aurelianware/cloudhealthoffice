@@ -11,17 +11,25 @@ namespace PremiumBillingService.Repositories;
 /// A short exclusive lease on one sponsor group's rated billing: only its
 /// holder reads the group's invoices, computes and writes, so two periods (or
 /// two runs) of one group are never reconciled from the same stale ledger.
+/// Invoice writes are fenced by it (see <see cref="IPremiumInvoiceRepository.CreateFencedAsync"/>):
+/// a holder whose lease was taken over cannot write.
 /// </summary>
 public class BillingLease
 {
+    public const string DocumentType = "billingLease";
+
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
     public string TenantId { get; set; } = string.Empty;
 
-    public string GroupNumber { get; set; } = string.Empty;
+    /// <summary>Marks the document in a shared container (Cosmos keeps leases beside the invoices they fence).</summary>
+    public string DocType { get; set; } = DocumentType;
 
-    public string Owner { get; set; } = string.Empty;
+    /// <summary>Not "groupNumber": the invoice queries by group must never match a lease.</summary>
+    public string LeaseGroupNumber { get; set; } = string.Empty;
+
+    public string LeaseOwner { get; set; } = string.Empty;
 
     public DateTime AcquiredAt { get; set; }
 
@@ -36,39 +44,67 @@ public class BillingLease
         "lease-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{tenantId}\n{groupNumber}")))[..32].ToLowerInvariant();
 }
 
+/// <summary>A held lease: who holds it, and (Cosmos) the version of the lease document it holds.</summary>
+public sealed class BillingLeaseHandle
+{
+    public string GroupNumber { get; init; } = string.Empty;
+    public string Owner { get; init; } = string.Empty;
+
+    /// <summary>Cosmos: ETag of the lease document as last written by this holder; the write fence.</summary>
+    public string? ETag { get; set; }
+}
+
+/// <summary>The lease was taken over (it expired while its holder was still working): stop, write nothing.</summary>
+public sealed class BillingLeaseLostException : InvalidOperationException
+{
+    public BillingLeaseLostException(string groupNumber)
+        : base($"The billing lease of group {groupNumber} was lost (it expired and another run took it); nothing was written by this run")
+    {
+    }
+}
+
 public interface IBillingLeaseRepository
 {
-    /// <summary>Takes the lease when nobody holds it or the holder's lease expired.</summary>
-    Task<bool> TryAcquireAsync(string groupNumber, string owner, DateTime now, TimeSpan duration);
+    /// <summary>Takes the lease when nobody holds it or the holder's lease expired; null when it is held.</summary>
+    Task<BillingLeaseHandle?> TryAcquireAsync(string groupNumber, string owner, DateTime now, TimeSpan duration);
 
-    /// <summary>Gives the lease back, if <paramref name="owner"/> still holds it.</summary>
-    Task ReleaseAsync(string groupNumber, string owner);
+    /// <summary>
+    /// Extends the lease only while <paramref name="lease"/> still holds it and
+    /// it has not expired. False: the lease is lost and the holder must stop.
+    /// </summary>
+    Task<bool> RenewAsync(BillingLeaseHandle lease, DateTime now, TimeSpan duration);
+
+    /// <summary>Gives the lease back, if its holder still holds it.</summary>
+    Task ReleaseAsync(BillingLeaseHandle lease);
 }
 
 /// <summary>MongoDB: collection <c>BillingLeases</c>; the unique _id makes the first insert win.</summary>
 public sealed class BillingLeaseRepositoryMongo : IBillingLeaseRepository
 {
+    public const string CollectionName = "BillingLeases";
+
     private readonly IMongoCollection<BillingLease> _collection;
     private readonly IHttpContextAccessor _http;
 
     public BillingLeaseRepositoryMongo(IMongoDatabase database, IHttpContextAccessor http)
     {
-        _collection = database.GetCollection<BillingLease>("BillingLeases");
+        _collection = database.GetCollection<BillingLease>(CollectionName);
         _http = http;
     }
 
-    public async Task<bool> TryAcquireAsync(string groupNumber, string owner, DateTime now, TimeSpan duration)
+    public async Task<BillingLeaseHandle?> TryAcquireAsync(string groupNumber, string owner, DateTime now, TimeSpan duration)
     {
         var tenantId = RepositoryTenant.From(_http);
         var lease = new BillingLease
         {
-            Id = BillingLease.IdFor(tenantId, groupNumber), TenantId = tenantId, GroupNumber = groupNumber,
-            Owner = owner, AcquiredAt = now, ExpiresAt = now + duration
+            Id = BillingLease.IdFor(tenantId, groupNumber), TenantId = tenantId, LeaseGroupNumber = groupNumber,
+            LeaseOwner = owner, AcquiredAt = now, ExpiresAt = now + duration
         };
+        var handle = new BillingLeaseHandle { GroupNumber = groupNumber, Owner = owner };
         try
         {
             await _collection.InsertOneAsync(lease);
-            return true;
+            return handle;
         }
         catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
@@ -78,21 +114,38 @@ public sealed class BillingLeaseRepositoryMongo : IBillingLeaseRepository
         var f = Builders<BillingLease>.Filter;
         var result = await _collection.UpdateOneAsync(
             f.And(f.Eq(l => l.Id, lease.Id), f.Eq(l => l.TenantId, tenantId), f.Lt(l => l.ExpiresAt, now)),
-            Builders<BillingLease>.Update.Set(l => l.Owner, owner).Set(l => l.AcquiredAt, now).Set(l => l.ExpiresAt, lease.ExpiresAt));
-        return result.ModifiedCount == 1;
+            Builders<BillingLease>.Update.Set(l => l.LeaseOwner, owner).Set(l => l.AcquiredAt, now).Set(l => l.ExpiresAt, lease.ExpiresAt));
+        return result.ModifiedCount == 1 ? handle : null;
     }
 
-    public async Task ReleaseAsync(string groupNumber, string owner)
+    public async Task<bool> RenewAsync(BillingLeaseHandle lease, DateTime now, TimeSpan duration)
     {
         var tenantId = RepositoryTenant.From(_http);
-        await _collection.DeleteOneAsync(l => l.Id == BillingLease.IdFor(tenantId, groupNumber) && l.TenantId == tenantId && l.Owner == owner);
+        var f = Builders<BillingLease>.Filter;
+        var result = await _collection.UpdateOneAsync(
+            f.And(f.Eq(l => l.Id, BillingLease.IdFor(tenantId, lease.GroupNumber)), f.Eq(l => l.TenantId, tenantId),
+                f.Eq(l => l.LeaseOwner, lease.Owner), f.Gt(l => l.ExpiresAt, now)),
+            Builders<BillingLease>.Update.Set(l => l.ExpiresAt, now + duration));
+        return result.MatchedCount == 1;
+    }
+
+    public async Task ReleaseAsync(BillingLeaseHandle lease)
+    {
+        var tenantId = RepositoryTenant.From(_http);
+        var id = BillingLease.IdFor(tenantId, lease.GroupNumber);
+        await _collection.DeleteOneAsync(l => l.Id == id && l.TenantId == tenantId && l.LeaseOwner == lease.Owner);
     }
 }
 
-/// <summary>Cosmos DB: container <c>BillingLeases</c>, partition key <c>/tenantId</c>; create conflict and ETag replace.</summary>
+/// <summary>
+/// Cosmos DB: lease documents live in the <c>PremiumInvoices</c> container (partition
+/// <c>/tenantId</c>, <c>docType = billingLease</c>), so an invoice write and the lease's
+/// ETag check go in one transactional batch. Create conflict and ETag replace take it.
+/// </summary>
 public sealed class BillingLeaseRepositoryCosmos : IBillingLeaseRepository
 {
-    public const string ContainerName = "BillingLeases";
+    /// <summary>Same container as the invoices the lease fences.</summary>
+    public const string ContainerName = "PremiumInvoices";
 
     private readonly Container _container;
     private readonly IHttpContextAccessor _http;
@@ -103,19 +156,19 @@ public sealed class BillingLeaseRepositoryCosmos : IBillingLeaseRepository
         _http = http;
     }
 
-    public async Task<bool> TryAcquireAsync(string groupNumber, string owner, DateTime now, TimeSpan duration)
+    public async Task<BillingLeaseHandle?> TryAcquireAsync(string groupNumber, string owner, DateTime now, TimeSpan duration)
     {
         var tenantId = RepositoryTenant.From(_http);
         var key = new PartitionKey(tenantId);
         var lease = new BillingLease
         {
-            Id = BillingLease.IdFor(tenantId, groupNumber), TenantId = tenantId, GroupNumber = groupNumber,
-            Owner = owner, AcquiredAt = now, ExpiresAt = now + duration
+            Id = BillingLease.IdFor(tenantId, groupNumber), TenantId = tenantId, LeaseGroupNumber = groupNumber,
+            LeaseOwner = owner, AcquiredAt = now, ExpiresAt = now + duration
         };
         try
         {
-            await _container.CreateItemAsync(lease, key);
-            return true;
+            var created = await _container.CreateItemAsync(lease, key);
+            return new BillingLeaseHandle { GroupNumber = groupNumber, Owner = owner, ETag = created.ETag };
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
@@ -125,30 +178,52 @@ public sealed class BillingLeaseRepositoryCosmos : IBillingLeaseRepository
         {
             var current = await _container.ReadItemAsync<BillingLease>(lease.Id, key);
             if (current.Resource.ExpiresAt >= now)
-                return false;
-            await _container.ReplaceItemAsync(lease, lease.Id, key, new ItemRequestOptions { IfMatchEtag = current.ETag });
-            return true;
+                return null;
+            var replaced = await _container.ReplaceItemAsync(lease, lease.Id, key, new ItemRequestOptions { IfMatchEtag = current.ETag });
+            return new BillingLeaseHandle { GroupNumber = groupNumber, Owner = owner, ETag = replaced.ETag };
         }
         catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.NotFound)
         {
             // Someone else took it over, or it was released between our create and read: try again later.
-            return false;
+            return null;
         }
     }
 
-    public async Task ReleaseAsync(string groupNumber, string owner)
+    public async Task<bool> RenewAsync(BillingLeaseHandle lease, DateTime now, TimeSpan duration)
     {
         var tenantId = RepositoryTenant.From(_http);
         var key = new PartitionKey(tenantId);
         try
         {
-            var current = await _container.ReadItemAsync<BillingLease>(BillingLease.IdFor(tenantId, groupNumber), key);
-            if (current.Resource.Owner != owner)
+            var current = await _container.ReadItemAsync<BillingLease>(BillingLease.IdFor(tenantId, lease.GroupNumber), key);
+            if (current.ETag != lease.ETag || current.Resource.LeaseOwner != lease.Owner || current.Resource.ExpiresAt <= now)
+                return false;
+            var renewed = current.Resource;
+            renewed.ExpiresAt = now + duration;
+            var replaced = await _container.ReplaceItemAsync(renewed, renewed.Id, key, new ItemRequestOptions { IfMatchEtag = lease.ETag });
+            lease.ETag = replaced.ETag;
+            return true;
+        }
+        catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
+    public async Task ReleaseAsync(BillingLeaseHandle lease)
+    {
+        var tenantId = RepositoryTenant.From(_http);
+        var key = new PartitionKey(tenantId);
+        try
+        {
+            var current = await _container.ReadItemAsync<BillingLease>(BillingLease.IdFor(tenantId, lease.GroupNumber), key);
+            if (current.Resource.LeaseOwner != lease.Owner)
                 return;
             await _container.DeleteItemAsync<BillingLease>(current.Resource.Id, key, new ItemRequestOptions { IfMatchEtag = current.ETag });
         }
         catch (CosmosException ex) when (ex.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.NotFound)
         {
+            // No longer ours (taken over) or already gone.
         }
     }
 }

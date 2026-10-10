@@ -96,7 +96,7 @@ else
     builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryCosmos>();
     // Container RateTables, partition key /tenantId: immutable rate table versions.
     builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryCosmos>();
-    // Container BillingLeases, partition key /tenantId: one rated-billing lease per sponsor group.
+    // Rated-billing group leases live in PremiumInvoices (docType billingLease) so invoice writes are fenced in one batch.
     builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryCosmos>();
     Console.WriteLine("Using Cosmos DB repository");
 }

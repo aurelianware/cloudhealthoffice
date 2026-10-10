@@ -261,6 +261,17 @@ public class PremiumBillingService : IPremiumBillingService
 
     public async Task<PremiumInvoice> VoidInvoiceAsync(string invoiceId, string reason)
     {
+        // A rated invoice is voided under its group's billing lease, so a void can never land
+        // between a generation's computation and its write (e.g. while a net credit is issued).
+        var existing = await _invoiceRepository.GetByIdAsync(invoiceId)
+                       ?? throw new InvalidOperationException($"Invoice {invoiceId} not found");
+        if (existing.PricingSource == PricingSource.RatingEngine && _ratedInvoices != null)
+            return await _ratedInvoices.RunUnderGroupLeaseAsync(existing.GroupNumber, () => VoidCoreAsync(invoiceId, reason));
+        return await VoidCoreAsync(invoiceId, reason);
+    }
+
+    private async Task<PremiumInvoice> VoidCoreAsync(string invoiceId, string reason)
+    {
         var updated = await InvoiceWrites.UpdateWithRetryAsync(_invoiceRepository, invoiceId, null, invoice =>
         {
             if (invoice.Status == InvoiceStatus.Paid)
