@@ -74,7 +74,7 @@ public record PaymentEstimateRequest
 
     /// <summary>
     /// Institutional: the DRG billed on the claim (837I HI*DR, e.g. MS-DRG "470").
-    /// Optional. Sent to pricing on every line, as adjudication does: a DRG-contracted
+    /// Optional; institutional claims only (ignored otherwise). Sent to pricing on every line, as adjudication does: a DRG-contracted
     /// provider's stay is priced at the DRG case rate, paid once and allocated across
     /// the lines by billed charge, and cost-shared once for the stay. There is no DRG
     /// grouper: without a DRG, a DRG-contracted stay finds no rate (billed charges).
@@ -83,7 +83,8 @@ public record PaymentEstimateRequest
 
     /// <summary>
     /// Institutional: length of stay in days (discharge − admission). Optional; must not
-    /// be negative. Drives an all-inclusive per diem contract (daily rate × days, paid once
+    /// be negative; a same-day stay (0) counts as one day, as in claims adjudication.
+    /// Ignored (with <see cref="DrgCode"/>) unless the claim type is Institutional. Drives an all-inclusive per diem contract (daily rate × days, paid once
     /// per stay). Line-level daily rates keyed by revenue code use each line's
     /// <see cref="PaymentEstimateLineRequest.Units"/> as the day count instead. It does not
     /// adjust a DRG case rate (no short-stay / transfer / outlier logic).
@@ -129,7 +130,7 @@ public record PaymentEstimateLineRequest
     /// line may send a <see cref="RevenueCode"/> instead (e.g. room and board "0120");
     /// every line needs one or the other.
     /// </summary>
-    public string ProcedureCode { get; init; } = string.Empty;
+    public string? ProcedureCode { get; init; }
 
     /// <summary>Code system for <see cref="ProcedureCode"/> — "CPT", "HCPCS", "CDT". Defaults to CPT.</summary>
     public string CodeType { get; init; } = "CPT";

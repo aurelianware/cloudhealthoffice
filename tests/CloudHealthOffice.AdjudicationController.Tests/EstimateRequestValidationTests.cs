@@ -66,6 +66,17 @@ public class EstimateRequestValidationTests : IClassFixture<AdjudicationControll
     }
 
     [Fact]
+    public async Task NullProcedureCodeWithRevenueCode_IsAccepted()
+    {
+        using var client = Client();
+
+        var resp = await client.PostAsJsonAsync("/api/v1/adjudication/estimate", Body(
+            [new { lineNumber = 1, procedureCode = (string?)null, revenueCode = "0120", chargeAmount = 9000m }]));
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
     public async Task LineWithNeitherProcedureNorRevenueCode_Is400()
     {
         using var client = Client();

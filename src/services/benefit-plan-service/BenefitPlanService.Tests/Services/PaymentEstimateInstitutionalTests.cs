@@ -115,6 +115,99 @@ public class PaymentEstimateInstitutionalTests
 
         _benefitRequest!.InpatientPricingMethod.Should().BeNull();
         _benefitRequest.DrgAllowedAmount.Should().BeNull();
+        // DRG and LOS are institutional inputs: not sent for a professional estimate.
+        _pricingRequests.Should().OnlyContain(r => r.DrgCode == null && r.LengthOfStay == null);
+    }
+
+    [Fact]
+    public async Task BenefitLinesCarryOriginalBilledCharges_AllowedViaAllowedAmounts()
+    {
+        var sut = Build(DrgSchedule(12_000m));
+
+        await sut.EstimateAsync(Tenant, Stay("470", 4,
+            Line(1, "", "0120", 12_000m), Line(2, "", "0250", 1_500m), Line(3, "", "0360", 29_000m)));
+
+        _benefitRequest!.Lines.Select(l => l.BilledAmount).Should().Equal(12_000m, 1_500m, 29_000m);
+        _benefitRequest.AllowedAmounts.Values.Sum().Should().Be(12_000m);
+    }
+
+    [Fact]
+    public async Task PricingReview_FromBenefitEngine_IsNeedsReview_NoAmountsQuoted()
+    {
+        var sut = Build(DrgSchedule(50_000m), benefitResult: _ => new BenefitResolutionResult
+        {
+            Success = false,
+            RequiresReview = true,
+            PendReasonCode = "PRICING",
+            PendReason = "Per-stay allowed amount 50000.00 allocates more than billed",
+        });
+
+        var resp = await sut.EstimateAsync(Tenant, Stay("470", 4, Line(1, "", "0120", 12_000m), Line(2, "", "0250", 1_500m)));
+
+        resp.Status.Should().Be("needs_review");
+        resp.Lines.Should().HaveCount(2).And.OnlyContain(l => l.Status == "needs_review"
+            && l.AllowedAmount == 0m && l.PatientResponsibility == 0m && l.PayerResponsibility == 0m
+            && l.Messages.Any(m => m.Code == "PRICING_REVIEW" && m.Description.Contains("more than billed")));
+        resp.Totals.BilledAmount.Should().Be(13_500m);
+        resp.Totals.PatientResponsibility.Should().Be(0m);
+        resp.Warnings.Should().Contain(w => w.Code == "PRICING_REVIEW");
+        resp.Confidence.Level.Should().Be(EstimateConfidenceLevel.Low);
+    }
+
+    [Theory]
+    [InlineData("96", "Hospital - Inpatient is not covered under this plan", "not_covered", "NON_COVERED_SERVICE")]
+    [InlineData("204", "No benefit category mapping for DRG claim", "needs_review", "NO_BENEFIT_MAPPING")]
+    public async Task StayDenial_MapsEveryLine_WithTheReason(string carc, string reason, string status, string code)
+    {
+        var sut = Build(DrgSchedule(12_000m), benefitResult: _ => new BenefitResolutionResult
+        {
+            Success = false,
+            DenialReasonCode = carc,
+            DenialReasonDescription = reason,
+        });
+
+        var resp = await sut.EstimateAsync(Tenant, Stay("470", 4, Line(1, "", "0120", 12_000m), Line(2, "", "0250", 1_500m)));
+
+        resp.Status.Should().Be("estimated");
+        resp.Lines.Should().HaveCount(2).And.OnlyContain(l => l.Status == status
+            && l.PayerResponsibility == 0m
+            && l.Messages.Any(m => m.Code == code && m.Description == reason));
+        resp.Warnings.Should().NotContain(w => w.Code == "BENEFIT_PLAN_UNRESOLVED");
+    }
+
+    [Fact]
+    public async Task PlanNotFound_StillInsufficientData()
+    {
+        var sut = Build(DrgSchedule(12_000m), benefitResult: _ => new BenefitResolutionResult
+        {
+            Success = false,
+            DenialReasonCode = "16",
+            DenialReasonDescription = "Benefit plan not found",
+        });
+
+        var resp = await sut.EstimateAsync(Tenant, Stay("470", 4, Line(1, "", "0120", 12_000m)));
+
+        resp.Status.Should().Be("insufficient_data");
+        resp.Warnings.Should().Contain(w => w.Code == "BENEFIT_PLAN_UNRESOLVED");
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 1)]
+    [InlineData(6, 6)]
+    public async Task LengthOfStay_ClampedToAtLeastOneDay(int sent, int priced)
+    {
+        var sut = Build(new FeeSchedule
+        {
+            Id = "PD-ALL", TenantId = Tenant, Name = "All-inclusive per diem",
+            Type = FeeScheduleType.PerDiem, PerDiemRate = 1_500m,
+            EffectiveDate = new DateTime(2026, 1, 1),
+        });
+
+        var resp = await sut.EstimateAsync(Tenant, Stay(null, sent, Line(1, "", "0450", 20_000m)));
+
+        _pricingRequests.Should().OnlyContain(r => r.LengthOfStay == priced);
+        resp.Totals.AllowedAmount.Should().Be(1_500m * priced);
     }
 
     // ── Per diem ──────────────────────────────────────────────────────
@@ -187,7 +280,9 @@ public class PaymentEstimateInstitutionalTests
         Lines = [new FeeScheduleLine { ProcedureCode = "470", Rate = caseRate }],
     };
 
-    private PaymentEstimateService Build(FeeSchedule planDefault, Action<PaRuleContext>? onPriorAuth = null)
+    private PaymentEstimateService Build(
+        FeeSchedule planDefault, Action<PaRuleContext>? onPriorAuth = null,
+        Func<BenefitResolutionRequest, BenefitResolutionResult>? benefitResult = null)
     {
         var schedules = new Mock<IFeeScheduleRepository>();
         schedules.Setup(r => r.GetDefaultForPlanAsync(Tenant, It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -206,7 +301,7 @@ public class PaymentEstimateInstitutionalTests
         var benefit = new Mock<IBenefitCalculationEngine>();
         benefit.Setup(b => b.CalculateAsync(It.IsAny<BenefitResolutionRequest>(), It.IsAny<CancellationToken>()))
             .Callback<BenefitResolutionRequest, CancellationToken>((req, _) => _benefitRequest = req)
-            .ReturnsAsync((BenefitResolutionRequest req, CancellationToken _) => new BenefitResolutionResult
+            .ReturnsAsync((BenefitResolutionRequest req, CancellationToken _) => benefitResult?.Invoke(req) ?? new BenefitResolutionResult
             {
                 Success = true,
                 Lines = req.Lines.Select(l => new LineBenefitResult

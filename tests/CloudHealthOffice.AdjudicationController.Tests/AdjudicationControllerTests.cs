@@ -778,6 +778,60 @@ public class AdjudicationControllerTests : IClassFixture<AdjudicationControllerT
             default!, default!, default, default!, default!, default!, default);
     }
 
+    /// <summary>
+    /// A case rate above total billed: /adjudicate pends (422 PRICING_REVIEW) and the
+    /// estimate of the same stay reports needs_review with no amounts quoted, rather
+    /// than an estimate whose lines are allowed more than they billed.
+    /// </summary>
+    [Fact]
+    public async Task Estimate_InstitutionalDrgStay_CaseRateAboveBilled_RealEngines_NeedsReviewLikeAdjudication()
+    {
+        WireRealEngines(caseRate: 50000m);
+        var stay = MakeDrgStayRequest();
+
+        using var client = CreateClientWithTenant();
+        var adjudicated = await client.PostAsJsonAsync("/api/v1/adjudication/adjudicate", stay);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, adjudicated.StatusCode);
+
+        var estimator = new PaymentEstimateService(
+            _factory.RateEngine, _factory.BenefitEngine, _factory.ProviderIntegrityGate, _factory.PriorAuthEngine,
+            _factory.OperatingModeProvider, new ClaimTypeRouter(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PaymentEstimateService>.Instance);
+        var estimate = await estimator.EstimateAsync(TenantId, EstimateOf(stay));
+
+        Assert.Equal("needs_review", estimate.Status);
+        Assert.All(estimate.Lines, l =>
+        {
+            Assert.Equal("needs_review", l.Status);
+            Assert.Equal(0m, l.PatientResponsibility);
+            Assert.Contains(l.Messages, m => m.Code == "PRICING_REVIEW");
+        });
+        Assert.Equal(42500m, estimate.Totals.BilledAmount);
+        Assert.Equal(0m, estimate.Totals.AllowedAmount);
+    }
+
+    private static BenefitPlanService.Models.Estimate.PaymentEstimateRequest EstimateOf(AdjudicationRequest stay) => new()
+    {
+        MemberId = stay.MemberId,
+        SubscriberId = stay.SubscriberId,
+        BenefitPlanId = stay.BenefitPlanId,
+        ProviderNpi = stay.ProviderNpi,
+        ServiceDate = stay.ServiceDate,
+        ClaimType = stay.ClaimType,
+        BillType = stay.BillType,
+        DrgCode = stay.DrgCode,
+        LengthOfStay = stay.LengthOfStay,
+        Lines = stay.Lines.Select(l => new BenefitPlanService.Models.Estimate.PaymentEstimateLineRequest
+        {
+            LineNumber = l.LineNumber,
+            ProcedureCode = l.ProcedureCode,
+            RevenueCode = l.RevenueCode,
+            ChargeAmount = l.BilledAmount,
+            PlaceOfService = l.PlaceOfService,
+            DiagnosisCodes = l.DiagnosisCodes,
+        }).ToList(),
+    };
+
     private sealed class EmptyCategoryRepository : IServiceCategoryMappingRepository
     {
         public Task<IReadOnlyList<ServiceCategoryMapping>> GetMappingsAsync(

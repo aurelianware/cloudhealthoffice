@@ -66,9 +66,10 @@ There is no second pricing or benefit engine.
    is already side-effect free.
 2. **Benefit calculation (prospective)** — `IBenefitCalculationEngine.CalculateAsync`
    runs the full cost-sharing waterfall with
-   `BenefitResolutionRequest.ExecutionMode = Prospective`. The priced allowed
-   amount is fed as the benefit line's billed amount, mirroring the production
-   adjudication seam.
+   `BenefitResolutionRequest.ExecutionMode = Prospective`. As in production
+   adjudication, the lines keep their original billed charges and the priced
+   allowed amounts go through `AllowedAmounts`, so the engine's checks that
+   compare the two (a per-stay rate above billed → pricing review) apply.
 3. **Advisory checks** — provider integrity and prior-auth rules are consulted
    in a **non-blocking** way. Instead of denying the request, findings become
    warnings on the response. A downstream outage degrades to a warning plus a
@@ -179,6 +180,7 @@ Representative line/claim codes:
 | `PROVIDER_EXCLUDED`        | warning  | Provider on a federal exclusion list.               |
 | `DRG_CASE_RATE_APPLIED`    | info     | Line's share of a DRG case rate paid once per stay. |
 | `PER_DIEM_STAY_APPLIED`    | info     | Line's share of an all-inclusive per diem × LOS.    |
+| `PRICING_REVIEW`           | warning  | Adjudication would pend for pricing review.         |
 
 Line `status` is one of `payable`, `not_covered`, `denied`, `needs_review`.
 
@@ -285,7 +287,10 @@ engine the same inputs synchronous adjudication (`AdjudicationController`) sends
 | `lengthOfStay` | claim | All-inclusive per diem: schedule `PerDiemRate` × days |
 | `lines[].revenueCode` | line | Revenue-code rate lines (e.g. room and board daily rates, units = days); benefit category |
 
-`drgCode` and `lengthOfStay` go on every pricing line. When the engine prices the
+`drgCode` and `lengthOfStay` are sent only for an institutional (837I) estimate,
+as the claims pipeline sends them, and go on every pricing line. A same-day stay
+(`lengthOfStay: 0`) counts as one day, as claims-service `CalculateLengthOfStay`
+counts it. When the engine prices the
 stay as one claim-level amount (`PricingResult.IsPerStayRate`: a DRG case rate or
 an all-inclusive per diem), it is paid once and allocated across the lines by
 billed charge, and the estimate sends the benefit engine the claim-level inpatient
@@ -296,6 +301,18 @@ revenue code price each line by its units and are cost-shared per line.
 
 A line may carry a `revenueCode` without a `procedureCode` (room and board); a
 line with neither, or a negative `lengthOfStay`, is rejected with 400.
+
+Outcomes that adjudication would not pay as estimated:
+
+- **Pricing review.** When the benefit engine would pend the claim — e.g. a
+  per-stay rate above total billed, which allocates a line more than it billed
+  (`/adjudicate` returns 422 `PRICING_REVIEW`) — the estimate's `status` is
+  `needs_review`, every line is `needs_review` with a `PRICING_REVIEW` message
+  carrying the reason, and no allowed amount or cost share is quoted.
+- **Stay denial.** When the stay's benefit cannot be resolved on the DRG /
+  per-diem path (CARC 204 no benefit mapping, CARC 96 not covered), every line
+  carries that denial and its reason (`needs_review` / `not_covered`), not
+  `insufficient_data`. Plan not found (CARC 16) stays `insufficient_data`.
 
 ```json
 {
