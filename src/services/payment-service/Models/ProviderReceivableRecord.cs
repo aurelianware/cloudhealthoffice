@@ -69,6 +69,14 @@ public class ProviderReceivableRecord
 
     public ReceivableStatus Status { get; set; } = ReceivableStatus.Open;
 
+    /// <summary>
+    /// While <see cref="ReceivableStatus.PendingVoid"/>: the original payments whose reversal
+    /// opened this receivable and whose NACHA file had not been sent when the reversal ran.
+    /// Nothing is recovered from the provider until each is either voided before payment
+    /// (its part is cancelled) or found to have been paid (<see cref="Activate"/>).
+    /// </summary>
+    public List<string> PendingPaymentIds { get; set; } = new();
+
     /// <summary>When the balance arose (the origin 835): the start of aging.</summary>
     public DateTime OriginatedAt { get; set; }
 
@@ -113,6 +121,9 @@ public class ProviderReceivableRecord
     {
         if (amount <= 0m)
             throw new InvalidOperationException($"A receivable recovery must be positive (was {amount:F2}).");
+        if (Status == ReceivableStatus.PendingVoid)
+            throw new InvalidOperationException(
+                $"Receivable {Id} waits for the void of an unsent payment ({string.Join(", ", PendingPaymentIds)}); nothing is recovered from it yet.");
         if (amount > OutstandingAmount)
             throw new InvalidOperationException(
                 $"Receivable {Id}: a recovery of {amount:F2} is more than the {OutstandingAmount:F2} outstanding; a receivable never goes negative.");
@@ -170,6 +181,85 @@ public class ProviderReceivableRecord
         Entries.Add(entry);
         return entry;
     }
+
+    /// <summary>Whether this receivable was already reduced for the unpaid payment <paramref name="paymentId"/>.</summary>
+    public bool HasCancellationFor(string paymentId)
+        => Entries.Any(e => e.Type == ReceivableEntryType.CancelledUnpaid && e.PaymentId == paymentId);
+
+    /// <summary>
+    /// The payment whose reversal opened (part of) this receivable was never paid (voided
+    /// before its NACHA file went out): nothing is owed back for it. Lowers what is
+    /// outstanding by <paramref name="amount"/>; refused when less than that is outstanding
+    /// (some of it was already recovered from the provider: that needs a person).
+    /// </summary>
+    public ReceivableLedgerEntry CancelForUnpaidPayment(string paymentId, decimal amount, string? by, DateTime at, string reason)
+    {
+        if (amount <= 0m)
+            throw new InvalidOperationException($"A receivable cancellation must be positive (was {amount:F2}).");
+        if (HasCancellationFor(paymentId))
+            throw new InvalidOperationException($"Receivable {Id} was already reduced for payment {paymentId}.");
+        if (amount > OutstandingAmount)
+            throw new InvalidOperationException(
+                $"Receivable {Id}: {amount:F2} cannot be cancelled, only {OutstandingAmount:F2} is outstanding (the rest was recovered from the provider); it needs a person.");
+
+        OutstandingAmount -= amount;
+        PendingPaymentIds.Remove(paymentId);
+        if (OutstandingAmount == 0m)
+        {
+            Status = RecoveredAmount > 0m ? ReceivableStatus.Recovered : ReceivableStatus.Cancelled;
+            FullyRecoveredAt ??= at;
+            PendingPaymentIds.Clear();
+        }
+        else if (Status == ReceivableStatus.PendingVoid && PendingPaymentIds.Count == 0)
+        {
+            Status = RecoveredAmount > 0m ? ReceivableStatus.PartiallyRecovered : ReceivableStatus.Open;
+        }
+        var entry = new ReceivableLedgerEntry
+        {
+            Type = ReceivableEntryType.CancelledUnpaid,
+            Amount = amount,
+            OutstandingAfter = OutstandingAmount,
+            PaymentId = paymentId,
+            At = at,
+            By = by,
+            Note = reason,
+        };
+        Entries.Add(entry);
+        return entry;
+    }
+}
+
+/// <summary>Releasing a receivable held for the void of an unsent payment.</summary>
+public static class ReceivablePending
+{
+    /// <summary>
+    /// The pending payment <paramref name="paymentId"/> (or every pending payment, when null)
+    /// was paid after all: its part is owed. Once none is pending, the receivable is Open
+    /// and later payment runs recover it. Returns false when nothing changed.
+    /// </summary>
+    public static bool Activate(this ProviderReceivableRecord record, string? paymentId, string? by, DateTime at, string reason)
+    {
+        if (record.Status != ReceivableStatus.PendingVoid)
+            return false;
+        var released = paymentId == null ? record.PendingPaymentIds.ToList() : record.PendingPaymentIds.Where(p => p == paymentId).ToList();
+        if (released.Count == 0)
+            return false;
+        foreach (var p in released)
+            record.PendingPaymentIds.Remove(p);
+        if (record.PendingPaymentIds.Count == 0)
+            record.Status = record.OutstandingAmount == 0m ? ReceivableStatus.Cancelled : ReceivableStatus.Open;
+        record.Entries.Add(new ReceivableLedgerEntry
+        {
+            Type = ReceivableEntryType.Activated,
+            Amount = 0m,
+            OutstandingAfter = record.OutstandingAmount,
+            PaymentId = string.Join(",", released),
+            At = at,
+            By = by,
+            Note = reason,
+        });
+        return true;
+    }
 }
 
 /// <summary>One line of a receivable's history.</summary>
@@ -179,7 +269,7 @@ public class ReceivableLedgerEntry
 
     public ReceivableEntryType Type { get; set; }
 
-    /// <summary>Always positive; <see cref="Type"/> gives the direction.</summary>
+    /// <summary>Positive (zero only for <see cref="ReceivableEntryType.Activated"/>); <see cref="Type"/> gives the direction.</summary>
     public decimal Amount { get; set; }
 
     /// <summary>The outstanding balance right after this entry.</summary>
@@ -213,6 +303,12 @@ public enum ReceivableEntryType
     Originated = 0,
     Recovered = 1,
     RecoveryReversed = 2,
+
+    /// <summary>The reversed payment was never paid (voided before transmission): nothing is owed for it.</summary>
+    CancelledUnpaid = 3,
+
+    /// <summary>A pending (unsent) payment was found to have been paid: the receivable may now be recovered.</summary>
+    Activated = 4,
 }
 
 public enum ReceivableStatus
@@ -220,6 +316,16 @@ public enum ReceivableStatus
     Open = 0,
     PartiallyRecovered = 1,
     Recovered = 2,
+
+    /// <summary>Nothing is owed any more: the reversed payments were never paid.</summary>
+    Cancelled = 3,
+
+    /// <summary>
+    /// Opened by a reversal of payments whose NACHA file had not been sent: held, never
+    /// recovered, until each such payment is voided before payment (its part is cancelled) or
+    /// found to have been paid (then Open). See <see cref="ProviderReceivableRecord.PendingPaymentIds"/>.
+    /// </summary>
+    PendingVoid = 4,
 }
 
 public enum ReceivableAgingBucket

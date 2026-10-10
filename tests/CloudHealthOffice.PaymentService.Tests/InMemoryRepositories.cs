@@ -125,6 +125,9 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
     /// <summary>When set, the next UpdateAsync throws it (a transient database error).</summary>
     public Exception? FailNextUpdate { get; set; }
 
+    /// <summary>When it returns an exception for the run being saved, that save throws it (once).</summary>
+    public Func<PaymentRun, Exception?>? FailUpdateWhen { get; set; }
+
     public Task<PaymentRun> UpdateAsync(PaymentRun run)
     {
         if (FailNextUpdate is { } failure)
@@ -132,15 +135,29 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
             FailNextUpdate = null;
             throw failure;
         }
+        if (FailUpdateWhen?.Invoke(run) is { } conditional)
+        {
+            FailUpdateWhen = null;
+            throw conditional;
+        }
         lock (_items) { _items.RemoveAll(r => r.Id == run.Id); _items.Add(Copy(run)); }
         return Task.FromResult(run);
     }
 
     public int EftFileWrites;
 
+    /// <summary>When set, the next EFT-file save throws it (a crash between a ledger write and the run's record).</summary>
+    public Exception? FailNextEftFileSave { get; set; }
+
     public Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
-        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
+        if (FailNextEftFileSave is { } failure)
+        {
+            FailNextEftFileSave = null;
+            throw failure;
+        }
         lock (_items)
         {
             var run = _items.FirstOrDefault(r => r.Id == id);
@@ -152,12 +169,19 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
             run.EftFile = JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(file));
             run.CheckFallbacks.AddRange(addFallbacks);
             run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+            {
+                if (addGlEvents.Any(e => run.GlOutbox.Any(m => m.EventId == e.EventId)))
+                    return Task.FromResult(false);
+                run.GlOutbox.AddRange(addGlEvents);
+            }
             EftFileWrites++;
             return Task.FromResult(true);
         }
     }
 
-    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
+    public Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         lock (_items)
         {
@@ -168,6 +192,27 @@ public sealed class InMemoryPaymentRunRepository : IPaymentRunRepository
             run.EftFileHistory.Add(JsonSerializer.Deserialize<PaymentRunEftFile>(JsonSerializer.Serialize(superseded))!);
             if (addWarnings != null)
                 run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+                run.GlOutbox.AddRange(addGlEvents);
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task<bool> TryRecordRemainderReissueAsync(string id, string paymentId, DateTime at, string by, string method, string reference,
+        PaymentFileOutboxMessage message, string warning)
+    {
+        lock (_items)
+        {
+            var run = _items.FirstOrDefault(r => r.Id == id);
+            var notice = run?.EftFile?.VoidedPayments.FirstOrDefault(v => v.PaymentId == paymentId);
+            if (run == null || notice == null || notice.RemainderReissuedAt != null || run.GlOutbox.Any(m => m.EventId == message.EventId))
+                return Task.FromResult(false);
+            notice.RemainderReissuedAt = at;
+            notice.RemainderReissuedBy = by;
+            notice.RemainderReissueMethod = method;
+            notice.RemainderReissueReference = reference;
+            run.GlOutbox.Add(message);
+            run.Warnings.Add(warning);
             return Task.FromResult(true);
         }
     }

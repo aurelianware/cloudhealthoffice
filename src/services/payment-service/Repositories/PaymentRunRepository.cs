@@ -34,7 +34,16 @@ public interface IPaymentRunRepository
     /// <paramref name="expectedSha256"/>. False when the condition did not hold or the run is gone.
     /// </summary>
     Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
-        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings);
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null);
+
+    /// <summary>
+    /// Records the reissue of a voided payment's remainder on its notice, with its GL event and a
+    /// warning, in one conditional write: only while that notice has no reissue yet and the outbox
+    /// holds no event with the message's id. False for the loser of a concurrent reissue.
+    /// </summary>
+    Task<bool> TryRecordRemainderReissueAsync(string id, string paymentId, DateTime at, string by, string method, string reference,
+        PaymentFileOutboxMessage message, string warning);
 
     /// <summary>
     /// Replaces the pinned EFT file with a re-dated one and appends the old one
@@ -43,7 +52,8 @@ public interface IPaymentRunRepository
     /// is still <c>superseded.Sha256</c>, appending <paramref name="addWarnings"/> in the
     /// same write. Touches nothing else on the run.
     /// </summary>
-    Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null);
+    Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null);
 
     Task DeleteAsync(string id);
 }
@@ -236,7 +246,8 @@ public class PaymentRunRepository : IPaymentRunRepository
     }
 
     public async Task<bool> TrySaveEftFileAsync(string id, PaymentRunEftFile file, string? expectedSha256,
-        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings)
+        IReadOnlyList<CheckFallbackPayment> addFallbacks, IReadOnlyList<string> addWarnings,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         var tenantId = GetTenantId();
         for (var attempt = 0; attempt < 5; attempt++)
@@ -261,6 +272,8 @@ public class PaymentRunRepository : IPaymentRunRepository
             run.EftFile = file;
             run.CheckFallbacks.AddRange(addFallbacks.Where(f => run.CheckFallbacks.All(x => x.PaymentId != f.PaymentId)));
             run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+                run.GlOutbox.AddRange(addGlEvents.Where(e => run.GlOutbox.All(x => x.EventId != e.EventId)));
             try
             {
                 // Only the version just read: anything written since is re-read and kept.
@@ -276,7 +289,8 @@ public class PaymentRunRepository : IPaymentRunRepository
         throw new InvalidOperationException($"Payment run {id} kept changing; its EFT file was not recorded");
     }
 
-    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null)
+    public async Task<bool> TryRepinEftFileAsync(string id, PaymentRunEftFile file, PaymentRunEftFile superseded, IReadOnlyList<string>? addWarnings = null,
+        IReadOnlyList<PaymentFileOutboxMessage>? addGlEvents = null)
     {
         var tenantId = GetTenantId();
         for (var attempt = 0; attempt < 5; attempt++)
@@ -298,6 +312,8 @@ public class PaymentRunRepository : IPaymentRunRepository
             run.EftFileHistory.Add(superseded);
             if (addWarnings != null)
                 run.Warnings.AddRange(addWarnings);
+            if (addGlEvents != null)
+                run.GlOutbox.AddRange(addGlEvents.Where(e => run.GlOutbox.All(x => x.EventId != e.EventId)));
             try
             {
                 await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId),
@@ -310,6 +326,46 @@ public class PaymentRunRepository : IPaymentRunRepository
             }
         }
         throw new InvalidOperationException($"Payment run {id} kept changing; its EFT file was not re-dated");
+    }
+
+    public async Task<bool> TryRecordRemainderReissueAsync(string id, string paymentId, DateTime at, string by, string method, string reference,
+        PaymentFileOutboxMessage message, string warning)
+    {
+        var tenantId = GetTenantId();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            ItemResponse<PaymentRun> current;
+            try
+            {
+                current = await _container.ReadItemAsync<PaymentRun>(id, new PartitionKey(tenantId));
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false;
+            }
+
+            // Re-checked on every version read: a concurrent reissue that landed wins.
+            var run = current.Resource;
+            var notice = run.EftFile?.VoidedPayments.FirstOrDefault(v => v.PaymentId == paymentId);
+            if (notice == null || notice.RemainderReissuedAt != null || run.GlOutbox.Any(m => m.EventId == message.EventId))
+                return false;
+            notice.RemainderReissuedAt = at;
+            notice.RemainderReissuedBy = by;
+            notice.RemainderReissueMethod = method;
+            notice.RemainderReissueReference = reference;
+            run.GlOutbox.Add(message);
+            run.Warnings.Add(warning);
+            try
+            {
+                await _container.ReplaceItemAsync(run, id, new PartitionKey(tenantId), new ItemRequestOptions { IfMatchEtag = current.ETag });
+                return true;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.PreconditionFailed)
+            {
+                // Changed since read: re-check on the new version.
+            }
+        }
+        throw new InvalidOperationException($"Payment run {id} kept changing; the reissue was not recorded");
     }
 
     public async Task<PaymentRun> UpdateAsync(PaymentRun paymentRun)

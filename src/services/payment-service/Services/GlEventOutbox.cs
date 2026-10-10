@@ -1,0 +1,183 @@
+using System.Text.Json;
+using CloudHealthOffice.Finance.Contracts;
+using PaymentService.Models;
+
+namespace PaymentService.Services;
+
+/// <summary>
+/// Builds the GL source events of payment and reversal runs and attaches them to the
+/// run's <c>GlOutbox</c>, so the repository writes them in the same document write that
+/// records the run's outcome (the appeals-service outbox pattern). Event ids are
+/// deterministic per run, so re-attaching never creates a second event.
+/// Amounts are the payments' own (money, 2 decimals); nothing else is copied:
+/// no bank number, no member or claim detail.
+/// </summary>
+public static class GlEventOutbox
+{
+    /// <summary>
+    /// Attaches PaymentRunExecuted for <paramref name="issued"/> (the payments the run
+    /// actually created, also when it then failed). Nothing when none were issued.
+    /// </summary>
+    /// <param name="replaceUnpublished">
+    /// The failure path: an event attached for a Completed outcome that was never saved (the
+    /// save failed) is replaced, so the payload states the run's final persisted status.
+    /// A published event is never changed.
+    /// </param>
+    public static void AttachPaymentRunExecuted(PaymentRun run, IReadOnlyCollection<Payment> issued, DateTime at, bool replaceUnpublished = false)
+    {
+        if (replaceUnpublished)
+            run.GlOutbox.RemoveAll(m => m.Type == GlEventTypes.PaymentRunExecuted && m.PublishedAt == null);
+        if (issued.Count == 0 || run.GlOutbox.Any(m => m.Type == GlEventTypes.PaymentRunExecuted))
+            return;
+
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"payment-run:{run.Id}", GlEventTypes.PaymentRunExecuted);
+        var lines = issued
+            .OrderBy(p => p.CheckNumber, StringComparer.Ordinal).ThenBy(p => p.Id, StringComparer.Ordinal)
+            .Select(p => new GlPaymentLine
+            {
+                PaymentId = p.Id,
+                CheckNumber = p.CheckNumber,
+                PayeeNpi = p.PayeeNPI,
+                PaymentMethod = p.PaymentMethod,
+                NetAmount = p.TotalPaymentAmount,
+                ReceivableOffsetAmount = p.ReceivableOffsets.Sum(o => o.Amount),
+            })
+            .ToList();
+        var payload = new PaymentRunExecutedEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            PaymentRunId = run.Id,
+            PaymentRunNumber = run.PaymentRunNumber,
+            RunStatus = run.Status.ToString(),
+            LineOfBusiness = run.Criteria.LineOfBusiness?.ToString(),
+            PaymentDate = run.PaymentDate.Date,
+            ExecutedAt = run.ExecutionStartedAt ?? at,
+            ExecutedBy = run.ExecutedBy ?? string.Empty,
+            Payments = lines,
+            TotalNetAmount = lines.Sum(l => l.NetAmount),
+            TotalReceivableOffsetAmount = lines.Sum(l => l.ReceivableOffsetAmount),
+        };
+        run.GlOutbox.Add(Message(eventId, GlEventTypes.PaymentRunExecuted, JsonSerializer.Serialize(payload, GlEventTypes.Json), at));
+    }
+
+    /// <summary>Attaches ReversalRunExecuted for the reversal payments <paramref name="issued"/> created.</summary>
+    public static void AttachReversalRunExecuted(ReversalRun run, IReadOnlyCollection<Payment> issued, DateTime at, bool replaceUnpublished = false)
+    {
+        if (replaceUnpublished)
+            run.GlOutbox.RemoveAll(m => m.Type == GlEventTypes.ReversalRunExecuted && m.PublishedAt == null);
+        if (issued.Count == 0 || run.GlOutbox.Any(m => m.Type == GlEventTypes.ReversalRunExecuted))
+            return;
+
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"reversal-run:{run.Id}", GlEventTypes.ReversalRunExecuted);
+        var lines = issued
+            .OrderBy(p => p.CheckNumber, StringComparer.Ordinal).ThenBy(p => p.Id, StringComparer.Ordinal)
+            .Select(p => new GlReversalLine
+            {
+                ReversalPaymentId = p.Id,
+                CheckNumber = p.CheckNumber,
+                PayeeNpi = p.PayeeNPI,
+                // A reversal payment is the negative of what was paid.
+                Amount = Math.Abs(p.TotalPaymentAmount),
+            })
+            .ToList();
+        var payload = new ReversalRunExecutedEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            ReversalRunId = run.Id,
+            ReversalRunNumber = run.ReversalRunNumber,
+            RunStatus = run.Status.ToString(),
+            ExecutedAt = run.ExecutionStartedAt ?? at,
+            ExecutedBy = run.ExecutedBy ?? string.Empty,
+            Reversals = lines,
+            TotalAmount = lines.Sum(l => l.Amount),
+        };
+        run.GlOutbox.Add(Message(eventId, GlEventTypes.ReversalRunExecuted, JsonSerializer.Serialize(payload, GlEventTypes.Json), at));
+    }
+
+    /// <summary>The PaymentVoidedBeforeTransmission event of one payment (deterministic per payment).</summary>
+    public static PaymentFileOutboxMessage PaymentVoidedBeforeTransmission(PaymentRun run, Payment payment, PaymentVoid plan,
+        string supersededFileReference, string newFileReference, string by, DateTime at)
+    {
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"payment-void:{payment.Id}", GlEventTypes.PaymentVoidedBeforeTransmission);
+        var payload = new PaymentVoidedBeforeTransmissionEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            PaymentRunId = run.Id,
+            PaymentRunNumber = run.PaymentRunNumber,
+            PaymentId = payment.Id,
+            CheckNumber = payment.CheckNumber,
+            PayeeNpi = payment.PayeeNPI,
+            // The payable never to be paid; a part that was not reversed stays payable (reissue).
+            Amount = plan.PayableRelieved,
+            UnpaidRemainder = plan.UnpaidRemainder,
+            ReversalRunId = plan.ReversalRunId,
+            ReversalRunExecutedAt = plan.ReversalExecutedAt,
+            ExcludedByOverride = plan.ByOverride,
+            SupersededFileReference = supersededFileReference,
+            NewFileReference = newFileReference,
+            VoidedAt = at,
+            VoidedBy = by,
+            PaymentRunExecutedAt = run.ExecutionStartedAt,
+        };
+        return Message(eventId, GlEventTypes.PaymentVoidedBeforeTransmission, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
+    }
+
+    /// <summary>The VoidRemainderReissued event of an excluded payment's remainder (deterministic per payment).</summary>
+    public static PaymentFileOutboxMessage VoidRemainderReissued(PaymentRun run, VoidedPaymentNotice notice, string reason, string by, DateTime at)
+    {
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"reissue:{notice.PaymentId}", GlEventTypes.VoidRemainderReissued);
+        var payload = new VoidRemainderReissuedEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            PaymentRunId = run.Id,
+            PaymentRunNumber = run.PaymentRunNumber,
+            PaymentId = notice.PaymentId,
+            CheckNumber = notice.CheckNumber,
+            PayeeNpi = notice.PayeeNpi,
+            Amount = notice.UnpaidRemainder,
+            Method = notice.RemainderReissueMethod ?? string.Empty,
+            Reference = notice.RemainderReissueReference ?? string.Empty,
+            Reason = reason,
+            ReissuedAt = at,
+            ReissuedBy = by,
+            PaymentRunExecutedAt = run.ExecutionStartedAt,
+        };
+        return Message(eventId, GlEventTypes.VoidRemainderReissued, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
+    }
+
+    /// <summary>The ProviderRefundOwed event of one reversed recovery (deterministic per receivable, recovering and voided payment).</summary>
+    public static PaymentFileOutboxMessage ProviderRefundOwed(PaymentRun run, VoidedPaymentNotice notice, string receivableId,
+        string recoveringPaymentId, string? recoveringRunNumber, decimal amount, string by, DateTime at)
+    {
+        var eventId = GlEventTypes.EventIdFor(run.TenantId, $"refund:{receivableId}:{recoveringPaymentId}:{notice.PaymentId}", GlEventTypes.ProviderRefundOwed);
+        var payload = new ProviderRefundOwedEvent
+        {
+            EventId = eventId,
+            TenantId = run.TenantId,
+            PaymentRunId = run.Id,
+            PaymentRunNumber = run.PaymentRunNumber,
+            VoidedPaymentId = notice.PaymentId,
+            VoidedCheckNumber = notice.CheckNumber,
+            ProviderNpi = notice.PayeeNpi,
+            ReceivableId = receivableId,
+            RecoveringPaymentId = recoveringPaymentId,
+            RecoveringRunNumber = recoveringRunNumber,
+            Amount = amount,
+            RecordedAt = at,
+            RecordedBy = by,
+        };
+        return Message(eventId, GlEventTypes.ProviderRefundOwed, JsonSerializer.Serialize(payload, GlEventTypes.Json), at);
+    }
+
+    private static PaymentFileOutboxMessage Message(string eventId, string type, string payload, DateTime at) => new()
+    {
+        EventId = eventId,
+        Type = type,
+        PayloadJson = payload,
+        CreatedAt = at,
+    };
+}

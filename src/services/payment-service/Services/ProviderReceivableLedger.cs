@@ -27,9 +27,27 @@ public interface IProviderReceivableLedger
     /// Opens (idempotently, keyed by the origin 835) a receivable for a
     /// reversal 835 that carried <paramref name="amountOwed"/> forward.
     /// </summary>
+    /// <param name="pendingPaymentIds">
+    /// Original payments of the reversal whose NACHA file had not been sent: the receivable
+    /// opens <see cref="ReceivableStatus.PendingVoid"/> (never recovered) until each is voided
+    /// before payment or found to have been paid.
+    /// </param>
     Task<ProviderReceivableRecord> RecordForwardBalanceAsync(
         string tenantId, string providerNpi, string? tradingPartnerId, ReversalRun run,
-        string eraEnvelopeId, string? traceNumber, decimal amountOwed, string? recordedBy);
+        string eraEnvelopeId, string? traceNumber, decimal amountOwed, string? recordedBy,
+        IReadOnlyCollection<string>? pendingPaymentIds = null);
+
+    /// <summary>Reverses the live recovery <paramref name="paymentId"/> made on one receivable (audited). Throws when it cannot.</summary>
+    Task ReverseRecoveryAsync(string tenantId, string receivableId, string paymentId, string? by, string reason);
+
+    /// <summary>
+    /// The payments were paid (their file reached the bank): every PendingVoid receivable
+    /// waiting on one of them releases it, and opens once none is pending. Idempotent.
+    /// </summary>
+    Task<IReadOnlyList<ProviderReceivableRecord>> ActivatePendingAsync(string tenantId, IReadOnlyCollection<string> paymentIds, string? by, string reason);
+
+    /// <summary>A person confirmed the pending payments were paid outside this system: the receivable opens (audited).</summary>
+    Task<ProviderReceivableRecord> ActivateAsync(string tenantId, string receivableId, string by, string reason);
 
     /// <summary>
     /// Recovers what the payment's payee owes, oldest receivable first, up to
@@ -48,6 +66,13 @@ public interface IProviderReceivableLedger
     /// Throws (after trying every receivable) when any could not be reversed.
     /// </summary>
     Task ReverseRecoveriesAsync(string tenantId, Payment payment, string? by, string reason);
+
+    /// <summary>
+    /// Cancels <paramref name="amount"/> of the receivable <paramref name="receivableId"/> because
+    /// the reversed payment <paramref name="paymentId"/> was never paid. Idempotent per payment.
+    /// Throws when less is outstanding (part was already recovered: it needs a person).
+    /// </summary>
+    Task CancelForUnpaidPaymentAsync(string tenantId, string receivableId, string paymentId, decimal amount, string? by, string reason);
 
     Task<IReadOnlyList<ProviderReceivableRecord>> SearchAsync(string tenantId, string? providerNpi = null, ReceivableStatus? status = null);
 
@@ -94,8 +119,10 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
 
     public async Task<ProviderReceivableRecord> RecordForwardBalanceAsync(
         string tenantId, string providerNpi, string? tradingPartnerId, ReversalRun run,
-        string eraEnvelopeId, string? traceNumber, decimal amountOwed, string? recordedBy)
+        string eraEnvelopeId, string? traceNumber, decimal amountOwed, string? recordedBy,
+        IReadOnlyCollection<string>? pendingPaymentIds = null)
     {
+        var pending = (pendingPaymentIds ?? Array.Empty<string>()).Distinct(StringComparer.Ordinal).OrderBy(p => p, StringComparer.Ordinal).ToList();
         if (amountOwed <= 0m)
             throw new ArgumentOutOfRangeException(nameof(amountOwed), "A receivable is opened for a positive amount owed.");
         if (string.IsNullOrWhiteSpace(providerNpi))
@@ -119,7 +146,8 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
             OriginalAmount = amountOwed,
             OutstandingAmount = amountOwed,
             RecoveredAmount = 0m,
-            Status = ReceivableStatus.Open,
+            Status = pending.Count > 0 ? ReceivableStatus.PendingVoid : ReceivableStatus.Open,
+            PendingPaymentIds = pending,
             OriginatedAt = now,
             CreatedBy = recordedBy,
             Version = 1,
@@ -235,7 +263,7 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
                 };
             }
 
-            if (current.OutstandingAmount <= 0m)
+            if (current.OutstandingAmount <= 0m || current.Status == ReceivableStatus.PendingVoid)
                 return null;
 
             var amount = Math.Min(current.OutstandingAmount, payment.TotalPaymentAmount);
@@ -322,6 +350,86 @@ public sealed class ProviderReceivableLedger : IProviderReceivableLedger
             }
         }
         return unreversed;
+    }
+
+    public async Task CancelForUnpaidPaymentAsync(string tenantId, string receivableId, string paymentId, decimal amount, string? by, string reason)
+    {
+        for (var attempt = 0; attempt < MaxConflictRetries; attempt++)
+        {
+            var current = await _repository.GetAsync(tenantId, receivableId)
+                          ?? throw new InvalidOperationException($"Receivable {receivableId} does not exist; the void of payment {paymentId} needs a person.");
+            if (current.HasCancellationFor(paymentId))
+                return;
+            var expected = current.Version;
+            current.CancelForUnpaidPayment(paymentId, amount, by, _time.GetUtcNow().UtcDateTime, reason);
+            current.Version = expected + 1;
+            if (await _repository.TryReplaceAsync(current, expected))
+            {
+                _logger.LogWarning(
+                    "AUDIT provider receivable {ReceivableId}: {Amount:F2} cancelled, payment {PaymentId} was never paid ({Reason}); {Outstanding:F2} outstanding",
+                    Sanitize(current.Id), amount, Sanitize(paymentId), Sanitize(reason), current.OutstandingAmount);
+                return;
+            }
+        }
+        throw new InvalidOperationException($"Receivable {receivableId} kept changing; the void of payment {paymentId} was not recorded.");
+    }
+
+    public async Task ReverseRecoveryAsync(string tenantId, string receivableId, string paymentId, string? by, string reason)
+    {
+        var unreversed = await ReverseForPaymentAsync(tenantId, paymentId, new[] { receivableId }, by, reason);
+        if (unreversed.Count > 0)
+            throw new InvalidOperationException($"The recovery by payment {paymentId} on receivable {receivableId} could not be reversed; it needs a person.");
+    }
+
+    public async Task<IReadOnlyList<ProviderReceivableRecord>> ActivatePendingAsync(string tenantId, IReadOnlyCollection<string> paymentIds, string? by, string reason)
+    {
+        var activated = new List<ProviderReceivableRecord>();
+        if (paymentIds.Count == 0)
+            return activated;
+        var wanted = paymentIds.ToHashSet(StringComparer.Ordinal);
+        foreach (var candidate in await _repository.SearchAsync(tenantId, null, ReceivableStatus.PendingVoid))
+        {
+            foreach (var paymentId in candidate.PendingPaymentIds.Where(wanted.Contains).ToList())
+            {
+                if (await ActivateOneAsync(tenantId, candidate.Id, paymentId, by, reason) is { } done)
+                    activated.Add(done);
+            }
+        }
+        return activated;
+    }
+
+    public async Task<ProviderReceivableRecord> ActivateAsync(string tenantId, string receivableId, string by, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("A reason is required to release a receivable held for a void.");
+        var current = await _repository.GetAsync(tenantId, receivableId)
+                      ?? throw new KeyNotFoundException($"Receivable {receivableId} not found.");
+        if (current.Status != ReceivableStatus.PendingVoid)
+            throw new InvalidOperationException($"Receivable {receivableId} is {current.Status}, not waiting for a void.");
+        return await ActivateOneAsync(tenantId, receivableId, null, by, reason)
+               ?? throw new InvalidOperationException($"Receivable {receivableId} changed meanwhile; check it.");
+    }
+
+    private async Task<ProviderReceivableRecord?> ActivateOneAsync(string tenantId, string receivableId, string? paymentId, string? by, string reason)
+    {
+        for (var attempt = 0; attempt < MaxConflictRetries; attempt++)
+        {
+            var current = await _repository.GetAsync(tenantId, receivableId);
+            if (current == null)
+                return null;
+            var expected = current.Version;
+            if (!current.Activate(paymentId, by, _time.GetUtcNow().UtcDateTime, Sanitize(reason)))
+                return null;
+            current.Version = expected + 1;
+            if (await _repository.TryReplaceAsync(current, expected))
+            {
+                _logger.LogWarning(
+                    "AUDIT provider receivable {ReceivableId}: pending payment {PaymentId} released by {By} ({Reason}); now {Status}, {Outstanding:F2} outstanding",
+                    Sanitize(current.Id), Sanitize(paymentId ?? "all"), Sanitize(by), Sanitize(reason), current.Status, current.OutstandingAmount);
+                return current;
+            }
+        }
+        throw new InvalidOperationException($"Receivable {receivableId} kept changing; it was not released.");
     }
 
     public Task<IReadOnlyList<ProviderReceivableRecord>> SearchAsync(string tenantId, string? providerNpi = null, ReceivableStatus? status = null)

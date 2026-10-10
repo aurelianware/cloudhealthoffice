@@ -10,11 +10,13 @@ COPY src/Directory.Build.props src/
 # Copy csproj files and restore (preserves layer caching)
 COPY src/services/ar-service/ar-service.csproj src/services/ar-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/CloudHealthOffice.Infrastructure.csproj src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Finance.Contracts/CloudHealthOffice.Finance.Contracts.csproj src/services/shared/CloudHealthOffice.Finance.Contracts/
 RUN dotnet restore src/services/ar-service/ar-service.csproj
 
 # Copy source code and build
 COPY src/services/ar-service/ src/services/ar-service/
 COPY src/services/shared/CloudHealthOffice.Infrastructure/ src/services/shared/CloudHealthOffice.Infrastructure/
+COPY src/services/shared/CloudHealthOffice.Finance.Contracts/ src/services/shared/CloudHealthOffice.Finance.Contracts/
 RUN dotnet build src/services/ar-service/ar-service.csproj -c Release --no-restore
 
 # Publish stage
