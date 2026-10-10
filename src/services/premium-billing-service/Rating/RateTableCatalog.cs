@@ -107,9 +107,19 @@ public sealed class RateTableCatalog
             if (previous.Proration != next.Proration && next.EffectiveFrom.Day != 1)
                 return $"proration changes from {previous.Proration} to {next.Proration} on {next.EffectiveFrom:yyyy-MM-dd}; " +
                        "a plan's proration rule may change only on the first day of a month";
+            // ACA ages are fixed for the plan year: a table that starts less than a year after the
+            // previous one's age date is a mid-year revision and must say which date ages are taken on.
+            var previousAgeDate = (previous.AgeDeterminationDate ?? previous.EffectiveFrom).Date;
+            if (IsAgeRated(next) && next.AgeDeterminationDate == null && next.EffectiveFrom.Date < previousAgeDate.AddYears(1))
+                return $"the table starting {next.EffectiveFrom:yyyy-MM-dd} is a mid-year revision (less than a year after ages were " +
+                       $"determined on {previousAgeDate:yyyy-MM-dd}) and must set AgeDeterminationDate (normally the plan-year start)";
         }
         return null;
     }
+
+    /// <summary>Rates that depend on age: age band, composite, or any tobacco surcharge (tobacco has a minimum age).</summary>
+    private static bool IsAgeRated(RateTable table) =>
+        table.Method is RatingMethod.AgeBand or RatingMethod.Composite || table.Tobacco != null;
 
     private static string Describe(RateTable t) =>
         $"{t.EffectiveFrom:yyyy-MM-dd}..{(t.EffectiveTo.HasValue ? t.EffectiveTo.Value.ToString("yyyy-MM-dd") : "open")}";

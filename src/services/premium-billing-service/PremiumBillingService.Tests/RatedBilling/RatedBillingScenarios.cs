@@ -26,13 +26,18 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
 
     protected IPremiumInvoiceRepository Invoices = null!;
     protected IRateTableRepository RateTables = null!;
+    protected IBillingLeaseRepository Leases = null!;
+    protected ISponsorAccountRepository Accounts = null!;
     protected readonly FakeCoverage Coverage = new();
     protected readonly FakeCensus Census = new();
     protected readonly FixedClock Clock = new(D(2026, 2, 20));
     protected RatedBillingOptions Options = null!;
     private RequestContext _http = null!;
 
-    protected abstract Task<(IPremiumInvoiceRepository Invoices, IRateTableRepository RateTables)> CreateStoresAsync(IHttpContextAccessor http);
+    protected sealed record Stores(IPremiumInvoiceRepository Invoices, IRateTableRepository RateTables,
+        IBillingLeaseRepository Leases, ISponsorAccountRepository Accounts);
+
+    protected abstract Task<Stores> CreateStoresAsync(IHttpContextAccessor http);
 
     public abstract Task DisposeAsync();
 
@@ -40,7 +45,8 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
     {
         _http = new RequestContext { HttpContext = new DefaultHttpContext() };
         _http.HttpContext.Items["TenantId"] = Tenant;
-        (Invoices, RateTables) = await CreateStoresAsync(_http);
+        var stores = await CreateStoresAsync(_http);
+        (Invoices, RateTables, Leases, Accounts) = (stores.Invoices, stores.RateTables, stores.Leases, stores.Accounts);
         Options = new RatedBillingOptions { Tenants = { [Tenant] = new RatedBillingTenantOptions { Enabled = true } } };
     }
 
@@ -80,8 +86,8 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
             Task.FromResult(Members.ToList());
     }
 
-    protected RatedInvoiceGenerator Generator() => new(Invoices, RateTables, Coverage, Census,
-        Microsoft.Extensions.Options.Options.Create(Options), Clock, NullLogger<RatedInvoiceGenerator>.Instance);
+    protected RatedInvoiceGenerator Generator(ICoverageServiceClient? coverage = null) => new(Invoices, RateTables, coverage ?? Coverage, Census,
+        Leases, Microsoft.Extensions.Options.Options.Create(Options), Clock, NullLogger<RatedInvoiceGenerator>.Instance, Accounts);
 
     protected RateTableService RateTableService() => new(RateTables, Clock);
 
@@ -171,7 +177,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         (await Invoices.GetOverdueAsync()).Should().BeEmpty();
 
         // The draft can be neither issued nor paid while the exception stands.
-        var issue = () => Generator().IssueDraftAsync(draft.Invoice.Id, "billing-user");
+        var issue = () => Generator().IssueDraftAsync(draft.Invoice.Id, Tenant, "billing-user");
         await issue.Should().ThrowAsync<InvalidOperationException>().WithMessage("*rating exception*");
 
         // The actuary extends the table (version 2); regenerating the draft rates March and issues it.
@@ -183,7 +189,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         stored.Id.Should().Be(draft.Invoice.Id);
         stored.Status.Should().Be(InvoiceStatus.Generated);
         stored.RatingExceptions.Should().BeEmpty();
-        stored.RatingRevision.Should().Be(2);
+        stored.RatingRevision.Should().Be(3, "computed by the first run, by the refused issue (which recomputes), and by the regeneration");
         stored.LineItems.Single().Should().Match<InvoiceLineItem>(l => l.TotalPremium == 500m && l.RateTableVersion == v2.Version);
 
         var again = () => Generator().RegenerateDraftAsync(draft.Invoice.Id, Tenant, "billing-user");
@@ -201,7 +207,7 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
         draft.Invoice.Status.Should().Be(InvoiceStatus.Draft);
         draft.Invoice.RatingExceptions.Should().BeEmpty();
 
-        var issued = await Generator().IssueDraftAsync(draft.Invoice.Id, "billing-user");
+        var issued = await Generator().IssueDraftAsync(draft.Invoice.Id, Tenant, "billing-user");
 
         issued.Status.Should().Be(InvoiceStatus.Generated);
         issued.IssuedAt.Should().Be(Clock.Now);
@@ -404,6 +410,236 @@ public abstract class RatedBillingScenarios : IAsyncLifetime
 
         await save.Should().ThrowAsync<RateTableRejectedException>().WithMessage("*overlap*");
     }
+
+    // ── Review regressions: one retro change is billed once ────────────
+
+    private async Task<decimal> RetroFor(string coverageId, DateTime month) =>
+        (await GroupInvoices()).Where(i => i.Status != InvoiceStatus.Voided).SelectMany(i => i.Adjustments)
+            .Where(a => a.CoverageId == coverageId && a.ServicePeriodStart == month).Sum(a => a.Amount);
+
+    [SkippableFact]
+    public async Task HeldDraft_BlocksLaterPeriods_SoARetroChangeIsBilledOnce()
+    {
+        // Review probe: Feb issued; B effective 2/1 arrives; March is held as Draft (+500 for Feb).
+        // April must not reconcile February again while March is unissued.
+        Options.Tenants[Tenant].HoldForReview = true;
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        var february = await Generate(D(2026, 2, 1));
+        await Generator().IssueDraftAsync(february.Invoice.Id, Tenant, "u");
+        Enroll("cov-B", "B", D(2026, 2, 1));
+
+        var march = await Generate(D(2026, 3, 1));
+        var april = await Generate(D(2026, 4, 1));
+
+        april.Kind.Should().Be(RatedInvoiceOutcomeKind.BlockedByEarlierDraft);
+        april.Invoice.Id.Should().Be(march.Invoice.Id);
+        (await GroupInvoices()).Should().NotContain(i => i.BillingPeriodStart == D(2026, 4, 1));
+
+        await Generator().IssueDraftAsync(march.Invoice.Id, Tenant, "u");
+        var aprilDraft = await Generate(D(2026, 4, 1));
+        await Generator().IssueDraftAsync(aprilDraft.Invoice.Id, Tenant, "u");
+
+        (await RetroFor("cov-B", D(2026, 2, 1))).Should().Be(500m, "B's February is charged once");
+    }
+
+    [SkippableFact]
+    public async Task IssuingAnOutOfDateDraft_RegeneratesIt_AndRefuses()
+    {
+        Options.Tenants[Tenant].HoldForReview = true;
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        var draft = (await Generate(D(2026, 3, 1))).Invoice;
+        draft.TotalAmount.Should().Be(500m);
+
+        // Coverage changes after the reviewer looked at 500.00.
+        Enroll("cov-B", "B", D(2026, 3, 1));
+        var issue = () => Generator().IssueDraftAsync(draft.Id, Tenant, "u");
+
+        await issue.Should().ThrowAsync<DraftOutOfDateException>();
+        var regenerated = await Invoices.GetByIdAsync(draft.Id);
+        regenerated!.Status.Should().Be(InvoiceStatus.Draft);
+        regenerated.TotalAmount.Should().Be(1000m);
+
+        // Reviewed again: now it issues exactly what was reviewed.
+        (await Generator().IssueDraftAsync(draft.Id, Tenant, "u")).Should().Match<PremiumInvoice>(i =>
+            i.Status == InvoiceStatus.Generated && i.TotalAmount == 1000m);
+    }
+
+    [SkippableFact]
+    public async Task DraftIssuedAfterTheBasisChanged_IsRefused()
+    {
+        // An April Draft computed before March was issued (out-of-order periods) reconciled without March.
+        Options.Tenants[Tenant].HoldForReview = true;
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        var april = (await Generate(D(2026, 4, 1))).Invoice;
+        var march = (await Generate(D(2026, 3, 1))).Invoice;
+        await Generator().IssueDraftAsync(march.Id, Tenant, "u");
+
+        var issue = () => Generator().IssueDraftAsync(april.Id, Tenant, "u");
+
+        await issue.Should().ThrowAsync<DraftOutOfDateException>();
+        (await Invoices.GetByIdAsync(april.Id))!.ReconciledInvoiceIds.Should().Contain(march.Id);
+    }
+
+    private sealed class BarrierCoverage(FakeCoverage inner, int parties) : ICoverageServiceClient
+    {
+        private readonly Barrier _barrier = new(parties);
+        public int TimedOut;
+
+        public Task<List<CoverageDto>> GetActiveCoveragesByGroupAsync(string t, string g, CancellationToken c = default) =>
+            throw new NotSupportedException();
+
+        public async Task<List<CoverageDto>> GetAllCoveragesByGroupAsync(string t, string g, CancellationToken c = default)
+        {
+            var records = await inner.GetAllCoveragesByGroupAsync(t, g, c);
+            // Both generations try to be here at once; under the group lease only one can be.
+            if (!await Task.Run(() => _barrier.SignalAndWait(TimeSpan.FromSeconds(2)), c))
+                Interlocked.Increment(ref TimedOut);
+            return records;
+        }
+    }
+
+    [SkippableFact]
+    public async Task ConcurrentPeriodsOfOneGroup_AreSerialized_SoARetroChangeIsBilledOnce()
+    {
+        // Review probe: March and April generated at the same moment, both after B's retro add for February.
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+        Enroll("cov-B", "B", D(2026, 2, 1));
+        var barrier = new BarrierCoverage(Coverage, 2);
+
+        await Task.WhenAll(
+            Task.Run(() => Generator(barrier).GenerateAsync(Sponsor, Tenant, D(2026, 3, 1), "r", "u")),
+            Task.Run(() => Generator(barrier).GenerateAsync(Sponsor, Tenant, D(2026, 4, 1), "r", "u")));
+
+        barrier.TimedOut.Should().BeGreaterThan(0, "the second generation waited for the first one's lease");
+        (await RetroFor("cov-B", D(2026, 2, 1))).Should().Be(500m);
+    }
+
+    [SkippableFact]
+    public async Task GroupLease_IsExclusiveUntilReleasedOrExpired()
+    {
+        var now = D(2026, 3, 1);
+        (await Leases.TryAcquireAsync(Group, "one", now, TimeSpan.FromMinutes(5))).Should().BeTrue();
+        (await Leases.TryAcquireAsync(Group, "two", now.AddMinutes(1), TimeSpan.FromMinutes(5))).Should().BeFalse();
+        (await Leases.TryAcquireAsync("OTHER-GROUP", "two", now, TimeSpan.FromMinutes(5))).Should().BeTrue();
+
+        await Leases.ReleaseAsync(Group, "two"); // not the holder: no effect
+        (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(2), TimeSpan.FromMinutes(5))).Should().BeFalse();
+
+        (await Leases.TryAcquireAsync(Group, "two", now.AddMinutes(6), TimeSpan.FromMinutes(5))).Should().BeTrue("the first lease expired");
+        await Leases.ReleaseAsync(Group, "two");
+        (await Leases.TryAcquireAsync(Group, "three", now.AddMinutes(7), TimeSpan.FromMinutes(5))).Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task BusyGroup_FailsAfterTheWait_InsteadOfComputingFromAStaleLedger()
+    {
+        Options.GroupLeaseWaitSeconds = 0;
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        (await Leases.TryAcquireAsync(Group, "someone-else", Clock.Now, TimeSpan.FromMinutes(5))).Should().BeTrue();
+
+        var generate = () => Generate(D(2026, 3, 1));
+
+        await generate.Should().ThrowAsync<GroupBillingBusyException>();
+        (await GroupInvoices()).Should().BeEmpty();
+    }
+
+    // ── Review regressions: credits and corrections ────────────────────
+
+    [SkippableFact]
+    public async Task NetCredit_MovesToTheSponsorsUnappliedCredit_Once()
+    {
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        Enroll("cov-B", "B", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+
+        // Both terminated 1/31, reported after February was billed: March owes nothing and credits 1,000.
+        foreach (var record in Coverage.Records)
+            record.TerminationDate = D(2026, 1, 31);
+        var march = (await Generate(D(2026, 3, 1))).Invoice;
+
+        march.TotalAmount.Should().Be(-1000m);
+        march.Status.Should().Be(InvoiceStatus.Paid);
+        march.BalanceDue.Should().Be(0m);
+        march.Payments.Should().ContainSingle().Which.Should().Match<InvoicePayment>(p => p.Amount == -1000m && p.PaymentMethod == "SponsorAccountCredit");
+        var account = await Accounts.GetAsync(Group);
+        account!.UnappliedCredit.Should().Be(1000m);
+        account.Entries.Should().ContainSingle(e => e.Type == SponsorAccountEntryType.RatedInvoiceCredit && e.InvoiceId == march.Id);
+
+        (await Generate(D(2026, 3, 1))).Kind.Should().Be(RatedInvoiceOutcomeKind.AlreadyIssued);
+        (await Accounts.GetAsync(Group))!.UnappliedCredit.Should().Be(1000m);
+    }
+
+    [SkippableFact]
+    public async Task CoverageThatVanished_IsAnException_NotACredit()
+    {
+        await SaveTierTable();
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        Enroll("cov-B", "B", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+
+        Coverage.Records.RemoveAll(r => r.CoverageId == "cov-B");
+        var march = (await Generate(D(2026, 3, 1))).Invoice;
+
+        march.Status.Should().Be(InvoiceStatus.Draft);
+        march.Adjustments.Should().BeEmpty("a missing record is not a termination");
+        march.RatingExceptions.Should().ContainSingle().Which.Should().Match<InvoiceRatingException>(e =>
+            e.Code == RatedInvoiceGenerator.CoverageMissing && e.CoverageId == "cov-B");
+    }
+
+    [SkippableFact]
+    public async Task RateCorrection_OfInvoicedMonths_IsHeldForReview()
+    {
+        var v1 = await SaveTierTable(500m);
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+
+        // The table is corrected (same dates, EE 520): February re-prices under v2.
+        await SaveTierTable(520m, expected: v1.Version);
+        var march = (await Generate(D(2026, 3, 1))).Invoice;
+
+        march.Status.Should().Be(InvoiceStatus.Draft);
+        march.RatingExceptions.Should().BeEmpty();
+        march.ReviewReasons.Should().ContainSingle(r => r.StartsWith("RATE_CORRECTION"));
+        march.Adjustments.Should().ContainSingle().Which.Should().Match<InvoiceAdjustment>(a =>
+            a.IsRateCorrection && a.Type == AdjustmentType.RateChange && a.Amount == 20m);
+
+        var issued = await Generator().IssueDraftAsync(march.Id, Tenant, "reviewer");
+        issued.Should().Match<PremiumInvoice>(i => i.Status == InvoiceStatus.Generated && i.TotalAmount == 540m);
+    }
+
+    [SkippableFact]
+    public async Task RateCorrection_BelowTheThreshold_IsIssued()
+    {
+        Options.Tenants[Tenant].RateCorrectionReviewThreshold = 25m;
+        var v1 = await SaveTierTable(500m);
+        Enroll("cov-A", "A", D(2026, 1, 1));
+        await Generate(D(2026, 2, 1));
+        await SaveTierTable(520m, expected: v1.Version);
+
+        (await Generate(D(2026, 3, 1))).Invoice.Status.Should().Be(InvoiceStatus.Generated);
+    }
+
+    [SkippableFact]
+    public async Task MemberPremiumTab_TakesTheLastIssuedInvoices_NotDrafts()
+    {
+        for (var month = 1; month <= 3; month++)
+            await Invoices.CreateAsync(new PremiumInvoice
+            {
+                InvoiceNumber = $"INV-{month}", GroupNumber = Group, BillingPeriodStart = D(2026, month, 1),
+                BillingPeriodEnd = D(2026, month, 28), DueDate = D(2026, month, 1),
+                Status = month == 3 ? InvoiceStatus.Draft : InvoiceStatus.Sent,
+                LineItems = { new InvoiceLineItem { MemberId = "MEM-1", TotalPremium = 100m } }
+            });
+
+        (await Invoices.ListByMemberAsync("MEM-1", take: 2)).Select(i => i.InvoiceNumber).Should().Equal("INV-2", "INV-1");
+    }
 }
 
 /// <summary><see cref="RatedBillingScenarios"/> on a real mongod and the Mongo repositories.</summary>
@@ -412,12 +648,14 @@ public sealed class RatedBillingMongoTests(MongoRunnerFixture mongo) : RatedBill
 {
     private IMongoDatabase _database = null!;
 
-    protected override Task<(IPremiumInvoiceRepository Invoices, IRateTableRepository RateTables)> CreateStoresAsync(IHttpContextAccessor http)
+    protected override Task<Stores> CreateStoresAsync(IHttpContextAccessor http)
     {
         _database = mongo.CreateDatabase("pb_rated_billing");
-        return Task.FromResult<(IPremiumInvoiceRepository, IRateTableRepository)>((
+        return Task.FromResult(new Stores(
             new PremiumInvoiceRepositoryMongo(_database, http, NullLogger<PremiumInvoiceRepositoryMongo>.Instance),
-            new RateTableRepositoryMongo(_database, http)));
+            new RateTableRepositoryMongo(_database, http),
+            new BillingLeaseRepositoryMongo(_database, http),
+            new SponsorAccountRepositoryMongo(_database, http)));
     }
 
     public override Task DisposeAsync() => mongo.DropDatabaseAsync(_database);

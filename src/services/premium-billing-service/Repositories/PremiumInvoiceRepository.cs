@@ -67,7 +67,7 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
     /// Status as stored: <see cref="Middleware.CosmosSystemTextJsonSerializer"/> writes enums as
     /// camelCase strings, so queries must compare with the same string (an int never matches).
     /// </summary>
-    internal static string StoredStatus(InvoiceStatus status) =>
+    public static string StoredStatus(InvoiceStatus status) =>
         System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(status.ToString());
 
     private readonly Container _container;
@@ -222,10 +222,11 @@ public class PremiumInvoiceRepository : IPremiumInvoiceRepository
         // for the tenant and filter to those that mention the member.
         var query = new QueryDefinition(
             "SELECT TOP @take * FROM c " +
-            "WHERE c.tenantId = @tenantId " +
+            "WHERE c.tenantId = @tenantId AND c.status != @draft " +
             "AND EXISTS(SELECT VALUE l FROM l IN c.lineItems WHERE l.memberId = @memberId) " +
             "ORDER BY c.billingPeriodStart DESC")
             .WithParameter("@take", take)
+            .WithParameter("@draft", StoredStatus(InvoiceStatus.Draft))
             .WithParameter("@tenantId", tenantId)
             .WithParameter("@memberId", memberId);
 

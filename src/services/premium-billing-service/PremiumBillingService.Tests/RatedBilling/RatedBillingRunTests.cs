@@ -103,6 +103,41 @@ public class RatedBillingRunTests
     }
 
     [Fact]
+    public async Task FlagTurnedOff_DoesNotBillAPeriodARatedInvoiceAlreadyBilled()
+    {
+        var run = Run(OtherTenant);
+        _sponsors.Setup(s => s.GetActiveSponsorsAsync(OtherTenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SponsorDto> { Sponsor("G1") });
+        var rated = Invoice("G1", InvoiceStatus.Sent, 500m);
+        rated.BillingPeriodStart = run.BillingPeriod;
+        _invoices.Setup(i => i.GetByGroupNumberAsync("G1")).ReturnsAsync(new[] { rated });
+
+        var result = await Service().ExecuteBillingRunAsync(run.Id);
+
+        result.SkippedGroupNumbers.Should().Equal("G1");
+        result.InvoiceIds.Should().BeEmpty();
+        _invoices.Verify(i => i.CreateAsync(It.IsAny<PremiumInvoice>()), Times.Never);
+        _coverage.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task BlockedGroup_IsReportedWithItsEarlierDraft()
+    {
+        var run = Run(RatedTenant);
+        _sponsors.Setup(s => s.GetActiveSponsorsAsync(RatedTenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SponsorDto> { Sponsor("G1") });
+        var earlier = Invoice("G1", InvoiceStatus.Draft, 300m);
+        _rated.Setup(g => g.GenerateAsync(It.IsAny<SponsorDto>(), RatedTenant, run.BillingPeriod, run.Id, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RatedInvoiceOutcome(RatedInvoiceOutcomeKind.BlockedByEarlierDraft, earlier));
+
+        var result = await Service().ExecuteBillingRunAsync(run.Id);
+
+        result.BlockingDraftInvoiceIds.Should().Equal(earlier.Id);
+        result.InvoiceIds.Should().BeEmpty();
+        result.Warnings.Should().Contain(w => w.Contains("still a Draft"));
+    }
+
+    [Fact]
     public void FlagDefaultsOff()
     {
         new RatedBillingOptions().For("any-tenant").Enabled.Should().BeFalse();

@@ -123,6 +123,8 @@ public class PremiumInvoiceRepositoryMongo : IPremiumInvoiceRepository
         var tenantId = GetTenantId();
         var filter = Builders<PremiumInvoice>.Filter.And(
             Builders<PremiumInvoice>.Filter.Eq(x => x.TenantId, tenantId),
+            // A draft is not a bill: leave it out before the last-N cut.
+            Builders<PremiumInvoice>.Filter.Ne(x => x.Status, InvoiceStatus.Draft),
             Builders<PremiumInvoice>.Filter.ElemMatch(
                 x => x.LineItems,
                 li => li.MemberId == memberId));

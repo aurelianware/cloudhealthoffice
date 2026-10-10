@@ -500,4 +500,55 @@ public class RatedBillingCalculatorTests
         // cents at most, and the drift is kept, never spread: this exact total is the documented result.
         invoice.TotalAmount.Should().Be(calculation.LineItems.Sum(l => PremiumRatingEngine.RoundMoney(500m * (32 - int.Parse(l.MemberId[1..])) / 31m)));
     }
+
+    // ── Review probes: proration edges (EE 500; documented in premium-rated-billing.md) ──
+
+    [Theory]
+    [InlineData("Daily", "2026-02-01", "2026-02-28", 500.00)]   // through the last day: the whole month
+    [InlineData("Daily", "2026-02-15", null, 250.00)]           // 14/28
+    [InlineData("Daily", "2026-01-31", null, 16.13)]            // 1/31 = 16.129…
+    [InlineData("Daily", "2026-03-01", "2026-03-01", 16.13)]    // ends on the 1st: one day
+    [InlineData("HalfMonth", "2026-02-01", "2026-02-15", 250.00)]
+    [InlineData("HalfMonth", "2026-02-01", "2026-02-16", 500.00)]
+    [InlineData("HalfMonth", "2026-02-16", null, 250.00)]
+    [InlineData("HalfMonth", "2026-02-17", null, null)]         // starts after the 16th: nothing this month
+    [InlineData("HalfMonth", "2026-03-02", "2026-03-20", 250.00)] // in force on the 16th only
+    [InlineData("HalfMonth", "2026-03-02", "2026-03-10", null)] // never in force on a half's first day: $0
+    [InlineData("FullMonth", "2026-03-01", "2026-03-01", 500.00)] // in force on the 1st: the whole month
+    [InlineData("FullMonth", "2026-03-02", "2026-03-31", null)] // not in force on the 1st: nothing
+    public void ProrationEdges(string rule, string effective, string? termination, double? expected)
+    {
+        var table = Versioned(TierTable(), 1);
+        table.Proration = Enum.Parse<ProrationRule>(rule);
+        var start = DateTime.SpecifyKind(DateTime.Parse(effective), DateTimeKind.Utc);
+        DateTime? end = termination == null ? null : DateTime.SpecifyKind(DateTime.Parse(termination), DateTimeKind.Utc);
+
+        var charge = Calculator(table).ChargeForMonth(Household("c", Plan, start, end, Subscriber("S")), new DateTime(start.Year, start.Month, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        (charge?.Amount).Should().Be(expected.HasValue ? (decimal)expected.Value : null);
+    }
+
+    [Fact]
+    public void MidYearAgeRatedTable_MustSayWhenAgesAreTaken()
+    {
+        var first = Versioned(AgeBandTable(), 1);
+        first.EffectiveTo = D(2026, 6, 30);
+        var revision = Versioned(AgeBandTable(baseRate: 310m), 1);
+        revision.Id = "rt-revision";
+        revision.EffectiveFrom = D(2026, 7, 1);
+
+        var act = () => new RateTableCatalog(new[] { first, revision });
+        act.Should().Throw<RateTableValidationException>().WithMessage("*mid-year revision*AgeDeterminationDate*");
+
+        revision.AgeDeterminationDate = D(2026, 1, 1);
+        _ = new RateTableCatalog(new[] { first, revision });
+
+        // A tier table without tobacco has no ages to fix: no age date needed.
+        var tierFirst = Versioned(TierTable(), 1);
+        tierFirst.EffectiveTo = D(2026, 6, 30);
+        var tierRevision = Versioned(TierTable(), 1);
+        tierRevision.Id = "rt-tier-revision";
+        tierRevision.EffectiveFrom = D(2026, 7, 1);
+        _ = new RateTableCatalog(new[] { tierFirst, tierRevision });
+    }
 }

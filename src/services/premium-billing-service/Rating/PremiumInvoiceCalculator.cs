@@ -11,6 +11,8 @@ public sealed class BilledLedger
 {
     private readonly Dictionary<(string Key, DateTime Month), decimal> _billed = new();
     private readonly HashSet<DateTime> _invoicedMonths = new();
+    private readonly Dictionary<(string Key, DateTime Month), HashSet<string>> _versions = new();
+    private readonly List<string> _sources = new();
 
     public static BilledLedger Empty => new();
 
@@ -26,36 +28,63 @@ public sealed class BilledLedger
         var ledger = new BilledLedger();
         foreach (var invoice in invoices.Where(Counts))
         {
+            ledger._sources.Add(invoice.Id);
             var month = MonthStart(invoice.BillingPeriodStart);
             ledger.MarkInvoiced(month);
             foreach (var line in invoice.LineItems)
             {
                 // A composite (per-tier) line bills several coverages: its components say how much each.
+                var version = line.RateTableId != null && line.RateTableVersion.HasValue
+                    ? RateTableReference.Of(line.RateTableId, line.RateTableVersion.Value)
+                    : null;
                 if (line.Components is { Count: > 0 } components)
                 {
                     foreach (var component in components)
-                        ledger.Add(KeyFor(component.CoverageId, component.MemberId), month, component.Amount);
+                        ledger.Add(KeyFor(component.CoverageId, component.MemberId), month, component.Amount, version);
                 }
                 else
                 {
-                    ledger.Add(KeyFor(line.CoverageId, line.MemberId), month, line.TotalPremium);
+                    ledger.Add(KeyFor(line.CoverageId, line.MemberId), month, line.TotalPremium, version);
                 }
             }
             // Only the calculator's own retro adjustments count as billing for a month;
             // a manual adjustment that happens to carry a service period is not reversed.
             foreach (var adjustment in invoice.Adjustments.Where(a => a.IsRatingRetro && a.ServicePeriodStart.HasValue))
-                ledger.Add(KeyFor(adjustment.CoverageId, adjustment.RelatedMemberId), MonthStart(adjustment.ServicePeriodStart!.Value), adjustment.Amount);
+            {
+                var key = KeyFor(adjustment.CoverageId, adjustment.RelatedMemberId);
+                var serviceMonth = MonthStart(adjustment.ServicePeriodStart!.Value);
+                ledger.Add(key, serviceMonth, adjustment.Amount);
+                foreach (var version in adjustment.RateTableVersions ?? new List<string>())
+                    ledger.AddVersion(key, serviceMonth, version);
+            }
         }
         return ledger;
     }
 
     public void MarkInvoiced(DateTime month) => _invoicedMonths.Add(MonthStart(month));
 
-    public void Add(string coverageKey, DateTime month, decimal amount)
+    public void Add(string coverageKey, DateTime month, decimal amount, string? rateVersion = null)
     {
         var key = (coverageKey, MonthStart(month));
         _billed[key] = _billed.GetValueOrDefault(key) + amount;
+        if (rateVersion != null)
+            AddVersion(coverageKey, month, rateVersion);
     }
+
+    public void AddVersion(string coverageKey, DateTime month, string rateVersion)
+    {
+        var key = (coverageKey, MonthStart(month));
+        if (!_versions.TryGetValue(key, out var set))
+            _versions[key] = set = new HashSet<string>(StringComparer.Ordinal);
+        set.Add(rateVersion);
+    }
+
+    /// <summary>Rate table versions (<c>id@vN</c>) the coverage-month was billed under; empty when unknown.</summary>
+    public IReadOnlySet<string> Versions(string coverageKey, DateTime month) =>
+        _versions.TryGetValue((coverageKey, MonthStart(month)), out var set) ? set : new HashSet<string>();
+
+    /// <summary>Issued invoices this ledger was built from (the basis a Draft is checked against).</summary>
+    public IReadOnlyList<string> SourceInvoiceIds => _sources;
 
     public decimal Billed(string coverageKey, DateTime month) => _billed.GetValueOrDefault((coverageKey, MonthStart(month)));
 
@@ -215,6 +244,14 @@ public sealed class PremiumInvoiceCalculator
                 if (difference == 0m)
                     continue;
 
+                var expectedVersions = charge?.Segments
+                    .Select(s => RateTableReference.Of(s.Rating.RateTableId, s.Rating.RateTableVersion))
+                    .Distinct().ToList();
+                var billedVersions = request.PriorBilling.Versions(key, month);
+                // Billed and due both, under different rates: a rate-table or plan correction re-prices the month.
+                var rateCorrection = expectedVersions is { Count: > 0 } && billed != 0m && billedVersions.Count > 0
+                                     && !billedVersions.SetEquals(expectedVersions);
+
                 result.Adjustments.Add(new InvoiceAdjustment
                 {
                     Type = AdjustmentKind(enrollment, month, expected, billed),
@@ -226,9 +263,8 @@ public sealed class PremiumInvoiceCalculator
                     ServicePeriodEnd = month.AddMonths(1).AddDays(-1),
                     AdjustmentDate = request.BillingDate,
                     IsRatingRetro = true,
-                    RateTableVersions = charge?.Segments
-                        .Select(s => RateTableReference.Of(s.Rating.RateTableId, s.Rating.RateTableVersion))
-                        .Distinct().ToList()
+                    RateTableVersions = expectedVersions,
+                    IsRateCorrection = rateCorrection
                 });
             }
         }

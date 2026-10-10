@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Headers;
 using CloudHealthOffice.Infrastructure.Middleware;
+using CloudHealthOffice.Infrastructure.Security;
 
 namespace PremiumBillingService.Clients;
 
@@ -7,6 +9,8 @@ namespace PremiumBillingService.Clients;
 /// member-service's rating census: the minimum a premium needs about each
 /// member of a group (who is the subscriber, relationship, date of birth,
 /// tobacco use). Names the tenant in <c>X-Tenant-ID</c> on every request.
+/// member-service admits only premium-billing-service's service token there,
+/// so the call always carries this service's own token, never a user's.
 /// </summary>
 public interface IMemberServiceClient
 {
@@ -21,11 +25,13 @@ public sealed class MemberServiceClient : IMemberServiceClient
     internal const int MaxPages = 1000;
 
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IChoServiceTokenSource? _tokens;
     private readonly ILogger<MemberServiceClient> _logger;
 
-    public MemberServiceClient(IHttpClientFactory httpClientFactory, ILogger<MemberServiceClient> logger)
+    public MemberServiceClient(IHttpClientFactory httpClientFactory, IServiceProvider services, ILogger<MemberServiceClient> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _tokens = ChoServiceTokens.Resolve(services);
         _logger = logger;
     }
 
@@ -34,6 +40,9 @@ public sealed class MemberServiceClient : IMemberServiceClient
     {
         if (string.IsNullOrEmpty(tenantId))
             throw new InvalidOperationException("A member-service call must name its tenant");
+        if (_tokens == null)
+            throw new InvalidOperationException(
+                "The rating census cannot be read: premium-billing-service has no service token configured (ChoAuth:ServiceToken)");
 
         var client = _httpClientFactory.CreateClient(HttpClientName);
         var members = new List<RatingCensusMemberDto>();
@@ -51,6 +60,8 @@ public sealed class MemberServiceClient : IMemberServiceClient
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add(TenantMiddleware.TenantHeaderName, tenantId);
+            // Always this service's own token: set here, the shared outbound handler leaves it alone.
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _tokens.GetTokenAsync(tenantId, cancellationToken));
             using var response = await client.SendAsync(request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)

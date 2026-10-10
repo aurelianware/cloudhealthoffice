@@ -118,6 +118,14 @@ public class PremiumBillingService : IPremiumBillingService
                         var outcome = await _ratedInvoices!.GenerateAsync(
                             sponsor, billingRun.TenantId, billingRun.BillingPeriod, billingRun.Id, billingRun.ExecutedBy);
                         invoice = outcome.Invoice;
+                        if (outcome.Kind == RatedInvoiceOutcomeKind.BlockedByEarlierDraft)
+                        {
+                            billingRun.BlockingDraftInvoiceIds.Add(invoice.Id);
+                            billingRun.Warnings.Add(
+                                $"Group {sponsor.GroupNumber} not billed for {billingRun.BillingPeriod:yyyy-MM}: invoice {invoice.InvoiceNumber} " +
+                                $"for {invoice.BillingPeriodStart:yyyy-MM} is still a Draft; issue or void it, then run again");
+                            continue;
+                        }
                         if (outcome.Kind is RatedInvoiceOutcomeKind.AlreadyIssued or RatedInvoiceOutcomeKind.UnratedInvoiceExists)
                         {
                             // Idempotent: an issued invoice is never regenerated or duplicated.
@@ -138,6 +146,18 @@ public class PremiumBillingService : IPremiumBillingService
                     }
                     else
                     {
+                        // Turning rated billing off must not bill a period a rated invoice already billed.
+                        var alreadyRated = (await _invoiceRepository.GetByGroupNumberAsync(sponsor.GroupNumber) ?? Enumerable.Empty<PremiumInvoice>())
+                            .FirstOrDefault(i => i.PricingSource == PricingSource.RatingEngine && i.Status != InvoiceStatus.Voided
+                                                 && i.BillingPeriodStart.Year == billingRun.BillingPeriod.Year
+                                                 && i.BillingPeriodStart.Month == billingRun.BillingPeriod.Month);
+                        if (alreadyRated != null)
+                        {
+                            billingRun.SkippedGroupNumbers.Add(sponsor.GroupNumber);
+                            billingRun.Warnings.Add(
+                                $"Group {sponsor.GroupNumber} already has rated invoice {alreadyRated.InvoiceNumber} ({alreadyRated.Status}) for {billingRun.BillingPeriod:yyyy-MM}; not billed again");
+                            continue;
+                        }
                         invoice = await GenerateInvoiceForSponsorAsync(
                             sponsor, billingRun.TenantId, billingRun.BillingPeriod, billingRun.Id, billingRun.ExecutedBy);
                     }

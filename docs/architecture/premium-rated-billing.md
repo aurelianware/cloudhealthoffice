@@ -40,10 +40,12 @@ migration steps are in
 billing run (POST /api/v1/billing-runs/{id}/execute)
   └─ per sponsor group
        ├─ tenant not enabled ──────────────► original pricing (unchanged)
-       └─ RatedInvoiceGenerator.GenerateAsync
+       ├─ tenant not enabled, but the period has a rated invoice ─► skipped (no double bill)
+       └─ RatedInvoiceGenerator.GenerateAsync      (under the group's billing lease)
             1. read the group's invoices
                ├─ period has an unrated invoice ─► leave it (UnratedInvoiceExists)
                ├─ period has an issued rated one ─► leave it (AlreadyIssued)
+               ├─ an earlier period in the retro window is a Draft ─► stop (BlockedByEarlierDraft)
                └─ period has a rated Draft ──────► recompute it in place
             2. coverage-service: every coverage record of the group (terminated included)
                member-service:   rating census (GET /api/v1/members/rating-census)
@@ -51,9 +53,20 @@ billing run (POST /api/v1/billing-runs/{id}/execute)
             3. RatingEnrollmentBuilder → households (+ data issues)
             4. PremiumInvoiceCalculator → lines for the period + retro adjustments (+ rating issues)
             5. list bill, or CompositeBill.Collapse for a composite group
-            6. no exceptions and not held for review → Generated (issued); else Draft
+            6. no exceptions and no review reasons → issued (a net credit moves to the
+               sponsor's unapplied credit and settles the invoice); else Draft
             7. create with a deterministic id, or replace the Draft (version / ETag checked)
 ```
+
+**Group lease.** Every read → compute → write of a group (generate, regenerate,
+issue) holds the group's billing lease: one document per tenant and group
+(`BillingLeases`; id = hash of tenant and group), taken by a create that only one
+writer wins, or by a conditional takeover once it expires (Mongo: unique `_id` and a
+conditional update; Cosmos: create conflict and an ETag-checked replace in partition
+`/tenantId`). The lease lasts `GroupLeaseSeconds` (300) and is released as soon as the
+invoice is written; a second writer waits up to `GroupLeaseWaitSeconds` (60) and then
+fails that group with a run warning. Two periods of one group are therefore never
+reconciled from the same ledger, so one retro change cannot be billed twice.
 
 A coverage-service, member-service or database failure fails that group's invoice
 (a billing-run warning); it never produces a `$0` or partial issued invoice.
@@ -63,7 +76,9 @@ A coverage-service, member-service or database failure fails that group's invoic
 coverage-service keeps one coverage record per covered member. member-service's
 rating census (minimum necessary: member id, subscriber link, X12 relationship code,
 date of birth, tobacco flag, name; never SSN, address or contact details) says who
-is the subscriber. `RatingEnrollmentBuilder` makes one household per **subscriber
+is the subscriber. The census admits only premium-billing-service's own service token
+(`RequireServiceClient`), and premium billing always calls it with that token, never a
+user's; a Finance user cannot read it. `RatingEnrollmentBuilder` makes one household per **subscriber
 coverage record** and attaches each dependent's coverage under the same plan and
 insurance line, overlapping in time, with the dependent's own effective and
 termination dates. The tier is derived from who is covered on each day; the coverage
@@ -127,6 +142,15 @@ The rule is part of the rate table (`proration`), so it is versioned with the ra
 | `HalfMonth` | two halves (1–15, 16–end), each half the monthly premium, rated with the household of the half's first day | from the next half | the whole current half |
 | `FullMonth` | the whole month, rated with the household of the 1st | from next month | the whole month |
 
+Outcomes that surprise people (all tested in `RatedBillingCalculatorTests.ProrationEdges`):
+
+- `HalfMonth`: coverage starting on the 17th is not charged that month; a stay from the
+  2nd to the 10th is never in force on a half's first day and costs nothing; a stay
+  from the 2nd to the 20th is charged one half.
+- `FullMonth`: coverage ending on the 1st is charged the whole month; coverage starting
+  on the 2nd is not charged until the next month.
+- `Daily`: coverage ending on the 1st is charged one day (500 × 1/31 = 16.13).
+
 A rate change applies from its effective date: within each billing unit the amount is
 split at the rate table boundary (by days of that unit). Under `Daily` that is
 exactly the effective date.
@@ -142,9 +166,22 @@ exactly the effective date.
   `RetroTerm` or `RateChange`. Manual adjustments are never reversed.
 - **Ages** are fixed at the plan-year start (`effectiveFrom`, or `ageDeterminationDate`)
   or at a member's own later coverage start, per 45 CFR 147.102. A birthday during
-  the year changes nothing until the next plan year's table. A mid-year rate revision
-  must set `ageDeterminationDate` to the plan-year start, or ages are re-measured on
-  its effective date.
+  the year changes nothing until the next plan year's table. A mid-year revision of an
+  age-rated table (age band, composite, or any table with a tobacco surcharge; one that
+  starts less than a year after the previous table's age date) **must** set
+  `ageDeterminationDate` (normally the plan-year start): saving it without one is
+  rejected.
+- **Rate or plan corrections.** A retro adjustment that re-prices an invoiced month
+  under different rate-table versions than it was billed with (a new version of the
+  table, or the coverage moved to another plan) is marked `isRateCorrection`. When its
+  size is above `RateCorrectionReviewThreshold` (default 0: always), the invoice stays
+  Draft with a `RATE_CORRECTION` review reason until someone issues it.
+- **Net credits.** When retro credits exceed the month's charges the issued invoice is
+  a net credit. The credit is moved, once per invoice, to the sponsor account's
+  unapplied credit (entry `RatedInvoiceCredit`), and the invoice is settled by a
+  `SponsorAccountCredit` payment of the same (negative) amount: balance due 0, status
+  Paid. The credit is then held on the account as unapplied credit, the same as an
+  overpayment received by cash application.
 
 ## Rounding
 
@@ -168,13 +205,22 @@ the total is the sum of lines and adjustments; otherwise the group's invoice fai
 ## Draft, issue and idempotency
 
 `InvoiceStatus.Draft` (appended to the enum, so stored numeric values keep their
-meaning) is a rated invoice that is not issued: it has exceptions, or the tenant holds
-rated invoices for review (`HoldForReview`). A Draft:
+meaning) is a rated invoice that is not issued: it has `ratingExceptions` (blocking),
+or `reviewReasons` (the tenant holds rated invoices for review, a rate correction, a
+net credit with nowhere to go). A Draft:
 
 - is recomputed in place by the next billing run for the period, or by
   `POST /api/v1/premium-invoices/{id}/regenerate`;
-- is issued by regeneration once it has no exceptions, or by
-  `POST /api/v1/premium-invoices/{id}/issue` (refused while it has exceptions);
+- is issued automatically by a recomputation that finds neither exceptions nor review
+  reasons, or by `POST /api/v1/premium-invoices/{id}/issue`. Issue **recomputes** the
+  Draft under the group lease and issues it only if it has no exceptions and is exactly
+  what was computed before (same `ratingFingerprint` of lines, adjustments, exceptions
+  and review reasons) against the same issued invoices (`reconciledInvoiceIds`).
+  Otherwise the recomputed Draft is saved and the request answers 409: review it and
+  issue again. A stale Draft is never issued;
+- blocks the billing of later periods of its group inside the retro window
+  (`BlockedByEarlierDraft`, listed in the run's `blockingDraftInvoiceIds`), and cannot
+  be issued while an earlier period of the group is still a Draft;
 - cannot be sent, paid, applied to by remittances, drafted by EFT, become overdue or
   delinquent, count toward a sponsor's open balance, or show on a member's premium tab;
 - does not count as billed for later retro reconciliation;
@@ -198,6 +244,10 @@ After a void, the next generation creates reissue `n + 1` with the same invoice 
 | `ENROLLMENT_DATA` | The household cannot be built or rated from the data (see Households). |
 | `ZERO_CHARGE` | A coverage rated to `0.00` for the month. |
 | `NO_BILLABLE_COVERAGE` | Nothing to bill or reconcile for the group this period. |
+| `COVERAGE_MISSING` | A coverage billed in the retro window is no longer listed by coverage-service at all (deleted rather than terminated). It is not credited; restore it with a termination date, or credit it by hand. |
+
+Review reasons (`reviewReasons`; they do not block an explicit issue): `HELD_FOR_REVIEW`,
+`RATE_CORRECTION`, `NET_CREDIT` (no sponsor account store).
 
 ## Storage
 
@@ -205,6 +255,8 @@ After a void, the next generation creates reissue `n + 1` with the same invoice 
 |---|---|---|
 | Rate table versions | collection `RateTables`, `_id` = hash of tenant + table id, plus version | container `RateTables`, partition `/tenantId` |
 | Invoices | `PremiumInvoices` (unchanged; new optional fields) | `PremiumInvoices` (unchanged; new optional fields) |
+| Group billing leases | collection `BillingLeases` | container `BillingLeases`, partition `/tenantId` |
+| Net credits | `SponsorAccounts` (existing) | `SponsorAccounts` (existing) |
 
 The Cosmos invoice repository's status filters (`GetOverdueAsync`, `GetByStatusAsync`,
 `SearchAsync`) now compare with the camelCase string the service's serializer stores;
@@ -212,17 +264,20 @@ they previously compared with the enum's number and never matched a stored statu
 
 ## Limitations
 
-- Two billing runs for **different** periods of the same group running at the same
-  time can both reconcile the same earlier month. Run one billing run per tenant at a
-  time.
 - Months billed before a tenant turned rated billing on are not reconciled
   (see the runbook's migration note).
-- A coverage record removed from coverage-service (rather than terminated) reads as
-  not covered: its invoiced months are credited back within the retro window.
+- Billing runs list only Active sponsors, so retro terms reported after a group itself
+  terminated are not credited automatically. The runbook gives the manual procedure;
+  an automatic final adjustment invoice for terminated groups is a follow-up.
+- A lease that expires while its holder is still working (a run slower than
+  `GroupLeaseSeconds`) can be taken over; the deterministic invoice id and the
+  version/ETag-checked writes still prevent a duplicate or lost invoice, but not a
+  retro charge computed from the older ledger. Keep the lease well above a group's
+  generation time.
 - Rated lines are per subscriber, so a dependent's premium tab (which finds invoices
   by line member) no longer lists the group's rated invoices; composite invoices have
   no member line at all and appear on no member's tab.
-- The portal shows the new fields only as far as its existing invoice view does;
-  Draft exceptions are read through the API.
+- The portal has no Issue / Regenerate buttons or Draft filter yet (follow-up); use the
+  API. Draft exceptions and review reasons are read through the API.
 - The member census reads the legacy `subscriberMemberId` link on dependents.
 - Rate tables have no maker-checker; finance:write saves them.

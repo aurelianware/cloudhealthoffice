@@ -19,6 +19,12 @@ public sealed class RatedBillingOptions
 
     public Dictionary<string, RatedBillingTenantOptions> Tenants { get; set; } = new();
 
+    /// <summary>How long one group's billing lease lasts (it is released as soon as the invoice is written).</summary>
+    public int GroupLeaseSeconds { get; set; } = 300;
+
+    /// <summary>How long a generation waits for another one of the same group to finish before giving up.</summary>
+    public int GroupLeaseWaitSeconds { get; set; } = 60;
+
     private static readonly RatedBillingTenantOptions Off = new() { Enabled = false };
 
     /// <summary>The tenant's settings; disabled when the tenant is not configured.</summary>
@@ -37,12 +43,18 @@ public sealed class RatedBillingOptions
     /// <summary>Every problem with the settings (checked at startup).</summary>
     public IEnumerable<string> Problems()
     {
+        if (GroupLeaseSeconds < 30)
+            yield return $"{SectionName}:GroupLeaseSeconds must be at least 30";
+        if (GroupLeaseWaitSeconds < 0)
+            yield return $"{SectionName}:GroupLeaseWaitSeconds cannot be negative";
         foreach (var (tenant, options) in Tenants)
         {
             if (options.MaxRetroMonths is < 0 or > 24)
                 yield return $"{SectionName}:Tenants:{tenant}:MaxRetroMonths must be 0–24";
             if (options.EmployerContributionPercent is < 0 or > 100)
                 yield return $"{SectionName}:Tenants:{tenant}:EmployerContributionPercent must be 0–100";
+            if (options.RateCorrectionReviewThreshold < 0)
+                yield return $"{SectionName}:Tenants:{tenant}:RateCorrectionReviewThreshold cannot be negative";
             foreach (var (group, groupOptions) in options.Groups)
             {
                 if (groupOptions.EmployerContributionPercent is < 0 or > 100)
@@ -67,6 +79,14 @@ public sealed class RatedBillingTenantOptions
 
     /// <summary>Keep every rated invoice in Draft until someone issues it (POST /premium-invoices/{id}/issue).</summary>
     public bool HoldForReview { get; set; }
+
+    /// <summary>
+    /// A retro adjustment that re-prices an invoiced month under a different
+    /// rate version or plan (a correction, not an enrollment change) and whose
+    /// size is above this amount keeps the invoice in Draft for review.
+    /// Default 0: every such correction is reviewed before it is billed.
+    /// </summary>
+    public decimal RateCorrectionReviewThreshold { get; set; }
 
     public Dictionary<string, RatedBillingGroupOptions> Groups { get; set; } = new();
 

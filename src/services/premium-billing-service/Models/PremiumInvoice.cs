@@ -192,6 +192,23 @@ public class PremiumInvoice
     /// </summary>
     public List<InvoiceRatingException> RatingExceptions { get; set; } = new();
 
+    /// <summary>
+    /// Rated invoices: why this invoice needs a person to issue it although it
+    /// can be rated (e.g. it re-prices invoiced months after a rate table or
+    /// plan correction). Unlike exceptions these do not block an explicit issue.
+    /// </summary>
+    public List<string> ReviewReasons { get; set; } = new();
+
+    /// <summary>
+    /// Rated invoices: the issued invoices of the group this computation
+    /// reconciled against. A Draft whose set has changed since is out of date
+    /// and is never issued as it stands.
+    /// </summary>
+    public List<string> ReconciledInvoiceIds { get; set; } = new();
+
+    /// <summary>Rated invoices: SHA-256 of the computed lines, adjustments, exceptions and review reasons.</summary>
+    public string? RatingFingerprint { get; set; }
+
     /// <summary>Rated invoices: when the lines were last computed.</summary>
     public DateTime? RatedAt { get; set; }
 
@@ -490,6 +507,13 @@ public class InvoiceAdjustment
 
     /// <summary>Rating retro adjustments: the rate table versions (<c>id@vN</c>) the corrected charge was rated with.</summary>
     public List<string>? RateTableVersions { get; set; }
+
+    /// <summary>
+    /// Rating retro adjustments: the month is re-priced under different rate
+    /// versions (or another plan's table) than it was billed with, i.e. a rate
+    /// or plan correction rather than an enrollment change.
+    /// </summary>
+    public bool IsRateCorrection { get; set; }
 }
 
 /// <summary>

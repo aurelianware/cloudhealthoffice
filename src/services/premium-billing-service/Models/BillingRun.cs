@@ -131,6 +131,16 @@ public class BillingRun
 
     /// <summary>Rated billing: invoices already issued for the period that this run left unchanged.</summary>
     public List<string> UnchangedInvoiceIds { get; set; } = new();
+
+    /// <summary>
+    /// Rated billing: earlier-period Drafts that stopped this run from billing
+    /// their group (a later period is not billed while an earlier one inside the
+    /// retro window is unissued). Issue or void them, then run again.
+    /// </summary>
+    public List<string> BlockingDraftInvoiceIds { get; set; } = new();
+
+    /// <summary>Groups skipped because the period already has an invoice of the other pricing.</summary>
+    public List<string> SkippedGroupNumbers { get; set; } = new();
 }
 
 /// <summary>

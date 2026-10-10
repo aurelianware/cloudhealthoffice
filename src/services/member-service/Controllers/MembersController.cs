@@ -126,15 +126,19 @@ public class MembersController : ControllerBase
             subscribersOnly: false, pageSize: 20, continuationToken: null);
     }
 
+    /// <summary>premium-billing-service's service client id (the only caller of the rating census).</summary>
+    public const string PremiumBillingClientId = "premium-billing-service";
+
     /// <summary>
     /// The rating census of a sponsor group: per member only what a premium
     /// is rated on (subscriber link, relationship, date of birth, tobacco use)
-    /// and a display name. Premium billing calls it to rate invoices with the
-    /// Finance user's token or its own service token, so billing:read reads it;
-    /// it never returns identifiers, addresses or contact details.
+    /// and a display name, for premium billing to rate invoices. Only
+    /// premium-billing-service's own service token is admitted (every user
+    /// token, Finance included, and every other service gets 403); the tenant
+    /// comes from the token. It never returns identifiers, addresses or contact details.
     /// </summary>
     [HttpGet("rating-census")]
-    [RequirePermission("members:read,billing:read")]
+    [RequireServiceClient(PremiumBillingClientId)]
     [ProducesResponseType(typeof(RatingCensusResponse), 200)]
     [ProducesResponseType(400)]
     public async Task<IActionResult> GetRatingCensus(

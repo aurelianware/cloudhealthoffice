@@ -61,6 +61,11 @@ public class PremiumInvoicesController : ControllerBase
         {
             return Conflict(new { error = ex.Message });
         }
+        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException)
+        {
+            // Regenerated (review it again), or another run holds the group: 409, the caller may retry.
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
@@ -75,13 +80,13 @@ public class PremiumInvoicesController : ControllerBase
     [ProducesResponseType(typeof(PremiumInvoice), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<PremiumInvoice>> IssueDraft(string id)
+    public async Task<ActionResult<PremiumInvoice>> IssueDraft(string id, CancellationToken cancellationToken)
     {
         if (_ratedInvoices == null || _actor == null)
             return BadRequest(new { error = "Rated billing is not available" });
         try
         {
-            return Ok(await _ratedInvoices.IssueDraftAsync(id, _actor.UserId));
+            return Ok(await _ratedInvoices.IssueDraftAsync(id, _actor.TenantId, _actor.UserId, cancellationToken));
         }
         catch (KeyNotFoundException ex)
         {
@@ -89,6 +94,11 @@ public class PremiumInvoicesController : ControllerBase
         }
         catch (ConcurrencyConflictException ex)
         {
+            return Conflict(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex is DraftOutOfDateException or GroupBillingBusyException)
+        {
+            // Regenerated (review it again), or another run holds the group: 409, the caller may retry.
             return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)

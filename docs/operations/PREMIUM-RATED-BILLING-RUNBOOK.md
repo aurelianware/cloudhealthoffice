@@ -13,10 +13,13 @@ as before. Design: [premium-rated-billing.md](../architecture/premium-rated-bill
 
 1. **Deploy** premium-billing-service and member-service from the same release
    (premium billing calls member-service's `GET /api/v1/members/rating-census`).
-   The service needs `MemberService:BaseUrl` (k8s ConfigMap `MemberService__BaseUrl`)
-   and `member-service` in `ChoAuth:Outbound:Hosts` (in `appsettings.json`).
-2. **Cosmos DB only:** create container `RateTables` with partition key `/tenantId` in
-   the service's database. (Mongo creates the `RateTables` collection on first write.)
+   The service needs `MemberService:BaseUrl` (k8s ConfigMap `MemberService__BaseUrl`),
+   `member-service` in `ChoAuth:Outbound:Hosts` (in `appsettings.json`), and its own
+   service token (`ChoAuth:ServiceToken`, as for the sponsor bank-details lookup): the
+   census admits only premium-billing-service's service token, never a user's.
+2. **Cosmos DB only:** create containers `RateTables` and `BillingLeases`, both with
+   partition key `/tenantId`, in the service's database. (Mongo creates the collections
+   on first write.)
 3. **Load rate tables** for every plan the tenant's groups are enrolled in, covering
    at least the retro window (default 3 months) before the first rated period:
    `POST /api/v1/rate-tables` (finance:write) with `{ "table": { ... }, "changeReason": "..." }`.
@@ -61,9 +64,15 @@ As environment variables: `PremiumBilling__RatedBilling__Tenants__tenant-a__Enab
 | `MaxRetroMonths` | `3` | How far back retro changes are reconciled (0–24). |
 | `EmployerContributionPercent` | `0` | Employer share shown on each line (0–100); the total is the full premium. |
 | `HoldForReview` | `false` | Keep every rated invoice in Draft until `POST /premium-invoices/{id}/issue`. |
+| `RateCorrectionReviewThreshold` | `0` | A rate/plan correction adjustment larger than this keeps the invoice in Draft for review. |
+
+Service-wide: `GroupLeaseSeconds` (300) and `GroupLeaseWaitSeconds` (60) under
+`PremiumBilling:RatedBilling` (see the architecture note's group lease).
 
 **Turning it off** (`Enabled: false`) returns the tenant to the original pricing from
-the next billing run. Rated invoices already issued stay as they are.
+the next billing run. Rated invoices already issued stay as they are, and a period that
+already has a rated invoice is skipped by the original pricing (`skippedGroupNumbers`),
+so it is not billed twice.
 
 ### Migration note
 
@@ -92,10 +101,15 @@ the next billing run. Rated invoices already issued stay as they are.
 - `invoiceIds`: invoices created and issued by this run (counted in the totals);
 - `draftInvoiceIds`: invoices left in Draft (not billed, not in the totals), with a
   warning naming the first exception;
-- `unchangedInvoiceIds`: groups whose period was already invoiced; nothing changed.
+- `unchangedInvoiceIds`: groups whose period was already invoiced; nothing changed;
+- `blockingDraftInvoiceIds`: groups not billed because an earlier period inside the
+  retro window is still a Draft (the id is that Draft). Issue or void it, then run the
+  period again.
 
 Re-running a period is safe: issued invoices are never changed or duplicated, and
-Drafts are recomputed in place.
+Drafts are recomputed in place. Runs may overlap: each group is computed under its
+billing lease, and a group whose lease stays busy past `GroupLeaseWaitSeconds` fails
+with a warning ("busy") for the next run.
 
 ## 4. Fixing a Draft
 
@@ -105,10 +119,16 @@ Drafts are recomputed in place.
    - `RATE_TABLE_INVALID`: two current tables of the plan overlap; withdraw or correct one;
    - `ENROLLMENT_DATA`: fix the member or coverage record named in the message;
    - `ZERO_CHARGE`: check the rate table and the coverage dates;
+   - `COVERAGE_MISSING`: a billed coverage record was deleted in coverage-service; restore it
+     with its termination date (the credit is then computed), or post the credit by hand;
    - `NO_BILLABLE_COVERAGE`: the group has no coverage for the period; void the Draft if that is right.
 3. `POST /api/v1/premium-invoices/{id}/regenerate` (billing:run), or run billing for
-   the period again. With no exceptions left the invoice is issued (unless the tenant
-   holds for review; then `POST /api/v1/premium-invoices/{id}/issue`).
+   the period again. With no exceptions and no review reasons left the invoice is
+   issued; otherwise read `reviewReasons` and `POST /api/v1/premium-invoices/{id}/issue`.
+4. **Issue answers 409** when the Draft changed since it was computed (coverage, rates,
+   or another invoice of the group was issued meanwhile). It has been regenerated:
+   review the new amounts and issue again. Issue answers 400 while an earlier period of
+   the group is still a Draft; issue that one first.
 
 A Draft cannot be paid, sent, drafted by EFT or go delinquent. A remittance naming its
 invoice number goes to the exceptions queue (`InvoiceClosed`) until it is issued.
@@ -117,15 +137,27 @@ invoice number goes to the exceptions queue (`InvoiceClosed`) until it is issued
 
 Save a new version of the table (`expectedCurrentVersion` = the version you read). The
 next invoice of each affected group re-rates its invoiced months within the retro
-window and bills or credits the difference as `RateChange` adjustments; issued invoices
-are not changed. To find which rates an invoice line used:
+window and bills or credits the difference as `RateChange` adjustments marked
+`isRateCorrection`; issued invoices are not changed. Those invoices stay Draft with a
+`RATE_CORRECTION` review reason (above `RateCorrectionReviewThreshold`) until a person
+issues them. A mid-year revision of an age-rated table must set `ageDeterminationDate`.
+To find which rates an invoice line used:
 `GET /api/v1/rate-tables/{rateTableId}/versions/{rateTableVersion}` (its `contentHash`
 equals the line's `rateTableHash`).
 
-## 6. Do not
+## 6. Credits
 
-- Run two billing runs of the same tenant at the same time (two periods could both
-  reconcile the same earlier month).
-- Delete a coverage record in coverage-service to end coverage: terminate it. A missing
-  record reads as never covered and its invoiced months are credited back.
+- **Net credit invoices** (retro credits above the month's charges) are issued with
+  their credit moved to the sponsor account's unapplied credit (entry
+  `RatedInvoiceCredit`); the invoice shows a `SponsorAccountCredit` payment and a zero
+  balance.
+- **Terminated groups.** Billing runs bill Active sponsors only, so a retro term reported
+  after the whole group terminated is not credited automatically. Compute the credit
+  from the coverage-month shown on the last rated invoices and post it to the sponsor
+  account by hand (a manual credit, with two people as for any ledger change).
+
+## 7. Do not
+
+- Delete a coverage record in coverage-service to end coverage: terminate it. A billed
+  record that disappears holds the group's next invoice in Draft (`COVERAGE_MISSING`).
 - Edit invoice documents in the database. Issued invoices are immutable by design.

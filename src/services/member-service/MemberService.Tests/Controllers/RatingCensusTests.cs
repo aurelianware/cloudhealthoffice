@@ -91,12 +91,10 @@ public class RatingCensusTests
     }
 
     [Fact]
-    public void BillingReadCanReadTheCensus_ButNoOtherMemberRead()
+    public void OnlyPremiumBillingsServiceIdentity_ReadsTheCensus()
     {
-        typeof(MembersController).GetMethod(nameof(MembersController.GetRatingCensus))!
-            .GetCustomAttributes<RequirePermissionAttribute>().Select(a => a.Permission)
-            .Should().Equal("members:read,billing:read");
-        typeof(MembersController).GetMethod(nameof(MembersController.GetMember))!
-            .GetCustomAttributes<RequirePermissionAttribute>().Should().BeEmpty("the member read keeps the members:read default");
+        var method = typeof(MembersController).GetMethod(nameof(MembersController.GetRatingCensus))!;
+        method.GetCustomAttributes<RequireServiceClientAttribute>().Select(a => a.ClientId).Should().Equal("premium-billing-service");
+        method.GetCustomAttributes<RequirePermissionAttribute>().Should().BeEmpty("no user permission opens the census");
     }
 }

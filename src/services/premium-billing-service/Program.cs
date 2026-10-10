@@ -67,6 +67,7 @@ if (databaseProvider == ChoDatabaseProvider.MongoDb)
     builder.Services.AddScoped<IRemittanceExceptionRepository, RemittanceExceptionRepositoryMongo>();
     builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryMongo>();
     builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryMongo>();
+    builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryMongo>();
     Console.WriteLine("Using MongoDB repository");
 }
 else
@@ -95,6 +96,8 @@ else
     builder.Services.AddScoped<ISponsorAccountRepository, SponsorAccountRepositoryCosmos>();
     // Container RateTables, partition key /tenantId: immutable rate table versions.
     builder.Services.AddScoped<IRateTableRepository, RateTableRepositoryCosmos>();
+    // Container BillingLeases, partition key /tenantId: one rated-billing lease per sponsor group.
+    builder.Services.AddScoped<IBillingLeaseRepository, BillingLeaseRepositoryCosmos>();
     Console.WriteLine("Using Cosmos DB repository");
 }
 
