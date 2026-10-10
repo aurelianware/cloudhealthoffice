@@ -81,10 +81,14 @@ public class PaymentEstimateService : IPaymentEstimateService
         var authority = await ResolveAuthorityAsync(tenantId, request.ClaimType, lobCode, ct);
 
         // ── Step 1: Fee-schedule pricing (read-only) ──
+        // Same institutional inputs AdjudicationController sends: the claim-level
+        // DRG and length of stay go on every line (the engine pays a DRG case rate /
+        // all-inclusive per diem once per stay), the revenue code per line.
+        var drgCode = string.IsNullOrWhiteSpace(request.DrgCode) ? null : request.DrgCode.Trim();
         var pricingRequests = request.Lines.Select(line => new PricingRequest
         {
             TenantId = tenantId,
-            ProcedureCode = line.ProcedureCode,
+            ProcedureCode = line.ProcedureCode ?? string.Empty,
             Modifiers = line.Modifiers,
             ProviderNpi = request.ProviderNpi,
             PlaceOfServiceCode = string.IsNullOrWhiteSpace(line.PlaceOfService) ? "11" : line.PlaceOfService,
@@ -93,6 +97,9 @@ public class PaymentEstimateService : IPaymentEstimateService
             BilledAmount = line.ChargeAmount,
             Units = line.Units,
             LineNumber = line.LineNumber,
+            DrgCode = drgCode,
+            LengthOfStay = request.LengthOfStay,
+            RevenueCode = string.IsNullOrWhiteSpace(line.RevenueCode) ? null : line.RevenueCode.Trim(),
             // Same facility-setting inputs AdjudicationController sends, so an
             // institutional estimate prices at the rate adjudication will allow.
             BillType = request.BillType,
@@ -120,7 +127,7 @@ public class PaymentEstimateService : IPaymentEstimateService
             return new ClaimLineInput
             {
                 LineNumber = line.LineNumber,
-                ProcedureCode = line.ProcedureCode,
+                ProcedureCode = line.ProcedureCode ?? string.Empty,
                 CodeType = line.CodeType,
                 Modifiers = line.Modifiers,
                 RevenueCode = line.RevenueCode,
@@ -130,6 +137,10 @@ public class PaymentEstimateService : IPaymentEstimateService
                 DiagnosisCodes = line.DiagnosisCodes
             };
         }).ToList();
+
+        // DRG / all-inclusive per-diem stays: cost share once per stay, on the
+        // claim's total allowed (same rule as adjudication).
+        var perStay = PerStayPricing.Resolve(claimTypeCode, drgCode, request.LengthOfStay, pricing);
 
         var benefitRequest = new BenefitResolutionRequest
         {
@@ -144,6 +155,10 @@ public class PaymentEstimateService : IPaymentEstimateService
             ClaimId = request.RequestId ?? $"estimate-{Guid.NewGuid():N}",
             Lines = benefitLines,
             AllowedAmounts = pricedByLine.ToDictionary(kv => kv.Key, kv => kv.Value.AllowedAmount),
+            DrgCode = perStay?.DrgCode,
+            DrgAllowedAmount = perStay?.ClaimAllowed,
+            LengthOfStay = perStay?.LengthOfStay,
+            InpatientPricingMethod = perStay?.Method,
             ExecutionMode = AdjudicationExecutionMode.Prospective
         };
 
@@ -190,7 +205,7 @@ public class PaymentEstimateService : IPaymentEstimateService
         {
             var benefitLine = benefitResult.Lines.FirstOrDefault(b => b.LineNumber == reqLine.LineNumber);
             var priced = pricedByLine.GetValueOrDefault(reqLine.LineNumber);
-            estimateLines.Add(MapLine(reqLine, benefitLine, priced));
+            estimateLines.Add(MapLine(reqLine, benefitLine, priced, drgCode, request.LengthOfStay));
         }
 
         var totals = SumLineTotals(estimateLines);
@@ -306,7 +321,8 @@ public class PaymentEstimateService : IPaymentEstimateService
                 ServicingProviderTaxonomy = request.ProviderTaxonomy,
                 MemberId = request.MemberId,
                 ServiceDate = request.ServiceDate,
-                ProcedureCodes = request.Lines.Select(l => l.ProcedureCode).Distinct().ToList(),
+                ProcedureCodes = request.Lines.Select(l => l.ProcedureCode)
+                    .Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList(),
                 DiagnosisCodes = request.Lines.SelectMany(l => l.DiagnosisCodes).Distinct().ToList(),
                 PlaceOfServiceCode = request.Lines.Select(l => l.PlaceOfService).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)),
                 EstimatedCost = request.Lines.Sum(l => l.ChargeAmount)
@@ -347,7 +363,9 @@ public class PaymentEstimateService : IPaymentEstimateService
     private static EstimateLine MapLine(
         PaymentEstimateLineRequest reqLine,
         LineBenefitResult? benefitLine,
-        PricingResult? priced)
+        PricingResult? priced,
+        string? drgCode,
+        int? lengthOfStay)
     {
         var billed = reqLine.ChargeAmount;
         var allowed = priced?.AllowedAmount ?? benefitLine?.AllowedAmount ?? billed;
@@ -384,7 +402,8 @@ public class PaymentEstimateService : IPaymentEstimateService
             return new EstimateLine
             {
                 LineNumber = reqLine.LineNumber,
-                ProcedureCode = reqLine.ProcedureCode,
+                ProcedureCode = reqLine.ProcedureCode ?? string.Empty,
+                RevenueCode = reqLine.RevenueCode,
                 ToothNumber = reqLine.ToothNumber,
                 BilledAmount = billed,
                 AllowedAmount = 0m,
@@ -409,6 +428,11 @@ public class PaymentEstimateService : IPaymentEstimateService
                     ? $"Allowed amount from {DescribeFeeSchedule(priced)} ({priced.NetworkStatus})."
                     : "No contracted or fee-schedule rate matched; billed charges used as the allowed amount."
             });
+
+            if (priced.IsPerStayRate && rateResolved)
+                messages.Add(Info(
+                    priced.FeeScheduleType == FeeScheduleType.Drg ? "DRG_CASE_RATE_APPLIED" : "PER_DIEM_STAY_APPLIED",
+                    DescribePerStay(priced, drgCode, lengthOfStay)));
 
             // e.g. missing / unsupported CMS multiple procedure indicator — priced without reduction
             foreach (var warning in priced.Warnings)
@@ -447,7 +471,8 @@ public class PaymentEstimateService : IPaymentEstimateService
             return new EstimateLine
             {
                 LineNumber = reqLine.LineNumber,
-                ProcedureCode = reqLine.ProcedureCode,
+                ProcedureCode = reqLine.ProcedureCode ?? string.Empty,
+                RevenueCode = reqLine.RevenueCode,
                 ToothNumber = reqLine.ToothNumber,
                 BilledAmount = billed,
                 AllowedAmount = allowed,
@@ -485,7 +510,8 @@ public class PaymentEstimateService : IPaymentEstimateService
         return new EstimateLine
         {
             LineNumber = reqLine.LineNumber,
-            ProcedureCode = reqLine.ProcedureCode,
+            ProcedureCode = reqLine.ProcedureCode ?? string.Empty,
+            RevenueCode = reqLine.RevenueCode,
             ToothNumber = reqLine.ToothNumber,
             BilledAmount = billed,
             AllowedAmount = allowed,
@@ -516,6 +542,15 @@ public class PaymentEstimateService : IPaymentEstimateService
         null => ("NO_BENEFIT_MAPPING", "needs_review"),
         _ => ("SERVICE_DENIED", "denied")
     };
+
+    /// <summary>The stay's claim-level rate, paid once and allocated across the lines by billed charge.</summary>
+    private static string DescribePerStay(PricingResult priced, string? drgCode, int? lengthOfStay)
+        => priced.FeeScheduleType == FeeScheduleType.Drg
+            ? $"DRG {drgCode} case rate from {DescribeFeeSchedule(priced)}, paid once for the stay; " +
+              "this line's share is allocated by billed charges and the stay is cost-shared once."
+            : $"All-inclusive per diem from {DescribeFeeSchedule(priced)}" +
+              (lengthOfStay is { } days ? $" for {days} day(s)" : string.Empty) +
+              ", paid once for the stay; this line's share is allocated by billed charges and the stay is cost-shared once.";
 
     private static string DescribeFeeSchedule(PricingResult priced)
     {

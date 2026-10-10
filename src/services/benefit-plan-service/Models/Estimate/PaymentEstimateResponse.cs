@@ -117,6 +117,9 @@ public record EstimateLine
     public int LineNumber { get; init; }
     public string ProcedureCode { get; init; } = default!;
 
+    /// <summary>The request line's revenue code, echoed (institutional lines).</summary>
+    public string? RevenueCode { get; init; }
+
     public decimal BilledAmount { get; init; }
     public decimal AllowedAmount { get; init; }
     public decimal ContractualAdjustment { get; init; }

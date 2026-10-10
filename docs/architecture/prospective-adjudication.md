@@ -22,6 +22,7 @@ a **read-only simulation mode** that never touches financial state.
 - [Security & tenancy](#security--tenancy)
 - [Example request](#example-request)
 - [Example response](#example-response)
+- [Institutional estimates (DRG, length of stay, revenue codes)](#institutional-estimates-drg-length-of-stay-revenue-codes)
 - [Limitations](#limitations)
 
 ---
@@ -176,6 +177,8 @@ Representative line/claim codes:
 | `FREQUENCY_LIMITATION`     | denial   | Visit/day/dollar limit exceeded (CARC 119).         |
 | `NO_BENEFIT_MAPPING`       | denial   | Procedure has no benefit category (CARC 16/204).    |
 | `PROVIDER_EXCLUDED`        | warning  | Provider on a federal exclusion list.               |
+| `DRG_CASE_RATE_APPLIED`    | info     | Line's share of a DRG case rate paid once per stay. |
+| `PER_DIEM_STAY_APPLIED`    | info     | Line's share of an all-inclusive per diem × LOS.    |
 
 Line `status` is one of `payable`, `not_covered`, `denied`, `needs_review`.
 
@@ -269,6 +272,60 @@ for future dental adjudication.
   "disclaimer": "Estimate only. Final payment depends on eligibility, benefits, accumulators, coordination of benefits, other claims, authorization state, and claim state at adjudication time."
 }
 ```
+
+## Institutional estimates (DRG, length of stay, revenue codes)
+
+An institutional estimate (`claimType: "Institutional"`) sends the fee schedule
+engine the same inputs synchronous adjudication (`AdjudicationController`) sends:
+
+| Request field | Level | Used for |
+|---------------|-------|----------|
+| `billType` | claim | Facility setting (with `claimType`); service category fallback (11x → Inpatient Hospital, ...) |
+| `drgCode` | claim | DRG-contracted pricing: the schedule's case rate for that DRG (`Rate`, or base rate × `DrgWeight`) |
+| `lengthOfStay` | claim | All-inclusive per diem: schedule `PerDiemRate` × days |
+| `lines[].revenueCode` | line | Revenue-code rate lines (e.g. room and board daily rates, units = days); benefit category |
+
+`drgCode` and `lengthOfStay` go on every pricing line. When the engine prices the
+stay as one claim-level amount (`PricingResult.IsPerStayRate`: a DRG case rate or
+an all-inclusive per diem), it is paid once and allocated across the lines by
+billed charge, and the estimate sends the benefit engine the claim-level inpatient
+inputs (`InpatientPricingMethod`, `DrgAllowedAmount`, `DrgCode`, `LengthOfStay`) —
+the shared `PerStayPricing` rule adjudication uses — so the stay is cost-shared once
+(one inpatient copay, deductible and coinsurance once). Line-level daily rates by
+revenue code price each line by its units and are cost-shared per line.
+
+A line may carry a `revenueCode` without a `procedureCode` (room and board); a
+line with neither, or a negative `lengthOfStay`, is rejected with 400.
+
+```json
+{
+  "memberId": "member-123",
+  "benefitPlanId": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+  "providerNpi": "1234567890",
+  "serviceDate": "2026-03-02",
+  "claimType": "Institutional",
+  "billType": "111",
+  "drgCode": "470",
+  "lengthOfStay": 4,
+  "lines": [
+    { "lineNumber": 1, "revenueCode": "0120", "chargeAmount": 12000.00, "units": 4 },
+    { "lineNumber": 2, "revenueCode": "0250", "chargeAmount": 1500.00 },
+    { "lineNumber": 3, "revenueCode": "0360", "procedureCode": "27447", "chargeAmount": 29000.00 }
+  ]
+}
+```
+
+What the pricing engine does **not** do (gaps, not implemented here):
+
+- **No DRG grouper.** The DRG must be supplied (`drgCode`, as billed in 837I
+  HI*DR). Without it a DRG-contracted stay finds no case rate and falls back to
+  billed charges (`BILLED_CHARGES_USED`). Diagnoses and procedures are not grouped.
+- **No DRG payment adjustments.** `lengthOfStay` does not adjust a DRG case rate:
+  there is no short-stay / transfer per-diem (GMLOS), cost or day outlier, IME/DSH,
+  wage index or new-technology add-on logic. The case rate is the schedule's DRG rate
+  (or base rate × relative weight) only.
+- **No APR-DRG severity / risk-of-mortality subclasses** beyond whatever code string
+  the schedule keys its lines by.
 
 ## Limitations
 
